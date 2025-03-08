@@ -1,13 +1,15 @@
 use std::path::PathBuf;
 
+use clap::CommandFactory;
+use clap::ValueEnum;
 use clap::{Parser, Subcommand, ValueHint};
 use clap_complete::{generate, Shell};
-use clap::CommandFactory;
-use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
-use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
-use clap::ValueEnum;
 use screenpipe_audio::vad_engine::VadEngineEnum;
+use screenpipe_audio::{
+    vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine,
+};
 use screenpipe_core::Language;
+use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
@@ -111,9 +113,9 @@ impl From<CliVadSensitivity> for VadSensitivity {
 
 #[derive(Parser)]
 #[command(
-    author, 
+    author,
     version,
-    about, 
+    about,
     long_about = None,
     name = "screenpipe"
 )]
@@ -124,9 +126,9 @@ pub struct Cli {
     /// Optimise based on your needs.
     /// Your screen rarely change more than 1 times within a second, right?
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
-    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))] 
+    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))]
     pub fps: f64, // ! not crazy about this (inconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
-    
+
     /// Audio chunk duration in seconds
     #[arg(short = 'd', long, default_value_t = 30)]
     pub audio_chunk_duration: u64,
@@ -248,7 +250,7 @@ pub struct Cli {
     /// Enable UI monitoring (macOS only)
     #[arg(long, default_value_t = false)]
     pub enable_ui_monitoring: bool,
-    
+
     /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
     #[arg(long, default_value_t = false)]
     pub enable_frame_cache: bool,
@@ -259,10 +261,7 @@ pub struct Cli {
 
     #[command(subcommand)]
     pub command: Option<Command>,
-
 }
-
-
 
 impl Cli {
     pub fn unique_languages(&self) -> Result<Vec<Language>, String> {

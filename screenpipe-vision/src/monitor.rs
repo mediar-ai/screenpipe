@@ -19,12 +19,12 @@ pub struct MonitorData {
 
 impl SafeMonitor {
     pub fn new(monitor: Monitor) -> Self {
-        let monitor_id = monitor.id();
+        let monitor_id = monitor.id().unwrap_or_default();
         let monitor_data = Arc::new(MonitorData {
-            width: monitor.width(),
-            height: monitor.height(),
-            name: monitor.name().to_string(),
-            is_primary: monitor.is_primary(),
+            width: monitor.width().unwrap_or_default(),
+            height: monitor.height().unwrap_or_default(),
+            name: monitor.name().unwrap_or_default(),
+            is_primary: monitor.is_primary().unwrap_or(false),
         });
 
         Self {
@@ -40,10 +40,10 @@ impl SafeMonitor {
             let monitor = Monitor::all()
                 .map_err(Error::from)?
                 .into_iter()
-                .find(|m| m.id() == monitor_id)
+                .find(|m| m.id().unwrap() == monitor_id)
                 .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?;
 
-            if monitor.width() == 0 || monitor.height() == 0 {
+            if monitor.width().unwrap() == 0 || monitor.height().unwrap() == 0 {
                 return Err(anyhow::anyhow!("Invalid monitor dimensions"));
             }
 
@@ -110,9 +110,9 @@ pub async fn get_default_monitor() -> SafeMonitor {
 pub async fn get_monitor_by_id(id: u32) -> Option<SafeMonitor> {
     tokio::task::spawn_blocking(move || {
         Monitor::all()
-            .unwrap()
+            .unwrap_or_default()
             .into_iter()
-            .find(|m| m.id() == id)
+            .find(|m| m.id().unwrap_or_default() == id)
             .map(SafeMonitor::new)
     })
     .await

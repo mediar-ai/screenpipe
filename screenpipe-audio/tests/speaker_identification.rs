@@ -37,7 +37,7 @@ mod tests {
                     .ok_or_else(|| anyhow::anyhow!("Invalid embedding model path"))
                     .unwrap(),
             )
-            .unwrap()
+            .unwrap(),
         ));
         let embedding_manager =
             screenpipe_audio::pyannote::identify::EmbeddingManager::new(usize::MAX);

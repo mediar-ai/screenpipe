@@ -55,7 +55,7 @@ async def read_ocr(payload: dict):
 #
 # Configure your "CustomOcrConfig" in Rust to point to http://localhost:8000/ocr
 
-# Clean up 
+# Clean up
 deactivate
 rm -rf venv app.py
 */

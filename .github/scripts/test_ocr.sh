@@ -9,7 +9,12 @@ do
    ps -p $(cat screenpipe.pid) -o %cpu,%mem,cmd
 done
 kill $DISPLAY_PID
-if grep -qi "Hello, Screenpipe OCR" screenpipe_output.log; then
+
+# Extract OCR text from SQLite
+OCR_TEXT=$(sqlite3 $HOME/.screenpipe/db.sqlite "SELECT text FROM ocr_text;")
+
+# Check if OCR detected the expected text
+if echo "$OCR_TEXT" | grep -qi "Hello, Screenpipe OCR"; then
   echo "OCR test passed: Text was recognized"
 else
   echo "OCR test failed: Text was not recognized"

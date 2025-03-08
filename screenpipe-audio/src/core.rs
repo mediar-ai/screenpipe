@@ -6,6 +6,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
+use oasgen::OaSchema;
 use screenpipe_core::Language;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -14,7 +15,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, thread};
 use tokio::sync::{broadcast, oneshot};
-use oasgen::OaSchema;
 
 lazy_static! {
     pub static ref LAST_AUDIO_CAPTURE: AtomicU64 = AtomicU64::new(

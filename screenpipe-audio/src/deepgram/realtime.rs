@@ -14,12 +14,12 @@ use futures::channel::mpsc::{self, Receiver as FuturesReceiver};
 use futures::{SinkExt, TryStreamExt};
 use screenpipe_core::Language;
 use screenpipe_events::send_event;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::oneshot;
 use tracing::info;
-use std::sync::atomic::{AtomicI64, Ordering};
 
 // Add this near other static/global variables
 static LAST_DISPLAY_AUDIO_ACTIVITY: AtomicI64 = AtomicI64::new(0);
@@ -94,7 +94,9 @@ pub async fn start_deepgram_stream(
         .encoding(Encoding::Linear16);
 
     let mut handle = req.clone().handle().await?;
-    let mut results = req.stream(get_stream(stream, device.device_type.clone())).await?;
+    let mut results = req
+        .stream(get_stream(stream, device.device_type.clone()))
+        .await?;
     let device_clone = device.clone();
 
     loop {
@@ -121,7 +123,10 @@ pub async fn start_deepgram_stream(
     Ok(())
 }
 
-fn get_stream(mut stream: Receiver<Vec<f32>>, device_type: DeviceType) -> FuturesReceiver<Result<Bytes, RecvError>> {
+fn get_stream(
+    mut stream: Receiver<Vec<f32>>,
+    device_type: DeviceType,
+) -> FuturesReceiver<Result<Bytes, RecvError>> {
     let (mut tx, rx) = mpsc::channel(1);
 
     tokio::spawn(async move {
@@ -129,21 +134,22 @@ fn get_stream(mut stream: Receiver<Vec<f32>>, device_type: DeviceType) -> Future
             if device_type == DeviceType::Output {
                 let sum_squares: f32 = data.iter().map(|&x| x * x).sum();
                 let rms = (sum_squares / data.len() as f32).sqrt();
-                
+
                 if rms > 0.01 {
                     LAST_DISPLAY_AUDIO_ACTIVITY.store(
                         SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .unwrap()
                             .as_millis() as i64,
-                        Ordering::SeqCst
+                        Ordering::SeqCst,
                     );
                 }
             } else if SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_millis() as i64
-                - LAST_DISPLAY_AUDIO_ACTIVITY.load(Ordering::SeqCst) < 100 
+                - LAST_DISPLAY_AUDIO_ACTIVITY.load(Ordering::SeqCst)
+                < 100
             {
                 continue;
             }
@@ -169,8 +175,10 @@ async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) 
         let res = channel.alternatives.first().unwrap();
         let text = res.transcript.clone();
         let is_input = device.device_type == DeviceType::Input;
-        
-        let speaker = res.words.first()
+
+        let speaker = res
+            .words
+            .first()
             .and_then(|w| w.speaker)
             .map(|s| s.to_string());
 

@@ -985,7 +985,6 @@ impl DatabaseManager {
         browser_url: Option<&str>,
         focused: Option<bool>,
     ) -> Result<usize, sqlx::Error> {
-
         // if focused or browser_url is present, we run only on OCR
         if focused.is_some() || browser_url.is_some() {
             content_type = ContentType::OCR;

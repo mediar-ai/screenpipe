@@ -71,7 +71,9 @@ fn find_unzip() -> Option<std::path::PathBuf> {
         // check PATH first
         which::which("unzip").ok(),
         // fallback to common GnuWin32 location
-        Some(std::path::PathBuf::from(r"C:\Program Files (x86)\GnuWin32\bin\unzip.exe")),
+        Some(std::path::PathBuf::from(
+            r"C:\Program Files (x86)\GnuWin32\bin\unzip.exe",
+        )),
     ];
 
     paths.into_iter().flatten().find(|p| p.exists())
@@ -79,9 +81,9 @@ fn find_unzip() -> Option<std::path::PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn install_onnxruntime() {
-    use std::time::Duration;
     use reqwest::blocking::Client;
-    use std::{process::Command, path::Path};
+    use std::time::Duration;
+    use std::{path::Path, process::Command};
     // Set static CRT for Windows MSVC target
     if env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default() == "msvc" {
         println!("cargo:rustc-env=KNF_STATIC_CRT=1");
@@ -96,13 +98,15 @@ fn install_onnxruntime() {
     let resp = client.get(url).send().expect("request failed");
     let body = resp.bytes().expect("body invalid");
     fs::write("./onnxruntime-win-x64-gpu-1.19.2.zip", &body).expect("failed to write");
-    let unzip_path = find_unzip().expect("could not find unzip executable - please install it via GnuWin32 or add it to PATH");
-    
+    let unzip_path = find_unzip().expect(
+        "could not find unzip executable - please install it via GnuWin32 or add it to PATH",
+    );
+
     let status = Command::new(unzip_path)
         .args(["-o", "onnxruntime-win-x64-gpu-1.19.2.zip"])
         .status()
         .expect("failed to execute unzip");
-    
+
     if !status.success() {
         panic!("failed to install onnx binary");
     }
@@ -110,9 +114,6 @@ fn install_onnxruntime() {
     if target_dir.exists() {
         fs::remove_dir_all(target_dir).expect("failed to remove existing directory");
     }
-    fs::rename(
-        "onnxruntime-win-x64-gpu-1.19.2",
-        target_dir,
-    ).expect("failed to rename");
+    fs::rename("onnxruntime-win-x64-gpu-1.19.2", target_dir).expect("failed to rename");
     println!("cargo:rustc-link-search=native=../screenpipe-app-tauri/src-tauri/onnxruntime-win-x64-gpu-1.19.2/lib");
 }
