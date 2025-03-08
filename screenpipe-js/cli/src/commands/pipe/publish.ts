@@ -341,6 +341,9 @@ export const publishCommand = new Command("publish")
             },
             timeout: 30000, // 30 second timeout
           });
+          
+          console.log(colors.dim(`${symbols.arrow} storage provider: S3`));
+          console.log(colors.dim(`${symbols.arrow} url response status: ${urlResponse.status}`));
         } catch (error) {
           // Handle version conflict specifically
           if (axios.isAxiosError(error)) {
@@ -489,8 +492,6 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
           }
         }
 
-        console.log(colors.dim(`${symbols.arrow} url response status: ${urlResponse.status}`));
-        
         // Get the upload URL and storage path from the response
         const { uploadUrl, path: storagePath } = urlResponse.data;
         console.log(colors.dim(`${symbols.arrow} received upload URL: ${uploadUrl.substring(0, 50)}...`));
@@ -643,7 +644,7 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
         }
         
         // Notify server that upload is complete
-        logger.log(colors.dim(`${symbols.arrow} finalizing upload...`));
+        logger.log(colors.dim(`${symbols.arrow} finalizing upload with S3 storage...`));
         console.log(colors.dim(`${symbols.arrow} sending finalize request to: ${API_BASE_URL}/api/plugins/publish/finalize`));
         
         const finalizeResponse = await axios.post(
