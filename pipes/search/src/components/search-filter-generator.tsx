@@ -6,7 +6,8 @@ import { Bot, Wand2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CommandDialog, CommandInput } from "@/components/ui/command";
 import OpenAI from "openai";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
+import { useSettings, type PipeSettings } from "@/lib/hooks/use-settings";
 import {
   Tooltip,
   TooltipContent,
@@ -47,9 +48,10 @@ export function SearchFilterGenerator({
   const [isLoading, setIsLoading] = useState(false);
   const [isMac, setIsMac] = useState(false);
   const [filterVariants, setFilterVariants] = useState<SearchFilterVariant[]>(
-    []
+    [],
   );
   const { settings } = useSettings();
+  const { getPreset } = usePipeSettings("search");
   const { items: appStats } = useSqlAutocomplete("app");
   const { items: windowStats } = useSqlAutocomplete("window");
 
@@ -72,6 +74,24 @@ export function SearchFilterGenerator({
     if (!prompt.trim()) return;
     setIsLoading(true);
     setFilterVariants([]);
+    const preset = getPreset();
+
+    if (!preset) {
+      toast({
+        title: "there is no ai settings selected",
+        description: "please create new or select existing ones",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let apiKey = "";
+    if (
+      (preset.provider === "openai" || preset.provider === "custom") &&
+      "apiKey" in preset
+    ) {
+      apiKey == preset.apiKey;
+    }
 
     try {
       // Format top apps and windows for the prompt
@@ -86,17 +106,17 @@ export function SearchFilterGenerator({
 
       const openai = new OpenAI({
         apiKey:
-          settings.aiProviderType === "screenpipe-cloud"
-            ? settings.user.token
-            : settings.openaiApiKey,
-        baseURL: settings.aiUrl,
+          preset.provider === "screenpipe-cloud"
+            ? settings?.user?.token
+            : apiKey,
+        baseURL: preset.url,
         dangerouslyAllowBrowser: true,
       });
 
       const currentDate = new Date().toISOString();
 
       const completion = await openai.chat.completions.create({
-        model: settings.aiModel,
+        model: preset.model,
         messages: [
           {
             role: "system",
@@ -160,18 +180,18 @@ search patterns:
 - slack chat → use OCR type + Slack app filter (no query)
 
 generate these 3 variations:
-1. broad: 
+1. broad:
    - wider time range
    - multiple content types
    - minimal filtering
    - empty query for OCR content
-   
+
 2. focused:
    - specific content type
    - exact app/window names
    - narrower time range
    - single-word query only if audio
-   
+
 3. balanced:
    - medium scope
    - optimal filter combination
@@ -199,7 +219,7 @@ do not include any explanation or additional text in the response - only the jso
       console.log(completion.choices[0].message.content);
 
       const { variants } = JSON.parse(
-        completion.choices[0].message.content || "[]"
+        completion.choices[0].message.content || "[]",
       ) as { variants: SearchFilterVariant[] };
       if (variants) {
         const now = new Date();
@@ -228,7 +248,7 @@ do not include any explanation or additional text in the response - only the jso
             },
             description: `variant ${i + 1}`,
             title: filters.title || `variant ${i + 1}`,
-          }))
+          })),
         );
       }
     } catch (error: any) {
@@ -315,7 +335,7 @@ do not include any explanation or additional text in the response - only the jso
                   <Bot className="h-4 w-4 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent side="left">
-                  <p className="text-xs">using {settings.aiModel}</p>
+                  <p className="text-xs">using {getPreset()?.model}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
