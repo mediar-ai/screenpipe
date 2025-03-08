@@ -70,4 +70,4 @@ objc-foundation = "0.1.1"
 
 thiserror = "2.0.12"
 core-foundation = "=0.10.0"
-
+core-graphics = "=0.24.0"

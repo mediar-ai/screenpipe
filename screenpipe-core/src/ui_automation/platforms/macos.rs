@@ -6,13 +6,14 @@ use crate::ui_automation::{
 use accessibility::AXUIElementAttributes;
 use accessibility::{AXAttribute, AXUIElement, TreeVisitor, TreeWalker, TreeWalkerFlow};
 use anyhow::Result;
-use core_foundation::array::{CFArray};
-use core_foundation::base::{TCFType};
+use core_foundation::array::CFArray;
+use core_foundation::base::TCFType;
 use core_foundation::boolean::CFBoolean;
-use core_foundation::dictionary::{CFDictionary};
-use core_foundation::string::{CFString};
+use core_foundation::dictionary::CFDictionary;
+use core_foundation::string::CFString;
+use core_graphics::display::{CGPoint, CGSize};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -27,6 +28,15 @@ extern "C" {
         value: *const ::std::os::raw::c_void,
     ) -> i32;
 }
+
+// Add these extern "C" declarations if not already present
+extern "C" {
+    fn AXValueGetValue(value: *const ::std::os::raw::c_void, type_: u32, out: *mut ::std::os::raw::c_void) -> i32;
+}
+
+// Add these constant definitions instead - these are the official values from Apple's headers
+const kAXValueCGPointType: u32 = 1;
+const kAXValueCGSizeType: u32 = 2;
 
 // Thread-safe wrapper for AXUIElement
 #[derive(Clone)]
@@ -143,8 +153,6 @@ impl MacOSEngine {
         );
 
         let mut all_elements = Vec::new();
-        // Use a HashSet to track unique element IDs to avoid duplicates
-        // let mut seen_elements = HashSet::new();
 
         // Search for each possible macOS role
         let collector = ElementCollector::new(
@@ -168,89 +176,6 @@ impl MacOSEngine {
             }
         };
 
-        // // First check if the root element might have windows to add
-        // if let Some(elem) = root {
-        //     // Try to get windows from the root element
-        //     if let Ok(windows) = elem.0.windows() {
-        //         debug!(target: "ui_automation", "Found {} windows in root element", windows.len());
-                
-        //         // For each window, check if it matches our criteria
-        //         for (i, window) in windows.iter().enumerate() {
-        //             let window_safe = ThreadSafeAXUIElement::new(window.clone());
-                    
-        //             // Generate a unique identifier for this element
-        //             let element_id = match window.identifier() {
-        //                 Ok(id) => id.to_string(),
-        //                 Err(_) => format!("window_{}", i), // Use index as part of identifier
-        //             };
-                    
-        //             // Skip if we've already seen this element
-        //             if seen_elements.contains(&element_id) {
-        //                 continue;
-        //             }
-                    
-        //             // Check if window role matches what we're looking for
-        //             if let Ok(window_role) = window.role() {
-        //                 if macos_roles.iter().any(|r| r == &window_role.to_string()) {
-        //                     // Check name if specified
-        //                     let mut include_window = true;
-        //                     if let Some(name_filter) = name {
-        //                         if let Ok(window_title) = window.title() {
-        //                             include_window = window_title.to_string().contains(name_filter);
-        //                         } else {
-        //                             include_window = false;
-        //                         }
-        //                     }
-                            
-        //                     if include_window {
-        //                         all_elements.push(window_safe.clone());
-        //                         seen_elements.insert(element_id);
-        //                     }
-        //                 }
-        //             }
-                    
-        //             // Also check inside the window
-        //             walker.walk(&window, &collector.adapter());
-        //         }
-        //     }
-            
-        //     // Try with main window as well
-        //     if let Ok(main_window) = elem.0.main_window() {
-        //         let window_safe = ThreadSafeAXUIElement::new(main_window.clone());
-                
-        //         // Generate a unique identifier for this element
-        //         let element_id = match main_window.identifier() {
-        //             Ok(id) => id.to_string(),
-        //             Err(_) => "main_window".to_string(), // Use constant string for main window
-        //         };
-                
-        //         // Skip if we've already seen this element
-        //         if !seen_elements.contains(&element_id) {
-        //             // Check if window role matches
-        //             if let Ok(window_role) = main_window.role() {
-        //                 if macos_roles.iter().any(|r| r == &window_role.to_string()) {
-        //                     // Check name if specified
-        //                     let mut include_window = true;
-        //                     if let Some(name_filter) = name {
-        //                         if let Ok(window_title) = main_window.title() {
-        //                             include_window = window_title.to_string().contains(name_filter);
-        //                         } else {
-        //                             include_window = false;
-        //                         }
-        //                     }
-                            
-        //                     if include_window {
-        //                         all_elements.push(window_safe);
-        //                         seen_elements.insert(element_id);
-        //                     }
-        //                 }
-        //             }
-                    
-        //             // Also check inside the main window
-        //             walker.walk(&main_window, &collector.adapter());
-        //         }
-        //     }
-        // }
 
         let adapter = collector.adapter();
         walker.walk(start_element, &adapter);
@@ -258,21 +183,6 @@ impl MacOSEngine {
         // Get elements from the adapter's collector
         let elements = adapter.inner.borrow().elements.clone();
         for element in elements {
-            // For elements with no identifier, generate a unique id based on their address
-            let element_id = match element.0.identifier() {
-                Ok(id) => id.to_string(),
-                Err(_) => {
-                    // Use object_id which is already defined as a unique identifier in the code
-                    // This avoids using raw pointers which requires unsafe
-                    format!("element_{}", std::ptr::addr_of!(element) as usize)
-                }
-            };
-            
-            // Skip if we've already seen this element
-            // if !seen_elements.contains(&element_id) {
-            //     all_elements.push(element);
-            //     seen_elements.insert(element_id);
-            // }
             all_elements.push(element);
         }
 
@@ -1213,10 +1123,46 @@ impl UIElementImpl for MacOSUIElement {
     }
 
     fn bounds(&self) -> Result<(f64, f64, f64, f64), AutomationError> {
-        // not implemented
-        Err(AutomationError::UnsupportedOperation(
-            "bounds not yet implemented for macOS".to_string(),
-        ))
+        let mut x = 0.0;
+        let mut y = 0.0;
+        let mut width = 0.0;
+        let mut height = 0.0;
+
+        // Get position
+        if let Ok(position) = self.element.0.attribute(&AXAttribute::new(&CFString::new("AXPosition"))) {
+            unsafe {
+                let value_ref = position.as_CFTypeRef();
+                
+                // Use AXValueGetValue to extract CGPoint data directly
+                let mut point: CGPoint = CGPoint { x: 0.0, y: 0.0 };
+                let point_ptr = &mut point as *mut CGPoint as *mut ::std::os::raw::c_void;
+                
+                if AXValueGetValue(value_ref as *const _, kAXValueCGPointType, point_ptr) != 0 {
+                    x = point.x;
+                    y = point.y;
+                }
+            }
+        }
+
+        // Get size
+        if let Ok(size) = self.element.0.attribute(&AXAttribute::new(&CFString::new("AXSize"))) {
+            unsafe {
+                let value_ref = size.as_CFTypeRef();
+                
+                // Use AXValueGetValue to extract CGSize data directly
+                let mut cg_size: CGSize = CGSize { width: 0.0, height: 0.0 };
+                let size_ptr = &mut cg_size as *mut CGSize as *mut ::std::os::raw::c_void;
+                
+                if AXValueGetValue(value_ref as *const _, kAXValueCGSizeType, size_ptr) != 0 {
+                    width = cg_size.width;
+                    height = cg_size.height;
+                }
+            }
+        }
+
+        debug!(target: "ui_automation", "Element bounds: x={}, y={}, width={}, height={}", x, y, width, height);
+        
+        Ok((x, y, width, height))
     }
 
     fn click(&self) -> Result<(), AutomationError> {
