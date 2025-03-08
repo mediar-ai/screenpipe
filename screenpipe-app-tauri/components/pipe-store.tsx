@@ -101,25 +101,6 @@ export const PipeStore: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filteredPipes.length]);
 
-  useEffect(() => {
-    const unsubscribePromise = listen("update-all-pipes", async () => {
-      // not sure this is a good idea ... basically pipes will break in the hand of users when update will happen
-      if (!checkLogin(settings.user, false)) return;
-
-      for (const pipe of pipes) {
-        // Then download the new version
-        await handleUpdatePipe(pipe);
-      }
-
-      // Refresh the pipe list
-      await fetchInstalledPipes();
-    });
-
-    return () => {
-      unsubscribePromise.then((unsubscribe) => unsubscribe());
-    };
-  }, []);
-
   const fetchStorePlugins = async () => {
     try {
       const pipeApi = await PipeApi.create(settings.user?.token!);
@@ -131,6 +112,7 @@ export const PipeStore: React.FC = () => {
           const installedPipe = installedPipes.find((p) => {
             return p.id?.replace("._temp", "") === plugin.name;
           });
+
           return {
             ...plugin,
             is_installed: !!installedPipe,
@@ -960,7 +942,7 @@ export const PipeStore: React.FC = () => {
 
   useEffect(() => {
     const checkForUpdates = async () => {
-      if (!settings.user.token) {
+      if (!settings.user?.token) {
         console.log("[pipe-update] Update check skipped: No user token");
         return;
       }
@@ -1004,30 +986,48 @@ export const PipeStore: React.FC = () => {
         
         console.log("[pipe-update] Update check response:", updates);
         
-        // Process updates
-        for (const pipe of installedPipes) {
+        // Process updates - only mark them as having updates, don't auto-update
+        let updatesAvailable = false;
+        
+        // Create a new array with updated pipe information
+        const updatedPipes = pipes.map(pipe => {
           const update = updates.results.find((u) => u.pipe_id === pipe.id);
-          console.log(`[pipe-update] Update check for ${pipe.name}:`, update);
-          if (update && "has_update" in update && update.has_update) {
+          const hasUpdate = update && "has_update" in update && update.has_update;
+          
+          if (hasUpdate) {
             console.log(`[pipe-update] Update available for ${pipe.name}`);
-            await handleUpdatePipe(pipe);
-          } else {
-            console.log(`[pipe-update] No update needed for ${pipe.name}`);
+            updatesAvailable = true;
+            // Return a new object with has_update set to true
+            return { ...pipe, has_update: true };
           }
+          
+          return pipe;
+        });
+        
+        // Only update state if there are changes
+        if (updatesAvailable) {
+          setPipes(updatedPipes);
+          
+          // Show a notification to the user
+          toast({
+            title: "Updates available",
+            description: "Updates are available for some of your pipes. Check the pipe store to update them.",
+            duration: 5000,
+          });
         }
       } catch (error) {
         console.error("[pipe-update] Error checking for updates:", error);
       }
     };
 
-    // Run check immediately
-    checkForUpdates();
+    // Set up interval to check every 5 minutes instead of 10 seconds
+    // This is more efficient since we have a 5-minute cooldown anyway
+    const interval = setInterval(checkForUpdates, 5 * 60 * 1000);
 
-    // Set up interval to check every 10 seconds actual check is done in the function
-    const interval = setInterval(checkForUpdates, 10 * 1000);
-
-    return () => clearInterval(interval);
-  }, [settings.user.token, pipes]);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [settings.user, pipes, setPipes]);
 
   useEffect(() => {
     const setupDeepLink = async () => {
@@ -1079,6 +1079,40 @@ export const PipeStore: React.FC = () => {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
   }, [pipes]);
+
+  useEffect(() => {
+    const unsubscribePromise = listen("update-all-pipes", async () => {
+      try {
+        if (!checkLogin(settings.user, false)) return;
+
+        // Filter pipes that need updates
+        const pipesToUpdate = pipes.filter(pipe => pipe.is_installed && pipe.has_update);
+        
+        if (pipesToUpdate.length === 0) {
+          console.log("No updates available for any pipes");
+          return;
+        }
+
+        console.log(`Found ${pipesToUpdate.length} pipes to update`);
+        
+        for (const pipe of pipesToUpdate) {
+          try {
+            await handleUpdatePipe(pipe);
+          } catch (error) {
+            console.error(`Failed to update pipe ${pipe.name}:`, error);
+          }
+        }
+
+        await fetchInstalledPipes();
+      } catch (error) {
+        console.error("Error in update-all-pipes handler:", error);
+      }
+    });
+
+    return () => {
+      unsubscribePromise.then((unsubscribe) => unsubscribe());
+    };
+  }, []);
 
   if (health?.status === "error") {
     return (
