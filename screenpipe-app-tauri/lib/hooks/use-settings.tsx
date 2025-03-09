@@ -90,6 +90,7 @@ export type Settings = {
   enableBeta: boolean;
   isFirstTimeUser: boolean;
   autoStartEnabled: boolean
+  autoUpdatePipes: boolean; // Add this line for auto-updating pipes
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
@@ -151,6 +152,7 @@ const DEFAULT_SETTINGS: Settings = {
   enableBeta: false,
   isFirstTimeUser: true,
   autoStartEnabled: true,
+  autoUpdatePipes: false, // Default to false for auto-updating pipes
   enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
