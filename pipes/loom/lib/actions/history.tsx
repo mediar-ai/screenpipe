@@ -1,7 +1,11 @@
 "use server";
 import fs from 'fs';
 import path from 'path';
-import { ScreenpipeQueryParams, AudioContent } from '@screenpipe/js';
+import { 
+  OCRContent,
+  AudioContent,
+  ScreenpipeQueryParams,
+} from '@screenpipe/js';
 
 export interface HistoryItem {
   id: string;
@@ -9,9 +13,11 @@ export interface HistoryItem {
   query: string;
   timestamp: string;
   mergedVideoPath: string;
-  params: ScreenpipeQueryParams;
-  audioContents: AudioContent; 
+  mergedAudioPath: string;
   results: any[];
+  ocrContents: OCRContent[] | undefined;
+  audioContents: AudioContent[] | undefined; 
+  params: ScreenpipeQueryParams | undefined;
   messages: {
     id: string;
     type: 'user' | 'ai';

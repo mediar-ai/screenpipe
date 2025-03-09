@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   // had to trim down the context when the loom video is tooooo long :(
   const removeDuplicateLines = (textContent: string[])  => {
     const uniqueLines = Array.from(new Set(textContent));
-    const rmdups = uniqueLines.map((i) => i.replace(/(\S+)(\s+\1)+/g, "$1"))
+    const rmdups = uniqueLines.map((i?) => i?.replace(/(\S+)(\s+\1)+/g, "$1"))
     let context = rmdups.join('\n');
 
     if (context.length > MAX_CONTENT_LENGTH) {

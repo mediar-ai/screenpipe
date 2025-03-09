@@ -5,11 +5,13 @@ import MediaThemeTailwindAudio from 'player.style/tailwind-audio/react';
 
 export const MediaComponent = memo(function MediaComponent({
   filePath,
+  type,
   className,
   customDescription,
 }: {
   filePath: string;
   className?: string;
+  type?: string;
   customDescription?: string;
 }) {
   const [mediaSrc, setMediaSrc] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export const MediaComponent = memo(function MediaComponent({
 
   return (
     <>
-      {isAudio ?
+      {(isAudio || type === "audio") ?
         <MediaThemeTailwindAudio>
           <audio
             slot="media"

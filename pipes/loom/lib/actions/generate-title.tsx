@@ -15,7 +15,8 @@ export async function generateTitle(query: string, settings: any): Promise<strin
         content: 
 `Generate a concise title for the following query: "${query}".
 The title should be no more than 50 characters.
-Only provide the title without any additional text.`,
+Only provide the title without any additional text.
+Don't use any type of quotattion`,
       },
     ],
   });

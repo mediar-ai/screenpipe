@@ -5,12 +5,20 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, Loader2, Send, Square } from "lucide-react";
+import { ChevronDown, Send, Square } from "lucide-react";
 import { ChatMessage } from "@/components/chat-message";
 import { spinner } from "@/components/spinner";
 import { useAiProvider } from "@/lib/hooks/use-ai-provider";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { ContentItem } from "@screenpipe/browser";
+import { 
+  ContentItem,
+  OCRContent,
+  AudioContent,
+  ScreenpipeQueryParams,
+} from "@screenpipe/browser";
+import { saveHistory, HistoryItem, loadHistory } from "@/lib/actions/history";
+import { v4 as uuidv4 } from 'uuid';
+import { generateTitle } from "@/lib/actions/generate-title";
 import {
   Tooltip,
   TooltipContent,
@@ -20,10 +28,27 @@ import {
 
 interface LLMChatProps {
   data: ContentItem[] | undefined;
+  mergedVideoPath: string;
+  mergedAudioPath: string;
   className?: string;
+  params: ScreenpipeQueryParams | undefined; 
 }
 
-export function LLMChat({ data, className }: LLMChatProps) {
+function isOCRContent(item: ContentItem): item is { type: "OCR"; content: OCRContent } {
+  return item.type === "OCR";
+}
+
+function isAudioContent(item: ContentItem): item is { type: "Audio"; content: AudioContent } {
+  return item.type === "Audio";
+}
+
+export function LLMChat({ 
+  data,
+  params,
+  className,
+  mergedVideoPath,
+  mergedAudioPath,
+}: LLMChatProps) {
   const { toast } = useToast();
   const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
@@ -107,6 +132,37 @@ export function LLMChat({ data, className }: LLMChatProps) {
     systemPrompt: "you can analyze text which is raw ocr of a video and provide comprehensive description for it",
   }
 
+  const setHistory = async () => {
+    const historyId = localStorage.getItem("historyId");
+    if (historyId) {
+      const history = await loadHistory(historyId);
+      const historyItem = history[0];
+      if (historyItem) {
+        if (historyItem.messages) {
+          setChatMessages(
+            historyItem.messages.map((msg: any) => ({
+              id: msg.id,
+              role: msg.type === "ai" ? "assistant" : "user",
+              content: msg.content,
+            }))
+          );
+        }
+      }
+      scrollToBottom();
+    }
+  };
+  
+  useEffect(() => {
+    const handleChatUpdate = () => {
+      setHistory();
+    };
+    window.addEventListener("historyUpdated", handleChatUpdate);
+    setHistory();
+    return () => {
+      window.removeEventListener("historyUpdated", handleChatUpdate);
+    };
+  }, []);
+
   const handleFloatingInputSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!floatingInput.trim() && !isStreaming) return;
@@ -171,6 +227,60 @@ export function LLMChat({ data, className }: LLMChatProps) {
         ...prevMessages.slice(0, -1),
         { id: generateId(), role: "assistant", content: fullResponse },
       ]);
+
+      const historyId = localStorage.getItem("historyId");
+      let historyItem: HistoryItem;
+
+      if (historyId) {
+        const history = await loadHistory(historyId);
+        historyItem = history[0] || {
+          id: historyId,
+          title: await generateTitle(floatingInput, settings),
+          query: floatingInput,
+          timestamp: new Date().toISOString(),
+          results: result,
+          messages: [],
+          mergedVideoPath: mergedVideoPath,
+          mergedAudioPath: mergedAudioPath,
+          params: params,
+          ocrContents: data?.filter(isOCRContent).map((i) => i.content),
+          audioContents: data?.filter(isAudioContent).map((i) => i.content),
+        };
+      } else {
+        historyItem = {
+          id: uuidv4(),
+          title: floatingInput,
+          query: floatingInput,
+          timestamp: new Date().toISOString(),
+          results: result,
+          messages: [],
+          mergedVideoPath: mergedVideoPath,
+          mergedAudioPath: mergedAudioPath,
+          params: params,
+          ocrContents: data?.filter(isOCRContent).map((i) => i.content),
+          audioContents: data?.filter(isAudioContent).map((i) => i.content),
+        };
+        localStorage.setItem("historyId", historyItem.id);
+      }
+
+      // user message to history
+      historyItem.messages.push({
+        id: generateId(),
+        type: "user",
+        content: floatingInput,
+        timestamp: new Date().toISOString(),
+      });
+
+      // ai message to history
+      historyItem.messages.push({
+        id: generateId(),
+        type: "ai",
+        content: fullResponse,
+        timestamp: new Date().toISOString(),
+      });
+
+      await saveHistory([historyItem]);
+      window.dispatchEvent(new Event("historyCreated"));
 
       setIsUserScrolling(false);
       lastScrollPosition.current = window.scrollY;

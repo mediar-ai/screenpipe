@@ -1,3 +1,4 @@
+"use client"
 import { Clock, Loader2, Volume2 } from "lucide-react";
 import { IconCheck, IconCopy } from "@/components/ui/icons";
 import { useToast } from "@/lib/use-toast";
@@ -10,11 +11,9 @@ import { DateTimePicker } from './date-time-picker';
 import { MediaComponent } from "@/components/media-comp";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useAiProvider } from "@/lib/hooks/use-ai-provider";
-import { OCRContent, AudioContent } from "@screenpipe/browser";
+import { OCRContent, AudioContent, ContentType, ScreenpipeQueryParams } from "@screenpipe/browser";
 import { cn } from "@/lib/utils";
-import { v4 as uuidv4 } from 'uuid';
-import { generateTitle } from "@/lib/actions/generate-title";
-import { saveHistory, loadHistory, HistoryItem } from "@/lib/actions/history";
+import { loadHistory } from "@/lib/actions/history";
 
 import {
   Tooltip,
@@ -43,16 +42,18 @@ const Pipe: React.FC = () => {
   const { toast } = useToast();
   const { settings} = useSettings();
   const { isServerDown } = useHealthCheck()
-  const [isCopied, setIsCopied] = React.useState<Boolean>(false);
   const { isAvailable, error } = useAiProvider(settings);
-  const [rawData, setRawData] = useState<ContentItem[] | undefined>([]);
-  const [ocrText, setOcrText] = useState<string[]>([]);
-  const [endTime, setEndTime] = useState<Date>(new Date());
   const [key, setKey] = useState(0);
+  const [rawData, setRawData] = useState<ContentItem[] | undefined>([]);
+  const [queryParams, setQueryParams] = useState<ScreenpipeQueryParams | undefined>();
+  const [isCopied, setIsCopied] = React.useState<Boolean>(false);
   const [isMerging, setIsMerging] = useState<boolean>(false);
   const [startTime, setStartTime] = useState<Date>(new Date());
+  const [endTime, setEndTime] = useState<Date>(new Date());
   const [mergedVideoPath, setMergedVideoPath] = useState<string>('');
-  const [audioContents, setAudioContents] = useState<AudioContent[]>([]);
+  const [mergedAudioPath, setMergedAudioPath] = useState<string>('');
+  const [ocrContents, setOcrContents] = useState<OCRContent[] | undefined>([]);
+  const [audioContents, setAudioContents] = useState<AudioContent[] | undefined>([]);
 
   const aiDisabled =
     settings.aiProviderType === "screenpipe-cloud" && !settings.user.token;
@@ -83,6 +84,9 @@ const Pipe: React.FC = () => {
       if (type === 'video') {
         setMergedVideoPath(data.video_path);
         setIsMerging(false);
+      } else if (type === 'audio') {
+        setMergedAudioPath(data.video_path);
+        setIsMerging(false);
       }
     } catch(error) {
       toast({
@@ -106,10 +110,16 @@ const Pipe: React.FC = () => {
       const endTimeStr = endTime.toISOString();
 
       try {
+        let contentType: ContentType | undefined = undefined
+        if (settings.customSettings?.loom?.contentType === "audio"){
+          contentType = "audio";
+        } else {
+          contentType = "audio+ocr"
+        }
         const response = await pipe.queryScreenpipe({
           offset: 0,
-          limit: 100000, // limit is fucking annoying
-          contentType:"audio+ocr",
+          limit: 100000, // keep max
+          contentType: contentType,
           startTime: startTimeStr,
           endTime: endTimeStr,
           maxLength: settings.customSettings?.loom?.maxLength || 500,
@@ -117,34 +127,52 @@ const Pipe: React.FC = () => {
         })
 
         if (response?.data) {
+          setQueryParams({
+            offset: 0,
+            limit: 100000,
+            contentType: contentType,
+            startTime: startTimeStr,
+            endTime: endTimeStr,
+            maxLength: settings.customSettings?.loom?.maxLength || 500,
+            minLength: 50,
+          })
           setRawData(response.data);
-          console.log("RES", response.data)
-          const ocrTexts = response.data
+
+          const ocrContents = response.data
             .filter(isOCRContent)
-            .map((item) => item.content.text);
+            .map((item) => item.content);
 
           const audioContents = response.data
             .filter(isAudioContent)
             .map((item) => item.content);
 
-          setOcrText(ocrTexts);
+          setOcrContents(ocrContents);
           setAudioContents(audioContents);
         }
-        const videoFiles = response?.data
-          .filter((item: ContentItem) => item.type === "OCR")
-          .map((item: ContentItem) => item.content.filePath);
-        const uniqueVideos = [...new Set(videoFiles)];
-
-        if (uniqueVideos.length < 2) {
+        
+        let mediaFiles: string[] | undefined = [];
+        if (settings.customSettings?.loom?.contentType === "audio") {
+          mediaFiles = audioContents?.map((i) => i.filePath);
+        } else {
+          mediaFiles = ocrContents?.map((i) => i.filePath);
+        }
+        const uniqueMediaFiles = [...new Set(mediaFiles)];
+        if (uniqueMediaFiles.length <= 1) {
           toast({
             title: "insufficient content",
             variant: "default",
-            description: "insufficient media contents in that time period, please try again!",
+            description: "no media contents found in that time period, please try again!",
           });
           setIsMerging(false);
           return;
         }
-        await mergeContent(uniqueVideos.reverse(), 'video');
+        let mergeType: "audio" | "video" = "video";
+        if (settings.customSettings?.loom?.contentType === "audio"){
+          mergeType = "audio";
+        } else {
+          mergeType = "video";
+        }
+        await mergeContent(uniqueMediaFiles.reverse(), mergeType);
         setIsMerging(false);
       } catch (e :any) {
         toast({
@@ -206,22 +234,17 @@ const Pipe: React.FC = () => {
       const history = await loadHistory(historyId);
       const historyItem = history[0];
       if (historyItem) {
-        setStartTime(new Date(historyItem.params.startTime));
-        setEndTime(new Date(historyItem.params.endTime));
+        setStartTime(historyItem.params?.startTime
+          ? new Date(historyItem.params.startTime)
+          : new Date());
+        setEndTime(historyItem.params?.endTime 
+          ? new Date(historyItem.params.endTime)
+          : new Date());
         setMergedVideoPath(historyItem.mergedVideoPath);
+        setMergedAudioPath(historyItem.mergedAudioPath);
+        setOcrContents(historyItem.ocrContents)
         setAudioContents(historyItem.audioContents)
-        // Restore messages if any
-        if (historyItem.messages) {
-          setChatMessages(
-            historyItem.messages.map((msg) => ({
-              id: msg.id,
-              role: msg.type === "ai" ? "assistant" : "user",
-              content: msg.content,
-            }))
-          );
-        }
       }
-      scrollToBottom();
     }
   };
 
@@ -334,7 +357,7 @@ const Pipe: React.FC = () => {
         </Tooltip>
       </TooltipProvider>
 
-      {mergedVideoPath && (
+      {(mergedVideoPath || mergedAudioPath) && (
         <div className="border-2 mt-16 pt-10 w-[1200px] relative rounded-lg flex-col flex items-center justify-center" >
           <Button
             variant={"outline"} 
@@ -346,13 +369,15 @@ const Pipe: React.FC = () => {
             <span className="sr-only">Copy video</span>
           </Button>
           <MediaComponent
-            filePath={mergedVideoPath}
+            filePath={mergedVideoPath ? mergedVideoPath : mergedAudioPath}
+            type={mergedAudioPath ? "audio" : "video"}
             className="text-center m-8 "
           />
+        {mergedVideoPath && (
           <div className="mt-4 w-[80%]">
-            <div className={cn("flex flex-row items-center justify-center")}>
-              {audioContents.length !== 0 && (
-                audioContents.map((file, index) => {
+            <div className={cn("flex relative flex-row items-center justify-center w-full")}>
+              {audioContents?.length !== 0 && (
+                audioContents?.map((file, index) => {
                 const audioTime = new Date(file.timestamp).getTime();
                 const startTimeMs = startTime.getTime();
                 const endTimeMs = endTime.getTime();
@@ -377,7 +402,7 @@ const Pipe: React.FC = () => {
                 );
               }))}
             </div>
-            {audioContents.length !== 0 && (
+            {audioContents?.length !== 0 && (
               <div className="grid-flow-col h-[50px] grid gap-[2px] border rounded-md mt-4 border-slate-800/30">
                 {Array.from({ length: 200 }).map((_, index) => (
                   <div key={index} className="bg-slate-900/30 h-full rounded-md"></div>
@@ -385,8 +410,15 @@ const Pipe: React.FC = () => {
               </div>
             )}
           </div>
+        )}
           <Divider />
-          <LLMChat key={key} data={rawData} />
+          <LLMChat 
+            key={key}
+            data={rawData}
+            mergedVideoPath={mergedVideoPath}
+            mergedAudioPath={mergedAudioPath}
+            params={queryParams}
+          />
         </div>
       )}
     </div>
@@ -394,5 +426,4 @@ const Pipe: React.FC = () => {
 };
 
 export default Pipe;
-
 

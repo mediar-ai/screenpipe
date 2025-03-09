@@ -125,9 +125,9 @@ const defaultCustomRules = `- Create a concise  summary of the given context
                 <SelectItem textValue="ocr" value="ocr">
                   ocr
                 </SelectItem>
-                {/* <SelectItem textValue="audio" value="audio"> */}
-                {/*   audio */}
-                {/* </SelectItem> */}
+                <SelectItem textValue="audio" value="audio">
+                  audio
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

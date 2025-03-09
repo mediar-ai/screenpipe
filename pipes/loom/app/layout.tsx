@@ -20,7 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <SidebarProvider defaultOpen={false}>
+        <SidebarProvider defaultOpen={true}>
           <div className="flex w-full h-full">
             <div className="absolute left-0 top-0 h-full z-[10]">
               <HistorySidebar />
