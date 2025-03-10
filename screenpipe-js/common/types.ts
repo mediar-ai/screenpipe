@@ -224,6 +224,31 @@ export interface User {
   };
 }
 
+export type AIPreset = {
+  id: string;
+  maxContextChars: number;
+  url: string;
+  model: string;
+  defaultPreset: boolean;
+  prompt: string;
+  //provider: AIProviderType;
+} & (
+  | {
+      provider: "openai";
+      apiKey: string;
+    }
+  | {
+      provider: "native-ollama";
+    }
+  | {
+      provider: "screenpipe-cloud";
+    }
+  | {
+      provider: "custom";
+      apiKey?: string;
+    }
+);
+
 export interface Settings {
   openaiApiKey: string;
   deepgramApiKey: string;
@@ -249,6 +274,7 @@ export interface Settings {
   enableRealtimeAudioTranscription: boolean;
   realtimeAudioTranscriptionEngine: string;
   disableVision: boolean;
+  aiPresets: AIPreset[];
 }
 
 /**
