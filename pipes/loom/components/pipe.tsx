@@ -83,9 +83,11 @@ const Pipe: React.FC = () => {
       const data = await response.json();
       if (type === 'video') {
         setMergedVideoPath(data.video_path);
+        setMergedAudioPath('');
         setIsMerging(false);
       } else if (type === 'audio') {
         setMergedAudioPath(data.video_path);
+        setMergedVideoPath('');
         setIsMerging(false);
       }
     } catch(error) {
@@ -226,7 +228,7 @@ const Pipe: React.FC = () => {
 
   useEffect(() => {
     setKey(prevKey => prevKey + 1);
-  }, [mergedVideoPath]);
+  }, [mergedVideoPath, mergedAudioPath]);
 
   const setHistory = async () => {
     const historyId = localStorage.getItem("historyId");
