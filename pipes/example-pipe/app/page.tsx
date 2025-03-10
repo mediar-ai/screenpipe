@@ -7,7 +7,7 @@ import { LastUiRecord } from "@/components/ready-to-use-examples/last-ui-record"
 import { PlaygroundCard } from "@/components/playground-card";
 import { ClientOnly } from "@/lib/client-only";
 import { Inter } from "next/font/google";
-import healthStatusContent from '../content/health-status-card.json';
+import componentsList from '../content/components-list.json';
 import { useEffect, useState } from "react";
 
 const inter = Inter({ 
@@ -50,7 +50,7 @@ export default function Page() {
         <div className={`flex flex-col gap-6 items-center justify-center h-full mt-12 px-4 pb-12 ${inter.className}`}>
           <h1 className="text-2xl font-bold mb-0">example app (pipe) for developers</h1>
           <p className="text-gray-600 mb-2 -mt-5">ready-to-use components for engineers building apps with screenpipe</p>
-          {healthStatusContent.map((cardContent, index) => (
+          {componentsList.map((cardContent, index) => (
             <PlaygroundCard key={index} content={cardContent} />
           ))}
           

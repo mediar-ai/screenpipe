@@ -1,42 +1,61 @@
-import { Spinner } from "@topcli/spinner";
-import { colors } from "../../../../../utils/colors";
-
-export const highlighter = {
-  error: colors.error,
-  warn: colors.warning,
-  info: colors.info,
-  success: colors.success,
-};
+import * as p from "@clack/prompts";
+import chalk from "chalk";
 
 export const logger = {
-  error(...args: unknown[]) {
-    console.log(highlighter.error(args.join(" ").toLowerCase()));
-  },
-  warn(...args: unknown[]) {
-    console.log(highlighter.warn(args.join(" ").toLowerCase()));
-  },
-  info(...args: unknown[]) {
-    console.log(highlighter.info(args.join(" ").toLowerCase()));
-  },
-  success(...args: unknown[]) {
-    console.log(highlighter.success(args.join(" ").toLowerCase()));
-  },
-  log(...args: unknown[]) {
-    console.log(args.join(" ").toLowerCase());
-  },
-  break() {
-    console.log("");
-  },
+  error: (...args: unknown[]) => console.error(chalk.red(...args)),
+  warn: (...args: unknown[]) => console.warn(chalk.yellow(...args)),
+  info: (...args: unknown[]) => console.info(chalk.blue(...args)),
+  success: (...args: unknown[]) => console.log(chalk.green(...args)),
+  log: (...args: unknown[]) => console.log(...args),
+  break: () => console.log(""),
 };
 
-export function spinner(
-  text: string,
-  options?: {
-    silent?: boolean;
-  }
-) {
-  return new Spinner({
-    verbose: !options?.silent,
-    color: "white", // you can customize this
-  }).start(text);
-}
+export const highlighter = {
+  info: (text: string) => chalk.blue(text),
+  error: (text: string) => chalk.red(text),
+  warning: (text: string) => chalk.yellow(text),
+  success: (text: string) => chalk.green(text),
+  code: (text: string) => chalk.gray(text),
+};
+
+export const spinner = (text: string, options: { silent?: boolean } = {}) => {
+  const s = p.spinner();
+  return {
+    start: (newText?: string) => {
+      if (!options.silent) {
+        s.start(newText || text);
+      }
+      return s;
+    },
+    stop: () => {
+      if (!options.silent) {
+        s.stop();
+      }
+      return s;
+    },
+    succeed: (text?: string) => {
+      if (!options.silent) {
+        s.stop(text ? chalk.green(`✔ ${text}`) : undefined);
+      }
+      return s;
+    },
+    fail: (text?: string) => {
+      if (!options.silent) {
+        s.stop(text ? chalk.red(`✖ ${text}`) : undefined);
+      }
+      return s;
+    },
+    info: (text?: string) => {
+      if (!options.silent) {
+        s.stop(text ? chalk.blue(`ℹ ${text}`) : undefined);
+      }
+      return s;
+    },
+    warn: (text?: string) => {
+      if (!options.silent) {
+        s.stop(text ? chalk.yellow(`⚠ ${text}`) : undefined);
+      }
+      return s;
+    }
+  };
+};

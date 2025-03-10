@@ -154,6 +154,7 @@ bunx --bun @screenpipe/dev@latest pipe publish --name foo
 
 - [template to build screenpipe-powered desktop native app using Tauri](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)
 - [template to build screenpipe-powered desktop native app using Electron](https://github.com/neo773/screenpipe-electron)
+- [community projects](https://www.sprint.dev/hackathons/screenpipe)
 
 ## star history
 

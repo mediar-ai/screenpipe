@@ -279,29 +279,68 @@ export class PipeApi {
   async checkUpdates(
     plugins: Array<{ pipe_id: string; version: string }>
   ): Promise<CheckUpdatesResponse> {
-    // Create a cache key based on all plugin IDs and versions
-    const cacheKey = `updates_${plugins
+    // Filter out local plugins
+    const localPlugins = plugins.filter(p => p.pipe_id.includes('_local'));
+    const remotePlugins = plugins.filter(p => !p.pipe_id.includes('_local'));
+    
+    if (localPlugins.length > 0) {
+      console.log(`[pipe-update] filtered out ${localPlugins.length} local plugins:`, localPlugins);
+    }
+    
+    
+    // If no remote plugins, return empty result
+    if (remotePlugins.length === 0) {
+      console.log("[pipe-update] no remote plugins to check for updates");
+      return { 
+        results: []
+      };
+    }
+    
+    // Create a cache key based on remote plugin IDs and versions
+    const cacheKey = `updates_${remotePlugins
       .map((p) => `${p.pipe_id}_${p.version}`)
       .join("_")}`;
     const cached = await this.getCached<CheckUpdatesResponse>(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      console.log("[pipe-update] returning cached update results");
+      return cached;
+    }
 
     try {
+      console.log(`[pipe-update] sending update check request to server for ${remotePlugins.length} plugins`);
       const response = await fetch(`${this.baseUrl}/api/plugins/check-updates`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${this.authToken}`,
         },
-        body: JSON.stringify({ plugins }),
+        body: JSON.stringify({ plugins: remotePlugins }),
       });
 
       if (!response.ok) {
-        const { error } = await response.json();
-        throw new Error(`failed to check for updates: ${error}`);
+        const errorData = await response.json();
+        console.error(`[pipe-update] server returned ${response.status}: ${JSON.stringify(errorData)}`);
+        throw new Error(`failed to check for updates: ${errorData.error}`);
       }
 
       const data = await response.json();
+      console.log("[pipe-update] received update check response:", data);
+      
+      // Add back information about local plugins
+      if (localPlugins.length > 0) {
+        console.log("[pipe-update] adding local plugin info to response");
+        const localResults = localPlugins.map(p => ({
+          pipe_id: p.pipe_id,
+          error: "Local plugin cannot be checked for updates",
+          status: 404
+        }));
+        
+        // If data.results exists, add local results to it
+        if (data.results) {
+          data.results = [...data.results, ...localResults];
+        }
+      }
+      
       await this.setCache(cacheKey, data);
       return data;
     } catch (error) {

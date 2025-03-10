@@ -23,6 +23,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -77,6 +84,8 @@ export const PipeStore: React.FC = () => {
         new Date(a.created_at as string).getTime()
       );
     });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
 
   // Add debounced search tracking
   useEffect(() => {
@@ -429,6 +438,7 @@ export const PipeStore: React.FC = () => {
   };
 
   const handleResetAllPipes = async () => {
+    setIsPurging(true);
     try {
       const t = toast({
         title: "resetting pipes",
@@ -449,7 +459,7 @@ export const PipeStore: React.FC = () => {
       if (!response.ok) {
         toast({
           title: "failed to purge pipes",
-          description: "failed to purge pipes, please try again",
+          description: `error: ${(await response.json()).error}...`,
           variant: "destructive",
         });
         return;
@@ -471,9 +481,12 @@ export const PipeStore: React.FC = () => {
       console.error("failed to reset pipes:", error);
       toast({
         title: "error resetting pipes",
-        description: "please try again or check the logs",
+          description: `error: ${(error as Error).message}...}`,
         variant: "destructive",
       });
+    } finally {
+      setIsPurging(false);
+      setConfirmOpen(false);
     }
   };
 
@@ -948,6 +961,7 @@ export const PipeStore: React.FC = () => {
   useEffect(() => {
     const checkForUpdates = async () => {
       if (!settings.user.token) {
+        console.log("[pipe-update] Update check skipped: No user token");
         return;
       }
       // Get last check time from local storage
@@ -958,45 +972,62 @@ export const PipeStore: React.FC = () => {
 
       // Check if 5 minutes have passed since last check
       if (lastCheckTime && now - lastCheckTime < 5 * 60 * 1000) {
+        console.log("[pipe-update] Skipping check - last check was less than 5 minutes ago");
         return;
       }
 
       // Store current time as last check
       await localforage.setItem("lastUpdateCheck", now);
+      console.log("[pipe-update] Checking for updates...");
 
       const installedPipes = pipes.filter(
         (pipe) => pipe.is_installed && pipe.installed_config?.version
       );
 
       // Skip if no pipes to check
-      if (installedPipes.length === 0) return;
-
-      // Format pipes for batch update check
-      const pluginsToCheck = installedPipes.map((pipe) => ({
-        pipe_id: pipe.id,
-        version: pipe.installed_config!.version!,
-      }));
-
-      const storeApi = await PipeApi.create(settings.user.token);
-      const updates = await storeApi.checkUpdates(pluginsToCheck);
-
-      // Process updates and install them
-      for (const pipe of installedPipes) {
-        const update = updates.results.find((u) => u.pipe_id === pipe.id);
-        if (update && "has_update" in update && update.has_update) {
-          await handleUpdatePipe(pipe);
+      if (installedPipes.length === 0) {
+        console.log("[pipe-update] No installed pipes to check");
+        return;
+      }
+            
+      try {
+        // Format pipes for batch update check
+        const pluginsToCheck = installedPipes.map((pipe) => ({
+          pipe_id: pipe.id,
+          version: pipe.installed_config!.version!,
+        }));
+        
+        console.log("[pipe-update] Sending update check request:", pluginsToCheck);
+        
+        const storeApi = await PipeApi.create(settings.user.token);
+        const updates = await storeApi.checkUpdates(pluginsToCheck);
+        
+        console.log("[pipe-update] Update check response:", updates);
+        
+        // Process updates
+        for (const pipe of installedPipes) {
+          const update = updates.results.find((u) => u.pipe_id === pipe.id);
+          console.log(`[pipe-update] Update check for ${pipe.name}:`, update);
+          if (update && "has_update" in update && update.has_update) {
+            console.log(`[pipe-update] Update available for ${pipe.name}`);
+            await handleUpdatePipe(pipe);
+          } else {
+            console.log(`[pipe-update] No update needed for ${pipe.name}`);
+          }
         }
+      } catch (error) {
+        console.error("[pipe-update] Error checking for updates:", error);
       }
     };
 
     // Run check immediately
     checkForUpdates();
 
-    // Set up interval to check every 10 seconds actual check  is done in the function
+    // Set up interval to check every 10 seconds actual check is done in the function
     const interval = setInterval(checkForUpdates, 10 * 1000);
 
     return () => clearInterval(interval);
-  }, [settings.user.token]);
+  }, [settings.user.token, pipes]);
 
   useEffect(() => {
     const setupDeepLink = async () => {
@@ -1140,8 +1171,9 @@ export const PipeStore: React.FC = () => {
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={handleResetAllPipes}
+                      onClick={() => setConfirmOpen(true)}
                       className="flex items-center gap-2"
+                      disabled={isPurging}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -1151,6 +1183,38 @@ export const PipeStore: React.FC = () => {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>confirm deletion of all pipes?</DialogTitle>
+                    <DialogDescription>
+                      are you sure you want to delete all pipes? <br/> you&apos;ll have to download them again
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex justify-end gap-4">
+                    <Button 
+                      onClick={() => setConfirmOpen(false)} 
+                      disabled={isPurging}
+                      variant={"outline"}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleResetAllPipes} 
+                      disabled={isPurging}
+                    >
+                      {isPurging ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          reseting all pipes...
+                        </>
+                      ) : (
+                          "Confirm"
+                        )}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
