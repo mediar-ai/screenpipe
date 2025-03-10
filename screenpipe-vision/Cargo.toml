@@ -37,6 +37,7 @@ screenpipe-events = { path = "../screenpipe-events" }
 
 # Lanuage specification
 screenpipe-core = { path = "../screenpipe-core" }
+screenpipe-db = { path = "../screenpipe-db" }
 
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }

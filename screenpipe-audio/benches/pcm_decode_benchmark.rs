@@ -1,6 +1,6 @@
 // cargo bench --bench pcm_decode_benchmark
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use screenpipe_audio::pcm_decode::pcm_decode;
+use screenpipe_audio::pcm_decode;
 use std::path::PathBuf;
 
 fn benchmark_pcm_decode(c: &mut Criterion) {

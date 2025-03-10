@@ -11,6 +11,10 @@ use axum::{
 };
 use oasgen::{oasgen, OaSchema, Server};
 
+use screenpipe_db::{
+    ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, Speaker,
+    TagContentType,
+};
 use tokio_util::io::ReaderStream;
 
 use tokio::fs::File;
@@ -22,22 +26,22 @@ use futures::{
 use image::ImageFormat::{self};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
-use crate::video_utils::extract_frame;
 use crate::{
-    db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
     embedding::embedding_endpoint::create_embeddings,
-    pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
-        extract_frame_from_video, extract_high_quality_frame, merge_videos, validate_media,
-        MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
+        extract_frame, extract_frame_from_video, extract_high_quality_frame, merge_videos,
+        validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
-    DatabaseManager,
+    PipeManager,
 };
 use chrono::{DateTime, Utc};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
+    audio_manager::AudioManager,
+    core::device::{
+        default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
+    },
 };
 use tracing::{debug, error, info};
 
@@ -67,16 +71,15 @@ use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 // At the top of the file, add:
 #[cfg(feature = "experimental")]
 use enigo::{Enigo, Key, Settings};
-
-use screenpipe_audio::LAST_AUDIO_CAPTURE;
-
 use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
 
+pub type FrameImageCache = LruCache<i64, (String, Instant)>;
+
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
-    // pub device_manager: Arc<DeviceManager>,
+    pub audio_manager: Arc<AudioManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -84,7 +87,7 @@ pub struct AppState {
     pub audio_disabled: bool,
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
-    pub frame_image_cache: Option<Arc<Mutex<LruCache<i64, (String, Instant)>>>>,
+    pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
 }
 
 // Update the SearchQuery struct
@@ -383,7 +386,7 @@ pub(crate) async fn search(
                 offset_index: audio.offset_index,
                 tags: audio.tags.clone(),
                 device_name: audio.device_name.clone(),
-                device_type: audio.device_type.clone(),
+                device_type: audio.device_type.clone().into(),
                 speaker: audio.speaker.clone(),
                 start_time: audio.start_time,
                 end_time: audio.end_time,
@@ -588,7 +591,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let app_uptime = (now as i64) - (state.app_start_time.timestamp());
     let grace_period = 120; // 2 minutes in seconds
 
-    let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
+    let last_capture = screenpipe_audio::core::LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
     let audio_active = if app_uptime < grace_period {
         true // Consider active during grace period
     } else {
@@ -932,7 +935,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
 pub struct SCServer {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
-    // device_manager: Arc<DeviceManager>,
+    audio_manager: Arc<AudioManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -950,6 +953,7 @@ impl SCServer {
         vision_disabled: bool,
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
+        audio_manager: Arc<AudioManager>,
     ) -> Self {
         SCServer {
             db,
@@ -959,16 +963,39 @@ impl SCServer {
             vision_disabled,
             audio_disabled,
             ui_monitoring_enabled,
+            audio_manager,
         }
     }
 
     pub async fn start(self, enable_frame_cache: bool) -> Result<(), std::io::Error> {
+        // Create the OpenAPI server
+        let app = self.create_router(enable_frame_cache).await;
+
+        #[cfg(feature = "experimental")]
+        let app = app.route("/experimental/input_control", post(input_control_handler));
+
+        // Create the listener
+        let listener = TcpListener::bind(&self.addr).await?;
+        info!("Server listening on {}", self.addr);
+
+        // Start serving
+        serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        Ok(())
+    }
+
+    pub async fn create_router(&self, enable_frame_cache: bool) -> Router {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            // device_manager: self.device_manager.clone(),
+            audio_manager: self.audio_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
-            pipe_manager: self.pipe_manager,
+            pipe_manager: self.pipe_manager.clone(),
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
             ui_monitoring_enabled: self.ui_monitoring_enabled,
@@ -998,8 +1025,6 @@ impl SCServer {
                 axum::http::header::CONTENT_TYPE,
                 axum::http::header::CACHE_CONTROL,
             ]);
-
-        // Create the OpenAPI server
         let server = Server::axum()
             .get("/search", search)
             .get("/audio/list", api_list_audio_devices)
@@ -1029,12 +1054,14 @@ impl SCServer {
             .get("/speakers/similar", get_similar_speakers_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
-            // .post("/audio/start", start_audio_device)
-            // .post("/audio/stop", stop_audio_device)
+            .post("/audio/start", start_audio)
+            .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
             .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
             .get("/search/keyword", keyword_search_handler)
             .post("/v1/embeddings", create_embeddings)
+            .post("/audio/device/start", start_audio_device)
+            .post("/audio/device/stop", stop_audio_device)
             // .post("/vision/start", start_vision_device)
             // .post("/vision/stop", stop_vision_device)
             // .post("/audio/restart", restart_audio_devices)
@@ -1044,7 +1071,7 @@ impl SCServer {
             .freeze();
 
         // Build the main router with all routes
-        let app = Router::new()
+        Router::new()
             .merge(server.into_router())
             // NOTE: websockerts and sse is not supported by openapi so we move it down here
             .route("/stream/frames", get(stream_frames_handler))
@@ -1053,24 +1080,7 @@ impl SCServer {
             .route("/frames/export", get(handle_video_export_ws))
             .with_state(app_state)
             .layer(cors)
-            .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()));
-
-        #[cfg(feature = "experimental")]
-        let app = app.route("/experimental/input_control", post(input_control_handler));
-
-        // Create the listener
-        let listener = TcpListener::bind(&self.addr).await?;
-        info!("Server listening on {}", self.addr);
-
-        // Start serving
-        serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-        Ok(())
+            .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()))
     }
 }
 
@@ -1202,7 +1212,7 @@ async fn add_frame_to_db(
                 frame_id,
                 &ocr.text,
                 ocr.text_json.as_deref().unwrap_or(""),
-                Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
+                Arc::new(OcrEngine::default().into()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
             )
             .await?;
         }
@@ -1253,11 +1263,6 @@ async fn add_transcription_to_db(
 ) -> Result<(), anyhow::Error> {
     let db = &state.db;
 
-    let device = AudioDevice {
-        name: device_name.to_string(),
-        device_type: DeviceType::Input,
-    };
-
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
 
     db.insert_audio_transcription(
@@ -1265,7 +1270,10 @@ async fn add_transcription_to_db(
         &transcription.transcription,
         -1,
         &transcription.transcription_engine,
-        &device,
+        &screenpipe_db::AudioDevice {
+            name: device_name.to_string(),
+            device_type: DeviceType::Input.into(),
+        },
         None,
         None,
         None,
@@ -1761,7 +1769,7 @@ async fn get_similar_speakers_handler(
 //     device_type: Option<DeviceType>,
 // }
 
-#[derive(Serialize)]
+#[derive(Debug, OaSchema, Serialize)]
 pub struct AudioDeviceControlResponse {
     success: bool,
     message: String,
@@ -1873,7 +1881,7 @@ struct SemanticSearchQuery {
 async fn semantic_search_handler(
     Query(query): Query<SemanticSearchQuery>,
     State(state): State<Arc<AppState>>,
-) -> Result<JsonResponse<Vec<crate::db_types::OCRResult>>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<JsonResponse<Vec<screenpipe_db::OCRResult>>, (StatusCode, JsonResponse<Value>)> {
     let limit = query.limit.unwrap_or(10);
     let threshold = query.threshold.unwrap_or(0.3);
 
@@ -2092,6 +2100,71 @@ pub struct VideoExportRequest {
     fps: f64,
 }
 
+#[derive(OaSchema, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct AudioDeviceControlRequest {
+    device_name: String,
+}
+
+#[oasgen]
+async fn start_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<Json<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+    let device: AudioDevice;
+    // todo Better handling error
+    match AudioDevice::from_name(&payload.device_name) {
+        Ok(audio_device) => device = audio_device,
+        Err(e) => {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                JsonResponse(
+                    json!({"success": false, "message": format!("device {} not found: {}", device_name.clone(), e)}),
+                ),
+            ))
+        }
+    };
+
+    if let Err(e) = state.audio_manager.start_device(&device).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start recording device {}: {}", device_name.clone(), e)
+            })),
+        ));
+    }
+
+    Ok(Json(AudioDeviceControlResponse {
+        success: true,
+        message: format!("started device: {}", device_name),
+    }))
+}
+
+#[oasgen]
+async fn stop_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<Json<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+
+    if let Err(e) = state.audio_manager.stop_device(&device_name).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to stop recording device {}: {}", device_name.clone(), e)
+            })),
+        ));
+    }
+
+    Ok(Json(AudioDeviceControlResponse {
+        success: true,
+        message: format!("stopped recording audio device: {}", device_name),
+    }))
+}
+
 fn deserialize_frame_ids<'de, D>(deserializer: D) -> Result<Vec<i64>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -2106,6 +2179,38 @@ struct ExportProgress {
     progress: f32,
     video_data: Option<Vec<u8>>,
     error: Option<String>,
+}
+
+#[oasgen]
+async fn start_audio(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match state.audio_manager.start().await {
+        Ok(_) => Ok(Response::builder().status(200).body(Body::empty()).unwrap()),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start audio processing: {}", e),
+            })),
+        )),
+    }
+}
+
+#[oasgen]
+async fn stop_audio(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match state.audio_manager.stop().await {
+        Ok(_) => Ok(Response::builder().status(200).body(Body::empty()).unwrap()),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start audio processing: {}", e),
+            })),
+        )),
+    }
 }
 
 pub async fn handle_video_export_ws(
