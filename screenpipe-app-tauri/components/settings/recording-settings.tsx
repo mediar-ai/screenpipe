@@ -39,6 +39,8 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
+import { Command as TauriCommand } from "@tauri-apps/plugin-shell";
+
 import {
   Settings,
   useSettings,
@@ -201,25 +203,44 @@ export function RecordingSettings() {
   useEffect(() => {
     const loadDevices = async () => {
       try {
-        // Fetch monitors
-        const monitorsResponse = await fetch(
-          "http://localhost:3030/vision/list"
-        );
-        if (!monitorsResponse.ok) {
-          throw new Error("Failed to fetch monitors");
+        // Use sidecar command to fetch monitors
+        const monitorCommand = TauriCommand.sidecar("screenpipe", [
+          "vision",
+          "list",
+          "-o",
+          "json",
+        ]);
+
+        const monitorOutput = await monitorCommand.execute();
+        if (monitorOutput.code !== 0) {
+          throw new Error(`Failed to fetch monitors: ${monitorOutput.stderr}`);
         }
-        const monitors: MonitorDevice[] = await monitorsResponse.json();
+
+        // Parse the JSON response which might be in {data: [...], success: true} format
+        const monitorResponse = JSON.parse(monitorOutput.stdout);
+        const monitors: MonitorDevice[] =
+          monitorResponse.data || monitorResponse;
         console.log("monitors", monitors);
         setAvailableMonitors(monitors);
 
-        // Fetch audio devices
-        const audioDevicesResponse = await fetch(
-          "http://localhost:3030/audio/list"
-        );
-        if (!audioDevicesResponse.ok) {
-          throw new Error("Failed to fetch audio devices");
+        // Use sidecar command to fetch audio devices
+        const audioCommand = TauriCommand.sidecar("screenpipe", [
+          "audio",
+          "list",
+          "-o",
+          "json",
+        ]);
+
+        const audioOutput = await audioCommand.execute();
+        if (audioOutput.code !== 0) {
+          throw new Error(
+            `Failed to fetch audio devices: ${audioOutput.stderr}`
+          );
         }
-        const audioDevices: AudioDevice[] = await audioDevicesResponse.json();
+
+        // Parse the JSON response which might be in {data: [...], success: true} format
+        const audioResponse = JSON.parse(audioOutput.stdout);
+        const audioDevices: AudioDevice[] = audioResponse.data || audioResponse;
         console.log("audioDevices", audioDevices);
         setAvailableAudioDevices(audioDevices);
 
@@ -677,9 +698,9 @@ export function RecordingSettings() {
         <></>
       )}
       <div
-        className={cn(
-          isDisabled && "opacity-50 pointer-events-none cursor-not-allowed"
-        )}
+      // className={cn(
+      //   isDisabled && "opacity-50 pointer-events-none cursor-not-allowed"
+      // )}
       >
         <h4 className="text-lg font-semibold my-4">video</h4>
         <div className="space-y-6">

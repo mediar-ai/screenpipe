@@ -234,12 +234,19 @@ async fn main() -> anyhow::Result<()> {
         match command {
             Command::Audio { subcommand } => match subcommand {
                 AudioCommand::List { output } => {
+                    let default_input = default_input_device().unwrap();
+                    let default_output = default_output_device().unwrap();
                     let devices = list_audio_devices().await?;
                     match output {
                         OutputFormat::Json => println!(
                             "{}",
                             serde_json::to_string_pretty(&json!({
-                                "data": devices,
+                                "data": devices.iter().map(|d| {
+                                    json!({
+                                        "name": d.name,
+                                        "is_default": d.name == default_input.name || d.name == default_output.name
+                                    })
+                                }).collect::<Vec<_>>(),
                                 "success": true
                             }))?
                         ),
@@ -265,7 +272,10 @@ async fn main() -> anyhow::Result<()> {
                                 "data": monitors.iter().map(|m| {
                                     json!({
                                         "id": m.id(),
-                                        "name": m.name()
+                                        "name": m.name(),
+                                        "width": m.width(),
+                                        "height": m.height(),
+                                        "is_default": m.is_primary(),
                                     })
                                 }).collect::<Vec<_>>(),
                                 "success": true
