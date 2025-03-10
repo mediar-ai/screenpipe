@@ -159,7 +159,7 @@ export function RecordingSettings() {
 
   // Show toast when settings change
   useEffect(() => {
-    if (hasUnsavedChanges && !settings.devMode) {
+    if (hasUnsavedChanges) {
       toast({
         title: "settings changed",
         description: "restart required to apply changes",
@@ -409,19 +409,19 @@ export function RecordingSettings() {
       ? settings.audioDevices.filter((device) => device !== currentValue)
       : [...settings.audioDevices, currentValue];
 
-    handleSettingsChange({ audioDevices: updatedDevices });
+    handleSettingsChange({ audioDevices: updatedDevices }, true);
   };
 
   const handlePiiRemovalChange = (checked: boolean) => {
-    handleSettingsChange({ usePiiRemoval: checked });
+    handleSettingsChange({ usePiiRemoval: checked }, true);
   };
 
   const handleDisableAudioChange = (checked: boolean) => {
-    handleSettingsChange({ disableAudio: checked });
+    handleSettingsChange({ disableAudio: checked }, true);
   };
 
   const handleFpsChange = (value: number[]) => {
-    handleSettingsChange({ fps: value[0] });
+    handleSettingsChange({ fps: value[0] }, true);
   };
 
   const handleVadSensitivityChange = (value: number[]) => {
@@ -430,9 +430,12 @@ export function RecordingSettings() {
       1: "medium",
       0: "low",
     };
-    handleSettingsChange({
-      vadSensitivity: sensitivityMap[value[0]],
-    });
+    handleSettingsChange(
+      {
+        vadSensitivity: sensitivityMap[value[0]],
+      },
+      true
+    );
   };
 
   const vadSensitivityToNumber = (sensitivity: VadSensitivity): number => {
@@ -445,7 +448,7 @@ export function RecordingSettings() {
   };
 
   const handleAudioChunkDurationChange = (value: number[]) => {
-    handleSettingsChange({ audioChunkDuration: value[0] });
+    handleSettingsChange({ audioChunkDuration: value[0] }, true);
   };
 
   const renderOcrEngineOptions = () => {
@@ -521,7 +524,7 @@ export function RecordingSettings() {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const newValue = e.target.value;
-    handleSettingsChange({ dataDir: newValue });
+    handleSettingsChange({ dataDir: newValue }, true);
   };
 
   const handleDataDirInputBlur = () => {
@@ -557,9 +560,12 @@ export function RecordingSettings() {
   };
 
   const handleFrameCacheToggle = (checked: boolean) => {
-    handleSettingsChange({
-      enableFrameCache: checked,
-    });
+    handleSettingsChange(
+      {
+        enableFrameCache: checked,
+      },
+      true
+    );
   };
 
   const handleUiMonitoringToggle = async (checked: boolean) => {
@@ -618,13 +624,16 @@ export function RecordingSettings() {
     if (addedValues.length > 0) {
       // Handle adding new value
       const newValue = addedValues[0];
-      handleSettingsChange({
-        ignoredWindows: [...settings.ignoredWindows, newValue],
-        // Remove from included windows if present
-        includedWindows: settings.includedWindows.filter(
-          (w) => w.toLowerCase() !== newValue.toLowerCase()
-        ),
-      });
+      handleSettingsChange(
+        {
+          ignoredWindows: [...settings.ignoredWindows, newValue],
+          // Remove from included windows if present
+          includedWindows: settings.includedWindows.filter(
+            (w) => w.toLowerCase() !== newValue.toLowerCase()
+          ),
+        },
+        true
+      );
     } else if (removedValues.length > 0) {
       // Handle removing value
       const removedValue = removedValues[0];
@@ -755,23 +764,6 @@ export function RecordingSettings() {
                   />
                 </div>
               </div>
-
-              {/* <div className="flex items-center justify-between mb-4">
-                <div className="space-y-1">
-                  <h4 className="font-medium">use all monitors</h4>
-                  <p className="text-sm text-muted-foreground">
-                    automatically detect and record all monitors, including
-                    newly connected ones
-                  </p>
-                </div>
-                <Switch
-                  id="useAllMonitors"
-                  checked={settings.useAllMonitors}
-                  onCheckedChange={(checked) =>
-                    handleSettingsChange({ useAllMonitors: checked })
-                  }
-                />
-              </div> */}
 
               <div className="flex flex-col space-y-6">
                 <div className="flex flex-col space-y-2">
@@ -1441,21 +1433,6 @@ export function RecordingSettings() {
                 id="chinese-mirror-toggle"
                 checked={settings.useChineseMirror}
                 onCheckedChange={handleChineseMirrorToggle}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <h4 className="font-medium">enable rewind</h4>
-                <p className="text-sm text-muted-foreground">
-                  experimental feature that provides a rewind interface for the
-                  rewind pipe
-                </p>
-              </div>
-              <Switch
-                id="frame-cache-toggle"
-                checked={settings.enableFrameCache}
-                onCheckedChange={handleFrameCacheToggle}
               />
             </div>
 

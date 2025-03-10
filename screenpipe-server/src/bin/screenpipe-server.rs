@@ -243,7 +243,7 @@ async fn main() -> anyhow::Result<()> {
                             serde_json::to_string_pretty(&json!({
                                 "data": devices.iter().map(|d| {
                                     json!({
-                                        "name": d.name,
+                                        "name": d.to_string(),
                                         "is_default": d.name == default_input.name || d.name == default_output.name
                                     })
                                 }).collect::<Vec<_>>(),
