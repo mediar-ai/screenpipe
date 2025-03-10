@@ -92,7 +92,7 @@ tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }
 tauri-plugin-updater = "2.0.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = "0.9.4"
+core-foundation = "=0.10.0"
 libc = "0.2.152"
 cocoa = "0.26.0"
 objc = "0.2.7"

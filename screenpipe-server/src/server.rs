@@ -11,6 +11,7 @@ use axum::{
 };
 use oasgen::{oasgen, OaSchema, Server};
 
+use screenpipe_core::Desktop;
 use tokio_util::io::ReaderStream;
 
 use tokio::fs::File;
@@ -1029,6 +1030,9 @@ impl SCServer {
             .get("/speakers/similar", get_similar_speakers_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
+            .post("/experimental/ui/find", find_elements_handler)
+            .post("/experimental/ui/click", click_element_handler)
+            .post("/experimental/ui/type", type_text_handler)
             // .post("/audio/start", start_audio_device)
             // .post("/audio/stop", stop_audio_device)
             .get("/semantic-search", semantic_search_handler)
@@ -2917,3 +2921,442 @@ pub struct RestartVisionDevicesResponse {
 //         restarted_devices,
 //     }))
 // }
+
+// New structs for UI automation API
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementSelector {
+    app_name: String,
+    locator: String,
+    index: Option<usize>,
+    text: Option<String>,
+    label: Option<String>,
+    description: Option<String>,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ClickElementRequest {
+    selector: ElementSelector,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct TypeTextRequest {
+    selector: ElementSelector,
+    text: String,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct FindElementsRequest {
+    selector: ElementSelector,
+    max_results: Option<usize>,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementPosition {
+    x: i32,
+    y: i32,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementSize {
+    width: i32,
+    height: i32,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementInfo {
+    id: String,
+    role: String,
+    label: Option<String>,
+    description: Option<String>,
+    text: Option<String>,
+    position: Option<ElementPosition>,
+    size: Option<ElementSize>,
+    properties: serde_json::Value,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct FindElementsResponse {
+    elements: Vec<ElementInfo>,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ActionResponse {
+    success: bool,
+    message: String,
+}
+
+// Handler functions for UI automation
+#[oasgen]
+async fn find_elements_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<FindElementsRequest>,
+) -> Result<JsonResponse<FindElementsResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new() {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let elements = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.all() {
+            Ok(all_elements) => {
+                let limit = request.max_results.unwrap_or(100);
+                all_elements.into_iter().take(limit).collect::<Vec<_>>()
+            }
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Filter elements if needed
+    let filtered_elements = elements
+        .into_iter()
+        .filter(|element| {
+            let matches_text = request
+                .selector
+                .text
+                .as_ref()
+                .map(|t| element.text().unwrap_or_default().contains(t))
+                .unwrap_or(true);
+
+            let matches_label = request
+                .selector
+                .label
+                .as_ref()
+                .map(|l| {
+                    element
+                        .attributes()
+                        .label
+                        .as_ref()
+                        .map(|el| el.contains(l))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(true);
+
+            let matches_description = request
+                .selector
+                .description
+                .as_ref()
+                .map(|d| {
+                    element
+                        .attributes()
+                        .description
+                        .as_ref()
+                        .map(|ed| ed.contains(d))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(true);
+
+            matches_text && matches_label && matches_description
+        })
+        .collect::<Vec<_>>();
+
+    // Convert to ElementInfo
+    let element_infos = filtered_elements
+        .into_iter()
+        .map(|element| ElementInfo {
+            id: format!("{:?}", element.id()),
+            role: element.role(),
+            label: element.attributes().label,
+            description: element.attributes().description,
+            text: element.text().ok(),
+            position: element
+                .bounds()
+                .ok()
+                .map(|(x, y, _, _)| ElementPosition {
+                    x: x as i32,
+                    y: y as i32,
+                }),
+            size: element
+                .bounds()
+                .ok()
+                .map(|(_, _, w, h)| ElementSize {
+                    width: w as i32,
+                    height: h as i32,
+                }),
+            properties: json!(element.attributes().properties),
+        })
+        .collect();
+
+    Ok(JsonResponse(FindElementsResponse {
+        elements: element_infos,
+    }))
+}
+
+#[oasgen]
+async fn click_element_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<ClickElementRequest>,
+) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new() {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Find elements matching the selector
+    let elements = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.all() {
+            Ok(elements) => elements,
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Filter elements
+    let filtered_elements = elements
+        .into_iter()
+        .filter(|element| {
+            let matches_text = request
+                .selector
+                .text
+                .as_ref()
+                .map(|t| element.text().unwrap_or_default().contains(t))
+                .unwrap_or(true);
+
+            let matches_label = request
+                .selector
+                .label
+                .as_ref()
+                .map(|l| {
+                    element
+                        .attributes()
+                        .label
+                        .as_ref()
+                        .map(|el| el.contains(l))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(true);
+
+            let matches_description = request
+                .selector
+                .description
+                .as_ref()
+                .map(|d| {
+                    element
+                        .attributes()
+                        .description
+                        .as_ref()
+                        .map(|ed| ed.contains(d))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(true);
+
+            matches_text && matches_label && matches_description
+        })
+        .collect::<Vec<_>>();
+
+    // Get the element to click
+    let element_to_click = match request.selector.index {
+        Some(index) => filtered_elements.get(index).cloned(),
+        None => filtered_elements.first().cloned(),
+    };
+
+    match element_to_click {
+        Some(element) => match element.click() {
+            Ok(_) => Ok(JsonResponse(ActionResponse {
+                success: true,
+                message: format!("Clicked element with role: {}", element.role()),
+            })),
+            Err(e) => Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to click element: {}", e)
+                })),
+            )),
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "No matching element found"
+            })),
+        )),
+    }
+}
+
+#[oasgen]
+async fn type_text_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<TypeTextRequest>,
+) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new() {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Find elements matching the selector
+    let elements = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.all() {
+            Ok(elements) => elements,
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Filter elements
+    let filtered_elements = elements
+        .into_iter()
+        .filter(|element| {
+            let matches_text = request
+                .selector
+                .text
+                .as_ref()
+                .map(|t| element.text().unwrap_or_default().contains(t))
+                .unwrap_or(true);
+
+            let matches_label = request
+                .selector
+                .label
+                .as_ref()
+                .map(|l| {
+                    element
+                        .attributes()
+                        .label
+                        .as_ref()
+                        .map(|el| el.contains(l))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(true);
+
+            let matches_description = request
+                .selector
+                .description
+                .as_ref()
+                .map(|d| {
+                    element
+                        .attributes()
+                        .description
+                        .as_ref()
+                        .map(|ed| ed.contains(d))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(true);
+
+            matches_text && matches_label && matches_description
+        })
+        .collect::<Vec<_>>();
+
+    // Get the element to type into
+    let element_to_type = match request.selector.index {
+        Some(index) => filtered_elements.get(index).cloned(),
+        None => filtered_elements.first().cloned(),
+    };
+
+    match element_to_type {
+        Some(element) => match element.type_text(&request.text) {
+            Ok(_) => Ok(JsonResponse(ActionResponse {
+                success: true,
+                message: format!("Typed text into element with role: {}", element.role()),
+            })),
+            Err(e) => Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to type text: {}", e)
+                })),
+            )),
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "No matching element found"
+            })),
+        )),
+    }
+}
