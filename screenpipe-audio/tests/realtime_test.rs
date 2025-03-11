@@ -1,7 +1,9 @@
 use futures::StreamExt;
-use screenpipe_audio::realtime::RealtimeTranscriptionEvent;
-use screenpipe_audio::{deepgram::start_deepgram_stream, AudioDevice};
-use screenpipe_audio::{pcm_decode, DeviceType};
+use screenpipe_audio::core::device::AudioDevice;
+use screenpipe_audio::core::device::DeviceType;
+use screenpipe_audio::pcm_decode;
+use screenpipe_audio::transcription::deepgram::streaming::start_deepgram_stream;
+use screenpipe_audio::transcription::deepgram::streaming::RealtimeTranscriptionEvent;
 use screenpipe_events::subscribe_to_event;
 use std::{
     sync::{atomic::AtomicBool, Arc},

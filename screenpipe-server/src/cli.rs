@@ -1,24 +1,30 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use clap::{Parser, Subcommand, ValueHint};
 use clap_complete::{generate, Shell};
 use clap::CommandFactory;
-use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
+use screenpipe_audio::{vad::{VadSensitivity, VadEngineEnum}, core::engine::AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
-use screenpipe_audio::vad_engine::VadEngineEnum;
 use screenpipe_core::Language;
-
+use screenpipe_db::OcrEngine as DBOcrEngine;
+use screenpipe_db::CustomOcrConfig as DBCustomOcrConfig;
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
     #[clap(name = "deepgram")]
     Deepgram,
     #[clap(name = "whisper-tiny")]
     WhisperTiny,
+    #[clap(name = "whisper-tiny-quantized")]
+    WhisperTinyQuantized,
     #[clap(name = "whisper-large")]
-    WhisperDistilLargeV3,
+    WhisperLargeV3,
+    #[clap(name = "whisper-large-quantized")]
+    WhisperLargeV3Quantized,
     #[clap(name = "whisper-large-v3-turbo")]
     WhisperLargeV3Turbo,
+    #[clap(name = "whisper-large-v3-turbo-quantized")]
+    WhisperLargeV3TurboQuantized,
 }
 
 impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
@@ -26,11 +32,14 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
         match cli_engine {
             CliAudioTranscriptionEngine::Deepgram => CoreAudioTranscriptionEngine::Deepgram,
             CliAudioTranscriptionEngine::WhisperTiny => CoreAudioTranscriptionEngine::WhisperTiny,
-            CliAudioTranscriptionEngine::WhisperDistilLargeV3 => {
-                CoreAudioTranscriptionEngine::WhisperDistilLargeV3
-            }
+            CliAudioTranscriptionEngine::WhisperTinyQuantized => CoreAudioTranscriptionEngine::WhisperTinyQuantized,
+            CliAudioTranscriptionEngine::WhisperLargeV3 => CoreAudioTranscriptionEngine::WhisperLargeV3,
+            CliAudioTranscriptionEngine::WhisperLargeV3Quantized => CoreAudioTranscriptionEngine::WhisperLargeV3Quantized,
             CliAudioTranscriptionEngine::WhisperLargeV3Turbo => {
                 CoreAudioTranscriptionEngine::WhisperLargeV3Turbo
+            }
+            CliAudioTranscriptionEngine::WhisperLargeV3TurboQuantized => {
+                CoreAudioTranscriptionEngine::WhisperLargeV3TurboQuantized
             }
         }
     }
@@ -46,6 +55,21 @@ pub enum CliOcrEngine {
     #[cfg(target_os = "macos")]
     AppleNative,
     Custom,
+}
+
+impl From<CliOcrEngine> for Arc<DBOcrEngine> {
+    fn from(cli_engine: CliOcrEngine) -> Self {
+        match cli_engine {
+            CliOcrEngine::Unstructured => Arc::new(DBOcrEngine::Unstructured),
+            #[cfg(target_os = "macos")]
+            CliOcrEngine::AppleNative => Arc::new(DBOcrEngine::AppleNative),
+            #[cfg(target_os = "linux")]
+            CliOcrEngine::Tesseract => Arc::new(DBOcrEngine::Tesseract),
+            #[cfg(target_os = "windows")]
+            CliOcrEngine::WindowsNative => Arc::new(DBOcrEngine::WindowsNative),
+            CliOcrEngine::Custom => Arc::new(DBOcrEngine::Custom(DBCustomOcrConfig::default())),
+        }
+    }
 }
 
 impl From<CliOcrEngine> for CoreOcrEngine {
@@ -250,7 +274,7 @@ pub struct Cli {
     pub enable_ui_monitoring: bool,
     
     /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = true)]
     pub enable_frame_cache: bool,
 
     /// Capture windows that are not focused (default: false)

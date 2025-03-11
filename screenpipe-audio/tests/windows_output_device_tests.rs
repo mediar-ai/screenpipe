@@ -1,7 +1,7 @@
 #[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
-    use screenpipe_audio::{list_audio_devices, record_and_transcribe, AudioInput};
+    use screenpipe_audio::{core::device::list_audio_devices, record_and_transcribe, AudioInput};
 
     use std::{
         path::PathBuf,
@@ -15,7 +15,7 @@ mod tests {
         let devices = list_audio_devices().await?;
         let virtual_device = match devices.iter().find(|d| d.name.contains("CABLE Output")) {
             Some(device) => device,
-            None => return Ok(()),  // Silently return if device not found
+            None => return Ok(()), // Silently return if device not found
         };
 
         println!("Found virtual device: {:?}", virtual_device.name);
@@ -26,7 +26,7 @@ mod tests {
         let (tx, _rx): (
             crossbeam::channel::Sender<AudioInput>,
             crossbeam::channel::Receiver<AudioInput>,
-            ) = crossbeam::channel::bounded(100);
+        ) = crossbeam::channel::bounded(100);
         let is_running = Arc::new(AtomicBool::new(true));
 
         // Record from the virtual device

@@ -1,0 +1,43 @@
+[package]
+name = "screenpipe-db"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono = { version = "0.4.31", features = ["serde"] }
+image = { workspace = true }
+sqlx = { version = "0.7", features = [
+  "sqlite",
+  "runtime-tokio-native-tls",
+  "chrono",
+  "migrate",
+] }
+sqlite-vec = "0.1.3"
+libsqlite3-sys = { version = "0.26", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+futures = { version = "0.3.31", features = ["std"] }
+
+zerocopy = { version = "0.7.32" }
+
+tokio-util = { version = "0.7", features = ["io"] }
+tokio = { version = "1.15", features = ["full", "tracing"] }
+
+tracing = { workspace = true }
+anyhow = "1.0.86"
+rand = "0.8.5"
+criterion = { workspace = true }
+oasgen = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[[bench]]
+name = "db_benchmarks"
+harness = false
+
+[[bench]]
+name = "new_db_benchmark"
+harness = false
