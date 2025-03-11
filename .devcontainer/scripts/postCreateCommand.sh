@@ -1,7 +1,4 @@
-echo "Welcome to Screenpipe!"
-
-echo "We have set up an alias 'test-linux' for 'linux_integration.sh' in your shell configurations."
-echo "You can use 'test-linux' to check if the Linux build of the app is working."
+#!/bin/bash
 
 # Define the alias
 ALIAS_CMD="alias test-linux=\"/workspaces/screenpipe/.devcontainer/scripts/linux_integration.sh\""
