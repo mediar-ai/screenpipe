@@ -1,5 +1,5 @@
 # Use the specified base image
-FROM mcr.microsoft.com/devcontainers/cpp:ubuntu-22.04
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
 
 # Switch to the vscode user
 USER vscode
@@ -44,11 +44,23 @@ RUN sudo apt-get update && sudo apt-get install -y \
     libwebkit2gtk-4.1-dev \
     librsvg2-dev \
     patchelf \
+    xvfb \
+    x11-utils \
+    x11-apps \
+    xdotool \
+    sqlitebrowser \
+    openbox \
+    xterm \
+    fonts-liberation \
+    imagemagick \
+    fonts-dejavu \
+    alsa-utils \
+    pulseaudio \
+    pulseaudio-utils \
     && sudo apt-get clean \
     && sudo rm -rf /var/lib/apt/lists/*
 
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash
 
-# Add Bun to PATH
-
+EXPOSE 3000 3030
