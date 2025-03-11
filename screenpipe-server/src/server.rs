@@ -2934,6 +2934,8 @@ pub struct ElementSelector {
     description: Option<String>,
     element_id: Option<String>,
     use_background_apps: Option<bool>,
+    /// If true, the app will be activated before finding elements (this is useful to refresh the tree or clicking on elements)
+    activate_app: Option<bool>,
 }
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
@@ -2995,7 +2997,10 @@ async fn find_elements_handler(
     State(_): State<Arc<AppState>>,
     Json(request): Json<FindElementsRequest>,
 ) -> Result<JsonResponse<FindElementsResponse>, (StatusCode, JsonResponse<Value>)> {
-    let desktop = match Desktop::new(request.selector.use_background_apps.unwrap_or(false)) {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
         Ok(d) => d,
         Err(e) => {
             return Err((
@@ -3024,7 +3029,7 @@ async fn find_elements_handler(
     let element = match app.locator(request.selector.locator.as_str()) {
         Ok(locator) => match locator.first() {
             Ok(element) => element,
-            Err(e) => {
+            Err(_) => {
                 return Err((
                     StatusCode::NOT_FOUND,
                     JsonResponse(json!({ "error": "No matching element found" })),
@@ -3076,7 +3081,10 @@ async fn click_element_handler(
     State(_): State<Arc<AppState>>,
     Json(request): Json<ClickElementRequest>,
 ) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
-    let desktop = match Desktop::new(request.selector.use_background_apps.unwrap_or(false)) {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
         Ok(d) => d,
         Err(e) => {
             return Err((
@@ -3158,7 +3166,10 @@ async fn type_text_handler(
     State(_): State<Arc<AppState>>,
     Json(request): Json<TypeTextRequest>,
 ) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
-    let desktop = match Desktop::new(request.selector.use_background_apps.unwrap_or(false)) {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
         Ok(d) => d,
         Err(e) => {
             return Err((

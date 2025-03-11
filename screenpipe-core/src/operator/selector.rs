@@ -31,6 +31,11 @@ impl From<&str> for Selector {
                 role: s.to_string(),
                 name: None,
             },
+            // starts with AX
+            _ if s.starts_with("AX") => Selector::Role {
+                role: s.to_string(),
+                name: None,
+            },
             _ if s.contains(':') => {
                 let parts: Vec<&str> = s.splitn(2, ':').collect();
                 Selector::Role {
@@ -40,7 +45,7 @@ impl From<&str> for Selector {
             }
             _ if s.starts_with('#') => Selector::Id(s[1..].to_string()),
             _ if s.starts_with('/') => Selector::Path(s.to_string()),
-            _ if s.starts_with("text:") => Selector::Text(s.to_string()),
+            _ if s.starts_with("text:") => Selector::Text(s[5..].to_string()),
             _ => Selector::Name(s.to_string()),
         }
     }

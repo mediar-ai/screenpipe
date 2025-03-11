@@ -10,9 +10,9 @@ mod errors;
 mod locator;
 mod platforms;
 mod selector;
-mod tree_search;
 #[cfg(test)]
 mod tests;
+mod tree_search;
 
 pub use element::{UIElement, UIElementAttributes};
 pub use errors::AutomationError;
@@ -26,8 +26,8 @@ pub struct Desktop {
 
 impl Desktop {
     /// Create a new instance with the default platform-specific implementation
-    pub fn new(use_background_apps: bool) -> Result<Self, AutomationError> {
-        let boxed_engine = platforms::create_engine(use_background_apps)?;
+    pub fn new(use_background_apps: bool, activate_app: bool) -> Result<Self, AutomationError> {
+        let boxed_engine = platforms::create_engine(use_background_apps, activate_app)?;
         // Move the boxed engine into an Arc
         let engine = Arc::from(boxed_engine);
         Ok(Self { engine })

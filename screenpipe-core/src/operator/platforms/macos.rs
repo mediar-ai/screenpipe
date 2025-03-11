@@ -85,10 +85,11 @@ impl fmt::Debug for ThreadSafeAXUIElement {
 pub struct MacOSEngine {
     system_wide: ThreadSafeAXUIElement,
     use_background_apps: bool,
+    activate_app: bool,
 }
 
 impl MacOSEngine {
-    pub fn new(use_background_apps: bool) -> Result<Self, AutomationError> {
+    pub fn new(use_background_apps: bool, activate_app: bool) -> Result<Self, AutomationError> {
         // Check accessibility permissions using FFI directly
         // Since accessibility::AXIsProcessTrustedWithOptions is not available
         let accessibility_enabled = unsafe {
@@ -118,6 +119,7 @@ impl MacOSEngine {
         Ok(Self {
             system_wide: ThreadSafeAXUIElement::system_wide(),
             use_background_apps,
+            activate_app,
         })
     }
 
@@ -139,7 +141,67 @@ impl MacOSEngine {
         UIElement::new(Box::new(MacOSUIElement {
             element: ax_element,
             use_background_apps: self.use_background_apps,
+            activate_app: self.activate_app,
         }))
+    }
+
+    // Add this new method to refresh the accessibility tree
+    pub fn refresh_accessibility_tree(
+        &self,
+        app_name: Option<&str>,
+    ) -> Result<(), AutomationError> {
+        if !self.activate_app {
+            return Ok(());
+        }
+
+        debug!(target: "operator", "Refreshing accessibility tree");
+
+        // If app name is provided, try to activate that app first
+        if let Some(name) = app_name {
+            unsafe {
+                use objc::{class, msg_send, sel, sel_impl};
+
+                let workspace_class = class!(NSWorkspace);
+                let shared_workspace: *mut objc::runtime::Object =
+                    msg_send![workspace_class, sharedWorkspace];
+                let apps: *mut objc::runtime::Object =
+                    msg_send![shared_workspace, runningApplications];
+                let count: usize = msg_send![apps, count];
+
+                for i in 0..count {
+                    let app: *mut objc::runtime::Object = msg_send![apps, objectAtIndex:i];
+                    let app_name_obj: *mut objc::runtime::Object = msg_send![app, localizedName];
+
+                    if !app_name_obj.is_null() {
+                        let app_name_str: &str = {
+                            let nsstring = app_name_obj as *const objc::runtime::Object;
+                            let bytes: *const std::os::raw::c_char =
+                                msg_send![nsstring, UTF8String];
+                            let len: usize = msg_send![nsstring, lengthOfBytesUsingEncoding:4]; // NSUTF8StringEncoding = 4
+                            let bytes_slice = std::slice::from_raw_parts(bytes as *const u8, len);
+                            std::str::from_utf8_unchecked(bytes_slice)
+                        };
+
+                        if app_name_str.to_lowercase() == name.to_lowercase() {
+                            // Found the app, activate it
+                            let _: () = msg_send![app, activateWithOptions:1]; // NSApplicationActivateIgnoringOtherApps = 1
+                            debug!(target: "operator", "Activated application: {}", name);
+
+                            // Give the system a moment to update
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Force a refresh of the system-wide element
+        // This is a bit of a hack, but querying the system-wide element
+        // can force the accessibility API to refresh its cache
+        let _ = self.system_wide.0.attribute_names();
+
+        Ok(())
     }
 }
 
@@ -299,6 +361,9 @@ impl AccessibilityEngine for MacOSEngine {
     }
 
     fn get_application_by_name(&self, name: &str) -> Result<UIElement, AutomationError> {
+        // Refresh the accessibility tree before searching
+        self.refresh_accessibility_tree(Some(name))?;
+
         // Get all applications first, then filter by name
         let apps = self.get_applications()?;
 
@@ -328,6 +393,32 @@ impl AccessibilityEngine for MacOSEngine {
         selector: &Selector,
         root: Option<&UIElement>,
     ) -> Result<UIElement, AutomationError> {
+        // If we have a root element that's an application, refresh the tree for that app
+        if let Some(root_elem) = root {
+            if let Some(macos_el) = root_elem.as_any().downcast_ref::<MacOSUIElement>() {
+                if macos_el
+                    .element
+                    .0
+                    .role()
+                    .map_or(false, |r| r.to_string() == "AXApplication")
+                {
+                    if let Some(app_name) = root_elem.attributes().label {
+                        self.refresh_accessibility_tree(Some(&app_name))?;
+                    }
+                }
+            }
+        }
+
+        let start_element = root
+            .map(|el| {
+                if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
+                    &macos_el.element.0
+                } else {
+                    panic!("Root element is not a macOS element")
+                }
+            })
+            .unwrap_or(&self.system_wide.0);
+
         // Regular element finding logic
         match selector {
             Selector::Role { role, name: _ } => {
@@ -343,16 +434,6 @@ impl AccessibilityEngine for MacOSEngine {
                     None,
                 );
                 let walker: TreeWalkerWithWindows = TreeWalkerWithWindows::new();
-
-                let start_element = root
-                    .map(|el| {
-                        if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
-                            &macos_el.element.0
-                        } else {
-                            panic!("Root element is not a macOS element")
-                        }
-                    })
-                    .unwrap_or(&self.system_wide.0);
 
                 walker.walk(start_element, &collector);
 
@@ -379,16 +460,6 @@ impl AccessibilityEngine for MacOSEngine {
                 );
                 let walker: TreeWalkerWithWindows = TreeWalkerWithWindows::new();
 
-                let start_element = root
-                    .map(|el| {
-                        if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
-                            &macos_el.element.0
-                        } else {
-                            panic!("Root element is not a macOS element")
-                        }
-                    })
-                    .unwrap_or(&self.system_wide.0);
-
                 walker.walk(start_element, &collector);
 
                 let ax_ui_element = match collector.find() {
@@ -414,16 +485,6 @@ impl AccessibilityEngine for MacOSEngine {
                 );
                 let walker: TreeWalkerWithWindows = TreeWalkerWithWindows::new();
 
-                let start_element = root
-                    .map(|el| {
-                        if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
-                            &macos_el.element.0
-                        } else {
-                            panic!("Root element is not a macOS element")
-                        }
-                    })
-                    .unwrap_or(&self.system_wide.0);
-
                 walker.walk(start_element, &collector);
 
                 let ax_ui_element = match collector.find() {
@@ -440,30 +501,22 @@ impl AccessibilityEngine for MacOSEngine {
 
             Selector::Text(text) => {
                 let text_owned = text.clone(); // Create an owned copy
+
+                // Create a collector that recursively checks children
                 let collector = ElementFinderWithWindows::new(
                     &self.system_wide.0,
                     move |e| {
-                        // Use move to take ownership of text_owned
-                        // AXValue is the text of the element
-                        if let Some(cf_string) = e.value().unwrap().downcast_into::<CFString>() {
-                            cf_string.to_string().contains(&text_owned)
-                        } else {
-                            false
+                        // First check if element itself contains the text in any attribute
+                        if element_contains_text(e, &text_owned) {
+                            return true;
                         }
+
+                        false
                     },
                     None,
                 );
-                let walker: TreeWalkerWithWindows = TreeWalkerWithWindows::new();
 
-                let start_element = root
-                    .map(|el| {
-                        if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
-                            &macos_el.element.0
-                        } else {
-                            panic!("Root element is not a macOS element")
-                        }
-                    })
-                    .unwrap_or(&self.system_wide.0);
+                let walker: TreeWalkerWithWindows = TreeWalkerWithWindows::new();
 
                 walker.walk(start_element, &collector);
 
@@ -492,12 +545,113 @@ impl AccessibilityEngine for MacOSEngine {
             }
         }
     }
+
+    fn find_elements(
+        &self,
+        selector: &Selector,
+        root: Option<&UIElement>,
+    ) -> Result<Vec<UIElement>, AutomationError> {
+        use crate::operator::tree_search::ElementsCollectorWithWindows;
+
+        // Get the start element from the provided root or fall back to system_wide
+        let start_element = root
+            .map(|el| {
+                if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
+                    &macos_el.element.0
+                } else {
+                    panic!("Root element is not a macOS element")
+                }
+            })
+            .unwrap_or(&self.system_wide.0);
+
+        match selector {
+            Selector::Role { role, name: _ } => {
+                let macos_roles = map_generic_role_to_macos_roles(role);
+
+                let collector = ElementsCollectorWithWindows::new(start_element, move |e| {
+                    let element_role = e.role().unwrap_or(CFString::new("")).to_string();
+                    macos_roles.contains(&element_role)
+                });
+
+                let ax_ui_elements = collector.find_all();
+
+                // Convert AXUIElements to UIElements
+                let ui_elements = ax_ui_elements
+                    .into_iter()
+                    .map(|e| self.wrap_element(ThreadSafeAXUIElement::new(e)))
+                    .collect();
+
+                Ok(ui_elements)
+            }
+            Selector::Id(id) => {
+                let id_owned = id.clone();
+                let collector = ElementsCollectorWithWindows::new(start_element, move |e| {
+                    e.identifier().unwrap_or(CFString::new("")).to_string() == id_owned
+                });
+
+                let ax_ui_elements = collector.find_all();
+
+                // Convert AXUIElements to UIElements
+                let ui_elements = ax_ui_elements
+                    .into_iter()
+                    .map(|e| self.wrap_element(ThreadSafeAXUIElement::new(e)))
+                    .collect();
+
+                Ok(ui_elements)
+            }
+            Selector::Name(name) => {
+                let name_owned = name.clone();
+                let collector = ElementsCollectorWithWindows::new(start_element, move |e| {
+                    e.title().unwrap_or(CFString::new("")).to_string() == name_owned
+                });
+
+                let ax_ui_elements = collector.find_all();
+
+                // Convert AXUIElements to UIElements
+                let ui_elements = ax_ui_elements
+                    .into_iter()
+                    .map(|e| self.wrap_element(ThreadSafeAXUIElement::new(e)))
+                    .collect();
+
+                Ok(ui_elements)
+            }
+            Selector::Text(text) => {
+                let text_owned = text.clone();
+                let collector = ElementsCollectorWithWindows::new(start_element, move |e| {
+                    element_contains_text(e, &text_owned)
+                });
+
+                let ax_ui_elements = collector.find_all();
+
+                // Convert AXUIElements to UIElements
+                let ui_elements = ax_ui_elements
+                    .into_iter()
+                    .map(|e| self.wrap_element(ThreadSafeAXUIElement::new(e)))
+                    .collect();
+
+                Ok(ui_elements)
+            }
+            Selector::Attributes(_attrs) => Err(AutomationError::UnsupportedOperation(
+                "Attributes selector not implemented for find_elements".to_string(),
+            )),
+            Selector::Path(_) => Err(AutomationError::UnsupportedOperation(
+                "Path selector not implemented for find_elements".to_string(),
+            )),
+            Selector::Filter(_) => Err(AutomationError::UnsupportedOperation(
+                "Filter selector not implemented for find_elements".to_string(),
+            )),
+            Selector::Chain(_) => Err(AutomationError::UnsupportedOperation(
+                "Chain selector not implemented for find_elements".to_string(),
+            )),
+        }
+    }
 }
 
 // Our concrete UIElement implementation for macOS
 pub struct MacOSUIElement {
     element: ThreadSafeAXUIElement,
     use_background_apps: bool,
+    activate_app: bool,
 }
 
 impl std::fmt::Debug for MacOSUIElement {
@@ -518,6 +672,7 @@ impl MacOSUIElement {
                     Some(MacOSUIElement {
                         element: ThreadSafeAXUIElement::new(app),
                         use_background_apps: self.use_background_apps,
+                        activate_app: self.activate_app,
                     })
                 } else {
                     None
@@ -590,6 +745,7 @@ impl MacOSUIElement {
                             Box::new(MacOSUIElement {
                                 element: ThreadSafeAXUIElement::new(child),
                                 use_background_apps: elem.use_background_apps,
+                                activate_app: elem.activate_app,
                             }),
                             next_depth,
                         ));
@@ -607,6 +763,39 @@ impl MacOSUIElement {
         }
 
         Ok(all_text.join("\n"))
+    }
+
+    fn click_with_applescript(&self) -> Result<(), AutomationError> {
+        // Get element position
+        let (x, y, width, height) = self.bounds()?;
+        let center_x = x + width / 2.0;
+        let center_y = y + height / 2.0;
+
+        // Create AppleScript to click at position
+        let script = format!(
+            "tell application \"System Events\" to click at {{{}, {}}}",
+            center_x as i32, center_y as i32
+        );
+
+        // Execute AppleScript
+        use std::process::Command;
+        let output = Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .output()
+            .map_err(|e| {
+                AutomationError::PlatformError(format!("Failed to execute AppleScript: {}", e))
+            })?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            return Err(AutomationError::PlatformError(format!(
+                "AppleScript execution failed: {}",
+                error
+            )));
+        }
+
+        Ok(())
     }
 }
 
@@ -803,6 +992,7 @@ impl UIElementImpl for MacOSUIElement {
                 all_children.push(UIElement::new(Box::new(MacOSUIElement {
                     element: ThreadSafeAXUIElement::new(window.clone()),
                     use_background_apps: self.use_background_apps,
+                    activate_app: self.activate_app,
                 })));
             }
         }
@@ -812,6 +1002,7 @@ impl UIElementImpl for MacOSUIElement {
             all_children.push(UIElement::new(Box::new(MacOSUIElement {
                 element: ThreadSafeAXUIElement::new(window.clone()),
                 use_background_apps: self.use_background_apps,
+                activate_app: self.activate_app,
             })));
         }
 
@@ -823,6 +1014,7 @@ impl UIElementImpl for MacOSUIElement {
                     all_children.push(UIElement::new(Box::new(MacOSUIElement {
                         element: ThreadSafeAXUIElement::new(child.clone()),
                         use_background_apps: self.use_background_apps,
+                        activate_app: self.activate_app,
                     })));
                 }
 
@@ -854,6 +1046,7 @@ impl UIElementImpl for MacOSUIElement {
                     Ok(Some(UIElement::new(Box::new(MacOSUIElement {
                         element: ThreadSafeAXUIElement::new(parent),
                         use_background_apps: self.use_background_apps,
+                        activate_app: self.activate_app,
                     }))))
                 } else {
                     Ok(None) // No parent
@@ -918,13 +1111,119 @@ impl UIElementImpl for MacOSUIElement {
     }
 
     fn click(&self) -> Result<(), AutomationError> {
-        // Perform a click action on the element
-        let press_attr = AXAttribute::new(&CFString::new("AXPress"));
+        // Try multiple approaches to click the element
 
-        self.element
-            .0
-            .perform_action(&press_attr.as_CFString())
-            .map_err(|e| AutomationError::PlatformError(format!("Failed to click element: {}", e)))
+        // 1. Try AXPress action first (the original approach)
+        let press_attr = AXAttribute::new(&CFString::new("AXPress"));
+        let press_result = self.element.0.perform_action(&press_attr.as_CFString());
+
+        if press_result.is_ok() {
+            debug!(target: "operator", "Successfully clicked element with AXPress");
+            // return Ok(());
+        } else {
+            debug!(target: "operator", "AXPress failed, trying alternative methods");
+        }
+
+        // 2. Try the more specific AXClick action
+        let click_attr = AXAttribute::new(&CFString::new("AXClick"));
+        let click_result = self.element.0.perform_action(&click_attr.as_CFString());
+
+        if click_result.is_ok() {
+            debug!(target: "operator", "Successfully clicked element with AXClick");
+            // return Ok(());
+        } else {
+            debug!(target: "operator", "AXClick failed, trying alternative methods");
+        }
+
+        // match self.click_with_applescript() {
+        //     Ok(_) => {
+        //         debug!(target: "operator", "Successfully clicked element with AppleScript");
+        //         return Ok(());
+        //     }
+        //     Err(e) => {
+        //         debug!(target: "operator", "AppleScript click failed: {}", e);
+        //     }
+        // }
+
+        // 3. If both direct methods failed, try simulating click using mouse events
+        // Only do this as a last resort, as it's more invasive
+        match self.bounds() {
+            Ok((x, y, width, height)) => {
+                // Calculate center point of the element
+                let center_x = x + width / 2.0;
+                let center_y = y + height / 2.0;
+
+                // Use CGEventCreateMouseEvent to simulate mouse click
+                use core_graphics::event::{CGEvent, CGEventType, CGMouseButton};
+                use core_graphics::event_source::CGEventSource;
+                use core_graphics::geometry::CGPoint;
+
+                let point = CGPoint::new(center_x, center_y);
+
+                // Create event source
+                let source = CGEventSource::new(
+                    core_graphics::event_source::CGEventSourceStateID::HIDSystemState,
+                )
+                .map_err(|_| {
+                    AutomationError::PlatformError("Failed to create event source".to_string())
+                })?;
+
+                // Move mouse to position
+                let mouse_move = CGEvent::new_mouse_event(
+                    source.clone(),
+                    CGEventType::MouseMoved,
+                    point,
+                    CGMouseButton::Left,
+                )
+                .map_err(|_| {
+                    AutomationError::PlatformError("Failed to create mouse move event".to_string())
+                })?;
+                mouse_move.post(core_graphics::event::CGEventTapLocation::HID);
+
+                // Brief pause to allow UI to respond
+                std::thread::sleep(std::time::Duration::from_millis(50));
+
+                debug!(target: "operator", "Mouse down at ({}, {})", center_x, center_y);
+
+                // Mouse down
+                let mouse_down = CGEvent::new_mouse_event(
+                    source.clone(),
+                    CGEventType::LeftMouseDown,
+                    point,
+                    CGMouseButton::Left,
+                )
+                .map_err(|_| {
+                    AutomationError::PlatformError("Failed to create mouse down event".to_string())
+                })?;
+                mouse_down.post(core_graphics::event::CGEventTapLocation::HID);
+
+                // Brief pause
+                std::thread::sleep(std::time::Duration::from_millis(50));
+
+                debug!(target: "operator", "Mouse up at ({}, {})", center_x, center_y);
+
+                // Mouse up
+                let mouse_up = CGEvent::new_mouse_event(
+                    source,
+                    CGEventType::LeftMouseUp,
+                    point,
+                    CGMouseButton::Left,
+                )
+                .map_err(|_| {
+                    AutomationError::PlatformError("Failed to create mouse up event".to_string())
+                })?;
+                mouse_up.post(core_graphics::event::CGEventTapLocation::HID);
+
+                debug!(target: "operator", "Performed simulated mouse click at ({}, {})", center_x, center_y);
+                return Ok(());
+            }
+            Err(e) => {
+                return Err(AutomationError::PlatformError(format!(
+                    "Failed to determine element bounds for click: {}",
+                    e
+                )));
+            }
+        }
     }
 
     fn double_click(&self) -> Result<(), AutomationError> {
@@ -1211,7 +1510,20 @@ impl UIElementImpl for MacOSUIElement {
 
     fn create_locator(&self, selector: Selector) -> Result<Locator, AutomationError> {
         // Get the platform-specific instance of the engine
-        let engine = MacOSEngine::new(self.use_background_apps)?;
+        let engine = MacOSEngine::new(self.use_background_apps, self.activate_app)?;
+
+        // If this is an application element, refresh the tree
+        if self
+            .element
+            .0
+            .role()
+            .map_or(false, |r| r.to_string() == "AXApplication")
+        {
+            if let Some(app_name) = self.attributes().label {
+                engine.refresh_accessibility_tree(Some(&app_name))?;
+            }
+        }
+
         // Add some debug output to understand the current element
         let attrs = self.attributes();
         debug!(target: "operator", "Creating locator for element: role={}, label={:?}", attrs.role, attrs.label);
@@ -1220,6 +1532,7 @@ impl UIElementImpl for MacOSUIElement {
         let self_element = UIElement::new(Box::new(MacOSUIElement {
             element: self.element.clone(),
             use_background_apps: self.use_background_apps,
+            activate_app: self.activate_app,
         }));
 
         // Create a locator for the selector with the engine, then set root to this element
@@ -1232,6 +1545,7 @@ impl UIElementImpl for MacOSUIElement {
         Box::new(MacOSUIElement {
             element: self.element.clone(),
             use_background_apps: self.use_background_apps,
+            activate_app: self.activate_app,
         })
     }
 }
@@ -1390,4 +1704,50 @@ fn parse_ax_attribute_value(
 
     // Fallback for unhandled types
     None
+}
+
+// Add this helper function after the selector handler
+fn element_contains_text(e: &AXUIElement, text: &str) -> bool {
+    // Check immediate element attributes for text
+    let contains_in_value = e
+        .value()
+        .ok()
+        .and_then(|v| v.downcast_into::<CFString>())
+        .map_or(false, |s| s.to_string().contains(text));
+
+    if contains_in_value {
+        return true;
+    }
+
+    // Check title, description and other text attributes
+    let contains_in_title = e
+        .title()
+        .ok()
+        .map_or(false, |t| t.to_string().contains(text));
+
+    let contains_in_desc = e
+        .description()
+        .ok()
+        .map_or(false, |d| d.to_string().contains(text));
+
+    // Check common text attributes
+    for attr_name in &[
+        "AXValue",
+        "AXTitle",
+        "AXDescription",
+        "AXHelp",
+        "AXLabel",
+        "AXText",
+    ] {
+        let attr = AXAttribute::new(&CFString::new(attr_name));
+        if let Ok(value) = e.attribute(&attr) {
+            if let Some(cf_string) = value.downcast_into::<CFString>() {
+                if cf_string.to_string().contains(text) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    contains_in_title || contains_in_desc
 }

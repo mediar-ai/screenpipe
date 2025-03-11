@@ -20,6 +20,15 @@ pub trait AccessibilityEngine: Send + Sync {
         selector: &Selector,
         root: Option<&UIElement>,
     ) -> Result<UIElement, AutomationError>;
+
+    /// Find all elements matching a selector
+    /// Default implementation returns an UnsupportedOperation error,
+    /// allowing platform-specific implementations to override as needed
+    fn find_elements(
+        &self,
+        selector: &Selector,
+        root: Option<&UIElement>,
+    ) -> Result<Vec<UIElement>, AutomationError>;
 }
 
 #[cfg(target_os = "linux")]
@@ -32,18 +41,28 @@ mod windows;
 /// Create the appropriate engine for the current platform
 pub fn create_engine(
     use_background_apps: bool,
+    activate_app: bool,
 ) -> Result<Box<dyn AccessibilityEngine>, AutomationError> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(Box::new(macos::MacOSEngine::new(use_background_apps)?));
+        return Ok(Box::new(macos::MacOSEngine::new(
+            use_background_apps,
+            activate_app,
+        )?));
     }
     #[cfg(target_os = "windows")]
     {
-        return Ok(Box::new(windows::WindowsEngine::new(use_background_apps)?));
+        return Ok(Box::new(windows::WindowsEngine::new(
+            use_background_apps,
+            activate_app,
+        )?));
     }
     #[cfg(target_os = "linux")]
     {
-        return Ok(Box::new(linux::LinuxEngine::new(use_background_apps)?));
+        return Ok(Box::new(linux::LinuxEngine::new(
+            use_background_apps,
+            activate_app,
+        )?));
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {

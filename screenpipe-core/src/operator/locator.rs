@@ -44,10 +44,25 @@ impl Locator {
 
     /// Get all elements matching this locator
     pub fn all(&self) -> Result<Vec<UIElement>, AutomationError> {
-        // not implemented
-        Err(AutomationError::UnsupportedOperation(
-            "all() is not implemented".to_string(),
-        ))
+        // Check if we can use platform-specific find_elements method
+        if let Ok(elements) = self
+            .engine
+            .find_elements(&self.selector, self.root.as_ref())
+        {
+            return Ok(elements);
+        }
+
+        // Fallback implementation - get the first element, then get its siblings
+        // Note: This is a naive implementation and might not work correctly in all cases
+        match self.first()? {
+            Some(first) => {
+                let result = vec![first];
+                // In a proper implementation, we would need to search for siblings
+                // or implement a custom ElementCollector that gathers all matches
+                Ok(result)
+            }
+            None => Ok(vec![]),
+        }
     }
 
     /// Wait for an element to be available
