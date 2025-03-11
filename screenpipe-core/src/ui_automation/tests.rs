@@ -28,7 +28,7 @@ mod tests {
             setup_tracing();
 
             // Create a desktop automation instance
-            let desktop = match Desktop::new() {
+            let desktop = match Desktop::new(true) {
                 Ok(d) => {
                     println!("Successfully created Desktop automation");
                     d
@@ -119,7 +119,7 @@ mod tests {
                 let button_type = if let Some(props) = button.attributes().properties.get("AXRole")
                 {
                     let props_str = props.clone();
-                    props_str
+                    props_str.unwrap_or_default()
                 } else {
                     "unknown".to_string()
                 };
@@ -177,7 +177,7 @@ mod tests {
             setup_tracing();
 
             // Create a desktop automation instance
-            let desktop = match Desktop::new() {
+            let desktop = match Desktop::new(true) {
                 Ok(d) => {
                     println!("Successfully created Desktop automation");
                     d
@@ -190,36 +190,17 @@ mod tests {
 
             let app = desktop.application("Notes").unwrap();
 
-            // let children = app.children().unwrap();
+            let children = app.children().unwrap();
 
-            // println!("App children: {:?}", children.len());
+            println!("App children: {:?}", children.len());
 
-            // for (i, child) in children.iter().enumerate() {
-            //     println!("App child #{}: {:?}", i, child.role());
-            // }
-
-            // let windows = app.locator("window").unwrap().all().unwrap_or_default();
-            // println!("Found {} windows", windows.len());
-
-            // for (i, window) in windows.iter().enumerate() {
-            //     println!("Window #{}: {:?}", i, window.text());
-            // }
-
-            let texts = app.locator("text").unwrap().all().unwrap_or_default();
-            println!("Found {} texts", texts.len());
-
-            for (i, text) in texts.iter().enumerate() {
-                println!("Text #{}: {:?}", i, text.role());
-                // if role i AXWebArea, fill text
-                if text.role() == "AXTextArea" {
-                    match text.type_text("Hello, world!") {
-                        Ok(_) => println!("Filled text: {:?}", text.text()),
-                        Err(e) => println!("Failed to fill text: {:?}", e),
-                    }
-                }
+            for (i, child) in children.iter().enumerate() {
+                println!("App child #{}: {:?}", i, child.role());
             }
-            
 
+            let input = app.locator("input").unwrap().first().unwrap_or_default();
+            println!("found input: {:?}", input.is_some());
+            println!("found input: {:?}", input.unwrap().text().unwrap());
         }
     }
 }

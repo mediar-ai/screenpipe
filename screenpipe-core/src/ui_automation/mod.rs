@@ -10,6 +10,7 @@ mod errors;
 mod locator;
 mod platforms;
 mod selector;
+mod tree_search;
 #[cfg(test)]
 mod tests;
 
@@ -25,8 +26,8 @@ pub struct Desktop {
 
 impl Desktop {
     /// Create a new instance with the default platform-specific implementation
-    pub fn new() -> Result<Self, AutomationError> {
-        let boxed_engine = platforms::create_engine()?;
+    pub fn new(use_background_apps: bool) -> Result<Self, AutomationError> {
+        let boxed_engine = platforms::create_engine(use_background_apps)?;
         // Move the boxed engine into an Arc
         let engine = Arc::from(boxed_engine);
         Ok(Self { engine })
@@ -40,11 +41,6 @@ impl Desktop {
     /// Create a locator to find elements matching the given selector
     pub fn locator(&self, selector: impl Into<Selector>) -> Locator {
         Locator::new(Arc::clone(&self.engine), selector.into())
-    }
-
-    /// Get an element by its accessibility ID
-    pub fn element_by_id(&self, id: &str) -> Result<UIElement, AutomationError> {
-        self.engine.get_element_by_id(id)
     }
 
     /// Get the currently focused element

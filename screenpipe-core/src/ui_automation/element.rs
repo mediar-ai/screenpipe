@@ -17,7 +17,7 @@ pub struct UIElementAttributes {
     pub label: Option<String>,
     pub value: Option<String>,
     pub description: Option<String>,
-    pub properties: HashMap<String, String>,
+    pub properties: HashMap<String, Option<String>>,
 }
 
 /// Interface for platform-specific element implementations

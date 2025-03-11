@@ -36,16 +36,18 @@ impl Locator {
 
     /// Get the first element matching this locator
     pub fn first(&self) -> Result<Option<UIElement>, AutomationError> {
-        let elements = self
+        let element = self
             .engine
-            .find_elements(&self.selector, self.root.as_ref())?;
-        Ok(elements.into_iter().next())
+            .find_element(&self.selector, self.root.as_ref())?;
+        Ok(Some(element))
     }
 
     /// Get all elements matching this locator
     pub fn all(&self) -> Result<Vec<UIElement>, AutomationError> {
-        self.engine
-            .find_elements(&self.selector, self.root.as_ref())
+        // not implemented
+        Err(AutomationError::UnsupportedOperation(
+            "all() is not implemented".to_string(),
+        ))
     }
 
     /// Wait for an element to be available

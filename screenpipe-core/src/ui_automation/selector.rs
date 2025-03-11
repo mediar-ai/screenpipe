@@ -27,7 +27,7 @@ impl From<&str> for Selector {
         // instead of Name selectors
         match s {
             "window" | "button" | "checkbox" | "menu" | "menuitem" | "menubar" | "textfield"
-            | "input" | "text" => Selector::Role {
+            | "input" => Selector::Role {
                 role: s.to_string(),
                 name: None,
             },
@@ -40,6 +40,7 @@ impl From<&str> for Selector {
             }
             _ if s.starts_with('#') => Selector::Id(s[1..].to_string()),
             _ if s.starts_with('/') => Selector::Path(s.to_string()),
+            _ if s.starts_with("text:") => Selector::Text(s.to_string()),
             _ => Selector::Name(s.to_string()),
         }
     }

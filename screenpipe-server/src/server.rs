@@ -2926,11 +2926,14 @@ pub struct RestartVisionDevicesResponse {
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
 pub struct ElementSelector {
     app_name: String,
+    window_name: Option<String>,
     locator: String,
     index: Option<usize>,
     text: Option<String>,
     label: Option<String>,
     description: Option<String>,
+    element_id: Option<String>,
+    use_background_apps: Option<bool>,
 }
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
@@ -2964,7 +2967,7 @@ pub struct ElementSize {
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
 pub struct ElementInfo {
-    id: String,
+    id: Option<String>,
     role: String,
     label: Option<String>,
     description: Option<String>,
@@ -2991,7 +2994,7 @@ async fn find_elements_handler(
     State(_): State<Arc<AppState>>,
     Json(request): Json<FindElementsRequest>,
 ) -> Result<JsonResponse<FindElementsResponse>, (StatusCode, JsonResponse<Value>)> {
-    let desktop = match Desktop::new() {
+    let desktop = match Desktop::new(request.selector.use_background_apps.unwrap_or(false)) {
         Ok(d) => d,
         Err(e) => {
             return Err((
@@ -3014,6 +3017,8 @@ async fn find_elements_handler(
             ));
         }
     };
+
+    debug!("app: {:?}", app.text().unwrap_or_default());
 
     let elements = match app.locator(request.selector.locator.as_str()) {
         Ok(locator) => match locator.all() {
@@ -3039,6 +3044,8 @@ async fn find_elements_handler(
             ));
         }
     };
+
+    debug!("elements: {:?}", elements);
 
     // Filter elements if needed
     let filtered_elements = elements
@@ -3083,32 +3090,30 @@ async fn find_elements_handler(
         })
         .collect::<Vec<_>>();
 
+    debug!("filtered_elements: {:?}", filtered_elements);
+
     // Convert to ElementInfo
     let element_infos = filtered_elements
         .into_iter()
         .map(|element| ElementInfo {
-            id: format!("{:?}", element.id()),
+            id: element.id(),
             role: element.role(),
             label: element.attributes().label,
             description: element.attributes().description,
             text: element.text().ok(),
-            position: element
-                .bounds()
-                .ok()
-                .map(|(x, y, _, _)| ElementPosition {
-                    x: x as i32,
-                    y: y as i32,
-                }),
-            size: element
-                .bounds()
-                .ok()
-                .map(|(_, _, w, h)| ElementSize {
-                    width: w as i32,
-                    height: h as i32,
-                }),
+            position: element.bounds().ok().map(|(x, y, _, _)| ElementPosition {
+                x: x as i32,
+                y: y as i32,
+            }),
+            size: element.bounds().ok().map(|(_, _, w, h)| ElementSize {
+                width: w as i32,
+                height: h as i32,
+            }),
             properties: json!(element.attributes().properties),
         })
         .collect();
+
+    debug!("element_infos: {:?}", element_infos);
 
     Ok(JsonResponse(FindElementsResponse {
         elements: element_infos,
@@ -3120,7 +3125,7 @@ async fn click_element_handler(
     State(_): State<Arc<AppState>>,
     Json(request): Json<ClickElementRequest>,
 ) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
-    let desktop = match Desktop::new() {
+    let desktop = match Desktop::new(request.selector.use_background_apps.unwrap_or(false)) {
         Ok(d) => d,
         Err(e) => {
             return Err((
@@ -3144,11 +3149,14 @@ async fn click_element_handler(
         }
     };
 
+    debug!("app: {:?}", app.text().unwrap_or_default());
+
     // Find elements matching the selector
     let elements = match app.locator(request.selector.locator.as_str()) {
         Ok(locator) => match locator.all() {
             Ok(elements) => elements,
             Err(e) => {
+                error!("Failed to find elements: {}", e);
                 return Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
                     JsonResponse(json!({
@@ -3166,6 +3174,8 @@ async fn click_element_handler(
             ));
         }
     };
+
+    debug!("elements: {:?}", elements);
 
     // Filter elements
     let filtered_elements = elements
@@ -3216,18 +3226,23 @@ async fn click_element_handler(
         None => filtered_elements.first().cloned(),
     };
 
+    debug!("element_to_click: {:?}", element_to_click);
+
     match element_to_click {
         Some(element) => match element.click() {
             Ok(_) => Ok(JsonResponse(ActionResponse {
                 success: true,
                 message: format!("Clicked element with role: {}", element.role()),
             })),
-            Err(e) => Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({
-                    "error": format!("Failed to click element: {}", e)
-                })),
-            )),
+            Err(e) => {
+                error!("Failed to click element: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to click element: {}", e)
+                    })),
+                ))
+            }
         },
         None => Err((
             StatusCode::NOT_FOUND,
@@ -3243,7 +3258,7 @@ async fn type_text_handler(
     State(_): State<Arc<AppState>>,
     Json(request): Json<TypeTextRequest>,
 ) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
-    let desktop = match Desktop::new() {
+    let desktop = match Desktop::new(request.selector.use_background_apps.unwrap_or(false)) {
         Ok(d) => d,
         Err(e) => {
             return Err((
@@ -3267,6 +3282,7 @@ async fn type_text_handler(
         }
     };
 
+    debug!("app: {:?}", app);
     // Find elements matching the selector
     let elements = match app.locator(request.selector.locator.as_str()) {
         Ok(locator) => match locator.all() {
@@ -3281,6 +3297,7 @@ async fn type_text_handler(
             }
         },
         Err(e) => {
+            error!("Failed to create locator: {}", e);
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({
@@ -3289,6 +3306,8 @@ async fn type_text_handler(
             ));
         }
     };
+
+    debug!("elements: {:?}", elements);
 
     // Filter elements
     let filtered_elements = elements
@@ -3333,11 +3352,15 @@ async fn type_text_handler(
         })
         .collect::<Vec<_>>();
 
+    debug!("filtered_elements: {:?}", filtered_elements);
+
     // Get the element to type into
     let element_to_type = match request.selector.index {
         Some(index) => filtered_elements.get(index).cloned(),
         None => filtered_elements.first().cloned(),
     };
+
+    debug!("element_to_type: {:?}", element_to_type);
 
     match element_to_type {
         Some(element) => match element.type_text(&request.text) {
@@ -3345,12 +3368,15 @@ async fn type_text_handler(
                 success: true,
                 message: format!("Typed text into element with role: {}", element.role()),
             })),
-            Err(e) => Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({
-                    "error": format!("Failed to type text: {}", e)
-                })),
-            )),
+            Err(e) => {
+                error!("Failed to type text: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to type text: {}", e)
+                    })),
+                ))
+            }
         },
         None => Err((
             StatusCode::NOT_FOUND,

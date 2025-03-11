@@ -1,12 +1,9 @@
-use crate::ui_automation::{AutomationError, Locator, Selector, UIElement};
+use crate::ui_automation::{AutomationError, Selector, UIElement};
 
 /// The common trait that all platform-specific engines must implement
 pub trait AccessibilityEngine: Send + Sync {
     /// Get the root UI element
     fn get_root_element(&self) -> UIElement;
-
-    /// Get an element by its ID
-    fn get_element_by_id(&self, id: &str) -> Result<UIElement, AutomationError>;
 
     /// Get the currently focused element
     fn get_focused_element(&self) -> Result<UIElement, AutomationError>;
@@ -18,11 +15,11 @@ pub trait AccessibilityEngine: Send + Sync {
     fn get_application_by_name(&self, name: &str) -> Result<UIElement, AutomationError>;
 
     /// Find elements using a selector
-    fn find_elements(
+    fn find_element(
         &self,
         selector: &Selector,
         root: Option<&UIElement>,
-    ) -> Result<Vec<UIElement>, AutomationError>;
+    ) -> Result<UIElement, AutomationError>;
 }
 
 #[cfg(target_os = "linux")]
@@ -33,18 +30,20 @@ mod macos;
 mod windows;
 
 /// Create the appropriate engine for the current platform
-pub fn create_engine() -> Result<Box<dyn AccessibilityEngine>, AutomationError> {
+pub fn create_engine(
+    use_background_apps: bool,
+) -> Result<Box<dyn AccessibilityEngine>, AutomationError> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(Box::new(macos::MacOSEngine::new()?));
+        return Ok(Box::new(macos::MacOSEngine::new(use_background_apps)?));
     }
     #[cfg(target_os = "windows")]
     {
-        return Ok(Box::new(windows::WindowsEngine::new()?));
+        return Ok(Box::new(windows::WindowsEngine::new(use_background_apps)?));
     }
     #[cfg(target_os = "linux")]
     {
-        return Ok(Box::new(linux::LinuxEngine::new()?));
+        return Ok(Box::new(linux::LinuxEngine::new(use_background_apps)?));
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
