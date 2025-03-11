@@ -2951,6 +2951,7 @@ pub struct TypeTextRequest {
 pub struct FindElementsRequest {
     selector: ElementSelector,
     max_results: Option<usize>,
+    max_depth: Option<usize>,
 }
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
@@ -3018,7 +3019,7 @@ async fn find_elements_handler(
         }
     };
 
-    debug!("app: {:?}", app.text().unwrap_or_default());
+    debug!("app: {:?}", app.text(1).unwrap_or_default());
 
     let elements = match app.locator(request.selector.locator.as_str()) {
         Ok(locator) => match locator.all() {
@@ -3047,60 +3048,15 @@ async fn find_elements_handler(
 
     debug!("elements: {:?}", elements);
 
-    // Filter elements if needed
-    let filtered_elements = elements
-        .into_iter()
-        .filter(|element| {
-            let matches_text = request
-                .selector
-                .text
-                .as_ref()
-                .map(|t| element.text().unwrap_or_default().contains(t))
-                .unwrap_or(true);
-
-            let matches_label = request
-                .selector
-                .label
-                .as_ref()
-                .map(|l| {
-                    element
-                        .attributes()
-                        .label
-                        .as_ref()
-                        .map(|el| el.contains(l))
-                        .unwrap_or(false)
-                })
-                .unwrap_or(true);
-
-            let matches_description = request
-                .selector
-                .description
-                .as_ref()
-                .map(|d| {
-                    element
-                        .attributes()
-                        .description
-                        .as_ref()
-                        .map(|ed| ed.contains(d))
-                        .unwrap_or(false)
-                })
-                .unwrap_or(true);
-
-            matches_text && matches_label && matches_description
-        })
-        .collect::<Vec<_>>();
-
-    debug!("filtered_elements: {:?}", filtered_elements);
-
     // Convert to ElementInfo
-    let element_infos = filtered_elements
+    let element_infos = elements
         .into_iter()
         .map(|element| ElementInfo {
             id: element.id(),
             role: element.role(),
             label: element.attributes().label,
             description: element.attributes().description,
-            text: element.text().ok(),
+            text: element.text(request.max_depth.unwrap_or(10)).ok(),
             position: element.bounds().ok().map(|(x, y, _, _)| ElementPosition {
                 x: x as i32,
                 y: y as i32,
@@ -3149,12 +3105,12 @@ async fn click_element_handler(
         }
     };
 
-    debug!("app: {:?}", app.text().unwrap_or_default());
+    debug!("app: {:?}", app.text(1).unwrap_or_default());
 
     // Find elements matching the selector
-    let elements = match app.locator(request.selector.locator.as_str()) {
-        Ok(locator) => match locator.all() {
-            Ok(elements) => elements,
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
             Err(e) => {
                 error!("Failed to find elements: {}", e);
                 return Err((
@@ -3175,60 +3131,9 @@ async fn click_element_handler(
         }
     };
 
-    debug!("elements: {:?}", elements);
+    debug!("element: {:?}", element);
 
-    // Filter elements
-    let filtered_elements = elements
-        .into_iter()
-        .filter(|element| {
-            let matches_text = request
-                .selector
-                .text
-                .as_ref()
-                .map(|t| element.text().unwrap_or_default().contains(t))
-                .unwrap_or(true);
-
-            let matches_label = request
-                .selector
-                .label
-                .as_ref()
-                .map(|l| {
-                    element
-                        .attributes()
-                        .label
-                        .as_ref()
-                        .map(|el| el.contains(l))
-                        .unwrap_or(false)
-                })
-                .unwrap_or(true);
-
-            let matches_description = request
-                .selector
-                .description
-                .as_ref()
-                .map(|d| {
-                    element
-                        .attributes()
-                        .description
-                        .as_ref()
-                        .map(|ed| ed.contains(d))
-                        .unwrap_or(false)
-                })
-                .unwrap_or(true);
-
-            matches_text && matches_label && matches_description
-        })
-        .collect::<Vec<_>>();
-
-    // Get the element to click
-    let element_to_click = match request.selector.index {
-        Some(index) => filtered_elements.get(index).cloned(),
-        None => filtered_elements.first().cloned(),
-    };
-
-    debug!("element_to_click: {:?}", element_to_click);
-
-    match element_to_click {
+    match element {
         Some(element) => match element.click() {
             Ok(_) => Ok(JsonResponse(ActionResponse {
                 success: true,
@@ -3284,9 +3189,9 @@ async fn type_text_handler(
 
     debug!("app: {:?}", app);
     // Find elements matching the selector
-    let elements = match app.locator(request.selector.locator.as_str()) {
-        Ok(locator) => match locator.all() {
-            Ok(elements) => elements,
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
             Err(e) => {
                 return Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -3307,62 +3212,9 @@ async fn type_text_handler(
         }
     };
 
-    debug!("elements: {:?}", elements);
+    debug!("element: {:?}", element);
 
-    // Filter elements
-    let filtered_elements = elements
-        .into_iter()
-        .filter(|element| {
-            let matches_text = request
-                .selector
-                .text
-                .as_ref()
-                .map(|t| element.text().unwrap_or_default().contains(t))
-                .unwrap_or(true);
-
-            let matches_label = request
-                .selector
-                .label
-                .as_ref()
-                .map(|l| {
-                    element
-                        .attributes()
-                        .label
-                        .as_ref()
-                        .map(|el| el.contains(l))
-                        .unwrap_or(false)
-                })
-                .unwrap_or(true);
-
-            let matches_description = request
-                .selector
-                .description
-                .as_ref()
-                .map(|d| {
-                    element
-                        .attributes()
-                        .description
-                        .as_ref()
-                        .map(|ed| ed.contains(d))
-                        .unwrap_or(false)
-                })
-                .unwrap_or(true);
-
-            matches_text && matches_label && matches_description
-        })
-        .collect::<Vec<_>>();
-
-    debug!("filtered_elements: {:?}", filtered_elements);
-
-    // Get the element to type into
-    let element_to_type = match request.selector.index {
-        Some(index) => filtered_elements.get(index).cloned(),
-        None => filtered_elements.first().cloned(),
-    };
-
-    debug!("element_to_type: {:?}", element_to_type);
-
-    match element_to_type {
+    match element {
         Some(element) => match element.type_text(&request.text) {
             Ok(_) => Ok(JsonResponse(ActionResponse {
                 success: true,
