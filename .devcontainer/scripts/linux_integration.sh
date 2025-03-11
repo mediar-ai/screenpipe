@@ -1,8 +1,5 @@
 #!/bin/bash
 
-set -e  # Exit immediately if a command fails
-set -o pipefail  # Catch errors in pipelines
-
 log() {
     echo -e "\e[1;34m[INFO]\e[0m $1"
 }

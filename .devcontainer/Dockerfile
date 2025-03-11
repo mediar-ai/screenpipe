@@ -34,6 +34,7 @@ RUN sudo apt-get update && sudo apt-get install -y \
     curl \
     pkg-config \
     libsqlite3-dev \
+    sqlite3 \
     libbz2-dev \
     zlib1g-dev \
     libonig-dev \
@@ -46,9 +47,9 @@ RUN sudo apt-get update && sudo apt-get install -y \
     patchelf \
     xvfb \
     x11-utils \
+    x11-xserver-utils \
     x11-apps \
     xdotool \
-    sqlitebrowser \
     openbox \
     xterm \
     fonts-liberation \
