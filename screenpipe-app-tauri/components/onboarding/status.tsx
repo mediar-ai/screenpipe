@@ -244,17 +244,18 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`${className} w-full flex flex-col items-center overflow-y-auto max-h-[80vh] pb-4 relative`}
+      className={`${className} w-full flex flex-col items-center relative max-h-full`}
     >
-      <DialogHeader className="flex flex-col px-2 justify-center items-center sticky top-0 bg-background z-10 w-full pt-4 pb-2">
-        <img className="w-24 h-24" src="/128x128.png" alt="screenpipe-logo" />
+      <div className="flex flex-col items-center justify-start w-full overflow-y-auto py-4"> 
+        <div className="w-32 h-32 flex items-center justify-center">
+            <img className="w-32 h-32" src="/128x128.png" alt="screenpipe-logo" />
+          </div> 
         <DialogTitle className="text-center text-2xl">
           setting up screenpipe
         </DialogTitle>
-        <p className="text-sm text-muted-foreground mt-2">
+        <p className="text-sm text-muted-foreground pt-2">
           100% local-first • your data never leaves your device
         </p>
-      </DialogHeader>
 
       {isMacOS && (
         <div className="mt-6 pt-4 border-t w-full flex flex-col items-center">
@@ -424,15 +425,13 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           <ChevronDown className="h-4 w-4" />
         </button>
       )}
-
-      <div className="sticky bottom-0 bg-background pt-2 pb-1 w-full">
+      </div>
         <OnboardingNavigation
           handlePrevSlide={handlePrev}
           handleNextSlide={handleNext}
           prevBtnText="previous"
           nextBtnText="next"
         />
-      </div>
     </div>
   );
 };

@@ -6,13 +6,16 @@ import {
 } from "@/lib/actions/get-screenpipe-app-settings";
 
 export interface PipeSettings {
-	aiLogPresetId:string;
+	exampleSetting: string;
+	aiLogPresetId: string;
 	aiPresetId: string;
 }
 
 type AIPreset = ScreenpipeAppSettings["aiPresets"][number];
 
-const DEFAULT_SETTINGS: Partial<PipeSettings> = {};
+export const DEFAULT_SETTINGS: Partial<PipeSettings> = {
+	exampleSetting: "default value",
+};
 
 type Listener = () => void;
 
@@ -56,7 +59,7 @@ class SettingsStore {
 		settings: Partial<PipeSettings> | null,
 	) {
 		this.store.pipeSettings[pipeName] = settings;
-		
+
 		this.notify();
 	}
 
@@ -117,7 +120,7 @@ class SettingsStore {
 			// get the current settings
 			const mightBeUpdated = await getScreenpipeAppSettings();
 
-			const updatedSettings = {	
+			const updatedSettings = {
 				...mightBeUpdated,
 				customSettings: {
 					...(mightBeUpdated.customSettings || {}),
