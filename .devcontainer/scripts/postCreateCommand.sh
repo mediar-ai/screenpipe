@@ -4,7 +4,7 @@ echo "We have set up an alias 'test-linux' for 'linux_integration.sh' in your sh
 echo "You can use 'test-linux' to check if the Linux build of the app is working."
 
 # Define the alias
-ALIAS_CMD="alias test-linux=\"${workspaceFolder}/linux_integration.sh\""
+ALIAS_CMD="alias test-linux=\"/workspaces/screenpipe/.devcontainer/scripts/linux_integration.sh\""
 
 # Add alias to .bashrc if it exists
 grep -qxF "$ALIAS_CMD" ~/.bashrc || echo "$ALIAS_CMD" >> ~/.bashrc

@@ -13,7 +13,9 @@
 	"forwardPorts": [3000, 3030],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "bash ${workspaceFolder}/.devcontainer/scripts/postCreateCommand.sh"
+	"postCreateCommand": "bash /workspaces/screenpipe/.devcontainer/scripts/postCreateCommand.sh",
+
+	"onCreateCommand": "sudo cp .devcontainer/scripts/welcome-message.txt /usr/local/etc/vscode-dev-containers/first-run-notice.txt"
 
 	// Configure tool-specific properties.
 	// "customizations": {},

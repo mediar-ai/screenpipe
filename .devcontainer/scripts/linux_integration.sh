@@ -7,7 +7,7 @@ log() {
     echo -e "\e[1;34m[INFO]\e[0m $1"
 }
 # Change directory to Screenpipe folder
-cd ${workspaceFolder}
+cd /workspaces/screenpipe/
 
 log "Installing dependencies"
 .github/scripts/install_dependencies.sh
