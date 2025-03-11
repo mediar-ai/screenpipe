@@ -11,10 +11,14 @@ use axum::{
 };
 use oasgen::{oasgen, OaSchema, Server};
 
+
+use screenpipe_core::Desktop;
+
 use screenpipe_db::{
     ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, Speaker,
     TagContentType,
 };
+
 use tokio_util::io::ReaderStream;
 
 use tokio::fs::File;
@@ -1054,6 +1058,9 @@ impl SCServer {
             .get("/speakers/similar", get_similar_speakers_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
+            .post("/experimental/operator", find_elements_handler)
+            .post("/experimental/operator/click", click_element_handler)
+            .post("/experimental/operator/type", type_text_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -3022,3 +3029,326 @@ pub struct RestartVisionDevicesResponse {
 //         restarted_devices,
 //     }))
 // }
+
+// New structs for UI automation API
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementSelector {
+    app_name: String,
+    window_name: Option<String>,
+    locator: String,
+    index: Option<usize>,
+    text: Option<String>,
+    label: Option<String>,
+    description: Option<String>,
+    element_id: Option<String>,
+    use_background_apps: Option<bool>,
+    /// If true, the app will be activated before finding elements (this is useful to refresh the tree or clicking on elements)
+    activate_app: Option<bool>,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ClickElementRequest {
+    selector: ElementSelector,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct TypeTextRequest {
+    selector: ElementSelector,
+    text: String,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct FindElementsRequest {
+    selector: ElementSelector,
+    max_results: Option<usize>,
+    max_depth: Option<usize>,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementPosition {
+    x: i32,
+    y: i32,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementSize {
+    width: i32,
+    height: i32,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementInfo {
+    id: Option<String>,
+    role: String,
+    label: Option<String>,
+    description: Option<String>,
+    text: Option<String>,
+    position: Option<ElementPosition>,
+    size: Option<ElementSize>,
+    properties: serde_json::Value,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct FindElementsResponse {
+    element: ElementInfo,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ActionResponse {
+    success: bool,
+    message: String,
+}
+
+// Handler functions for UI automation
+#[oasgen]
+async fn find_elements_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<FindElementsRequest>,
+) -> Result<JsonResponse<FindElementsResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("app: {:?}", app.text(1).unwrap_or_default());
+
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
+            Err(_) => {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    JsonResponse(json!({ "error": "No matching element found" })),
+                ));
+            }
+        },
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({ "error": format!("Failed to create locator: {}", e) })),
+            ));
+        }
+    };
+
+    match element {
+        Some(element) => {
+            debug!("element: {:?}", element);
+            // Convert to ElementInfo
+            let element_info = ElementInfo {
+                id: element.id(),
+                role: element.role(),
+                label: element.attributes().label,
+                description: element.attributes().description,
+                text: element.text(request.max_depth.unwrap_or(10)).ok(),
+                position: element.bounds().ok().map(|(x, y, _, _)| ElementPosition {
+                    x: x as i32,
+                    y: y as i32,
+                }),
+                size: element.bounds().ok().map(|(_, _, w, h)| ElementSize {
+                    width: w as i32,
+                    height: h as i32,
+                }),
+                properties: json!(element.attributes().properties),
+            };
+
+            Ok(JsonResponse(FindElementsResponse {
+                element: element_info,
+            }))
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({ "error": "No matching element found" })),
+        )),
+    }
+}
+
+#[oasgen]
+async fn click_element_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<ClickElementRequest>,
+) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("app: {:?}", app.text(1).unwrap_or_default());
+
+    // Find elements matching the selector
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
+            Err(e) => {
+                error!("Failed to find elements: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("element: {:?}", element);
+
+    match element {
+        Some(element) => match element.click() {
+            Ok(_) => Ok(JsonResponse(ActionResponse {
+                success: true,
+                message: format!("Clicked element with role: {}", element.role()),
+            })),
+            Err(e) => {
+                error!("Failed to click element: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to click element: {}", e)
+                    })),
+                ))
+            }
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "No matching element found"
+            })),
+        )),
+    }
+}
+
+#[oasgen]
+async fn type_text_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<TypeTextRequest>,
+) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("app: {:?}", app);
+    // Find elements matching the selector
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            error!("Failed to create locator: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("element: {:?}", element);
+
+    match element {
+        Some(element) => match element.type_text(&request.text) {
+            Ok(_) => Ok(JsonResponse(ActionResponse {
+                success: true,
+                message: format!("Typed text into element with role: {}", element.role()),
+            })),
+            Err(e) => {
+                error!("Failed to type text: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to type text: {}", e)
+                    })),
+                ))
+            }
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "No matching element found"
+            })),
+        )),
+    }
+}
