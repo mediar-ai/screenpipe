@@ -1,5 +1,5 @@
-use crate::ui_automation::errors::AutomationError;
-use crate::ui_automation::selector::Selector;
+use crate::operator::errors::AutomationError;
+use crate::operator::selector::Selector;
 use std::collections::HashMap;
 use std::fmt::Debug;
 

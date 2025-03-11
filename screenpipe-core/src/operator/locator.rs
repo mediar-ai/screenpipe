@@ -1,5 +1,5 @@
-use crate::ui_automation::platforms::AccessibilityEngine;
-use crate::ui_automation::{AutomationError, Selector, UIElement};
+use crate::operator::platforms::AccessibilityEngine;
+use crate::operator::{AutomationError, Selector, UIElement};
 use std::sync::Arc;
 use std::time::Duration;
 

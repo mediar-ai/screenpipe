@@ -1030,9 +1030,9 @@ impl SCServer {
             .get("/speakers/similar", get_similar_speakers_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
-            .post("/experimental/ui/find", find_elements_handler)
-            .post("/experimental/ui/click", click_element_handler)
-            .post("/experimental/ui/type", type_text_handler)
+            .post("/experimental/operator", find_elements_handler)
+            .post("/experimental/operator/click", click_element_handler)
+            .post("/experimental/operator/type", type_text_handler)
             // .post("/audio/start", start_audio_device)
             // .post("/audio/stop", stop_audio_device)
             .get("/semantic-search", semantic_search_handler)
@@ -2980,7 +2980,7 @@ pub struct ElementInfo {
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
 pub struct FindElementsResponse {
-    elements: Vec<ElementInfo>,
+    element: ElementInfo,
 }
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
@@ -3021,59 +3021,54 @@ async fn find_elements_handler(
 
     debug!("app: {:?}", app.text(1).unwrap_or_default());
 
-    let elements = match app.locator(request.selector.locator.as_str()) {
-        Ok(locator) => match locator.all() {
-            Ok(all_elements) => {
-                let limit = request.max_results.unwrap_or(100);
-                all_elements.into_iter().take(limit).collect::<Vec<_>>()
-            }
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
             Err(e) => {
                 return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(json!({
-                        "error": format!("Failed to find elements: {}", e)
-                    })),
+                    StatusCode::NOT_FOUND,
+                    JsonResponse(json!({ "error": "No matching element found" })),
                 ));
             }
         },
         Err(e) => {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({
-                    "error": format!("Failed to create locator: {}", e)
-                })),
+                JsonResponse(json!({ "error": format!("Failed to create locator: {}", e) })),
             ));
         }
     };
 
-    debug!("elements: {:?}", elements);
+    match element {
+        Some(element) => {
+            debug!("element: {:?}", element);
+            // Convert to ElementInfo
+            let element_info = ElementInfo {
+                id: element.id(),
+                role: element.role(),
+                label: element.attributes().label,
+                description: element.attributes().description,
+                text: element.text(request.max_depth.unwrap_or(10)).ok(),
+                position: element.bounds().ok().map(|(x, y, _, _)| ElementPosition {
+                    x: x as i32,
+                    y: y as i32,
+                }),
+                size: element.bounds().ok().map(|(_, _, w, h)| ElementSize {
+                    width: w as i32,
+                    height: h as i32,
+                }),
+                properties: json!(element.attributes().properties),
+            };
 
-    // Convert to ElementInfo
-    let element_infos = elements
-        .into_iter()
-        .map(|element| ElementInfo {
-            id: element.id(),
-            role: element.role(),
-            label: element.attributes().label,
-            description: element.attributes().description,
-            text: element.text(request.max_depth.unwrap_or(10)).ok(),
-            position: element.bounds().ok().map(|(x, y, _, _)| ElementPosition {
-                x: x as i32,
-                y: y as i32,
-            }),
-            size: element.bounds().ok().map(|(_, _, w, h)| ElementSize {
-                width: w as i32,
-                height: h as i32,
-            }),
-            properties: json!(element.attributes().properties),
-        })
-        .collect();
-
-    debug!("element_infos: {:?}", element_infos);
-
-    Ok(JsonResponse(FindElementsResponse {
-        elements: element_infos,
-    }))
+            Ok(JsonResponse(FindElementsResponse {
+                element: element_info,
+            }))
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({ "error": "No matching element found" })),
+        )),
+    }
 }
 
 #[oasgen]

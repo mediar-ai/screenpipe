@@ -43,5 +43,5 @@ pub use devices::*;
 pub mod embedding;
 pub use embedding::*;
 
-pub mod ui_automation;
-pub use ui_automation::*;
+pub mod operator;
+pub use operator::*;

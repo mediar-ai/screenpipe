@@ -1,6 +1,6 @@
-use crate::ui_automation::element::UIElementImpl;
-use crate::ui_automation::platforms::AccessibilityEngine;
-use crate::ui_automation::{AutomationError, Locator, Selector, UIElement, UIElementAttributes};
+use crate::operator::element::UIElementImpl;
+use crate::operator::platforms::AccessibilityEngine;
+use crate::operator::{AutomationError, Locator, Selector, UIElement, UIElementAttributes};
 use std::fmt::Debug;
 
 pub struct WindowsEngine;

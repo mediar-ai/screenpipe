@@ -17,7 +17,7 @@ mod tests {
         fn setup_tracing() {
             let filter = EnvFilter::from_default_env()
                 .add_directive(LevelFilter::DEBUG.into())
-                .add_directive("ui_automation=debug".parse().unwrap());
+                .add_directive("operator=debug".parse().unwrap());
 
             tracing_subscriber::registry()
                 .with(fmt::layer())

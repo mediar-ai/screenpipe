@@ -44,14 +44,14 @@ impl TreeWalkerWithWindows {
     fn walk_one(&self, root: &AXUIElement, visitor: &dyn TreeVisitor) -> TreeWalkerFlow {
         let mut flow = visitor.enter_element(root);
 
-        trace!(target: "ui_automation", "Walking element: {:?}", root.attribute_names());
+        trace!(target: "operator", "Walking element: {:?}", root.attribute_names());
 
         if flow == TreeWalkerFlow::Continue {
             // First try to get windows (if this is an application element)
             let windows_result = root.windows();
             if let Ok(windows) = &windows_result {
                 for window in windows.iter() {
-                    debug!(target: "ui_automation", "Walking window: {:?}", window.title());
+                    debug!(target: "operator", "Walking window: {:?}", window.title());
                     let window_flow = self.walk_one(&window, visitor);
                     if window_flow == TreeWalkerFlow::Exit {
                         flow = window_flow;
@@ -64,7 +64,7 @@ impl TreeWalkerWithWindows {
             // Try main window
             if flow != TreeWalkerFlow::Exit {
                 if let Ok(main_window) = root.main_window() {
-                    debug!(target: "ui_automation", "Walking main window: {:?}", main_window.title());
+                    debug!(target: "operator", "Walking main window: {:?}", main_window.title());
                     let window_flow = self.walk_one(&main_window, visitor);
                     if window_flow == TreeWalkerFlow::Exit {
                         flow = window_flow;
