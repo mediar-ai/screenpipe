@@ -96,7 +96,7 @@ impl Locator {
     }
 
     /// Get text from the first matching element
-    pub async fn text(&self) -> Result<String, AutomationError> {
-        self.wait().await?.text()
+    pub async fn text(&self, max_depth: usize) -> Result<String, AutomationError> {
+        self.wait().await?.text(max_depth)
     }
 }

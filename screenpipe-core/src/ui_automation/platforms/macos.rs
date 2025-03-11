@@ -15,8 +15,8 @@ use core_foundation::boolean::CFBoolean;
 use core_foundation::dictionary::CFDictionary;
 use core_foundation::string::CFString;
 use core_graphics::display::{CGPoint, CGSize};
-use serde_json;
-use std::collections::HashMap;
+use serde_json::{self, Value};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::sync::Arc;
 use tracing::{debug, trace};
@@ -66,11 +66,6 @@ impl ThreadSafeAXUIElement {
 
     pub fn application(pid: i32) -> Self {
         Self(Arc::new(AXUIElement::application(pid)))
-    }
-
-    // Add method to get a reference to the underlying AXUIElement
-    pub fn as_ref(&self) -> &AXUIElement {
-        &self.0
     }
 
     pub fn clone(&self) -> Self {
@@ -451,7 +446,7 @@ impl AccessibilityEngine for MacOSEngine {
                         // Use move to take ownership of text_owned
                         // AXValue is the text of the element
                         if let Some(cf_string) = e.value().unwrap().downcast_into::<CFString>() {
-                            cf_string.to_string() == text_owned
+                            cf_string.to_string().contains(&text_owned)
                         } else {
                             false
                         }
@@ -530,6 +525,88 @@ impl MacOSUIElement {
             }
             Err(_) => None,
         }
+    }
+
+    // Add the extract_web_content_text method here as a regular method
+    fn extract_web_content_text(&self, max_depth: usize) -> Result<String, AutomationError> {
+        // Default to a reasonably high but not infinite depth
+        self.extract_web_content_text_with_depth(max_depth)
+    }
+
+    fn extract_web_content_text_with_depth(
+        &self,
+        max_depth: usize,
+    ) -> Result<String, AutomationError> {
+        let mut all_text = Vec::new();
+        let mut visited = HashSet::new();
+
+        // Simple breadth-first traversal with depth tracking
+        let mut queue = VecDeque::new();
+        queue.push_back((self.clone_box(), 0)); // (element, depth)
+
+        while let Some((element, depth)) = queue.pop_front() {
+            // Check depth limit
+            if depth > max_depth {
+                continue;
+            }
+
+            let elem = element.as_any().downcast_ref::<MacOSUIElement>().unwrap();
+            let id = elem.object_id();
+
+            if visited.contains(&id) {
+                continue;
+            }
+            visited.insert(id);
+
+            // Extract ALL text attributes, no filtering
+            for attr_name in &[
+                "AXValue",
+                "AXTitle",
+                "AXDescription",
+                "AXHelp",
+                "AXLabel",
+                "AXText",
+            ] {
+                let attr = AXAttribute::new(&CFString::new(attr_name));
+                if let Ok(value) = elem.element.0.attribute(&attr) {
+                    if let Some(cf_string) = value.downcast_into::<CFString>() {
+                        let text = cf_string.to_string();
+                        if !text.is_empty() && !all_text.contains(&text) {
+                            all_text.push(text);
+                        }
+                    }
+                }
+            }
+
+            // Get ALL children and add to queue with incremented depth
+            let next_depth = depth + 1;
+
+            // Try navigation order children first
+            let nav_attr = AXAttribute::new(&CFString::new("AXChildrenInNavigationOrder"));
+            if let Ok(value) = elem.element.0.attribute(&nav_attr) {
+                if let Some(array) = extract_children_from_array(value) {
+                    for child in array {
+                        queue.push_back((
+                            Box::new(MacOSUIElement {
+                                element: ThreadSafeAXUIElement::new(child),
+                                use_background_apps: elem.use_background_apps,
+                            }),
+                            next_depth,
+                        ));
+                    }
+                }
+            }
+
+            // Add regular children too to be thorough
+            if let Ok(children) = elem.children() {
+                for child in children {
+                    let child_impl = child.as_any().downcast_ref::<MacOSUIElement>().unwrap();
+                    queue.push_back((child_impl.clone_box(), next_depth));
+                }
+            }
+        }
+
+        Ok(all_text.join("\n"))
     }
 }
 
@@ -621,9 +698,10 @@ impl UIElementImpl for MacOSUIElement {
                 let attr = AXAttribute::new(&CFString::new(attr_name));
                 if let Ok(value) = self.element.0.attribute(&attr) {
                     if let Some(cf_bool) = value.downcast_into::<CFBoolean>() {
-                        attrs
-                            .properties
-                            .insert(attr_name.to_string(), Some(format!("{:?}", cf_bool)));
+                        attrs.properties.insert(
+                            attr_name.to_string(),
+                            Some(Value::String(format!("{:?}", cf_bool))),
+                        );
                     }
                 }
             }
@@ -988,45 +1066,72 @@ impl UIElementImpl for MacOSUIElement {
         ))
     }
 
-    fn get_text(&self) -> Result<String, AutomationError> {
-        // Try multiple possible attributes that might contain text
+    fn get_text(&self, max_depth: usize) -> Result<String, AutomationError> {
+        // Special case for web content - we need a different approach
+        if self
+            .element
+            .0
+            .role()
+            .map_or(false, |r| r.to_string() == "AXWebArea")
+            || self
+                .element
+                .0
+                .role()
+                .map_or(false, |r| r.to_string().contains("Browser"))
+        {
+            debug!(target: "ui_automation", "Using specialized web content extraction for: {:?}", 
+                   self.element.0.role().map(|r| r.to_string()));
 
-        // First try AXValue (commonly used for text fields, text areas)
+            return self.extract_web_content_text(max_depth);
+        }
+
+        // Regular implementation for non-web elements
+        let mut text_parts = Vec::new();
+
+        // First try getting text from the current element's AXValue
         let value_attr = AXAttribute::new(&CFString::new("AXValue"));
         if let Ok(value) = self.element.0.attribute(&value_attr) {
             if let Some(cf_string) = value.downcast_into::<CFString>() {
-                let text = cf_string.to_string();
-                if !text.is_empty() {
-                    return Ok(text);
+                let val = cf_string.to_string();
+                if !val.is_empty() {
+                    text_parts.push(val);
                 }
             }
         }
 
-        // Then try AXTitle (commonly used for labels, buttons)
-        let title_attr = AXAttribute::new(&CFString::new("AXTitle"));
-        if let Ok(value) = self.element.0.attribute(&title_attr) {
-            if let Some(cf_string) = value.downcast_into::<CFString>() {
-                let text = cf_string.to_string();
-                if !text.is_empty() {
-                    return Ok(text);
-                }
-            }
-        }
-
-        // Try AXDescription (commonly used for more detailed descriptions)
+        // Then check for AXDescription and AXTitle
         let desc_attr = AXAttribute::new(&CFString::new("AXDescription"));
-        if let Ok(value) = self.element.0.attribute(&desc_attr) {
-            if let Some(cf_string) = value.downcast_into::<CFString>() {
+        if let Ok(desc) = self.element.0.attribute(&desc_attr) {
+            if let Some(cf_string) = desc.downcast_into::<CFString>() {
                 let text = cf_string.to_string();
                 if !text.is_empty() {
-                    return Ok(text);
+                    text_parts.push(text);
                 }
             }
         }
 
-        // If none of the above contain text, return an empty string
-        // This is more useful than an error as many valid UI elements might not have text
-        Ok(String::new())
+        let title_attr = AXAttribute::new(&CFString::new("AXTitle"));
+        if let Ok(title) = self.element.0.attribute(&title_attr) {
+            if let Some(cf_string) = title.downcast_into::<CFString>() {
+                let text = cf_string.to_string();
+                if !text.is_empty() {
+                    text_parts.push(text);
+                }
+            }
+        }
+
+        // Get text from children
+        if let Ok(children) = self.children() {
+            for child in children {
+                if let Ok(child_text) = child.text(max_depth) {
+                    if !child_text.is_empty() {
+                        text_parts.push(child_text);
+                    }
+                }
+            }
+        }
+
+        Ok(text_parts.join("\n"))
     }
 
     fn set_value(&self, value: &str) -> Result<(), AutomationError> {
@@ -1131,27 +1236,59 @@ impl UIElementImpl for MacOSUIElement {
     }
 }
 
+// Helper function to extract children from an array attribute
+fn extract_children_from_array(value: core_foundation::base::CFType) -> Option<Vec<AXUIElement>> {
+    use core_foundation::array::{CFArrayGetCount, CFArrayGetTypeID, CFArrayGetValueAtIndex};
+    use core_foundation::base::{CFGetTypeID, TCFType};
+
+    unsafe {
+        let value_ref = value.as_CFTypeRef();
+        let type_id = CFGetTypeID(value_ref);
+
+        if type_id == CFArrayGetTypeID() {
+            let array_ref = value_ref as *const __CFArray;
+            let count = CFArrayGetCount(array_ref);
+
+            let mut children = Vec::with_capacity(count as usize);
+            for i in 0..count {
+                let item = CFArrayGetValueAtIndex(array_ref, i as isize);
+                if !item.is_null() {
+                    let ax_element = AXUIElement::wrap_under_get_rule(item as *mut _);
+                    children.push(ax_element);
+                }
+            }
+            return Some(children);
+        }
+    }
+
+    None
+}
+
 // Helper function to parse AXUIElement attribute values into appropriate types
-fn parse_ax_attribute_value(name: &str, value: core_foundation::base::CFType) -> Option<String> {
+fn parse_ax_attribute_value(
+    name: &str,
+    value: core_foundation::base::CFType,
+) -> Option<serde_json::Value> {
     use core_foundation::base::TCFType;
     use core_foundation::boolean::CFBoolean;
     use core_foundation::number::CFNumber;
     use core_foundation::string::CFString;
     use core_graphics::geometry::{CGPoint, CGSize};
+    use serde_json::{json, Value};
 
     // Handle different types based on known attribute names and value types
     match name {
         // String values (text, identifiers, descriptions)
         "AXRole" | "AXRoleDescription" | "AXIdentifier" | "AXValue" => {
             if let Some(cf_string) = value.downcast_into::<CFString>() {
-                return Some(cf_string.to_string());
+                return Some(Value::String(cf_string.to_string()));
             }
         }
 
         // Boolean values
         "AXEnabled" | "AXFocused" => {
             if let Some(cf_bool) = value.downcast_into::<CFBoolean>() {
-                return Some((cf_bool == CFBoolean::true_value()).to_string());
+                return Some(Value::Bool(cf_bool == CFBoolean::true_value()));
             }
         }
 
@@ -1159,9 +1296,14 @@ fn parse_ax_attribute_value(name: &str, value: core_foundation::base::CFType) ->
         "AXNumberOfCharacters" | "AXInsertionPointLineNumber" => {
             if let Some(cf_num) = value.downcast_into::<CFNumber>() {
                 if let Some(num) = cf_num.to_i64() {
-                    return Some(num.to_string());
+                    return Some(Value::Number(serde_json::Number::from(num)));
                 } else if let Some(num) = cf_num.to_f64() {
-                    return Some(num.to_string());
+                    // Need to handle possible NaN/Infinity which aren't allowed in JSON
+                    if num.is_finite() {
+                        return serde_json::Number::from_f64(num).map(Value::Number);
+                    } else {
+                        return Some(Value::Null);
+                    }
                 }
             }
         }
@@ -1175,7 +1317,10 @@ fn parse_ax_attribute_value(name: &str, value: core_foundation::base::CFType) ->
                 let point_ptr = &mut point as *mut CGPoint as *mut ::std::os::raw::c_void;
 
                 if AXValueGetValue(value_ref, K_AXVALUE_CGPOINT_TYPE, point_ptr) != 0 {
-                    return Some(serde_json::json!({ "x": point.x, "y": point.y }).to_string());
+                    return Some(json!({
+                        "x": point.x,
+                        "y": point.y
+                    }));
                 }
             }
         }
@@ -1191,10 +1336,10 @@ fn parse_ax_attribute_value(name: &str, value: core_foundation::base::CFType) ->
                 let size_ptr = &mut size as *mut CGSize as *mut ::std::os::raw::c_void;
 
                 if AXValueGetValue(value_ref, K_AXVALUE_CGSIZE_TYPE, size_ptr) != 0 {
-                    return Some(
-                        serde_json::json!({ "width": size.width, "height": size.height })
-                            .to_string(),
-                    );
+                    return Some(json!({
+                        "width": size.width,
+                        "height": size.height
+                    }));
                 }
             }
         }
@@ -1203,7 +1348,8 @@ fn parse_ax_attribute_value(name: &str, value: core_foundation::base::CFType) ->
         "AXParent" | "AXWindow" | "AXTopLevelUIElement" => {
             // get object id
             if let Some(ax_element) = value.downcast_into::<AXUIElement>() {
-                return Some(format!("{}", &ax_element as *const _ as usize));
+                let address = &ax_element as *const _ as usize;
+                return Some(Value::String(format!("{}", address)));
             }
         }
 
@@ -1221,14 +1367,18 @@ fn parse_ax_attribute_value(name: &str, value: core_foundation::base::CFType) ->
                     let count = CFArrayGetCount(array_ref);
                     debug!(target: "ui_automation", "AXChildren array with {} elements", count);
 
-                    // Print info about first few elements (limit to avoid spam)
-                    let max_items = 5.min(count as usize);
-                    for i in 0..max_items {
+                    // Create an array of element addresses
+                    let mut items = Vec::with_capacity(count as usize);
+                    for i in 0..count {
                         let item = CFArrayGetValueAtIndex(array_ref, i as isize);
                         if !item.is_null() {
-                            debug!(target: "ui_automation", "  Child[{}] ptr: {:?}", i, item);
+                            // Correctly wrap the raw pointer into AXUIElement
+                            let ax_element = AXUIElement::wrap_under_get_rule(item as *mut _);
+                            let address = &ax_element as *const _ as usize;
+                            items.push(json!(format!("{}", address)));
                         }
                     }
+                    return Some(Value::Array(items));
                 }
             }
 

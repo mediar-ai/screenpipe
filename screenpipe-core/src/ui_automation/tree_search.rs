@@ -1,12 +1,12 @@
 /// TLDR: default TreeWalker does not traverse windows, so we need to traverse windows manually
 use accessibility::{AXAttribute, AXUIElement, AXUIElementAttributes, Error};
-use core_foundation::{array::CFArray, base::TCFType, string::CFString};
+use core_foundation::array::CFArray;
 use std::{
     cell::{Cell, RefCell},
     thread,
     time::{Duration, Instant},
 };
-use tracing::debug;
+use tracing::{debug, trace};
 
 pub trait TreeVisitor {
     fn enter_element(&self, element: &AXUIElement) -> TreeWalkerFlow;
@@ -44,7 +44,7 @@ impl TreeWalkerWithWindows {
     fn walk_one(&self, root: &AXUIElement, visitor: &dyn TreeVisitor) -> TreeWalkerFlow {
         let mut flow = visitor.enter_element(root);
 
-        debug!(target: "ui_automation", "Walking element: {:?}", root.title());
+        trace!(target: "ui_automation", "Walking element: {:?}", root.attribute_names());
 
         if flow == TreeWalkerFlow::Continue {
             // First try to get windows (if this is an application element)
@@ -61,7 +61,7 @@ impl TreeWalkerWithWindows {
             }
 
             // TODO avoid duplicate main window walking
-            // Try main window 
+            // Try main window
             if flow != TreeWalkerFlow::Exit {
                 if let Ok(main_window) = root.main_window() {
                     debug!(target: "ui_automation", "Walking main window: {:?}", main_window.title());

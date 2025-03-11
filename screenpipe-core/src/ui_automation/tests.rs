@@ -7,6 +7,8 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     mod macos_tests {
+        use serde_json::Value;
+
         use crate::Desktop;
 
         use super::*;
@@ -121,7 +123,7 @@ mod tests {
                     let props_str = props.clone();
                     props_str.unwrap_or_default()
                 } else {
-                    "unknown".to_string()
+                    Value::String("unknown".to_string())
                 };
 
                 println!(
@@ -143,11 +145,11 @@ mod tests {
 
                 // Count by type
                 match button_type.as_str() {
-                    "AXButton" => ax_button_count += 1,
-                    "AXMenuItem" => ax_menu_item_count += 1,
-                    "AXMenuBarItem" => ax_menu_bar_item_count += 1,
-                    "AXStaticText" => ax_static_text_count += 1,
-                    "AXImage" => ax_image_count += 1,
+                    Some("AXButton") => ax_button_count += 1,
+                    Some("AXMenuItem") => ax_menu_item_count += 1,
+                    Some("AXMenuBarItem") => ax_menu_bar_item_count += 1,
+                    Some("AXStaticText") => ax_static_text_count += 1,
+                    Some("AXImage") => ax_image_count += 1,
                     _ => other_count += 1,
                 }
             }
@@ -188,7 +190,7 @@ mod tests {
                 }
             };
 
-            let app = desktop.application("Notes").unwrap();
+            let app = desktop.application("Arc").unwrap();
 
             let children = app.children().unwrap();
 
@@ -198,7 +200,7 @@ mod tests {
                 println!("App child #{}: {:?}", i, child.role());
             }
 
-            let input = app.locator("input").unwrap().first().unwrap_or_default();
+            let input = app.locator("window").unwrap().first().unwrap_or_default();
             println!("found input: {:?}", input.is_some());
             println!("found input: {:?}", input.unwrap().text().unwrap());
         }

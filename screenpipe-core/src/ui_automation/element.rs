@@ -17,7 +17,7 @@ pub struct UIElementAttributes {
     pub label: Option<String>,
     pub value: Option<String>,
     pub description: Option<String>,
-    pub properties: HashMap<String, Option<String>>,
+    pub properties: HashMap<String, Option<serde_json::Value>>,
 }
 
 /// Interface for platform-specific element implementations
@@ -36,7 +36,7 @@ pub(crate) trait UIElementImpl: Send + Sync + Debug {
     fn focus(&self) -> Result<(), AutomationError>;
     fn type_text(&self, text: &str) -> Result<(), AutomationError>;
     fn press_key(&self, key: &str) -> Result<(), AutomationError>;
-    fn get_text(&self) -> Result<String, AutomationError>;
+    fn get_text(&self, max_depth: usize) -> Result<String, AutomationError>;
     fn set_value(&self, value: &str) -> Result<(), AutomationError>;
     fn is_enabled(&self) -> Result<bool, AutomationError>;
     fn is_visible(&self) -> Result<bool, AutomationError>;
@@ -121,8 +121,8 @@ impl UIElement {
     }
 
     /// Get text content of this element
-    pub fn text(&self) -> Result<String, AutomationError> {
-        self.inner.get_text()
+    pub fn text(&self, max_depth: usize) -> Result<String, AutomationError> {
+        self.inner.get_text(max_depth)
     }
 
     /// Set value of this element
