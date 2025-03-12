@@ -34,7 +34,7 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Tooltip,
   TooltipContent,
@@ -82,19 +82,19 @@ interface BaseAIPreset {
 type AIPreset = BaseAIPreset &
   (
     | {
-      provider: "openai";
-      apiKey: string;
-    }
+        provider: "openai";
+        apiKey: string;
+      }
     | {
-      provider: "native-ollama";
-    }
+        provider: "native-ollama";
+      }
     | {
-      provider: "screenpipe-cloud";
-    }
+        provider: "screenpipe-cloud";
+      }
     | {
-      provider: "custom";
-      apiKey?: string;
-    }
+        provider: "custom";
+        apiKey?: string;
+      }
   );
 
 interface BaseRecommendedPreset {
@@ -107,14 +107,14 @@ interface BaseRecommendedPreset {
 type RecommendedPreset = BaseRecommendedPreset &
   (
     | {
-      provider: "openai";
-    }
+        provider: "openai";
+      }
     | {
-      provider: "native-ollama";
-    }
+        provider: "native-ollama";
+      }
     | {
-      provider: "screenpipe-cloud";
-    }
+        provider: "screenpipe-cloud";
+      }
   );
 
 interface AIProviderConfigProps {
@@ -751,12 +751,12 @@ export const AIPresetDialog = ({
 
   const defaultPreset = preset
     ? {
-      id: preset.id,
-      provider: preset.provider,
-      baseUrl: preset.url,
-      modelName: preset.model,
-      ...("apiKey" in preset ? { apiKey: preset.apiKey } : {}),
-    }
+        id: preset.id,
+        provider: preset.provider,
+        baseUrl: preset.url,
+        modelName: preset.model,
+        ...("apiKey" in preset ? { apiKey: preset.apiKey } : {}),
+      }
     : undefined;
 
   return (
@@ -823,8 +823,7 @@ export const AIPresetsSelector = ({
           [aiKey]: nextPreset.id,
         });
 
-        toast({
-          title: "Preset changed",
+        toast.success("Preset changed", {
           description: `Switched to ${nextPreset.id} (${nextPreset.model})`,
         });
       }
@@ -836,19 +835,15 @@ export const AIPresetsSelector = ({
 
   const handleSavePreset = (preset: Partial<AIPreset>) => {
     if (!preset.id) {
-      toast({
-        title: "please enter a name for this preset",
-        description: "name is required",
-        variant: "destructive",
+      toast.error("Please enter a name for this preset", {
+        description: "Name is required",
       });
       return;
     }
 
     if (!settings?.aiPresets) {
-      toast({
-        title: "error",
-        description: "settings not initialized",
-        variant: "destructive",
+      toast.error("Error", {
+        description: "Settings not initialized",
       });
       return;
     }
@@ -866,10 +861,8 @@ export const AIPresetsSelector = ({
         );
 
         if (existingPreset) {
-          toast({
-            title: "name already exists",
-            description: "please choose a different name",
-            variant: "destructive",
+          toast.error("Name already exists", {
+            description: "Please choose a different name",
           });
           return;
         }
@@ -885,9 +878,8 @@ export const AIPresetsSelector = ({
           ],
         });
 
-        toast({
-          title: "preset copied",
-          description: "new preset has been created from copy",
+        toast.success("Preset copied", {
+          description: "New preset has been created from copy",
         });
       } else {
         // Normal edit operation
@@ -917,9 +909,8 @@ export const AIPresetsSelector = ({
           });
         }
 
-        toast({
-          title: "preset updated",
-          description: "your changes have been saved",
+        toast.success("Preset updated", {
+          description: "Your changes have been saved",
         });
       }
     } else {
@@ -929,10 +920,8 @@ export const AIPresetsSelector = ({
       );
 
       if (existingPreset) {
-        toast({
-          title: "name already exists",
-          description: "please choose a different name",
-          variant: "destructive",
+        toast.error("Name already exists", {
+          description: "Please choose a different name",
         });
         return;
       }
@@ -968,9 +957,8 @@ export const AIPresetsSelector = ({
         });
       }
 
-      toast({
-        title: "preset created",
-        description: "new preset has been added",
+      toast.success("Preset created", {
+        description: "New preset has been added",
       });
     }
 
@@ -1013,8 +1001,7 @@ export const AIPresetsSelector = ({
       }),
     });
 
-    toast({
-      title: "default preset updated",
+    toast.success("Default preset updated", {
       description: `${preset.id} is now the default preset`,
     });
   };
@@ -1022,10 +1009,8 @@ export const AIPresetsSelector = ({
   const handleRemovePreset = (preset: AIPreset) => {
     if (!settings?.aiPresets) return;
     if (preset.defaultPreset) {
-      toast({
-        title: "cannot delete default preset",
-        description: "please set another preset as default first",
-        variant: "destructive",
+      toast.error("Cannot delete default preset", {
+        description: "Please set another preset as default first",
       });
       return;
     }
@@ -1041,8 +1026,7 @@ export const AIPresetsSelector = ({
       });
     }
 
-    toast({
-      title: "preset removed",
+    toast.success("Preset removed", {
       description: `${preset.id} has been removed`,
     });
   };

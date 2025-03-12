@@ -35,6 +35,8 @@ pub trait AccessibilityEngine: Send + Sync {
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+mod tree_search;
 #[cfg(target_os = "windows")]
 mod windows;
 

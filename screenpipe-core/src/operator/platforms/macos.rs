@@ -1,5 +1,4 @@
 use crate::operator::platforms::AccessibilityEngine;
-use crate::operator::tree_search::{ElementFinderWithWindows, TreeWalkerWithWindows};
 use crate::operator::{
     element::UIElementImpl, AutomationError, Locator, Selector, UIElement, UIElementAttributes,
 };
@@ -20,6 +19,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::sync::Arc;
 use tracing::{debug, trace};
+
+use super::tree_search::{
+    ElementFinderWithWindows, ElementsCollectorWithWindows, TreeWalkerWithWindows,
+};
 
 // Import the C function for setting attributes
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -552,8 +555,6 @@ impl AccessibilityEngine for MacOSEngine {
         selector: &Selector,
         root: Option<&UIElement>,
     ) -> Result<Vec<UIElement>, AutomationError> {
-        use crate::operator::tree_search::ElementsCollectorWithWindows;
-
         // Get the start element from the provided root or fall back to system_wide
         let start_element = root
             .map(|el| {
