@@ -6,7 +6,7 @@ use std::fmt::Debug;
 pub struct LinuxEngine;
 
 impl LinuxEngine {
-    pub fn new() -> Result<Self, AutomationError> {
+    pub fn new(use_background_apps: bool, activate_app: bool) -> Result<Self, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Linux implementation is not yet available".to_string(),
         ))
@@ -16,12 +16,6 @@ impl LinuxEngine {
 impl AccessibilityEngine for LinuxEngine {
     fn get_root_element(&self) -> UIElement {
         panic!("Linux implementation is not yet available")
-    }
-
-    fn get_element_by_id(&self, _id: &str) -> Result<UIElement, AutomationError> {
-        Err(AutomationError::UnsupportedPlatform(
-            "Linux implementation is not yet available".to_string(),
-        ))
     }
 
     fn get_focused_element(&self) -> Result<UIElement, AutomationError> {
@@ -37,6 +31,16 @@ impl AccessibilityEngine for LinuxEngine {
     }
 
     fn get_application_by_name(&self, _name: &str) -> Result<UIElement, AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Linux implementation is not yet available".to_string(),
+        ))
+    }
+
+    fn find_element(
+        &self,
+        selector: &Selector,
+        root: Option<&UIElement>,
+    ) -> Result<UIElement, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Linux implementation is not yet available".to_string(),
         ))
@@ -145,7 +149,7 @@ impl UIElementImpl for LinuxUIElement {
         ))
     }
 
-    fn get_text(&self) -> Result<String, AutomationError> {
+    fn get_text(&self, max_depth: usize) -> Result<String, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Linux implementation is not yet available".to_string(),
         ))

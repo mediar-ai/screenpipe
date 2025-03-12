@@ -47,6 +47,7 @@ cron = "0.13.0"
 chrono = "0.4.38"
 sentry = { workspace = true }
 zip = "0.6.2"
+thiserror = "2.0.12"
 
 [dev-dependencies]
 reqwest = { workspace = true }
@@ -67,6 +68,5 @@ accessibility = { git = "https://github.com/eiz/accessibility.git", branch = "ma
 objc = "0.2.7"
 objc-foundation = "0.1.1"
 
-thiserror = "2.0.12"
 core-foundation = "=0.10.0"
 core-graphics = "=0.24.0"

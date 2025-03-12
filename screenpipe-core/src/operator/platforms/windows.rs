@@ -6,7 +6,7 @@ use std::fmt::Debug;
 pub struct WindowsEngine;
 
 impl WindowsEngine {
-    pub fn new() -> Result<Self, AutomationError> {
+    pub fn new(use_background_apps: bool, activate_app: bool) -> Result<Self, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Windows implementation is not yet available".to_string(),
         ))
@@ -47,6 +47,16 @@ impl AccessibilityEngine for WindowsEngine {
         _selector: &Selector,
         _root: Option<&UIElement>,
     ) -> Result<Vec<UIElement>, AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Windows implementation is not yet available".to_string(),
+        ))
+    }
+
+    fn find_element(
+        &self,
+        selector: &Selector,
+        root: Option<&UIElement>,
+    ) -> Result<UIElement, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Windows implementation is not yet available".to_string(),
         ))
@@ -145,7 +155,7 @@ impl UIElementImpl for WindowsUIElement {
         ))
     }
 
-    fn get_text(&self) -> Result<String, AutomationError> {
+    fn get_text(&self, max_depth: usize) -> Result<String, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Windows implementation is not yet available".to_string(),
         ))
