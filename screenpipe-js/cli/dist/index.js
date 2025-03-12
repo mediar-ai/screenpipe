@@ -1541,7 +1541,8 @@ var registry_default = {
     ],
     registryDependencies: [
       "get-screenpipe-app-settings",
-      "types"
+      "types",
+      "use-settings"
     ]
   },
   "get-screenpipe-app-settings": {
@@ -1588,6 +1589,60 @@ var registry_default = {
     ],
     registryDependencies: [],
     devDependencies: []
+  },
+  "ai-presets-selector": {
+    name: "ai-presets-selector",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/components/ai-presets-selector.tsx",
+    target: "./src/components/ai-presets-selector.tsx",
+    registryDependencies: [
+      "use-pipe-settings",
+      "use-settings"
+    ],
+    shadcnComponent: [
+      "button",
+      "command",
+      "dialog",
+      "popover",
+      "tooltip",
+      "input",
+      "label",
+      "select",
+      "textarea",
+      "slider",
+      "sonner"
+    ]
+  },
+  "ai-presets-dialog": {
+    name: "ai-presets-dialog",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/components/ai-presets-dialog.tsx",
+    target: "./src/components/ai-presets-dialog.tsx",
+    registryDependencies: [
+      "use-pipe-settings",
+      "use-settings"
+    ],
+    shadcnComponent: [
+      "button",
+      "command",
+      "dialog",
+      "tooltip",
+      "input",
+      "label",
+      "select",
+      "textarea",
+      "slider",
+      "sonner"
+    ]
+  },
+  "use-settings": {
+    name: "use-settings",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/lib/hooks/use-settings.tsx",
+    target: "./src/lib/hooks/use-settings.ts",
+    dependencies: [
+      "@screenpipe/browser"
+    ],
+    registryDependencies: [
+      "get-screenpipe-app-settings"
+    ]
   }
 };
 
