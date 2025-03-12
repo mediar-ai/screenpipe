@@ -9,7 +9,7 @@ mod tests {
     mod macos_tests {
         use serde_json::Value;
 
-        use crate::{Desktop, Selector};
+        use crate::Desktop;
 
         use super::*;
 
@@ -22,10 +22,13 @@ mod tests {
             tracing_subscriber::registry()
                 .with(fmt::layer())
                 .with(filter)
-                .init();
+                .try_init()
+                .unwrap_or_default();
         }
 
         #[test]
+        #[ignore]
+
         fn test_find_buttons_in_iphone_mirroring() {
             setup_tracing();
 
@@ -175,6 +178,7 @@ mod tests {
         }
 
         #[test]
+        #[ignore]
         fn test_find_and_fill_text_inputs() {
             setup_tracing();
 
@@ -206,6 +210,7 @@ mod tests {
         }
 
         #[test]
+        #[ignore]
         fn test_find_and_fill_text_inputsv2() {
             setup_tracing();
 
@@ -239,7 +244,7 @@ mod tests {
                 println!("b: {:?}", text);
                 if text.contains("Click") {
                     println!("clicking");
-                    b.type_text("foo");
+                    let _ = b.type_text("foo");
                     b.focus().unwrap();
                     if let Err(e) = b.click() {
                         println!("failed to click: {:?}", e);

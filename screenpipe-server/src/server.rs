@@ -11,7 +11,6 @@ use axum::{
 };
 use oasgen::{oasgen, OaSchema, Server};
 
-
 use screenpipe_core::Desktop;
 
 use screenpipe_db::{
@@ -2905,130 +2904,8 @@ struct MergeSpeakersRequest {
     speaker_to_merge_id: i64,
 }
 
-#[derive(Serialize)]
-pub struct RestartAudioDevicesResponse {
-    success: bool,
-    message: String,
-    restarted_devices: Vec<String>,
-}
-
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
-
-// async fn restart_audio_devices(
-//     State(state): State<Arc<AppState>>,
-// ) -> Result<JsonResponse<RestartAudioDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
-//     debug!("restarting active audio devices");
-
-//     // Get currently active devices from device manager
-//     let active_devices = state.device_manager.get_active_devices().await;
-//     let mut restarted_devices = Vec::new();
-
-//     for (_, control) in active_devices {
-//         debug!("restarting audio device: {:?}", control.device);
-
-//         let audio_device = match control.device {
-//             DeviceType::Audio(device) => device,
-//             _ => continue,
-//         };
-//         // Stop the device
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
-//                 is_running: false,
-//                 is_paused: false,
-//             })
-//             .await;
-
-//         // Small delay to ensure clean shutdown
-//         tokio::time::sleep(Duration::from_millis(1000)).await;
-
-//         // Start the device again
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
-//                 is_running: true,
-//                 is_paused: false,
-//             })
-//             .await;
-
-//         restarted_devices.push(audio_device.name.clone());
-//     }
-
-//     if restarted_devices.is_empty() {
-//         Ok(JsonResponse(RestartAudioDevicesResponse {
-//             success: true,
-//             message: "no active audio devices to restart".to_string(),
-//             restarted_devices,
-//         }))
-//     } else {
-//         Ok(JsonResponse(RestartAudioDevicesResponse {
-//             success: true,
-//             message: format!("restarted {} audio devices", restarted_devices.len()),
-//             restarted_devices,
-//         }))
-//     }
-// }
-
-#[derive(Serialize)]
-pub struct RestartVisionDevicesResponse {
-    success: bool,
-    message: String,
-    restarted_devices: Vec<u32>,
-}
-// async fn restart_vision_devices(
-//     State(state): State<Arc<AppState>>,
-// ) -> Result<JsonResponse<RestartVisionDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
-//     debug!("restarting active vision devices");
-
-//     let active_devices = state.device_manager.get_active_devices().await;
-//     let mut restarted_devices = Vec::new();
-
-//     for (_, control) in active_devices {
-//         let vision_device = match control.device {
-//             DeviceType::Vision(device) => device,
-//             _ => continue,
-//         };
-
-//         debug!("restarting vision device: {:?}", vision_device);
-
-//         // Stop the device
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
-//                 is_running: false,
-//                 is_paused: false,
-//             })
-//             .await;
-
-//         tokio::time::sleep(Duration::from_millis(1000)).await;
-
-//         // Start the device again
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
-//                 is_running: true,
-//                 is_paused: false,
-//             })
-//             .await;
-
-//         restarted_devices.push(vision_device.clone());
-//     }
-
-//     Ok(JsonResponse(RestartVisionDevicesResponse {
-//         success: true,
-//         message: if restarted_devices.is_empty() {
-//             "no active vision devices to restart".to_string()
-//         } else {
-//             format!("restarted {} vision devices", restarted_devices.len())
-//         },
-//         restarted_devices,
-//     }))
-// }
 
 // New structs for UI automation API
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
@@ -3090,7 +2967,7 @@ pub struct ElementInfo {
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
 pub struct FindElementsResponse {
-    element: ElementInfo,
+    data: Vec<ElementInfo>,
 }
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
@@ -3123,6 +3000,7 @@ async fn find_elements_handler(
     let app = match desktop.application(&request.selector.app_name) {
         Ok(app) => app,
         Err(e) => {
+            error!("Application not found: {}", e);
             return Err((
                 StatusCode::NOT_FOUND,
                 JsonResponse(json!({
@@ -3134,17 +3012,42 @@ async fn find_elements_handler(
 
     debug!("app: {:?}", app.text(1).unwrap_or_default());
 
-    let element = match app.locator(request.selector.locator.as_str()) {
-        Ok(locator) => match locator.first() {
-            Ok(element) => element,
-            Err(_) => {
-                return Err((
-                    StatusCode::NOT_FOUND,
-                    JsonResponse(json!({ "error": "No matching element found" })),
-                ));
+    let elements = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => {
+            if request.max_results.unwrap_or(1) > 1 {
+                // Get all matching elements if 'all' is true
+                match locator.all() {
+                    Ok(elements) => elements,
+                    Err(_) => {
+                        error!("No matching elements found");
+                        return Err((
+                            StatusCode::NOT_FOUND,
+                            JsonResponse(json!({ "error": "No matching elements found" })),
+                        ));
+                    }
+                }
+            } else {
+                // Get only the first element (current behavior)
+                match locator.first() {
+                    Ok(element) => {
+                        if let Some(el) = element {
+                            vec![el]
+                        } else {
+                            vec![]
+                        }
+                    }
+                    Err(_) => {
+                        error!("No matching element found");
+                        return Err((
+                            StatusCode::NOT_FOUND,
+                            JsonResponse(json!({ "error": "No matching element found" })),
+                        ));
+                    }
+                }
             }
-        },
+        }
         Err(e) => {
+            error!("Failed to create locator: {}", e);
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({ "error": format!("Failed to create locator: {}", e) })),
@@ -3152,11 +3055,20 @@ async fn find_elements_handler(
         }
     };
 
-    match element {
-        Some(element) => {
+    if elements.is_empty() {
+        error!("No matching elements found");
+        return Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({ "error": "No matching elements found" })),
+        ));
+    }
+
+    let elements_info: Vec<ElementInfo> = elements
+        .into_iter()
+        .map(|element| {
             debug!("element: {:?}", element);
             // Convert to ElementInfo
-            let element_info = ElementInfo {
+            ElementInfo {
                 id: element.id(),
                 role: element.role(),
                 label: element.attributes().label,
@@ -3171,17 +3083,13 @@ async fn find_elements_handler(
                     height: h as i32,
                 }),
                 properties: json!(element.attributes().properties),
-            };
+            }
+        })
+        .collect();
 
-            Ok(JsonResponse(FindElementsResponse {
-                element: element_info,
-            }))
-        }
-        None => Err((
-            StatusCode::NOT_FOUND,
-            JsonResponse(json!({ "error": "No matching element found" })),
-        )),
-    }
+    Ok(JsonResponse(FindElementsResponse {
+        data: elements_info,
+    }))
 }
 
 #[oasgen]
@@ -3195,6 +3103,7 @@ async fn click_element_handler(
     ) {
         Ok(d) => d,
         Err(e) => {
+            error!("Failed to initialize desktop automation: {}", e);
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({
@@ -3207,6 +3116,7 @@ async fn click_element_handler(
     let app = match desktop.application(&request.selector.app_name) {
         Ok(app) => app,
         Err(e) => {
+            error!("Application not found: {}", e);
             return Err((
                 StatusCode::NOT_FOUND,
                 JsonResponse(json!({
@@ -3233,6 +3143,7 @@ async fn click_element_handler(
             }
         },
         Err(e) => {
+            error!("Failed to create locator: {}", e);
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({
@@ -3292,6 +3203,7 @@ async fn type_text_handler(
     let app = match desktop.application(&request.selector.app_name) {
         Ok(app) => app,
         Err(e) => {
+            error!("Application not found: {}", e);
             return Err((
                 StatusCode::NOT_FOUND,
                 JsonResponse(json!({
@@ -3307,6 +3219,7 @@ async fn type_text_handler(
         Ok(locator) => match locator.first() {
             Ok(element) => element,
             Err(e) => {
+                error!("Failed to find elements: {}", e);
                 return Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
                     JsonResponse(json!({

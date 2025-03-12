@@ -5289,7 +5289,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "0.39.7"
+version = "0.39.8"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5297,7 +5297,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "cocoa 0.26.0",
- "core-foundation 0.9.4",
+ "core-foundation 0.10.0",
  "dirs 5.0.1",
  "fix-path-env",
  "futures",

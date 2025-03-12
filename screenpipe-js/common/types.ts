@@ -337,3 +337,54 @@ export interface EventStreamResponse {
   name: string;
   data: VisionEvent | TranscriptionChunk | any;
 }
+
+// Types for the Operator API
+
+export interface ElementSelector {
+  app_name: string;
+  window_name?: string;
+  locator: string;
+  index?: number;
+  text?: string;
+  label?: string;
+  description?: string;
+  element_id?: string;
+  use_background_apps?: boolean;
+  activate_app?: boolean;
+}
+
+export interface ElementPosition {
+  x: number;
+  y: number;
+}
+
+export interface ElementSize {
+  width: number;
+  height: number;
+}
+
+export interface ElementInfo {
+  id?: string;
+  role: string;
+  label?: string;
+  description?: string;
+  text?: string;
+  position?: ElementPosition;
+  size?: ElementSize;
+  properties: Record<string, any>;
+}
+
+export interface FindElementsRequest {
+  selector: ElementSelector;
+  max_results?: number;
+  max_depth?: number;
+}
+
+export interface ClickElementRequest {
+  selector: ElementSelector;
+}
+
+export interface TypeTextRequest {
+  selector: ElementSelector;
+  text: string;
+}
