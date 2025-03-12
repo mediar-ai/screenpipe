@@ -1,12 +1,13 @@
 {
   "name": "data-table",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --no-lint",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "publish": "bunx --bun @screenpipe/dev@latest pipe publish --name data-table"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.2",
