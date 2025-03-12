@@ -23,7 +23,7 @@ hf-hub = { workspace = true, features = [
     "native-tls",
 ] }
 http-cache-reqwest = "0.15.0"
-reqwest-middleware = "0.4.0"
+reqwest-middleware = "0.4.1"
 tokio = { workspace = true }
 
 # Security
