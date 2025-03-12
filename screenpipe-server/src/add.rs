@@ -14,12 +14,12 @@ use screenpipe_vision::perform_ocr_windows;
 use screenpipe_vision::perform_ocr_tesseract;
 
 use serde_json::json;
-use tracing::warn;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use tracing::error;
+use tracing::warn;
 use tracing::{debug, info};
 use uuid::Uuid;
 use walkdir::WalkDir;
@@ -188,7 +188,7 @@ pub async fn handle_index_command(
                 _ => {
                     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                     {
-                        perform_ocr_tesseract(&frame, Arc::new([]))
+                        return perform_ocr_tesseract(&frame, Vec::new());
                     }
                     warn!("unsupported ocr engine");
                     ("".to_string(), "".to_string(), None)

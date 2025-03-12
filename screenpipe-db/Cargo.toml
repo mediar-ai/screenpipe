@@ -24,7 +24,6 @@ futures = { version = "0.3.31", features = ["std"] }
 
 zerocopy = { version = "0.7.32" }
 
-tokio-util = { version = "0.7", features = ["io"] }
 tokio = { version = "1.15", features = ["full", "tracing"] }
 
 tracing = { workspace = true }
