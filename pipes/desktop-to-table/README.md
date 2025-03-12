@@ -8,4 +8,6 @@ allow you to click, type, scrap, control your computer using a playwright API li
 https://cap.so/s/4kpvfe76hw4jd6q
 
 
+backend code:
 
+https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-core/src/operator
