@@ -438,14 +438,12 @@ import { Command as Command7 } from "commander";
 import fs2 from "fs";
 import { Command as Command3 } from "commander";
 import * as p4 from "@clack/prompts";
-async function validateGitHubRepo(url2) {
+function validateGitHubRepo(url2) {
   try {
-    const repoPath = url2.replace("https://github.com/", "").replace(/\/$/, "");
-    const apiUrl = `https://api.github.com/repos/${repoPath}`;
-    const response = await fetch(apiUrl, {
-      headers: { Accept: "application/vnd.github.v3+json" }
-    });
-    return response.status === 200;
+    if (!url2.includes("github.com")) {
+      return false;
+    }
+    return true;
   } catch (error) {
     return false;
   }
@@ -493,7 +491,7 @@ var registerCommand = new Command3().name("register").description("register a ne
   p4.intro(`${colors.highlight("\u26A0\uFE0F IMPORTANT: Publishing Process \u26A0\uFE0F")}`);
   const githubValidationSpinner = p4.spinner();
   githubValidationSpinner.start("Validating GitHub repository");
-  const isValidRepo = await validateGitHubRepo(opts.source);
+  const isValidRepo = validateGitHubRepo(opts.source);
   if (!isValidRepo) {
     githubValidationSpinner.stop("GitHub validation failed");
     handleError(

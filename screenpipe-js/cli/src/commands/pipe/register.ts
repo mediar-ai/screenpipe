@@ -8,17 +8,14 @@ import { handleError } from "../components/commands/add/utils/handle-error";
 import * as p from "@clack/prompts";
 
 // Function to validate GitHub repository existence
-async function validateGitHubRepo(url: string): Promise<boolean> {
+function validateGitHubRepo(url: string): boolean {
   try {
-    // GitHub API URL format: https://api.github.com/repos/{owner}/{repo}
-    const repoPath = url.replace("https://github.com/", "").replace(/\/$/, "");
-    const apiUrl = `https://api.github.com/repos/${repoPath}`;
+    // just check if contains github.com
+    if (!url.includes("github.com")) {
+      return false;
+    }
 
-    const response = await fetch(apiUrl, {
-      headers: { Accept: "application/vnd.github.v3+json" },
-    });
-
-    return response.status === 200;
+    return true;
   } catch (error) {
     return false;
   }
@@ -89,7 +86,7 @@ export const registerCommand = new Command()
     const githubValidationSpinner = p.spinner();
     githubValidationSpinner.start("Validating GitHub repository");
 
-    const isValidRepo = await validateGitHubRepo(opts.source);
+    const isValidRepo = validateGitHubRepo(opts.source);
     if (!isValidRepo) {
       githubValidationSpinner.stop("GitHub validation failed");
       handleError(
