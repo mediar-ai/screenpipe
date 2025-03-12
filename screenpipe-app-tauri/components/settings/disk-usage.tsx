@@ -66,27 +66,28 @@ export default function DiskUsage() {
   const getDisk = async () => {
     setLoading(true);
     try {
-      const cachedData = await localforage.getItem<{
-        diskData: DiskUsageData;
-        lastUpdated: number;
-      }>("diskUsage");
+      // const cachedData = await localforage.getItem<{
+      //   diskData: DiskUsageData;
+      //   lastUpdated: number;
+      // }>("diskUsage");
       const now = Date.now();
       const twoDaysInMillis = 2 * 24 * 60 * 60 * 1000;
-      if (cachedData && now - cachedData.lastUpdated < twoDaysInMillis) {
-        setDiskUsage(cachedData.diskData);
-        setLoading(false);
-      } else {
-        const result = await invoke<DiskUsageData>("get_disk_usage");
-        await new Promise<DiskUsageData>((resolve) => {
-          setTimeout(() => resolve(result), 3000);
-        });
-        await localforage.setItem("diskUsage", {
-          diskData: result,
-          lastUpdated: now,
-        });
-        setDiskUsage(result);
-        setLoading(false);
-      }
+      // if (cachedData && now - cachedData.lastUpdated < twoDaysInMillis) {
+      //   setDiskUsage(cachedData.diskData);
+      //   setLoading(false);
+      // } else {
+      const result = await invoke<DiskUsageData>("get_disk_usage");
+      console.log("result", result);
+      // await new Promise<DiskUsageData>((resolve) => {
+      //   setTimeout(() => resolve(result), 3000);
+      // });
+      // await localforage.setItem("diskUsage", {
+      //   diskData: result,
+      //   lastUpdated: now,
+      // });
+      setDiskUsage(result);
+      setLoading(false);
+      // }
     } catch (error) {
       console.error("Failed to fetch disk usage:", error);
       toast({

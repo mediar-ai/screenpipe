@@ -6,7 +6,9 @@ interface AIProviderStatus {
   error: string;
 }
 
-export function useAiProvider(settings: Settings): AIProviderStatus {
+export function useAiProvider(
+  settings: Settings | undefined,
+): AIProviderStatus {
   const [status, setStatus] = useState<AIProviderStatus>({
     isAvailable: true,
     error: "",
@@ -15,6 +17,11 @@ export function useAiProvider(settings: Settings): AIProviderStatus {
   useEffect(() => {
     const checkAiProvider = async () => {
       try {
+        if (!settings) {
+          setStatus({ isAvailable: false, error: "no ai-provider is set" });
+          return;
+        }
+
         if (!settings.aiProviderType) {
           setStatus({ isAvailable: false, error: "no ai-provider is set" });
           return;
@@ -75,10 +82,10 @@ export function useAiProvider(settings: Settings): AIProviderStatus {
 
     checkAiProvider();
   }, [
-    settings.aiProviderType,
-    settings.openaiApiKey,
-    settings.aiUrl,
-    settings.user?.token,
+    settings?.aiProviderType,
+    settings?.openaiApiKey,
+    settings?.aiUrl,
+    settings?.user?.token,
   ]);
 
   return status;

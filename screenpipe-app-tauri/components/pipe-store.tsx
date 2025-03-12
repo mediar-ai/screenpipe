@@ -1197,7 +1197,7 @@ export const PipeStore: React.FC = () => {
                       disabled={isPurging}
                       variant={"outline"}
                     >
-                      Cancel
+                      cancel
                     </Button>
                     <Button 
                       onClick={handleResetAllPipes} 
@@ -1209,7 +1209,7 @@ export const PipeStore: React.FC = () => {
                           reseting all pipes...
                         </>
                       ) : (
-                          "Confirm"
+                          "confirm"
                         )}
                     </Button>
                   </div>

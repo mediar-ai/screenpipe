@@ -11,10 +11,13 @@ use axum::{
 };
 use oasgen::{oasgen, OaSchema, Server};
 
+use screenpipe_core::Desktop;
+
 use screenpipe_db::{
     ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, Speaker,
     TagContentType,
 };
+
 use tokio_util::io::ReaderStream;
 
 use tokio::fs::File;
@@ -1054,6 +1057,9 @@ impl SCServer {
             .get("/speakers/similar", get_similar_speakers_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
+            .post("/experimental/operator", find_elements_handler)
+            .post("/experimental/operator/click", click_element_handler)
+            .post("/experimental/operator/type", type_text_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -2898,127 +2904,364 @@ struct MergeSpeakersRequest {
     speaker_to_merge_id: i64,
 }
 
-#[derive(Serialize)]
-pub struct RestartAudioDevicesResponse {
-    success: bool,
-    message: String,
-    restarted_devices: Vec<String>,
-}
-
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
 
-// async fn restart_audio_devices(
-//     State(state): State<Arc<AppState>>,
-// ) -> Result<JsonResponse<RestartAudioDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
-//     debug!("restarting active audio devices");
+// New structs for UI automation API
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementSelector {
+    app_name: String,
+    window_name: Option<String>,
+    locator: String,
+    index: Option<usize>,
+    text: Option<String>,
+    label: Option<String>,
+    description: Option<String>,
+    element_id: Option<String>,
+    use_background_apps: Option<bool>,
+    /// If true, the app will be activated before finding elements (this is useful to refresh the tree or clicking on elements)
+    activate_app: Option<bool>,
+}
 
-//     // Get currently active devices from device manager
-//     let active_devices = state.device_manager.get_active_devices().await;
-//     let mut restarted_devices = Vec::new();
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ClickElementRequest {
+    selector: ElementSelector,
+}
 
-//     for (_, control) in active_devices {
-//         debug!("restarting audio device: {:?}", control.device);
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct TypeTextRequest {
+    selector: ElementSelector,
+    text: String,
+}
 
-//         let audio_device = match control.device {
-//             DeviceType::Audio(device) => device,
-//             _ => continue,
-//         };
-//         // Stop the device
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
-//                 is_running: false,
-//                 is_paused: false,
-//             })
-//             .await;
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct FindElementsRequest {
+    selector: ElementSelector,
+    max_results: Option<usize>,
+    max_depth: Option<usize>,
+}
 
-//         // Small delay to ensure clean shutdown
-//         tokio::time::sleep(Duration::from_millis(1000)).await;
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementPosition {
+    x: i32,
+    y: i32,
+}
 
-//         // Start the device again
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
-//                 is_running: true,
-//                 is_paused: false,
-//             })
-//             .await;
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementSize {
+    width: i32,
+    height: i32,
+}
 
-//         restarted_devices.push(audio_device.name.clone());
-//     }
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementInfo {
+    id: Option<String>,
+    role: String,
+    label: Option<String>,
+    description: Option<String>,
+    text: Option<String>,
+    position: Option<ElementPosition>,
+    size: Option<ElementSize>,
+    properties: serde_json::Value,
+}
 
-//     if restarted_devices.is_empty() {
-//         Ok(JsonResponse(RestartAudioDevicesResponse {
-//             success: true,
-//             message: "no active audio devices to restart".to_string(),
-//             restarted_devices,
-//         }))
-//     } else {
-//         Ok(JsonResponse(RestartAudioDevicesResponse {
-//             success: true,
-//             message: format!("restarted {} audio devices", restarted_devices.len()),
-//             restarted_devices,
-//         }))
-//     }
-// }
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct FindElementsResponse {
+    data: Vec<ElementInfo>,
+}
 
-#[derive(Serialize)]
-pub struct RestartVisionDevicesResponse {
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ActionResponse {
     success: bool,
     message: String,
-    restarted_devices: Vec<u32>,
 }
-// async fn restart_vision_devices(
-//     State(state): State<Arc<AppState>>,
-// ) -> Result<JsonResponse<RestartVisionDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
-//     debug!("restarting active vision devices");
 
-//     let active_devices = state.device_manager.get_active_devices().await;
-//     let mut restarted_devices = Vec::new();
+// Handler functions for UI automation
+#[oasgen]
+async fn find_elements_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<FindElementsRequest>,
+) -> Result<JsonResponse<FindElementsResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
 
-//     for (_, control) in active_devices {
-//         let vision_device = match control.device {
-//             DeviceType::Vision(device) => device,
-//             _ => continue,
-//         };
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
 
-//         debug!("restarting vision device: {:?}", vision_device);
+    debug!("app: {:?}", app.text(1).unwrap_or_default());
 
-//         // Stop the device
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
-//                 is_running: false,
-//                 is_paused: false,
-//             })
-//             .await;
+    let elements = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => {
+            if request.max_results.unwrap_or(1) > 1 {
+                // Get all matching elements if 'all' is true
+                match locator.all() {
+                    Ok(elements) => elements,
+                    Err(_) => {
+                        error!("No matching elements found");
+                        return Err((
+                            StatusCode::NOT_FOUND,
+                            JsonResponse(json!({ "error": "No matching elements found" })),
+                        ));
+                    }
+                }
+            } else {
+                // Get only the first element (current behavior)
+                match locator.first() {
+                    Ok(element) => {
+                        if let Some(el) = element {
+                            vec![el]
+                        } else {
+                            vec![]
+                        }
+                    }
+                    Err(_) => {
+                        error!("No matching element found");
+                        return Err((
+                            StatusCode::NOT_FOUND,
+                            JsonResponse(json!({ "error": "No matching element found" })),
+                        ));
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to create locator: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({ "error": format!("Failed to create locator: {}", e) })),
+            ));
+        }
+    };
 
-//         tokio::time::sleep(Duration::from_millis(1000)).await;
+    if elements.is_empty() {
+        error!("No matching elements found");
+        return Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({ "error": "No matching elements found" })),
+        ));
+    }
 
-//         // Start the device again
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
-//                 is_running: true,
-//                 is_paused: false,
-//             })
-//             .await;
+    let elements_info: Vec<ElementInfo> = elements
+        .into_iter()
+        .map(|element| {
+            debug!("element: {:?}", element);
+            // Convert to ElementInfo
+            ElementInfo {
+                id: element.id(),
+                role: element.role(),
+                label: element.attributes().label,
+                description: element.attributes().description,
+                text: element.text(request.max_depth.unwrap_or(10)).ok(),
+                position: element.bounds().ok().map(|(x, y, _, _)| ElementPosition {
+                    x: x as i32,
+                    y: y as i32,
+                }),
+                size: element.bounds().ok().map(|(_, _, w, h)| ElementSize {
+                    width: w as i32,
+                    height: h as i32,
+                }),
+                properties: json!(element.attributes().properties),
+            }
+        })
+        .collect();
 
-//         restarted_devices.push(vision_device.clone());
-//     }
+    Ok(JsonResponse(FindElementsResponse {
+        data: elements_info,
+    }))
+}
 
-//     Ok(JsonResponse(RestartVisionDevicesResponse {
-//         success: true,
-//         message: if restarted_devices.is_empty() {
-//             "no active vision devices to restart".to_string()
-//         } else {
-//             format!("restarted {} vision devices", restarted_devices.len())
-//         },
-//         restarted_devices,
-//     }))
-// }
+#[oasgen]
+async fn click_element_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<ClickElementRequest>,
+) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            error!("Failed to initialize desktop automation: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("app: {:?}", app.text(1).unwrap_or_default());
+
+    // Find elements matching the selector
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
+            Err(e) => {
+                error!("Failed to find elements: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            error!("Failed to create locator: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("element: {:?}", element);
+
+    match element {
+        Some(element) => match element.click() {
+            Ok(_) => Ok(JsonResponse(ActionResponse {
+                success: true,
+                message: format!("Clicked element with role: {}", element.role()),
+            })),
+            Err(e) => {
+                error!("Failed to click element: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to click element: {}", e)
+                    })),
+                ))
+            }
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "No matching element found"
+            })),
+        )),
+    }
+}
+
+#[oasgen]
+async fn type_text_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<TypeTextRequest>,
+) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("app: {:?}", app);
+    // Find elements matching the selector
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
+            Err(e) => {
+                error!("Failed to find elements: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            error!("Failed to create locator: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("element: {:?}", element);
+
+    match element {
+        Some(element) => match element.type_text(&request.text) {
+            Ok(_) => Ok(JsonResponse(ActionResponse {
+                success: true,
+                message: format!("Typed text into element with role: {}", element.role()),
+            })),
+            Err(e) => {
+                error!("Failed to type text: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to type text: {}", e)
+                    })),
+                ))
+            }
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "No matching element found"
+            })),
+        )),
+    }
+}

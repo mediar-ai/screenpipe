@@ -37,7 +37,7 @@ const unflattenObject = (obj: Record<string, any>): any => {
 // Helper functions that work in both environments
 function toCamelCase(str: string): string {
   return str.replace(/([-_][a-z])/g, (group) =>
-    group.toUpperCase().replace("-", "").replace("_", "")
+    group.toUpperCase().replace("-", "").replace("_", ""),
   );
 }
 
@@ -69,7 +69,6 @@ function getDefaultSettings(): Settings {
     - Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
     - Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
     - Always answer my question/intent, do not make up things
-    
     `,
     port: 3030,
     dataDir: "default",
@@ -96,6 +95,7 @@ function getDefaultSettings(): Settings {
     enableRealtimeAudioTranscription: false,
     realtimeAudioTranscriptionEngine: "deepgram",
     disableVision: false,
+    aiPresets: [],
   };
 }
 

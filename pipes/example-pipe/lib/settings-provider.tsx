@@ -1,19 +1,24 @@
 "use client";
 
 import { createContext, useContext, ReactNode } from "react";
-import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
+import { useSettings as useSettingsApp } from "@/lib/hooks/use-settings";
 
 // Create a context for settings
-type SettingsContextType = ReturnType<typeof usePipeSettings>;
+type SettingsContextType = ReturnType<typeof useSettingsApp>;
 
-const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+const SettingsContext = createContext<SettingsContextType | undefined>(
+  undefined,
+);
 
 // Provider component
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const settingsData = usePipeSettings();
-  
-  console.log("settings provider initialized with data:", settingsData.loading ? "loading..." : "loaded");
-  
+  const settingsData = useSettingsApp();
+
+  console.log(
+    "settings provider initialized with data:",
+    settingsData.loading ? "loading..." : "loaded",
+  );
+
   return (
     <SettingsContext.Provider value={settingsData}>
       {children}
@@ -28,4 +33,4 @@ export function useSettings() {
     throw new Error("useSettings must be used within a SettingsProvider");
   }
   return context;
-} 
+}
