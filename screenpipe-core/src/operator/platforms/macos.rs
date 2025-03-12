@@ -146,6 +146,7 @@ impl MacOSEngine {
     }
 
     // Add this new method to refresh the accessibility tree
+    #[allow(clippy::unexpected_cfg_condition)]
     pub fn refresh_accessibility_tree(
         &self,
         app_name: Option<&str>,
@@ -273,7 +274,7 @@ fn macos_role_to_generic_role(role: &str) -> Vec<String> {
     }
 }
 // Helper function to get PIDs of running applications using NSWorkspace
-#[allow(clippy::all)]
+#[allow(clippy::unexpected_cfg_condition)]
 fn get_running_application_pids(use_background_apps: bool) -> Result<Vec<i32>, AutomationError> {
     // Implementation using Objective-C bridging
     unsafe {
@@ -763,39 +764,6 @@ impl MacOSUIElement {
         }
 
         Ok(all_text.join("\n"))
-    }
-
-    fn click_with_applescript(&self) -> Result<(), AutomationError> {
-        // Get element position
-        let (x, y, width, height) = self.bounds()?;
-        let center_x = x + width / 2.0;
-        let center_y = y + height / 2.0;
-
-        // Create AppleScript to click at position
-        let script = format!(
-            "tell application \"System Events\" to click at {{{}, {}}}",
-            center_x as i32, center_y as i32
-        );
-
-        // Execute AppleScript
-        use std::process::Command;
-        let output = Command::new("osascript")
-            .arg("-e")
-            .arg(&script)
-            .output()
-            .map_err(|e| {
-                AutomationError::PlatformError(format!("Failed to execute AppleScript: {}", e))
-            })?;
-
-        if !output.status.success() {
-            let error = String::from_utf8_lossy(&output.stderr);
-            return Err(AutomationError::PlatformError(format!(
-                "AppleScript execution failed: {}",
-                error
-            )));
-        }
-
-        Ok(())
     }
 }
 

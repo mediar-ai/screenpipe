@@ -1,6 +1,6 @@
 /// TLDR: default TreeWalker does not traverse windows, so we need to traverse windows manually
 use accessibility::{AXAttribute, AXUIElement, AXUIElementAttributes, Error};
-use core_foundation::{array::CFArray, string::CFString};
+use core_foundation::array::CFArray;
 use std::{
     cell::{Cell, RefCell},
     thread,
