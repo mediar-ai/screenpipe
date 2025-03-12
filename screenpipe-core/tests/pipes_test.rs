@@ -1,7 +1,17 @@
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution};
+    use screenpipe_core::{
+        run_pipe, 
+        download_pipe,
+        sanitize_pipe_name,
+        save_cron_execution,
+        download_pipe_private,
+        get_last_cron_execution,
+        PipeState
+    };
+
+    use tokio::io::AsyncWriteExt;
     use serde_json::json;
     use std::sync::Arc;
     use std::sync::Once;
@@ -240,8 +250,53 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(windows)]
-    async fn test_download_pipe_windows_path() {
+    async fn test_sanitize_pipe_name() {
+        init();
+
+        // test default pipe url
+        let github_default_url = "https://github.com/KentTDang/AI-Interview-Coach/";
+        assert_eq!(sanitize_pipe_name(github_default_url), "AI-Interview-Coach");
+
+        // test pipe url with branch
+        let github_url = "https://github.com/KentTDang/AI-Interview-Coach/tree/main";
+        assert_eq!(sanitize_pipe_name(github_url), "AI-Interview-Coach");
+
+        // test pipe url as a subdirectory
+        let github_url_subdir = "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search";
+        assert_eq!(sanitize_pipe_name(github_url_subdir), "search");
+
+        // test a local directory path
+        let temp_dir = TempDir::new().unwrap();
+        let source_dir = temp_dir.path().join("test-pipe-name");
+        tokio::fs::create_dir_all(&source_dir).await.unwrap();
+        assert_eq!(sanitize_pipe_name(
+            source_dir.to_str().expect("failed to convert path to str")
+        ), "test-pipe-name");
+
+        // test with a non-GitHub URL
+        let non_github_url = "https://example.com/some/path";
+        assert_eq!(sanitize_pipe_name(non_github_url), "https---example-com-some-path");
+
+        // url including invalid characters
+        let invalid_chars = "invalid:name/with*chars";
+        assert_eq!(sanitize_pipe_name(invalid_chars), "invalid-name-with-chars");
+    }
+
+    #[tokio::test]
+    async fn test_non_existence_local_pipe() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+
+        let source_dir = temp_dir.path().join("source_pipe");
+        let result = download_pipe(&source_dir.to_str().expect("failed bathbuf to str"),
+            screenpipe_dir.clone()).await;
+       
+        assert!(result.is_err(), "test failed for non existence local pipe: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_downloading_and_running_sideloaded_pipe() {
         init();
         let temp_dir = TempDir::new().unwrap();
         let screenpipe_dir = temp_dir.path().to_path_buf();
@@ -258,29 +313,246 @@ mod tests {
         .await
         .unwrap();
 
-        // Get the absolute Windows path with backslashes
-        let source_path = source_dir.to_str().unwrap().replace("/", "\\");
-        println!("Testing Windows path: {}", source_path);
-
         // Try to download the pipe using the Windows path
-        let result = download_pipe(&source_path, screenpipe_dir.clone()).await;
+        let result = download_pipe(&source_dir.to_str().expect("failed to convert to str"),
+            screenpipe_dir.clone()
+        ).await;
 
-        // The function should succeed with a Windows path
+
+        // The function should succeed for every os
         assert!(
             result.is_ok(),
-            "Failed to handle Windows path: {:?}",
+            "Failed to download pipe: {:?}",
             result.err()
         );
 
         // Verify the pipe was copied correctly
         let pipe_name = source_dir.file_name().unwrap().to_str().unwrap();
-        let dest_path = screenpipe_dir
-            .join("pipes")
-            .join(format!("{}_local", pipe_name));
+        let dest_path = screenpipe_dir.join("pipes").join(pipe_name);
+
         assert!(dest_path.exists(), "Destination pipe directory not found");
+        assert!(dest_path.join("pipe.js").exists(), "pipe.js not found in destination");
+
+        // tests for urls
+        let urls = vec![
+            "https://github.com/KentTDang/AI-Interview-Coach/",
+            "https://github.com/KentTDang/AI-Interview-Coach/tree/main",
+            "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search",
+        ];
+
+        for url in urls {
+            let result = download_pipe(url, screenpipe_dir.clone()).await;
+            assert!(result.is_ok(), "Failed to download pipe from URL: {}", url);
+
+            let pipe_name = sanitize_pipe_name(url);
+            let dest_path = screenpipe_dir.join("pipes").join(&pipe_name);
+            assert!(dest_path.exists(), "Destination pipe directory not found for URL: {}", url);
+
+            // verify pipe.json
+            let pipe_json_path = dest_path.join("pipe.json");
+            let pipe_json_content = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
+            let pipe_json: serde_json::Value = serde_json::from_str(&pipe_json_content).expect("Invalid JSON format");
+            assert!(pipe_json.is_object(), "expected json to be an object");
+
+            // enable side loaded pipe, even tho its enabled by default
+            let pipe_dir = dest_path;
+            let pipe_json_path = pipe_dir.join("pipe.json");
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
+            let mut pipe_config: serde_json::Value = serde_json::from_str(&pipe_json).unwrap();
+            pipe_config["enabled"] = json!(true);
+            let updated_pipe_json = serde_json::to_string_pretty(&pipe_config);
+            let mut file = tokio::fs::File::create(&pipe_json_path).await.unwrap();
+            file.write_all(updated_pipe_json.expect("failed to write").as_bytes()).await.unwrap();
+
+            // run pipe
+            let run_result = run_pipe(&pipe_name, screenpipe_dir.clone()).await;
+
+            let (_child, pipe_state) = run_result.unwrap();
+
+            // for `bun i` command, keeping it max
+            sleep(Duration::from_secs(20)).await;
+
+            match pipe_state {
+                PipeState::Port(port) => {
+                    // verify the pipe is running on the expected port
+                    let client = reqwest::Client::new();
+                    let response = client.get(format!("http://localhost:{}", port)).send().await;
+
+                    assert!(response.is_ok(), "Failed to connect to the pipe on port {}", port);
+
+                    // if successfull clean up the process
+                    #[cfg(windows)]
+                    {
+                        let output = tokio::process::Command::new("powershell")
+                            .arg("-NoProfile")
+                            .arg("-WindowStyle")
+                            .arg("hidden")
+                            .arg("-Command")
+                            .arg(format!(
+                                r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*\pipes\{}\*" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
+                                &pipe_name.to_string()
+                            ))
+                            .creation_flags(0x08000000)
+                            .output()
+                            .await
+                            .expect("Failed to execute PowerShell command");
+
+                        assert!(
+                            output.status.success(),
+                            "{} hasn't ran successfully",
+                            pipe_name 
+                        );
+
+                    }
+
+                    #[cfg(unix)]
+                    {
+                        let command = format!(
+                            "ps axuw | grep 'pipes/{}/' | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                            &pipe_name.to_string()
+                        );
+
+                        let output = tokio::process::Command::new("sh")
+                            .arg("-c")
+                            .arg(command)
+                            .output()
+                            .await
+                            .expect("Failed to execute ps command");
+
+                        assert!(
+                            output.status.success(),
+                            "{} hasn't ran successfully",
+                            &pipe_name.to_string()
+                        );
+                    }
+                }
+                PipeState::Pid(_pid) => {
+                    // pipe process will not be running at this point
+                    // check by `ps axuw | grep pipes | grep -v grep`
+                }
+            }
+
+        }
+    }
+
+    #[tokio::test]
+    async fn test_downloading_and_running_private_pipe() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+
+        let pipe_name = "data-table";
+        let source = "https://raw.githubusercontent.com/tribhuwan-kumar/anime/master/0.1.8.zip";
+        let result = download_pipe_private("data-table", source, screenpipe_dir.clone()).await;
+
         assert!(
-            dest_path.join("pipe.js").exists(),
-            "pipe.js not found in destination"
+            result.is_ok(),
+            "Failed to download private pipe: {:?}",
+            result.err()
         );
+        assert!(screenpipe_dir.join("pipes").join(pipe_name).exists(), 
+            "test failed for downloading private pipe: {:?}",
+            result.err()
+        );
+
+        // any zip shouldn't exists
+        let mut entries = tokio::fs::read_dir(screenpipe_dir.join("pipes").join(pipe_name)).await.unwrap();
+        let mut zip_exists = false;
+        while let Some(entry) = entries.next_entry().await.unwrap() {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) == Some("zip") {
+                zip_exists = true;
+                break;
+            }
+        }
+        assert!(!zip_exists, 
+            "failed zip extraction for downloading private pipe: {:?}",
+            result.err()
+        );
+
+        // verify pipe.json
+        let pipe_json_path = screenpipe_dir.join("pipes").join(pipe_name).join("pipe.json");
+        let pipe_json_content = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
+        let pipe_json: serde_json::Value = serde_json::from_str(&pipe_json_content).expect("Invalid JSON format");
+
+        assert!(pipe_json.is_object(), "expected json to be an object");
+
+        // enable by writng pipe.json
+        let pipe_dir = screenpipe_dir.join("pipes").join(pipe_name);
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
+        let mut pipe_config: serde_json::Value = serde_json::from_str(&pipe_json).unwrap();
+        pipe_config["enabled"] = json!(true);
+        let updated_pipe_json = serde_json::to_string_pretty(&pipe_config);
+        let mut file = tokio::fs::File::create(&pipe_json_path).await.unwrap();
+        file.write_all(updated_pipe_json.expect("failed to write").as_bytes()).await.unwrap();
+
+        // run pipe
+        let run_result = run_pipe(pipe_name, screenpipe_dir.clone()).await;
+
+        let (_child, pipe_state) = run_result.unwrap();
+
+        // for `bun i` command, keeping it max
+        sleep(Duration::from_secs(20)).await;
+
+        match pipe_state {
+            PipeState::Port(port) => {
+                // verify the pipe is running on the expected port
+                let client = reqwest::Client::new();
+                let response = client.get(format!("http://localhost:{}", port)).send().await;
+
+                assert!(response.is_ok(), "Failed to connect to the pipe on port {}", port);
+
+                // if successfull clean up the process
+                #[cfg(windows)]
+                {
+                    let output = tokio::process::Command::new("powershell")
+                        .arg("-NoProfile")
+                        .arg("-WindowStyle")
+                        .arg("hidden")
+                        .arg("-Command")
+                        .arg(format!(
+                            r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*\pipes\{}\*" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
+                            &pipe_name.to_string()
+                        ))
+                        .creation_flags(0x08000000)
+                        .output()
+                    .await
+                    .expect("Failed to execute PowerShell command");
+
+                    assert!(
+                        output.status.success(),
+                        "{} hasn't ran successfully",
+                        pipe_name 
+                    );
+
+                }
+
+                #[cfg(unix)]
+                {
+                    let command = format!(
+                        "ps axuw | grep 'pipes/{}/' | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                        &pipe_name.to_string()
+                    );
+
+                    let output = tokio::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(command)
+                        .output()
+                        .await
+                        .expect("Failed to execute ps command");
+
+                    assert!(
+                        output.status.success(),
+                        "{} hasn't ran successfully",
+                        pipe_name 
+                    );
+                }
+            }
+            PipeState::Pid(_pid) => {
+                // pipe process will not be running at this point
+                // check by `ps axuw | grep pipes | grep -v grep`
+            }
+        }
     }
 }

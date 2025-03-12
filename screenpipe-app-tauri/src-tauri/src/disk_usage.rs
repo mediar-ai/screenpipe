@@ -94,7 +94,9 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
 
     // Check if cache exists and is recent
     if let Ok(content) = fs::read_to_string(&cache_file) {
+        info!("cache file found: {}", cache_file.to_string_lossy());
         if let Ok(cached) = serde_json::from_str::<CachedDiskUsage>(&content) {
+            info!("cached: {:?}", cached);
             let now = chrono::Utc::now().timestamp();
             let two_days = 2 * 24 * 60 * 60; // 2 days in seconds
             if now - cached.timestamp < two_days {
@@ -174,6 +176,8 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
         timestamp: chrono::Utc::now().timestamp(),
         usage: disk_usage.clone(),
     };
+
+    info!("writing cache file: {}", cache_file.to_string_lossy());
 
     if let Err(e) = fs::write(&cache_file, serde_json::to_string_pretty(&cached).unwrap()) {
         info!("Failed to write cache file: {}", e);

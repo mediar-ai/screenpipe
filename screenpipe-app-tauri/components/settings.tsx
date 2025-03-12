@@ -21,6 +21,7 @@ import { AccountSection } from "./settings/account-section";
 import ShortcutSection from "./settings/shortcut-section";
 import DiskUsage from "./settings/disk-usage";
 import AISection from "./settings/ai-section";
+import { AIPresets } from "./settings/ai-presets";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -110,7 +111,7 @@ export function Settings() {
       case "general":
         return <GeneralSettings />;
       case "ai":
-        return <AISection />;
+        return <AIPresets />;
       case "account":
         return <AccountSection />;
       case "recording":
@@ -265,7 +266,7 @@ export function Settings() {
                     "flex items-center space-x-2 px-4 py-1.5 rounded-lg transition-colors",
                     activeSection === section.id
                       ? "bg-black/90 text-white"
-                      : "hover:bg-black/10"
+                      : "hover:bg-black/10",
                   )}
                 >
                   {section.icon}

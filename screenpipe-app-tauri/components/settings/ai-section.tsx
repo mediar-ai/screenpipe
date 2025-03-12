@@ -39,9 +39,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import posthog from "posthog-js";
 
-interface AIProviderCardProps {
+export interface AIProviderCardProps {
   type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
   title: string;
   description: string;
@@ -53,20 +52,20 @@ interface AIProviderCardProps {
   imageClassName?: string;
 }
 
-interface OllamaModel {
+export interface OllamaModel {
   name: string;
   size: number;
   digest: string;
   modified_at: string;
 }
 
-interface AIModel {
+export interface AIModel {
   id: string;
   name: string;
   provider: string;
 }
 
-const AIProviderCard = ({
+export const AIProviderCard = ({
   type,
   title,
   description,
@@ -83,7 +82,7 @@ const AIProviderCard = ({
       className={cn(
         "flex py-4 px-4 rounded-lg hover:bg-accent transition-colors h-[145px] w-full cursor-pointer",
         selected ? "border-black/60 border-[1.5px]" : "",
-        disabled && "opacity-50 cursor-not-allowed"
+        disabled && "opacity-50 cursor-not-allowed",
       )}
     >
       <CardContent className="flex flex-col p-0 w-full">
@@ -95,7 +94,7 @@ const AIProviderCard = ({
               "rounded-lg shrink-0 size-8",
               type === "native-ollama" &&
                 "outline outline-gray-300 outline-1 outline-offset-2",
-              imageClassName
+              imageClassName,
             )}
           />
           <span className="text-lg font-medium truncate">{title}</span>
@@ -123,7 +122,7 @@ const AISection = () => {
   };
 
   const handleCustomPromptChange = (
-    e: React.ChangeEvent<HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLTextAreaElement>,
   ) => {
     updateSettings({ customPrompt: e.target.value });
   };
@@ -182,7 +181,7 @@ const AISection = () => {
               headers: {
                 Authorization: `Bearer ${settings.user?.id || ""}`,
               },
-            }
+            },
           );
           if (!response.ok) throw new Error("Failed to fetch models");
           const data = await response.json();
@@ -201,7 +200,7 @@ const AISection = () => {
               id: model.name,
               name: model.name,
               provider: "ollama",
-            }))
+            })),
           );
           break;
 
@@ -228,12 +227,12 @@ const AISection = () => {
                 id: model.id,
                 name: model.id,
                 provider: "custom",
-              }))
+              })),
             );
           } catch (error) {
             console.error(
               "Failed to fetch custom models, allowing manual input:",
-              error
+              error,
             );
             setModels([]);
           }
@@ -245,7 +244,7 @@ const AISection = () => {
     } catch (error) {
       console.error(
         `Failed to fetch models for ${settings.aiProviderType}:`,
-        error
+        error,
       );
       setModels([]);
     } finally {
@@ -286,8 +285,8 @@ const AISection = () => {
               !settings.user
                 ? "login required"
                 : !settings.user?.credits?.amount
-                ? "requires credits"
-                : undefined
+                  ? "requires credits"
+                  : undefined
             }
           />
 

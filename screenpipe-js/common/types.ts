@@ -224,6 +224,31 @@ export interface User {
   };
 }
 
+export type AIPreset = {
+  id: string;
+  maxContextChars: number;
+  url: string;
+  model: string;
+  defaultPreset: boolean;
+  prompt: string;
+  //provider: AIProviderType;
+} & (
+  | {
+      provider: "openai";
+      apiKey: string;
+    }
+  | {
+      provider: "native-ollama";
+    }
+  | {
+      provider: "screenpipe-cloud";
+    }
+  | {
+      provider: "custom";
+      apiKey?: string;
+    }
+);
+
 export interface Settings {
   openaiApiKey: string;
   deepgramApiKey: string;
@@ -249,6 +274,7 @@ export interface Settings {
   enableRealtimeAudioTranscription: boolean;
   realtimeAudioTranscriptionEngine: string;
   disableVision: boolean;
+  aiPresets: AIPreset[];
 }
 
 /**
@@ -310,4 +336,55 @@ export interface VisionStreamResponse {
 export interface EventStreamResponse {
   name: string;
   data: VisionEvent | TranscriptionChunk | any;
+}
+
+// Types for the Operator API
+
+export interface ElementSelector {
+  app_name: string;
+  window_name?: string;
+  locator: string;
+  index?: number;
+  text?: string;
+  label?: string;
+  description?: string;
+  element_id?: string;
+  use_background_apps?: boolean;
+  activate_app?: boolean;
+}
+
+export interface ElementPosition {
+  x: number;
+  y: number;
+}
+
+export interface ElementSize {
+  width: number;
+  height: number;
+}
+
+export interface ElementInfo {
+  id?: string;
+  role: string;
+  label?: string;
+  description?: string;
+  text?: string;
+  position?: ElementPosition;
+  size?: ElementSize;
+  properties: Record<string, any>;
+}
+
+export interface FindElementsRequest {
+  selector: ElementSelector;
+  max_results?: number;
+  max_depth?: number;
+}
+
+export interface ClickElementRequest {
+  selector: ElementSelector;
+}
+
+export interface TypeTextRequest {
+  selector: ElementSelector;
+  text: string;
 }

@@ -37,13 +37,14 @@ screenpipe-events = { path = "../screenpipe-events" }
 
 # Lanuage specification
 screenpipe-core = { path = "../screenpipe-core" }
+screenpipe-db = { path = "../screenpipe-db" }
 
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-xcap = "0.3.3"
+xcap = { git = "https://github.com/nashaofu/xcap", rev = "09c11cc" }
 
 once_cell = { workspace = true }
 base64 = "0.22.1"
@@ -97,7 +98,7 @@ windows = { version = "0.58", features = [
 libc = "=0.2.164"
 cidre = { git = "https://github.com/yury/cidre.git" } # idk why cant pin version / rev 
 accessibility-sys = "0.1.3"
-core-foundation = "0.9.4"
+core-foundation = "=0.10.0"
 url = "2.5.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
