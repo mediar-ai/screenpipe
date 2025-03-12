@@ -3,6 +3,9 @@
 log() {
     echo -e "\e[1;34m[INFO]\e[0m $1"
 }
+export XDG_SESSION_TYPE="x11"
+export WAYLAND_DISPLAY=""
+
 # Change directory to Screenpipe folder
 cd /workspaces/screenpipe/
 
