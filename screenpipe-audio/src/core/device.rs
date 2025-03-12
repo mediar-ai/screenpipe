@@ -152,66 +152,102 @@ pub async fn get_cpal_device_and_config(
 }
 
 pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
-    let host = cpal::default_host();
-    let mut devices = Vec::new();
+    // Helper function containing the original implementation
+    async fn try_list_audio_devices() -> Result<Vec<AudioDevice>> {
+        let host = cpal::default_host();
+        let mut devices = Vec::new();
 
-    for device in host.input_devices()? {
-        if let Ok(name) = device.name() {
-            devices.push(AudioDevice::new(name, DeviceType::Input));
+        for device in host.input_devices()? {
+            if let Ok(name) = device.name() {
+                devices.push(AudioDevice::new(name, DeviceType::Input));
+            }
         }
-    }
 
-    // Filter function to exclude macOS speakers and AirPods for output devices
-    fn should_include_output_device(name: &str) -> bool {
+        // Filter function to exclude macOS speakers and AirPods for output devices
+        fn should_include_output_device(name: &str) -> bool {
+            #[cfg(target_os = "macos")]
+            {
+                !name.to_lowercase().contains("speakers")
+                    && !name.to_lowercase().contains("airpods")
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                // Avoid "unused variable" warning in non-macOS systems
+                let _ = name;
+                true
+            }
+        }
+
+        // macos hack using screen capture kit for output devices - does not work well
         #[cfg(target_os = "macos")]
         {
-            !name.to_lowercase().contains("speakers") && !name.to_lowercase().contains("airpods")
+            // !HACK macos is supposed to use special macos feature "display capture"
+            // ! see https://github.com/RustAudio/cpal/pull/894
+            if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+                for device in host.input_devices()? {
+                    if let Ok(name) = device.name() {
+                        if should_include_output_device(&name) {
+                            devices.push(AudioDevice::new(name, DeviceType::Output));
+                        }
+                    }
+                }
+            }
         }
-        #[cfg(not(target_os = "macos"))]
-        {
-            // Avoid "unused variable" warning in non-macOS systems
-            let _ = name;
-            true
+
+        // add default output device - on macos think of custom virtual devices
+        for device in host.output_devices()? {
+            if let Ok(name) = device.name() {
+                if should_include_output_device(&name) {
+                    devices.push(AudioDevice::new(name, DeviceType::Output));
+                }
+            }
         }
+
+        // last, add devices that are listed in .devices() which are not already in the devices vector
+        let other_devices = host.devices().unwrap();
+        for device in other_devices {
+            if !devices.iter().any(|d| d.name == device.name().unwrap())
+                && should_include_output_device(&device.name().unwrap())
+            {
+                // TODO: not sure if it can be input, usually aggregate or multi output
+                devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
+            }
+        }
+
+        Ok(devices)
     }
 
-    // macos hack using screen capture kit for output devices - does not work well
-    #[cfg(target_os = "macos")]
-    {
-        // !HACK macos is supposed to use special macos feature "display capture"
-        // ! see https://github.com/RustAudio/cpal/pull/894
-        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-            for device in host.input_devices()? {
-                if let Ok(name) = device.name() {
-                    if should_include_output_device(&name) {
-                        devices.push(AudioDevice::new(name, DeviceType::Output));
-                    }
+    // Implement retry logic with exponential backoff
+    const MAX_RETRIES: u32 = 3;
+    let mut delay = std::time::Duration::from_millis(100);
+    let mut last_error = None;
+
+    for attempt in 0..MAX_RETRIES {
+        match try_list_audio_devices().await {
+            Ok(devices) => return Ok(devices),
+            Err(err) => {
+                last_error = Some(err);
+                if attempt < MAX_RETRIES - 1 {
+                    tracing::warn!(
+                        "Failed to list audio devices (attempt {}/{}): {}. Retrying after {:?}...",
+                        attempt + 1,
+                        MAX_RETRIES,
+                        last_error.as_ref().unwrap(),
+                        delay
+                    );
+                    tokio::time::sleep(delay).await;
+                    delay *= 2; // Exponential backoff
                 }
             }
         }
     }
 
-    // add default output device - on macos think of custom virtual devices
-    for device in host.output_devices()? {
-        if let Ok(name) = device.name() {
-            if should_include_output_device(&name) {
-                devices.push(AudioDevice::new(name, DeviceType::Output));
-            }
-        }
-    }
-
-    // last, add devices that are listed in .devices() which are not already in the devices vector
-    let other_devices = host.devices().unwrap();
-    for device in other_devices {
-        if !devices.iter().any(|d| d.name == device.name().unwrap())
-            && should_include_output_device(&device.name().unwrap())
-        {
-            // TODO: not sure if it can be input, usually aggregate or multi output
-            devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
-        }
-    }
-
-    Ok(devices)
+    Err(last_error.unwrap_or_else(|| {
+        anyhow!(
+            "Failed to list audio devices after {} attempts",
+            MAX_RETRIES
+        )
+    }))
 }
 
 pub fn default_input_device() -> Result<AudioDevice> {
