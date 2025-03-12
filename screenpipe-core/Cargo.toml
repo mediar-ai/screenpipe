@@ -22,8 +22,8 @@ hf-hub = { workspace = true, features = [
     "tokio",
     "native-tls",
 ] }
-http-cache-reqwest = "0.15.0"
-reqwest-middleware = "0.4.1"
+http-cache-reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
 tokio = { workspace = true }
 
 # Security

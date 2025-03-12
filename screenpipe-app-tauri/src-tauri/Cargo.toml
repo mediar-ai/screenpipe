@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.40.1"
+version = "0.40.2"
 description = ""
 authors = ["you"]
 license = ""
@@ -50,7 +50,7 @@ log = "0.4.17"
 tokio = { version = "1.36.0", features = ["full"] }
 
 # HTTP client
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { workspace = true }
 
 # tracing
 tracing = "0.1.40"

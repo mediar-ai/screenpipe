@@ -12,7 +12,6 @@ mod platforms;
 mod selector;
 #[cfg(test)]
 mod tests;
-mod tree_search;
 
 pub use element::{UIElement, UIElementAttributes};
 pub use errors::AutomationError;
