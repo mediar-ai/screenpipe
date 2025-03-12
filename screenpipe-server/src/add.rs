@@ -188,7 +188,7 @@ pub async fn handle_index_command(
                 _ => {
                     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                     {
-                        return perform_ocr_tesseract(&frame, Vec::new());
+                        perform_ocr_tesseract(&frame, Vec::new());
                     }
                     warn!("unsupported ocr engine");
                     ("".to_string(), "".to_string(), None)
