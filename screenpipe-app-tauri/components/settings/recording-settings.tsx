@@ -345,12 +345,12 @@ export function RecordingSettings() {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       // await relaunch();
 
-      toast({
-        title: "settings updated successfully",
-        description: "screenpipe has been restarted with new settings.",
-      });
+      // toast({
+      //   title: "settings updated successfully",
+      //   description: "screenpipe has been restarted with new settings.",
+      // });
 
-      window.location.reload();
+      // window.location.reload();
     } catch (error) {
       console.error("failed to update settings:", error);
       toast({
@@ -1043,22 +1043,6 @@ export function RecordingSettings() {
                           <span>deepgram</span>
                           <Badge variant="secondary">cloud</Badge>
                         </div>
-                      </SelectItem>
-                      <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
-                      <SelectItem value="whisper-tiny-quantized">
-                        whisper-tiny-quantized
-                      </SelectItem>
-                      <SelectItem value="whisper-large">
-                        whisper-large
-                      </SelectItem>
-                      <SelectItem value="whisper-large-quantized">
-                        whisper-large-quantized
-                      </SelectItem>
-                      <SelectItem value="whisper-large-v3-turbo">
-                        whisper-large-turbo
-                      </SelectItem>
-                      <SelectItem value="whisper-large-v3-turbo-quantized">
-                        whisper-large-turbo-quantized
                       </SelectItem>
                     </SelectContent>
                   </Select>

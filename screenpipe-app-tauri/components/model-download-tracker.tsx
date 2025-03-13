@@ -2,9 +2,9 @@
 
 import { useToast } from "@/components/ui/use-toast";
 import { listen } from "@tauri-apps/api/event";
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Progress } from "./ui/progress";
-import { AlertCircle, Download } from "lucide-react";
 
 export function ModelDownloadTracker() {
   const { toast, dismiss } = useToast();
@@ -23,6 +23,7 @@ export function ModelDownloadTracker() {
     const interval = setInterval(() => {
       Object.keys(activeDownloads).forEach((model) => {
         // Get current progress
+
         let progress = downloadProgress[model] || 5;
 
         // Only update if not at max
@@ -41,6 +42,14 @@ export function ModelDownloadTracker() {
           if (toastRefs[model]) {
             toastRefs[model].update({
               title: "downloading model",
+              description: (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Download className="h-4 w-4" />
+                  </div>
+                  <Progress value={downloadProgress[model]} className="h-1" />
+                </div>
+              ),
               duration: Infinity,
             });
           }
@@ -103,6 +112,14 @@ export function ModelDownloadTracker() {
         // Show toast for download start with initial progress
         const toastRef = toast({
           title: "downloading model",
+          description: (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Download className="h-4 w-4" />
+              </div>
+              <Progress value={5} className="h-1" />
+            </div>
+          ),
           duration: Infinity, // Will be manually closed when download completes
         });
 
