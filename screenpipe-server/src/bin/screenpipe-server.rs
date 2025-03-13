@@ -582,9 +582,15 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    if find_ffmpeg_path().is_none() {
-        eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
-        std::process::exit(1);
+    // Replace the current conditional check with:
+    let ffmpeg_path = find_ffmpeg_path();
+    if ffmpeg_path.is_none() {
+        // Try one more time, which might trigger the installation
+        let ffmpeg_path = find_ffmpeg_path();
+        if ffmpeg_path.is_none() {
+            eprintln!("ffmpeg not found and installation failed. please install ffmpeg manually.");
+            std::process::exit(1);
+        }
     }
 
     if !is_local_ipv4_port_free(cli.port) {
