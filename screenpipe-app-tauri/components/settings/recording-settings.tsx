@@ -1044,6 +1044,22 @@ export function RecordingSettings() {
                           <Badge variant="secondary">cloud</Badge>
                         </div>
                       </SelectItem>
+                      <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
+                      <SelectItem value="whisper-tiny-quantized">
+                        whisper-tiny-quantized
+                      </SelectItem>
+                      <SelectItem value="whisper-large">
+                        whisper-large
+                      </SelectItem>
+                      <SelectItem value="whisper-large-quantized">
+                        whisper-large-quantized
+                      </SelectItem>
+                      <SelectItem value="whisper-large-v3-turbo">
+                        whisper-large-turbo
+                      </SelectItem>
+                      <SelectItem value="whisper-large-v3-turbo-quantized">
+                        whisper-large-turbo-quantized
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1085,9 +1101,18 @@ export function RecordingSettings() {
                       </div>
                     </SelectItem>
                     <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
+                    <SelectItem value="whisper-tiny-quantized">
+                      whisper-tiny-quantized
+                    </SelectItem>
                     <SelectItem value="whisper-large">whisper-large</SelectItem>
+                    <SelectItem value="whisper-large-quantized">
+                      whisper-large-quantized
+                    </SelectItem>
                     <SelectItem value="whisper-large-v3-turbo">
                       whisper-large-turbo
+                    </SelectItem>
+                    <SelectItem value="whisper-large-v3-turbo-quantized">
+                      whisper-large-turbo-quantized
                     </SelectItem>
                   </SelectContent>
                 </Select>
