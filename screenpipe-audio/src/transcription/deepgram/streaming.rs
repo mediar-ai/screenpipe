@@ -82,13 +82,8 @@ pub async fn start_deepgram_stream(
         return Err(anyhow::anyhow!("Deepgram API key not found"));
     }
 
-    // Log the API key (partially masked)
-    let masked_key = if api_key.len() > 8 {
-        format!("{}...{}", &api_key[0..4], &api_key[api_key.len()-4..])
-    } else {
-        "***".to_string()
-    };
-    info!("using deepgram api key: {}", masked_key);
+    // Remove the API key logging
+    info!("initializing deepgram transcription service");
 
     // Log the WebSocket URL
     let ws_url = if DEEPGRAM_WEBSOCKET_URL.as_str().is_empty() {
@@ -96,10 +91,10 @@ pub async fn start_deepgram_stream(
     } else {
         DEEPGRAM_WEBSOCKET_URL.as_str().to_string()
     };
-    info!("connecting to deepgram at: {}", ws_url);
+    debug!("connecting to deepgram at: {}", ws_url);
     
     // Log the audio configuration
-    info!("audio configuration: sample_rate={}, channels=1, device={}", sample_rate, device);
+    debug!("audio configuration: sample_rate={}, channels=1, device={}", sample_rate, device);
 
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
 
@@ -111,12 +106,12 @@ pub async fn start_deepgram_stream(
         let _ = shutdown_tx.send(()); // Ignore send errors if receiver is dropped
     });
 
-    info!("Starting deepgram stream for device: {}", device);
+    debug!("Starting deepgram stream for device: {}", device);
 
     let deepgram = match DEEPGRAM_WEBSOCKET_URL.as_str().is_empty() {
         true => deepgram::Deepgram::new(api_key)?,
         false => {
-            info!("using custom deepgram websocket url: {}", DEEPGRAM_WEBSOCKET_URL.as_str());
+            debug!("using custom deepgram websocket url: {}", DEEPGRAM_WEBSOCKET_URL.as_str());
             deepgram::Deepgram::with_base_url_and_api_key(DEEPGRAM_WEBSOCKET_URL.as_str(), api_key)?
         }
     };
@@ -129,7 +124,7 @@ pub async fn start_deepgram_stream(
         .diarize(true)
         .build();
     
-    info!("deepgram options: {:?}", options);
+        debug!("deepgram options: {:?}", options);
 
     let req = deepgram_transcription
         .stream_request_with_options(options)
@@ -138,15 +133,15 @@ pub async fn start_deepgram_stream(
         .sample_rate(sample_rate)
         .encoding(Encoding::Linear16);
 
-    info!("sending deepgram request with encoding=Linear16, channels=1, sample_rate={}", sample_rate);
+    debug!("sending deepgram request with encoding=Linear16, channels=1, sample_rate={}", sample_rate);
     
     let mut handle = req.clone().handle().await?;
-    info!("deepgram handle created successfully");
+    debug!("deepgram handle created successfully");
     
     let mut results = req
         .stream(get_stream(stream, device.device_type.clone()))
         .await?;
-    info!("deepgram stream started successfully");
+    debug!("deepgram stream started successfully");
     
     let device_clone = device.clone();
 
@@ -166,13 +161,13 @@ pub async fn start_deepgram_stream(
 
     // Try to parse the sample to see if our expected format matches
     match serde_json::from_str::<StreamResponse>(sample_response) {
-        Ok(_) => info!("sample response format is valid"),
+        Ok(_) => debug!("sample response format is valid"),
         Err(e) => {
-            info!("expected format example error: {}", e);
+            debug!("expected format example error: {}", e);
             
             // Try to parse as generic JSON to see what we can extract
             if let Ok(value) = serde_json::from_str::<Value>(sample_response) {
-                info!("sample can be parsed as generic json: {}", value["type"]);
+                debug!("sample can be parsed as generic json: {}", value["type"]);
             }
         }
     };
@@ -180,7 +175,7 @@ pub async fn start_deepgram_stream(
     loop {
         tokio::select! {
             Ok(()) = &mut shutdown_rx => {
-                info!("Shutting down deepgram stream for device: {}", device);
+                debug!("Shutting down deepgram stream for device: {}", device);
                 break;
             }
             result = results.try_next() => {
@@ -191,22 +186,22 @@ pub async fn start_deepgram_stream(
                     Ok(None) => break, // Stream ended
                     Err(e) => {
                         // Log the error
-                        info!("Error in deepgram stream: {}", e);
+                        debug!("Error in deepgram stream: {}", e);
                         
                         // Try to extract and process the raw JSON from the error
                         if let Some(raw_data) = e.to_string().find("data:") {
                             let raw_str = &e.to_string()[raw_data..];
-                            info!("Raw data excerpt: {}", raw_str);
+                            debug!("Raw data excerpt: {}", raw_str);
                             
                             // Try to extract and process the raw JSON
                             if let Some(json_start) = raw_str.find('{') {
                                 let json_str = &raw_str[json_start..];
                                 if let Ok(value) = serde_json::from_str::<Value>(json_str) {
-                                    info!("Processing raw JSON from error: {}", value);
+                                    debug!("Processing raw JSON from error: {}", value);
                                     
                                     // Try to handle as a Results type
                                     if value.get("type").and_then(|t| t.as_str()) == Some("Results") {
-                                        info!("Found Results type in error data, processing...");
+                                        debug!("Found Results type in error data, processing...");
                                         // Process the transcription data
                                         // ...
                                     }
@@ -216,10 +211,10 @@ pub async fn start_deepgram_stream(
                         
                         // Don't break the loop for deserialization errors
                         if e.to_string().contains("deserialization") {
-                            info!("Continuing despite deserialization error");
+                            debug!("Continuing despite deserialization error");
                             continue;
                         } else {
-                            info!("Breaking stream due to non-deserialization error");
+                            debug!("Breaking stream due to non-deserialization error");
                             break;
                         }
                     }
