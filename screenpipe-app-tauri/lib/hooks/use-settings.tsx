@@ -156,7 +156,7 @@ const DEFAULT_SETTINGS: Settings = {
 - Always answer my question/intent, do not make up things
 `,
 	devMode: false,
-	audioTranscriptionEngine: "deepgram",
+	audioTranscriptionEngine: "whisper-large-v3-turbo",
 	ocrEngine: "default",
 	monitorIds: ["default"],
 	audioDevices: ["default"],
@@ -196,7 +196,7 @@ const DEFAULT_SETTINGS: Settings = {
 	stopAudioShortcut: "",
 	pipeShortcuts: {},
 	enableRealtimeAudioTranscription: false,
-	realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
+	realtimeAudioTranscriptionEngine: "deepgram",
 	disableVision: false,
 	useAllMonitors: false,
 	enableRealtimeVision: false,

@@ -8,10 +8,7 @@ use screenpipe_audio::{
     audio_manager::AudioManagerBuilder,
     core::device::{
         default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-        trigger_audio_permission,
     },
-    transcription::whisper::model::download_whisper_model,
-    vad::silero::SileroVad,
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_db::{
@@ -31,13 +28,7 @@ use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use std::{
-    env, fs,
-    io::Write,
-    net::SocketAddr,
-    ops::Deref,
-    path::PathBuf,
-    sync::{atomic::AtomicBool, Arc},
-    time::Duration,
+    env, fs, io::Write, net::SocketAddr, ops::Deref, path::PathBuf, sync::Arc, time::Duration,
 };
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
@@ -235,7 +226,7 @@ async fn main() -> anyhow::Result<()> {
             Command::Audio { subcommand } => match subcommand {
                 AudioCommand::List { output } => {
                     let default_input = default_input_device().unwrap();
-                    let default_output = default_output_device().unwrap();
+                    let default_output = default_output_device().await.unwrap();
                     let devices = list_audio_devices().await?;
                     match output {
                         OutputFormat::Json => println!(
@@ -297,56 +288,6 @@ async fn main() -> anyhow::Result<()> {
             }
             Command::Pipe { subcommand } => {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
-                return Ok(());
-            }
-            Command::Setup {} => {
-                use screenpipe_vision::core::trigger_screen_capture_permission;
-
-                // Trigger audio permission request
-                if let Err(e) = trigger_audio_permission() {
-                    warn!("failed to trigger audio permission: {:?}", e);
-                    warn!("please grant microphone permission manually in System Preferences.");
-                } else {
-                    info!("audio permission requested. please grant permission if prompted.");
-                }
-
-                // Trigger screen capture permission request
-                if let Err(e) = trigger_screen_capture_permission() {
-                    warn!("failed to trigger screen capture permission: {:?}", e);
-                    warn!(
-                        "please grant screen recording permission manually in System Preferences."
-                    );
-                } else {
-                    info!(
-                        "screen capture permission requested. please grant permission if prompted."
-                    );
-                }
-
-                // this command just download models and stuff (useful to have specific step to display in UI)
-
-                // ! should prob skip if deepgram?
-                download_whisper_model(Arc::new(cli.audio_transcription_engine.into())).unwrap();
-                // ! assuming silero is used
-                SileroVad::new().await.unwrap();
-
-                // Check if FFmpeg is working properly
-                if let Some(ffmpeg_path) = find_ffmpeg_path() {
-                    println!("ffmpeg found at: {:?}", ffmpeg_path);
-                } else {
-                    eprintln!("failed to find or install ffmpeg.");
-                    return Err(anyhow::anyhow!("ffmpeg installation failed"));
-                }
-
-                match check_ffmpeg().await {
-                    Ok(_) => info!("FFmpeg is working properly"),
-                    Err(e) => {
-                        warn!("ffmpeg check failed: {}", e);
-                        warn!("please ensure ffmpeg is installed correctly and is in your PATH");
-                        return Err(e);
-                    }
-                }
-
-                info!("screenpipe setup complete");
                 return Ok(());
             }
             Command::Migrate {
@@ -588,9 +529,15 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    if find_ffmpeg_path().is_none() {
-        eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
-        std::process::exit(1);
+    // Replace the current conditional check with:
+    let ffmpeg_path = find_ffmpeg_path();
+    if ffmpeg_path.is_none() {
+        // Try one more time, which might trigger the installation
+        let ffmpeg_path = find_ffmpeg_path();
+        if ffmpeg_path.is_none() {
+            eprintln!("ffmpeg not found and installation failed. please install ffmpeg manually.");
+            std::process::exit(1);
+        }
     }
 
     if !is_local_ipv4_port_free(cli.port) {
@@ -612,7 +559,7 @@ async fn main() -> anyhow::Result<()> {
             if let Ok(input_device) = default_input_device() {
                 audio_devices.push(input_device.to_string());
             }
-            if let Ok(output_device) = default_output_device() {
+            if let Ok(output_device) = default_output_device().await {
                 audio_devices.push(output_device.to_string());
             }
         } else {
@@ -633,7 +580,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Ok(input_device) = default_input_device() {
                     realtime_audio_devices.push(Arc::new(input_device.clone()));
                 }
-                if let Ok(output_device) = default_output_device() {
+                if let Ok(output_device) = default_output_device().await {
                     realtime_audio_devices.push(Arc::new(output_device.clone()));
                 }
             } else {
@@ -664,9 +611,6 @@ async fn main() -> anyhow::Result<()> {
 
     let db_server = db.clone();
 
-    // Channel for controlling the recorder ! TODO RENAME SHIT
-    let vision_control = Arc::new(AtomicBool::new(true));
-
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
     let monitor_ids = if cli.monitor_id.is_empty() {
@@ -692,7 +636,6 @@ async fn main() -> anyhow::Result<()> {
 
     let db_clone = Arc::clone(&db);
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
-    let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
     let monitor_ids_clone = monitor_ids.clone();
     let ignored_windows_clone = cli.ignored_windows.clone();
@@ -737,7 +680,6 @@ async fn main() -> anyhow::Result<()> {
                     output_path_clone.clone(),
                     fps,
                     Duration::from_secs(cli.video_chunk_duration),
-                    vision_control_clone.clone(),
                     Arc::new(cli.ocr_engine.clone().into()),
                     monitor_ids_clone.clone(),
                     cli.use_pii_removal,
@@ -1446,20 +1388,5 @@ async fn handle_pipe_command(
             }
         }
     }
-    Ok(())
-}
-
-// Add this function near the end of the file
-async fn check_ffmpeg() -> anyhow::Result<()> {
-    // TODO: this should also check if it can properly encode mp4 etc
-    use tokio::process::Command;
-
-    let output = Command::new("ffmpeg").arg("-version").output().await?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow::anyhow!("FFmpeg check failed: {}", stderr));
-    }
-
     Ok(())
 }
