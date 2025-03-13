@@ -39,7 +39,7 @@ let summaryJob: any = null;
 let suggestionJob: any = null;
 
 export async function runBot(
-  settings: Settings,
+  settings: Partial<Settings>,
   cookies: CookieParam[],
   frequency: number,
   prompt: string,
@@ -107,7 +107,7 @@ async function launchProcesses(
   frequency: number,
   prompt: string,
   openai: OpenAI,
-  settings: Settings,
+  settings: Partial<Settings>,
 ): Promise<void> {
   await Promise.all([
     profileProcess(cookies, openai, settings),
@@ -140,7 +140,7 @@ async function launchProcesses(
 async function profileProcess(
   cookies: CookieParam[],
   openai: OpenAI,
-  settings: Settings,
+  settings: Partial<Settings>,
   scrollLimit: number = 10,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
@@ -222,7 +222,7 @@ async function profileProcess(
     const tweetArray = Array.from(tweets).map((s: string) => JSON.parse(s));
 
     const res = await openai.chat.completions.create({
-      model: settings.aiModel,
+      model: settings.aiModel!,
       messages: [
         {
           role: "system",
@@ -273,7 +273,10 @@ ${JSON.stringify(tweetArray, null, 2)}
 
 let lastCheck: Date | null = null;
 
-async function ocrProcess(openai: OpenAI, settings: Settings): Promise<void> {
+async function ocrProcess(
+  openai: OpenAI,
+  settings: Partial<Settings>,
+): Promise<void> {
   if (!browser || !browser.isConnected()) {
     await stopBot();
     return;
@@ -292,7 +295,7 @@ async function ocrProcess(openai: OpenAI, settings: Settings): Promise<void> {
     const context = res?.data.map((e) => e.content);
 
     const res2 = await openai.chat.completions.create({
-      model: settings.aiModel,
+      model: settings.aiModel!,
       messages: [
         {
           role: "system",
@@ -405,7 +408,7 @@ async function timelineProcess(
 
 async function summaryProcess(
   openai: OpenAI,
-  settings: Settings,
+  settings: Partial<Settings>,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
     await stopBot();
@@ -418,7 +421,7 @@ async function summaryProcess(
     const summaries = await store.getSummaries();
 
     const res = await openai.chat.completions.create({
-      model: settings.aiModel,
+      model: settings.aiModel!,
       messages: [
         {
           role: "system",
@@ -466,7 +469,7 @@ ${JSON.stringify(summaries, null, 2)}
 async function suggestionProcess(
   prompt: string,
   openai: OpenAI,
-  settings: Settings,
+  settings: Partial<Settings>,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
     await stopBot();
@@ -481,7 +484,7 @@ async function suggestionProcess(
     const summaries = await store.getSummaries();
     const tweets = (await store.getTweets()).slice(0, 10);
 
-    let model = settings.aiModel;
+    let model = settings.aiModel!;
     if (model === "gpt-4") {
       model = "gpt-4o";
     }
@@ -583,13 +586,13 @@ Make sure to return only JSON in the following schema:
   eventEmitter.emit("updateProgress", { process: 4, value: 100 });
 }
 
-async function getOpenAI(settings: Settings): Promise<OpenAI> {
+async function getOpenAI(settings: Partial<Settings>): Promise<OpenAI> {
   return new OpenAI({
     apiKey:
       settings.aiProviderType === "screenpipe-cloud"
-        ? settings.user.token
-        : settings.openaiApiKey,
-    baseURL: settings.aiUrl,
+        ? settings.user!.token
+        : settings.openaiApiKey!,
+    baseURL: settings.aiUrl!,
     dangerouslyAllowBrowser: true,
   });
 }

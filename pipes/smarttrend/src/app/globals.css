@@ -76,3 +76,7 @@ body {
   margin-top: 0 !important;
   margin-bottom: 0 !important;
 }
+
+.min-w-400 {
+  min-width: 400px;
+}
