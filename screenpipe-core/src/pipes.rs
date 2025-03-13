@@ -86,7 +86,8 @@ pub fn sanitize_pipe_name(name: &str) -> String {
                 if let Some(tree_index) = path_segments.iter().position(|&s| s == "tree") {
                     let remaining_segments = &path_segments[tree_index + 1..];
                     if remaining_segments.len() > 2 {
-                        debug!("Using repository name for pipe: {:?}", 
+                        debug!(
+                            "Using repository name for pipe: {:?}",
                             remaining_segments.last().unwrap().to_string()
                         );
                         return remaining_segments.last().unwrap().to_string();
@@ -815,8 +816,7 @@ async fn retry_install(bun_path: &Path, dest_dir: &Path, max_retries: u32) -> Re
 pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
     info!("Processing pipe from source: {}", source);
 
-    let pipe_name =
-        sanitize_pipe_name(Path::new(source).to_str().unwrap());
+    let pipe_name = sanitize_pipe_name(Path::new(source).to_str().unwrap());
 
     let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
 
@@ -1403,8 +1403,11 @@ async fn run_cron_schedule(
         let last_run = match get_last_cron_execution(&pipe_dir, path).await {
             Ok(time) => time,
             Err(e) => {
-                error!("[{}] failed to get last cron execution: {}", 
-                    pipe_dir.file_name().unwrap_or_default().to_string_lossy(), e);
+                error!(
+                    "[{}] failed to get last cron execution: {}",
+                    pipe_dir.file_name().unwrap_or_default().to_string_lossy(),
+                    e
+                );
                 None
             }
         };
@@ -1507,23 +1510,55 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
     // read the build value from pipe.json
     let build_dir = pipe_dir.join(".next");
     let pipe_json_path = pipe_dir.join("pipe.json");
-    if pipe_json_path.exists() {
+
+    // Check if both the pipe.json indicates a build AND the build directory contains a valid build
+    let should_skip_build = if pipe_json_path.exists() {
         let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
         let pipe_config: Value = serde_json::from_str(&pipe_json)?;
-        let is_build = pipe_config.get("build").and_then(Value::as_bool).unwrap_or(false);
-        if is_build {
-            info!("[{}] pipe is already build, skipping rebuild", 
-            pipe_dir.file_name().unwrap_or_default().to_string_lossy()
-            );
-            return Ok(BuildStatus::Success);
+        let is_build = pipe_config
+            .get("build")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+
+        // Only skip if build flag is true AND the build directory exists with required files
+        if is_build && build_dir.exists() {
+            // Check for key files that indicate a valid Next.js build
+            let build_id_file = build_dir.join("BUILD_ID");
+            let server_dir = build_dir.join("server");
+
+            if build_id_file.exists() && server_dir.exists() {
+                debug!(
+                    "[{}] verified valid build exists, skipping rebuild",
+                    pipe_dir.file_name().unwrap_or_default().to_string_lossy()
+                );
+                true
+            } else {
+                debug!(
+                    "[{}] build flag is true but build appears invalid, forcing rebuild",
+                    pipe_dir.file_name().unwrap_or_default().to_string_lossy()
+                );
+                false
+            }
         } else {
             if !is_build && build_dir.exists() {
-                debug!("[{}] removing invalid next.js build directory",
+                debug!(
+                    "[{}] removing invalid next.js build directory",
                     pipe_dir.file_name().unwrap_or_default().to_string_lossy()
                 );
                 tokio::fs::remove_dir_all(&build_dir).await?;
             }
+            false
         }
+    } else {
+        false
+    };
+
+    if should_skip_build {
+        info!(
+            "[{}] pipe is already built, skipping rebuild",
+            pipe_dir.file_name().unwrap_or_default().to_string_lossy()
+        );
+        return Ok(BuildStatus::Success);
     }
 
     // Update build status to InProgress in pipe.json
@@ -1535,7 +1570,8 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
         tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
     }
 
-    info!("[{}] running next.js build",
+    info!(
+        "[{}] running next.js build",
         pipe_dir.file_name().unwrap_or_default().to_string_lossy()
     );
     let build_output = Command::new(bun_path)
@@ -1553,7 +1589,8 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
         let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
         let mut file = File::create(&pipe_json_path).await?;
         file.write_all(updated_pipe_json.as_bytes()).await?;
-        info!("[{}] next.js pipe build successfully", 
+        info!(
+            "[{}] next.js pipe build successfully",
             pipe_dir.file_name().unwrap_or_default().to_string_lossy()
         );
         Ok(BuildStatus::Success)
@@ -1565,7 +1602,8 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
         let mut file = File::create(&pipe_json_path).await?;
         file.write_all(updated_pipe_json.as_bytes()).await?;
         let error_message = String::from_utf8_lossy(&build_output.stderr).to_string();
-        error!("[{}] next.js build failed: {}",
+        error!(
+            "[{}] next.js build failed: {}",
             pipe_dir.file_name().unwrap_or_default().to_string_lossy(),
             error_message
         );

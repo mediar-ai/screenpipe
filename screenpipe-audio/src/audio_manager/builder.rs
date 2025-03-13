@@ -144,7 +144,7 @@ impl AudioManagerBuilder {
         if options.enabled_devices.is_empty() {
             options.enabled_devices = HashSet::from_iter(vec![
                 default_input_device()?.to_string(),
-                default_output_device()?.to_string(),
+                default_output_device().await?.to_string(),
             ]);
         }
 

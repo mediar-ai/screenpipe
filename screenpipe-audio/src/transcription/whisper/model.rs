@@ -2,6 +2,7 @@ use crate::core::engine::AudioTranscriptionEngine;
 use anyhow::Result;
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use std::{path::PathBuf, sync::Arc};
+use tracing::info;
 use whisper_rs::WhisperContextParameters;
 
 pub fn download_whisper_model(engine: Arc<AudioTranscriptionEngine>) -> Result<PathBuf> {
@@ -12,6 +13,8 @@ pub fn download_whisper_model(engine: Arc<AudioTranscriptionEngine>) -> Result<P
         "main".to_string(),
     );
     let api_repo = api.repo(repo);
+
+    info!("downloading model {:?}", engine);
     let model_name = match *engine {
         AudioTranscriptionEngine::WhisperLargeV3Turbo => "ggml-large-v3-turbo.bin",
         AudioTranscriptionEngine::WhisperTiny => "ggml-tiny.bin",
@@ -22,6 +25,8 @@ pub fn download_whisper_model(engine: Arc<AudioTranscriptionEngine>) -> Result<P
     };
 
     let model = api_repo.get(model_name)?;
+
+    info!("whisper model downloaded {}", model_name);
 
     Ok(model)
 }
