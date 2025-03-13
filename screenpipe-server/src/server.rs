@@ -2892,6 +2892,46 @@ pub async fn purge_pipe_handler(
     }
 }
 
+#[oasgen]
+pub async fn get_app_icon_handler(
+    State(state): State<Arc<AppState>>,
+    Query(app_name): Query<AppIconQuery>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    info!("received app icon request: {:?}", app_name);
+
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
+            Ok(Some(icon)) => {
+                let headers = [
+                    (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
+                    (
+                        http::header::CACHE_CONTROL,
+                        HeaderValue::from_static("public, max-age=604800"),
+                    ),
+                ];
+                Ok((headers, Bytes::from(icon.data)))
+            }
+            Ok(None) => Err((StatusCode::NOT_FOUND, "Icon not found".to_string())),
+            Err(e) => {
+                error!("failed to get app icon: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to get app icon: {}", e),
+                ))
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err((
+            StatusCode::NOT_IMPLEMENTED,
+            "app icon retrieval not supported on this platform".to_string(),
+        ))
+    }
+}
+
 // Add this struct for the request payload
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct DeletePipeRequest {
@@ -2906,6 +2946,12 @@ struct MergeSpeakersRequest {
 
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
+
+#[derive(Debug, OaSchema, Deserialize)]
+pub struct AppIconQuery {
+    name: String,
+    path: Option<String>,
+}
 
 // New structs for UI automation API
 #[derive(Debug, OaSchema, Deserialize, Serialize)]

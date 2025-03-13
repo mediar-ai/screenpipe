@@ -28,3 +28,5 @@ pub use server::SCServer;
 pub use server::{api_list_monitors, MonitorInfo};
 pub use video::VideoCapture;
 pub mod embedding;
+pub mod icons;
+pub use icons::get_app_icon;
