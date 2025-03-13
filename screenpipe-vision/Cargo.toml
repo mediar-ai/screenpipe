@@ -44,7 +44,7 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-xcap = { git = "https://github.com/nashaofu/xcap", rev = "09c11cc" }
+xcap = "0.3.3" # non broken version
 
 once_cell = { workspace = true }
 base64 = "0.22.1"

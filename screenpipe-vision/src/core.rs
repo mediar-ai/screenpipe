@@ -13,7 +13,7 @@ use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
 use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
-use log::{debug, error};
+use log::{debug, error, warn};
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde::Deserialize;
@@ -146,33 +146,67 @@ pub async fn continuous_capture(
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
+    // Add failure tracking
+    let mut consecutive_failures = 0;
+    let failure_threshold = 10;
+
+    // Add heartbeat counter
+    let mut last_heartbeat = Instant::now();
+    let heartbeat_interval = Duration::from_secs(60);
+
     debug!(
         "continuous_capture: Starting using monitor: {:?}",
         monitor_id
     );
 
+    let monitor = match get_monitor_by_id(monitor_id).await {
+        Some(m) => m,
+        None => {
+            error!("continuous_capture: Failed to get monitor {}", monitor_id);
+            return;
+        }
+    };
+
     loop {
-        let monitor = match get_monitor_by_id(monitor_id).await {
-            Some(m) => m,
-            None => {
-                sleep(Duration::from_secs(1)).await;
-                continue;
+        // Log heartbeat periodically
+        if last_heartbeat.elapsed() >= heartbeat_interval {
+            debug!(
+                "continuous_capture: Heartbeat for monitor {} - frame {}",
+                monitor_id, frame_counter
+            );
+            last_heartbeat = Instant::now();
+        }
+
+        let capture_result = match capture_screenshot(
+            &monitor,
+            &window_filters,
+            capture_unfocused_windows,
+        )
+        .await
+        {
+            Ok((image, window_images, image_hash, _capture_duration)) => {
+                debug!(
+                    "Captured screenshot on monitor {} with hash: {} (frame {})",
+                    monitor_id, image_hash, frame_counter
+                );
+                consecutive_failures = 0; // Reset failure counter on success
+                Some((image, window_images, image_hash))
+            }
+            Err(e) => {
+                consecutive_failures += 1;
+                error!(
+                    "Failed to capture screenshot on monitor {} (attempt {}/{} failures): {}",
+                    monitor_id, consecutive_failures, failure_threshold, e
+                );
+
+                if consecutive_failures >= failure_threshold {
+                    error!("continuous_capture: Too many consecutive capture failures, will retry in 5s");
+                    sleep(Duration::from_secs(5)).await;
+                    consecutive_failures = 0; // Reset after longer wait
+                }
+                None
             }
         };
-        let capture_result =
-            match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
-                Ok((image, window_images, image_hash, _capture_duration)) => {
-                    debug!(
-                        "Captured screenshot on monitor {} with hash: {}",
-                        monitor_id, image_hash
-                    );
-                    Some((image, window_images, image_hash))
-                }
-                Err(e) => {
-                    error!("Failed to capture screenshot: {}", e);
-                    None
-                }
-            };
 
         if let Some((image, window_images, image_hash)) = capture_result {
             let current_average = match compare_with_previous_image(
@@ -360,18 +394,24 @@ pub async fn process_ocr_task(
         window_ocr_results,
     };
 
+    // Add channel health check
+    if result_tx.capacity() == 0 {
+        warn!("OCR task channel at capacity - receiver may be blocked or slow");
+    }
+
     if let Err(e) = result_tx.send(capture_result).await {
         if e.to_string().contains("channel closed") {
+            error!("OCR task channel closed, recording may have stopped: {}", e);
             return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Channel closed",
+                std::io::ErrorKind::BrokenPipe,
+                "Channel closed - recording appears to have stopped",
             ));
         }
 
         error!("Failed to send OCR result: {}", e);
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            "Failed to send OCR result",
+            format!("Failed to send OCR result: {}", e),
         ));
     }
 

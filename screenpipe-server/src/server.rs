@@ -610,7 +610,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     };
 
     let now = Utc::now();
-    let threshold = Duration::from_secs(3600); // 1 hour
+    let threshold = Duration::from_secs(1800); // 30 minutes
 
     let frame_status = if state.vision_disabled {
         "disabled"
