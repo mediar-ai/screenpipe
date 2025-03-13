@@ -11,7 +11,45 @@ export function ModelDownloadTracker() {
   const [activeDownloads, setActiveDownloads] = useState<
     Record<string, boolean>
   >({});
-  const [toastIds, setToastIds] = useState<Record<string, string>>({});
+  const [toastRefs, setToastRefs] = useState<Record<string, any>>({});
+  const [downloadProgress, setDownloadProgress] = useState<
+    Record<string, number>
+  >({});
+
+  // Update progress on a timer for active downloads
+  useEffect(() => {
+    if (Object.keys(activeDownloads).length === 0) return;
+
+    const interval = setInterval(() => {
+      Object.keys(activeDownloads).forEach((model) => {
+        // Get current progress
+        let progress = downloadProgress[model] || 5;
+
+        // Only update if not at max
+        if (progress < 95) {
+          // Start faster, slow down as we progress
+          const increment = progress < 50 ? 5 : 2;
+          progress = Math.min(95, progress + increment);
+
+          // Update progress state (outside of forEach)
+          setDownloadProgress((prev) => ({
+            ...prev,
+            [model]: progress,
+          }));
+
+          // Update toast using its reference
+          if (toastRefs[model]) {
+            toastRefs[model].update({
+              title: "downloading model",
+              duration: Infinity,
+            });
+          }
+        }
+      });
+    }, 3000); // Update every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [activeDownloads, toastRefs, downloadProgress]);
 
   useEffect(() => {
     // Patterns to look for in logs
@@ -62,24 +100,16 @@ export function ModelDownloadTracker() {
       if (modelStarting && !activeDownloads[modelStarting]) {
         console.log(`Detected model download starting: ${modelStarting}`);
 
-        // Show toast for download start
-        const id = toast({
+        // Show toast for download start with initial progress
+        const toastRef = toast({
           title: "downloading model",
-          description: (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <Download className="h-4 w-4" />
-                <span>{modelStarting}</span>
-              </div>
-              <Progress value={33} className="h-1" />
-            </div>
-          ),
           duration: Infinity, // Will be manually closed when download completes
-        }).id;
+        });
 
-        // Store toast ID so we can update it later
-        setToastIds((prev) => ({ ...prev, [modelStarting]: id }));
+        // Store toast reference so we can update it later
+        setToastRefs((prev) => ({ ...prev, [modelStarting]: toastRef }));
         setActiveDownloads((prev) => ({ ...prev, [modelStarting]: true }));
+        setDownloadProgress((prev) => ({ ...prev, [modelStarting]: 5 }));
       }
 
       // Check for download completion
@@ -88,14 +118,14 @@ export function ModelDownloadTracker() {
         console.log(`Detected model download completed: ${modelCompleted}`);
 
         // Close the "downloading" toast
-        if (toastIds[modelCompleted]) {
-          dismiss(toastIds[modelCompleted]);
+        if (toastRefs[modelCompleted]) {
+          dismiss(toastRefs[modelCompleted].id);
         }
 
         // Show completion toast
         toast({
           title: "model downloaded",
-          description: `${modelCompleted} is ready to use`,
+          description: `model is ready to use`,
           duration: 3000,
         });
 
@@ -106,7 +136,13 @@ export function ModelDownloadTracker() {
           return newState;
         });
 
-        setToastIds((prev) => {
+        setToastRefs((prev) => {
+          const newState = { ...prev };
+          delete newState[modelCompleted];
+          return newState;
+        });
+
+        setDownloadProgress((prev) => {
           const newState = { ...prev };
           delete newState[modelCompleted];
           return newState;
@@ -143,7 +179,7 @@ export function ModelDownloadTracker() {
     return () => {
       unlisten.then((unsubscribe) => unsubscribe());
     };
-  }, [toast, dismiss, activeDownloads, toastIds]);
+  }, [toast, dismiss, activeDownloads, toastRefs]);
 
   return null; // This component doesn't render anything
 }
