@@ -94,7 +94,7 @@ jobs:
           path: screenpipe-*.tar.gz
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2019
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
