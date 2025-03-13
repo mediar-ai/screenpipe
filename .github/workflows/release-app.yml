@@ -122,7 +122,7 @@ jobs:
             fi
             sleep 10
           done
-          echo "runner_type=windows-latest" >> $GITHUB_OUTPUT
+          echo "runner_type=windows-2019" >> $GITHUB_OUTPUT
 
   publish-tauri:
     needs: [check_commit, draft, check_runner]
@@ -633,7 +633,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: windows-latest
+          - platform: windows-2019
             args: "--target x86_64-pc-windows-msvc --features mkl"
             pre-build-args: ""
             tauri-args: "--target x86_64-pc-windows-msvc"
