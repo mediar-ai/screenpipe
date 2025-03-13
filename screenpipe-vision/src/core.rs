@@ -159,15 +159,14 @@ pub async fn continuous_capture(
         monitor_id
     );
 
-    let monitor = match get_monitor_by_id(monitor_id).await {
-        Some(m) => m,
-        None => {
-            error!("continuous_capture: Failed to get monitor {}", monitor_id);
-            return;
-        }
-    };
-
     loop {
+        let monitor = match get_monitor_by_id(monitor_id).await {
+            Some(m) => m,
+            None => {
+                error!("continuous_capture: Failed to get monitor {}", monitor_id);
+                return;
+            }
+        };
         // Log heartbeat periodically
         if last_heartbeat.elapsed() >= heartbeat_interval {
             debug!(
