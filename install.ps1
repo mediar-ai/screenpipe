@@ -47,9 +47,23 @@ try {
     # Cleanup
     Remove-Item $tempZip -Force
 
-    # Install bun
-    Write-Host "installing bun..."
-    powershell -c "irm bun.sh/install.ps1|iex"
+    # Check if bun is installed
+    $bunInstalled = $false
+    $bunVersion = ""
+    
+    try {
+        $bunVersion = (bun --version 2>$null) -replace "[^\d\.]", ""
+        if ($bunVersion -as [version] -ge [version]"1.1.43") {
+            $bunInstalled = $true
+        }
+    } catch {}
+
+    if ($bunInstalled) {
+        Write-Host "Bun is already installed and meets version requirements"
+    } else {
+        Write-Host "Installing bun..."
+        powershell -c "irm bun.sh/install.ps1|iex"
+    }
 
     # Install Visual Studio Redistributables to avoid any ort issues
     Set-ExecutionPolicy Bypass -Scope Process -Force
