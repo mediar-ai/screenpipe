@@ -2898,7 +2898,7 @@ pub async fn purge_pipe_handler(
 pub async fn get_app_icon_handler(
     State(_state): State<Arc<AppState>>,
     Query(app_name): Query<AppIconQuery>,
-) -> Result<Response<Body>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<Response<Body>, (StatusCode, String)> {
 
     info!("received app icon request: {:?}", app_name);
 
@@ -2922,13 +2922,13 @@ pub async fn get_app_icon_handler(
             }
             Ok(None) => Err((
                 StatusCode::NOT_FOUND,
-                JsonResponse(Value::String("Icon not found".to_string())),
+                format!("Icon not found"),
             )),
             Err(e) => {
                 error!("failed to get app icon: {}", e);
                 Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(Value::String(format!("failed to get app icon: {}", e))),
+                    format!("failed to get app icon: {}", e),
                 ))
             }
         }
