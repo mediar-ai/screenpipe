@@ -1,6 +1,5 @@
 use chrono::Utc;
 use crossbeam::queue::ArrayQueue;
-use image::ImageFormat::{self};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
@@ -16,7 +15,7 @@ use tokio::io::BufReader;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 pub(crate) const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
@@ -144,54 +143,45 @@ impl VideoCapture {
 }
 
 pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
-    // Overriding fps with max fps if over the max and warning user
-    let fps = if fps > MAX_FPS {
-        warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
-        MAX_FPS
-    } else {
-        fps
-    };
+    let fps = fps.min(MAX_FPS);
 
-    info!("Starting FFmpeg process for file: {}", output_file);
+    debug!("starting ffmpeg process for: {}", output_file);
     let fps_str = fps.to_string();
     let mut command = Command::new(find_ffmpeg_path().unwrap());
-    let mut args = vec![
+
+    // Updated FFmpeg arguments for better performance and quality
+    let args = vec![
         "-f",
         "image2pipe",
         "-vcodec",
-        "png",
+        "mjpeg",
         "-r",
         &fps_str,
         "-i",
         "-",
         "-vf",
-        "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
-    ];
-
-    args.extend_from_slice(&[
-        "-vcodec",
+        "format=yuv420p,pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
+        "-c:v",
         "libx265",
         "-tag:v",
         "hvc1",
         "-preset",
-        "ultrafast",
+        "medium", // Changed from ultrafast for better compression
         "-crf",
-        "23",
-    ]);
-
-    args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
+        "28", // Slightly higher CRF for smaller file size
+        "-x265-params",
+        "log-level=error", // Reduce x265 logging noise
+        output_file,
+    ];
 
     command
         .args(&args)
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
+        .stdout(Stdio::null()) // Changed to null since we don't need stdout
         .stderr(Stdio::piped());
 
-    debug!("FFmpeg command: {:?}", command);
-
+    debug!("ffmpeg command: {:?}", command);
     let child = command.spawn()?;
-    debug!("FFmpeg process spawned");
-
     Ok(child)
 }
 
@@ -287,9 +277,12 @@ async fn wait_for_first_frame(
 
 fn encode_frame(frame: &CaptureResult) -> Vec<u8> {
     let mut buffer = Vec::new();
-    frame
-        .image
-        .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
+    let rgb_image = frame.image.to_rgb8();
+    rgb_image
+        .write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Jpeg,
+        )
         .expect("Failed to encode frame");
     buffer
 }
