@@ -15,7 +15,7 @@ export async function handleFileTranscription(request: Request, env: Env): Promi
     const sampleRate = request.headers.get('sample_rate') || '16000';
     
     const deepgramResponse = await fetch(
-      'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&sample_rate=' +
+      'https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&sample_rate=' +
         sampleRate +
         (languages.length > 0 ? '&' + languages.map((lang) => `detect_language=${lang}`).join('&') : ''),
       {
