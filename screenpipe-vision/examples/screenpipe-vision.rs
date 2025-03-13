@@ -37,7 +37,6 @@ async fn main() {
     // Get monitor ID before spawning the task
     let monitor_id = tokio::task::spawn_blocking(|| Monitor::all().unwrap().first().unwrap().id())
         .await
-        .unwrap()
         .unwrap();
 
     let window_filters = Arc::new(WindowFilters::new(&[], &[]));
