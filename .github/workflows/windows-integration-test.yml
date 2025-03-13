@@ -59,10 +59,6 @@ jobs:
         Scream\Install\helpers\devcon-x64.exe install Scream\Install\driver\x64\Scream.inf *Scream
       timeout-minutes: 5
 
-    - name: Start Windows Audio Service
-      shell: powershell
-      run: net start audiosrv
-
     - name: Build CLI
       run: cargo build --release
 
