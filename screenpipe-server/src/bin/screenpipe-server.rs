@@ -226,7 +226,7 @@ async fn main() -> anyhow::Result<()> {
             Command::Audio { subcommand } => match subcommand {
                 AudioCommand::List { output } => {
                     let default_input = default_input_device().unwrap();
-                    let default_output = default_output_device().unwrap();
+                    let default_output = default_output_device().await.unwrap();
                     let devices = list_audio_devices().await?;
                     match output {
                         OutputFormat::Json => println!(
@@ -559,7 +559,7 @@ async fn main() -> anyhow::Result<()> {
             if let Ok(input_device) = default_input_device() {
                 audio_devices.push(input_device.to_string());
             }
-            if let Ok(output_device) = default_output_device() {
+            if let Ok(output_device) = default_output_device().await {
                 audio_devices.push(output_device.to_string());
             }
         } else {
@@ -580,7 +580,7 @@ async fn main() -> anyhow::Result<()> {
                 if let Ok(input_device) = default_input_device() {
                     realtime_audio_devices.push(Arc::new(input_device.clone()));
                 }
-                if let Ok(output_device) = default_output_device() {
+                if let Ok(output_device) = default_output_device().await {
                     realtime_audio_devices.push(Arc::new(output_device.clone()));
                 }
             } else {

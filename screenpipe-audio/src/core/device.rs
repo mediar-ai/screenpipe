@@ -272,28 +272,21 @@ pub fn default_input_device() -> Result<AudioDevice> {
         .ok_or(anyhow!("No default input device detected"))?;
     Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
-// this should be optional ?
-pub fn default_output_device() -> Result<AudioDevice> {
+
+pub async fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
         // ! see https://github.com/RustAudio/cpal/pull/894
-        let screen_capture_result = tokio::runtime::Handle::current().block_on(async {
-            if let Ok(host) = get_screen_capture_host().await {
-                if let Some(device) = host.default_input_device() {
-                    if let Ok(name) = device.name() {
-                        return Some(AudioDevice::new(name, DeviceType::Output));
-                    }
+        // Try to get device from ScreenCaptureKit first
+        if let Ok(host) = get_screen_capture_host().await {
+            if let Some(device) = host.default_input_device() {
+                if let Ok(name) = device.name() {
+                    return Ok(AudioDevice::new(name, DeviceType::Output));
                 }
-                None
-            } else {
-                None
             }
-        });
-
-        if let Some(device) = screen_capture_result {
-            return Ok(device);
         }
 
+        // Fall back to default output device
         let host = cpal::default_host();
         let device = host
             .default_output_device()
@@ -307,6 +300,6 @@ pub fn default_output_device() -> Result<AudioDevice> {
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
-        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
+        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
     }
 }
