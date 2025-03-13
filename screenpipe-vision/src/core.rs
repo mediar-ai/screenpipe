@@ -9,7 +9,7 @@ use crate::monitor::get_monitor_by_id;
 use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
@@ -32,7 +32,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 
 use crate::browser_utils::create_url_detector;
-use xcap::Monitor;
+use crate::monitor::SafeMonitor;
 
 fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -154,132 +154,246 @@ pub async fn continuous_capture(
     let mut last_heartbeat = Instant::now();
     let heartbeat_interval = Duration::from_secs(60);
 
+    // Add monitor retrieval failure tracking
+    let mut monitor_retrieval_failures = 0;
+    let max_monitor_retrieval_attempts = 3;
+
     debug!(
         "continuous_capture: Starting using monitor: {:?}",
         monitor_id
     );
 
     loop {
-        let monitor = match get_monitor_by_id(monitor_id).await {
-            Some(m) => m,
-            None => {
-                error!("continuous_capture: Failed to get monitor {}", monitor_id);
-                return;
-            }
-        };
-        // Log heartbeat periodically
-        if last_heartbeat.elapsed() >= heartbeat_interval {
-            debug!(
-                "continuous_capture: Heartbeat for monitor {} - frame {}",
-                monitor_id, frame_counter
-            );
-            last_heartbeat = Instant::now();
-        }
-
-        let capture_result = match capture_screenshot(
-            &monitor,
-            &window_filters,
-            capture_unfocused_windows,
+        // 1. Get monitor
+        let monitor = match get_monitor(
+            &monitor_id,
+            &mut monitor_retrieval_failures,
+            max_monitor_retrieval_attempts,
         )
         .await
         {
-            Ok((image, window_images, image_hash, _capture_duration)) => {
-                debug!(
-                    "Captured screenshot on monitor {} with hash: {} (frame {})",
-                    monitor_id, image_hash, frame_counter
-                );
-                consecutive_failures = 0; // Reset failure counter on success
-                Some((image, window_images, image_hash))
-            }
-            Err(e) => {
-                consecutive_failures += 1;
-                error!(
-                    "Failed to capture screenshot on monitor {} (attempt {}/{} failures): {}",
-                    monitor_id, consecutive_failures, failure_threshold, e
-                );
-
-                if consecutive_failures >= failure_threshold {
-                    error!("continuous_capture: Too many consecutive capture failures, will retry in 5s");
-                    sleep(Duration::from_secs(5)).await;
-                    consecutive_failures = 0; // Reset after longer wait
-                }
-                None
+            Some(m) => m,
+            None => {
+                sleep(Duration::from_secs(1)).await;
+                continue;
             }
         };
 
-        if let Some((image, window_images, image_hash)) = capture_result {
-            let current_average = match compare_with_previous_image(
-                previous_image.as_ref(),
-                &image,
-                &mut max_average,
-                frame_counter,
-                &mut max_avg_value,
-            )
-            .await
-            {
-                Ok(avg) => avg,
-                Err(e) => {
-                    error!("Error comparing images: {}", e);
-                    previous_image = None;
-                    0.0
-                }
-            };
+        // 2. Log heartbeat if needed
+        log_heartbeat_if_needed(
+            &mut last_heartbeat,
+            heartbeat_interval,
+            monitor_id,
+            frame_counter,
+        );
 
-            let current_average = if previous_image.is_none() {
-                1.0
-            } else {
-                current_average
-            };
-
-            if current_average < 0.006 {
-                debug!(
-                    "Skipping frame {} due to low average difference: {:.3}",
-                    frame_counter, current_average
-                );
+        // 3. Capture screenshot
+        let capture_result = match capture_screenshot_with_retry(
+            &monitor,
+            &window_filters,
+            capture_unfocused_windows,
+            &mut consecutive_failures,
+            failure_threshold,
+            monitor_id,
+            frame_counter,
+        )
+        .await
+        {
+            Some(result) => result,
+            None => {
                 frame_counter += 1;
                 tokio::time::sleep(interval).await;
                 continue;
             }
+        };
 
-            if current_average > max_avg_value {
-                max_average = Some(MaxAverageFrame {
-                    image: image.clone(),
-                    window_images: window_images.clone(),
-                    image_hash,
-                    frame_number: frame_counter,
-                    timestamp: Instant::now(),
-                    result_tx: result_tx.clone(),
-                    average: current_average,
-                });
-                max_avg_value = current_average;
-            }
+        // 4. Process captured image
+        let (image, window_images, image_hash) = capture_result;
 
-            previous_image = Some(image);
+        let should_skip = should_skip_frame(
+            &previous_image,
+            &image,
+            &mut max_average,
+            frame_counter,
+            &mut max_avg_value,
+            &window_images,
+            image_hash,
+            result_tx.clone(),
+        )
+        .await;
 
-            if let Some(max_avg_frame) = max_average.take() {
-                let ocr_task_data = OcrTaskData {
-                    image: max_avg_frame.image,
-                    window_images: max_avg_frame.window_images,
-                    frame_number: max_avg_frame.frame_number,
-                    timestamp: max_avg_frame.timestamp,
-                    result_tx: max_avg_frame.result_tx,
-                };
+        if should_skip {
+            frame_counter += 1;
+            tokio::time::sleep(interval).await;
+            continue;
+        }
 
-                if let Err(e) =
-                    process_ocr_task(ocr_task_data, &ocr_engine, languages.clone()).await
-                {
-                    error!("Error processing OCR task: {}", e);
-                }
+        previous_image = Some(image);
 
-                frame_counter = 0;
-                max_avg_value = 0.0;
-            }
-        } else {
-            debug!("Skipping frame {} due to capture failure", frame_counter);
+        // 5. Process max average frame if available
+        if let Some(max_avg_frame) = max_average.take() {
+            process_max_average_frame(max_avg_frame, &ocr_engine, languages.clone()).await;
+            frame_counter = 0;
+            max_avg_value = 0.0;
         }
 
         frame_counter += 1;
         tokio::time::sleep(interval).await;
+    }
+}
+
+// Helper functions to break down the complex continuous_capture function
+async fn get_monitor(
+    monitor_id: &u32,
+    retrieval_failures: &mut u32,
+    max_attempts: u32,
+) -> Option<SafeMonitor> {
+    match get_monitor_by_id(*monitor_id).await {
+        Some(m) => {
+            // Reset the counter when successful
+            *retrieval_failures = 0;
+            Some(m)
+        }
+        None => {
+            *retrieval_failures += 1;
+            error!(
+                "continuous_capture: Failed to get monitor {} (attempt {}/{})",
+                monitor_id, retrieval_failures, max_attempts
+            );
+
+            if *retrieval_failures >= max_attempts {
+                error!("continuous_capture: Failed to get monitor after {} attempts, stopping capture process", 
+                       max_attempts);
+                None
+            } else {
+                None
+            }
+        }
+    }
+}
+
+fn log_heartbeat_if_needed(
+    last_heartbeat: &mut Instant,
+    heartbeat_interval: Duration,
+    monitor_id: u32,
+    frame_counter: u64,
+) {
+    if last_heartbeat.elapsed() >= heartbeat_interval {
+        debug!(
+            "continuous_capture: Heartbeat for monitor {} - frame {}",
+            monitor_id, frame_counter
+        );
+        *last_heartbeat = Instant::now();
+    }
+}
+
+async fn capture_screenshot_with_retry(
+    monitor: &SafeMonitor,
+    window_filters: &Arc<WindowFilters>,
+    capture_unfocused_windows: bool,
+    consecutive_failures: &mut u32,
+    failure_threshold: u32,
+    monitor_id: u32,
+    frame_counter: u64,
+) -> Option<(DynamicImage, Vec<CapturedWindow>, u64)> {
+    match capture_screenshot(monitor, window_filters, capture_unfocused_windows).await {
+        Ok((image, window_images, image_hash, _capture_duration)) => {
+            debug!(
+                "Captured screenshot on monitor {} with hash: {} (frame {})",
+                monitor_id, image_hash, frame_counter
+            );
+            *consecutive_failures = 0; // Reset failure counter on success
+            Some((image, window_images, image_hash))
+        }
+        Err(e) => {
+            *consecutive_failures += 1;
+            error!(
+                "Failed to capture screenshot on monitor {} (attempt {}/{} failures): {}",
+                monitor_id, consecutive_failures, failure_threshold, e
+            );
+
+            if *consecutive_failures >= failure_threshold {
+                error!(
+                    "continuous_capture: Too many consecutive capture failures, will retry in 5s"
+                );
+                sleep(Duration::from_secs(5)).await;
+                *consecutive_failures = 0; // Reset after longer wait
+            }
+            None
+        }
+    }
+}
+
+async fn should_skip_frame(
+    previous_image: &Option<DynamicImage>,
+    current_image: &DynamicImage,
+    max_average: &mut Option<MaxAverageFrame>,
+    frame_counter: u64,
+    max_avg_value: &mut f64,
+    window_images: &Vec<CapturedWindow>,
+    image_hash: u64,
+    result_tx: Sender<CaptureResult>,
+) -> bool {
+    let current_average = match compare_with_previous_image(
+        previous_image.as_ref(),
+        current_image,
+        max_average,
+        frame_counter,
+        max_avg_value,
+    )
+    .await
+    {
+        Ok(avg) => avg,
+        Err(e) => {
+            error!("Error comparing images: {}", e);
+            0.0
+        }
+    };
+
+    let current_average = if previous_image.is_none() {
+        1.0
+    } else {
+        current_average
+    };
+
+    if current_average < 0.006 {
+        debug!(
+            "Skipping frame {} due to low average difference: {:.3}",
+            frame_counter, current_average
+        );
+        true
+    } else {
+        if current_average > *max_avg_value {
+            *max_average = Some(MaxAverageFrame {
+                image: current_image.clone(),
+                window_images: window_images.clone(),
+                image_hash,
+                frame_number: frame_counter,
+                timestamp: Instant::now(),
+                result_tx: result_tx.clone(),
+                average: current_average,
+            });
+            *max_avg_value = current_average;
+        }
+        false
+    }
+}
+
+async fn process_max_average_frame(
+    max_avg_frame: MaxAverageFrame,
+    ocr_engine: &OcrEngine,
+    languages: Vec<Language>,
+) {
+    let ocr_task_data = OcrTaskData {
+        image: max_avg_frame.image,
+        window_images: max_avg_frame.window_images,
+        frame_number: max_avg_frame.frame_number,
+        timestamp: max_avg_frame.timestamp,
+        result_tx: max_avg_frame.result_tx,
+    };
+
+    if let Err(e) = process_ocr_task(ocr_task_data, ocr_engine, languages).await {
+        error!("Error processing OCR task: {}", e);
     }
 }
 
@@ -317,75 +431,19 @@ pub async fn process_ocr_task(
     let mut window_count = 0;
 
     for captured_window in window_images {
-        let app_name = captured_window.app_name.clone();
-        let browser_url = if cfg!(not(target_os = "linux"))
-            && captured_window.is_focused
-            && BROWSER_NAMES
-                .iter()
-                .any(|&browser| app_name.to_lowercase().contains(browser))
-        {
-            match tokio::task::spawn_blocking(move || {
-                get_active_browser_url_sync(&app_name, captured_window.process_id)
-            })
-            .await
-            {
-                Ok(Ok(url)) => Some(url),
-                Ok(Err(_)) => {
-                    // error!("Failed to get browser URL: {}", e);
-                    None
-                }
-                Err(e) => {
-                    error!("Failed to spawn blocking task: {}", e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
+        let ocr_result = process_window_ocr(
+            captured_window,
+            ocr_engine,
+            &languages,
+            &mut total_confidence,
+            &mut window_count,
+        )
+        .await?;
 
-        let (window_text, window_json_output, confidence) = match ocr_engine {
-            OcrEngine::Unstructured => perform_ocr_cloud(&captured_window.image, languages.clone())
-                .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-            OcrEngine::Tesseract => {
-                perform_ocr_tesseract(&captured_window.image, languages.clone())
-            }
-            #[cfg(target_os = "windows")]
-            OcrEngine::WindowsNative => perform_ocr_windows(&captured_window.image)
-                .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-            #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => perform_ocr_apple(&captured_window.image, &languages),
-            OcrEngine::Custom(config) => {
-                perform_ocr_custom(&captured_window.image, languages.clone(), config)
-                    .await
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
-            }
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Unsupported OCR engine",
-                ))
-            }
-        };
-
-        if let Some(conf) = confidence {
-            total_confidence += conf;
-            window_count += 1;
-        }
-
-        window_ocr_results.push(WindowOcrResult {
-            image: captured_window.image,
-            window_name: captured_window.window_name,
-            app_name: captured_window.app_name,
-            text: window_text,
-            text_json: parse_json_output(&window_json_output),
-            focused: captured_window.is_focused,
-            confidence: confidence.unwrap_or(0.0),
-            browser_url: browser_url.clone(),
-        });
+        window_ocr_results.push(ocr_result);
     }
 
+    // Create and send the result
     let capture_result = CaptureResult {
         image,
         frame_number,
@@ -393,6 +451,112 @@ pub async fn process_ocr_task(
         window_ocr_results,
     };
 
+    send_ocr_result(&result_tx, capture_result).await?;
+
+    // Log performance metrics
+    log_ocr_performance(start_time, window_count, total_confidence, frame_number);
+
+    Ok(())
+}
+
+async fn process_window_ocr(
+    captured_window: CapturedWindow,
+    ocr_engine: &OcrEngine,
+    languages: &[Language],
+    total_confidence: &mut f64,
+    window_count: &mut u32,
+) -> Result<WindowOcrResult, std::io::Error> {
+    let app_name = captured_window.app_name.clone();
+
+    // Get browser URL if applicable
+    let browser_url = get_browser_url_if_needed(
+        &app_name,
+        captured_window.is_focused,
+        captured_window.process_id,
+    )
+    .await;
+
+    // Perform OCR based on the selected engine
+    let (window_text, window_json_output, confidence) =
+        perform_ocr_with_engine(ocr_engine, &captured_window.image, languages.to_vec()).await?;
+
+    // Update confidence metrics
+    if let Some(conf) = confidence {
+        *total_confidence += conf;
+        *window_count += 1;
+    }
+
+    Ok(WindowOcrResult {
+        image: captured_window.image,
+        window_name: captured_window.window_name,
+        app_name: captured_window.app_name,
+        text: window_text,
+        text_json: parse_json_output(&window_json_output),
+        focused: captured_window.is_focused,
+        confidence: confidence.unwrap_or(0.0),
+        browser_url,
+    })
+}
+
+async fn get_browser_url_if_needed(
+    app_name: &str,
+    is_focused: bool,
+    process_id: i32,
+) -> Option<String> {
+    if cfg!(not(target_os = "linux"))
+        && is_focused
+        && BROWSER_NAMES
+            .iter()
+            .any(|&browser| app_name.to_lowercase().contains(browser))
+    {
+        let app_name = app_name.to_string(); // Clone to move into the closure
+        match tokio::task::spawn_blocking(move || {
+            get_active_browser_url_sync(&app_name, process_id)
+        })
+        .await
+        {
+            Ok(Ok(url)) => Some(url),
+            Ok(Err(_)) => None,
+            Err(e) => {
+                error!("Failed to spawn blocking task: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    }
+}
+
+async fn perform_ocr_with_engine(
+    ocr_engine: &OcrEngine,
+    image: &DynamicImage,
+    languages: Vec<Language>,
+) -> Result<(String, String, Option<f64>), std::io::Error> {
+    match ocr_engine {
+        OcrEngine::Unstructured => perform_ocr_cloud(image, languages)
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+        OcrEngine::Tesseract => Ok(perform_ocr_tesseract(image, languages)),
+        #[cfg(target_os = "windows")]
+        OcrEngine::WindowsNative => perform_ocr_windows(image)
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+        #[cfg(target_os = "macos")]
+        OcrEngine::AppleNative => Ok(perform_ocr_apple(image, &languages)),
+        OcrEngine::Custom(config) => perform_ocr_custom(image, languages, config)
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Unsupported OCR engine",
+        )),
+    }
+}
+
+async fn send_ocr_result(
+    result_tx: &Sender<CaptureResult>,
+    capture_result: CaptureResult,
+) -> Result<(), std::io::Error> {
     // Add channel health check
     if result_tx.capacity() == 0 {
         warn!("OCR task channel at capacity - receiver may be blocked or slow");
@@ -414,6 +578,15 @@ pub async fn process_ocr_task(
         ));
     }
 
+    Ok(())
+}
+
+fn log_ocr_performance(
+    start_time: Instant,
+    window_count: u32,
+    total_confidence: f64,
+    frame_number: u64,
+) {
     let duration = start_time.elapsed();
     let avg_confidence = if window_count > 0 {
         total_confidence / window_count as f64
@@ -424,7 +597,6 @@ pub async fn process_ocr_task(
         "OCR task processed frame {} with {} windows in {:?}, average confidence: {:.2}",
         frame_number, window_count, duration, avg_confidence
     );
-    Ok(())
 }
 
 fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
@@ -435,19 +607,6 @@ fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
         });
 
     parsed_output
-}
-
-pub fn trigger_screen_capture_permission() -> Result<()> {
-    // Get the primary monitor
-    let monitor = Monitor::all().map_err(|e| anyhow!("Failed to get monitor: {}", e))?;
-
-    // Attempt to capture a screenshot, which should trigger the permission request
-    let _screenshot = monitor.first().unwrap().capture_image()?;
-
-    // We don't need to do anything with the screenshot
-    // The mere attempt to capture it should trigger the permission request
-
-    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

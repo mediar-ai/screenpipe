@@ -351,8 +351,6 @@ pub enum Command {
         #[arg(long, default_value_t = false)]
         use_embedding: bool,
     },
-    /// Setup screenpipe environment
-    Setup,
     /// Run data migrations in the background
     Migrate {
         /// The name of the migration to run

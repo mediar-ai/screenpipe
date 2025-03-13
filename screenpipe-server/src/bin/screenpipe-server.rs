@@ -8,10 +8,7 @@ use screenpipe_audio::{
     audio_manager::AudioManagerBuilder,
     core::device::{
         default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-        trigger_audio_permission,
     },
-    transcription::whisper::model::download_whisper_model,
-    vad::silero::SileroVad,
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_db::{
@@ -291,56 +288,6 @@ async fn main() -> anyhow::Result<()> {
             }
             Command::Pipe { subcommand } => {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
-                return Ok(());
-            }
-            Command::Setup {} => {
-                use screenpipe_vision::core::trigger_screen_capture_permission;
-
-                // Trigger audio permission request
-                if let Err(e) = trigger_audio_permission() {
-                    warn!("failed to trigger audio permission: {:?}", e);
-                    warn!("please grant microphone permission manually in System Preferences.");
-                } else {
-                    info!("audio permission requested. please grant permission if prompted.");
-                }
-
-                // Trigger screen capture permission request
-                if let Err(e) = trigger_screen_capture_permission() {
-                    warn!("failed to trigger screen capture permission: {:?}", e);
-                    warn!(
-                        "please grant screen recording permission manually in System Preferences."
-                    );
-                } else {
-                    info!(
-                        "screen capture permission requested. please grant permission if prompted."
-                    );
-                }
-
-                // this command just download models and stuff (useful to have specific step to display in UI)
-
-                // ! should prob skip if deepgram?
-                download_whisper_model(Arc::new(cli.audio_transcription_engine.into())).unwrap();
-                // ! assuming silero is used
-                SileroVad::new().await.unwrap();
-
-                // Check if FFmpeg is working properly
-                if let Some(ffmpeg_path) = find_ffmpeg_path() {
-                    println!("ffmpeg found at: {:?}", ffmpeg_path);
-                } else {
-                    eprintln!("failed to find or install ffmpeg.");
-                    return Err(anyhow::anyhow!("ffmpeg installation failed"));
-                }
-
-                match check_ffmpeg().await {
-                    Ok(_) => info!("FFmpeg is working properly"),
-                    Err(e) => {
-                        warn!("ffmpeg check failed: {}", e);
-                        warn!("please ensure ffmpeg is installed correctly and is in your PATH");
-                        return Err(e);
-                    }
-                }
-
-                info!("screenpipe setup complete");
                 return Ok(());
             }
             Command::Migrate {
@@ -1441,20 +1388,5 @@ async fn handle_pipe_command(
             }
         }
     }
-    Ok(())
-}
-
-// Add this function near the end of the file
-async fn check_ffmpeg() -> anyhow::Result<()> {
-    // TODO: this should also check if it can properly encode mp4 etc
-    use tokio::process::Command;
-
-    let output = Command::new("ffmpeg").arg("-version").output().await?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow::anyhow!("FFmpeg check failed: {}", stderr));
-    }
-
     Ok(())
 }

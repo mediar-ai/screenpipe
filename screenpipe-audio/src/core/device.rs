@@ -107,6 +107,57 @@ pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
     AudioDevice::from_name(name)
 }
 
+/// Attempts an operation with exponential backoff retry
+#[cfg(target_os = "macos")]
+async fn with_retry<T, F, Fut>(operation: F, max_retries: usize) -> Result<T>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T>>,
+{
+    let mut retries = 0;
+    let mut delay_ms = 10; // Start with 10ms delay
+
+    loop {
+        match operation().await {
+            Ok(value) => return Ok(value),
+            Err(e) => {
+                if retries >= max_retries {
+                    return Err(anyhow!("Max retries reached: {}", e));
+                }
+
+                // Add some jitter to prevent synchronized retries
+                use rand::{rng, Rng};
+                let jitter = rng().random_range(0..=10) as u64;
+                let delay = std::time::Duration::from_millis(delay_ms + jitter);
+
+                tracing::warn!(
+                    "ScreenCaptureKit host error, retrying in {}ms: {}",
+                    delay_ms + jitter,
+                    e
+                );
+                tokio::time::sleep(delay).await;
+
+                retries += 1;
+                delay_ms = std::cmp::min(delay_ms * 2, 1000); // Exponential backoff, max 1s
+            }
+        }
+    }
+}
+
+/// Gets the ScreenCaptureKit host with retry mechanism
+#[cfg(target_os = "macos")]
+async fn get_screen_capture_host() -> Result<cpal::Host> {
+    // necessary hack because this is unreliable
+    with_retry(
+        || async {
+            cpal::host_from_id(cpal::HostId::ScreenCaptureKit)
+                .map_err(|e| anyhow!("Failed to get ScreenCaptureKit host: {}", e))
+        },
+        3,
+    )
+    .await
+}
+
 pub async fn get_cpal_device_and_config(
     audio_device: &AudioDevice,
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
@@ -133,7 +184,7 @@ pub async fn get_cpal_device_and_config(
 
         #[cfg(target_os = "macos")]
         if is_output_device {
-            if let Ok(screen_capture_host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+            if let Ok(screen_capture_host) = get_screen_capture_host().await {
                 devices = screen_capture_host.input_devices()?;
             }
         }
@@ -152,102 +203,66 @@ pub async fn get_cpal_device_and_config(
 }
 
 pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
-    // Helper function containing the original implementation
-    async fn try_list_audio_devices() -> Result<Vec<AudioDevice>> {
-        let host = cpal::default_host();
-        let mut devices = Vec::new();
+    let host = cpal::default_host();
+    let mut devices = Vec::new();
 
-        for device in host.input_devices()? {
-            if let Ok(name) = device.name() {
-                devices.push(AudioDevice::new(name, DeviceType::Input));
-            }
+    for device in host.input_devices()? {
+        if let Ok(name) = device.name() {
+            devices.push(AudioDevice::new(name, DeviceType::Input));
         }
+    }
 
-        // Filter function to exclude macOS speakers and AirPods for output devices
-        fn should_include_output_device(name: &str) -> bool {
-            #[cfg(target_os = "macos")]
-            {
-                !name.to_lowercase().contains("speakers")
-                    && !name.to_lowercase().contains("airpods")
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                // Avoid "unused variable" warning in non-macOS systems
-                let _ = name;
-                true
-            }
-        }
-
-        // macos hack using screen capture kit for output devices - does not work well
+    // Filter function to exclude macOS speakers and AirPods for output devices
+    fn should_include_output_device(name: &str) -> bool {
         #[cfg(target_os = "macos")]
         {
-            // !HACK macos is supposed to use special macos feature "display capture"
-            // ! see https://github.com/RustAudio/cpal/pull/894
-            if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-                for device in host.input_devices()? {
-                    if let Ok(name) = device.name() {
-                        if should_include_output_device(&name) {
-                            devices.push(AudioDevice::new(name, DeviceType::Output));
-                        }
+            !name.to_lowercase().contains("speakers") && !name.to_lowercase().contains("airpods")
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            // Avoid "unused variable" warning in non-macOS systems
+            let _ = name;
+            true
+        }
+    }
+
+    // macos hack using screen capture kit for output devices - does not work well
+    #[cfg(target_os = "macos")]
+    {
+        // !HACK macos is supposed to use special macos feature "display capture"
+        // ! see https://github.com/RustAudio/cpal/pull/894
+        if let Ok(screen_capture_host) = get_screen_capture_host().await {
+            for device in screen_capture_host.input_devices()? {
+                if let Ok(name) = device.name() {
+                    if should_include_output_device(&name) {
+                        devices.push(AudioDevice::new(name, DeviceType::Output));
                     }
                 }
             }
         }
-
-        // add default output device - on macos think of custom virtual devices
-        for device in host.output_devices()? {
-            if let Ok(name) = device.name() {
-                if should_include_output_device(&name) {
-                    devices.push(AudioDevice::new(name, DeviceType::Output));
-                }
-            }
-        }
-
-        // last, add devices that are listed in .devices() which are not already in the devices vector
-        let other_devices = host.devices().unwrap();
-        for device in other_devices {
-            if !devices.iter().any(|d| d.name == device.name().unwrap())
-                && should_include_output_device(&device.name().unwrap())
-            {
-                // TODO: not sure if it can be input, usually aggregate or multi output
-                devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
-            }
-        }
-
-        Ok(devices)
     }
 
-    // Implement retry logic with exponential backoff
-    const MAX_RETRIES: u32 = 3;
-    let mut delay = std::time::Duration::from_millis(100);
-    let mut last_error = None;
-
-    for attempt in 0..MAX_RETRIES {
-        match try_list_audio_devices().await {
-            Ok(devices) => return Ok(devices),
-            Err(err) => {
-                last_error = Some(err);
-                if attempt < MAX_RETRIES - 1 {
-                    tracing::warn!(
-                        "Failed to list audio devices (attempt {}/{}): {}. Retrying after {:?}...",
-                        attempt + 1,
-                        MAX_RETRIES,
-                        last_error.as_ref().unwrap(),
-                        delay
-                    );
-                    tokio::time::sleep(delay).await;
-                    delay *= 2; // Exponential backoff
-                }
+    // add default output device - on macos think of custom virtual devices
+    for device in host.output_devices()? {
+        if let Ok(name) = device.name() {
+            if should_include_output_device(&name) {
+                devices.push(AudioDevice::new(name, DeviceType::Output));
             }
         }
     }
 
-    Err(last_error.unwrap_or_else(|| {
-        anyhow!(
-            "Failed to list audio devices after {} attempts",
-            MAX_RETRIES
-        )
-    }))
+    // last, add devices that are listed in .devices() which are not already in the devices vector
+    let other_devices = host.devices().unwrap();
+    for device in other_devices {
+        if !devices.iter().any(|d| d.name == device.name().unwrap())
+            && should_include_output_device(&device.name().unwrap())
+        {
+            // TODO: not sure if it can be input, usually aggregate or multi output
+            devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
+        }
+    }
+
+    Ok(devices)
 }
 
 pub fn default_input_device() -> Result<AudioDevice> {
@@ -262,18 +277,28 @@ pub fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
         // ! see https://github.com/RustAudio/cpal/pull/894
-        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-            if let Some(device) = host.default_input_device() {
-                if let Ok(name) = device.name() {
-                    return Ok(AudioDevice::new(name, DeviceType::Output));
+        let screen_capture_result = tokio::runtime::Handle::current().block_on(async {
+            if let Ok(host) = get_screen_capture_host().await {
+                if let Some(device) = host.default_input_device() {
+                    if let Ok(name) = device.name() {
+                        return Some(AudioDevice::new(name, DeviceType::Output));
+                    }
                 }
+                None
+            } else {
+                None
             }
+        });
+
+        if let Some(device) = screen_capture_result {
+            return Ok(device);
         }
+
         let host = cpal::default_host();
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
-        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
+        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -284,28 +309,4 @@ pub fn default_output_device() -> Result<AudioDevice> {
             .ok_or_else(|| anyhow!("No default output device found"))?;
         return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
-}
-
-pub fn trigger_audio_permission() -> Result<()> {
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or_else(|| anyhow!("No default input device found"))?;
-
-    let config = device.default_input_config()?;
-
-    // Attempt to build an input stream, which should trigger the permission request
-    let _stream = device.build_input_stream(
-        &config.into(),
-        |_data: &[f32], _: &cpal::InputCallbackInfo| {
-            // Do nothing, we just want to trigger the permission request
-        },
-        |err| eprintln!("Error in audio stream: {}", err),
-        None,
-    )?;
-
-    // We don't actually need to start the stream
-    // The mere attempt to build it should trigger the permission request
-
-    Ok(())
 }
