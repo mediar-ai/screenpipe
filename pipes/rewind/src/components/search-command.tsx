@@ -125,7 +125,7 @@ export function AppSelect({ apps, setApps }: AppSelectProps) {
 		<div className="flex items-center gap-2">
 			<span className="text-xl">
 				<img
-					src={`http://localhost:11435/app-icon?name=${option.value}`}
+					src={`http://localhost:3030/app/icon?name=${option.value}`}
 					className="w-6 h-6"
 					alt={option.value}
 					loading="lazy"
@@ -151,7 +151,7 @@ export function AppSelect({ apps, setApps }: AppSelectProps) {
 								<span key={id}>
 									{
 										<img
-											src={`http://localhost:11435/app-icon?name=${tech.label}`}
+											src={`http://localhost:3030/app/icon?name=${tech.label}`}
 											className="w-6 h-6"
 											alt={tech.label}
 											loading="lazy"

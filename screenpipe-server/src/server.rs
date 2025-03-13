@@ -5,6 +5,7 @@ use axum::{
         Json, Path, Query, State,
     },
     http::StatusCode,
+    http::header::{CONTENT_TYPE, CACHE_CONTROL, HeaderValue},
     response::{IntoResponse, Json as JsonResponse, Response},
     routing::get,
     serve, Router,
@@ -1065,6 +1066,7 @@ impl SCServer {
             .get("/semantic-search", semantic_search_handler)
             .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
             .get("/search/keyword", keyword_search_handler)
+            .get("/app/icon", get_app_icon_handler)
             .post("/v1/embeddings", create_embeddings)
             .post("/audio/device/start", start_audio_device)
             .post("/audio/device/stop", stop_audio_device)
@@ -2894,9 +2896,10 @@ pub async fn purge_pipe_handler(
 
 #[oasgen]
 pub async fn get_app_icon_handler(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Query(app_name): Query<AppIconQuery>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<Response<Body>, (StatusCode, JsonResponse<Value>)> {
+
     info!("received app icon request: {:?}", app_name);
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
@@ -2906,18 +2909,26 @@ pub async fn get_app_icon_handler(
                 let headers = [
                     (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
                     (
-                        http::header::CACHE_CONTROL,
+                        CACHE_CONTROL,
                         HeaderValue::from_static("public, max-age=604800"),
                     ),
                 ];
-                Ok((headers, Bytes::from(icon.data)))
+
+                let mut response = Response::new(Body::from(icon.data));
+                for (key, value) in &headers {
+                    response.headers_mut().insert(key, value.clone());
+                }
+                Ok(response)
             }
-            Ok(None) => Err((StatusCode::NOT_FOUND, "Icon not found".to_string())),
+            Ok(None) => Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(Value::String("Icon not found".to_string())),
+            )),
             Err(e) => {
                 error!("failed to get app icon: {}", e);
                 Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("failed to get app icon: {}", e),
+                    JsonResponse(Value::String(format!("failed to get app icon: {}", e))),
                 ))
             }
         }
@@ -2927,7 +2938,7 @@ pub async fn get_app_icon_handler(
     {
         Err((
             StatusCode::NOT_IMPLEMENTED,
-            "app icon retrieval not supported on this platform".to_string(),
+            JsonResponse(Value::String(format!("app icon retrieval not supported on this platform"))),
         ))
     }
 }

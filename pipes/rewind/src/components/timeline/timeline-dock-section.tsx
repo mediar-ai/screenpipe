@@ -44,7 +44,7 @@ async function getAppIcon(
   });
 
   try {
-    const response = await fetch(`http://localhost:11435/app-icon?${params}`, {
+    const response = await fetch(`http://localhost:3030/app/icon?${params}`, {
       method: "GET",
       headers: {
         Accept: "application/json",
