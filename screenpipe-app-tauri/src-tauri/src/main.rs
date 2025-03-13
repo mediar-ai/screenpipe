@@ -29,7 +29,6 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 use updates::start_update_check;
 mod analytics;
-mod icons;
 use crate::analytics::start_analytics;
 
 mod commands;
@@ -46,7 +45,6 @@ pub use server::*;
 
 pub use sidecar::*;
 
-pub use icons::*;
 pub use store::*;
 
 mod config;

@@ -1,15 +1,13 @@
 use crate::window_api::{close_window, show_specific_window};
 use crate::{get_base_dir, get_store, register_shortcut};
-use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
-use axum::response::IntoResponse;
 use axum::{
-    extract::{Query, State},
+    extract::State,
     http::{Method, StatusCode},
     Json, Router,
 };
 use futures::stream::Stream;
-use http::header::{HeaderValue, CONTENT_TYPE};
+use http::header::HeaderValue;
 use notify::RecursiveMode;
 use notify::Watcher;
 use reqwest::Client;
@@ -81,12 +79,6 @@ struct AuthData {
     token: String,
     email: String,
     user_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AppIconQuery {
-    name: String,
-    path: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -169,7 +161,6 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/inbox", axum::routing::post(send_inbox_message))
         .route("/log", axum::routing::post(log_message))
         .route("/auth", axum::routing::post(handle_auth))
-        .route("/app-icon", axum::routing::get(get_app_icon_handler))
         .route("/window-size", axum::routing::post(set_window_size))
         .route("/sse/settings", axum::routing::get(settings_stream))
         .route("/sidecar/start", axum::routing::post(start_sidecar))
@@ -305,45 +296,6 @@ async fn handle_auth(
         success: true,
         message: "auth data stored successfully".to_string(),
     }))
-}
-
-async fn get_app_icon_handler(
-    State(_): State<ServerState>,
-    Query(app_name): Query<AppIconQuery>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    info!("received app icon request: {:?}", app_name);
-
-    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-    {
-        match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
-            Ok(Some(icon)) => {
-                let headers = [
-                    (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
-                    (
-                        http::header::CACHE_CONTROL,
-                        HeaderValue::from_static("public, max-age=604800"),
-                    ),
-                ];
-                Ok((headers, Bytes::from(icon.data)))
-            }
-            Ok(None) => Err((StatusCode::NOT_FOUND, "Icon not found".to_string())),
-            Err(e) => {
-                error!("failed to get app icon: {}", e);
-                Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("failed to get app icon: {}", e),
-                ))
-            }
-        }
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    {
-        Err((
-            StatusCode::NOT_IMPLEMENTED,
-            "app icon retrieval not supported on this platform".to_string(),
-        ))
-    }
 }
 
 async fn set_window_size(
