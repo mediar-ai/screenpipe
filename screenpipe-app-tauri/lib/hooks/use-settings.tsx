@@ -195,11 +195,11 @@ const DEFAULT_SETTINGS: Settings = {
 	startAudioShortcut: "",
 	stopAudioShortcut: "",
 	pipeShortcuts: {},
-	enableRealtimeAudioTranscription: false,
+	enableRealtimeAudioTranscription: true,
 	realtimeAudioTranscriptionEngine: "deepgram",
 	disableVision: false,
 	useAllMonitors: false,
-	enableRealtimeVision: false,
+	enableRealtimeVision: true,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
