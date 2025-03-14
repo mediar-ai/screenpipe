@@ -21,9 +21,9 @@ edition = "2021"
 
 [workspace.dependencies]
 # AI
-candle = { git = "https://github.com/huggingface/candle.git", rev = "c930ab7e1a234f02a0f49350bf38f03f45e53757", package = "candle-core" }
-candle-nn = { git = "https://github.com/huggingface/candle.git", rev = "c930ab7e1a234f02a0f49350bf38f03f45e53757", package = "candle-nn" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", rev = "c930ab7e1a234f02a0f49350bf38f03f45e53757", package = "candle-transformers" }
+candle = { version = "0.8.3", package = "candle-core" }
+candle-nn = { version = "0.8.3", package = "candle-nn" }
+candle-transformers = { version = "0.8.3", package = "candle-transformers" }
 tokenizers = "0.21.0"
 hf-hub = { version = "0.3.2", git = "https://github.com/neo773/hf-hub", features = [
     "native-tls",
