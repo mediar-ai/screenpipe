@@ -10,6 +10,7 @@ import {
 	RefreshCw,
 	Download,
 	Bell,
+	HardDriveDownload,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
@@ -54,6 +55,7 @@ import { PermissionButtons } from "./status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
+import { getAllWindows } from "@tauri-apps/api/window";
 
 const corePipes: string[] = [];
 
@@ -82,6 +84,7 @@ export const PipeStore: React.FC = () => {
 		[],
 	);
 	const [updatePopoverOpen, setUpdatePopoverOpen] = useState(false);
+	const [isUpdating, setIsUpdating] = useState(false);
 	const filteredPipes = pipes
 		.filter(
 			(pipe) =>
@@ -509,9 +512,7 @@ export const PipeStore: React.FC = () => {
 			}
 
 			// Filter installed pipes that have updates available
-			const pipesToUpdate = pipes.filter(
-				(pipe) => pipe.is_installed && pipe.has_update,
-			);
+			const pipesToUpdate = availableUpdates;
 
 			if (pipesToUpdate.length === 0) {
 				if (t) {
@@ -568,7 +569,21 @@ export const PipeStore: React.FC = () => {
 					duration: 100000,
 				});
 
-				await handleUpdatePipe(pipe);
+				await handleUpdatePipe(pipe);// Set all pipes to be updated to "in_progress" status
+			setPipes((prevPipes) =>
+				prevPipes.map((p) => {
+					if (pipesToUpdate.some(pipeToUpdate => pipeToUpdate.id === p.id)) {
+						return {
+							...p,
+							installed_config: {
+								...p.installed_config!,
+								buildStatus: "in_progress",
+							},
+						};
+					}
+					return p;
+				})
+			);
 			}
 
 			t.update({
@@ -808,10 +823,40 @@ export const PipeStore: React.FC = () => {
 		try {
 			if (!checkLogin(settings.user)) return;
 
+			// Set the pipe status to in_progress so the user gets feedback in the UI
+			setPipes((prevPipes) =>
+				prevPipes.map((p) =>
+					p.id === pipe.id
+						? {
+								...p,
+								installed_config: {
+									...p.installed_config!,
+									buildStatus: "in_progress",
+								},
+						  }
+						: p
+				)
+			);
+
 			const currentVersion = pipe.installed_config?.version!;
 			const storeApi = await PipeApi.create(settings.user!.token!);
 			const update = await storeApi.checkUpdate(pipe.id, currentVersion);
 			if (!update.has_update) {
+				// Reset the status if no update is available
+				setPipes((prevPipes) =>
+					prevPipes.map((p) =>
+						p.id === pipe.id
+							? {
+									...p,
+									installed_config: {
+										...p.installed_config!,
+										buildStatus: "success",
+									},
+							  }
+							: p
+					)
+				);
+				
 				toast({
 					title: "no update available",
 					description: "the pipe is already up to date",
@@ -854,6 +899,15 @@ export const PipeStore: React.FC = () => {
 				),
 			});
 
+
+			const windows = await getAllWindows();
+			console.log("windows", windows,pipe);
+			const window = windows.find((w) => w.label === pipe.name);
+			console.log("window", window);
+			if (window) {
+				window.close();
+			}
+
 			const response = await fetch(
 				`http://localhost:3030/pipes/update-version`,
 				{
@@ -870,6 +924,20 @@ export const PipeStore: React.FC = () => {
 
 			const data = await response.json();
 			if (!data.success) {
+				// Set status to error if update fails
+				setPipes((prevPipes) =>
+					prevPipes.map((p) =>
+						p.id === pipe.id
+							? {
+									...p,
+									installed_config: {
+										...p.installed_config!,
+										buildStatus: "error",
+									},
+							  }
+							: p
+					)
+				);
 				throw new Error(data.error);
 			}
 
@@ -894,6 +962,22 @@ export const PipeStore: React.FC = () => {
 			t.dismiss();
 		} catch (error) {
 			console.error("failed to update pipe:", error);
+			
+			// Set status to error if update fails
+			setPipes((prevPipes) =>
+				prevPipes.map((p) =>
+					p.id === pipe.id
+						? {
+								...p,
+								installed_config: {
+									...p.installed_config!,
+									buildStatus: "error",
+								},
+						  }
+						: p
+				)
+			);
+			
 			toast({
 				title: "error updating pipe",
 				description: "please try again or check the logs for more information.",
@@ -945,6 +1029,9 @@ export const PipeStore: React.FC = () => {
 	// Define the checkForUpdates function before it's used
 	const checkForUpdates = useCallback(
 		async (silent: boolean = false) => {
+			setIsUpdating(true);
+			console.log("[pipe-update] checkForUpdates called at", new Date().toISOString());
+			
 			if (!settings.user?.token) {
 				console.log("[pipe-update] Update check skipped: No user token");
 				return;
@@ -958,7 +1045,11 @@ export const PipeStore: React.FC = () => {
 			if (lastCheckTime && now - lastCheckTime < 5 * 60 * 1000 && !silent) {
 				console.log(
 					"[pipe-update] Skipping check - last check was less than 5 minutes ago",
+					"Last check:", new Date(lastCheckTime).toISOString(),
+					"Now:", new Date(now).toISOString(),
+					"Diff (minutes):", (now - lastCheckTime) / (60 * 1000)
 				);
+				setIsUpdating(false);
 				return;
 			}
 
@@ -1019,8 +1110,12 @@ export const PipeStore: React.FC = () => {
 				setAvailableUpdates(pipesWithUpdates);
 
 				// If auto-update is enabled and there are updates, update all pipes
+				console.log("autoUpdatePipes", settings.autoUpdatePipes);
 				if (settings.autoUpdatePipes && pipesWithUpdates.length > 0) {
-					await handleUpdateAllPipes(true);
+					console.log("autoUpdatePipes", settings.autoUpdatePipes);
+					for (const pipe of pipesWithUpdates) {
+						await handleUpdatePipe(pipe);
+					}
 				} else if (pipesWithUpdates.length > 0 && !silent) {
 					// Show a notification to the user
 					toast({
@@ -1029,9 +1124,11 @@ export const PipeStore: React.FC = () => {
 						duration: 5000,
 					});
 				}
+				setIsUpdating(false);
 			} catch (error) {
 				console.error("[pipe-update] Error checking for updates:", error);
-			}
+				setIsUpdating(false);
+			} 
 		},
 		[
 			settings.user,
@@ -1041,6 +1138,14 @@ export const PipeStore: React.FC = () => {
 			handleUpdateAllPipes,
 		],
 	);
+
+	// Create a ref to store the latest version of checkForUpdates
+	const checkForUpdatesRef = React.useRef(checkForUpdates);
+	
+	// Update the ref whenever checkForUpdates changes
+	useEffect(() => {
+		checkForUpdatesRef.current = checkForUpdates;
+	}, [checkForUpdates]);
 
 	useEffect(() => {
 		fetchStorePlugins();
@@ -1063,17 +1168,22 @@ export const PipeStore: React.FC = () => {
 
 	// Add periodic update check
 	useEffect(() => {
+		// Define the update check interval (5 minutes in milliseconds)
+		const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
+		
 		// Run check immediately with a small delay to allow component to fully initialize
-		const initialCheckTimeout = setTimeout(() => checkForUpdates(), 1000);
+		const initialCheckTimeout = setTimeout(() => checkForUpdatesRef.current(), 2000);
 
 		// Set up interval to check every 5 minutes
-		const interval = setInterval(() => checkForUpdates(), 5 * 60 * 1000);
+		const interval = setInterval(() => checkForUpdatesRef.current(), UPDATE_CHECK_INTERVAL);
+
+		console.log(`[pipe-update] Set up update check interval: ${UPDATE_CHECK_INTERVAL}ms (${UPDATE_CHECK_INTERVAL / (60 * 1000)} minutes)`);
 
 		return () => {
 			clearTimeout(initialCheckTimeout);
 			clearInterval(interval);
 		};
-	}, [checkForUpdates]);
+	}, []); // Empty dependency array
 
 	useEffect(() => {
 		const setupDeepLink = async () => {
@@ -1157,7 +1267,7 @@ export const PipeStore: React.FC = () => {
 					await fetchInstalledPipes();
 				} else {
 					// Just check for updates but don't install them
-					await checkForUpdates(true);
+					await checkForUpdatesRef.current(true);
 				}
 			} catch (error) {
 				console.error("Error in update-all-pipes handler:", error);
@@ -1171,7 +1281,6 @@ export const PipeStore: React.FC = () => {
 		pipes,
 		settings.user,
 		settings.autoUpdatePipes,
-		checkForUpdates,
 		fetchInstalledPipes,
 	]);
 
@@ -1239,42 +1348,62 @@ export const PipeStore: React.FC = () => {
 	}
 
 	return (
-		<div className="flex flex-col h-full mt-5">
-			<div className="flex items-center justify-between mb-4">
-				<div className="flex items-center space-x-2">
+		<div className="flex flex-col h-full mt-5 p-5">
+			<div className="flex flex-col md:flex-row sm:items-center justify-between gap-4 mb-4">
+				<div className="flex items-center space-x-2 flex-wrap gap-2">
 					<Input
 						placeholder="search pipes..."
 						value={searchQuery}
 						onChange={(e) => setSearchQuery(e.target.value)}
-						className="w-64"
+						className="w-full sm:w-64"
 					/>
-					<TooltipProvider>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant="outline"
-									size="icon"
-									onClick={() => setShowInstalledOnly(!showInstalledOnly)}
-								>
-									<Power
-										className={cn(
-											"h-4 w-4",
-											showInstalledOnly && "text-green-500",
-										)}
-									/>
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent>
-								<p>
-									{showInstalledOnly
-										? "showing installed pipes only"
-										: "showing all pipes"}
-								</p>
-							</TooltipContent>
-						</Tooltip>
-					</TooltipProvider>
+					<div className="flex items-center space-x-2">
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										variant="outline"
+										size="icon"
+										onClick={() => setConfirmOpen(true)}
+										className="flex items-center gap-2"
+										disabled={isPurging}
+									>
+										<Trash2 className="h-4 w-4" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									<p>reset all pipes</p>
+								</TooltipContent>
+							</Tooltip>
+						</TooltipProvider>
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										variant="outline"
+										size="icon"
+										onClick={() => setShowInstalledOnly(!showInstalledOnly)}
+									>
+										<HardDriveDownload
+											className={cn(
+												"h-4 w-4",
+												showInstalledOnly && "text-green-500",
+											)}
+										/>
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									<p>
+										{showInstalledOnly
+											? "showing installed pipes only"
+											: "showing all pipes"}
+									</p>
+								</TooltipContent>
+							</Tooltip>
+						</TooltipProvider>
+					</div>
 				</div>
-				<div className="flex items-center space-x-2">
+				<div className="flex items-center space-x-2 mt-2 sm:mt-0">
 					{availableUpdates.length > 0 && (
 						<Popover
 							open={updatePopoverOpen}
@@ -1283,13 +1412,13 @@ export const PipeStore: React.FC = () => {
 							<PopoverTrigger asChild>
 								<Button variant="outline" className="relative">
 									<Download className="h-4 w-4 mr-2" />
-									Updates
+									<span className="hidden sm:inline">Updates</span>
 									<span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
 										{availableUpdates.length}
 									</span>
 								</Button>
 							</PopoverTrigger>
-							<PopoverContent className="w-80">
+							<PopoverContent className="w-[90vw] sm:w-[500px]">
 								<div className="space-y-4">
 									<div className="flex items-center justify-between">
 										<h4 className="font-medium">Available Updates</h4>
@@ -1301,17 +1430,7 @@ export const PipeStore: React.FC = () => {
 												setUpdatePopoverOpen(false);
 											}}
 										>
-											Update All cancel
-										</Button>
-										<Button onClick={handleResetAllPipes} disabled={isPurging}>
-											{isPurging ? (
-												<>
-													<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-													reseting all pipes...
-												</>
-											) : (
-												"confirm"
-											)}
+											Update All
 										</Button>
 									</div>
 									<div className="space-y-2 max-h-60 overflow-y-auto">
@@ -1354,9 +1473,22 @@ export const PipeStore: React.FC = () => {
 							</PopoverContent>
 						</Popover>
 					)}
-					<Button onClick={() => checkForUpdates()} variant="outline">
-						<RefreshCw className="h-4 w-4 mr-2" />
-						Check for Updates
+					<Button 
+						onClick={async () => {
+							const lastCheckTime = await localforage.getItem("lastUpdateCheck");	
+							if (lastCheckTime) {
+								await localforage.removeItem("lastUpdateCheck");
+							}
+							checkForUpdates();
+						}}
+						variant="outline" 
+						className="whitespace-nowrap"
+						disabled={isUpdating}
+						
+					>
+						<RefreshCw className={cn("h-4 w-4 mr-2", isUpdating && "animate-spin")} />
+						<span className="hidden sm:inline">Check for Updates</span>
+						<span className="inline sm:hidden">Check</span>
 					</Button>
 				</div>
 			</div>

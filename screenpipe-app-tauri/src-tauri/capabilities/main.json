@@ -45,6 +45,9 @@
     "global-shortcut:default",
     "sentry:default",
     "opener:allow-open-url",
+    "core:window:default",
+    "core:window:allow-get-all-windows",
+    "core:window:allow-close",
     {
       "identifier": "fs:scope",
       "allow": [
