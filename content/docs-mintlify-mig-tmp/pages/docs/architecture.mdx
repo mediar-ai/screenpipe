@@ -1,6 +1,7 @@
-import MotionDiv from '../../components/motion-div'
+---
+title: "architecture overview"
+---
 
-# architecture overview
 
 screenpipe's architecture handles continuous screen and audio capture, local data storage, and real-time processing. here's a breakdown of the key components:
 
@@ -51,7 +52,6 @@ at its core, screenpipe acts as a bridge between your digital activities and AI 
 
 this modular architecture makes screenpipe adaptable to various use cases, from personal productivity tracking to advanced business intelligence.
 
-
 ### data flow & lifecycle
 
 here's the typical data flow through the screenpipe system:
@@ -60,22 +60,18 @@ here's the typical data flow through the screenpipe system:
    - screen is captured at the configured fps (default 1.0, or 0.5 on macos)
    - audio is captured in chunks (default 30 seconds)
    - ui events are optionally captured (macos only currently)
-
 2. **processing**
    - captured frames are processed through OCR to extract text
    - audio chunks are processed through STT to generate transcriptions
    - speaker identification is applied to audio transcriptions
-
 3. **storage**
    - processed data is stored in the local sqlite database
    - raw media files are stored in the configured data directory
    - metadata is indexed for efficient retrieval
-
 4. **retrieval**
    - applications query the database through the REST API
    - real-time data can be streamed through SSE endpoints
    - pipes can access data through the typescript SDK
-
 5. **extension**
    - pipes process the data to create higher-level abstractions
    - pipes can integrate with external services (LLMs, etc.)
@@ -90,7 +86,7 @@ screenpipe organizes data in concentric layers of abstraction, from raw data to 
 1. **core (mp4 files)**: the innermost layer contains the raw screen recordings and audio captures in mp4 format
 2. **processing layer**: contains the direct processing outputs
    - OCR embeddings: vectorized text extracted from screen
-   - human id: anonymized user identification 
+   - human id: anonymized user identification
    - accessibility: metadata for improved data access
    - transcripts: processed audio-to-text
 3. **AI memories**: the outermost layer represents the highest level of abstraction where AI processes and synthesizes all lower-level data into meaningful insights
@@ -106,12 +102,10 @@ screenpipe maintains several types of state:
    - managed by the core screenpipe server
    - controls recording status, device selection, etc.
    - accessible through the health API endpoint
-
 2. **configuration state**
    - stored in the settings database
    - controls behavior of the core system
    - accessible through the settings API
-
 3. **pipe state**
    - each pipe maintains its own state
    - stored in the pipe's local storage or in screenpipe's settings
@@ -143,6 +137,7 @@ sqlite3 ~/.screenpipe/db.sqlite .schema
 developers typically interact with screenpipe in one of these patterns:
 
 1. **retrieval pattern**: query for relevant context based on the current task
+
    ```typescript
    const context = await pipe.queryScreenpipe({
      q: "meeting notes",
@@ -150,15 +145,15 @@ developers typically interact with screenpipe in one of these patterns:
      limit: 10
    })
    ```
-
 2. **streaming pattern**: process events as they occur
+
    ```typescript
    for await (const event of pipe.streamVision()) {
      // Process each new screen event
    }
    ```
-
 3. **augmentation pattern**: enhance user experience with context
+
    ```typescript
    // When user asks about a recent meeting
    const meetingContext = await pipe.queryScreenpipe({
@@ -169,8 +164,8 @@ developers typically interact with screenpipe in one of these patterns:
    // Use context to generate response
    const response = await generateResponse(userQuery, meetingContext)
    ```
-
 4. **automation pattern**: take actions based on context
+
    ```typescript
    // Monitor for specific content
    for await (const event of pipe.streamVision()) {
@@ -182,69 +177,65 @@ developers typically interact with screenpipe in one of these patterns:
 
 understanding these patterns will help you design effective applications that leverage screenpipe's capabilities.
 
-
-## status 
+## status
 
 Alpha: runs on my computer `Macbook pro m3 32 GB ram` and a $400 Windows laptop, 24/7.
 
 Uses 600 MB, 10% CPU.
 
-- [ ] Integrations
-    - [x] ollama
-    - [x] openai
-    - [x] Friend wearable 
-    - [x] [Fileorganizer2000](https://github.com/different-ai/file-organizer-2000)
-    - [x] mem0
-    - [x] Brilliant Frames
-    - [x] Vercel AI SDK
-    - [ ] supermemory
-    - [x] deepgram
-    - [x] unstructured
-    - [x] excalidraw
-    - [x] Obsidian
-    - [x] Apple shortcut
-    - [x] multion
-    - [x] iPhone
-    - [ ] Android
-    - [ ] Camera
-    - [ ] Keyboard
-    - [x] Browser
-    - [x] Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Bun Typescript engine within screenpipe on your computer
-- [x] screenshots + OCR with different engines to optimise privacy, quality, or energy consumption
-  - [x] tesseract
-  - [x] Windows native OCR
-  - [x] Apple native OCR
-  - [x] unstructured.io
-  - [ ] screenpipe screen/audio specialised LLM
-- [x] audio + STT (works with multi input devices, like your iPhone + mac mic, many STT engines)
-  - [x] Linux, MacOS, Windows input & output devices
-  - [x] iPhone microphone
-- [x] [remote capture](https://github.com/mediar-ai/screenpipe/discussions/68) (run screenpipe on your cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
-- [x] optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
-- [x] sqlite local db
-- [x] local api
-- [x] Cross platform CLI, [desktop app](https://screenpi.pe/) (MacOS, Windows, Linux)
-- [x] Metal, CUDA
-- [ ] TS SDK
-- [ ] multimodal embeddings
-- [ ] cloud storage options (s3, pgsql, etc.)
-- [x] cloud computing options (deepgram for audio, unstructured for OCR)
-- [x] custom storage settings: customizable capture settings (fps, resolution)
-- [ ] security
-  - [x] window specific capture (e.g. can decide to only capture specific tab of cursor, chrome, obsidian, or only specific app)
-  - [ ] encryption
-  - [x] PII removal
-- [ ] fast, optimised, energy-efficient modes
-- [ ] webhooks/events (for automations)
-- [ ] abstractions for multiplayer usage (e.g. aggregate sales team data, company team data, partner, etc.)
+- Integrations
+  - ollama
+  - openai
+  - Friend wearable
+  - [Fileorganizer2000](https://github.com/different-ai/file-organizer-2000)
+  - mem0
+  - Brilliant Frames
+  - Vercel AI SDK
+  - supermemory
+  - deepgram
+  - unstructured
+  - excalidraw
+  - Obsidian
+  - Apple shortcut
+  - multion
+  - iPhone
+  - Android
+  - Camera
+  - Keyboard
+  - Browser
+  - Pipe Store (a list of "pipes" you can build, share & easily install to get more value out of your screen & mic data without effort). It runs in Bun Typescript engine within screenpipe on your computer
+- screenshots + OCR with different engines to optimise privacy, quality, or energy consumption
+  - tesseract
+  - Windows native OCR
+  - Apple native OCR
+  - unstructured.io
+  - screenpipe screen/audio specialised LLM
+- audio + STT (works with multi input devices, like your iPhone + mac mic, many STT engines)
+  - Linux, MacOS, Windows input & output devices
+  - iPhone microphone
+- [remote capture](https://github.com/mediar-ai/screenpipe/discussions/68) (run screenpipe on your cloud and it capture your local machine, only tested on Linux) for example when you have low compute laptop
+- optimised screen & audio recording (mp4 encoding, estimating 30 gb/m with default settings)
+- sqlite local db
+- local api
+- Cross platform CLI, [desktop app](https://screenpi.pe/) (MacOS, Windows, Linux)
+- Metal, CUDA
+- TS SDK
+- multimodal embeddings
+- cloud storage options (s3, pgsql, etc.)
+- cloud computing options (deepgram for audio, unstructured for OCR)
+- custom storage settings: customizable capture settings (fps, resolution)
+- security
+  - window specific capture (e.g. can decide to only capture specific tab of cursor, chrome, obsidian, or only specific app)
+  - encryption
+  - PII removal
+- fast, optimised, energy-efficient modes
+- webhooks/events (for automations)
+- abstractions for multiplayer usage (e.g. aggregate sales team data, company team data, partner, etc.)
 
-
-### LLM links 
+### LLM links
 
 paste these links into your Cursor chat for context:
 
-- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/server.rs
-- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/core.rs
-- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-audio/src/core.rs
-- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-vision/src/core.rs
-
+- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/server.rs>
+- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/core.rs>
+- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-vision/src/core.rs>

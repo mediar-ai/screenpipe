@@ -1,129 +1,82 @@
+---
+title: "FAQ"
+---
 
+<Expandable title="How can I monetize my custom pipes (plugins)?">
+  - you can publish your pipes to the screenpipe store and earn money
+  - set your own pricing model (subscription or one-time purchase)
+  - publish using the CLI: `bunx --bun @screenpipe/dev@latest pipe publish --name your-pipe \[--paid --price 50\]`
+  - our platform handles payment processing and distribution
+  - get detailed analytics on installations and usage
+  - check our [monetization guide](/docs/plugins) for more details on revenue sharing
+</Expandable>
 
-<details>
-  <summary>What's the difference with rewind.ai?</summary>
+<Expandable title="What are some example pipes (plugins) available?">
+  - **rewind**: timeline and search through your screen history
+  - **obsidian**: sync your screen activities to obsidian notes
+  - **meeting**: automatic meeting notes and summaries
+  - **reddit-auto-posts**: create reddit posts based on your screen activities
+  - **linkedin-ai-assistant**: helps craft linkedin content
+  - **desktop-to-table**: low-level API for desktop automation (similar to playwright but for your desktop)
+  - **visual-conversation**: chat with your screen history
+  - and many more in our [pipe store](/docs/plugins)
+</Expandable>
 
-  screenpipe is for developers to build apps like rewind.ai.
-</details>
+<Expandable title="How do I develop and test a pipe locally?">
+  - create a new pipe with: `bunx --bun @screenpipe/dev@latest pipe create`
+  - navigate to your pipe directory: `cd your-pipe-name`
+  - start development server: `bun run dev`
+  - test your pipe locally in the screenpipe app
+  - debug and iterate on your implementation
+  - when ready, build for production: `bun run build`
+  - see our [pipe development guide](/docs/plugins) for detailed instructions
+</Expandable>
 
-<details>
-  <summary>Where is the data stored?</summary>
-  
-  - 100% of the data stay local in a SQLite database and mp4/mp3 files. You own your data
-</details>
+<Expandable title="What are the hardware requirements for running screenpipe?">
+  - **minimum requirements**:
+    - dual-core processor (2GHz+)
+    - 2GB RAM
+    - 20GB free disk space
+    - any modern graphics card for hardware acceleration
+  - **recommended specifications**:
+    - quad-core processor or better
+    - 4GB+ RAM
+    - 50GB+ free SSD space
+    - dedicated graphics card with at least 2GB VRAM
+  - screenpipe is optimized to use hardware acceleration when available, significantly reducing CPU usage
+</Expandable>
 
-<details>
-  <summary>Do you encrypt the data?</summary>
-  
-  - Not yet but we're working on it. We want to provide you the highest level of security.
-</details>
+<Expandable title="How can I contribute to the screenpipe project?">
+  - screenpipe is open source and welcomes contributions
+  - check our [GitHub Issues](https://github.com/mediar-ai/screenpipe/issues) for tasks to work on
+  - participate in our [bounty program](https://console.algora.io/org/mediar-ai/bounties) to earn rewards
+  - join our [Discord community](https://discord.gg/dU9EBuw7Uq) to collaborate with other contributors
+  - follow our [contribution guidelines](https://github.com/mediar-ai/screenpipe/blob/main/CONTRIBUTING.md) for code standards
+  - submit pull requests with features, bug fixes, or documentation improvements
+</Expandable>
 
-<details>
-  <summary>How can I customize capture settings to reduce storage and energy usage?</summary>
-  
-  - You can adjust frame rates and resolution in the configuration. Lower values will reduce storage and energy consumption. We're working on making this more user-friendly in future updates.
-</details>
+<Expandable title="What's the screenpipe operator feature?">
+  - similar to playwright but for your desktop
+  - provides a low-level API for desktop automation
+  - 100% accurate interaction with desktop applications
+  - not based on unreliable pixel-matching like some AI agents
+  - ideal for building robust automation workflows
+</Expandable>
 
-<details>
-  <summary>What are some practical use cases for screenpipe?</summary>
-  
-    - RAG & question answering
-    - Automation (write code somewhere else while watching you coding, write docs, fill your CRM, sync company's knowledge, etc.)
-    - Analytics (track human performance, education, become aware of how you can improve, etc.)
-    - etc.
-    - We're constantly exploring new use cases and welcome community input!
-</details>
+<Expandable title="What file formats does screenpipe use for recording?">
+  - screen recordings are stored as mp4 files
+  - audio recordings are stored as mp3 files
+  - all files are saved in $HOME/.screenpipe/ directory
+  - metadata and indexes are stored in SQLite database
+  - OCR and transcription data are also indexed in the database
+  - you can access all data programmatically via our API
+</Expandable>
 
-<details>
-  <summary>How do I manage screenpipe sessions?</summary>
-  
-  - **starting a session**: 
-    - macOS: use the system tray icon or run `screenpipe` in terminal
-    - windows: launch from start menu or run `screenpipe` in command prompt
-    - linux: run `screenpipe` in terminal
-  
-  - **checking if session is running**:
-    ```bash
-    curl localhost:3030/health
-    # If running, you'll get a health status response
-    # If not running, you'll get a connection refused error
-    ```
-  
-  - **stopping a session**:
-    - macOS: cmd+option+x or right-click tray icon and select "quit"
-    - windows: right-click tray icon and select "exit"
-    - linux: ctrl+c in terminal
-    
-  - **troubleshooting**:
-    - if ctrl+c doesn't work to stop a terminal session, try:
-      ```bash
-      # Find screenpipe process ID
-      ps aux | grep screenpipe
-      # Kill the process
-      kill -9 [PID]
-      ```
-    - if the server starts but API calls fail, check if another instance is already running
-</details>
-
-<details>
-  <summary>Can I run screenpipe on remote/virtual machines?</summary>
-  
-  - yes! screenpipe works seamlessly with remote desktop solutions
-  - microsoft remote desktop: works out of the box, capturing both screen and audio
-  - other remote solutions: generally compatible as long as they support audio/video forwarding
-  - check our [server setup guide](/docs/server) for detailed instructions
-</details>
-
-<details>
-  <summary>How resource-intensive is screenpipe?</summary>
-  
-  - designed to be lightweight and efficient
-  - typical cpu usage: 1-2% on modern machines
-  - memory footprint: ~100-200mb baseline
-  - storage usage varies based on your capture settings and activity
-  - optimized for 24/7 operation
-</details>
-
-<details>
-  <summary>Can I build custom plugins/pipes?</summary>
-  
-  - yes! screenpipe is designed to be extensible
-  - write plugins in typescript + bun
-  - full access to captured screen/audio data
-  - integrate with any ai model or external service
-  - check our [plugin development guide](/docs/plugins) for details
-</details>
-
-<details>
-  <summary>Is screenpipe open source?</summary>
-  
-  - yes! core functionality is open source under MIT license
-  - built with rust + tauri for the core
-  - plugins system in typescript + bun
-  - community contributions welcome
-  - find us on [github](https://github.com/mediar-ai/screenpipe)
-</details>
-
-<details>
-  <summary>How do I troubleshoot common installation issues?</summary>
-  
-  - **missing dependencies**: 
-    - linux: install `ffmpeg` and required libraries
-    - macOS: ensure XCode tools are installed
-    - windows: ensure VS C++ redistributable is installed
-  
-  see our [complete troubleshooting guide](/docs/troubleshooting) for more details.
-</details>
-
-<details>
-  <summary>Does screenpipe work with frameworks other than Next.js?</summary>
-
-  - yes! while our examples mainly use next.js, you can use any framework:
-    - **react**: yes
-    - **vue/svelte/etc**: yes
-    - **electron/tauri**: yes
-    - **python**: yes
-    - **ruby/php/etc**: yes
-  
-  - example pipe templates for other frameworks coming soon!
-</details>
+<Expandable title="How can I backup or transfer my screenpipe data?">
+  - all data is stored in $HOME/.screenpipe/ directory
+  - to backup, simply copy this directory to another location
+  - to transfer to another machine, copy the directory to the same location
+  - you can also use our export API to selectively export data
+  - database can be accessed directly with SQLite tools
+  - note: when transferring between different operating systems, some paths may need adjustment
+</Expandable>

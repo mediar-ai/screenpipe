@@ -1,47 +1,37 @@
-import MotionDiv from '../../components/motion-div'
-
-# cli reference for screenpipe
+---
+title: "cli reference for screenpipe"
+---
 
 below is the detailed cli reference for screenpipe's core functionality.
 
 ### core options
 
-- **fps** (`-f, --fps <FLOAT>`): frames per second for continuous recording
+- **fps** (`\-f, --fps <FLOAT>`): frames per second for continuous recording
   - default: `1.0` (non-macos), `0.5` (macos)
   - storage impact: `1 FPS ≈ 30 GB/month`, `5 FPS ≈ 150 GB/month`
-
-- **port** (`-p, --port <INT>`): port to run the server on
+- **port** (`\-p, --port <INT>`): port to run the server on
   - default: `3030`
-
 - **data-dir** (`--data-dir <PATH>`): data directory
   - default: `$HOME/.screenpipe`
-
 - **debug** (`--debug`): enable debug logging
   - default: `false`
 
 ### audio options
 
-- **audio-chunk-duration** (`-d, --audio-chunk-duration <INT>`): audio chunk duration in seconds
+- **audio-chunk-duration** (`\-d, --audio-chunk-duration <INT>`): audio chunk duration in seconds
   - default: `30`
-
 - **disable-audio** (`--disable-audio`): disable audio recording
   - default: `false`
-
-- **audio-device** (`-i, --audio-device <STRING>`): audio devices to use (can specify multiple)
-
-- **realtime-audio-device** (`-r, --realtime-audio-device <STRING>`): devices for realtime transcription
-
+- **audio-device** (`\-i, --audio-device <STRING>`): audio devices to use (can specify multiple)
+- **realtime-audio-device** (`\-r, --realtime-audio-device <STRING>`): devices for realtime transcription
 - **list-audio-devices** (`--list-audio-devices`): list available audio devices
-
-- **audio-transcription-engine** (`-a, --audio-transcription-engine <ENGINE>`): transcription engine
+- **audio-transcription-engine** (`\-a, --audio-transcription-engine <ENGINE>`): transcription engine
   - options:
     - `deepgram`: cloud-based, high quality (free tier available)
     - `whisper-tiny`: local, lightweight, privacy-focused
     - `whisper-large`: local, higher quality than tiny
     - `whisper-large-v3-turbo`: local, highest quality
   - default: `whisper-large-v3-turbo`
-
-
 - **enable-realtime-audio-transcription** (`--enable-realtime-audio-transcription`): enable realtime transcription
   - default: `false`
 
@@ -49,21 +39,15 @@ below is the detailed cli reference for screenpipe's core functionality.
 
 - **disable-vision** (`--disable-vision`): disable vision recording
   - default: `false`
-
 - **list-monitors** (`--list-monitors`): list available monitors
-
-- **monitor-id** (`-m, --monitor-id <INT>`): monitor IDs to record (can specify multiple)
-
+- **monitor-id** (`\-m, --monitor-id <INT>`): monitor IDs to record (can specify multiple)
 - **ignored-windows** (`--ignored-windows <STRING>`): windows to ignore by title
   - example: `--ignored-windows "Spotify" --ignored-windows "Chrome"`
-
 - **included-windows** (`--included-windows <STRING>`): windows to include by title
   - example: `--included-windows "Code" --included-windows "Terminal"`
-
 - **video-chunk-duration** (`--video-chunk-duration <INT>`): video chunk duration in seconds
   - default: `60`
-
-- **ocr-engine** (`-o, --ocr-engine <ENGINE>`): OCR engine selection
+- **ocr-engine** (`\-o, --ocr-engine <ENGINE>`): OCR engine selection
   - options:
     - `apple-native`: default for macos
     - `windows-native`: default for windows
@@ -140,8 +124,7 @@ rm -rf venv app.py
 
 ### language & privacy
 
-- **language** (`-l, --language <LANG>`): languages to support (can specify multiple)
-
+- **language** (`\-l, --language <LANG>`): languages to support (can specify multiple)
 - **use-pii-removal** (`--use-pii-removal`): enable PII removal from OCR text
   - default: `false`
 
@@ -150,26 +133,20 @@ rm -rf venv app.py
 - **vad-engine** (`--vad-engine <ENGINE>`): voice activity detection engine
   - options: `silero`, `webrtc`
   - default: `silero`
-
 - **vad-sensitivity** (`--vad-sensitivity <LEVEL>`): VAD sensitivity level
   - options: `low`, `medium`, `high`
   - default: `high`
-
 
 ### experimental features
 
 - **enable-llm** (`--enable-llm`): enable local LLM API
   - default: `false`
-
 - **enable-ui-monitoring** (`--enable-ui-monitoring`): enable UI monitoring (macos only)
   - default: `false`
-
 - **enable-frame-cache** (`--enable-frame-cache`): enable experimental video frame cache
   - default: `false`
-
 - **capture-unfocused-windows** (`--capture-unfocused-windows`): capture unfocused windows
   - default: `false`
-
 - **enable-realtime-audio-transcription** (`--enable-realtime-audio-transcription`): enable realtime transcription
   - default: `false`
   - requires: at least one `--realtime-audio-device`
@@ -178,6 +155,7 @@ rm -rf venv app.py
 ### subcommands
 
 #### pipe management
+
 ```bash
 # list all pipes
 screenpipe pipe list [--output <FORMAT>] [--port <PORT>]
@@ -282,70 +260,84 @@ rm metadata.json
 note: if you don't provide a metadata override file, screenpipe will automatically extract metadata from the video files. use overrides when you need to specify custom metadata or when the automatic extraction fails.
 
 #### database
+
 ```bash
 # run migrations
 screenpipe migrate
 ```
 
+### Shell Completions
 
-### Shell Completions  
+The `screenpipe` CLI supports generating shell completions for popular shells. Follow the steps below to enable autocompletion for your shell:
 
-The `screenpipe` CLI supports generating shell completions for popular shells. Follow the steps below to enable autocompletion for your shell:  
+#### Bash
 
-#### Bash  
-1. Add the following to your `.bashrc` profile:  
+1. Add the following to your `.bashrc` profile:
+
    ```bash
    eval "$(screenpipe completions bash)" 
-   ```  
-2. Reload your profile:  
-   ```bash  
+   ```
+2. Reload your profile:
+
+   ```bash
    source ~/.bashrc  
-   ```  
+   ```
 
-#### Zsh  
+#### Zsh
+
 1. Add the following to your `.zshrc` profile:
-   ```bash  
-   eval "$(screenpipe completions zsh)"
-   ```  
-2. Reload your profile:  
-   ```bash  
-   source ~/.zshrc  
-   ```  
-`
-#### Fish  
-1. Create `~/.config/fish/conf.d/screenpipe.fish` and add this line to it:
-   ```fish  
-   screenpipe completions fish | source  
-   ```  
 
-#### PowerShell  
+   ```bash
+   eval "$(screenpipe completions zsh)"
+   ```
+2. Reload your profile:
+
+   ```bash
+   source ~/.zshrc  
+   ```
+
+\`
+
+#### Fish
+
+1. Create `\~/.config/fish/conf.d/screenpipe.fish` and add this line to it:
+
+   ```fish
+   screenpipe completions fish | source  
+   ```
+
+#### PowerShell
+
 1. Add the following to the end of your profile file:
-   ```powershell  
+
+   ```powershell
    screenpipe completions powershell | Out-String | Invoke-Expression 
    ```
-   
-- For macOS/Linux, the profile is located at `~/.config/powershell/Microsoft.PowerShell_profile.ps1`
+
+- For macOS/Linux, the profile is located at `\~/.config/powershell/Microsoft.PowerShell_profile.ps1`
 - For Windows location is either:
-  - `%userprofile%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` Powershell 5
-  - `%userprofile%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` Powershell 6+
+  - `%userprofile%\\Documents\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1` Powershell 5
+  - `%userprofile%\\Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1` Powershell 6+
 - To create the profile file you can run this in PowerShell:
+
   ```powershell
   if (-not (Test-Path $profile)) { New-Item $profile -Force }
   ```
 - To edit your profile run this in PowerShell:
+
   ```powershell
   Invoke-Item $profile
   ```
-2. Reload your profile:  
-   ```powershell  
+
+1. Reload your profile:
+
+   ```powershell
    . $PROFILE  
-   ```  
+   ```
 
-
-### LLM links 
+### LLM links
 
 paste these links into your Cursor chat for context:
 
-- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/bin/screenpipe-server.rs
-- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/cli.rs
-
+- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/bin/screenpipe-server.rs>
+- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/cli.rs>
