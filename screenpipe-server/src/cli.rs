@@ -192,7 +192,7 @@ pub struct Cli {
     pub enable_realtime_audio_transcription: bool,
 
     /// Enable realtime vision
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = true)]
     pub enable_realtime_vision: bool,
 
     /// OCR engine to use.

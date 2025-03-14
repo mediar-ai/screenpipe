@@ -199,7 +199,7 @@ const DEFAULT_SETTINGS: Settings = {
 	realtimeAudioTranscriptionEngine: "deepgram",
 	disableVision: false,
 	useAllMonitors: false,
-	enableRealtimeVision: false,
+	enableRealtimeVision: true,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
