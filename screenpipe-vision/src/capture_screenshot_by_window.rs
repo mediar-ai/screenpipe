@@ -1,5 +1,5 @@
 use image::DynamicImage;
-use log::error;
+use tracing::error;
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::error::Error;

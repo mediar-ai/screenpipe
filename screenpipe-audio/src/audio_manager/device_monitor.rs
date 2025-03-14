@@ -52,19 +52,8 @@ pub async fn start_device_monitor(
                     {
                         info!("Device {device_name} disconnected");
 
-                        // we try to restart the device
-
                         let _ = audio_manager.stop_device(device_name).await;
-                        // disconnected_devices.insert(device_name.clone());
-                        match audio_manager.start_device(&device).await {
-                            Ok(()) => {
-                                let _ = audio_manager.stop_device(device_name).await;
-                                disconnected_devices.insert(device_name.clone());
-                            }
-                            Err(e) => {
-                                error!("restarting device {device_name} failed: {e}");
-                            }
-                        }
+                        disconnected_devices.insert(device_name.clone());
                     } else {
                         if audio_manager.status().await != AudioManagerStatus::Running {
                             break;

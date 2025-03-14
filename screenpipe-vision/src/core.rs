@@ -13,7 +13,7 @@ use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
-use log::{debug, error, warn};
+use tracing::{debug, error, warn};
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde::Deserialize;
@@ -164,7 +164,7 @@ pub async fn continuous_capture(
             match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
                 Ok(result) => result,
                 Err(e) => {
-                    error!("Error capturing screenshot: {}", e);
+                    debug!("error capturing screenshot: {}", e);
                     sleep(Duration::from_secs(1)).await;
                     continue;
                 }

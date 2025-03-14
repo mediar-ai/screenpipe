@@ -24,12 +24,8 @@ rusty-tesseract = { git = "https://github.com/louis030195/rusty-tesseract.git", 
 
 anyhow = "1.0.86"
 
-# Log
-log = { workspace = true }
-
 image-compare = "0.4.1"
 clap = { version = "4.0", features = ["derive"] }
-# tokio = { version = "1", features = ["full"] }
 
 # Integrations
 screenpipe-integrations = { path = "../screenpipe-integrations" }
