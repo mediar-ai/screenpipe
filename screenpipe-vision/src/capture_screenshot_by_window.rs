@@ -1,9 +1,9 @@
 use image::DynamicImage;
-use tracing::error;
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
+use tracing::error;
 
 use xcap::{Window, XCapError};
 
@@ -201,14 +201,55 @@ pub async fn capture_all_visible_windows(
         .into_iter()
         .filter_map(|window| {
             // Extract all necessary data from the window while in the main thread
-            let app_name = window.app_name().to_string();
-            let title = window.title().to_string();
-            let is_focused = window.is_focused();
-            let process_id = window.pid();
+            let app_name = match window.app_name() {
+                Ok(name) => name.to_string(),
+                Err(e) => {
+                    // Log warning and skip this window
+                    error!("Failed to get app_name for window: {}", e);
+                    return None;
+                }
+            };
+
+            let title = match window.title() {
+                Ok(title) => title.to_string(),
+                Err(e) => {
+                    error!("Failed to get title for window {}: {}", app_name, e);
+                    return None;
+                }
+            };
+
+            let is_focused = match window.is_focused() {
+                Ok(focused) => focused,
+                Err(e) => {
+                    error!(
+                        "Failed to get focus state for window {} ({}): {}",
+                        app_name, title, e
+                    );
+                    return None;
+                }
+            };
+
+            let process_id = match window.pid() {
+                Ok(pid) => pid,
+                Err(e) => {
+                    error!(
+                        "Failed to get process ID for window {} ({}): {}",
+                        app_name, title, e
+                    );
+                    return None;
+                }
+            };
+
             // Capture image immediately while we have access to the window
             match window.capture_image() {
                 Ok(buffer) => Some((app_name, title, is_focused, buffer, process_id)),
-                Err(_) => None,
+                Err(e) => {
+                    error!(
+                        "Failed to capture image for window {} ({}): {}",
+                        app_name, title, e
+                    );
+                    None
+                }
             }
         })
         .collect::<Vec<_>>();

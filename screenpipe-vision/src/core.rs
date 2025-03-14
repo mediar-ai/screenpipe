@@ -13,7 +13,6 @@ use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
-use tracing::{debug, error, warn};
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde::Deserialize;
@@ -30,6 +29,7 @@ use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
+use tracing::{debug, error, warn};
 
 use crate::browser_utils::create_url_detector;
 
@@ -131,6 +131,20 @@ const BROWSER_NAMES: [&str; 9] = [
     "chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera",
 ];
 
+#[derive(Debug)]
+pub enum ContinuousCaptureError {
+    MonitorNotFound,
+    ErrorCapturingScreenshot(String),
+    ErrorProcessingOcr(String),
+    ErrorSendingOcrResult(String),
+}
+
+impl std::fmt::Display for ContinuousCaptureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
@@ -139,7 +153,7 @@ pub async fn continuous_capture(
     window_filters: Arc<WindowFilters>,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
-) {
+) -> Result<(), ContinuousCaptureError> {
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<DynamicImage> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
@@ -154,7 +168,7 @@ pub async fn continuous_capture(
         Some(m) => m,
         None => {
             error!("Monitor not found");
-            return;
+            return Err(ContinuousCaptureError::MonitorNotFound);
         }
     };
 
@@ -195,7 +209,11 @@ pub async fn continuous_capture(
 
         // 5. Process max average frame if available
         if let Some(max_avg_frame) = max_average.take() {
-            process_max_average_frame(max_avg_frame, &ocr_engine, languages.clone()).await;
+            if let Err(e) =
+                process_max_average_frame(max_avg_frame, &ocr_engine, languages.clone()).await
+            {
+                error!("Error processing max average frame: {}", e);
+            }
             frame_counter = 0;
             max_avg_value = 0.0;
         }
@@ -264,7 +282,7 @@ async fn process_max_average_frame(
     max_avg_frame: MaxAverageFrame,
     ocr_engine: &OcrEngine,
     languages: Vec<Language>,
-) {
+) -> Result<(), ContinuousCaptureError> {
     let ocr_task_data = OcrTaskData {
         image: max_avg_frame.image,
         window_images: max_avg_frame.window_images,
@@ -275,7 +293,10 @@ async fn process_max_average_frame(
 
     if let Err(e) = process_ocr_task(ocr_task_data, ocr_engine, languages).await {
         error!("Error processing OCR task: {}", e);
+        return Err(ContinuousCaptureError::ErrorProcessingOcr(e.to_string()));
     }
+
+    Ok(())
 }
 
 pub struct MaxAverageFrame {
@@ -292,7 +313,7 @@ pub async fn process_ocr_task(
     ocr_task_data: OcrTaskData,
     ocr_engine: &OcrEngine,
     languages: Vec<Language>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), ContinuousCaptureError> {
     let OcrTaskData {
         image,
         window_images,
@@ -319,7 +340,8 @@ pub async fn process_ocr_task(
             &mut total_confidence,
             &mut window_count,
         )
-        .await?;
+        .await
+        .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string()))?;
 
         window_ocr_results.push(ocr_result);
     }
@@ -332,7 +354,9 @@ pub async fn process_ocr_task(
         window_ocr_results,
     };
 
-    send_ocr_result(&result_tx, capture_result).await?;
+    send_ocr_result(&result_tx, capture_result)
+        .await
+        .map_err(|e| ContinuousCaptureError::ErrorSendingOcrResult(e.to_string()))?;
 
     // Log performance metrics
     log_ocr_performance(start_time, window_count, total_confidence, frame_number);
@@ -346,7 +370,7 @@ async fn process_window_ocr(
     languages: &[Language],
     total_confidence: &mut f64,
     window_count: &mut u32,
-) -> Result<WindowOcrResult, std::io::Error> {
+) -> Result<WindowOcrResult, ContinuousCaptureError> {
     let app_name = captured_window.app_name.clone();
 
     // Get browser URL if applicable
@@ -359,7 +383,9 @@ async fn process_window_ocr(
 
     // Perform OCR based on the selected engine
     let (window_text, window_json_output, confidence) =
-        perform_ocr_with_engine(ocr_engine, &captured_window.image, languages.to_vec()).await?;
+        perform_ocr_with_engine(ocr_engine, &captured_window.image, languages.to_vec())
+            .await
+            .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string()))?;
 
     // Update confidence metrics
     if let Some(conf) = confidence {
@@ -412,24 +438,23 @@ async fn perform_ocr_with_engine(
     ocr_engine: &OcrEngine,
     image: &DynamicImage,
     languages: Vec<Language>,
-) -> Result<(String, String, Option<f64>), std::io::Error> {
+) -> Result<(String, String, Option<f64>), ContinuousCaptureError> {
     match ocr_engine {
         OcrEngine::Unstructured => perform_ocr_cloud(image, languages)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+            .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string())),
         OcrEngine::Tesseract => Ok(perform_ocr_tesseract(image, languages)),
         #[cfg(target_os = "windows")]
         OcrEngine::WindowsNative => perform_ocr_windows(image)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+            .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string())),
         #[cfg(target_os = "macos")]
         OcrEngine::AppleNative => Ok(perform_ocr_apple(image, &languages)),
         OcrEngine::Custom(config) => perform_ocr_custom(image, languages, config)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
-        _ => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Unsupported OCR engine",
+            .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string())),
+        _ => Err(ContinuousCaptureError::ErrorProcessingOcr(
+            "Unsupported OCR engine".to_string(),
         )),
     }
 }
@@ -437,7 +462,7 @@ async fn perform_ocr_with_engine(
 async fn send_ocr_result(
     result_tx: &Sender<CaptureResult>,
     capture_result: CaptureResult,
-) -> Result<(), std::io::Error> {
+) -> Result<(), ContinuousCaptureError> {
     // Add channel health check
     if result_tx.capacity() == 0 {
         warn!("OCR task channel at capacity - receiver may be blocked or slow");
@@ -446,17 +471,16 @@ async fn send_ocr_result(
     if let Err(e) = result_tx.send(capture_result).await {
         if e.to_string().contains("channel closed") {
             error!("OCR task channel closed, recording may have stopped: {}", e);
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                "Channel closed - recording appears to have stopped",
+            return Err(ContinuousCaptureError::ErrorSendingOcrResult(
+                "Channel closed - recording appears to have stopped".to_string(),
             ));
         }
 
         error!("Failed to send OCR result: {}", e);
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to send OCR result: {}", e),
-        ));
+        return Err(ContinuousCaptureError::ErrorSendingOcrResult(format!(
+            "Failed to send OCR result: {}",
+            e
+        )));
     }
 
     Ok(())

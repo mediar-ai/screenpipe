@@ -19,12 +19,16 @@ use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
 pub(crate) const MAX_FPS: f64 = 30.0; // Adjust based on your needs
-const MAX_QUEUE_SIZE: usize = 10;
+const MAX_QUEUE_SIZE: usize = 30; // Increased from 10 for more buffer room
 
 pub struct VideoCapture {
     #[allow(unused)]
     video_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
     pub ocr_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
+    // Add handles to tasks so we can monitor their status
+    capture_thread_handle: tokio::task::JoinHandle<()>,
+    queue_thread_handle: tokio::task::JoinHandle<()>,
+    video_thread_handle: tokio::task::JoinHandle<()>,
 }
 
 impl VideoCapture {
@@ -53,13 +57,24 @@ impl VideoCapture {
         let new_chunk_callback = Arc::new(new_chunk_callback);
         let new_chunk_callback_clone = Arc::clone(&new_chunk_callback);
 
+        info!(
+            "Starting VideoCapture for monitor {}, max queue size: {}, fps: {}",
+            monitor_id, MAX_QUEUE_SIZE, fps
+        );
+
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(512);
         let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list));
         let window_filters_clone = Arc::clone(&window_filters);
-        let _capture_thread = tokio::spawn(async move {
-            continuous_capture(
+
+        // Store task handles for health monitoring
+        let capture_thread = tokio::spawn(async move {
+            info!(
+                "Starting continuous_capture task for monitor {}",
+                monitor_id
+            );
+            match continuous_capture(
                 result_sender,
                 interval,
                 (*ocr_engine).clone(),
@@ -68,11 +83,31 @@ impl VideoCapture {
                 languages.clone(),
                 capture_unfocused_windows,
             )
-            .await;
+            .await
+            {
+                Ok(_) => warn!(
+                    "continuous_capture task for monitor {} completed unexpectedly",
+                    monitor_id
+                ),
+                Err(e) => error!(
+                    "continuous_capture task for monitor {} failed with error: {}",
+                    monitor_id, e
+                ),
+            }
+            warn!(
+                "continuous_capture task terminated for monitor {}",
+                monitor_id
+            );
         });
 
         // In the _queue_thread
-        let _queue_thread = tokio::spawn(async move {
+        let queue_thread = tokio::spawn(async move {
+            info!("Starting queue processing task for monitor {}", monitor_id);
+            let mut processed_count = 0;
+            let start_time = std::time::Instant::now();
+            let mut last_log_time = start_time;
+            let log_interval = Duration::from_secs(30); // Log stats every 30 seconds
+
             // Helper function to push to queue and handle errors
             fn push_to_queue(
                 queue: &ArrayQueue<Arc<CaptureResult>>,
@@ -80,6 +115,15 @@ impl VideoCapture {
                 queue_name: &str,
             ) -> bool {
                 if queue.push(Arc::clone(result)).is_err() {
+                    if queue.len() >= queue.capacity() {
+                        error!(
+                            "{} queue is full ({}/{})",
+                            queue_name,
+                            queue.len(),
+                            queue.capacity()
+                        );
+                    }
+
                     if queue.pop().is_none() {
                         error!("{} queue is in an inconsistent state", queue_name);
                         return false;
@@ -91,12 +135,38 @@ impl VideoCapture {
                         );
                         return false;
                     }
-                    debug!("{} queue was full, dropped oldest frame", queue_name);
+                    debug!(
+                        "{} queue was full, dropped oldest frame, new size: {}/{}",
+                        queue_name,
+                        queue.len(),
+                        queue.capacity()
+                    );
                 }
                 true
             }
+
             while let Some(result) = result_receiver.recv().await {
                 let frame_number = result.frame_number;
+                processed_count += 1;
+
+                // Periodically log stats
+                let now = std::time::Instant::now();
+                if now.duration_since(last_log_time) >= log_interval {
+                    let elapsed_secs = now.duration_since(start_time).as_secs_f64();
+                    let rate = if elapsed_secs > 0.0 {
+                        processed_count as f64 / elapsed_secs
+                    } else {
+                        0.0
+                    };
+                    info!(
+                        "Queue stats for monitor {}: processed {} frames in {:.1}s ({:.2} fps), queue sizes: video={}/{}, ocr={}/{}",
+                        monitor_id, processed_count, elapsed_secs, rate,
+                        capture_video_frame_queue.len(), capture_video_frame_queue.capacity(),
+                        capture_ocr_frame_queue.len(), capture_ocr_frame_queue.capacity()
+                    );
+                    last_log_time = now;
+                }
+
                 debug!("Received frame {} for queueing", frame_number);
 
                 let result = Arc::new(result);
@@ -113,19 +183,30 @@ impl VideoCapture {
                 }
 
                 debug!(
-                    "Frame {} pushed to queues. Queue lengths: {}, {}",
+                    "Frame {} pushed to queues. Queue lengths: video={}/{}, ocr={}/{}",
                     frame_number,
                     capture_video_frame_queue.len(),
-                    capture_ocr_frame_queue.len()
+                    capture_video_frame_queue.capacity(),
+                    capture_ocr_frame_queue.len(),
+                    capture_ocr_frame_queue.capacity()
                 );
             }
+
+            warn!(
+                "Queue processing task terminated for monitor {} - channel closed",
+                monitor_id
+            );
         });
 
         let video_frame_queue_clone = video_frame_queue.clone();
 
         let output_path = output_path.to_string();
-        let _video_thread = tokio::spawn(async move {
-            save_frames_as_video(
+        let video_thread = tokio::spawn(async move {
+            info!(
+                "Starting save_frames_as_video task for monitor {}",
+                monitor_id
+            );
+            match save_frames_as_video(
                 &video_frame_queue_clone,
                 &output_path,
                 fps,
@@ -133,13 +214,49 @@ impl VideoCapture {
                 monitor_id,
                 video_chunk_duration,
             )
-            .await;
+            .await
+            {
+                Ok(_) => warn!(
+                    "save_frames_as_video task completed unexpectedly for monitor {}",
+                    monitor_id
+                ),
+                Err(e) => error!(
+                    "save_frames_as_video task failed for monitor {}: {}",
+                    monitor_id, e
+                ),
+            }
+            warn!(
+                "save_frames_as_video task terminated for monitor {}",
+                monitor_id
+            );
         });
 
         VideoCapture {
             video_frame_queue,
             ocr_frame_queue,
+            capture_thread_handle: capture_thread,
+            queue_thread_handle: queue_thread,
+            video_thread_handle: video_thread,
         }
+    }
+
+    // Add method to check health of tasks
+    pub fn check_health(&self) -> bool {
+        let capture_ok = !self.capture_thread_handle.is_finished();
+        let queue_ok = !self.queue_thread_handle.is_finished();
+        let video_ok = !self.video_thread_handle.is_finished();
+
+        if !capture_ok {
+            error!("continuous_capture task has terminated unexpectedly");
+        }
+        if !queue_ok {
+            error!("queue processing task has terminated unexpectedly");
+        }
+        if !video_ok {
+            error!("save_frames_as_video task has terminated unexpectedly");
+        }
+
+        capture_ok && queue_ok && video_ok
     }
 }
 
@@ -218,24 +335,45 @@ async fn save_frames_as_video(
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
     monitor_id: u32,
     video_chunk_duration: Duration,
-) {
-    debug!("Starting save_frames_as_video function");
+) -> Result<(), anyhow::Error> {
+    info!(
+        "Starting save_frames_as_video function for monitor {}",
+        monitor_id
+    );
     let frames_per_video = (fps * video_chunk_duration.as_secs_f64()).ceil() as usize;
     let mut frame_count = 0;
     let mut current_ffmpeg: Option<Child> = None;
     let mut current_stdin: Option<ChildStdin> = None;
 
+    // Track health metrics
+    let start_time = std::time::Instant::now();
+    let mut frames_total = 0;
+    let mut chunks_total = 0;
+    let mut last_stats_time = start_time;
+    let stats_interval = Duration::from_secs(60);
+
     loop {
         if frame_count >= frames_per_video || current_ffmpeg.is_none() {
             if let Some(child) = current_ffmpeg.take() {
+                info!(
+                    "Finishing FFmpeg process for monitor {} after {} frames",
+                    monitor_id, frame_count
+                );
                 finish_ffmpeg_process(child, current_stdin.take()).await;
+                chunks_total += 1;
             }
 
             frame_count = 0;
+            debug!("Waiting for first frame for monitor {}", monitor_id);
             let first_frame = wait_for_first_frame(frame_queue).await;
             let buffer = encode_frame(&first_frame);
+            debug!("Got first frame for new chunk for monitor {}", monitor_id);
 
             let output_file = create_output_file(output_path, monitor_id);
+            info!(
+                "Starting new video chunk: {} for monitor {}",
+                output_file, monitor_id
+            );
             new_chunk_callback(&output_file);
 
             match start_ffmpeg_process(&output_file, fps).await {
@@ -243,23 +381,53 @@ async fn save_frames_as_video(
                     let mut stdin = child.stdin.take().expect("Failed to open stdin");
                     spawn_ffmpeg_loggers(child.stderr.take(), child.stdout.take());
 
+                    debug!("Writing first frame to FFmpeg for monitor {}", monitor_id);
                     if let Err(e) = write_frame_to_ffmpeg(&mut stdin, &buffer).await {
-                        error!("Failed to write first frame to ffmpeg: {}", e);
+                        error!(
+                            "Failed to write first frame to ffmpeg for monitor {}: {}",
+                            monitor_id, e
+                        );
                         continue;
                     }
                     frame_count += 1;
+                    frames_total += 1;
 
                     current_ffmpeg = Some(child);
                     current_stdin = Some(stdin);
-                    debug!("New FFmpeg process started for file: {}", output_file);
+                    info!(
+                        "New FFmpeg process started for file: {} (monitor {})",
+                        output_file, monitor_id
+                    );
                 }
                 Err(e) => {
-                    error!("Failed to start FFmpeg process: {}", e);
+                    error!(
+                        "Failed to start FFmpeg process for monitor {}: {}",
+                        monitor_id, e
+                    );
                     continue;
                 }
             }
         }
 
+        let now = std::time::Instant::now();
+        if now.duration_since(last_stats_time) >= stats_interval {
+            let runtime = now.duration_since(start_time).as_secs();
+            let fps_avg = if runtime > 0 {
+                frames_total as f64 / runtime as f64
+            } else {
+                0.0
+            };
+            info!(
+                "Video stats for monitor {}: processed {} frames in {} chunks over {}s ({:.2} avg fps)",
+                monitor_id, frames_total, chunks_total, runtime, fps_avg
+            );
+            last_stats_time = now;
+        }
+
+        debug!(
+            "Processing frames for monitor {}, current count: {}/{}",
+            monitor_id, frame_count, frames_per_video
+        );
         process_frames(
             frame_queue,
             &mut current_stdin,
@@ -269,8 +437,15 @@ async fn save_frames_as_video(
         )
         .await;
 
+        // Update total frame count
+        frames_total = frames_total.max(frame_count);
+
         tokio::task::yield_now().await;
     }
+
+    // This is unreachable, but we need to return a Result to match the function signature
+    #[allow(unreachable_code)]
+    Ok(())
 }
 
 async fn wait_for_first_frame(
