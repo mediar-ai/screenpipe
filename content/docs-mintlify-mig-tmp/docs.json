@@ -14,13 +14,13 @@
         "tab": "Documentation",
         "pages": [
           "pages/index",
-          "pages/docs/getting-started",
-          "pages/docs/sdk-reference",
-          "pages/docs/architecture",
-          "pages/docs/cli-reference",
-          "pages/docs/plugins",
-          "pages/docs/contributing",
-          "pages/docs/faq"
+          "pages/getting-started",
+          "pages/sdk-reference",
+          "pages/architecture",
+          "pages/cli-reference",
+          "pages/plugins",
+          "pages/contributing",
+          "pages/faq"
         ]
       },
       {
@@ -30,8 +30,8 @@
     ]
   },
   "logo": {
-    "light": "/lmstudio1.png",
-    "dark": "/lmstudio1.png"
+    "light": "/favicon.ico",
+    "dark": "/favicon.ico"
   },
   "navbar": {
     "links": [
