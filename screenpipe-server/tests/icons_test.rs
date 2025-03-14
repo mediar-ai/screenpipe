@@ -1,5 +1,7 @@
+#[cfg(feature = "pipe-store")]
 use screenpipe_server::icons::get_app_icon;
 
+#[cfg(feature = "pipe-store")]
 #[tokio::test]
 async fn test_get_app_icon() {
     let apps = vec![
@@ -17,6 +19,7 @@ async fn test_get_app_icon() {
 }
 
 
+#[cfg(feature = "pipe-store")]
 #[tokio::test]
 async fn test_get_app_icon_with_invalid_app_name() {
     let app_name = "NonExistentApp";

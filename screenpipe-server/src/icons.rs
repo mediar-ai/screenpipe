@@ -1,11 +1,14 @@
+#[cfg(feature = "pipe-store")]
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "pipe-store")]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppIcon {
     pub data: Vec<u8>,
     pub path: Option<String>,
 }
 
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "macos")]
 pub async fn get_app_icon(
     app_name: &str,
@@ -65,18 +68,23 @@ pub async fn get_app_icon(
     }
 }
 
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "windows")]
 use lazy_static::lazy_static;
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "windows")]
 use std::sync::Arc;
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "windows")]
 use tokio::sync::Semaphore;
 
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "windows")]
 lazy_static! {
     static ref SEMAPHORE: Arc<Semaphore> = Arc::new(Semaphore::new(5));
 }
 
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "windows")]
 pub async fn get_app_icon(
     app_name: &str,
@@ -130,6 +138,7 @@ pub async fn get_app_icon(
     }))
 }
 
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "windows")]
 fn get_exe_by_reg_key(app_name: &str) -> Option<String> {
     use winreg::RegKey;
@@ -182,6 +191,7 @@ fn get_exe_by_reg_key(app_name: &str) -> Option<String> {
     None
 }
 
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "windows")]
 async fn get_exe_from_potential_path(app_name: &str) -> Option<String> {
     const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -233,6 +243,7 @@ async fn get_exe_from_potential_path(app_name: &str) -> Option<String> {
     None
 }
 
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "windows")]
 async fn get_exe_by_appx(app_name: &str) -> Option<String> {
     use std::str;
@@ -318,6 +329,7 @@ async fn get_exe_by_appx(app_name: &str) -> Option<String> {
     None
 }
 
+#[cfg(feature = "pipe-store")]
 #[cfg(target_os = "linux")]
 pub async fn get_app_icon(
     app_name: &str,

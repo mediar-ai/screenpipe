@@ -1029,7 +1029,7 @@ impl SCServer {
                 axum::http::header::CONTENT_TYPE,
                 axum::http::header::CACHE_CONTROL,
             ]);
-        let server = Server::axum()
+        let mut server = Server::axum()
             .get("/search", search)
             .get("/audio/list", api_list_audio_devices)
             .get("/vision/list", api_list_monitors)
@@ -1066,7 +1066,6 @@ impl SCServer {
             .get("/semantic-search", semantic_search_handler)
             .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
             .get("/search/keyword", keyword_search_handler)
-            .get("/app/icon", get_app_icon_handler)
             .post("/v1/embeddings", create_embeddings)
             .post("/audio/device/start", start_audio_device)
             .post("/audio/device/stop", stop_audio_device)
@@ -1075,9 +1074,14 @@ impl SCServer {
             // .post("/audio/restart", restart_audio_devices)
             // .post("/vision/restart", restart_vision_devices)
             .route_yaml_spec("/openapi.yaml")
-            .route_json_spec("/openapi.json")
-            .freeze();
+            .route_json_spec("/openapi.json");
 
+            #[cfg(feature = "pipe-store")]
+            {
+                server = server.get("/app/icon", get_app_icon_handler);
+            }
+
+        let server = server.freeze();
         // Build the main router with all routes
         Router::new()
             .merge(server.into_router())
@@ -2894,6 +2898,7 @@ pub async fn purge_pipe_handler(
     }
 }
 
+#[cfg(feature = "pipe-store")]
 #[oasgen]
 pub async fn get_app_icon_handler(
     State(_state): State<Arc<AppState>>,
@@ -2958,6 +2963,7 @@ struct MergeSpeakersRequest {
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
 
+#[cfg(feature = "pipe-store")]
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct AppIconQuery {
     name: String,

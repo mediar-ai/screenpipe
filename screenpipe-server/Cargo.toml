@@ -126,13 +126,14 @@ tokio-tungstenite = "0.19.0"
 criterion = { workspace = true }
 
 [features]
-default = []
+default = ["pipe-store"]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 llm = []
 experimental = ["enigo"]
 debug-console = ["console-subscriber"]
+pipe-store = []
 
 [[bin]]
 name = "screenpipe"
