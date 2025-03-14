@@ -78,6 +78,12 @@ export function ModelDownloadTracker() {
       { regex: /model downloaded/, group: 1 },
     ];
 
+    // ffmpeg installation patterns
+    const ffmpegStartPattern = /ffmpeg not found\. installing/i;
+    const ffmpegEndPattern = /ffmpeg (installed|ready)/i;
+    const [ffmpegInstalling, setFfmpegInstalling] = useState(false);
+    const [ffmpegToastRef, setFfmpegToastRef] = useState<any>(null);
+
     // Function to extract model name from log line
     const getModelName = (
       line: string,
@@ -99,9 +105,51 @@ export function ModelDownloadTracker() {
       if (
         !line.includes("download") &&
         !line.includes("model") &&
-        !line.includes("cache")
+        !line.includes("cache") &&
+        !line.includes("ffmpeg")
       ) {
         return;
+      }
+
+      // Check for ffmpeg installation
+      if (ffmpegStartPattern.test(line) && !ffmpegInstalling) {
+        console.log("Detected ffmpeg installation starting");
+
+        const toastRef = toast({
+          title: "installing ffmpeg",
+          description: (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Download className="h-4 w-4" />
+              </div>
+              <Progress value={20} className="h-1" />
+            </div>
+          ),
+          duration: Infinity,
+        });
+
+        setFfmpegInstalling(true);
+        setFfmpegToastRef(toastRef);
+      }
+
+      // Check for ffmpeg installation completion
+      if (ffmpegEndPattern.test(line) && ffmpegInstalling) {
+        console.log("Detected ffmpeg installation completed");
+
+        // Close the "installing" toast
+        if (ffmpegToastRef) {
+          dismiss(ffmpegToastRef.id);
+        }
+
+        // Show completion toast
+        toast({
+          title: "ffmpeg installed",
+          description: "ffmpeg is ready to use",
+          duration: 3000,
+        });
+
+        setFfmpegInstalling(false);
+        setFfmpegToastRef(null);
       }
 
       // Check for download start
