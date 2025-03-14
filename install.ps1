@@ -66,26 +66,6 @@ try {
         Write-Host "Installing bun..."
         powershell -c "irm bun.sh/install.ps1|iex"
     }
-
-    # Check if ffmpeg is installed
-    $ffmpegInstalled = $false
-
-    try {
-        $ffmpegVersion = ffmpeg -version 2>$null
-        if ($ffmpegVersion) {
-            $ffmpegInstalled = $true
-        }
-    }
-    catch {}
-
-    if ($ffmpegInstalled) {
-        Write-Host "FFmpeg is installed."
-    }
-    else {
-        Write-Host "FFmpeg is required but not found in PATH."
-        Write-Host "You can install it using: `"winget install FFmpeg (Essentials Build)`""
-    }
-
     
     # Install Visual Studio Redistributables to avoid any ort issues
     Write-Host "Installing Visual Studio Redistributables..."
