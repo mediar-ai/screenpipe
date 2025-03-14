@@ -28,4 +28,5 @@ pub use server::SCServer;
 pub use server::{api_list_monitors, MonitorInfo};
 pub use video::VideoCapture;
 pub mod embedding;
+#[cfg(feature = "pipe-store")]
 pub mod icons;

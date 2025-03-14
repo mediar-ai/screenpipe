@@ -5,7 +5,6 @@ use axum::{
         Json, Path, Query, State,
     },
     http::StatusCode,
-    http::header::{CONTENT_TYPE, CACHE_CONTROL, HeaderValue},
     response::{IntoResponse, Json as JsonResponse, Response},
     routing::get,
     serve, Router,
@@ -78,6 +77,9 @@ use enigo::{Enigo, Key, Settings};
 use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
+
+#[cfg(feature = "pipe-store")]
+use axum::http::header::{CONTENT_TYPE, CACHE_CONTROL, HeaderValue};
 
 pub type FrameImageCache = LruCache<i64, (String, Instant)>;
 
@@ -1029,6 +1031,7 @@ impl SCServer {
                 axum::http::header::CONTENT_TYPE,
                 axum::http::header::CACHE_CONTROL,
             ]);
+        #[allow(unused_mut)]
         let mut server = Server::axum()
             .get("/search", search)
             .get("/audio/list", api_list_audio_devices)
