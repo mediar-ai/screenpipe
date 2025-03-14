@@ -165,32 +165,6 @@ export function ModelDownloadTracker() {
           return newState;
         });
       }
-
-      // Also look for general download progress in the logs (may not be available)
-      if (line.includes("download") && line.includes("%")) {
-        const percentMatch = line.match(/(\d+)%/);
-        if (percentMatch && percentMatch[1]) {
-          const percent = parseInt(percentMatch[1], 10);
-          console.log(`Download progress detected: ${percent}%`);
-          // We could use this to update progress bars if we can associate it with a specific model
-        }
-      }
-
-      // Look for download errors
-      if (
-        (line.includes("download") || line.includes("model")) &&
-        (line.includes("error") ||
-          line.includes("failed") ||
-          line.includes("timeout"))
-      ) {
-        toast({
-          title: "download error",
-          description:
-            "there was a problem downloading a model. check logs for details.",
-          variant: "destructive",
-          duration: 5000,
-        });
-      }
     });
 
     return () => {

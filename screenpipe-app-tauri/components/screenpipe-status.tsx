@@ -12,7 +12,7 @@ import { toast } from "./ui/use-toast";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Folder, Power, Settings, Activity } from "lucide-react";
+import { Folder, Activity, Mic } from "lucide-react";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 
 import { LogFileButton } from "./log-file-button";
@@ -212,6 +212,69 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   <PermissionButtons type="audio" />
                 </div>
               </div>
+
+              {/* Audio Devices Status */}
+              {!settings.disableAudio && health?.device_status_details && (
+                <div className="mt-1 mb-2">
+                  <div className="flex items-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 p-2"
+                      onClick={() => {
+                        const audioDevicesEl = document.getElementById(
+                          "audio-devices-container"
+                        );
+                        if (audioDevicesEl) {
+                          audioDevicesEl.classList.toggle("hidden");
+                        }
+                      }}
+                    >
+                      <Mic className="h-4 w-4 mr-2" />
+                      <span className="text-xs font-medium">audio devices</span>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="ml-1 h-4 w-4"
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </Button>
+                  </div>
+
+                  <div
+                    id="audio-devices-container"
+                    className="mt-1 max-h-32 overflow-y-auto rounded border border-border p-2 hidden"
+                  >
+                    {health.device_status_details
+                      .split(", ")
+                      .map((deviceStatus: string, index: number) => {
+                        const isActive = deviceStatus.includes("active");
+
+                        return (
+                          <div
+                            key={index}
+                            className="flex items-center mb-1 last:mb-0"
+                          >
+                            <div
+                              className={`w-2 h-2 rounded-full mr-2 ${
+                                isActive ? "bg-green-500" : "bg-red-500"
+                              }`}
+                            ></div>
+                            <span className="text-xs">{deviceStatus}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
 
               {/* UI Monitoring Status */}
               {settings.enableUiMonitoring && (

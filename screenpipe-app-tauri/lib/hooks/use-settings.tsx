@@ -83,7 +83,7 @@ export type AIPreset = {
 );
 
 export type Settings = {
-  openaiApiKey: string;
+	openaiApiKey: string;
 	deepgramApiKey: string;
 	isLoading: boolean;
 	aiModel: string;
@@ -196,8 +196,8 @@ const DEFAULT_SETTINGS: Settings = {
 	startAudioShortcut: "",
 	stopAudioShortcut: "",
 	pipeShortcuts: {},
-	enableRealtimeAudioTranscription: true,
- 	realtimeAudioTranscriptionEngine: "deepgram",
+	enableRealtimeAudioTranscription: false,
+	realtimeAudioTranscriptionEngine: "deepgram",
 	disableVision: false,
 	useAllMonitors: false,
 	enableRealtimeVision: false,
