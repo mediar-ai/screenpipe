@@ -9,7 +9,7 @@ use std::{
 use anyhow::{anyhow, Result};
 use tracing::{debug, error, info, warn};
 
-use crate::{core::LAST_AUDIO_CAPTURE, AudioInput};
+use crate::{core::update_device_capture_time, AudioInput};
 
 use super::AudioStream;
 
@@ -20,10 +20,11 @@ pub async fn run_record_and_transcribe(
     is_running: Arc<AtomicBool>,
 ) -> Result<()> {
     let mut receiver = audio_stream.subscribe().await;
+    let device_name = audio_stream.device.to_string();
 
     info!(
         "starting continuous recording for {} ({}s segments)",
-        audio_stream.device.to_string(),
+        device_name,
         duration.as_secs()
     );
 
@@ -41,13 +42,7 @@ pub async fn run_record_and_transcribe(
             match receiver.recv().await {
                 Ok(chunk) => {
                     collected_audio.extend(chunk);
-                    LAST_AUDIO_CAPTURE.store(
-                        std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs(),
-                        Ordering::Relaxed,
-                    );
+                    update_device_capture_time(&device_name);
                 }
                 Err(e) => {
                     error!("error receiving audio data: {}", e);
@@ -84,6 +79,6 @@ pub async fn run_record_and_transcribe(
         }
     }
 
-    info!("stopped recording for {}", audio_stream.device.to_string());
+    info!("stopped recording for {}", device_name);
     Ok(())
 }

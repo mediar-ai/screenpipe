@@ -32,7 +32,6 @@ use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 
 use crate::browser_utils::create_url_detector;
-use crate::monitor::SafeMonitor;
 
 fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -146,69 +145,33 @@ pub async fn continuous_capture(
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
-    // Add failure tracking
-    let mut consecutive_failures = 0;
-    let failure_threshold = 10;
-
-    // Add heartbeat counter
-    let mut last_heartbeat = Instant::now();
-    let heartbeat_interval = Duration::from_secs(60);
-
-    // Add monitor retrieval failure tracking
-    let mut monitor_retrieval_failures = 0;
-    let max_monitor_retrieval_attempts = 3;
-
     debug!(
         "continuous_capture: Starting using monitor: {:?}",
         monitor_id
     );
+    // 1. Get monitor
+    let monitor = match get_monitor_by_id(monitor_id).await {
+        Some(m) => m,
+        None => {
+            error!("Monitor not found");
+            return;
+        }
+    };
 
     loop {
-        // 1. Get monitor
-        let monitor = match get_monitor(
-            &monitor_id,
-            &mut monitor_retrieval_failures,
-            max_monitor_retrieval_attempts,
-        )
-        .await
-        {
-            Some(m) => m,
-            None => {
-                sleep(Duration::from_secs(1)).await;
-                continue;
-            }
-        };
-
-        // 2. Log heartbeat if needed
-        log_heartbeat_if_needed(
-            &mut last_heartbeat,
-            heartbeat_interval,
-            monitor_id,
-            frame_counter,
-        );
-
         // 3. Capture screenshot
-        let capture_result = match capture_screenshot_with_retry(
-            &monitor,
-            &window_filters,
-            capture_unfocused_windows,
-            &mut consecutive_failures,
-            failure_threshold,
-            monitor_id,
-            frame_counter,
-        )
-        .await
-        {
-            Some(result) => result,
-            None => {
-                frame_counter += 1;
-                tokio::time::sleep(interval).await;
-                continue;
-            }
-        };
+        let capture_result =
+            match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
+                Ok(result) => result,
+                Err(e) => {
+                    error!("Error capturing screenshot: {}", e);
+                    sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
 
         // 4. Process captured image
-        let (image, window_images, image_hash) = capture_result;
+        let (image, window_images, image_hash, _capture_duration) = capture_result;
 
         let should_skip = should_skip_frame(
             &previous_image,
@@ -239,88 +202,6 @@ pub async fn continuous_capture(
 
         frame_counter += 1;
         tokio::time::sleep(interval).await;
-    }
-}
-
-// Helper functions to break down the complex continuous_capture function
-async fn get_monitor(
-    monitor_id: &u32,
-    retrieval_failures: &mut u32,
-    max_attempts: u32,
-) -> Option<SafeMonitor> {
-    match get_monitor_by_id(*monitor_id).await {
-        Some(m) => {
-            // Reset the counter when successful
-            *retrieval_failures = 0;
-            Some(m)
-        }
-        None => {
-            *retrieval_failures += 1;
-            error!(
-                "continuous_capture: Failed to get monitor {} (attempt {}/{})",
-                monitor_id, retrieval_failures, max_attempts
-            );
-
-            if *retrieval_failures >= max_attempts {
-                error!("continuous_capture: Failed to get monitor after {} attempts, stopping capture process", 
-                       max_attempts);
-                None
-            } else {
-                None
-            }
-        }
-    }
-}
-
-fn log_heartbeat_if_needed(
-    last_heartbeat: &mut Instant,
-    heartbeat_interval: Duration,
-    monitor_id: u32,
-    frame_counter: u64,
-) {
-    if last_heartbeat.elapsed() >= heartbeat_interval {
-        debug!(
-            "continuous_capture: Heartbeat for monitor {} - frame {}",
-            monitor_id, frame_counter
-        );
-        *last_heartbeat = Instant::now();
-    }
-}
-
-async fn capture_screenshot_with_retry(
-    monitor: &SafeMonitor,
-    window_filters: &Arc<WindowFilters>,
-    capture_unfocused_windows: bool,
-    consecutive_failures: &mut u32,
-    failure_threshold: u32,
-    monitor_id: u32,
-    frame_counter: u64,
-) -> Option<(DynamicImage, Vec<CapturedWindow>, u64)> {
-    match capture_screenshot(monitor, window_filters, capture_unfocused_windows).await {
-        Ok((image, window_images, image_hash, _capture_duration)) => {
-            debug!(
-                "Captured screenshot on monitor {} with hash: {} (frame {})",
-                monitor_id, image_hash, frame_counter
-            );
-            *consecutive_failures = 0; // Reset failure counter on success
-            Some((image, window_images, image_hash))
-        }
-        Err(e) => {
-            *consecutive_failures += 1;
-            error!(
-                "Failed to capture screenshot on monitor {} (attempt {}/{} failures): {}",
-                monitor_id, consecutive_failures, failure_threshold, e
-            );
-
-            if *consecutive_failures >= failure_threshold {
-                error!(
-                    "continuous_capture: Too many consecutive capture failures, will retry in 5s"
-                );
-                sleep(Duration::from_secs(5)).await;
-                *consecutive_failures = 0; // Reset after longer wait
-            }
-            None
-        }
     }
 }
 

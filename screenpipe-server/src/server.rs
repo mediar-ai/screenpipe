@@ -287,6 +287,7 @@ pub struct HealthCheckResponse {
     pub ui_status: String,
     pub message: String,
     pub verbose_instructions: Option<String>,
+    pub device_status_details: Option<String>,
 }
 
 #[derive(OaSchema, Serialize, Deserialize)]
@@ -594,12 +595,39 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let app_uptime = (now as i64) - (state.app_start_time.timestamp());
     let grace_period = 120; // 2 minutes in seconds
 
-    let last_capture = screenpipe_audio::core::LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
-    let audio_active = if app_uptime < grace_period {
-        true // Consider active during grace period
-    } else {
-        now - last_capture < 5 // Consider active if captured in last 5 seconds
-    };
+    // Get the status of all devices
+    let audio_devices = state.audio_manager.current_devices();
+    let mut device_statuses = Vec::new();
+    let mut global_audio_active = false;
+
+    // Check each device
+    for device in &audio_devices {
+        let device_name = device.to_string();
+        let last_capture = screenpipe_audio::core::get_device_capture_time(&device_name);
+        let device_active = if app_uptime < grace_period {
+            true // Consider active during grace period
+        } else {
+            now - last_capture < 5 // Consider active if captured in last 5 seconds
+        };
+
+        // Track if any device is active
+        if device_active {
+            global_audio_active = true;
+        }
+        debug!(target: "server", "device status: {} {}", device_name, device_active);
+
+        device_statuses.push((device_name, device_active, last_capture));
+    }
+
+    // Fallback to global timestamp if no devices are detected
+    if audio_devices.is_empty() {
+        let last_capture = screenpipe_audio::core::LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
+        global_audio_active = if app_uptime < grace_period {
+            true // Consider active during grace period
+        } else {
+            now - last_capture < 5 // Consider active if captured in last 5 seconds
+        };
+    }
 
     let (last_frame, audio, last_ui) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio, ui)) => (frame, audio, ui),
@@ -623,16 +651,45 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
                 "ok"
             }
             Some(_) => "stale",
-            None => "no data",
+            None => "not_started",
         }
     };
 
     let audio_status = if state.audio_disabled {
-        "disabled"
-    } else if audio_active {
-        "ok"
+        "disabled".to_string()
+    } else if global_audio_active {
+        "ok".to_string()
     } else {
-        "stale"
+        match audio {
+            Some(timestamp)
+                if now.signed_duration_since(timestamp)
+                    < chrono::Duration::from_std(threshold).unwrap() =>
+            {
+                "stale".to_string()
+            }
+            Some(_) => "stale".to_string(),
+            None => "not_started".to_string(),
+        }
+    };
+
+    // Format device statuses as a string for a more detailed view
+    let device_status_details = if !device_statuses.is_empty() {
+        let now_secs = now.timestamp() as u64;
+        let device_details: Vec<String> = device_statuses
+            .iter()
+            .map(|(name, active, last_capture)| {
+                format!(
+                    "{}: {} (last activity: {}s ago)",
+                    name,
+                    if *active { "active" } else { "inactive" },
+                    now_secs.saturating_sub(*last_capture)
+                )
+            })
+            .collect();
+
+        Some(device_details.join(", "))
+    } else {
+        None
     };
 
     let ui_status = if !state.ui_monitoring_enabled {
@@ -646,7 +703,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
                 "ok"
             }
             Some(_) => "stale",
-            None => "no data",
+            None => "not_started",
         }
     };
 
@@ -670,15 +727,15 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             unhealthy_systems.push("audio");
         }
         if ui_status != "ok" && ui_status != "disabled" {
-            unhealthy_systems.push("ui monitoring");
+            unhealthy_systems.push("ui");
         }
 
+        let systems_str = unhealthy_systems.join(", ");
         (
-            "unhealthy",
-            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}",
-                    unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
-            Some("if you're experiencing issues, please try contacting us on discord".to_string()),
-            500,
+            "degraded",
+            format!("some systems are not healthy: {}", systems_str),
+            Some(get_verbose_instructions(&unhealthy_systems)),
+            503,
         )
     };
 
@@ -689,12 +746,37 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         last_audio_timestamp: audio,
         last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
-        audio_status: audio_status.to_string(),
+        audio_status,
         ui_status: ui_status.to_string(),
         message,
         verbose_instructions,
+        device_status_details,
     })
 }
+
+fn get_verbose_instructions(unhealthy_systems: &[&str]) -> String {
+    let mut instructions = String::new();
+
+    if unhealthy_systems.contains(&"vision") {
+        instructions.push_str("Vision system is not working properly. Check if screen recording permissions are enabled.\n");
+    }
+
+    if unhealthy_systems.contains(&"audio") {
+        instructions.push_str("Audio system is not working properly. Check if microphone permissions are enabled and devices are connected.\n");
+    }
+
+    if unhealthy_systems.contains(&"ui") {
+        instructions.push_str("UI monitoring is not working properly. Check if accessibility permissions are enabled.\n");
+    }
+
+    if instructions.is_empty() {
+        instructions =
+            "If you're experiencing issues, please try contacting us on Discord.".to_string();
+    }
+
+    instructions
+}
+
 // Request and response structs
 #[derive(OaSchema, Deserialize)]
 struct DownloadPipeRequest {
@@ -1068,10 +1150,6 @@ impl SCServer {
             .post("/v1/embeddings", create_embeddings)
             .post("/audio/device/start", start_audio_device)
             .post("/audio/device/stop", stop_audio_device)
-            // .post("/vision/start", start_vision_device)
-            // .post("/vision/stop", stop_vision_device)
-            // .post("/audio/restart", restart_audio_devices)
-            // .post("/vision/restart", restart_vision_devices)
             .route_yaml_spec("/openapi.yaml")
             .route_json_spec("/openapi.json")
             .freeze();
