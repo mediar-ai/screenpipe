@@ -56,6 +56,8 @@ reqwest-middleware = "0.4.1"
 [patch.crates-io]
 # enables chinese mirror (hf is banned in china) and native-tls
 hf-hub = { git = "https://github.com/neo773/hf-hub", features = ["native-tls"] }
+# Patch half to use a version compatible with both candle and ort
+half = { git = "https://github.com/starkat99/half-rs.git", tag = "v2.5.0" }
 
 [workspace.metadata.vcpkg]
 git = "https://github.com/microsoft/vcpkg"

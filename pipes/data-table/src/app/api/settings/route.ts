@@ -24,7 +24,7 @@ export async function GET() {
     const settingsPath = path.join(
       screenpipeDir,
       "pipes",
-      "obsidian",
+      "data-table",
       "pipe.json"
     );
 
@@ -38,8 +38,8 @@ export async function GET() {
         ...rawSettings,
         customSettings: {
           ...rawSettings.customSettings,
-          ["obsidian"]: {
-            ...(rawSettings.customSettings?.["obsidian"] || {}),
+          ["data-table"]: {
+            ...(rawSettings.customSettings?.["data-table"] || {}),
             ...persistedSettings,
           },
         },

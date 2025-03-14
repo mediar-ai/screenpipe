@@ -200,7 +200,7 @@ const DEFAULT_SETTINGS: Settings = {
 	realtimeAudioTranscriptionEngine: "deepgram",
 	disableVision: false,
 	useAllMonitors: false,
-	enableRealtimeVision: false,
+	enableRealtimeVision: true,
 	autoUpdatePipes: false, // Default to false for auto-updating pipes
 };
 
