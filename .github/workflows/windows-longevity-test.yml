@@ -1,0 +1,280 @@
+name: Windows CLI Longevity Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-windows:
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Install Rust
+      run: |
+        Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
+        .\rustup-init.exe -y
+
+    - name: Set up Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        cache: true
+        rustflags: ""
+
+    - name: Install Chocolatey
+      run: Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+    - name: Install dependencies
+      shell: pwsh
+      run: |
+        choco install ffmpeg openssl
+        echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Install Scream on Windows
+      shell: powershell
+      run: |
+        Invoke-WebRequest https://github.com/duncanthrax/scream/releases/download/4.0/Scream4.0.zip -OutFile Scream4.0.zip
+        Expand-Archive -Path Scream4.0.zip -DestinationPath Scream
+        openssl req -batch -verbose -x509 -newkey rsa -keyout ScreamCertificate.pvk -out ScreamCertificate.cer -nodes -extensions v3_req
+        openssl pkcs12 -export -nodes -in ScreamCertificate.cer -inkey ScreamCertificate.pvk -out ScreamCertificate.pfx -passout pass:
+
+    - name: Setup MSVC Dev Cmd
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Sign and Install Scream Driver on Windows
+      shell: powershell
+      run: |
+        signtool sign /v /fd SHA256 /f ScreamCertificate.pfx Scream\Install\driver\x64\Scream.cat
+        Import-Certificate -FilePath ScreamCertificate.cer -CertStoreLocation Cert:\LocalMachine\root
+        Import-Certificate -FilePath ScreamCertificate.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
+        Scream\Install\helpers\devcon-x64.exe install Scream\Install\driver\x64\Scream.inf *Scream
+      timeout-minutes: 5
+
+    - name: Build CLI
+      run: cargo build --release
+
+    - name: Run CLI and generate activity (4-hour longevity test)
+      shell: pwsh
+      run: |
+        $env:RUST_LOG = "debug"
+        $process = Start-Process -FilePath ".\target\release\screenpipe.exe" -ArgumentList "--debug" -PassThru -RedirectStandardOutput "screenpipe_output.log" -RedirectStandardError "screenpipe_error.log" -NoNewWindow
+        
+        # Create a memory log file with headers
+        "Timestamp,ElapsedMinutes,WorkingSet(MB),PrivateMemory(MB),VirtualMemory(MB),CPU(%)" | Out-File -FilePath "memory_usage.csv"
+        
+        $totalDuration = 4 * 60 * 60  # 4 hours in seconds
+        $startTime = Get-Date
+        $endTime = $startTime.AddSeconds($totalDuration)
+        
+        Write-Host "Starting 4-hour longevity test at $startTime"
+        Write-Host "Test will end at approximately $endTime"
+        
+        # Activity cycle - run this every few minutes
+        $iteration = 0
+        while ((Get-Date) -lt $endTime) {
+          $iteration++
+          $currentTime = Get-Date
+          $elapsedMinutes = [math]::Floor(($currentTime - $startTime).TotalMinutes)
+          $remainingMinutes = [math]::Ceiling(($endTime - $currentTime).TotalMinutes)
+          
+          Write-Host "Iteration $iteration - $elapsedMinutes minutes elapsed, $remainingMinutes minutes remaining"
+          
+          # Log memory usage
+          try {
+            $processInfo = Get-Process -Id $process.Id -ErrorAction Stop
+            $workingSetMB = [math]::Round($processInfo.WorkingSet64 / 1MB, 2)
+            $privateMemoryMB = [math]::Round($processInfo.PrivateMemorySize64 / 1MB, 2)
+            $virtualMemoryMB = [math]::Round($processInfo.VirtualMemorySize64 / 1MB, 2)
+            $cpuPercent = [math]::Round($processInfo.CPU, 2)
+            
+            $memoryLogEntry = "$currentTime,$elapsedMinutes,$workingSetMB,$privateMemoryMB,$virtualMemoryMB,$cpuPercent"
+            $memoryLogEntry | Out-File -FilePath "memory_usage.csv" -Append
+            
+            Write-Host "Memory Usage: Working Set: $workingSetMB MB, Private: $privateMemoryMB MB, Virtual: $virtualMemoryMB MB, CPU: $cpuPercent%"
+          }
+          catch {
+            Write-Host "Failed to get process memory info: $_"
+          }
+          
+          # Generate screen activity (different patterns based on iteration)
+          switch ($iteration % 4) {
+            0 {
+              # Open multiple apps
+              Start-Process "notepad.exe"
+              Start-Sleep -Seconds 5
+              Start-Process "calc.exe"
+              Start-Sleep -Seconds 10
+              Stop-Process -Name "notepad" -Force -ErrorAction SilentlyContinue
+              Stop-Process -Name "calc" -Force -ErrorAction SilentlyContinue
+            }
+            1 {
+              # Drawing activity
+              Start-Process "mspaint.exe"
+              Start-Sleep -Seconds 10
+              # Simulate mouse movement (alternatively could use actual automation)
+              Add-Type -AssemblyName System.Windows.Forms
+              $screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+              $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+              for ($i = 0; $i -lt 10; $i++) {
+                $x = Get-Random -Minimum 0 -Maximum $screenWidth
+                $y = Get-Random -Minimum 0 -Maximum $screenHeight
+                [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)
+                Start-Sleep -Milliseconds 500
+              }
+              Stop-Process -Name "mspaint" -Force -ErrorAction SilentlyContinue
+            }
+            2 {
+              # Browser activity
+              Start-Process "msedge.exe" -ArgumentList "https://example.com"
+              Start-Sleep -Seconds 15
+              Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
+            }
+            3 {
+              # Text input activity
+              Start-Process "notepad.exe"
+              Start-Sleep -Seconds 5
+              Add-Type -AssemblyName System.Windows.Forms
+              [System.Windows.Forms.SendKeys]::SendWait("Testing screenpipe longevity")
+              Start-Sleep -Seconds 5
+              [System.Windows.Forms.SendKeys]::SendWait("{ENTER}Iteration $iteration")
+              Start-Sleep -Seconds 5
+              Stop-Process -Name "notepad" -Force -ErrorAction SilentlyContinue
+            }
+          }
+          
+          # Generate audio
+          [console]::beep(1000 + ($iteration % 10) * 200, 500)
+          
+          # Check if process is still running, restart if needed
+          if ($process.HasExited) {
+            Write-Host "WARNING: Process exited unexpectedly. Restarting..."
+            $process = Start-Process -FilePath ".\target\release\screenpipe.exe" -ArgumentList "--debug" -PassThru -RedirectStandardOutput "screenpipe_output.log" -RedirectStandardError "screenpipe_error.log" -NoNewWindow -Append
+            
+            # Log restart event
+            "$(Get-Date),PROCESS_RESTART,0,0,0,0" | Out-File -FilePath "memory_usage.csv" -Append
+          }
+          
+          # Sleep between activity cycles - vary time between 1-3 minutes
+          $sleepTime = Get-Random -Minimum 60 -Maximum 180
+          Write-Host "Sleeping for $sleepTime seconds..."
+          Start-Sleep -Seconds $sleepTime
+        }
+        
+        # Take one final memory measurement
+        try {
+          $processInfo = Get-Process -Id $process.Id -ErrorAction Stop
+          $workingSetMB = [math]::Round($processInfo.WorkingSet64 / 1MB, 2)
+          $privateMemoryMB = [math]::Round($processInfo.PrivateMemorySize64 / 1MB, 2)
+          $virtualMemoryMB = [math]::Round($processInfo.VirtualMemorySize64 / 1MB, 2)
+          $cpuPercent = [math]::Round($processInfo.CPU, 2)
+          
+          $elapsedMinutes = [math]::Floor(((Get-Date) - $startTime).TotalMinutes)
+          $memoryLogEntry = "$(Get-Date),$elapsedMinutes,$workingSetMB,$privateMemoryMB,$virtualMemoryMB,$cpuPercent"
+          $memoryLogEntry | Out-File -FilePath "memory_usage.csv" -Append
+          
+          Write-Host "Final Memory Usage: Working Set: $workingSetMB MB, Private: $privateMemoryMB MB, Virtual: $virtualMemoryMB MB, CPU: $cpuPercent%"
+        }
+        catch {
+          Write-Host "Failed to get final process memory info: $_"
+        }
+        
+        Write-Host "4-hour test complete. Stopping process."
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+
+    - name: Check for crashes and captured data
+      shell: pwsh
+      run: |
+        if (Select-String -Path "screenpipe_output.log" -Pattern "panic" -Quiet) {
+          Write-Host "CLI crashed"
+          Get-Content "screenpipe_output.log"
+          exit 1
+        }
+        Write-Host "CLI ran successfully without crashing"
+        
+        $capturedFiles = Get-ChildItem -Path "$env:USERPROFILE\.screenpipe\data" -Recurse
+        if ($capturedFiles.Count -eq 0) {
+          Write-Host "No data was captured"
+          exit 1
+        }
+        Write-Host "Data captured successfully. File count: $($capturedFiles.Count)"
+        
+        if (Select-String -Path "screenpipe_error.log" -Pattern "no audio devices available" -Quiet) {
+          Write-Host "Audio device setup failed"
+          exit 1
+        }
+        
+        Get-Content "screenpipe_output.log" -Tail 100
+        Get-Content "screenpipe_error.log"
+
+    - name: Generate memory usage report
+      shell: pwsh
+      if: always()
+      run: |
+        Write-Host "Generating memory usage summary..."
+        
+        if (Test-Path "memory_usage.csv") {
+          $memoryData = Import-Csv "memory_usage.csv"
+          
+          # Calculate memory growth
+          if ($memoryData.Count -gt 1) {
+            $firstEntry = $memoryData | Select-Object -First 1
+            $lastEntry = $memoryData | Select-Object -Last 1
+            
+            $workingSetStart = [double]$firstEntry.'WorkingSet(MB)'
+            $workingSetEnd = [double]$lastEntry.'WorkingSet(MB)'
+            $workingSetGrowth = $workingSetEnd - $workingSetStart
+            
+            $privateStart = [double]$firstEntry.'PrivateMemory(MB)'
+            $privateEnd = [double]$lastEntry.'PrivateMemory(MB)'
+            $privateGrowth = $privateEnd - $privateStart
+            
+            $timeSpanHours = [math]::Round([double]$lastEntry.ElapsedMinutes / 60, 2)
+            
+            # Calculate min/max/avg
+            $workingSetValues = $memoryData | ForEach-Object { [double]$_.'WorkingSet(MB)' }
+            $workingSetMin = ($workingSetValues | Measure-Object -Minimum).Minimum
+            $workingSetMax = ($workingSetValues | Measure-Object -Maximum).Maximum
+            $workingSetAvg = ($workingSetValues | Measure-Object -Average).Average
+            
+            $privateValues = $memoryData | ForEach-Object { [double]$_.'PrivateMemory(MB)' }
+            $privateMin = ($privateValues | Measure-Object -Minimum).Minimum
+            $privateMax = ($privateValues | Measure-Object -Maximum).Maximum
+            $privateAvg = ($privateValues | Measure-Object -Average).Average
+            
+            # Output summary report
+            "## Memory Usage Summary" | Out-File -FilePath "memory_report.md"
+            "- Test Duration: $timeSpanHours hours" | Out-File -FilePath "memory_report.md" -Append
+            "- Data Points: $($memoryData.Count)" | Out-File -FilePath "memory_report.md" -Append
+            "- Working Set: Start $workingSetStart MB, End $workingSetEnd MB, Growth $workingSetGrowth MB" | Out-File -FilePath "memory_report.md" -Append
+            "- Working Set: Min $workingSetMin MB, Max $workingSetMax MB, Avg $workingSetAvg MB" | Out-File -FilePath "memory_report.md" -Append
+            "- Private Memory: Start $privateStart MB, End $privateEnd MB, Growth $privateGrowth MB" | Out-File -FilePath "memory_report.md" -Append
+            "- Private Memory: Min $privateMin MB, Max $privateMax MB, Avg $privateAvg MB" | Out-File -FilePath "memory_report.md" -Append
+            
+            Write-Host "Memory report generated successfully"
+          } else {
+            Write-Host "Not enough data points to generate memory report"
+          }
+        } else {
+          Write-Host "Memory usage log file not found"
+        }
+
+    - name: Upload logs and data
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: windows-logs-and-data
+        path: |
+          screenpipe_output.log
+          screenpipe_error.log
+          memory_usage.csv
+          memory_report.md
+          ${{ env.USERPROFILE }}\.screenpipe\data\
