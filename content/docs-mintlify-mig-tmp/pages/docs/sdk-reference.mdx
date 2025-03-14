@@ -1,36 +1,35 @@
-import { Tabs, Tab } from 'nextra/components'
+
 
 # javascript sdk reference
 
-
 screenpipe provides two sdk packages:
+
 - `@screenpipe/js` - for node.js environments (nextjs api routes, etc)
 - `@screenpipe/browser` - for browser environments
 
 both sdks provide type-safe interfaces to interact with screenpipe's core functionality.
 
-
 ### installation
 
 #### node.js sdk
 
-<Tabs items={['npm', 'pnpm', 'bun', 'yarn']}>
-  <Tab>
+<Tabs>
+  <Tab title="Tab">
     ```bash copy
     npm install @screenpipe/js
     ```
   </Tab>
-  <Tab>
+  <Tab title="Tab">
     ```bash copy
     pnpm add @screenpipe/js
     ```
   </Tab>
-  <Tab>
+  <Tab title="Tab">
     ```bash copy
     bun add @screenpipe/js
     ```
   </Tab>
-  <Tab>
+  <Tab title="Tab">
     ```bash copy
     yarn add @screenpipe/js
     ```
@@ -39,23 +38,23 @@ both sdks provide type-safe interfaces to interact with screenpipe's core functi
 
 #### browser sdk
 
-<Tabs items={['npm', 'pnpm', 'bun', 'yarn']}>
-  <Tab>
+<Tabs>
+  <Tab title="Tab">
     ```bash copy
     npm install @screenpipe/browser
     ```
   </Tab>
-  <Tab>
+  <Tab title="Tab">
     ```bash copy
     pnpm add @screenpipe/browser
     ```
   </Tab>
-  <Tab>
+  <Tab title="Tab">
     ```bash copy
     bun add @screenpipe/browser
     ```
   </Tab>
-  <Tab>
+  <Tab title="Tab">
     ```bash copy
     yarn add @screenpipe/browser
     ```
@@ -248,9 +247,7 @@ const pullRequests = githubActivity.filter(item =>
 console.log(`Found ${pullRequests.length} pull request interactions`);
 ```
 
-
-
-### vercel-like crons 
+### vercel-like crons
 
 you need to add a `pipe.json` file to your pipe folder with this config for example:
 
@@ -278,7 +275,6 @@ bunx @screenpipe/dev@latest components add
 
 please adjust its code to your needs as some things are hardcoded in it.
 
-
 ### realtime streams
 
 ```typescript
@@ -298,7 +294,6 @@ for await (const event of pipe.streamVision(true)) { // true to include images
 
 ### react hooks sdk support ⚛️
 
-  
 screenpipe provides first-class support for React applications through custom hooks, enabling seamless integration with your React components. while you can manually create hooks using libraries like [React Query](https://tanstack.com/query/v5/docs/framework/react/overview), we recommend leveraging our built-in CLI to quickly add pre-built, optimized hooks to your pipes.
 
 #### using the cli to add hooks
@@ -317,7 +312,6 @@ select from the interactive menu to add hooks such as:
 - `use-sql-autocomplete`: provide sql query assistance.
 
 these hooks follow best practices, ensuring type safety, efficient state management, and easy integration with your existing React components.
-
 
 #### real-time meeting summarizer
 
@@ -402,7 +396,6 @@ monitorScreenActivity().catch(console.error)
 
 ### settings management
 
-
 pipes can access and modify screenpipe app settings through the SDK. this is useful for storing pipe-specific configuration and accessing global app settings.
 
 #### quick start with CLI
@@ -415,6 +408,7 @@ bunx --bun @screenpipe/dev@latest components add
 ```
 
 this will add the following components to your pipe:
+
 - `use-pipe-settings` hook for react components
 - `get-screenpipe-app-settings` server action
 - required typescript types
@@ -437,7 +431,7 @@ export interface Settings {
 }
 ```
 
-2. create server action to access settings:
+1. create server action to access settings:
 
 ```typescript
 // src/lib/actions/get-screenpipe-app-settings.ts
@@ -455,7 +449,7 @@ export async function updateScreenpipeAppSettings(
 }
 ```
 
-3. create react hook for settings management:
+1. create react hook for settings management:
 
 ```typescript
 // src/lib/hooks/use-pipe-settings.tsx
@@ -540,7 +534,7 @@ export function usePipeSettings() {
 }
 ```
 
-4. use in your components:
+1. use in your components:
 
 ```typescript
 import { usePipeSettings } from '@/lib/hooks/use-pipe-settings'
@@ -574,7 +568,6 @@ export function SettingsComponent() {
 }
 ```
 
-
 #### best practices
 
 - store pipe-specific settings under `customSettings.yourPipeName` in screenpipe app settings
@@ -586,8 +579,6 @@ export function SettingsComponent() {
 - consider using shadcn/ui components for consistent UI
 
 see the [obsidian pipe](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) for a complete example of settings management.
-
-
 
 ### integrating with llms
 
@@ -817,8 +808,6 @@ const messages = await pipe.inbox.getMessages()
 await pipe.inbox.clearMessages()
 ```
 
-
-
 ### input control api
 
 requires building the backend with the `experimental` feature flag.
@@ -872,11 +861,9 @@ async function fillForm() {
 await fillForm()
 ```
 
-### LLM links 
+### LLM links
 
 paste these links into your Cursor chat for context:
 
-- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts
-- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/node-sdk/src/index.ts
-
-
+- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts>
+- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/node-sdk/src/index.ts>
