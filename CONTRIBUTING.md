@@ -114,20 +114,30 @@ before you begin:
 
    ```powershell
    $path = "C:\Windows\System32\vcruntime140.dll"
-
+   
    if (-Not (Test-Path $path)) {
-       Start-Process powershell -Verb RunAs -ArgumentList @"
-           -NoProfile -ExecutionPolicy Bypass -Command "& {
+       Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command "& {
            Set-ExecutionPolicy Bypass -Scope Process -Force
            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-           Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
-           }"
-   "@ -Wait
+           $url = ''https://vcredist.com/install.ps1''
+           $scriptPath = ''$env:TEMP\install_vcredist.ps1''
+           Invoke-WebRequest -Uri $url -OutFile $scriptPath
+           & $scriptPath
+       }"' -Wait
    }
    
+   # Verify installation
+   if (-Not (Test-Path $path)) {
+       Write-Host "Installation failed. Exiting."
+       exit 1
+   }
+   
+   # Copy vcruntime140.dll to the specified directory
    $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
    New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
-   Copy-Item C:\Windows\System32\vcruntime140.dll -Destination $vcredist_dir -Force
+   Copy-Item $path -Destination $vcredist_dir -Force
+   
+   Write-Host "vcruntime140.dll copied successfully!"
    ```
 
 7. **clone and build**:
