@@ -25,7 +25,7 @@
       },
       {
         "tab": "API Reference",
-        "openapi": "https://github.com/mediar-ai/screenpipe/blob/main/content/docs-mintlify-mig-tmp/openapi.yaml"
+        "openapi": "https://raw.githubusercontent.com/mediar-ai/screenpipe/refs/heads/main/content/docs-mintlify-mig-tmp/openapi.yaml"
       }
     ]
   },
