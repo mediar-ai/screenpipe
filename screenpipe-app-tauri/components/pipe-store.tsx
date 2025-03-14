@@ -1038,6 +1038,12 @@ export const PipeStore: React.FC = () => {
 
       if (!settings.user?.token) {
         console.log("[pipe-update] Update check skipped: No user token");
+        toast({
+          title: "error checking for updates",
+          description: "please login to check for updates",
+          variant: "destructive",
+        });
+		setIsUpdating(true)
         return;
       }
       // Get last check time from local storage
