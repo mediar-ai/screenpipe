@@ -2517,65 +2517,131 @@ async fn get_pipe_build_status(
     State(state): State<Arc<AppState>>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     let pipe_dir = state.screenpipe_dir.join("pipes").join(&pipe_id);
+    let update_temp_dir = std::env::temp_dir().join(format!("{}_update", pipe_id));
     let temp_dir = pipe_dir.with_extension("_temp");
-
-    // First check temp directory if it exists
-    if temp_dir.exists() {
-        let temp_pipe_json = temp_dir.join("pipe.json");
-        if temp_pipe_json.exists() {
-            let pipe_json = tokio::fs::read_to_string(&temp_pipe_json)
+    
+    // 1. First check if the update temp directory exists
+    if update_temp_dir.exists() {
+        debug!("Update temp directory exists for pipe: {}", pipe_id);
+        
+        // Check if there's a pipe.json in the update temp directory
+        let update_pipe_json_path = update_temp_dir.join("pipe.json");
+        if update_pipe_json_path.exists() {
+            let pipe_json = tokio::fs::read_to_string(&update_pipe_json_path)
                 .await
                 .map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        JsonResponse(
-                            json!({"error": format!("Failed to read temp pipe config: {}", e)}),
-                        ),
+                        JsonResponse(json!({"error": format!("Failed to read update temp pipe config: {}", e)})),
                     )
                 })?;
 
             let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(
-                        json!({"error": format!("Failed to parse temp pipe config: {}", e)}),
-                    ),
+                    JsonResponse(json!({"error": format!("Failed to parse update temp pipe config: {}", e)})),
                 )
             })?;
 
-            info!("{:?}", pipe_config);
-            let build_status = pipe_config.get("buildStatus").unwrap_or(&Value::Null);
-            return Ok(JsonResponse(json!({ "buildStatus": build_status })));
+            // Return the buildStatus if it exists
+            if let Some(build_status) = pipe_config.get("buildStatus") {
+                debug!("Found build status in update temp directory for pipe: {}", pipe_id);
+                return Ok(JsonResponse(build_status.clone()));
+            }
         }
+        
+        // If no buildStatus found in update temp directory, return a default in_progress status
+        return Ok(JsonResponse(json!({
+            "status": "in_progress",
+            "step": "downloading",
+            "message": "Update in progress"
+        })));
     }
 
-    // If no temp directory or no pipe.json in temp, check the main pipe directory
-    let pipe_json_path = pipe_dir.join("pipe.json");
-    if !pipe_json_path.exists() {
+    // 2. Check if the pipe directory exists
+    if pipe_dir.exists() {
+        // Then check if there's a pipe.json file
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        if pipe_json_path.exists() {
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({"error": format!("Failed to read pipe config: {}", e)})),
+                    )
+                })?;
+
+            let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({"error": format!("Failed to parse pipe config: {}", e)})),
+                )
+            })?;
+
+            // Check if there's a buildStatus field
+            if let Some(build_status) = pipe_config.get("buildStatus") {
+                // Return the build status directly
+                return Ok(JsonResponse(build_status.clone()));
+            }
+        } else {
+            // Pipe directory exists but pipe.json doesn't exist yet
+            // This likely means the pipe is still being created
+            debug!("Pipe directory exists but pipe.json not found for pipe: {}", pipe_id);
+            return Ok(JsonResponse(json!({
+                "status": "in_progress",
+                "step": "creating_config",
+                "message": "Creating pipe configuration"
+            })));
+        }
+    } else {
+        // If pipe directory doesn't exist, check temp directory
+        if temp_dir.exists() {
+            let temp_pipe_json = temp_dir.join("pipe.json");
+            if temp_pipe_json.exists() {
+                let pipe_json = tokio::fs::read_to_string(&temp_pipe_json)
+                    .await
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(
+                                json!({"error": format!("Failed to read temp pipe config: {}", e)}),
+                            ),
+                        )
+                    })?;
+
+                let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(
+                            json!({"error": format!("Failed to parse temp pipe config: {}", e)}),
+                        ),
+                    )
+                })?;
+
+                debug!("Found build status in temp directory for pipe: {}", pipe_id);
+                if let Some(build_status) = pipe_config.get("buildStatus") {
+                    return Ok(JsonResponse(build_status.clone()));
+                }
+            }
+            
+            // Temp directory exists but no pipe.json or no buildStatus
+            return Ok(JsonResponse(json!({
+                "status": "in_progress",
+                "step": "initializing",
+                "message": "Initializing pipe"
+            })));
+        }
+        
+        // If neither pipe directory nor temp directory exists, return not found
         return Err((
             StatusCode::NOT_FOUND,
             JsonResponse(json!({"error": "Pipe not found"})),
         ));
     }
 
-    let pipe_json = tokio::fs::read_to_string(&pipe_json_path)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Failed to read pipe config: {}", e)})),
-            )
-        })?;
-
-    let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": format!("Failed to parse pipe config: {}", e)})),
-        )
-    })?;
-
-    let build_status = pipe_config.get("buildStatus").unwrap_or(&Value::Null);
-    Ok(JsonResponse(json!({ "buildStatus": build_status })))
+    // If we get here, there's a pipe.json but no buildStatus field
+    Ok(JsonResponse(json!(null)))
 }
 
 #[oasgen]

@@ -584,17 +584,83 @@ impl PipeManager {
         let config = tokio::fs::read_to_string(&pipe_json_path).await?;
         let mut config: Value = serde_json::from_str(&config)?;
 
+        // Save the build status from the existing config
+        let build_status = config.get("buildStatus").cloned();
+        debug!("preserving build status: {:?}", build_status);
+
+        // Update build status to indicate update has started
+        if let Some(obj) = config.as_object_mut() {
+            obj.insert(
+                "buildStatus".to_string(),
+                serde_json::json!({
+                    "status": "in_progress",
+                    "step": "preparing",
+                    "message": "Starting update process"
+                }),
+            );
+            let updated_config = serde_json::to_string_pretty(&config)?;
+            tokio::fs::write(&pipe_json_path, updated_config).await?;
+        }
+
         // Create temp directory outside of pipes dir
-        let tmp_dir = std::env::temp_dir().join(format!("screenpipe_update_{}", id));
+        let tmp_dir = std::env::temp_dir().join(format!("{}_update", id));
         tokio::fs::create_dir_all(&tmp_dir).await?;
         debug!("created temp dir: {:?}", tmp_dir);
 
+        // Update build status to indicate downloading
+        if let Some(obj) = config.as_object_mut() {
+            obj.insert(
+                "buildStatus".to_string(),
+                serde_json::json!({
+                    "status": "in_progress",
+                    "step": "downloading",
+                    "message": "Downloading new version"
+                }),
+            );
+            let updated_config = serde_json::to_string_pretty(&config)?;
+            tokio::fs::write(&pipe_json_path, updated_config).await?;
+        }
+
         // Download new version to temp directory
-        let tmp_pipe_dir = download_pipe_private(id, source, tmp_dir.clone()).await?;
-        debug!("downloaded new version to temp dir: {:?}", tmp_pipe_dir);
+        let tmp_pipe_dir = match download_pipe_private(id, source, tmp_dir.clone()).await {
+            Ok(dir) => {
+                debug!("downloaded new version to temp dir: {:?}", dir);
+                dir
+            },
+            Err(e) => {
+                // Update build status to indicate download failure
+                if let Some(obj) = config.as_object_mut() {
+                    obj.insert(
+                        "buildStatus".to_string(),
+                        serde_json::json!({
+                            "status": "error",
+                            "step": "downloading",
+                            "error": format!("Failed to download: {}", e)
+                        }),
+                    );
+                    let updated_config = serde_json::to_string_pretty(&config)?;
+                    tokio::fs::write(&pipe_json_path, updated_config).await?;
+                }
+                return Err(anyhow::anyhow!("failed to download new version: {}", e));
+            }
+        };
 
         // Verify temp directory exists and contains the pipe files
         if !tmp_pipe_dir.exists() {
+            // Update build status to indicate verification failure
+            if let Some(obj) = config.as_object_mut() {
+                obj.insert(
+                    "buildStatus".to_string(),
+                    serde_json::json!({
+                        "status": "error",
+                        "step": "verification",
+                        "message": "Temp pipe directory not found"
+                    }),
+                );
+                let updated_config = serde_json::to_string_pretty(&config)?;
+                tokio::fs::write(&pipe_json_path, updated_config).await?;
+            }
+            
             error!("temp pipe directory not found: {:?}", tmp_pipe_dir);
             return Err(anyhow::anyhow!(
                 "temp pipe directory not found: {:?}",
@@ -602,13 +668,75 @@ impl PipeManager {
             ));
         }
 
+        // Update build status to indicate extracting version
+        if let Some(obj) = config.as_object_mut() {
+            obj.insert(
+                "buildStatus".to_string(),
+                serde_json::json!({
+                    "status": "in_progress",
+                    "step": "extracting version",
+                    "message": "Extracting version information"
+                }),
+            );
+            let updated_config = serde_json::to_string_pretty(&config)?;
+            tokio::fs::write(&pipe_json_path, updated_config).await?;
+        }
+
         // Get version from new pipe.json in temp dir
         let new_pipe_package_json_path = tmp_pipe_dir.join("package.json");
-        let new_config = tokio::fs::read_to_string(&new_pipe_package_json_path)
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to read new package.json: {}", e))?;
-        let new_config: Value = serde_json::from_str(&new_config)
-            .map_err(|e| anyhow::anyhow!("failed to parse new package.json: {}", e))?;
+        let new_config = match tokio::fs::read_to_string(&new_pipe_package_json_path).await {
+            Ok(content) => {
+                match serde_json::from_str::<Value>(&content) {
+                    Ok(config) => config,
+                    Err(e) => {
+                        // Update build status to indicate parsing failure
+                        if let Some(obj) = config.as_object_mut() {
+                            obj.insert(
+                                "buildStatus".to_string(),
+                                serde_json::json!({
+                                    "status": "error",
+                                    "step": "extracting version",
+                                    "error": format!("Failed to parse package.json: {}", e)
+                                }),
+                            );
+                            let updated_config = serde_json::to_string_pretty(&config)?;
+                            tokio::fs::write(&pipe_json_path, updated_config).await?;
+                        }
+                        return Err(anyhow::anyhow!("failed to parse new package.json: {}", e));
+                    }
+                }
+            },
+            Err(e) => {
+                // Update build status to indicate reading failure
+                if let Some(obj) = config.as_object_mut() {
+                    obj.insert(
+                        "buildStatus".to_string(),
+                        serde_json::json!({
+                            "status": "error",
+                            "step": "extracting version",
+                            "error": format!("Failed to read package.json: {}", e)
+                        }),
+                    );
+                    let updated_config = serde_json::to_string_pretty(&config)?;
+                    tokio::fs::write(&pipe_json_path, updated_config).await?;
+                }
+                return Err(anyhow::anyhow!("failed to read new package.json: {}", e));
+            }
+        };
+
+        // Update build status to indicate stopping pipe
+        if let Some(obj) = config.as_object_mut() {
+            obj.insert(
+                "buildStatus".to_string(),
+                serde_json::json!({
+                    "status": "in_progress",
+                    "step": "stopping pipe",
+                    "message": "Stopping current pipe"
+                }),
+            );
+            let updated_config = serde_json::to_string_pretty(&config)?;
+            tokio::fs::write(&pipe_json_path, updated_config).await?;
+        }
 
         // Update version in existing config
         if let Some(new_version) = new_config.get("version").and_then(Value::as_str) {
@@ -617,21 +745,47 @@ impl PipeManager {
                     "version".to_string(),
                     Value::String(new_version.to_string()),
                 );
+                
                 // Write updated config back to file
-                let updated_config = serde_json::to_string_pretty(&config)
-                    .map_err(|e| anyhow::anyhow!("failed to serialize updated config: {}", e))?;
-                tokio::fs::write(&pipe_json_path, updated_config)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("failed to write updated config: {}", e))?;
+                let updated_config = serde_json::to_string_pretty(&config)?;
+                tokio::fs::write(&pipe_json_path, updated_config).await?;
                 debug!("updated version in pipe.json to: {}", new_version);
             }
         }
 
         // 2. Stop current pipe if running
-        self.stop_pipe(id)
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to stop pipe: {}", e))?;
+        if let Err(e) = self.stop_pipe(id).await {
+            // Update build status to indicate stopping failure
+            if let Some(obj) = config.as_object_mut() {
+                obj.insert(
+                    "buildStatus".to_string(),
+                    serde_json::json!({
+                        "status": "error",
+                        "step": "stopping pipe",
+                        "error": format!("Failed to stop pipe: {}", e)
+                    }),
+                );
+                let updated_config = serde_json::to_string_pretty(&config)?;
+                tokio::fs::write(&pipe_json_path, updated_config).await?;
+            }
+            warn!("failed to stop pipe: {}", e);
+            // Continue with update despite stopping failure
+        }
         debug!("stopped running pipe");
+
+        // Update build status to indicate removing old files
+        if let Some(obj) = config.as_object_mut() {
+            obj.insert(
+                "buildStatus".to_string(),
+                serde_json::json!({
+                    "status": "in_progress",
+                    "step": "removing old files",
+                    "message": "Removing old files"
+                }),
+            );
+            let updated_config = serde_json::to_string_pretty(&config)?;
+            tokio::fs::write(&pipe_json_path, updated_config).await?;
+        }
 
         // 3. Remove old files
         let files_to_remove = ["node_modules", "bun.lockb", "package.json"];
@@ -648,6 +802,20 @@ impl PipeManager {
         }
 
         debug!("moved old files to trash");
+
+        // Update build status to indicate copying new files
+        if let Some(obj) = config.as_object_mut() {
+            obj.insert(
+                "buildStatus".to_string(),
+                serde_json::json!({
+                    "status": "in_progress",
+                    "step": "copying new files",
+                    "message": "Copying new files"
+                }),
+            );
+            let updated_config = serde_json::to_string_pretty(&config)?;
+            tokio::fs::write(&pipe_json_path, updated_config).await?;
+        }
 
         // 4. Move new files from temp to pipe dir
         let mut entries = tokio::fs::read_dir(&tmp_pipe_dir).await?;
@@ -681,15 +849,76 @@ impl PipeManager {
         tokio::fs::remove_dir_all(&tmp_dir).await?;
         debug!("cleaned up temp dir");
 
+        // Update build status to indicate restarting pipe
+        if let Some(obj) = config.as_object_mut() {
+            obj.insert(
+                "buildStatus".to_string(),
+                serde_json::json!({
+                    "status": "in_progress",
+                    "step": "restarting",
+                    "message": "Restarting pipe"
+                }),
+            );
+            let updated_config = serde_json::to_string_pretty(&config)?;
+            tokio::fs::write(&pipe_json_path, updated_config).await?;
+        }
+
         // 5. Restart pipe if it was enabled
         if config
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(false)
         {
-            let future = self.start_pipe_task(id.to_string()).await?;
-            tokio::spawn(future);
-            debug!("restarted pipe");
+            match self.start_pipe_task(id.to_string()).await {
+                Ok(future) => {
+                    tokio::spawn(future);
+                    debug!("restarted pipe");
+                    
+                    // Update build status to indicate success
+                    if let Some(obj) = config.as_object_mut() {
+                        obj.insert(
+                            "buildStatus".to_string(),
+                            serde_json::json!({
+                                "status": "success",
+                                "step": "completed",
+                                "message": "Update completed successfully"
+                            }),
+                        );
+                        let updated_config = serde_json::to_string_pretty(&config)?;
+                        tokio::fs::write(&pipe_json_path, updated_config).await?;
+                    }
+                },
+                Err(e) => {
+                    // Update build status to indicate restart failure
+                    if let Some(obj) = config.as_object_mut() {
+                        obj.insert(
+                            "buildStatus".to_string(),
+                            serde_json::json!({
+                                "status": "error",
+                                "step": "restarting",
+                                "error": format!("Update completed but failed to restart pipe: {}", e)
+                            }),
+                        );
+                        let updated_config = serde_json::to_string_pretty(&config)?;
+                        tokio::fs::write(&pipe_json_path, updated_config).await?;
+                    }
+                    warn!("failed to restart pipe: {}", e);
+                }
+            }
+        } else {
+            // Update build status to indicate success (no restart needed)
+            if let Some(obj) = config.as_object_mut() {
+                obj.insert(
+                    "buildStatus".to_string(),
+                    serde_json::json!({
+                        "status": "success",
+                        "step": "completed",
+                        "message": "Update completed successfully (pipe not enabled)"
+                    }),
+                );
+                let updated_config = serde_json::to_string_pretty(&config)?;
+                tokio::fs::write(&pipe_json_path, updated_config).await?;
+            }
         }
 
         info!("pipe {} updated successfully", id);

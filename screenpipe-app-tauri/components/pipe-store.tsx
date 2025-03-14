@@ -1,8 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Power, Search, Trash2, RefreshCw } from "lucide-react";
+import {
+  Loader2,
+  Power,
+  Search,
+  Trash2,
+  RefreshCw,
+  Download,
+  Bell,
+  HardDriveDownload,
+} from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import {
@@ -35,41 +44,53 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import localforage from "localforage";
 import { useLoginDialog } from "./login-dialog";
 import { PermissionButtons } from "./status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { invoke } from "@tauri-apps/api/core";
+import { cn } from "@/lib/utils";
+import { getAllWindows } from "@tauri-apps/api/window";
 
 const corePipes: string[] = [];
 
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>(
-    []
+    [],
   );
   const { checkLogin } = useLoginDialog();
   const { open: openStatusDialog } = useStatusDialog();
   const [loadingPurchases, setLoadingPurchases] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [loadingInstalls, setLoadingInstalls] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const { isMac: isMacOS } = usePlatform();
   const [isRestarting, setIsRestarting] = useState(false);
+  const [availableUpdates, setAvailableUpdates] = useState<PipeWithStatus[]>(
+    [],
+  );
+  const [updatePopoverOpen, setUpdatePopoverOpen] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const filteredPipes = pipes
     .filter(
       (pipe) =>
         pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
         (!showInstalledOnly || pipe.is_installed) &&
-        !pipe.is_installing
+        !pipe.is_installing,
     )
     .sort((a, b) => {
       // Sort by downloads count first
@@ -101,25 +122,6 @@ export const PipeStore: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filteredPipes.length]);
 
-  useEffect(() => {
-    const unsubscribePromise = listen("update-all-pipes", async () => {
-      // not sure this is a good idea ... basically pipes will break in the hand of users when update will happen
-      if (!checkLogin(settings.user, false)) return;
-
-      for (const pipe of pipes) {
-        // Then download the new version
-        await handleUpdatePipe(pipe);
-      }
-
-      // Refresh the pipe list
-      await fetchInstalledPipes();
-    });
-
-    return () => {
-      unsubscribePromise.then((unsubscribe) => unsubscribe());
-    };
-  }, []);
-
   const fetchStorePlugins = async () => {
     try {
       const pipeApi = await PipeApi.create(settings.user?.token!);
@@ -131,26 +133,27 @@ export const PipeStore: React.FC = () => {
           const installedPipe = installedPipes.find((p) => {
             return p.id?.replace("._temp", "") === plugin.name;
           });
+
           return {
             ...plugin,
             is_installed: !!installedPipe,
             installed_config: installedPipe?.config,
             has_purchased: purchaseHistory.some(
-              (p) => p.plugin_id === plugin.id
+              (p) => p.plugin_id === plugin.id,
             ),
             is_core_pipe: corePipes.includes(plugin.name),
             is_enabled: installedPipe?.config?.enabled ?? false,
             has_update: false,
           };
-        })
+        }),
       );
 
       const customPipes = installedPipes
         .filter(
           (p) =>
             !plugins.find(
-              (plugin) => plugin.name === p.id?.replace("._temp", "")
-            )
+              (plugin) => plugin.name === p.id?.replace("._temp", ""),
+            ),
         )
         .map((p) => {
           const pluginName = p.config?.source?.split("/").pop();
@@ -191,7 +194,7 @@ export const PipeStore: React.FC = () => {
 
   const handlePurchasePipe = async (
     pipe: PipeWithStatus,
-    onComplete?: () => void
+    onComplete?: () => void,
   ) => {
     try {
       if (!checkLogin(settings.user)) return;
@@ -318,7 +321,7 @@ export const PipeStore: React.FC = () => {
 
   const handleInstallPipe = async (
     pipe: PipeWithStatus,
-    onComplete?: () => void
+    onComplete?: () => void,
   ) => {
     try {
       if (!checkLogin(settings.user)) return;
@@ -326,8 +329,8 @@ export const PipeStore: React.FC = () => {
       // Keep the pipe in its current position by updating its status
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
-          p.id === pipe.id ? { ...p, is_installing: true } : p
-        )
+          p.id === pipe.id ? { ...p, is_installing: true } : p,
+        ),
       );
 
       setLoadingInstalls((prev) => new Set(prev).add(pipe.id));
@@ -358,7 +361,7 @@ export const PipeStore: React.FC = () => {
             pipe_id: pipe.id,
             url: response.download_url,
           }),
-        }
+        },
       );
 
       const data = await downloadResponse.json();
@@ -377,8 +380,8 @@ export const PipeStore: React.FC = () => {
                 is_installed: true,
                 is_installing: false,
               }
-            : p
-        )
+            : p,
+        ),
       );
 
       onComplete?.();
@@ -389,8 +392,8 @@ export const PipeStore: React.FC = () => {
       // Reset the pipe's status on error
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
-          p.id === pipe.id ? { ...p, is_installing: false } : p
-        )
+          p.id === pipe.id ? { ...p, is_installing: false } : p,
+        ),
       );
       if ((error as Error).cause === PipeDownloadError.PURCHASE_REQUIRED) {
         return toast({
@@ -481,7 +484,7 @@ export const PipeStore: React.FC = () => {
       console.error("failed to reset pipes:", error);
       toast({
         title: "error resetting pipes",
-          description: `error: ${(error as Error).message}...}`,
+        description: `error: ${(error as Error).message}...}`,
         variant: "destructive",
       });
     } finally {
@@ -509,9 +512,7 @@ export const PipeStore: React.FC = () => {
       }
 
       // Filter installed pipes that have updates available
-      const pipesToUpdate = pipes.filter(
-        (pipe) => pipe.is_installed && pipe.has_update
-      );
+      const pipesToUpdate = availableUpdates;
 
       if (pipesToUpdate.length === 0) {
         if (t) {
@@ -568,7 +569,23 @@ export const PipeStore: React.FC = () => {
           duration: 100000,
         });
 
-        await handleUpdatePipe(pipe);
+        await handleUpdatePipe(pipe); // Set all pipes to be updated to "in_progress" status
+        setPipes((prevPipes) =>
+          prevPipes.map((p) => {
+            if (
+              pipesToUpdate.some((pipeToUpdate) => pipeToUpdate.id === p.id)
+            ) {
+              return {
+                ...p,
+                installed_config: {
+                  ...p.installed_config!,
+                  buildStatus: "in_progress",
+                },
+              };
+            }
+            return p;
+          }),
+        );
       }
 
       t.update({
@@ -594,7 +611,7 @@ export const PipeStore: React.FC = () => {
 
   const handleTogglePipe = async (
     pipe: PipeWithStatus,
-    onComplete: () => void
+    onComplete: () => void,
   ) => {
     try {
       const t = toast({
@@ -651,7 +668,7 @@ export const PipeStore: React.FC = () => {
         `Failed to ${
           pipe.installed_config?.enabled ? "disable" : "enable"
         } pipe:`,
-        error
+        error,
       );
       toast({
         title: "error toggling pipe",
@@ -662,7 +679,7 @@ export const PipeStore: React.FC = () => {
   };
 
   const handleLoadFromLocalFolder = async (
-    setNewRepoUrl: (url: string) => void
+    setNewRepoUrl: (url: string) => void,
   ) => {
     try {
       const selectedFolder = await open({
@@ -808,10 +825,40 @@ export const PipeStore: React.FC = () => {
     try {
       if (!checkLogin(settings.user)) return;
 
+      // Set the pipe status to in_progress so the user gets feedback in the UI
+      setPipes((prevPipes) =>
+        prevPipes.map((p) =>
+          p.id === pipe.id
+            ? {
+                ...p,
+                installed_config: {
+                  ...p.installed_config!,
+                  buildStatus: "in_progress",
+                },
+              }
+            : p,
+        ),
+      );
+
       const currentVersion = pipe.installed_config?.version!;
       const storeApi = await PipeApi.create(settings.user!.token!);
       const update = await storeApi.checkUpdate(pipe.id, currentVersion);
       if (!update.has_update) {
+        // Reset the status if no update is available
+        setPipes((prevPipes) =>
+          prevPipes.map((p) =>
+            p.id === pipe.id
+              ? {
+                  ...p,
+                  installed_config: {
+                    ...p.installed_config!,
+                    buildStatus: "success",
+                  },
+                }
+              : p,
+          ),
+        );
+
         toast({
           title: "no update available",
           description: "the pipe is already up to date",
@@ -854,6 +901,14 @@ export const PipeStore: React.FC = () => {
         ),
       });
 
+      const windows = await getAllWindows();
+      console.log("windows", windows, pipe);
+      const window = windows.find((w) => w.label === pipe.name);
+      console.log("window", window);
+      if (window) {
+        window.close();
+      }
+
       const response = await fetch(
         `http://localhost:3030/pipes/update-version`,
         {
@@ -865,11 +920,25 @@ export const PipeStore: React.FC = () => {
             pipe_id: pipe.name,
             source: responseDownload.download_url,
           }),
-        }
+        },
       );
 
       const data = await response.json();
       if (!data.success) {
+        // Set status to error if update fails
+        setPipes((prevPipes) =>
+          prevPipes.map((p) =>
+            p.id === pipe.id
+              ? {
+                  ...p,
+                  installed_config: {
+                    ...p.installed_config!,
+                    buildStatus: "error",
+                  },
+                }
+              : p,
+          ),
+        );
         throw new Error(data.error);
       }
 
@@ -888,9 +957,28 @@ export const PipeStore: React.FC = () => {
 
       await fetchInstalledPipes();
 
+      // Update the available updates state
+      setAvailableUpdates((prev) => prev.filter((p) => p.id !== pipe.id));
+
       t.dismiss();
     } catch (error) {
       console.error("failed to update pipe:", error);
+
+      // Set status to error if update fails
+      setPipes((prevPipes) =>
+        prevPipes.map((p) =>
+          p.id === pipe.id
+            ? {
+                ...p,
+                installed_config: {
+                  ...p.installed_config!,
+                  buildStatus: "error",
+                },
+              }
+            : p,
+        ),
+      );
+
       toast({
         title: "error updating pipe",
         description: "please try again or check the logs for more information.",
@@ -939,6 +1027,139 @@ export const PipeStore: React.FC = () => {
     }
   };
 
+  // Define the checkForUpdates function before it's used
+  const checkForUpdates = useCallback(
+    async (silent: boolean = false) => {
+      setIsUpdating(true);
+      console.log(
+        "[pipe-update] checkForUpdates called at",
+        new Date().toISOString(),
+      );
+
+      if (!settings.user?.token) {
+        console.log("[pipe-update] Update check skipped: No user token");
+        toast({
+          title: "error checking for updates",
+          description: "please login to check for updates",
+          variant: "destructive",
+        });
+		setIsUpdating(true)
+        return;
+      }
+      // Get last check time from local storage
+      const lastCheckTime =
+        await localforage.getItem<number>("lastUpdateCheck");
+      const now = Date.now();
+
+      // Check if 5 minutes have passed since last check
+      if (lastCheckTime && now - lastCheckTime < 5 * 60 * 1000 && !silent) {
+        console.log(
+          "[pipe-update] Skipping check - last check was less than 5 minutes ago",
+          "Last check:",
+          new Date(lastCheckTime).toISOString(),
+          "Now:",
+          new Date(now).toISOString(),
+          "Diff (minutes):",
+          (now - lastCheckTime) / (60 * 1000),
+        );
+        setIsUpdating(false);
+        return;
+      }
+
+      // Store current time as last check
+      await localforage.setItem("lastUpdateCheck", now);
+      console.log("[pipe-update] Checking for updates...");
+
+      const installedPipes = pipes.filter(
+        (pipe) => pipe.is_installed && pipe.installed_config?.version,
+      );
+
+      // Skip if no pipes to check
+      if (installedPipes.length === 0) {
+        console.log("[pipe-update] No installed pipes to check");
+        return;
+      }
+
+      try {
+        // Format pipes for batch update check
+        const pluginsToCheck = installedPipes.map((pipe) => ({
+          pipe_id: pipe.id,
+          version: pipe.installed_config!.version!,
+        }));
+
+        console.log(
+          "[pipe-update] Sending update check request:",
+          pluginsToCheck,
+        );
+
+        const storeApi = await PipeApi.create(settings.user.token);
+        const updates = await storeApi.checkUpdates(pluginsToCheck);
+
+        console.log("[pipe-update] Update check response:", updates);
+
+        // Process updates - only mark them as having updates, don't auto-update
+        const pipesWithUpdates: PipeWithStatus[] = [];
+
+        // Create a new array with updated pipe information
+        const updatedPipes = pipes.map((pipe) => {
+          const update = updates.results.find((u) => u.pipe_id === pipe.id);
+          const hasUpdate =
+            update && "has_update" in update && update.has_update;
+
+          if (hasUpdate) {
+            console.log(`[pipe-update] Update available for ${pipe.name}`);
+            pipesWithUpdates.push(pipe);
+            // Return a new object with has_update set to true
+            return { ...pipe, has_update: true };
+          }
+
+          return pipe;
+        });
+
+        // Update the pipes state with the new information
+        setPipes(updatedPipes);
+
+        // Update the available updates state
+        setAvailableUpdates(pipesWithUpdates);
+
+        // If auto-update is enabled and there are updates, update all pipes
+        console.log("autoUpdatePipes", settings.autoUpdatePipes);
+        if (settings.autoUpdatePipes && pipesWithUpdates.length > 0) {
+          console.log("autoUpdatePipes", settings.autoUpdatePipes);
+          for (const pipe of pipesWithUpdates) {
+            await handleUpdatePipe(pipe);
+          }
+        } else if (pipesWithUpdates.length > 0 && !silent) {
+          // Show a notification to the user
+          toast({
+            title: "Updates available",
+            description: `Updates are available for ${pipesWithUpdates.length} pipe${pipesWithUpdates.length > 1 ? "s" : ""}.`,
+            duration: 5000,
+          });
+        }
+        setIsUpdating(false);
+      } catch (error) {
+        console.error("[pipe-update] Error checking for updates:", error);
+        setIsUpdating(false);
+      }
+    },
+    [
+      settings.user,
+      pipes,
+      setPipes,
+      settings.autoUpdatePipes,
+      handleUpdateAllPipes,
+    ],
+  );
+
+  // Create a ref to store the latest version of checkForUpdates
+  const checkForUpdatesRef = React.useRef(checkForUpdates);
+
+  // Update the ref whenever checkForUpdates changes
+  useEffect(() => {
+    checkForUpdatesRef.current = checkForUpdates;
+  }, [checkForUpdates]);
+
   useEffect(() => {
     fetchStorePlugins();
   }, [installedPipes, purchaseHistory]);
@@ -958,76 +1179,32 @@ export const PipeStore: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Add periodic update check
   useEffect(() => {
-    const checkForUpdates = async () => {
-      if (!settings.user.token) {
-        console.log("[pipe-update] Update check skipped: No user token");
-        return;
-      }
-      // Get last check time from local storage
-      const lastCheckTime = await localforage.getItem<number>(
-        "lastUpdateCheck"
-      );
-      const now = Date.now();
+    // Define the update check interval (5 minutes in milliseconds)
+    const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
 
-      // Check if 5 minutes have passed since last check
-      if (lastCheckTime && now - lastCheckTime < 5 * 60 * 1000) {
-        console.log("[pipe-update] Skipping check - last check was less than 5 minutes ago");
-        return;
-      }
+    // Run check immediately with a small delay to allow component to fully initialize
+    const initialCheckTimeout = setTimeout(
+      () => checkForUpdatesRef.current(),
+      2000,
+    );
 
-      // Store current time as last check
-      await localforage.setItem("lastUpdateCheck", now);
-      console.log("[pipe-update] Checking for updates...");
+    // Set up interval to check every 5 minutes
+    const interval = setInterval(
+      () => checkForUpdatesRef.current(),
+      UPDATE_CHECK_INTERVAL,
+    );
 
-      const installedPipes = pipes.filter(
-        (pipe) => pipe.is_installed && pipe.installed_config?.version
-      );
+    console.log(
+      `[pipe-update] Set up update check interval: ${UPDATE_CHECK_INTERVAL}ms (${UPDATE_CHECK_INTERVAL / (60 * 1000)} minutes)`,
+    );
 
-      // Skip if no pipes to check
-      if (installedPipes.length === 0) {
-        console.log("[pipe-update] No installed pipes to check");
-        return;
-      }
-            
-      try {
-        // Format pipes for batch update check
-        const pluginsToCheck = installedPipes.map((pipe) => ({
-          pipe_id: pipe.id,
-          version: pipe.installed_config!.version!,
-        }));
-        
-        console.log("[pipe-update] Sending update check request:", pluginsToCheck);
-        
-        const storeApi = await PipeApi.create(settings.user.token);
-        const updates = await storeApi.checkUpdates(pluginsToCheck);
-        
-        console.log("[pipe-update] Update check response:", updates);
-        
-        // Process updates
-        for (const pipe of installedPipes) {
-          const update = updates.results.find((u) => u.pipe_id === pipe.id);
-          console.log(`[pipe-update] Update check for ${pipe.name}:`, update);
-          if (update && "has_update" in update && update.has_update) {
-            console.log(`[pipe-update] Update available for ${pipe.name}`);
-            await handleUpdatePipe(pipe);
-          } else {
-            console.log(`[pipe-update] No update needed for ${pipe.name}`);
-          }
-        }
-      } catch (error) {
-        console.error("[pipe-update] Error checking for updates:", error);
-      }
+    return () => {
+      clearTimeout(initialCheckTimeout);
+      clearInterval(interval);
     };
-
-    // Run check immediately
-    checkForUpdates();
-
-    // Set up interval to check every 10 seconds actual check is done in the function
-    const interval = setInterval(checkForUpdates, 10 * 1000);
-
-    return () => clearInterval(interval);
-  }, [settings.user.token, pipes]);
+  }, []); // Empty dependency array
 
   useEffect(() => {
     const setupDeepLink = async () => {
@@ -1079,6 +1256,49 @@ export const PipeStore: React.FC = () => {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
   }, [pipes]);
+
+  // Update the event listener effect to use the memoized functions
+  useEffect(() => {
+    const unsubscribePromise = listen("update-all-pipes", async () => {
+      try {
+        if (!checkLogin(settings.user, false)) return;
+
+        // If auto-update is enabled, update all pipes
+        if (settings.autoUpdatePipes) {
+          // Filter pipes that need updates
+          const pipesToUpdate = pipes.filter(
+            (pipe) => pipe.is_installed && pipe.has_update,
+          );
+
+          if (pipesToUpdate.length === 0) {
+            console.log("No updates available for any pipes");
+            return;
+          }
+
+          console.log(`Found ${pipesToUpdate.length} pipes to update`);
+
+          for (const pipe of pipesToUpdate) {
+            try {
+              await handleUpdatePipe(pipe);
+            } catch (error) {
+              console.error(`Failed to update pipe ${pipe.name}:`, error);
+            }
+          }
+
+          await fetchInstalledPipes();
+        } else {
+          // Just check for updates but don't install them
+          await checkForUpdatesRef.current(true);
+        }
+      } catch (error) {
+        console.error("Error in update-all-pipes handler:", error);
+      }
+    });
+
+    return () => {
+      unsubscribePromise.then((unsubscribe) => unsubscribe());
+    };
+  }, [pipes, settings.user, settings.autoUpdatePipes, fetchInstalledPipes]);
 
   if (health?.status === "error") {
     return (
@@ -1144,132 +1364,183 @@ export const PipeStore: React.FC = () => {
   }
 
   return (
-    <div className="overflow-hidden flex flex-col space-y-4">
-      <div className="flex flex-col flex-1 overflow-hidden space-y-4 p-4">
-        <div className="space-y-4">
-          <div className="flex flex-col gap-4 md:w-[50%] w-full">
-            <div className="flex-1 relative py-2">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="search community pipes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-                autoCorrect="off"
-                autoComplete="off"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">show installed only</span>
-              <Switch
-                checked={showInstalledOnly}
-                onCheckedChange={setShowInstalledOnly}
-              />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
+    <div className="flex flex-col h-full mt-5 p-5">
+      <div className="flex flex-col md:flex-row sm:items-center justify-between gap-4 mb-4">
+        <div className="flex items-center space-x-2 flex-wrap gap-2">
+          <Input
+            placeholder="search pipes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full sm:w-64"
+          />
+          <div className="flex items-center space-x-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setConfirmOpen(true)}
+                    className="flex items-center gap-2"
+                    disabled={isPurging}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>reset all pipes</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowInstalledOnly(!showInstalledOnly)}
+                  >
+                    <HardDriveDownload
+                      className={cn(
+                        "h-4 w-4",
+                        showInstalledOnly && "text-green-500",
+                      )}
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    {showInstalledOnly
+                      ? "showing installed pipes only"
+                      : "showing all pipes"}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2 mt-2 sm:mt-0">
+          {availableUpdates.length > 0 && (
+            <Popover
+              open={updatePopoverOpen}
+              onOpenChange={setUpdatePopoverOpen}
+            >
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="relative">
+                  <Download className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Updates</span>
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                    {availableUpdates.length}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[90vw] sm:w-[500px]">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium">Available Updates</h4>
                     <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setConfirmOpen(true)}
-                      className="flex items-center gap-2"
-                      disabled={isPurging}
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        handleUpdateAllPipes();
+                        setUpdatePopoverOpen(false);
+                      }}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>reset all pipes</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>confirm deletion of all pipes?</DialogTitle>
-                    <DialogDescription>
-                      are you sure you want to delete all pipes? <br/> you&apos;ll have to download them again
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="flex justify-end gap-4">
-                    <Button 
-                      onClick={() => setConfirmOpen(false)} 
-                      disabled={isPurging}
-                      variant={"outline"}
-                    >
-                      cancel
-                    </Button>
-                    <Button 
-                      onClick={handleResetAllPipes} 
-                      disabled={isPurging}
-                    >
-                      {isPurging ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          reseting all pipes...
-                        </>
-                      ) : (
-                          "confirm"
-                        )}
+                      Update All
                     </Button>
                   </div>
-                </DialogContent>
-              </Dialog>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handleUpdateAllPipes()}
-                      className="flex items-center gap-2"
-                      disabled={
-                        !pipes.some(
-                          (pipe) => pipe.is_installed && pipe.has_update
-                        )
-                      }
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>update all pipes</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {availableUpdates.map((pipe) => (
+                      <div
+                        key={pipe.id}
+                        className="flex items-center justify-between border p-2 rounded"
+                      >
+                        <div>
+                          <p className="font-medium">{pipe.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {pipe.installed_config?.version} → newer version
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            handleUpdatePipe(pipe);
+                          }}
+                        >
+                          Update
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center pt-2 border-t">
+                    <Switch
+                      id="auto-update-toggle"
+                      checked={settings.autoUpdatePipes}
+                      onCheckedChange={(checked) => {
+                        updateSettings({ autoUpdatePipes: checked });
+                      }}
+                      className="mr-2"
+                    />
+                    <label htmlFor="auto-update-toggle" className="text-sm">
+                      Auto-update pipes
+                    </label>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+          <Button
+            onClick={async () => {
+              const lastCheckTime =
+                await localforage.getItem("lastUpdateCheck");
+              if (lastCheckTime) {
+                await localforage.removeItem("lastUpdateCheck");
+              }
+              checkForUpdates();
+            }}
+            variant="outline"
+            className="whitespace-nowrap"
+            disabled={isUpdating}
+          >
+            <RefreshCw
+              className={cn("h-4 w-4 mr-2", isUpdating && "animate-spin")}
+            />
+            <span className="hidden sm:inline">Check for Updates</span>
+            <span className="inline sm:hidden">Check</span>
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredPipes.map((pipe) => (
+            <PipeCard
+              key={pipe.id}
+              pipe={pipe}
+              setPipe={(updatedPipe) => {
+                setPipes((prevPipes) => {
+                  return prevPipes.map((p) =>
+                    p.id === updatedPipe.id ? updatedPipe : p,
+                  );
+                });
+              }}
+              onInstall={handleInstallPipe}
+              onClick={setSelectedPipe}
+              onPurchase={handlePurchasePipe}
+              isLoadingPurchase={loadingPurchases.has(pipe.id)}
+              isLoadingInstall={loadingInstalls.has(pipe.id)}
+              onToggle={handleTogglePipe}
+            />
+          ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredPipes.map((pipe) => (
-              <PipeCard
-                key={pipe.id}
-                pipe={pipe}
-                setPipe={(updatedPipe) => {
-                  setPipes((prevPipes) => {
-                    return prevPipes.map((p) =>
-                      p.id === updatedPipe.id ? updatedPipe : p
-                    );
-                  });
-                }}
-                onInstall={handleInstallPipe}
-                onClick={setSelectedPipe}
-                onPurchase={handlePurchasePipe}
-                isLoadingPurchase={loadingPurchases.has(pipe.id)}
-                isLoadingInstall={loadingInstalls.has(pipe.id)}
-                onToggle={handleTogglePipe}
-              />
-            ))}
-          </div>
+        <div className="flex items-center justify-center my-4">
+          <AddPipeForm
+            onAddPipe={handleInstallSideload}
+            isHealthy={health?.status !== "error"}
+            onLoadFromLocalFolder={handleLoadFromLocalFolder}
+          />
         </div>
-
-        <AddPipeForm
-          onAddPipe={handleInstallSideload}
-          isHealthy={health?.status !== "error"}
-          onLoadFromLocalFolder={handleLoadFromLocalFolder}
-        />
       </div>
     </div>
   );

@@ -31,6 +31,22 @@ export default function GeneralSettings() {
             }
           />
         </div>
+
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h4 className="font-medium">auto-update pipes</h4>
+            <p className="text-sm text-muted-foreground">
+              automatically update pipes when updates are available
+            </p>
+          </div>
+          <Switch
+            id="auto-update-toggle"
+            checked={settings.autoUpdatePipes}
+            onCheckedChange={(checked) =>
+              handleSettingsChange({ autoUpdatePipes: checked })
+            }
+          />
+        </div>
       </div>
     </div>
   );
