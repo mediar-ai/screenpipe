@@ -188,7 +188,7 @@ pub struct Cli {
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
 
     /// Enable realtime audio transcription
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = false)]
     pub enable_realtime_audio_transcription: bool,
 
     /// Enable realtime vision

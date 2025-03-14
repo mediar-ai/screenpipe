@@ -13,6 +13,7 @@ use oasgen::{oasgen, OaSchema, Server};
 
 use screenpipe_core::Desktop;
 
+use chrono::TimeZone;
 use screenpipe_db::{
     ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, Speaker,
     TagContentType,
@@ -599,11 +600,16 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let audio_devices = state.audio_manager.current_devices();
     let mut device_statuses = Vec::new();
     let mut global_audio_active = false;
+    let mut most_recent_audio_timestamp = 0; // Track the most recent timestamp
 
     // Check each device
     for device in &audio_devices {
         let device_name = device.to_string();
         let last_capture = screenpipe_audio::core::get_device_capture_time(&device_name);
+
+        // Update the most recent timestamp
+        most_recent_audio_timestamp = most_recent_audio_timestamp.max(last_capture);
+
         let device_active = if app_uptime < grace_period {
             true // Consider active during grace period
         } else {
@@ -743,7 +749,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         status: overall_status.to_string(),
         status_code,
         last_frame_timestamp: last_frame,
-        last_audio_timestamp: audio,
+        last_audio_timestamp: if most_recent_audio_timestamp > 0 {
+            Some(
+                Utc.timestamp_opt(most_recent_audio_timestamp as i64, 0)
+                    .unwrap(),
+            )
+        } else {
+            None
+        },
         last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
         audio_status,

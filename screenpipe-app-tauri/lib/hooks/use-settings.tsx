@@ -195,7 +195,7 @@ const DEFAULT_SETTINGS: Settings = {
 	startAudioShortcut: "",
 	stopAudioShortcut: "",
 	pipeShortcuts: {},
-	enableRealtimeAudioTranscription: true,
+	enableRealtimeAudioTranscription: false,
 	realtimeAudioTranscriptionEngine: "deepgram",
 	disableVision: false,
 	useAllMonitors: false,
