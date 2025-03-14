@@ -1,40 +1,26 @@
-import MotionDiv from '../../components/motion-div'
-import { Tabs, Tab } from 'nextra/components'
-import Image from 'next/image'
-
-
 # getting started
 
 ### choose your installation method
 
-| method | best for | pros | cons |
-|--------|----------|------|------|
-| [desktop app](https://screenpi.pe) | personal users, quick setup | easy gui, no terminal required | less customizable, automatic updates |
-| [cli](https://screenpi.pe) | developers, automation, scripting | fast, scriptable | requires terminal familiarity |
+| method      | best for                          | pros                           | cons                                 |
+| ----------- | --------------------------------- | ------------------------------ | ------------------------------------ |
+|             | personal users, quick setup       | easy gui, no terminal required | less customizable, automatic updates |
+|             | developers, automation, scripting | fast, scriptable               | requires terminal familiarity        |
 
 ### install desktop app
+
 - download the [desktop app](https://screenpi.pe) and follow the installation instructions.
 
 ### install cli
-<Tabs items={['macOS & Linux', 'Windows']}>
-  <Tab>
-    ```bash copy
-    curl -fsSL get.screenpi.pe/cli | sh
-    screenpipe
-    ```
-  </Tab>
-  <Tab>
-    ```powershell copy
-    iwr get.screenpi.pe/cli.ps1 | iex
-    screenpipe.exe
-    ```
-  </Tab>
-</Tabs>
+
+
 
 ### verify installation
+
 - run `screenpipe` or `screenpipe.exe` to verify successful installation.
 
 ### query data with javascript sdk
+
 then query the data using our javaScript sdk:
 
 ```typescript copy
@@ -70,55 +56,14 @@ async function queryScreenpipe() {
 queryScreenpipe().catch(console.error);
 ```
 
-now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to add more features!
+now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to add more features
 
 ### connect to AI providers
 
 screenpipe can connect to various AI providers to process your data. here's how to set up popular local AI providers:
 
-<Tabs items={['ollama', 'lmstudio']}>
-  <Tab>
-    1. install ollama from [ollama.ai](https://ollama.ai) and run your preferred model
-    ```bash copy
-    # start ollama with your preferred model
-    ollama run phi4:14b-q4_K_M
-    ```
-    2. then configure screenpipe to use ollama in your settings with model phi4:14b-q4_K_M
-    
-    that's it! screenpipe will now use ollama for AI like search, rewind, and more. you can change the model in settings.
-  </Tab>
-  <Tab>
-    to use LMStudio:
 
-    1. download and install [LMStudio](https://lmstudio.ai)
-    2. select your preferred model
-    3. start the local server
-    
-    <Image 
-      src="/lmstudio2.png" 
-      alt="Select model in LMStudio" 
-      width={800} 
-      height={450}
-      className="rounded-lg"
-    />
-    <Image 
-      src="/lmstudio3.png" 
-      alt="Start server in LMStudio" 
-      width={800} 
-      height={450}
-      className="rounded-lg"
-    />
-    <Image 
-      src="/lmstudio1.png" 
-      alt="LMStudio setup" 
-      width={800} 
-      height={450}
-      className="rounded-lg"
-    />
-  </Tab>
-</Tabs>
-
-verify your ai provider using any pipe in the store!
+verify your ai provider using any pipe in the store\!
 
 ### for developers
 
@@ -128,7 +73,7 @@ if you're interested in building from source or contributing to screenpipe, plea
 
 some of our customers use screenpipe in the following ways:
 
-- have existing screen recording software and want enterprise screen search engine 
+- have existing screen recording software and want enterprise screen search engine
 - want to integrate team's scale meeting transcriptions
 - want to extract knowledge from enterprise-scale screens
 - running the CLI on their customer's computer
