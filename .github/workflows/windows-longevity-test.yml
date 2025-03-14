@@ -8,7 +8,7 @@ on:
 
 jobs:
   test-windows:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Windows, X64]
     steps:
     - uses: actions/checkout@v4
 
