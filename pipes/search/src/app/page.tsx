@@ -24,7 +24,7 @@ export default function SearchPage() {
           </AlertDescription>
         </Alert>
       )}
-      <p className="text-2xl font-bold">where pixels become magic</p>
+      <p className="text-2xl font-bold">search your screen history</p>
       <SearchChat />
     </div>
   );
