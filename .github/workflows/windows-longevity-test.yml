@@ -34,12 +34,6 @@ jobs:
     - name: Install Chocolatey
       run: Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
-    - name: Install dependencies
-      shell: pwsh
-      run: |
-        choco install ffmpeg openssl
-        echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
     - name: Install Scream on Windows
       shell: powershell
       run: |
@@ -64,7 +58,7 @@ jobs:
       run: cargo build --release
 
     - name: Run CLI and generate activity (4-hour longevity test)
-      shell: pwsh
+      shell: powershell
       run: |
         $env:RUST_LOG = "debug"
         $process = Start-Process -FilePath ".\target\release\screenpipe.exe" -ArgumentList "--debug" -PassThru -RedirectStandardOutput "screenpipe_output.log" -RedirectStandardError "screenpipe_error.log" -NoNewWindow
@@ -192,7 +186,7 @@ jobs:
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
 
     - name: Check for crashes and captured data
-      shell: pwsh
+      shell: powershell
       run: |
         if (Select-String -Path "screenpipe_output.log" -Pattern "panic" -Quiet) {
           Write-Host "CLI crashed"
@@ -217,7 +211,7 @@ jobs:
         Get-Content "screenpipe_error.log"
 
     - name: Generate memory usage report
-      shell: pwsh
+      shell: powershell
       if: always()
       run: |
         Write-Host "Generating memory usage summary..."
