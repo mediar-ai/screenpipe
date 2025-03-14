@@ -15,6 +15,8 @@ export function ModelDownloadTracker() {
   const [downloadProgress, setDownloadProgress] = useState<
     Record<string, number>
   >({});
+  const [ffmpegInstalling, setFfmpegInstalling] = useState(false);
+  const [ffmpegToastRef, setFfmpegToastRef] = useState<any>(null);
 
   // Update progress on a timer for active downloads
   useEffect(() => {
@@ -81,8 +83,6 @@ export function ModelDownloadTracker() {
     // ffmpeg installation patterns
     const ffmpegStartPattern = /ffmpeg not found\. installing/i;
     const ffmpegEndPattern = /ffmpeg (installed|ready)/i;
-    const [ffmpegInstalling, setFfmpegInstalling] = useState(false);
-    const [ffmpegToastRef, setFfmpegToastRef] = useState<any>(null);
 
     // Function to extract model name from log line
     const getModelName = (
