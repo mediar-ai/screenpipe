@@ -83,7 +83,7 @@ export type AIPreset = {
 );
 
 export type Settings = {
-	openaiApiKey: string;
+  openaiApiKey: string;
 	deepgramApiKey: string;
 	isLoading: boolean;
 	aiModel: string;
@@ -115,7 +115,6 @@ export type Settings = {
 	enableBeta: boolean;
 	isFirstTimeUser: boolean;
 	autoStartEnabled: boolean;
-	autoUpdatePipes: boolean; // Add this line for auto-updating pipes
 	enableFrameCache: boolean; // Add this line
 	enableUiMonitoring: boolean; // Add this line
 	platform: string; // Add this line
@@ -131,7 +130,9 @@ export type Settings = {
 	realtimeAudioTranscriptionEngine: string;
 	disableVision: boolean;
 	useAllMonitors: boolean;
+	aiPresets: AIPreset[];
 	enableRealtimeVision: boolean;
+	autoUpdatePipes: boolean;
 };
 
 export const DEFAULT_PROMPT = `Rules:
@@ -184,7 +185,6 @@ const DEFAULT_SETTINGS: Settings = {
 	enableBeta: false,
 	isFirstTimeUser: true,
 	autoStartEnabled: true,
-	autoUpdatePipes: false, // Default to false for auto-updating pipes
 	enableFrameCache: true, // Add this line
 	enableUiMonitoring: false, // Change from true to false
 	platform: "unknown", // Add this line
@@ -201,7 +201,7 @@ const DEFAULT_SETTINGS: Settings = {
 	disableVision: false,
 	useAllMonitors: false,
 	enableRealtimeVision: false,
-	autoStartEnabled: true,
+	autoUpdatePipes: false, // Default to false for auto-updating pipes
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
