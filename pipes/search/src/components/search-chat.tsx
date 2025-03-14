@@ -269,7 +269,6 @@ export function SearchChat() {
 	const [progress, setProgress] = useState(0);
 
 	const [floatingInput, setFloatingInput] = useState("");
-	
 
 	const floatingInputRef = useRef<HTMLInputElement>(null);
 	const [showScrollButton, setShowScrollButton] = useState(false);
@@ -646,8 +645,6 @@ export function SearchChat() {
 		}
 	};
 
-
-
 	const handleResultSelection = (index: number) => {
 		setSelectedResults((prev) => {
 			const newSet = new Set(prev);
@@ -724,8 +721,9 @@ export function SearchChat() {
 
 		let apiKey = "";
 		if (preset.provider === "openai" || preset.provider === "custom") {
+			preset.apiKey;
 			if ("apiKey" in preset) {
-				apiKey == preset.apiKey;
+				apiKey = preset.apiKey;
 			} else {
 				toast({
 					title: "please provide api key",
@@ -2001,18 +1999,23 @@ export function SearchChat() {
 						>
 							<div className="relative flex-grow flex items-center space-x-2">
 								<AIPresetsDialog
-								pipeName={"search"}
-								recommendedPresets={[	
-									{
-										id: "search-chat",
-										model: "gemma:2b",
-										provider: "native-ollama",
-										prompt: DEFAULT_PROMPT,
-										maxContextChars: 512000,
-									},
-								]}
+									pipeName={"search"}
+									recommendedPresets={[
+										{
+											id: "search-chat",
+											model: "gemma:2b",
+											provider: "native-ollama",
+											prompt: DEFAULT_PROMPT,
+											maxContextChars: 512000,
+										},
+									]}
 								>
-									<Button type="button" variant="outline" size="icon" className=" p-2">
+									<Button
+										type="button"
+										variant="outline"
+										size="icon"
+										className=" p-2"
+									>
 										<SparklesIcon className="h-4 w-4" />
 									</Button>
 								</AIPresetsDialog>
@@ -2140,7 +2143,7 @@ export function SearchChat() {
 			)}
 
 			<div className="w-1/3 mx-auto">
-			<AIPresetsSelector pipeName={"search"} />
+				<AIPresetsSelector pipeName={"search"} />
 			</div>
 
 			{/* Scroll to Bottom Button */}
