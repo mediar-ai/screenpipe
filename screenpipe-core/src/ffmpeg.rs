@@ -4,7 +4,7 @@ use ffmpeg_sidecar::{
     paths::sidecar_dir,
     version::ffmpeg_version,
 };
-use log::{debug, error};
+use log::{debug, error, info};
 use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use which::which;
@@ -136,7 +136,7 @@ fn handle_ffmpeg_installation() -> Result<(), anyhow::Error> {
         return Ok(());
     }
 
-    debug!("ffmpeg not found. installing...");
+    info!("ffmpeg not found. installing...");
     match check_latest_version() {
         Ok(version) => debug!("latest version: {}", version),
         Err(e) => debug!("skipping version check due to error: {e}"),
@@ -145,7 +145,7 @@ fn handle_ffmpeg_installation() -> Result<(), anyhow::Error> {
     let download_url = ffmpeg_download_url()?;
     let destination = get_ffmpeg_install_dir()?;
 
-    debug!("downloading from: {:?}", download_url);
+    info!("downloading from: {:?}", download_url);
     let archive_path = download_ffmpeg_package(download_url, &destination)?;
     debug!("downloaded package: {:?}", archive_path);
 
@@ -154,7 +154,7 @@ fn handle_ffmpeg_installation() -> Result<(), anyhow::Error> {
 
     let version = ffmpeg_version()?;
 
-    debug!("done! installed ffmpeg version {}", version);
+    info!("done! installed ffmpeg version {}", version);
     Ok(())
 }
 
