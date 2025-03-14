@@ -41,11 +41,11 @@ async fn main() {
 
     let window_filters = Arc::new(WindowFilters::new(&[], &[]));
 
-    continuous_capture(
+    let _ = continuous_capture(
         result_tx,
         Duration::from_secs_f32(1.0 / cli.fps),
         OcrEngine::AppleNative,
-        monitor_id,
+        monitor_id.unwrap(),
         window_filters,
         languages.clone(),
         false,
