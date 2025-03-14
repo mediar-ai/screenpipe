@@ -86,6 +86,7 @@ before you begin:
    ```
 
 5. **setup Intel OpenMP DLLs**:
+   - make sure your in root of the project i.e screenpipe
    - Ensure Python and `pip` are installed before running the script.
    
    ```powershell
@@ -108,8 +109,28 @@ before you begin:
    # Clean up the temporary directory
    Remove-Item -Path $temp_dir -Recurse -Force
    ```
+6. **make sure vcredist is present on system**:
+   - make sure your in root of the project i.e screenpipe
 
-6. **clone and build**:
+   ```powershell
+   $path = "C:\Windows\System32\vcruntime140.dll"
+
+   if (-Not (Test-Path $path)) {
+       Start-Process powershell -Verb RunAs -ArgumentList @"
+           -NoProfile -ExecutionPolicy Bypass -Command "& {
+           Set-ExecutionPolicy Bypass -Scope Process -Force
+           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+           Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
+           }"
+   "@ -Wait
+   }
+   
+   $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+   New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
+   Copy-Item C:\Windows\System32\vcruntime140.dll -Destination $vcredist_dir -Force
+   ```
+
+7. **clone and build**:
    ```powershell
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
