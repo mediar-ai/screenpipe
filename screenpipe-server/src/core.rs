@@ -7,7 +7,6 @@ use screenpipe_db::{DatabaseManager, Speaker};
 use screenpipe_events::{poll_meetings_events, send_event};
 use screenpipe_vision::core::WindowOcr;
 use screenpipe_vision::OcrEngine;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
@@ -19,7 +18,6 @@ pub async fn start_continuous_recording(
     output_path: Arc<String>,
     fps: f64,
     video_chunk_duration: Duration,
-    vision_control: Arc<AtomicBool>,
     ocr_engine: Arc<OcrEngine>,
     monitor_ids: Vec<u32>,
     use_pii_removal: bool,
@@ -38,7 +36,6 @@ pub async fn start_continuous_recording(
             .map(|&monitor_id| {
                 let db_manager_video = Arc::clone(&db);
                 let output_path_video = Arc::clone(&output_path);
-                let is_running_video = Arc::clone(&vision_control);
                 let ocr_engine = Arc::clone(&ocr_engine);
                 let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
@@ -51,7 +48,6 @@ pub async fn start_continuous_recording(
                         db_manager_video,
                         output_path_video,
                         fps,
-                        is_running_video,
                         ocr_engine,
                         monitor_id,
                         use_pii_removal,
@@ -99,7 +95,6 @@ async fn record_video(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: f64,
-    is_running: Arc<AtomicBool>,
     ocr_engine: Arc<OcrEngine>,
     monitor_id: u32,
     use_pii_removal: bool,
@@ -110,10 +105,14 @@ async fn record_video(
     capture_unfocused_windows: bool,
     realtime_vision: bool,
 ) -> Result<()> {
-    debug!("record_video: Starting");
+    debug!("record_video: Starting for monitor {}", monitor_id);
     let db_chunk_callback = Arc::clone(&db);
     let rt = Handle::current();
     let device_name = Arc::new(format!("monitor_{}", monitor_id));
+
+    // Add heartbeat counter
+    let mut heartbeat_counter: u64 = 0;
+    let heartbeat_interval = 100; // Log every 100 iterations
 
     let new_chunk_callback = {
         let db_chunk_callback = Arc::clone(&db_chunk_callback);
@@ -147,8 +146,21 @@ async fn record_video(
         capture_unfocused_windows,
     );
 
-    while is_running.load(Ordering::SeqCst) {
+    loop {
+        // Increment and check heartbeat
+        heartbeat_counter += 1;
+        if heartbeat_counter % heartbeat_interval == 0 {
+            debug!(
+                "record_video: Heartbeat for monitor {} - iteration {}",
+                monitor_id, heartbeat_counter
+            );
+        }
+
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
+            debug!(
+                "record_video: Processing frame with {} window results",
+                frame.window_ocr_results.len()
+            );
             for window_result in &frame.window_ocr_results {
                 match db
                     .insert_frame(
@@ -210,11 +222,17 @@ async fn record_video(
                     }
                 }
             }
+        } else {
+            // Log when frame queue is empty
+            if heartbeat_counter % 10 == 0 {
+                debug!(
+                    "record_video: No frames in queue for monitor {}",
+                    monitor_id
+                );
+            }
         }
         tokio::time::sleep(Duration::from_secs_f64(1.0 / fps)).await;
     }
-
-    Ok(())
 }
 
 pub async fn merge_speakers(

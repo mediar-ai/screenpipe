@@ -107,6 +107,57 @@ pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
     AudioDevice::from_name(name)
 }
 
+/// Attempts an operation with exponential backoff retry
+#[cfg(target_os = "macos")]
+async fn with_retry<T, F, Fut>(operation: F, max_retries: usize) -> Result<T>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T>>,
+{
+    let mut retries = 0;
+    let mut delay_ms = 10; // Start with 10ms delay
+
+    loop {
+        match operation().await {
+            Ok(value) => return Ok(value),
+            Err(e) => {
+                if retries >= max_retries {
+                    return Err(anyhow!("Max retries reached: {}", e));
+                }
+
+                // Add some jitter to prevent synchronized retries
+                use rand::{rng, Rng};
+                let jitter = rng().random_range(0..=10) as u64;
+                let delay = std::time::Duration::from_millis(delay_ms + jitter);
+
+                tracing::warn!(
+                    "ScreenCaptureKit host error, retrying in {}ms: {}",
+                    delay_ms + jitter,
+                    e
+                );
+                tokio::time::sleep(delay).await;
+
+                retries += 1;
+                delay_ms = std::cmp::min(delay_ms * 2, 1000); // Exponential backoff, max 1s
+            }
+        }
+    }
+}
+
+/// Gets the ScreenCaptureKit host with retry mechanism
+#[cfg(target_os = "macos")]
+async fn get_screen_capture_host() -> Result<cpal::Host> {
+    // necessary hack because this is unreliable
+    with_retry(
+        || async {
+            cpal::host_from_id(cpal::HostId::ScreenCaptureKit)
+                .map_err(|e| anyhow!("Failed to get ScreenCaptureKit host: {}", e))
+        },
+        3,
+    )
+    .await
+}
+
 pub async fn get_cpal_device_and_config(
     audio_device: &AudioDevice,
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
@@ -133,7 +184,7 @@ pub async fn get_cpal_device_and_config(
 
         #[cfg(target_os = "macos")]
         if is_output_device {
-            if let Ok(screen_capture_host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+            if let Ok(screen_capture_host) = get_screen_capture_host().await {
                 devices = screen_capture_host.input_devices()?;
             }
         }
@@ -180,8 +231,8 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     {
         // !HACK macos is supposed to use special macos feature "display capture"
         // ! see https://github.com/RustAudio/cpal/pull/894
-        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
-            for device in host.input_devices()? {
+        if let Ok(screen_capture_host) = get_screen_capture_host().await {
+            for device in screen_capture_host.input_devices()? {
                 if let Ok(name) = device.name() {
                     if should_include_output_device(&name) {
                         devices.push(AudioDevice::new(name, DeviceType::Output));
@@ -221,23 +272,26 @@ pub fn default_input_device() -> Result<AudioDevice> {
         .ok_or(anyhow!("No default input device detected"))?;
     Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
-// this should be optional ?
-pub fn default_output_device() -> Result<AudioDevice> {
+
+pub async fn default_output_device() -> Result<AudioDevice> {
     #[cfg(target_os = "macos")]
     {
         // ! see https://github.com/RustAudio/cpal/pull/894
-        if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+        // Try to get device from ScreenCaptureKit first
+        if let Ok(host) = get_screen_capture_host().await {
             if let Some(device) = host.default_input_device() {
                 if let Ok(name) = device.name() {
                     return Ok(AudioDevice::new(name, DeviceType::Output));
                 }
             }
         }
+
+        // Fall back to default output device
         let host = cpal::default_host();
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
-        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
+        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -246,30 +300,6 @@ pub fn default_output_device() -> Result<AudioDevice> {
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
-        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
+        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
     }
-}
-
-pub fn trigger_audio_permission() -> Result<()> {
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or_else(|| anyhow!("No default input device found"))?;
-
-    let config = device.default_input_config()?;
-
-    // Attempt to build an input stream, which should trigger the permission request
-    let _stream = device.build_input_stream(
-        &config.into(),
-        |_data: &[f32], _: &cpal::InputCallbackInfo| {
-            // Do nothing, we just want to trigger the permission request
-        },
-        |err| eprintln!("Error in audio stream: {}", err),
-        None,
-    )?;
-
-    // We don't actually need to start the stream
-    // The mere attempt to build it should trigger the permission request
-
-    Ok(())
 }

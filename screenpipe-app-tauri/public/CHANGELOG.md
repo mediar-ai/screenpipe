@@ -1,12 +1,13 @@
-Based on the provided commits, here is the changelog for the new screenpipe update:
+Based on the provided commits, here is the changelog for the new Screenpipe update:
+
+### **New Features:**
+- **Example pipe logs:** Added example pipe logs to improve user understanding and demonstration of features.
 
 ### **Improvements:**
-- **Removed emojis and ASCII Art from installation prompts:** Cleaned up the install.ps to present a more professional and straightforward installation experience.
+- No significant improvements were noted from the provided commits.
 
 ### **Fixes:**
-- **Attempted fix for sideload issue:** Addressed issues related to sideloading the application to enhance overall functionality. 
+- No fixes were noted from the provided commits.
 
-(Note: The specific result of the attempt fix for sideload is not clear; only the action taken is included under fixes.)
-
-#### **Full Changelog:** [20c3c..c3905](https://github.com/mediar-ai/screenpipe/compare/20c3c..c3905)
+#### **Full Changelog:** [b0670..8043e](https://github.com/mediar-ai/screenpipe/compare/b0670..8043e)
 

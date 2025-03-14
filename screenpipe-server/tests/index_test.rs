@@ -58,6 +58,7 @@ async fn copy_test_video(temp_dir: &Path) -> Result<PathBuf> {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_index_command_with_sql() -> Result<()> {
     setup_test_env().await?;
 

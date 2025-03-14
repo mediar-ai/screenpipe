@@ -438,14 +438,12 @@ import { Command as Command7 } from "commander";
 import fs2 from "fs";
 import { Command as Command3 } from "commander";
 import * as p4 from "@clack/prompts";
-async function validateGitHubRepo(url2) {
+function validateGitHubRepo(url2) {
   try {
-    const repoPath = url2.replace("https://github.com/", "").replace(/\/$/, "");
-    const apiUrl = `https://api.github.com/repos/${repoPath}`;
-    const response = await fetch(apiUrl, {
-      headers: { Accept: "application/vnd.github.v3+json" }
-    });
-    return response.status === 200;
+    if (!url2.includes("github.com")) {
+      return false;
+    }
+    return true;
   } catch (error) {
     return false;
   }
@@ -493,7 +491,7 @@ var registerCommand = new Command3().name("register").description("register a ne
   p4.intro(`${colors.highlight("\u26A0\uFE0F IMPORTANT: Publishing Process \u26A0\uFE0F")}`);
   const githubValidationSpinner = p4.spinner();
   githubValidationSpinner.start("Validating GitHub repository");
-  const isValidRepo = await validateGitHubRepo(opts.source);
+  const isValidRepo = validateGitHubRepo(opts.source);
   if (!isValidRepo) {
     githubValidationSpinner.stop("GitHub validation failed");
     handleError(
@@ -664,13 +662,19 @@ async function httpRequest(url2, method, data, headers, onProgress, verbose = fa
     const contentLength = Buffer.isBuffer(bodyData) ? bodyData.length : Buffer.byteLength(bodyData, "utf8");
     headers = { ...headers, "Content-Length": contentLength.toString() };
     if (verbose) {
-      console.log(colors.dim(`${symbols.arrow} setting content-length: ${contentLength}`));
+      console.log(
+        colors.dim(`${symbols.arrow} setting content-length: ${contentLength}`)
+      );
     }
   }
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       if (attempt > 1) {
-        console.log(colors.dim(`${symbols.arrow} retry attempt ${attempt}/${MAX_RETRIES}...`));
+        console.log(
+          colors.dim(
+            `${symbols.arrow} retry attempt ${attempt}/${MAX_RETRIES}...`
+          )
+        );
       }
       const result = await new Promise((resolve, reject) => {
         const requestOptions = {
@@ -681,11 +685,19 @@ async function httpRequest(url2, method, data, headers, onProgress, verbose = fa
           headers
         };
         if (verbose && attempt === 1) {
-          console.log(colors.dim(`${symbols.arrow} request options: ${JSON.stringify({
-            method,
-            url: parsedUrl.toString(),
-            headers
-          }, null, 2)}`));
+          console.log(
+            colors.dim(
+              `${symbols.arrow} request options: ${JSON.stringify(
+                {
+                  method,
+                  url: parsedUrl.toString(),
+                  headers
+                },
+                null,
+                2
+              )}`
+            )
+          );
         }
         const req = requestModule.request(requestOptions, (res) => {
           const chunks = [];
@@ -710,9 +722,15 @@ async function httpRequest(url2, method, data, headers, onProgress, verbose = fa
                   errorMessage += `: ${responseData.toString("utf8")}`;
                 } else if (contentType.includes("xml")) {
                   const xmlString = responseData.toString("utf8");
-                  console.log(colors.dim(`${symbols.arrow} error response (XML): ${xmlString}`));
+                  console.log(
+                    colors.dim(
+                      `${symbols.arrow} error response (XML): ${xmlString}`
+                    )
+                  );
                   const errorCodeMatch = xmlString.match(/<Code>(.*?)<\/Code>/);
-                  const errorMessageMatch = xmlString.match(/<Message>(.*?)<\/Message>/);
+                  const errorMessageMatch = xmlString.match(
+                    /<Message>(.*?)<\/Message>/
+                  );
                   if (errorCodeMatch && errorMessageMatch) {
                     errorMessage += `: ${errorCodeMatch[1]} - ${errorMessageMatch[1]}`;
                   }
@@ -737,7 +755,10 @@ async function httpRequest(url2, method, data, headers, onProgress, verbose = fa
             if (Buffer.isBuffer(chunk)) {
               uploadedBytes += chunk.length;
             } else if (typeof chunk === "string") {
-              uploadedBytes += Buffer.byteLength(chunk, encoding);
+              uploadedBytes += Buffer.byteLength(
+                chunk,
+                encoding
+              );
             }
             onProgress(uploadedBytes, totalBytes);
             return result2;
@@ -751,15 +772,27 @@ async function httpRequest(url2, method, data, headers, onProgress, verbose = fa
       return result;
     } catch (error) {
       if (error instanceof Error && error.message.includes("400") && (error.message.includes("already exists") || error.message.includes("Version") || error.message.includes("version"))) {
-        console.log(colors.dim(`${symbols.arrow} detected version conflict, not retrying with same version`));
+        console.log(
+          colors.dim(
+            `${symbols.arrow} detected version conflict, not retrying with same version`
+          )
+        );
         throw error;
       }
       if (attempt === MAX_RETRIES) {
         throw error;
       }
-      console.log(colors.dim(`${symbols.arrow} request failed (attempt ${attempt}/${MAX_RETRIES}): ${error instanceof Error ? error.message : "unknown error"}`));
+      console.log(
+        colors.dim(
+          `${symbols.arrow} request failed (attempt ${attempt}/${MAX_RETRIES}): ${error instanceof Error ? error.message : "unknown error"}`
+        )
+      );
       const delay = INITIAL_DELAY * Math.pow(2, attempt - 1) * (0.5 + Math.random() * 0.5);
-      console.log(colors.dim(`${symbols.arrow} waiting ${Math.round(delay)}ms before retry...`));
+      console.log(
+        colors.dim(
+          `${symbols.arrow} waiting ${Math.round(delay)}ms before retry...`
+        )
+      );
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -805,13 +838,15 @@ function bumpVersion(version, type = "patch") {
   else newVersion = `${major}.${minor}.${patch + 1}`;
   console.log(colors.dim(`${symbols.arrow} new version: ${newVersion}`));
   return newVersion;
-  return `${major}.${minor}.${patch + 1}`;
 }
 function updatePackageVersion(newVersion) {
   const packageJsonPath = path2.join(process.cwd(), "package.json");
   const packageJson = JSON.parse(fs3.readFileSync(packageJsonPath, "utf-8"));
   packageJson.version = newVersion;
-  fs3.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + "\n");
+  fs3.writeFileSync(
+    packageJsonPath,
+    JSON.stringify(packageJson, null, 2) + "\n"
+  );
 }
 var publishCommand = new Command4("publish").description("publish or update a pipe to the store").requiredOption("-n, --name <name>", "name of the pipe").option("-v, --verbose", "enable verbose logging", false).option(
   "--skip-build-check",
@@ -944,7 +979,11 @@ ${symbols.info} publishing ${colors.highlight(
     }
     try {
       console.log(colors.dim(`${symbols.arrow} getting upload URL...`));
-      console.log(colors.dim(`${symbols.arrow} requesting URL from: ${API_BASE_URL}/api/plugins/publish`));
+      console.log(
+        colors.dim(
+          `${symbols.arrow} requesting URL from: ${API_BASE_URL}/api/plugins/publish`
+        )
+      );
       let urlResponse;
       try {
         const response = await httpRequest(
@@ -966,19 +1005,35 @@ ${symbols.info} publishing ${colors.highlight(
         );
         urlResponse = { data: JSON.parse(response.data.toString("utf8")) };
         console.log(colors.dim(`${symbols.arrow} storage provider: S3`));
-        console.log(colors.dim(`${symbols.arrow} url response status: ${response.statusCode}`));
+        console.log(
+          colors.dim(
+            `${symbols.arrow} url response status: ${response.statusCode}`
+          )
+        );
       } catch (error) {
-        console.log(colors.dim(`${symbols.arrow} server error details: ${error instanceof Error ? error.message : "unknown error"}`));
+        console.log(
+          colors.dim(
+            `${symbols.arrow} server error details: ${error instanceof Error ? error.message : "unknown error"}`
+          )
+        );
         if (error instanceof Error && (error.message.includes("already exists") || error.message.includes("Version") || error.message.includes("version"))) {
-          console.log(colors.dim(`${symbols.arrow} detected version conflict, preparing to bump version`));
+          console.log(
+            colors.dim(
+              `${symbols.arrow} detected version conflict, preparing to bump version`
+            )
+          );
           const readline = __require("readline").createInterface({
             input: process.stdin,
             output: process.stdout
           });
           const newVersion = bumpVersion(packageJson.version);
           const question = `
-${symbols.info} ${colors.info(`Version ${packageJson.version} already exists.`)} 
-${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/n): `)}`;
+${symbols.info} ${colors.info(
+            `Version ${packageJson.version} already exists.`
+          )} 
+${colors.info(
+            `Would you like to bump to version ${newVersion} and continue? (y/n): `
+          )}`;
           const answer = await new Promise((resolve) => {
             readline.question(question, (ans) => {
               readline.close();
@@ -987,21 +1042,31 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
           });
           if (answer === "y" || answer === "yes") {
             updatePackageVersion(newVersion);
-            logger.success(`${symbols.success} Updated package.json to version ${newVersion}`);
+            logger.success(
+              `${symbols.success} Updated package.json to version ${newVersion}`
+            );
             packageJson.version = newVersion;
             if (fs3.existsSync(zipPath)) {
               fs3.unlinkSync(zipPath);
               if (opts.verbose) {
-                console.log(colors.dim(`${symbols.arrow} cleaned up old zip file`));
+                console.log(
+                  colors.dim(`${symbols.arrow} cleaned up old zip file`)
+                );
               }
             }
             try {
-              logger.info(colors.info(`
-${symbols.info} Rebuilding project with new version ${newVersion}...`));
+              logger.info(
+                colors.info(
+                  `
+${symbols.info} Rebuilding project with new version ${newVersion}...`
+                )
+              );
               runBuildCommand();
             } catch (error2) {
               if (error2 instanceof Error) {
-                console.error(colors.error(`${symbols.error} ${error2.message}`));
+                console.error(
+                  colors.error(`${symbols.error} ${error2.message}`)
+                );
                 process.exit(1);
               }
             }
@@ -1012,7 +1077,11 @@ ${symbols.info} Rebuilding project with new version ${newVersion}...`));
             const newOutput = fs3.createWriteStream(zipPath);
             const newArchive = archiver("zip", { zlib: { level: 9 } });
             newArchive.pipe(newOutput);
-            logger.log(colors.dim(`${symbols.arrow} creating new package archive with version ${newVersion}...`));
+            logger.log(
+              colors.dim(
+                `${symbols.arrow} creating new package archive with version ${newVersion}...`
+              )
+            );
             if (isNextProject) {
               await archiveNextJsProject(newArchive);
             } else {
@@ -1029,11 +1098,23 @@ ${symbols.info} Rebuilding project with new version ${newVersion}...`));
             fileHash = newHashSum.digest("hex");
             fileSize = fs3.statSync(zipPath).size;
             if (opts.verbose) {
-              console.log(colors.dim(`${symbols.arrow} new archive created: ${zipPath}`));
-              console.log(colors.dim(`${symbols.arrow} new file size: ${fileSize} bytes`));
-              console.log(colors.dim(`${symbols.arrow} new file hash: ${fileHash}`));
+              console.log(
+                colors.dim(`${symbols.arrow} new archive created: ${zipPath}`)
+              );
+              console.log(
+                colors.dim(
+                  `${symbols.arrow} new file size: ${fileSize} bytes`
+                )
+              );
+              console.log(
+                colors.dim(`${symbols.arrow} new file hash: ${fileHash}`)
+              );
             }
-            console.log(colors.dim(`${symbols.arrow} retrying with new version: ${newVersion}`));
+            console.log(
+              colors.dim(
+                `${symbols.arrow} retrying with new version: ${newVersion}`
+              )
+            );
             const response = await httpRequest(
               `${API_BASE_URL}/api/plugins/publish`,
               "POST",
@@ -1052,23 +1133,44 @@ ${symbols.info} Rebuilding project with new version ${newVersion}...`));
               void 0,
               opts.verbose
             );
-            urlResponse = { data: JSON.parse(response.data.toString("utf8")) };
+            urlResponse = {
+              data: JSON.parse(response.data.toString("utf8"))
+            };
           } else {
-            throw new Error(`Publishing canceled. Please update the version manually in package.json.`);
+            throw new Error(
+              `Publishing canceled. Please update the version manually in package.json.`
+            );
           }
         } else {
           throw error;
         }
       }
       const { uploadUrl, path: storagePath } = urlResponse.data;
-      console.log(colors.dim(`${symbols.arrow} received upload URL: ${uploadUrl.substring(0, 50)}...`));
-      console.log(colors.dim(`${symbols.arrow} storage path: ${storagePath}`));
-      console.log(colors.dim(`${symbols.arrow} file size: ${fileSize} bytes`));
+      console.log(
+        colors.dim(
+          `${symbols.arrow} received upload URL: ${uploadUrl.substring(
+            0,
+            50
+          )}...`
+        )
+      );
+      console.log(
+        colors.dim(`${symbols.arrow} storage path: ${storagePath}`)
+      );
+      console.log(
+        colors.dim(`${symbols.arrow} file size: ${fileSize} bytes`)
+      );
       let currentUploadUrl = uploadUrl;
       let currentStoragePath = storagePath;
       logger.log(colors.dim(`${symbols.arrow} uploading to storage...`));
-      console.log(colors.dim(`${symbols.arrow} starting upload with native http...`));
-      console.log(colors.dim(`${symbols.arrow} upload file size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB`));
+      console.log(
+        colors.dim(`${symbols.arrow} starting upload with native http...`)
+      );
+      console.log(
+        colors.dim(
+          `${symbols.arrow} upload file size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB`
+        )
+      );
       const progressBar = {
         current: 0,
         total: fileSize,
@@ -1084,7 +1186,11 @@ ${symbols.info} Rebuilding project with new version ${newVersion}...`));
             const loadedSize = (loaded / (1024 * 1024)).toFixed(2);
             const totalSize = (total / (1024 * 1024)).toFixed(2);
             process.stdout.write(
-              `${colors.dim(`${symbols.arrow} uploading: [`)}${colors.info(bar)}${colors.dim(`] ${percent}%`)} ${colors.dim(`(${loadedSize}/${totalSize} MB)`)}`
+              `${colors.dim(`${symbols.arrow} uploading: [`)}${colors.info(
+                bar
+              )}${colors.dim(`] ${percent}%`)} ${colors.dim(
+                `(${loadedSize}/${totalSize} MB)`
+              )}`
             );
           }
         },
@@ -1105,11 +1211,23 @@ ${symbols.info} Rebuilding project with new version ${newVersion}...`));
         opts.verbose
       );
       progressBar.complete();
-      console.log(colors.dim(`${symbols.arrow} upload completed with status: ${uploadResponse.statusCode}`));
-      console.log(colors.dim(`${symbols.arrow} waiting for S3 to process the upload...`));
+      console.log(
+        colors.dim(
+          `${symbols.arrow} upload completed with status: ${uploadResponse.statusCode}`
+        )
+      );
+      console.log(
+        colors.dim(`${symbols.arrow} waiting for S3 to process the upload...`)
+      );
       await new Promise((resolve) => setTimeout(resolve, 5e3));
-      logger.log(colors.dim(`${symbols.arrow} finalizing upload with S3 storage...`));
-      console.log(colors.dim(`${symbols.arrow} sending finalize request to: ${API_BASE_URL}/api/plugins/publish/finalize`));
+      logger.log(
+        colors.dim(`${symbols.arrow} finalizing upload with S3 storage...`)
+      );
+      console.log(
+        colors.dim(
+          `${symbols.arrow} sending finalize request to: ${API_BASE_URL}/api/plugins/publish/finalize`
+        )
+      );
       const finalizeResponse = await httpRequest(
         `${API_BASE_URL}/api/plugins/publish/finalize`,
         "POST",
@@ -1128,9 +1246,19 @@ ${symbols.info} Rebuilding project with new version ${newVersion}...`));
         void 0,
         opts.verbose
       );
-      console.log(colors.dim(`${symbols.arrow} finalize response status: ${finalizeResponse.statusCode}`));
+      console.log(
+        colors.dim(
+          `${symbols.arrow} finalize response status: ${finalizeResponse.statusCode}`
+        )
+      );
       const finalizeData = JSON.parse(finalizeResponse.data.toString("utf8"));
-      console.log(colors.dim(`${symbols.arrow} finalize response data: ${JSON.stringify(finalizeData)}`));
+      console.log(
+        colors.dim(
+          `${symbols.arrow} finalize response data: ${JSON.stringify(
+            finalizeData
+          )}`
+        )
+      );
       logger.success(`
 ${symbols.success} successfully published plugin!`);
       console.log(
@@ -1148,12 +1276,38 @@ ${symbols.success} successfully published plugin!`);
         logger.info(`
 ${symbols.info} ${finalizeData.message}`);
       }
+      if (fs3.existsSync(zipPath)) {
+        if (opts.verbose) {
+          console.log(
+            colors.dim(`${symbols.arrow} cleaning up zip file: ${zipPath}`)
+          );
+        }
+        fs3.unlinkSync(zipPath);
+      }
     } catch (error) {
-      console.error(colors.error(`${symbols.error} ${error instanceof Error ? error.message : "unknown error"}`));
+      console.error(
+        colors.error(
+          `${symbols.error} ${error instanceof Error ? error.message : "unknown error"}`
+        )
+      );
+      if (zipPath && fs3.existsSync(zipPath)) {
+        if (opts.verbose) {
+          console.log(
+            colors.dim(
+              `${symbols.arrow} cleaning up zip file after error: ${zipPath}`
+            )
+          );
+        }
+        fs3.unlinkSync(zipPath);
+      }
       process.exit(1);
     }
   } catch (error) {
-    console.error(colors.error(`${symbols.error} ${error instanceof Error ? error.message : "unknown error"}`));
+    console.error(
+      colors.error(
+        `${symbols.error} ${error instanceof Error ? error.message : "unknown error"}`
+      )
+    );
     process.exit(1);
   }
 });
@@ -1541,7 +1695,8 @@ var registry_default = {
     ],
     registryDependencies: [
       "get-screenpipe-app-settings",
-      "types"
+      "types",
+      "use-settings"
     ]
   },
   "get-screenpipe-app-settings": {
@@ -1588,6 +1743,60 @@ var registry_default = {
     ],
     registryDependencies: [],
     devDependencies: []
+  },
+  "ai-presets-selector": {
+    name: "ai-presets-selector",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/components/ai-presets-selector.tsx",
+    target: "./src/components/ai-presets-selector.tsx",
+    registryDependencies: [
+      "use-pipe-settings",
+      "use-settings"
+    ],
+    shadcnComponent: [
+      "button",
+      "command",
+      "dialog",
+      "popover",
+      "tooltip",
+      "input",
+      "label",
+      "select",
+      "textarea",
+      "slider",
+      "sonner"
+    ]
+  },
+  "ai-presets-dialog": {
+    name: "ai-presets-dialog",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/components/ai-presets-dialog.tsx",
+    target: "./src/components/ai-presets-dialog.tsx",
+    registryDependencies: [
+      "use-pipe-settings",
+      "use-settings"
+    ],
+    shadcnComponent: [
+      "button",
+      "command",
+      "dialog",
+      "tooltip",
+      "input",
+      "label",
+      "select",
+      "textarea",
+      "slider",
+      "sonner"
+    ]
+  },
+  "use-settings": {
+    name: "use-settings",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/lib/hooks/use-settings.tsx",
+    target: "./src/lib/hooks/use-settings.ts",
+    dependencies: [
+      "@screenpipe/browser"
+    ],
+    registryDependencies: [
+      "get-screenpipe-app-settings"
+    ]
   }
 };
 

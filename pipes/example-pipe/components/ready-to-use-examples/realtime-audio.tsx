@@ -28,10 +28,18 @@ export function RealtimeAudio({
 
   const startStreaming = async () => {
     try {
+      // Add logging to debug settings state
+      console.log("starting audio streaming, settings:", {
+        realtimeEnabled: settings?.enableRealtimeAudioTranscription,
+        model: settings?.audioTranscriptionModel,
+      });
+
       // Check if realtime transcription is enabled
       if (!settings?.enableRealtimeAudioTranscription) {
         const errorMessage =
           "realtime audio transcription is not enabled in settings, go to account-> settings -> recording -> enable realtime audiotranscription -> models to use: screenpipe cloud. Then Refresh. If it doesn't start you might need to restart.";
+        
+        console.error("streaming failed: realtime audio transcription not enabled in settings");
         setError(errorMessage);
 
         // Pass the error to the parent component
@@ -42,6 +50,7 @@ export function RealtimeAudio({
         return; // Exit early
       }
 
+      console.log("realtime audio enabled, attempting to start stream...");
       setError(null);
       setIsStreaming(true);
 
@@ -61,9 +70,11 @@ export function RealtimeAudio({
       };
 
       const stream = pipe.streamTranscriptions();
+      console.log("stream created successfully");
       streamRef.current = stream;
 
       for await (const event of stream) {
+        console.log("received stream event:", event);
         if (event.choices?.[0]?.text) {
           const chunk: TranscriptionChunk = {
             transcription: event.choices[0].text,
@@ -94,6 +105,13 @@ export function RealtimeAudio({
       console.error = originalConsoleError;
     } catch (error) {
       console.error("audio stream failed:", error);
+      // Log additional details that might help debugging
+      console.error("error details:", {
+        name: error instanceof Error ? error.name : "unknown",
+        stack: error instanceof Error ? error.stack : "no stack available",
+        settings: settings
+      });
+      
       const errorMessage =
         error instanceof Error
           ? `Failed to stream audio: ${error.message}`

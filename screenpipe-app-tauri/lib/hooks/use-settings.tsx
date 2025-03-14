@@ -83,55 +83,55 @@ export type AIPreset = {
 );
 
 export type Settings = {
-  openaiApiKey: string;
-  deepgramApiKey: string;
-  isLoading: boolean;
-  aiModel: string;
-  installedPipes: Pipe[];
-  userId: string;
-  customPrompt: string;
-  devMode: boolean;
-  audioTranscriptionEngine: string;
-  ocrEngine: string;
-  monitorIds: string[];
-  audioDevices: string[];
-  usePiiRemoval: boolean;
-  restartInterval: number;
-  port: number;
-  dataDir: string;
-  disableAudio: boolean;
-  ignoredWindows: string[];
-  includedWindows: string[];
-  aiProviderType: AIProviderType;
-  aiUrl: string;
-  aiMaxContextChars: number;
-  fps: number;
-  vadSensitivity: VadSensitivity;
-  analyticsEnabled: boolean;
-  audioChunkDuration: number; // new field
-  useChineseMirror: boolean; // Add this line
-  embeddedLLM: EmbeddedLLMConfig;
-  languages: Language[];
-  enableBeta: boolean;
-  isFirstTimeUser: boolean;
-  autoStartEnabled: boolean
-  autoUpdatePipes: boolean; // Add this line for auto-updating pipes
-  enableFrameCache: boolean; // Add this line
-  enableUiMonitoring: boolean; // Add this line
-  platform: string; // Add this line
-  disabledShortcuts: Shortcut[];
-  user: User;
-  showScreenpipeShortcut: string;
-  startRecordingShortcut: string;
-  stopRecordingShortcut: string;
-  startAudioShortcut: string;
-  stopAudioShortcut: string;
-  pipeShortcuts: Record<string, string>;
-  enableRealtimeAudioTranscription: boolean;
-  realtimeAudioTranscriptionEngine: string;
-  disableVision: boolean;
-  useAllMonitors: boolean;
-  enableRealtimeVision: boolean;
+	openaiApiKey: string;
+	deepgramApiKey: string;
+	isLoading: boolean;
+	aiModel: string;
+	installedPipes: Pipe[];
+	userId: string;
+	customPrompt: string;
+	devMode: boolean;
+	audioTranscriptionEngine: string;
+	ocrEngine: string;
+	monitorIds: string[];
+	audioDevices: string[];
+	usePiiRemoval: boolean;
+	restartInterval: number;
+	port: number;
+	dataDir: string;
+	disableAudio: boolean;
+	ignoredWindows: string[];
+	includedWindows: string[];
+	aiProviderType: AIProviderType;
+	aiUrl: string;
+	aiMaxContextChars: number;
+	fps: number;
+	vadSensitivity: VadSensitivity;
+	analyticsEnabled: boolean;
+	audioChunkDuration: number; // new field
+	useChineseMirror: boolean; // Add this line
+	embeddedLLM: EmbeddedLLMConfig;
+	languages: Language[];
+	enableBeta: boolean;
+	isFirstTimeUser: boolean;
+	autoStartEnabled: boolean;
+	autoUpdatePipes: boolean; // Add this line for auto-updating pipes
+	enableFrameCache: boolean; // Add this line
+	enableUiMonitoring: boolean; // Add this line
+	platform: string; // Add this line
+	disabledShortcuts: Shortcut[];
+	user: User;
+	showScreenpipeShortcut: string;
+	startRecordingShortcut: string;
+	stopRecordingShortcut: string;
+	startAudioShortcut: string;
+	stopAudioShortcut: string;
+	pipeShortcuts: Record<string, string>;
+	enableRealtimeAudioTranscription: boolean;
+	realtimeAudioTranscriptionEngine: string;
+	disableVision: boolean;
+	useAllMonitors: boolean;
+	enableRealtimeVision: boolean;
 };
 
 export const DEFAULT_PROMPT = `Rules:
@@ -155,52 +155,53 @@ const DEFAULT_SETTINGS: Settings = {
 - Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
 - Always answer my question/intent, do not make up things
 `,
-  devMode: false,
-  audioTranscriptionEngine: "deepgram",
-  ocrEngine: "default",
-  monitorIds: ["default"],
-  audioDevices: ["default"],
-  usePiiRemoval: false,
-  restartInterval: 0,
-  port: 3030,
-  dataDir: "default",
-  disableAudio: false,
-  ignoredWindows: [],
-  includedWindows: [],
-  aiProviderType: "openai",
-  aiUrl: "https://api.openai.com/v1",
-  aiMaxContextChars: 512000,
-  fps: 0.5,
-  vadSensitivity: "high",
-  analyticsEnabled: true,
-  audioChunkDuration: 30, // default to 10 seconds
-  useChineseMirror: false, // Add this line
-  languages: [],
-  embeddedLLM: {
-    enabled: false,
-    model: "llama3.2:1b-instruct-q4_K_M",
-    port: 11434,
-  },
-  enableBeta: false,
-  isFirstTimeUser: true,
-  autoStartEnabled: true,
-  autoUpdatePipes: false, // Default to false for auto-updating pipes
-  enableFrameCache: true, // Add this line
-  enableUiMonitoring: false, // Change from true to false
-  platform: "unknown", // Add this line
-  disabledShortcuts: [],
-  user: {},
-  showScreenpipeShortcut: "Super+Alt+S",
-  startRecordingShortcut: "Super+Alt+R",
-  stopRecordingShortcut: "Super+Alt+X",
-  startAudioShortcut: "",
-  stopAudioShortcut: "",
-  pipeShortcuts: {},
-  enableRealtimeAudioTranscription: false,
-  realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
-  disableVision: false,
-  useAllMonitors: false,
-  enableRealtimeVision: false,
+	devMode: false,
+	audioTranscriptionEngine: "deepgram",
+	ocrEngine: "default",
+	monitorIds: ["default"],
+	audioDevices: ["default"],
+	usePiiRemoval: false,
+	restartInterval: 0,
+	port: 3030,
+	dataDir: "default",
+	disableAudio: false,
+	ignoredWindows: [],
+	includedWindows: [],
+	aiProviderType: "openai",
+	aiUrl: "https://api.openai.com/v1",
+	aiMaxContextChars: 512000,
+	fps: 0.5,
+	vadSensitivity: "high",
+	analyticsEnabled: true,
+	audioChunkDuration: 30, // default to 10 seconds
+	useChineseMirror: false, // Add this line
+	languages: [],
+	embeddedLLM: {
+		enabled: false,
+		model: "llama3.2:1b-instruct-q4_K_M",
+		port: 11434,
+	},
+	enableBeta: false,
+	isFirstTimeUser: true,
+	autoStartEnabled: true,
+	autoUpdatePipes: false, // Default to false for auto-updating pipes
+	enableFrameCache: true, // Add this line
+	enableUiMonitoring: false, // Change from true to false
+	platform: "unknown", // Add this line
+	disabledShortcuts: [],
+	user: {},
+	showScreenpipeShortcut: "Super+Alt+S",
+	startRecordingShortcut: "Super+Alt+R",
+	stopRecordingShortcut: "Super+Alt+X",
+	startAudioShortcut: "",
+	stopAudioShortcut: "",
+	pipeShortcuts: {},
+	enableRealtimeAudioTranscription: false,
+	realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
+	disableVision: false,
+	useAllMonitors: false,
+	enableRealtimeVision: false,
+	autoStartEnabled: true,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -325,7 +326,8 @@ const tauriStorage: PersistStorage = {
 		// Set new flattened values
 		for (const [key, val] of Object.entries(flattenedValue)) {
 			if (!key || !key.length) continue;
-			const defaultValue = key in DEFAULT_SETTINGS ? DEFAULT_SETTINGS[key as keyof Settings] : "";
+			const defaultValue =
+				key in DEFAULT_SETTINGS ? DEFAULT_SETTINGS[key as keyof Settings] : "";
 			await tauriStore.set(key, val === undefined ? defaultValue : val);
 		}
 

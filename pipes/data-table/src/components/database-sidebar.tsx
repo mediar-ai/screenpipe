@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Database } from "lucide-react";
-import { JSX } from "react";
+import { JSX, useEffect, useState } from "react";
 
 interface TableItem {
   name: string;
@@ -11,7 +11,7 @@ interface TableItem {
   icon: JSX.Element;
 }
 
-const tables: TableItem[] = [
+const allTables: TableItem[] = [
   {
     name: "ui_monitoring",
     displayName: "UI monitoring",
@@ -43,6 +43,23 @@ export function DatabaseSidebar({
   currentTable,
   onTableSelect,
 }: DatabaseSidebarProps) {
+  const [tables, setTables] = useState<TableItem[]>([]);
+
+  useEffect(() => {
+    // detect macos
+    const isMacOS =
+      navigator.platform.toUpperCase().indexOf("MAC") >= 0 ||
+      /Mac/.test(navigator.userAgent);
+
+    // filter tables based on os
+    if (isMacOS) {
+      setTables(allTables);
+    } else {
+      // exclude ui_monitoring on non-macos
+      setTables(allTables.filter((table) => table.name !== "ui_monitoring"));
+    }
+  }, []);
+
   return (
     <div className="pb-12 w-64 border-r">
       <div className="space-y-4 py-4">

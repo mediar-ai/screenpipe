@@ -456,7 +456,7 @@ pub(crate) async fn api_list_audio_devices(
         )
     })?;
 
-    let default_output_device = default_output_device().map_err(|e| {
+    let default_output_device = default_output_device().await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             JsonResponse(json!({"error": format!("Failed to get default output device: {}", e)})),
@@ -610,7 +610,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     };
 
     let now = Utc::now();
-    let threshold = Duration::from_secs(3600); // 1 hour
+    let threshold = Duration::from_secs(1800); // 30 minutes
 
     let frame_status = if state.vision_disabled {
         "disabled"

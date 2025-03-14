@@ -1,0 +1,82 @@
+---
+title: "FAQ"
+---
+
+<Expandable title="How can I monetize my custom pipes (plugins)?">
+  - you can publish your pipes to the screenpipe store and earn money
+  - set your own pricing model (subscription or one-time purchase)
+  - publish using the CLI: `bunx --bun @screenpipe/dev@latest pipe publish --name your-pipe \[--paid --price 50\]`
+  - our platform handles payment processing and distribution
+  - get detailed analytics on installations and usage
+  - check our [monetization guide](/docs/plugins) for more details on revenue sharing
+</Expandable>
+
+<Expandable title="What are some example pipes (plugins) available?">
+  - **rewind**: timeline and search through your screen history
+  - **obsidian**: sync your screen activities to obsidian notes
+  - **meeting**: automatic meeting notes and summaries
+  - **reddit-auto-posts**: create reddit posts based on your screen activities
+  - **linkedin-ai-assistant**: helps craft linkedin content
+  - **desktop-to-table**: low-level API for desktop automation (similar to playwright but for your desktop)
+  - **visual-conversation**: chat with your screen history
+  - and many more in our [pipe store](/docs/plugins)
+</Expandable>
+
+<Expandable title="How do I develop and test a pipe locally?">
+  - create a new pipe with: `bunx --bun @screenpipe/dev@latest pipe create`
+  - navigate to your pipe directory: `cd your-pipe-name`
+  - start development server: `bun run dev`
+  - test your pipe locally in the screenpipe app
+  - debug and iterate on your implementation
+  - when ready, build for production: `bun run build`
+  - see our [pipe development guide](/docs/plugins) for detailed instructions
+</Expandable>
+
+<Expandable title="What are the hardware requirements for running screenpipe?">
+  - **minimum requirements**:
+    - dual-core processor (2GHz+)
+    - 2GB RAM
+    - 20GB free disk space
+    - any modern graphics card for hardware acceleration
+  - **recommended specifications**:
+    - quad-core processor or better
+    - 4GB+ RAM
+    - 50GB+ free SSD space
+    - dedicated graphics card with at least 2GB VRAM
+  - screenpipe is optimized to use hardware acceleration when available, significantly reducing CPU usage
+</Expandable>
+
+<Expandable title="How can I contribute to the screenpipe project?">
+  - screenpipe is open source and welcomes contributions
+  - check our [GitHub Issues](https://github.com/mediar-ai/screenpipe/issues) for tasks to work on
+  - participate in our [bounty program](https://console.algora.io/org/mediar-ai/bounties) to earn rewards
+  - join our [Discord community](https://discord.gg/dU9EBuw7Uq) to collaborate with other contributors
+  - follow our [contribution guidelines](https://github.com/mediar-ai/screenpipe/blob/main/CONTRIBUTING.md) for code standards
+  - submit pull requests with features, bug fixes, or documentation improvements
+</Expandable>
+
+<Expandable title="What's the screenpipe operator feature?">
+  - similar to playwright but for your desktop
+  - provides a low-level API for desktop automation
+  - 100% accurate interaction with desktop applications
+  - not based on unreliable pixel-matching like some AI agents
+  - ideal for building robust automation workflows
+</Expandable>
+
+<Expandable title="What file formats does screenpipe use for recording?">
+  - screen recordings are stored as mp4 files
+  - audio recordings are stored as mp3 files
+  - all files are saved in $HOME/.screenpipe/ directory
+  - metadata and indexes are stored in SQLite database
+  - OCR and transcription data are also indexed in the database
+  - you can access all data programmatically via our API
+</Expandable>
+
+<Expandable title="How can I backup or transfer my screenpipe data?">
+  - all data is stored in $HOME/.screenpipe/ directory
+  - to backup, simply copy this directory to another location
+  - to transfer to another machine, copy the directory to the same location
+  - you can also use our export API to selectively export data
+  - database can be accessed directly with SQLite tools
+  - note: when transferring between different operating systems, some paths may need adjustment
+</Expandable>
