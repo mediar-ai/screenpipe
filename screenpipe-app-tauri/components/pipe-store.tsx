@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -85,26 +85,28 @@ export const PipeStore: React.FC = () => {
   );
   const [updatePopoverOpen, setUpdatePopoverOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const filteredPipes = pipes
-    .filter(
-      (pipe) =>
-        pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        (!showInstalledOnly || pipe.is_installed) &&
-        !pipe.is_installing,
-    )
-    .sort((a, b) => {
-      // Sort by downloads count first
-      const downloadsA = a.plugin_analytics?.downloads_count || 0;
-      const downloadsB = b.plugin_analytics?.downloads_count || 0;
-      if (downloadsB !== downloadsA) {
-        return downloadsB - downloadsA;
-      }
-      // Then by creation date
-      return (
-        new Date(b.created_at as string).getTime() -
-        new Date(a.created_at as string).getTime()
-      );
-    });
+  const filteredPipes = useMemo(() => {
+    return pipes
+      .filter(
+        (pipe) =>
+          pipe.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          (!showInstalledOnly || pipe.is_installed) &&
+          !pipe.is_installing,
+      )
+      .sort((a, b) => {
+        // Sort by downloads count first
+        const downloadsA = a.plugin_analytics?.downloads_count || 0;
+        const downloadsB = b.plugin_analytics?.downloads_count || 0;
+        if (downloadsB !== downloadsA) {
+          return downloadsB - downloadsA;
+        }
+        // Then by creation date
+        return (
+          new Date(b.created_at as string).getTime() -
+          new Date(a.created_at as string).getTime()
+        );
+      });
+  }, [pipes, searchQuery, showInstalledOnly]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
 
@@ -1043,7 +1045,7 @@ export const PipeStore: React.FC = () => {
           description: "please login to check for updates",
           variant: "destructive",
         });
-		setIsUpdating(true)
+		setIsUpdating(false)
         return;
       }
       // Get last check time from local storage
@@ -1062,6 +1064,10 @@ export const PipeStore: React.FC = () => {
           "Diff (minutes):",
           (now - lastCheckTime) / (60 * 1000),
         );
+		toast({
+          title: "skipping update check",
+          description: "last check was less than 5 minutes ago",
+        });
         setIsUpdating(false);
         return;
       }
@@ -1077,6 +1083,11 @@ export const PipeStore: React.FC = () => {
       // Skip if no pipes to check
       if (installedPipes.length === 0) {
         console.log("[pipe-update] No installed pipes to check");
+        toast({
+          title: "no installed pipes to check",
+          description: "please install a pipe to check for updates",
+        });
+        setIsUpdating(false);
         return;
       }
 
