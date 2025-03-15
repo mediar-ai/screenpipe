@@ -34,18 +34,7 @@ jobs:
     - name: Install OpenSSL
       shell: powershell
       run: |
-        # Try winget first
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-            winget install --id ShiningLight.OpenSSL -e --accept-package-agreements --accept-source-agreements
-            $env:PATH += ";C:\Program Files\OpenSSL-Win64\bin"
-        }
-        else {
-            # Fallback to direct download
-            Invoke-WebRequest -Uri "https://mirror.firedaemon.com/OpenSSL/openssl-3.2.1.zip" -OutFile "openssl.zip"
-            Expand-Archive -Path "openssl.zip" -DestinationPath ".\openssl"
-            $env:PATH += ";$(Get-Location)\openssl\bin"
-        }
-        # Verify installation
+        choco install openssl
         openssl version
 
     - name: Install Scream on Windows
