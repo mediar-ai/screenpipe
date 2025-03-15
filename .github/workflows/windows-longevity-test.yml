@@ -31,12 +31,16 @@ jobs:
         cache: true
         rustflags: ""
 
-    - name: Install Chocolatey
-      run: Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
-    - name: Install openssl
+    - name: Install OpenSSL without admin rights
       shell: powershell
-      run: choco install openssl
+      run: |
+        Invoke-WebRequest -Uri "https://mirror.firedaemon.com/OpenSSL/openssl-3.2.1.zip" -OutFile "openssl.zip"
+        Expand-Archive -Path "openssl.zip" -DestinationPath ".\openssl"
+        # Add to PATH for this session
+        $env:PATH += ";$(Get-Location)\openssl\bin"
+        # Verify installation
+        openssl version
 
     - name: Install Scream on Windows
       shell: powershell
