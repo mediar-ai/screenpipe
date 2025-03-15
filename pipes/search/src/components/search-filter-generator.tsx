@@ -90,7 +90,7 @@ export function SearchFilterGenerator({
       (preset.provider === "openai" || preset.provider === "custom") &&
       "apiKey" in preset
     ) {
-      apiKey == preset.apiKey;
+      apiKey = preset.apiKey;
     }
 
     try {
