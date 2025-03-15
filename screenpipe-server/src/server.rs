@@ -79,6 +79,9 @@ use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
 
+#[cfg(feature = "pipe-store")]
+use axum::http::header::{CONTENT_TYPE, CACHE_CONTROL, HeaderValue};
+
 pub type FrameImageCache = LruCache<i64, (String, Instant)>;
 
 pub struct AppState {
@@ -1123,7 +1126,8 @@ impl SCServer {
                 axum::http::header::CONTENT_TYPE,
                 axum::http::header::CACHE_CONTROL,
             ]);
-        let server = Server::axum()
+        #[allow(unused_mut)]
+        let mut server = Server::axum()
             .get("/search", search)
             .get("/audio/list", api_list_audio_devices)
             .get("/vision/list", api_list_monitors)
@@ -1164,9 +1168,14 @@ impl SCServer {
             .post("/audio/device/start", start_audio_device)
             .post("/audio/device/stop", stop_audio_device)
             .route_yaml_spec("/openapi.yaml")
-            .route_json_spec("/openapi.json")
-            .freeze();
+            .route_json_spec("/openapi.json");
 
+            #[cfg(feature = "pipe-store")]
+            {
+                server = server.get("/app/icon", get_app_icon_handler);
+            }
+
+        let server = server.freeze();
         // Build the main router with all routes
         Router::new()
             .merge(server.into_router())
@@ -3049,6 +3058,56 @@ pub async fn purge_pipe_handler(
     }
 }
 
+#[cfg(feature = "pipe-store")]
+#[oasgen]
+pub async fn get_app_icon_handler(
+    State(_state): State<Arc<AppState>>,
+    Query(app_name): Query<AppIconQuery>,
+) -> Result<Response<Body>, (StatusCode, String)> {
+
+    info!("received app icon request: {:?}", app_name);
+
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
+            Ok(Some(icon)) => {
+                let headers = [
+                    (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
+                    (
+                        CACHE_CONTROL,
+                        HeaderValue::from_static("public, max-age=604800"),
+                    ),
+                ];
+
+                let mut response = Response::new(Body::from(icon.data));
+                for (key, value) in &headers {
+                    response.headers_mut().insert(key, value.clone());
+                }
+                Ok(response)
+            }
+            Ok(None) => Err((
+                StatusCode::NOT_FOUND,
+                format!("Icon not found"),
+            )),
+            Err(e) => {
+                error!("failed to get app icon: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to get app icon: {}", e),
+                ))
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err((
+            StatusCode::NOT_IMPLEMENTED,
+            JsonResponse(Value::String(format!("app icon retrieval not supported on this platform"))),
+        ))
+    }
+}
+
 // Add this struct for the request payload
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct DeletePipeRequest {
@@ -3063,6 +3122,13 @@ struct MergeSpeakersRequest {
 
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
+
+#[cfg(feature = "pipe-store")]
+#[derive(Debug, OaSchema, Deserialize)]
+pub struct AppIconQuery {
+    name: String,
+    path: Option<String>,
+}
 
 // New structs for UI automation API
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
