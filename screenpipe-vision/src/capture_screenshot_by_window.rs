@@ -238,7 +238,7 @@ pub async fn capture_all_visible_windows(
                     );
                     // on linux return 0 as process id (happens in server/ci/cd)
                     #[cfg(target_os = "linux")]
-                    return 0;
+                    return Some(0);
                     #[cfg(not(target_os = "linux"))]
                     return None;
                 }
