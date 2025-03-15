@@ -31,14 +31,20 @@ jobs:
         cache: true
         rustflags: ""
 
-
-    - name: Install OpenSSL without admin rights
+    - name: Install OpenSSL
       shell: powershell
       run: |
-        Invoke-WebRequest -Uri "https://mirror.firedaemon.com/OpenSSL/openssl-3.2.1.zip" -OutFile "openssl.zip"
-        Expand-Archive -Path "openssl.zip" -DestinationPath ".\openssl"
-        # Add to PATH for this session
-        $env:PATH += ";$(Get-Location)\openssl\bin"
+        # Try winget first
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget install --id ShiningLight.OpenSSL -e --accept-package-agreements --accept-source-agreements
+            $env:PATH += ";C:\Program Files\OpenSSL-Win64\bin"
+        }
+        else {
+            # Fallback to direct download
+            Invoke-WebRequest -Uri "https://mirror.firedaemon.com/OpenSSL/openssl-3.2.1.zip" -OutFile "openssl.zip"
+            Expand-Archive -Path "openssl.zip" -DestinationPath ".\openssl"
+            $env:PATH += ";$(Get-Location)\openssl\bin"
+        }
         # Verify installation
         openssl version
 
