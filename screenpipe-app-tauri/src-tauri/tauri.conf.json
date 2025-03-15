@@ -102,7 +102,7 @@
     "withGlobalTauri": true,
     "trayIcon": {
       "id": "screenpipe_main",
-      "iconPath": "icons/screenpipe-logo-tray-black.png",
+      "iconPath": "assets/screenpipe-logo-tray-white.png",
       "iconAsTemplate": true
     },
     "windows": [
