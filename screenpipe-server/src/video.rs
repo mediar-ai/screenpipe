@@ -2,12 +2,14 @@ use chrono::Utc;
 use crossbeam::queue::ArrayQueue;
 use image::ImageFormat::{self};
 use screenpipe_core::{find_ffmpeg_path, Language};
+use screenpipe_vision::monitor::get_monitor_by_id;
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
 };
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncBufReadExt;
@@ -29,6 +31,9 @@ pub struct VideoCapture {
     capture_thread_handle: tokio::task::JoinHandle<()>,
     queue_thread_handle: tokio::task::JoinHandle<()>,
     video_thread_handle: tokio::task::JoinHandle<()>,
+    monitor_check_handle: tokio::task::JoinHandle<()>, // New handle for monitor check
+    monitor_available: Arc<AtomicBool>,                // Flag to track monitor availability
+    monitor_id: u32,                                   // Store monitor ID for availability checks
 }
 
 impl VideoCapture {
@@ -56,6 +61,8 @@ impl VideoCapture {
         let ocr_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let new_chunk_callback = Arc::new(new_chunk_callback);
         let new_chunk_callback_clone = Arc::clone(&new_chunk_callback);
+        let monitor_available = Arc::new(AtomicBool::new(true));
+        let monitor_available_clone = monitor_available.clone();
 
         info!(
             "Starting VideoCapture for monitor {}, max queue size: {}, fps: {}",
@@ -66,7 +73,15 @@ impl VideoCapture {
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(512);
         let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list));
-        let window_filters_clone = Arc::clone(&window_filters);
+
+        // Add parameters for monitoring restart
+        let capture_ocr_engine = ocr_engine.clone();
+        let capture_monitor_available = monitor_available.clone();
+        let capture_window_filters = window_filters.clone();
+        let capture_languages = languages.clone();
+        let capture_result_sender = result_sender.clone();
+        let capture_interval = interval;
+        let capture_unfocused = capture_unfocused_windows;
 
         // Store task handles for health monitoring
         let capture_thread = tokio::spawn(async move {
@@ -74,30 +89,45 @@ impl VideoCapture {
                 "Starting continuous_capture task for monitor {}",
                 monitor_id
             );
-            match continuous_capture(
-                result_sender,
-                interval,
-                (*ocr_engine).clone(),
-                monitor_id,
-                window_filters_clone,
-                languages.clone(),
-                capture_unfocused_windows,
-            )
-            .await
-            {
-                Ok(_) => warn!(
-                    "continuous_capture task for monitor {} completed unexpectedly",
-                    monitor_id
-                ),
-                Err(e) => error!(
-                    "continuous_capture task for monitor {} failed with error: {}",
-                    monitor_id, e
-                ),
+
+            loop {
+                // Check if monitor is available before starting capture
+                if !capture_monitor_available.load(Ordering::SeqCst) {
+                    warn!(
+                        "Monitor {} is not available, waiting before starting capture",
+                        monitor_id
+                    );
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+
+                info!("Starting continuous_capture for monitor {}", monitor_id);
+
+                match continuous_capture(
+                    capture_result_sender.clone(),
+                    capture_interval,
+                    (*capture_ocr_engine).clone(),
+                    monitor_id,
+                    capture_window_filters.clone(),
+                    capture_languages.clone(),
+                    capture_unfocused,
+                )
+                .await
+                {
+                    Ok(_) => warn!(
+                        "continuous_capture task for monitor {} completed unexpectedly",
+                        monitor_id
+                    ),
+                    Err(e) => error!(
+                        "continuous_capture task for monitor {} failed with error: {}",
+                        monitor_id, e
+                    ),
+                }
+
+                // If we get here, either the task completed or failed
+                // Wait before attempting restart
+                tokio::time::sleep(Duration::from_secs(5)).await;
             }
-            warn!(
-                "continuous_capture task terminated for monitor {}",
-                monitor_id
-            );
         });
 
         // In the _queue_thread
@@ -231,20 +261,56 @@ impl VideoCapture {
             );
         });
 
+        // Add monitor availability check task
+        let monitor_check_handle = tokio::spawn(async move {
+            info!(
+                "Starting monitor availability check for monitor {}",
+                monitor_id
+            );
+            let mut check_interval = tokio::time::interval(Duration::from_secs(10));
+
+            loop {
+                check_interval.tick().await;
+
+                // Check if monitor is available
+                let monitor_exists = match get_monitor_by_id(monitor_id).await {
+                    Some(_) => true,
+                    None => false,
+                };
+
+                // Update availability flag
+                let current_availability = monitor_available_clone.load(Ordering::SeqCst);
+                if monitor_exists != current_availability {
+                    monitor_available_clone.store(monitor_exists, Ordering::SeqCst);
+
+                    if monitor_exists {
+                        info!("Monitor {} is now available", monitor_id);
+                    } else {
+                        warn!("Monitor {} is no longer available", monitor_id);
+                    }
+                }
+            }
+        });
+
         VideoCapture {
             video_frame_queue,
             ocr_frame_queue,
             capture_thread_handle: capture_thread,
             queue_thread_handle: queue_thread,
             video_thread_handle: video_thread,
+            monitor_check_handle,
+            monitor_available,
+            monitor_id,
         }
     }
 
-    // Add method to check health of tasks
+    // Modify check_health to include monitor check task
     pub fn check_health(&self) -> bool {
         let capture_ok = !self.capture_thread_handle.is_finished();
         let queue_ok = !self.queue_thread_handle.is_finished();
         let video_ok = !self.video_thread_handle.is_finished();
+        let monitor_check_ok = !self.monitor_check_handle.is_finished();
+        let monitor_available = self.monitor_available.load(Ordering::SeqCst);
 
         if !capture_ok {
             error!("continuous_capture task has terminated unexpectedly");
@@ -255,8 +321,19 @@ impl VideoCapture {
         if !video_ok {
             error!("save_frames_as_video task has terminated unexpectedly");
         }
+        if !monitor_check_ok {
+            error!("monitor check task has terminated unexpectedly");
+        }
+        if !monitor_available {
+            warn!("monitor {} is currently unavailable", self.monitor_id);
+        }
 
-        capture_ok && queue_ok && video_ok
+        capture_ok && queue_ok && video_ok && monitor_check_ok
+    }
+
+    // Add method to check if monitor is available
+    pub fn is_monitor_available(&self) -> bool {
+        self.monitor_available.load(Ordering::SeqCst)
     }
 }
 

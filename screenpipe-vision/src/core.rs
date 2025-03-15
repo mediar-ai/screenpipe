@@ -28,7 +28,6 @@ use std::{
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
-use tokio::time::sleep;
 use tracing::{debug, error, warn};
 
 use crate::browser_utils::create_url_detector;
@@ -179,8 +178,9 @@ pub async fn continuous_capture(
                 Ok(result) => result,
                 Err(e) => {
                     debug!("error capturing screenshot: {}", e);
-                    sleep(Duration::from_secs(1)).await;
-                    continue;
+                    return Err(ContinuousCaptureError::ErrorCapturingScreenshot(
+                        e.to_string(),
+                    ));
                 }
             };
 

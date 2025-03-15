@@ -598,7 +598,7 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_devices_clone = audio_devices.clone();
     let resource_monitor = ResourceMonitor::new(!cli.disable_telemetry);
-    resource_monitor.start_monitoring(Duration::from_secs(10), Some(Duration::from_secs(60)));
+    resource_monitor.start_monitoring(Duration::from_secs(30), Some(Duration::from_secs(60)));
 
     let db = Arc::new(
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir.to_string_lossy()))

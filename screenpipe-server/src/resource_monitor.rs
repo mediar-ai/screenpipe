@@ -13,6 +13,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
 use tracing::debug;
+use tracing::trace;
 use tracing::{error, info, warn};
 
 pub struct ResourceMonitor {
@@ -102,7 +103,7 @@ impl ResourceMonitor {
             }
         });
 
-        debug!("Sending resource usage to PostHog: {:?}", payload);
+        trace!(target: "resource_monitor", "Sending resource usage to PostHog: {:?}", payload);
 
         // Send the event to PostHog
         if let Err(e) = client
