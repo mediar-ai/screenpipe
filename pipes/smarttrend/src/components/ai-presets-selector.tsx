@@ -9,31 +9,32 @@ import {
   CommandItem,
   CommandList,
 } from "./ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import {
   Check,
+  ChevronsUpDown,
   Plus,
   Copy,
   Edit2,
   Star,
   Trash2,
-  Settings,
   Terminal,
   Loader2,
   HelpCircle,
   Eye,
   EyeOff,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { toast } from "@/lib/use-toast";
 import {
   Tooltip,
   TooltipContent,
@@ -713,6 +714,13 @@ interface AIPresetDialogProps {
   preset?: AIPreset;
 }
 
+interface AIPresetsSelectorProps {
+  recommendedPresets?: RecommendedPreset[];
+  pipeName: string;
+  aiKey?: keyof PipeSettings;
+  shortcutKey?: string;
+}
+
 export const AIPresetDialog = ({
   open,
   onOpenChange,
@@ -773,26 +781,17 @@ export const AIPresetDialog = ({
   );
 };
 
-interface AIPresetsDialogProps {
-  children?: React.ReactNode;
-  recommendedPresets?: RecommendedPreset[];
-  pipeName: string;
-  aiKey?: keyof PipeSettings;
-  shortcutKey?: string;
-}
-
-export const AIPresetsDialog = ({
-  children,
+export const AIPresetsSelector = ({
   recommendedPresets,
   pipeName,
   aiKey = "aiPresetId",
   shortcutKey = "/",
-}: AIPresetsDialogProps) => {
+}: AIPresetsSelectorProps) => {
   const { settings: pipeSettings, updateSettings: updatePipeSettings } =
     usePipeSettings(pipeName);
   const { settings, updateSettings } = useSettings();
+  const [open, setOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [presetDialogOpen, setPresetDialogOpen] = useState(false);
   const [selectedPresetToEdit, setSelectedPresetToEdit] = useState<
     AIPreset | undefined
   >();
@@ -804,7 +803,7 @@ export const AIPresetsDialog = ({
       (preset) => preset.id == pipeSettings?.[aiKey],
     );
 
-    return preset;
+    return preset?.id;
   }, [settings?.aiPresets, pipeSettings?.[aiKey]]);
 
   useEffect(() => {
@@ -815,7 +814,7 @@ export const AIPresetsDialog = ({
         if (!aiPresets.length) return;
 
         const currentIndex = selectedPreset
-          ? aiPresets.findIndex((p) => p.id === selectedPreset.id)
+          ? aiPresets.findIndex((p) => p.id === selectedPreset)
           : -1;
         const nextIndex = (currentIndex + 1) % aiPresets.length;
         const nextPreset = aiPresets[nextIndex];
@@ -824,7 +823,8 @@ export const AIPresetsDialog = ({
           [aiKey]: nextPreset.id,
         });
 
-        toast.success("Preset changed", {
+        toast({
+          title: "Preset changed",
           description: `Switched to ${nextPreset.id} (${nextPreset.model})`,
         });
       }
@@ -832,19 +832,23 @@ export const AIPresetsDialog = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [aiPresets, selectedPreset, updatePipeSettings, aiKey]);
+  }, [aiPresets, selectedPreset, updatePipeSettings]);
 
   const handleSavePreset = (preset: Partial<AIPreset>) => {
     if (!preset.id) {
-      toast.error("Please enter a name for this preset", {
-        description: "Name is required",
+      toast({
+        title: "please enter a name for this preset",
+        description: "name is required",
+        variant: "destructive",
       });
       return;
     }
 
     if (!settings?.aiPresets) {
-      toast.error("Error", {
-        description: "Settings not initialized",
+      toast({
+        title: "error",
+        description: "settings not initialized",
+        variant: "destructive",
       });
       return;
     }
@@ -862,8 +866,10 @@ export const AIPresetsDialog = ({
         );
 
         if (existingPreset) {
-          toast.error("Name already exists", {
-            description: "Please choose a different name",
+          toast({
+            title: "name already exists",
+            description: "please choose a different name",
+            variant: "destructive",
           });
           return;
         }
@@ -879,8 +885,9 @@ export const AIPresetsDialog = ({
           ],
         });
 
-        toast.success("Preset copied", {
-          description: "New preset has been created from copy",
+        toast({
+          title: "preset copied",
+          description: "new preset has been created from copy",
         });
       } else {
         // Normal edit operation
@@ -910,8 +917,9 @@ export const AIPresetsDialog = ({
           });
         }
 
-        toast.success("Preset updated", {
-          description: "Your changes have been saved",
+        toast({
+          title: "preset updated",
+          description: "your changes have been saved",
         });
       }
     } else {
@@ -921,8 +929,10 @@ export const AIPresetsDialog = ({
       );
 
       if (existingPreset) {
-        toast.error("Name already exists", {
-          description: "Please choose a different name",
+        toast({
+          title: "name already exists",
+          description: "please choose a different name",
+          variant: "destructive",
         });
         return;
       }
@@ -958,12 +968,13 @@ export const AIPresetsDialog = ({
         });
       }
 
-      toast.success("Preset created", {
-        description: "New preset has been added",
+      toast({
+        title: "preset created",
+        description: "new preset has been added",
       });
     }
 
-    setPresetDialogOpen(false);
+    setDialogOpen(false);
     setSelectedPresetToEdit(undefined);
   };
 
@@ -973,12 +984,12 @@ export const AIPresetsDialog = ({
       id: `${preset.id}-copy`,
       defaultPreset: false,
     });
-    setPresetDialogOpen(true);
+    setDialogOpen(true);
   };
 
   const handleEditPreset = (preset: AIPreset) => {
     setSelectedPresetToEdit(preset);
-    setPresetDialogOpen(true);
+    setDialogOpen(true);
   };
 
   const handleSetDefaultPreset = (preset: AIPreset) => {
@@ -1002,7 +1013,8 @@ export const AIPresetsDialog = ({
       }),
     });
 
-    toast.success("Default preset updated", {
+    toast({
+      title: "default preset updated",
       description: `${preset.id} is now the default preset`,
     });
   };
@@ -1010,8 +1022,10 @@ export const AIPresetsDialog = ({
   const handleRemovePreset = (preset: AIPreset) => {
     if (!settings?.aiPresets) return;
     if (preset.defaultPreset) {
-      toast.error("Cannot delete default preset", {
-        description: "Please set another preset as default first",
+      toast({
+        title: "cannot delete default preset",
+        description: "please set another preset as default first",
+        variant: "destructive",
       });
       return;
     }
@@ -1027,78 +1041,77 @@ export const AIPresetsDialog = ({
       });
     }
 
-    toast.success("Preset removed", {
+    toast({
+      title: "preset removed",
       description: `${preset.id} has been removed`,
     });
   };
 
-  const renderTrigger = () => {
-    const content = children || (
-      <Button variant="outline" className="flex w-full items-center">
-        <Settings className="mr-2 h-4 w-4" />
-        Manage AI Presets
-      </Button>
-    );
-
-    return (
-      <TooltipProvider delayDuration={0}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DialogTrigger asChild onClick={() => setDialogOpen(true)}>
-              {content}
-            </DialogTrigger>
-          </TooltipTrigger>
-          <TooltipContent className="space-y-1 text-justify">
-            <p className="flex items-center gap-2">
-              <span>Press</span>
-              <kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">
-                ⌘/
-              </kbd>
-              <span>to cycle presets</span>
-            </p>
-            {selectedPreset && (
-              <div className="mt-2 pt-2 border-t">
-                <div className="font-medium truncate max-w-[200px]">
-                  {selectedPreset.id}
-                </div>
-                <div className="text-xs text-muted-foreground space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
-                      {selectedPreset.provider}
-                    </span>
-                    <span className="truncate max-w-[120px]">
-                      {selectedPreset.model}
-                    </span>
-                  </div>
-                  <div className="whitespace-nowrap">
-                    Context:{" "}
-                    {(selectedPreset.maxContextChars / 1000).toFixed(0)}k chars
-                  </div>
-                  {selectedPreset.defaultPreset && (
-                    <div className="text-primary">Default Preset</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  };
-
   return (
     <>
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        {renderTrigger()}
-        <DialogContent className="w-[95vw] sm:w-[640px] md:w-[768px] lg:w-[1024px] xl:w-[1280px] max-w-[95vw]">
-          <DialogHeader>
-            <DialogTitle>AI Presets</DialogTitle>
-            <DialogDescription>
-              Manage your AI presets. You can create, edit, duplicate, and
-              delete presets.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+      <div className="flex w-full items-center gap-2">
+        <Popover open={open} onOpenChange={setOpen}>
+          <TooltipProvider>
+            <Tooltip>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={open}
+                  className="w-full justify-between"
+                >
+                  {selectedPreset ? (
+                    <div className="flex w-full items-center justify-between gap-2 overflow-hidden">
+                      <span className="font-medium min-w-[80px] max-w-[30%] truncate text-left">
+                        {
+                          aiPresets.find(
+                            (preset) => preset.id === selectedPreset,
+                          )?.id
+                        }
+                      </span>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground overflow-hidden">
+                        <span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
+                          {
+                            aiPresets.find(
+                              (preset) => preset.id === selectedPreset,
+                            )?.provider
+                          }
+                        </span>
+                        <span className="hidden sm:block truncate max-w-[30%]">
+                          {
+                            aiPresets.find(
+                              (preset) => preset.id === selectedPreset,
+                            )?.model
+                          }
+                        </span>
+                        <span className="whitespace-nowrap">
+                          {(
+                            (aiPresets.find(
+                              (preset) => preset.id === selectedPreset,
+                            )?.maxContextChars || 0) / 1000
+                          ).toFixed(0)}
+                          k
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    "select ai preset..."
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <TooltipContent>
+                <p className="flex items-center gap-2">
+                  <span>Press</span>
+                  <kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">
+                    ⌘/
+                  </kbd>
+                  <span>to cycle presets</span>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <PopoverContent className="min-w-[500px] w-[--radix-popover-trigger-width] p-0">
             <Command>
               <CommandInput placeholder="search presets..." />
               <CommandList>
@@ -1108,43 +1121,43 @@ export const AIPresetsDialog = ({
                     {recommendedPresets.map((preset) => (
                       <CommandItem
                         key={`${preset.id}-recommended`}
-                        value={`${preset.id}-recommended`}
-                        className="flex py-3"
+                        value={`${preset.id}-recommened`}
+                        className="flex py-2"
                       >
-                        <div className="flex w-full items-center justify-between gap-4 overflow-hidden">
-                          <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex w-full items-center justify-between gap-2 overflow-hidden">
+                          <div className="flex items-center gap-2 min-w-0 flex-shrink">
                             <Check
                               className={cn(
                                 "h-4 w-4 shrink-0",
-                                selectedPreset?.id === preset.id
+                                selectedPreset === preset.id
                                   ? "opacity-100"
                                   : "opacity-0",
                               )}
                             />
-                            <span className="font-medium truncate max-w-[180px]">
+                            <span className="font-medium truncate max-w-[30%]">
                               {preset.id}
                             </span>
                             <span className="rounded bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium shrink-0">
                               recommended
                             </span>
                           </div>
-                          <div className="flex items-center justify-end gap-4 text-xs text-muted-foreground shrink-0">
-                            <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground shrink-0">
+                            <div className="flex items-center gap-2">
                               <span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
                                 {preset.provider}
                               </span>
-                              <span className="truncate max-w-[180px]">
+                              <span className="hidden sm:block truncate max-w-[30%]">
                                 {preset.model}
                               </span>
                             </div>
                             <span className="whitespace-nowrap">
                               {(preset.maxContextChars / 1000).toFixed(0)}k
                             </span>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 shrink-0"
+                                className="h-6 w-6 shrink-0"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   // Create a full preset from the recommended preset with -copy suffix
@@ -1162,10 +1175,10 @@ export const AIPresetsDialog = ({
                                     defaultPreset: false,
                                   } as AIPreset;
                                   setSelectedPresetToEdit(fullPreset);
-                                  setPresetDialogOpen(true);
+                                  setDialogOpen(true);
                                 }}
                               >
-                                <Copy className="h-4 w-4" />
+                                <Copy className="h-3 w-3" />
                               </Button>
                             </div>
                           </div>
@@ -1174,7 +1187,7 @@ export const AIPresetsDialog = ({
                     ))}
                   </CommandGroup>
                 )}
-                <CommandGroup heading="Your Presets">
+                <CommandGroup>
                   {aiPresets.map((preset) => (
                     <CommandItem
                       key={preset.id}
@@ -1182,24 +1195,23 @@ export const AIPresetsDialog = ({
                       onSelect={(currentValue) => {
                         updatePipeSettings({
                           [aiKey]:
-                            currentValue === selectedPreset?.id
-                              ? ""
-                              : currentValue,
+                            currentValue === selectedPreset ? "" : currentValue,
                         });
+                        setOpen(false);
                       }}
-                      className="flex py-3"
+                      className="flex py-2"
                     >
-                      <div className="flex w-full items-center justify-between gap-4 overflow-hidden">
-                        <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex w-full items-center justify-between gap-2 overflow-hidden">
+                        <div className="flex items-center gap-2 min-w-0">
                           <Check
                             className={cn(
                               "h-4 w-4 shrink-0",
-                              selectedPreset?.id === preset.id
+                              selectedPreset === preset.id
                                 ? "opacity-100"
                                 : "opacity-0",
                             )}
                           />
-                          <span className="font-medium truncate max-w-[180px]">
+                          <span className="font-medium truncate max-w-[120px]">
                             {preset.id}
                           </span>
                           {preset.defaultPreset && (
@@ -1208,64 +1220,64 @@ export const AIPresetsDialog = ({
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center justify-end gap-4 text-xs text-muted-foreground shrink-0">
-                          <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground shrink-0">
+                          <div className="flex items-center gap-2">
                             <span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
                               {preset.provider}
                             </span>
-                            <span className="truncate max-w-[180px]">
+                            <span className="truncate max-w-[120px]">
                               {preset.model}
                             </span>
                           </div>
                           <span className="whitespace-nowrap">
                             {(preset.maxContextChars / 1000).toFixed(0)}k
                           </span>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 shrink-0"
+                              className="h-6 w-6 shrink-0"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEditPreset(preset);
                               }}
                             >
-                              <Edit2 className="h-4 w-4" />
+                              <Edit2 className="h-3 w-3" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 shrink-0"
+                              className="h-6 w-6 shrink-0"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDuplicatePreset(preset);
                               }}
                             >
-                              <Copy className="h-4 w-4" />
+                              <Copy className="h-3 w-3" />
                             </Button>
                             {!preset.defaultPreset && (
                               <>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-7 w-7 shrink-0"
+                                  className="h-6 w-6 shrink-0"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleSetDefaultPreset(preset);
                                   }}
                                 >
-                                  <Star className="h-4 w-4" />
+                                  <Star className="h-3 w-3" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-7 w-7 shrink-0"
+                                  className="h-6 w-6 shrink-0"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleRemovePreset(preset);
                                   }}
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-3 w-3" />
                                 </Button>
                               </>
                             )}
@@ -1278,8 +1290,9 @@ export const AIPresetsDialog = ({
                 <CommandGroup>
                   <CommandItem
                     onSelect={() => {
+                      setOpen(false);
                       setSelectedPresetToEdit(undefined);
-                      setPresetDialogOpen(true);
+                      setDialogOpen(true);
                     }}
                   >
                     <Plus className="mr-2 h-4 w-4" />
@@ -1288,12 +1301,12 @@ export const AIPresetsDialog = ({
                 </CommandGroup>
               </CommandList>
             </Command>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </PopoverContent>
+        </Popover>
+      </div>
       <AIPresetDialog
-        open={presetDialogOpen}
-        onOpenChange={setPresetDialogOpen}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
         onSave={handleSavePreset}
         preset={selectedPresetToEdit}
       />

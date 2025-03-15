@@ -9,19 +9,6 @@ interface Props {
 }
 
 export function PromptInput({ prompt, setPrompt }: Props) {
-  const [rows, setRows] = useState<number>(5);
-
-  useEffect(() => {
-    const updateRows = () => {
-      setRows(5 + Math.floor(Math.max(window.innerHeight - 800, 0) / 50));
-    };
-
-    updateRows();
-    window.addEventListener("resize", updateRows);
-
-    return () => window.removeEventListener("resize", updateRows);
-  }, []);
-
   const change = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const newPrompt = e.target?.value.slice("Rules:\n".length);
     setPrompt(newPrompt);
@@ -33,7 +20,7 @@ export function PromptInput({ prompt, setPrompt }: Props) {
       <h2 className="text-lg text-center font-bold mb-4">Prompt</h2>
       <textarea
         className="w-full border p-2"
-        rows={rows}
+        rows="5"
         value={"Rules:\n" + prompt}
         onChange={change}
       />

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AIProviderConfig } from "@/components/ai-presets-dialog";
+import { AIPresetsDialog } from "@/components/ai-presets-dialog";
+import { AIPresetsSelector } from "@/components/ai-presets-selector";
 import { ConnectionPanel } from "@/components/connection-panel";
 import { ControlPanel } from "@/components/control-panel";
 import { Status } from "@/components/status";
@@ -58,40 +58,28 @@ export default function Page() {
         <h1 className="text-2xl text-center font-bold">SmartTrend</h1>
       </div>
       <div className="flex flex-col gap-8 lg:flex-row xl:gap-16 h-full px-8 lg:px-16">
-        <div>
-          <Tabs defaultValue="tab1">
-            <TabsList>
-              <TabsTrigger value="tab1">App</TabsTrigger>
-              <TabsTrigger value="tab2">Provider</TabsTrigger>
-            </TabsList>
-            <TabsContent className="flex flex-col gap-8 h-full" value="tab1">
-              <ConnectionPanel
-                setCookies={setCookies}
-                isConnected={isConnected}
-              />
-              <ControlPanel
-                cookies={cookies}
-                isConnected={isConnected}
-                isRunning={isRunning}
-                setIsRunning={setIsRunning}
-                frequency={frequency}
-                prompt={prompt}
-              />
-              {isRunning && <Status />}
-              {!isRunning && (
-                <FrequencySlider
-                  frequency={frequency}
-                  setFrequency={setFrequency}
-                />
-              )}
-              {!isRunning && (
-                <PromptInput prompt={prompt} setPrompt={setPrompt} />
-              )}
-            </TabsContent>
-            <TabsContent value="tab2">
-              <AIProviderConfig onSubmit={() => {}} />
-            </TabsContent>
-          </Tabs>
+        <div className="flex flex-col gap-4 h-full">
+          <ConnectionPanel setCookies={setCookies} isConnected={isConnected} />
+          <ControlPanel
+            cookies={cookies}
+            isConnected={isConnected}
+            isRunning={isRunning}
+            setIsRunning={setIsRunning}
+            frequency={frequency}
+            prompt={prompt}
+          />
+          {isRunning && <Status />}
+          {!isRunning && (
+            <FrequencySlider
+              frequency={frequency}
+              setFrequency={setFrequency}
+            />
+          )}
+          {!isRunning && <PromptInput prompt={prompt} setPrompt={setPrompt} />}
+          <div className="flex gap-4">
+            <AIPresetsDialog pipeName="smarttrend" />
+            <AIPresetsSelector pipeName="smarttrend" />
+          </div>
         </div>
         <SuggestionList
           cookies={cookies}
