@@ -20,7 +20,7 @@ export function PromptInput({ prompt, setPrompt }: Props) {
       <h2 className="text-lg text-center font-bold mb-4">Prompt</h2>
       <textarea
         className="w-full border p-2"
-        rows="5"
+        rows={5}
         value={"Rules:\n" + prompt}
         onChange={change}
       />
