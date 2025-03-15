@@ -230,13 +230,13 @@ pub async fn capture_all_visible_windows(
             };
 
             let process_id = match window.pid() {
-                Ok(pid) => pid,
+                Ok(pid) => pid as i32,
                 Err(e) => {
                     error!(
                         "Failed to get process ID for window {} ({}): {}",
                         app_name, title, e
                     );
-                    return None;
+                    -1
                 }
             };
 
