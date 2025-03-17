@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { embed, generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
-import { ContentItem } from "@screenpipe/js";
+import { AIPreset, ContentItem } from "@screenpipe/js";
 import { pipe } from "@screenpipe/js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { extractLinkedContent } from "@/lib/actions/obsidian";
+import { settingsStore } from "@/lib/store/settings-store";
+import { OpenAI } from "openai";
 
 const workLog = z.object({
   title: z.string(),
@@ -21,17 +23,21 @@ type WorkLog = z.infer<typeof workLog> & {
 };
 
 async function generateWorkLog(
-  screenData: ContentItem[],
-  model: string,
-  startTime: Date,
-  endTime: Date,
-  customPrompt?: string,
-  obsidianPath?: string
+  data: ContentItem[],
+  obsidianPath: string,
+  prevTime: Date,
+  curTime: Date,
+  aiPreset: ReturnType<typeof settingsStore.getPreset>
 ): Promise<WorkLog> {
-  let enrichedPrompt = customPrompt || "";
 
-  if (customPrompt && obsidianPath) {
-    enrichedPrompt = await extractLinkedContent(customPrompt, obsidianPath);
+  if (!aiPreset) {
+    throw new Error("ai preset not configured");
+  }
+
+  let enrichedPrompt = aiPreset.prompt || "";
+
+  if (enrichedPrompt && obsidianPath) {
+    enrichedPrompt = await extractLinkedContent(enrichedPrompt, obsidianPath);
   }
 
   const defaultPrompt = `You are analyzing screen recording data from Screenpipe, a desktop app that records screens & mics 24/7 to provide context to AI systems.
@@ -42,7 +48,7 @@ async function generateWorkLog(
     Here are some user instructions:
     ${enrichedPrompt}
 
-    Screen data: ${JSON.stringify(screenData)}
+    Screen data: ${JSON.stringify(data)}
     
     Rules:
     - analyze the screen data carefully to understand the user's work context and activities
@@ -87,12 +93,22 @@ async function generateWorkLog(
         "mediaLinks": ["<video src=\"file:///absolute/path/to/video.mp4\" controls></video>"]
     }`;
 
-  const provider = ollama(model);
-  const response = await generateObject({
-    model: provider,
+
+  const openaiConfig = {
+    apiKey: aiPreset.apiKey,
+    model: aiPreset.model,
+    baseURL: aiPreset.url || undefined,
+  };
+  
+  const openai = new OpenAI(openaiConfig);
+
+  const response = await openai.chat.completions.create({
+    model: aiPreset.model,
     messages: [{ role: "user", content: defaultPrompt }],
-    schema: workLog,
+    response_format: { type: "json_object" },
   });
+
+  const jsonResponse = JSON.parse(response.choices[0].message.content || "{}");
 
   const formatDate = (date: Date) => {
     return date.toLocaleString("en-US", {
@@ -106,9 +122,9 @@ async function generateWorkLog(
   };
 
   return {
-    ...response.object,
-    startTime: formatDate(startTime),
-    endTime: formatDate(endTime),
+    ...jsonResponse,
+    startTime: formatDate(prevTime),
+    endTime: formatDate(curTime),
   };
 }
 
@@ -256,15 +272,20 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 export async function GET() {
   try {
-    const settings = await pipe.settings.getAll();
-    const interval =
-      settings.customSettings?.obsidian?.logTimeWindow || 3600000;
-    const obsidianPath = settings.customSettings?.obsidian?.vaultPath;
-    const customPrompt = settings.customSettings?.obsidian?.prompt;
-    const pageSize = settings.customSettings?.obsidian?.logPageSize || 100;
-    const model = settings.customSettings?.obsidian?.logModel;
-    const deduplicationEnabled =
-      settings.customSettings?.obsidian?.deduplicationEnabled;
+    const settings = await settingsStore.loadPipeSettings("obsidian");
+    const interval = settings.logTimeWindow || 3600000;
+    const obsidianPath = settings.vaultPath;
+    const pageSize = settings.logPageSize || 100;
+    const deduplicationEnabled = settings.deduplicationEnabled;
+
+    const aiPreset = settingsStore.getPreset("aiLogPresetId");
+
+    if (!aiPreset || !aiPreset.model) {
+      return NextResponse.json(
+        { error: "ai preset not configured" },
+        { status: 400 }
+      );
+    }
 
     if (!obsidianPath) {
       return NextResponse.json(
@@ -301,16 +322,15 @@ export async function GET() {
 
     const logEntry = await generateWorkLog(
       screenData.data,
-      model,
+      obsidianPath,
       oneHourAgo,
       now,
-      customPrompt,
-      obsidianPath
+      aiPreset
     );
     const _ = await syncLogToObsidian(logEntry, obsidianPath);
 
     await pipe.captureEvent("obsidian_work_log_synced", {
-      model,
+      model: aiPreset?.model,
       interval,
       pageSize,
     });
