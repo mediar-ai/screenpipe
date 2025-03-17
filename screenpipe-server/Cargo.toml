@@ -12,12 +12,13 @@ edition = { workspace = true }
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+oasgen = { workspace = true }
 
 screenpipe-events = { path = "../screenpipe-events" }
 screenpipe-vision = { path = "../screenpipe-vision" }
 screenpipe-audio = { path = "../screenpipe-audio" }
 screenpipe-core = { path = "../screenpipe-core", features = ["security"] }
-screenpipe-actions = { path = "../screenpipe-actions", optional = true }
+screenpipe-db = { path = "../screenpipe-db" }
 killport = { version = "1.1.0" }
 
 # Image processing
@@ -42,7 +43,6 @@ tokenizers = { workspace = true }
 
 anyhow = "1.0.86"
 hf-hub = { workspace = true }
-rand = "0.8.5"
 
 #opentelemetry
 sentry = { workspace = true }
@@ -97,7 +97,7 @@ tempfile = "3.3.0"
 url = { version = "2.2.0", optional = true }
 
 
-enigo = { version = "0.2.1", optional = true }
+enigo = { version = "0.3", optional = true }
 
 # Bincode for serializing hot cache
 bincode = "1.3.3"
@@ -107,9 +107,6 @@ sha2 = "0.10.6"
 
 # Fast random number generator
 fastrand = "2.1.1"
-sqlite-vec = "0.1.3"
-libsqlite3-sys = { version = "0.26", features = ["bundled"] }
-zerocopy = { version = "0.7.32" }
 port_check = "0.2.1"
 
 walkdir = "2.3.4"
@@ -119,7 +116,7 @@ regex = "1.10.0"
 lru = "0.13.0"
 tokio-util = { version = "0.7", features = ["io"] }
 
-dashmap = "6.1.0"
+once_cell = { workspace = true }
 [dev-dependencies]
 env_logger = "0.10"
 tempfile = "3.3.0"
@@ -127,26 +124,13 @@ tokio-tungstenite = "0.19.0"
 
 # Benches
 criterion = { workspace = true }
-rand = "0.8"
-
-axum-test = "15.3.0"
-
-[[bench]]
-name = "db_benchmarks"
-harness = false
-
-[[bench]]
-name = "new_db_benchmark"
-harness = false
 
 [features]
 default = []
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
-pipes = ["screenpipe-core/pipes", "url"]
-llm = ["screenpipe-core/llm"]
-beta = ["screenpipe-core/beta", "dep:screenpipe-actions"]
+llm = []
 experimental = ["enigo"]
 debug-console = ["console-subscriber"]
 

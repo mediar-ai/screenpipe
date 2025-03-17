@@ -7,6 +7,8 @@ import {
   RefreshCw,
   Trash2,
   X,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PipeWithStatus } from "./types";
@@ -22,6 +24,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { PipeConfigForm } from "../pipe-config-form";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Badge } from "../ui/badge";
+import { getBuildStatus } from "./pipe-card";
 
 interface PipeDetailsProps {
   pipe: PipeWithStatus;
@@ -31,7 +34,13 @@ interface PipeDetailsProps {
   onUpdate: (pipe: PipeWithStatus, onComplete: () => void) => void;
   onDelete: (pipe: PipeWithStatus, onComplete: () => void) => void;
   onRefreshFromDisk: (pipe: PipeWithStatus, onComplete: () => void) => void;
+  onInstall: (pipe: PipeWithStatus, onComplete: () => void) => void;
+  onPurchase: (pipe: PipeWithStatus, onComplete: () => void) => void;
+  isLoadingPurchase?: boolean;
+  isLoadingInstall?: boolean;
 }
+
+const buildStatusNotAllows = ["in_progress", "not_started"];
 
 const isValidSource = (source?: string): boolean => {
   if (!source) return false;
@@ -58,6 +67,10 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
   onUpdate,
   onDelete,
   onRefreshFromDisk,
+  onInstall,
+  onPurchase,
+  isLoadingPurchase,
+  isLoadingInstall,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   return (
@@ -219,48 +232,88 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
 
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto p-8 ">
-            {pipe.installed_config?.enabled && pipe.installed_config?.port && (
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        openUrl(
-                          `http://localhost:${pipe.installed_config?.port}`
-                        )
-                      }
-                      disabled={!pipe.installed_config?.enabled}
-                    >
-                      <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                      open in browser
-                    </Button>
-                    <Button
-                      variant="default"
-                      onClick={async () => {
-                        try {
-                          await invoke("open_pipe_window", {
-                            port: pipe.installed_config!.port,
-                            title: pipe.name,
-                          });
-                        } catch (err) {
-                          console.error("failed to open pipe window:", err);
-                          toast({
-                            title: "error opening pipe window",
-                            description: "please try again or check the logs",
-                            variant: "destructive",
-                          });
-                        }
-                      }}
-                      disabled={!pipe.installed_config.enabled}
-                    >
-                      <Puzzle className="mr-2 h-3.5 w-3.5" />
-                      open as app
-                    </Button>
-                  </div>
-                </div>
+            {!pipe.is_installed && (
+              <div className="mb-6">
+                <Button
+                  size="sm"
+                  variant={pipe.is_paid ? "default" : "outline"}
+                  onClick={() => {
+                    if (pipe.is_paid && !pipe.has_purchased) {
+                      setIsLoading(true);
+                      onPurchase(pipe, () => setIsLoading(false));
+                    } else {
+                      setIsLoading(true);
+                      onInstall(pipe, () => setIsLoading(false));
+                    }
+                  }}
+                  className="font-medium"
+                  disabled={isLoadingPurchase || isLoadingInstall}
+                >
+                  {isLoadingPurchase ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : isLoadingInstall ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      installing...
+                    </>
+                  ) : pipe.is_paid && !pipe.has_purchased ? (
+                    `$${pipe.price}`
+                  ) : (
+                    <>
+                      <Download className="h-3.5 w-3.5 mr-2" />
+                      get
+                    </>
+                  )}
+                </Button>
               </div>
             )}
+
+            {pipe.installed_config?.enabled &&
+              !buildStatusNotAllows.includes(
+                getBuildStatus(pipe.installed_config.buildStatus) ?? ""
+              ) &&
+              pipe.installed_config?.port && (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          openUrl(
+                            `http://localhost:${pipe.installed_config?.port}`
+                          )
+                        }
+                        disabled={!pipe.installed_config?.enabled}
+                      >
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                        open in browser
+                      </Button>
+                      <Button
+                        variant="default"
+                        onClick={async () => {
+                          try {
+                            await invoke("open_pipe_window", {
+                              port: pipe.installed_config!.port,
+                              title: pipe.name,
+                            });
+                          } catch (err) {
+                            console.error("failed to open pipe window:", err);
+                            toast({
+                              title: "error opening pipe window",
+                              description: "please try again or check the logs",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        disabled={!pipe.installed_config.enabled}
+                      >
+                        <Puzzle className="mr-2 h-3.5 w-3.5" />
+                        open as app
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
             {pipe.description && (
               <div>

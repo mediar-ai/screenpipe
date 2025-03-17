@@ -16,19 +16,47 @@ export type ContentType =
  * Parameters for querying Screenpipe.
  */
 export interface ScreenpipeQueryParams {
+  /** Optional search query text */
   q?: string;
+
+  /** Type of content to search for (default: "all") */
   contentType?: ContentType;
+
+  /** Maximum number of results to return (default: 10) */
   limit?: number;
+
+  /** Number of results to skip (for pagination) */
   offset?: number;
+
+  /** Filter results after this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
   startTime?: string;
+
+  /** Filter results before this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
   endTime?: string;
+
+  /** Filter by application name (e.g. "chrome", "vscode") */
   appName?: string;
+
+  /** Filter by window title */
   windowName?: string;
+
+  /** Include base64-encoded screenshot frames in results */
   includeFrames?: boolean;
+
+  /** Filter by minimum text length */
   minLength?: number;
+
+  /** Filter by maximum text length */
   maxLength?: number;
+
+  /** Filter by specific speaker IDs */
   speakerIds?: number[];
+
+  /** Filter by frame name */
   frameName?: string;
+
+  /** Filter by browser URL (for web content) */
+  browserUrl?: string;
 }
 
 /**
@@ -46,6 +74,7 @@ export interface OCRContent {
   frame?: string;
   frameName?: string;
   browserUrl?: string;
+  focused?: boolean;
 }
 
 /**
@@ -195,6 +224,31 @@ export interface User {
   };
 }
 
+export type AIPreset = {
+  id: string;
+  maxContextChars: number;
+  url: string;
+  model: string;
+  defaultPreset: boolean;
+  prompt: string;
+  //provider: AIProviderType;
+} & (
+  | {
+      provider: "openai";
+      apiKey: string;
+    }
+  | {
+      provider: "native-ollama";
+    }
+  | {
+      provider: "screenpipe-cloud";
+    }
+  | {
+      provider: "custom";
+      apiKey?: string;
+    }
+);
+
 export interface Settings {
   openaiApiKey: string;
   deepgramApiKey: string;
@@ -220,6 +274,7 @@ export interface Settings {
   enableRealtimeAudioTranscription: boolean;
   realtimeAudioTranscriptionEngine: string;
   disableVision: boolean;
+  aiPresets: AIPreset[];
 }
 
 /**
@@ -243,6 +298,7 @@ export interface TranscriptionChunk {
   device: string;
   is_input: boolean;
   is_final: boolean;
+  speaker?: string;
 }
 
 export interface TranscriptionStreamResponse {
@@ -259,6 +315,7 @@ export interface TranscriptionStreamResponse {
     timestamp: string;
     device: string;
     isInput: boolean;
+    speaker?: string;
   };
 }
 
@@ -268,6 +325,7 @@ export interface VisionEvent {
   timestamp: string;
   app_name?: string;
   window_name?: string;
+  browser_url?: string;
 }
 
 export interface VisionStreamResponse {
@@ -278,4 +336,55 @@ export interface VisionStreamResponse {
 export interface EventStreamResponse {
   name: string;
   data: VisionEvent | TranscriptionChunk | any;
+}
+
+// Types for the Operator API
+
+export interface ElementSelector {
+  app_name: string;
+  window_name?: string;
+  locator: string;
+  index?: number;
+  text?: string;
+  label?: string;
+  description?: string;
+  element_id?: string;
+  use_background_apps?: boolean;
+  activate_app?: boolean;
+}
+
+export interface ElementPosition {
+  x: number;
+  y: number;
+}
+
+export interface ElementSize {
+  width: number;
+  height: number;
+}
+
+export interface ElementInfo {
+  id?: string;
+  role: string;
+  label?: string;
+  description?: string;
+  text?: string;
+  position?: ElementPosition;
+  size?: ElementSize;
+  properties: Record<string, any>;
+}
+
+export interface FindElementsRequest {
+  selector: ElementSelector;
+  max_results?: number;
+  max_depth?: number;
+}
+
+export interface ClickElementRequest {
+  selector: ElementSelector;
+}
+
+export interface TypeTextRequest {
+  selector: ElementSelector;
+  text: string;
 }

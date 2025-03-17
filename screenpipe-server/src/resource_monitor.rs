@@ -13,8 +13,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
 use tracing::debug;
+use tracing::trace;
 use tracing::{error, info, warn};
-use uuid;
 
 pub struct ResourceMonitor {
     start_time: Instant,
@@ -85,7 +85,7 @@ impl ResourceMonitor {
 
         // Avoid unnecessary cloning by using references
         let payload = json!({
-            "api_key": "phc_6TUWxXM2NQGPuLhkwgRHxPfXMWqhGGpXqWNIw0GRpMD",
+            "api_key": "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce",
             "event": "resource_usage",
             "properties": {
                 "distinct_id": &self.distinct_id,
@@ -103,7 +103,7 @@ impl ResourceMonitor {
             }
         });
 
-        debug!("Sending resource usage to PostHog: {:?}", payload);
+        trace!(target: "resource_monitor", "Sending resource usage to PostHog: {:?}", payload);
 
         // Send the event to PostHog
         if let Err(e) = client
@@ -302,7 +302,7 @@ impl ResourceMonitor {
             }
         }
 
-        if let Some(_) = &self.posthog_client {
+        if self.posthog_client.is_some() {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }

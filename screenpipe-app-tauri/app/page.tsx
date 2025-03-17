@@ -2,7 +2,7 @@
 
 import { getStore, useSettings } from "@/lib/hooks/use-settings";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import NotificationHandler from "@/components/notification-handler";
 import Header from "@/components/header";
 import { useToast } from "@/components/ui/use-toast";
@@ -22,6 +22,8 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { PipeApi } from "@/lib/api";
 import localforage from "localforage";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { LoginDialog } from "../components/login-dialog";
+import { ModelDownloadTracker } from "../components/model-download-tracker";
 
 export default function Home() {
   const { settings, updateSettings, loadUser, reloadStore } = useSettings();
@@ -33,14 +35,11 @@ export default function Home() {
   const { setIsOpen: setSettingsOpen } = useSettingsDialog();
   const isProcessingRef = React.useRef(false);
 
-  // staggered polling with exponential backoff while maintaining responsiveness
-  // while reducing backend load
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadUser(settings.user?.token!);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [settings]);
+    if (settings.user?.token) {
+      loadUser(settings.user.token);
+    }
+  }, [settings.user.token]);
 
   useEffect(() => {
     const getAudioDevices = async () => {
@@ -62,7 +61,7 @@ export default function Home() {
               updateSettings({ user: { token: apiKey } });
               toast({
                 title: "logged in!",
-                description: "your api key has been set",
+                description: "you have been logged in",
               });
             }
           }
@@ -228,16 +227,18 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center flex-1">
+    <div className="flex flex-col items-center flex-1 max-w-screen-2xl mx-auto relative">
+      <LoginDialog />
+      <ModelDownloadTracker />
       <NotificationHandler />
       {showOnboarding ? (
         <Onboarding />
       ) : (
         <>
           <ChangelogDialog />
-          <BreakingChangesInstructionsDialog />
+          {/* <BreakingChangesInstructionsDialog /> */}
           <Header />
-          <div className=" w-[90%]">
+          <div className=" w-full">
             <PipeStore />
           </div>
         </>

@@ -1,13 +1,13 @@
 "use client";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Terminal } from "lucide-react";
 import { SearchChat } from "@/components/search-chat";
 
 export default function SearchPage() {
-
   const { settings } = useSettings();
-  const aiDisabled = settings.aiProviderType === "screenpipe-cloud" && !settings.user.token;
+  const aiDisabled =
+    settings?.aiProviderType === "screenpipe-cloud" && !settings?.user?.token;
 
   return (
     <>
@@ -22,7 +22,7 @@ export default function SearchPage() {
             </AlertDescription>
           </Alert>
         )}
-        <p className="text-2xl font-bold">where pixels become magic</p>
+        <p className="text-2xl font-bold">search your screen history</p>
         <SearchChat />
       </div>
     </>

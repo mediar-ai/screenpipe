@@ -2,6 +2,13 @@ import { ContentItem } from "@screenpipe/js";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import levenshtein from "js-levenshtein";
+import {
+	createSerializer,
+	inferParserType,
+	parseAsArrayOf,
+	parseAsIsoDateTime,
+	parseAsString,
+} from "nuqs";
 
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -58,3 +65,14 @@ export function stringToColor(str: string): string {
 	}
 	return color;
 }
+
+export const queryParser = {
+	query: parseAsString,
+	start_time: parseAsIsoDateTime,
+	end_time: parseAsIsoDateTime,
+	apps: parseAsArrayOf(parseAsString),
+};
+
+export const querySerializer = createSerializer(queryParser);
+
+export type QueryParser = inferParserType<typeof queryParser>;

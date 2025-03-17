@@ -18,6 +18,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "./ui/tooltip";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
 
 interface LogFile {
   name: string;
@@ -87,6 +88,7 @@ export const ShareLogsButton = ({
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [mergedVideoPath, setMergedVideoPath] = useState<string | null>(null);
+  const { health } = useHealthCheck();
 
   useEffect(() => {
     const loadMachineId = async () => {
@@ -347,7 +349,7 @@ export const ShareLogsButton = ({
                         ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/20"
                         : ""
                     }`}
-                    disabled={isLoadingVideo}
+                    disabled={isLoadingVideo || health?.status === "error"}
                   >
                     {isLoadingVideo ? (
                       <Loader className="h-3.5 w-3.5 animate-spin" />
@@ -364,7 +366,7 @@ export const ShareLogsButton = ({
                   side="bottom"
                   className="text-xs bg-secondary/80 backdrop-blur-sm border-secondary/30"
                 >
-                  Attach last 5 minutes of screen recording
+                  attach last 5 minutes of screen recording
                 </TooltipContent>
               </Tooltip>
             </div>

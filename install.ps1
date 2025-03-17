@@ -47,55 +47,68 @@ try {
     # Cleanup
     Remove-Item $tempZip -Force
 
-    # Install bun
-    Write-Host "installing bun..."
-    powershell -c "irm bun.sh/install.ps1|iex"
+    # Check if bun is installed
+    $bunInstalled = $false
+    $bunVersion = ""
+    
+    try {
+        $bunVersion = (bun --version 2>$null) -replace "[^\d\.]", ""
+        if ($bunVersion -as [version] -ge [version]"1.1.43") {
+            $bunInstalled = $true
+        }
+    }
+    catch {}
 
+    if ($bunInstalled) {
+        Write-Host "Bun is already installed and meets version requirements"
+    }
+    else {
+        Write-Host "Installing bun..."
+        powershell -c "irm bun.sh/install.ps1|iex"
+    }
+    
     # Install Visual Studio Redistributables to avoid any ort issues
+    Write-Host "Installing Visual Studio Redistributables..."
+    Write-Host ""
+    # Inform the user about the need for elevation
+    Write-Host "The script requires administrative privileges. You will be prompted to allow this action."
+    
+    Start-Process powershell -Verb RunAs -ArgumentList @"
+    -NoProfile -ExecutionPolicy Bypass -Command "& {
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    iex ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
+    }"
+    "@
 
-    Write-Host @"
-
-███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗██████╗ ██╗██████╗ ███████╗
-██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║██╔══██╗██║██╔══██╗██╔════╝
-███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║█████╔╝██║██████╔╝█████╗
-╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║██╔═══╝ ██║██╔═══╝ ██╔══╝
-███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║██║     ██║██║     ███████╗
-╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝╚═╝     ╚═╝╚═╝     ╚══════╝
-"@
-
-    Write-Host "installation complete! 🚀"
+    Write-Host "Installation Complete"
+    Write-Host ""
     Write-Host "to get started:"
     Write-Host "1. restart your terminal"
     Write-Host "2. run: screenpipe"
     Write-Host ""
-    Write-Host "╭──────────────────────────────────────────╮"
-    Write-Host "│  join our discord:                       │"
-    Write-Host "│  --> https://discord.gg/dU9EBuw7Uq       │"
-    Write-Host "│                                          │"
-    Write-Host "│  check the docs:                         │"
-    Write-Host "│  --> https://docs.screenpi.pe            │"
-    Write-Host "╰──────────────────────────────────────────╯"
+    Write-Host "join our discord: https://discord.gg/dU9EBuw7Uq"
+    Write-Host "check the docs: https://docs.screenpi.pe"
 
     try {
         $postHogData = @{
-            api_key = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce"
-            event = "cli_install"
+            api_key    = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce"
+            event      = "cli_install"
             properties = @{
                 distinct_id = $env:COMPUTERNAME
-                version = $latestRelease.tag_name
-                os = "windows"
-                arch = "x86_64"
-        }
-    } | ConvertTo-Json
+                version     = $latestRelease.tag_name
+                os          = "windows"
+                arch        = "x86_64"
+            }
+        } | ConvertTo-Json
         Invoke-RestMethod -Uri "https://eu.i.posthog.com/capture/" -Method Post -Body $postHogData -ContentType "application/json"
-    } catch {
+    }
+    catch {
         # Silently continue if tracking fails
     }
 
-} catch {
+}
+catch {
     Write-Host "installation failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }

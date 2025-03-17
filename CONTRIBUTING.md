@@ -86,6 +86,7 @@ before you begin:
    ```
 
 5. **setup Intel OpenMP DLLs**:
+   - make sure your in root of the project i.e screenpipe
    - Ensure Python and `pip` are installed before running the script.
    
    ```powershell
@@ -108,8 +109,38 @@ before you begin:
    # Clean up the temporary directory
    Remove-Item -Path $temp_dir -Recurse -Force
    ```
+6. **make sure vcredist is present on system**:
+   - make sure your in root of the project i.e screenpipe
 
-6. **clone and build**:
+   ```powershell
+   $path = "C:\Windows\System32\vcruntime140.dll"
+   
+   if (-Not (Test-Path $path)) {
+       Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command "& {
+           Set-ExecutionPolicy Bypass -Scope Process -Force
+           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+           $url = ''https://vcredist.com/install.ps1''
+           $scriptPath = ''$env:TEMP\install_vcredist.ps1''
+           Invoke-WebRequest -Uri $url -OutFile $scriptPath
+           & $scriptPath
+       }"' -Wait
+   }
+   
+   # Verify installation
+   if (-Not (Test-Path $path)) {
+       Write-Host "Installation failed. Exiting."
+       exit 1
+   }
+   
+   # Copy vcruntime140.dll to the specified directory
+   $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+   New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
+   Copy-Item $path -Destination $vcredist_dir -Force
+   
+   Write-Host "vcruntime140.dll copied successfully!"
+   ```
+
+7. **clone and build**:
    ```powershell
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
@@ -241,55 +272,6 @@ before submitting a pull request, run all the tests to ensure nothing has broken
 
 ```bash
 cargo test
-# on macos you need to set DYLD_LIBRARY_PATH for apple native OCR tests to run
-DYLD_LIBRARY_PATH=$(pwd)/screenpipe-vision/lib cargo test
-```
-
-you can add env var to `.vscode/settings.json`:
-
-```json
-{
-    "terminal.integrated.env.osx": {
-        "DYLD_LIBRARY_PATH": "$(pwd)/screenpipe-vision/lib"
-    }
-}
-```
-
-this is @louis030195 whole `.vscode/settings.json` file:
-
-```json
-{
-    "rust-analyzer.server.extraEnv": {
-        "PKG_CONFIG_ALLOW_SYSTEM_LIBS": "1",
-        "PKG_CONFIG_ALLOW_SYSTEM_CFLAGS": "1",
-        "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig",
-        "PATH": "/usr/bin:/opt/homebrew/bin:${env:PATH}",
-        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
-    },
-    "rust-analyzer.cargo.extraEnv": {
-        "PKG_CONFIG_ALLOW_SYSTEM_LIBS": "1",
-        "PKG_CONFIG_ALLOW_SYSTEM_CFLAGS": "1",
-        "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig",
-        "PATH": "/usr/bin:/opt/homebrew/bin:${env:PATH}",
-        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
-    },
-    // add env to integrated terminal
-    "terminal.integrated.env.osx": {
-        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
-        "SCREENPIPE_APP_DEV": "true",
-    },
-    "rust-analyzer.cargo.features": [
-        "pipes"
-    ],
-    "rust-analyzer.cargo.runBuildScripts": true,
-    "rust-analyzer.checkOnSave.command": "clippy",
-    "rust-analyzer.checkOnSave.extraArgs": [
-        "--features",
-        "pipes"
-    ],
-    "rust-analyzer.cargo.allFeatures": false,
-    "rust-analyzer.cargo.noDefaultFeatures": false
-}
 ```
 
 ## other hacks

@@ -6,7 +6,7 @@ use cidre::{
 };
 use image::DynamicImage;
 use image::GenericImageView;
-use log::error;
+use tracing::error;
 use screenpipe_core::Language;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

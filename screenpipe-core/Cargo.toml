@@ -14,19 +14,16 @@ which = "6.0.1"
 ffmpeg-sidecar = { git = "https://github.com/nathanbabcock/ffmpeg-sidecar", branch = "main" }
 log = "0.4.17"
 anyhow = "1.0.86"
-candle = { workspace = true, optional = true }
-candle-nn = { workspace = true, optional = true }
-candle-transformers = { workspace = true, optional = true }
-tokenizers = { workspace = true, optional = true }
+candle = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+tokenizers = { workspace = true }
 hf-hub = { workspace = true, features = [
     "tokio",
     "native-tls",
-], optional = true }
-screenpipe-actions = { path = "../screenpipe-actions", optional = true }
-http-cache-reqwest = "0.15.0"
-reqwest = { workspace = true }
-reqwest-middleware = "0.4.0"
-# pipes
+] }
+http-cache-reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
 tokio = { workspace = true }
 
 # Security
@@ -50,14 +47,26 @@ cron = "0.13.0"
 chrono = "0.4.38"
 sentry = { workspace = true }
 zip = "0.6.2"
-tokio-stream = "0.1.17"
+thiserror = "2.0.12"
+
+[dev-dependencies]
+reqwest = { workspace = true }
 
 [features]
-default = ["pipes", "security"]
-llm = ["candle", "candle-nn", "candle-transformers", "tokenizers", "hf-hub"]
-pipes = []
+default = ["security"]
 security = ["dep:regex", "dep:lazy_static"]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
-beta = ["dep:screenpipe-actions"]
+llm = []
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# accessibility-sys = "0.1.3"
+accessibility-sys = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
+# accessibility = "0.1.6"
+accessibility = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
+objc = "0.2.7"
+objc-foundation = "0.1.1"
+
+core-foundation = "=0.10.0"
+core-graphics = "=0.24.0"

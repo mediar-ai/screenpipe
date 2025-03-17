@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.35.2"
+version = "0.42.7"
 description = ""
 authors = ["you"]
 license = ""
@@ -46,11 +46,14 @@ http = "0.2"
 # Logging
 log = "0.4.17"
 
+# Dark mode or light mode
+dark-light = "2.0.0"
+
 # Tokio
 tokio = { version = "1.36.0", features = ["full"] }
 
 # HTTP client
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "=0.12.12", features = ["blocking", "multipart", "json"] }
 
 # tracing
 tracing = "0.1.40"
@@ -92,13 +95,13 @@ tauri-plugin-single-instance = { version = "2.0.0", features = ["deep-link"] }
 tauri-plugin-updater = "2.0.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = "0.9.4"
+core-foundation = "=0.10.0"
 libc = "0.2.152"
 cocoa = "0.26.0"
 objc = "0.2.7"
 base64 = "0.22.1"
 # bunch of hack for permissions
-scap = { git = "https://github.com/CapSoftware/scap", rev = "58d4410bf52f" }
+scap = { git = "https://github.com/CapSoftware/scap", rev = "92cabc5" }
 nokhwa-bindings-macos = { git = "https://github.com/CapSoftware/nokhwa", rev = "0d3d1f30a78b" }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
 

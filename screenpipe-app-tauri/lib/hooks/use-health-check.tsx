@@ -11,6 +11,8 @@ interface HealthCheckResponse {
   audio_status: string;
   ui_status: string;
   message: string;
+  verbose_instructions?: string | null;
+  device_status_details?: string | null;
 }
 
 function isHealthChanged(

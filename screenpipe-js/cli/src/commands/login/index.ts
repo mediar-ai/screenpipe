@@ -1,53 +1,46 @@
 import { Command } from "commander";
-import inquirer from "inquirer";
+import * as p from "@clack/prompts";
 import { cliLogin } from "./utils/cli-login";
 import { apiKeyLogin } from "./utils/api-key-login";
-import { handleError } from "../components/commands/add/utils/handle-error";
 
 export const loginCommand = new Command()
-.name("login")
-.description("authenticate with screenpipe")
-.action(async () => {
-    let type;
-    try {
-        type = await inquirer.prompt([
-                {
-                    type: "list",
-                    name: "type",
-                    message: "select login type",
-                    choices: ["browser", "api key"],
-            }
-        ]);
-    } catch (error) {
-        process.exit(1);
+  .name("login")
+  .description("authenticate with screenpipe")
+  .action(async () => {
+    p.intro("Welcome to Screenpipe");
+
+    const type = await p.select({
+      message: "Select login type",
+      options: [
+        { value: "browser", label: "Browser" },
+        { value: "apiKey", label: "API Key" },
+      ],
+    });
+
+    if (p.isCancel(type)) {
+      p.cancel("Login cancelled");
+      process.exit(1);
     }
 
-    if (type?.type === "browser") {
-        await cliLogin();
+    if (type === "browser") {
+      await cliLogin();
     } else {
-        let apiKey;
-        try {
-            apiKey = await inquirer.prompt([
-                {
-                    type: "input",
-                    name: "apiKey",
-                    message: "enter your API key",
-                    // validate: (input: string) => {
-                //     if (input.length !== 32) {
-                //         return "API key must be 32 characters long";
-                //     }
-                //     return true;
-                    // }
-                }
-            ]);
-        } catch (error) {
-            process.exit(1);
-        }
+      const apiKey = await p.text({
+        message: "Enter your API key",
+        // validate: (value) => {
+        //     if (value.length !== 32) {
+        //         return 'API key must be 32 characters long';
+        //     }
+        // }
+      });
 
-        if (apiKey) {
-            await apiKeyLogin(apiKey.apiKey);
-        }
+      if (p.isCancel(apiKey)) {
+        p.cancel("Login cancelled");
+        process.exit(1);
+      }
+
+      await apiKeyLogin(apiKey);
     }
-});
 
-
+    p.outro("Login complete");
+  });

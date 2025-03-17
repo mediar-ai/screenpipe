@@ -6,21 +6,16 @@ mod tests {
     use axum::Router;
     use chrono::DateTime;
     use chrono::{Duration, Utc};
-    use lru::LruCache;
-    use screenpipe_audio::{AudioDevice, DeviceType};
-    use screenpipe_server::db_types::ContentType;
-    use screenpipe_server::db_types::SearchResult;
-    use screenpipe_server::video_cache::FrameCache;
+    use screenpipe_audio::audio_manager::AudioManagerBuilder;
+    use screenpipe_db::{ContentType, DatabaseManager, SearchResult};
     use screenpipe_server::PipeManager;
-    use screenpipe_server::{
-        create_router, AppState, ContentItem, DatabaseManager, PaginatedResponse,
-    };
+    use screenpipe_server::SCServer;
+    use screenpipe_server::{ContentItem, PaginatedResponse};
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use serde::Deserialize;
-    use std::num::NonZeroUsize;
+    use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::sync::Arc;
-    use tokio::sync::Mutex;
     use tower::ServiceExt; // for `oneshot` and `ready`
 
     // Before the test function, add:
@@ -28,35 +23,41 @@ mod tests {
     struct TestErrorResponse {
         error: String,
     }
-    async fn setup_test_app() -> (Router, Arc<AppState>) {
+    // Add this function to initialize the logger
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    async fn setup_test_app() -> (Router, Arc<DatabaseManager>) {
         let db = Arc::new(DatabaseManager::new("sqlite::memory:").await.unwrap());
 
-        let app_state = Arc::new(AppState {
-            db: db.clone(),
-            app_start_time: Utc::now(),
-            screenpipe_dir: PathBuf::from(""),
-            pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
-            vision_disabled: false,
-            audio_disabled: false,
-            frame_cache: Some(Arc::new(
-                FrameCache::new(PathBuf::from(""), db).await.unwrap(),
-            )),
-            ui_monitoring_enabled: false,
-            frame_image_cache: Some(Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(100).unwrap(),
-            )))),
-        });
+        let audio_manager = Arc::new(
+            AudioManagerBuilder::new()
+                .output_path("/tmp/screenpipe".into())
+                .build(db.clone())
+                .await
+                .unwrap(),
+        );
 
-        let router = create_router();
-        let app = router.with_state(app_state.clone());
+        let app = SCServer::new(
+            db.clone(),
+            SocketAddr::from(([127, 0, 0, 1], 23948)),
+            PathBuf::from(""),
+            Arc::new(PipeManager::new(PathBuf::from(""))),
+            false,
+            false,
+            false,
+            audio_manager,
+        );
 
-        (app, app_state)
+        let router = app.create_router(true).await;
+        init();
+        (router, db)
     }
 
     #[tokio::test]
     async fn test_search_audio_with_length_constraints() {
-        let (app, state) = setup_test_app().await;
-        let db = &state.db;
+        let (app, db) = setup_test_app().await;
 
         // Insert some test data
         let _ = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
@@ -69,7 +70,10 @@ mod tests {
                 "Short",
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test1".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,
@@ -83,7 +87,10 @@ mod tests {
                 "This is a longer transcription with more words",
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test2".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,
@@ -164,24 +171,26 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_count_search_results() {
-        let (_, state) = setup_test_app().await;
-        let db = &state.db;
+        let (_, db) = setup_test_app().await;
 
         // Insert test data with known lengths:
         let _ = db
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
-        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
+        let frame_id2 = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id1,
             "This is a test OCR text", // 21 chars
             "",
-            "TestApp",
-            "TestWindow",
-            Arc::new(OcrEngine::Tesseract),
-            false,
+            Arc::new(OcrEngine::Tesseract.into()),
         )
         .await
         .unwrap();
@@ -189,10 +198,7 @@ mod tests {
             frame_id2,
             "Another OCR text for testing that should be longer than thirty characters", // >30 chars
             "",
-            "TestApp2",
-            "TestWindow2",
-            Arc::new(OcrEngine::Tesseract),
-            false,
+            Arc::new(OcrEngine::Tesseract.into()),
         )
         .await
         .unwrap();
@@ -205,7 +211,10 @@ mod tests {
                 "This is a test audio transcription that should definitely be longer than thirty characters", // >30 chars
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test1".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,
@@ -218,7 +227,10 @@ mod tests {
                 "Short audio", // <30 chars
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test2".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,
@@ -231,6 +243,8 @@ mod tests {
             .count_search_results(
                 "test*",
                 ContentType::All,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -257,6 +271,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -267,6 +283,8 @@ mod tests {
             .count_search_results(
                 "audio",
                 ContentType::Audio,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -293,6 +311,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -307,6 +327,8 @@ mod tests {
                 None,
                 None,
                 Some("TestWindow2"),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -329,6 +351,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -347,6 +371,8 @@ mod tests {
                 Some(25),
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -355,15 +381,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_with_time_constraints() {
-        let (_, state) = setup_test_app().await;
-        let db = &state.db;
+        let (_, db) = setup_test_app().await;
 
         // insert test data with different timestamps
         let _ = db
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
 
         let now = DateTime::parse_from_rfc3339("2024-09-21T10:49:23.240367Z")
@@ -384,10 +412,7 @@ mod tests {
             frame_id1,
             "old ocr text",
             "",
-            "testapp",
-            "testwindow",
-            Arc::new(OcrEngine::Tesseract),
-            false,
+            Arc::new(OcrEngine::Tesseract.into()),
         )
         .await
         .unwrap();
@@ -398,7 +423,10 @@ mod tests {
                 "old audio transcription",
                 0,
                 "",
-                &AudioDevice::new("test".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,
@@ -427,6 +455,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -439,6 +469,8 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::minutes(1)),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -460,6 +492,8 @@ mod tests {
                 0,
                 None,
                 Some(now - Duration::minutes(10)),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -490,6 +524,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -506,6 +542,8 @@ mod tests {
                 "ocr",
                 ContentType::OCR,
                 Some(two_hours_ago - Duration::minutes(1)),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -530,6 +568,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -538,8 +578,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_recent_tasks_no_bleeding() {
-        let (_, state) = setup_test_app().await;
-        let db = &state.db;
+        let (_, db) = setup_test_app().await;
 
         // Setup test data with different timestamps
         let now = Utc::now();
@@ -551,14 +590,20 @@ mod tests {
             .insert_video_chunk("old_video.mp4", "test_device")
             .await
             .unwrap();
-        let old_frame_id = db.insert_frame("test_device", None, None).await.unwrap();
+        let old_frame_id = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
 
         // Insert recent data
         let _ = db
             .insert_video_chunk("recent_video.mp4", "test_device")
             .await
             .unwrap();
-        let recent_frame_id = db.insert_frame("test_device", None, None).await.unwrap();
+        let recent_frame_id = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
 
         // Insert OCR data with different timestamps
         sqlx::query("UPDATE frames SET timestamp = ? WHERE id = ?")
@@ -579,10 +624,7 @@ mod tests {
             old_frame_id,
             "old task: write documentation",
             "",
-            "vscode",
-            "tasks.md",
-            Arc::new(OcrEngine::Tesseract),
-            false,
+            Arc::new(OcrEngine::Tesseract.into()),
         )
         .await
         .unwrap();
@@ -591,10 +633,7 @@ mod tests {
             recent_frame_id,
             "current task: fix bug #123",
             "",
-            "vscode",
-            "tasks.md",
-            Arc::new(OcrEngine::Tesseract),
-            false,
+            Arc::new(OcrEngine::Tesseract.into()),
         )
         .await
         .unwrap();
@@ -607,6 +646,8 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::seconds(30)),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -642,6 +683,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -653,6 +696,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // only local
     async fn test_recent_tasks_no_bleeding_production_db() {
         // Get home directory safely
         let home = std::env::var("HOME").expect("HOME environment variable not set");
@@ -685,6 +729,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -700,6 +746,8 @@ mod tests {
                 0,
                 Some(four_hours_ago - Duration::minutes(5)),
                 Some(four_hours_ago + Duration::minutes(5)),
+                None,
+                None,
                 None,
                 None,
                 None,

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Screenpipe Documentation",
+  "colors": {
+    "primary": "#000000",
+    "light": "#333333",
+    "dark": "#000000"
+  },
+  "favicon": "/favicon.ico",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "pages": [
+          "pages/index",
+          "pages/getting-started",
+          "pages/sdk-reference",
+          "pages/architecture",
+          "pages/cli-reference",
+          "pages/plugins",
+          "pages/contributing",
+          "pages/faq"
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "openapi": "openapi.yaml"
+      }
+    ]
+  },
+  "logo": {
+    "light": "/favicon.ico",
+    "dark": "/favicon.ico"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "support",
+        "href": "mailto:support@screenpipe.co"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "download",
+      "href": "https://screenpipe.co/download"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/screenpipe"
+    }
+  },
+  "modeToggle": {
+    "default": "dark"
+  },
+  "search": {
+    "prompt": "search documentation..."
+  }
+}

@@ -1,14 +1,22 @@
-#[cfg(feature = "pipes")]
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution};
+    use screenpipe_core::{
+        run_pipe, 
+        download_pipe,
+        sanitize_pipe_name,
+        save_cron_execution,
+        download_pipe_private,
+        get_last_cron_execution,
+        PipeState
+    };
+
+    use tokio::io::AsyncWriteExt;
     use serde_json::json;
     use std::sync::Arc;
+    use std::sync::Once;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
-    use std::{path::PathBuf, sync::Once};
     use tempfile::TempDir;
-    use tokio::fs::create_dir_all;
     use tokio::sync::Mutex;
     use tokio::time::sleep;
     use tracing::subscriber::set_global_default;
@@ -26,124 +34,6 @@ mod tests {
         });
     }
 
-    async fn setup_test_pipe(temp_dir: &TempDir, pipe_name: &str, code: &str) -> PathBuf {
-        init();
-        let pipe_dir = temp_dir.path().join(pipe_name);
-        create_dir_all(&pipe_dir).await.unwrap();
-        let file_path = pipe_dir.join("pipe.ts");
-        tokio::fs::write(&file_path, code).await.unwrap();
-        pipe_dir
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn test_simple_pipe() {
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let code = r#"
-            console.log("Hello from simple pipe!");
-            const result = 2 + 3;
-            console.log(`Result: ${result}`);
-        "#;
-
-        let pipe_dir = setup_test_pipe(&temp_dir, "simple_pipe", code).await;
-
-        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    #[ignore] // TODO: fix this test (not implemented yet)
-    async fn test_pipe_with_http_request() {
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let code = r#"
-            console.log("Fetching data from API...");
-            const response = await pipe.get("https://jsonplaceholder.typicode.com/todos/1");
-            console.log(JSON.stringify(response, null, 2));
-        "#;
-
-        let pipe_dir = setup_test_pipe(&temp_dir, "http_pipe", code).await;
-
-        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    #[ignore] // TODO: fix this test (not implemented yet)
-    async fn test_pipe_with_error() {
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let code = r#"
-            console.log("This pipe will throw an error");
-            throw new Error("Intentional error");
-        "#;
-
-        let pipe_dir = setup_test_pipe(&temp_dir, "error_pipe", code).await;
-
-        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    #[ignore] // TODO: fix this test (file operations work but not in this test for some reason)
-    async fn test_pipe_with_file_operations() {
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let code = r#"
-            console.log("Writing to a file...");
-            await pipe.writeFile("output.txt", "Hello, Screenpipe!");
-            const content = await pipe.readFile("output.txt");
-            console.log(`File content: ${content}`);
-        "#;
-
-        let pipe_dir = setup_test_pipe(&temp_dir, "file_pipe", code).await;
-
-        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
-        assert!(result.is_ok());
-
-        // Verify that the file was created and contains the expected content
-        let output_file = pipe_dir.join("output.txt");
-        assert!(output_file.exists());
-        let content = tokio::fs::read_to_string(output_file).await.unwrap();
-        assert_eq!(content, "Hello, Screenpipe!");
-    }
-
-    #[tokio::test]
-    #[ignore] // Github said NO
-    async fn test_download_pipe_github_folder() {
-        init();
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let github_url =
-            "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-stream-ocr-text";
-        let result = download_pipe(github_url, screenpipe_dir.clone()).await;
-
-        assert!(
-            result.is_ok(),
-            "Failed to download GitHub folder: {:?}",
-            result
-        );
-        let pipe_dir = result.unwrap();
-        assert!(pipe_dir.exists(), "Pipe directory does not exist");
-
-        let has_main_or_pipe_file = std::fs::read_dir(&pipe_dir).unwrap().any(|entry| {
-            let file_name = entry.unwrap().file_name().into_string().unwrap();
-            (file_name.starts_with("main") || file_name.starts_with("pipe"))
-                && (file_name.ends_with(".ts") || file_name.ends_with(".js"))
-        });
-
-        assert!(
-            has_main_or_pipe_file,
-            "No main.ts, main.js, pipe.ts, or pipe.js file found"
-        );
-    }
-
     #[tokio::test]
     async fn test_download_pipe_invalid_url() {
         init();
@@ -154,143 +44,6 @@ mod tests {
         let result = download_pipe(invalid_url, screenpipe_dir.clone()).await;
 
         assert!(result.is_err(), "Expected an error for invalid URL");
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn test_send_email() {
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-        let to = std::env::var("EMAIL_TO").expect("EMAIL_TO not set");
-        let from = std::env::var("EMAIL_FROM").expect("EMAIL_FROM not set");
-        let password = std::env::var("EMAIL_PASSWORD").expect("EMAIL_PASSWORD not set");
-
-        println!("to: {}", to);
-        println!("from: {}", from);
-        println!("password: {}", password);
-
-        // Test plain text email
-        let plain_text_code = format!(
-            r#"
-            (async () => {{
-                const result = await pipe.sendEmail({{
-                    to: "{to}",
-                    from: "{from}",
-                    password: "{password}",
-                    subject: "screenpipe test - plain text",
-                    body: "yo louis, this is a plain text email test!",
-                    contentType: "text/plain"
-                }});
-                console.log("Plain text email result:", result);
-                if (!result) {{
-                    throw new Error("Failed to send plain text email");
-                }}
-            }})();
-            "#
-        );
-
-        // Test HTML email
-        let html_code = format!(
-            r#"
-            (async () => {{
-                const result = await pipe.sendEmail({{
-                    to: "{to}",
-                    from: "{from}",
-                    password: "{password}",
-                    subject: "screenpipe test - html",
-                    body: `
-                        <html>
-                            <body>
-                                <h1>yo louis, you absolute madlad!</h1>
-                                <p>this is an <strong>html</strong> email test from screenpipe.</p>
-                                <ul>
-                                    <li>item 1</li>
-                                    <li>item 2</li>
-                                    <li>item 3</li>
-                                </ul>
-                            </body>
-                        </html>
-                    `,
-                    contentType: "text/html"
-                }});
-                console.log("HTML email result:", result);
-                if (!result) {{
-                    throw new Error("Failed to send HTML email");
-                }}
-            }})();
-            "#
-        );
-
-        let pipe_dir = setup_test_pipe(&temp_dir, "email_test_pipe_plain", &plain_text_code).await;
-        std::env::set_current_dir(&pipe_dir).unwrap();
-        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir.clone()).await;
-        assert!(result.is_ok(), "Plain text email test failed: {:?}", result);
-
-        let pipe_dir = setup_test_pipe(&temp_dir, "email_test_pipe_html", &html_code).await;
-        std::env::set_current_dir(&pipe_dir).unwrap();
-        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
-        assert!(result.is_ok(), "HTML email test failed: {:?}", result);
-    }
-
-    #[tokio::test]
-    #[ignore] // works when run on click in cursor but not in cli so weird haha
-    async fn test_directory_functions() {
-        let temp_dir = TempDir::new().unwrap();
-        let screenpipe_dir = temp_dir.path().to_path_buf();
-
-        let code = r#"
-        (async () => {
-            // Test mkdir
-            await fs.mkdir('test_dir');
-            console.log('Directory created');
-
-            // Test writeFile
-            await fs.writeFile('test_dir/test_file.txt', 'Hello, World!');
-            console.log('File written');
-
-            // Test readFile
-            const content = await fs.readFile('test_dir/test_file.txt');
-            console.log('File content:', content);
-            if (content !== 'Hello, World!') {
-                throw new Error('File content mismatch');
-            }
-
-            // Test readdir
-            const files = await fs.readdir('test_dir');
-            console.log('Directory contents:', files);
-            if (!files.includes('test_file.txt')) {
-                throw new Error('File not found in directory');
-            }
-
-            // Test path.join
-            const joinedPath = path.join('test_dir', 'nested', 'file.txt');
-            console.log('Joined path:', joinedPath);
-            const expectedPath = process.env.OS === 'windows' ? 'test_dir\\nested\\file.txt' : 'test_dir/nested/file.txt';
-            if (joinedPath !== expectedPath) {
-                throw new Error('Path join mismatch');
-            }
-
-            console.log('All directory function tests passed');
-        })();
-        "#;
-
-        let pipe_dir = setup_test_pipe(&temp_dir, "directory_functions_test", code).await;
-
-        // Change the working directory to the pipe directory
-        std::env::set_current_dir(&pipe_dir).unwrap();
-
-        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
-        assert!(result.is_ok(), "Pipe execution failed: {:?}", result);
-
-        // Additional checks
-        let test_dir = pipe_dir.join("test_dir");
-        assert!(test_dir.exists(), "Test directory was not created");
-
-        let test_file = test_dir.join("test_file.txt");
-        assert!(test_file.exists(), "Test file was not created");
-
-        let file_content = std::fs::read_to_string(test_file).unwrap();
-        assert_eq!(file_content, "Hello, World!", "File content mismatch");
     }
 
     #[tokio::test]
@@ -494,5 +247,312 @@ mod tests {
             "Unexpected time difference: {}",
             time_diff
         );
+    }
+
+    #[tokio::test]
+    async fn test_sanitize_pipe_name() {
+        init();
+
+        // test default pipe url
+        let github_default_url = "https://github.com/KentTDang/AI-Interview-Coach/";
+        assert_eq!(sanitize_pipe_name(github_default_url), "AI-Interview-Coach");
+
+        // test pipe url with branch
+        let github_url = "https://github.com/KentTDang/AI-Interview-Coach/tree/main";
+        assert_eq!(sanitize_pipe_name(github_url), "AI-Interview-Coach");
+
+        // test pipe url as a subdirectory
+        let github_url_subdir = "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search";
+        assert_eq!(sanitize_pipe_name(github_url_subdir), "search");
+
+        // test a local directory path
+        let temp_dir = TempDir::new().unwrap();
+        let source_dir = temp_dir.path().join("test-pipe-name");
+        tokio::fs::create_dir_all(&source_dir).await.unwrap();
+        assert_eq!(sanitize_pipe_name(
+            source_dir.to_str().expect("failed to convert path to str")
+        ), "test-pipe-name");
+
+        // test with a non-GitHub URL
+        let non_github_url = "https://example.com/some/path";
+        assert_eq!(sanitize_pipe_name(non_github_url), "https---example-com-some-path");
+
+        // url including invalid characters
+        let invalid_chars = "invalid:name/with*chars";
+        assert_eq!(sanitize_pipe_name(invalid_chars), "invalid-name-with-chars");
+    }
+
+    #[tokio::test]
+    async fn test_non_existence_local_pipe() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+
+        let source_dir = temp_dir.path().join("source_pipe");
+        let result = download_pipe(&source_dir.to_str().expect("failed bathbuf to str"),
+            screenpipe_dir.clone()).await;
+       
+        assert!(result.is_err(), "test failed for non existence local pipe: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_downloading_and_running_sideloaded_pipe() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+
+        // Create a source directory with a simple pipe
+        let source_dir = temp_dir.path().join("source_pipe");
+        tokio::fs::create_dir_all(&source_dir).await.unwrap();
+
+        // Create a basic pipe.js file
+        tokio::fs::write(
+            source_dir.join("pipe.js"),
+            r#"console.log("Hello from Windows pipe test!");"#,
+        )
+        .await
+        .unwrap();
+
+        // Try to download the pipe using the Windows path
+        let result = download_pipe(&source_dir.to_str().expect("failed to convert to str"),
+            screenpipe_dir.clone()
+        ).await;
+
+
+        // The function should succeed for every os
+        assert!(
+            result.is_ok(),
+            "Failed to download pipe: {:?}",
+            result.err()
+        );
+
+        // Verify the pipe was copied correctly
+        let pipe_name = source_dir.file_name().unwrap().to_str().unwrap();
+        let dest_path = screenpipe_dir.join("pipes").join(pipe_name);
+
+        assert!(dest_path.exists(), "Destination pipe directory not found");
+        assert!(dest_path.join("pipe.js").exists(), "pipe.js not found in destination");
+
+        // tests for urls
+        let urls = vec![
+            "https://github.com/KentTDang/AI-Interview-Coach/",
+            "https://github.com/KentTDang/AI-Interview-Coach/tree/main",
+            "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search",
+        ];
+
+        for url in urls {
+            let result = download_pipe(url, screenpipe_dir.clone()).await;
+            assert!(result.is_ok(), "Failed to download pipe from URL: {}", url);
+
+            let pipe_name = sanitize_pipe_name(url);
+            let dest_path = screenpipe_dir.join("pipes").join(&pipe_name);
+            assert!(dest_path.exists(), "Destination pipe directory not found for URL: {}", url);
+
+            // verify pipe.json
+            let pipe_json_path = dest_path.join("pipe.json");
+            let pipe_json_content = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
+            let pipe_json: serde_json::Value = serde_json::from_str(&pipe_json_content).expect("Invalid JSON format");
+            assert!(pipe_json.is_object(), "expected json to be an object");
+
+            // enable side loaded pipe, even tho its enabled by default
+            let pipe_dir = dest_path;
+            let pipe_json_path = pipe_dir.join("pipe.json");
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
+            let mut pipe_config: serde_json::Value = serde_json::from_str(&pipe_json).unwrap();
+            pipe_config["enabled"] = json!(true);
+            let updated_pipe_json = serde_json::to_string_pretty(&pipe_config);
+            let mut file = tokio::fs::File::create(&pipe_json_path).await.unwrap();
+            file.write_all(updated_pipe_json.expect("failed to write").as_bytes()).await.unwrap();
+
+            // run pipe
+            let run_result = run_pipe(&pipe_name, screenpipe_dir.clone()).await;
+
+            let (_child, pipe_state) = run_result.unwrap();
+
+            // for `bun i` command, keeping it max
+            sleep(Duration::from_secs(20)).await;
+
+            match pipe_state {
+                PipeState::Port(port) => {
+                    // verify the pipe is running on the expected port
+                    let client = reqwest::Client::new();
+                    let response = client.get(format!("http://localhost:{}", port)).send().await;
+
+                    assert!(response.is_ok(), "Failed to connect to the pipe on port {}", port);
+
+                    // if successfull clean up the process
+                    #[cfg(windows)]
+                    {
+                        let output = tokio::process::Command::new("powershell")
+                            .arg("-NoProfile")
+                            .arg("-WindowStyle")
+                            .arg("hidden")
+                            .arg("-Command")
+                            .arg(format!(
+                                r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*\pipes\{}\*" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
+                                &pipe_name.to_string()
+                            ))
+                            .creation_flags(0x08000000)
+                            .output()
+                            .await
+                            .expect("Failed to execute PowerShell command");
+
+                        assert!(
+                            output.status.success(),
+                            "{} hasn't ran successfully",
+                            pipe_name 
+                        );
+
+                    }
+
+                    #[cfg(unix)]
+                    {
+                        let command = format!(
+                            "ps axuw | grep 'pipes/{}/' | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                            &pipe_name.to_string()
+                        );
+
+                        let output = tokio::process::Command::new("sh")
+                            .arg("-c")
+                            .arg(command)
+                            .output()
+                            .await
+                            .expect("Failed to execute ps command");
+
+                        assert!(
+                            output.status.success(),
+                            "{} hasn't ran successfully",
+                            &pipe_name.to_string()
+                        );
+                    }
+                }
+                PipeState::Pid(_pid) => {
+                    // pipe process will not be running at this point
+                    // check by `ps axuw | grep pipes | grep -v grep`
+                }
+            }
+
+        }
+    }
+
+    #[tokio::test]
+    async fn test_downloading_and_running_private_pipe() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+
+        let pipe_name = "data-table";
+        let source = "https://raw.githubusercontent.com/tribhuwan-kumar/anime/master/0.1.8.zip";
+        let result = download_pipe_private("data-table", source, screenpipe_dir.clone()).await;
+
+        assert!(
+            result.is_ok(),
+            "Failed to download private pipe: {:?}",
+            result.err()
+        );
+        assert!(screenpipe_dir.join("pipes").join(pipe_name).exists(), 
+            "test failed for downloading private pipe: {:?}",
+            result.err()
+        );
+
+        // any zip shouldn't exists
+        let mut entries = tokio::fs::read_dir(screenpipe_dir.join("pipes").join(pipe_name)).await.unwrap();
+        let mut zip_exists = false;
+        while let Some(entry) = entries.next_entry().await.unwrap() {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) == Some("zip") {
+                zip_exists = true;
+                break;
+            }
+        }
+        assert!(!zip_exists, 
+            "failed zip extraction for downloading private pipe: {:?}",
+            result.err()
+        );
+
+        // verify pipe.json
+        let pipe_json_path = screenpipe_dir.join("pipes").join(pipe_name).join("pipe.json");
+        let pipe_json_content = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
+        let pipe_json: serde_json::Value = serde_json::from_str(&pipe_json_content).expect("Invalid JSON format");
+
+        assert!(pipe_json.is_object(), "expected json to be an object");
+
+        // enable by writng pipe.json
+        let pipe_dir = screenpipe_dir.join("pipes").join(pipe_name);
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
+        let mut pipe_config: serde_json::Value = serde_json::from_str(&pipe_json).unwrap();
+        pipe_config["enabled"] = json!(true);
+        let updated_pipe_json = serde_json::to_string_pretty(&pipe_config);
+        let mut file = tokio::fs::File::create(&pipe_json_path).await.unwrap();
+        file.write_all(updated_pipe_json.expect("failed to write").as_bytes()).await.unwrap();
+
+        // run pipe
+        let run_result = run_pipe(pipe_name, screenpipe_dir.clone()).await;
+
+        let (_child, pipe_state) = run_result.unwrap();
+
+        // for `bun i` command, keeping it max
+        sleep(Duration::from_secs(20)).await;
+
+        match pipe_state {
+            PipeState::Port(port) => {
+                // verify the pipe is running on the expected port
+                let client = reqwest::Client::new();
+                let response = client.get(format!("http://localhost:{}", port)).send().await;
+
+                assert!(response.is_ok(), "Failed to connect to the pipe on port {}", port);
+
+                // if successfull clean up the process
+                #[cfg(windows)]
+                {
+                    let output = tokio::process::Command::new("powershell")
+                        .arg("-NoProfile")
+                        .arg("-WindowStyle")
+                        .arg("hidden")
+                        .arg("-Command")
+                        .arg(format!(
+                            r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*\pipes\{}\*" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
+                            &pipe_name.to_string()
+                        ))
+                        .creation_flags(0x08000000)
+                        .output()
+                    .await
+                    .expect("Failed to execute PowerShell command");
+
+                    assert!(
+                        output.status.success(),
+                        "{} hasn't ran successfully",
+                        pipe_name 
+                    );
+
+                }
+
+                #[cfg(unix)]
+                {
+                    let command = format!(
+                        "ps axuw | grep 'pipes/{}/' | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                        &pipe_name.to_string()
+                    );
+
+                    let output = tokio::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(command)
+                        .output()
+                        .await
+                        .expect("Failed to execute ps command");
+
+                    assert!(
+                        output.status.success(),
+                        "{} hasn't ran successfully",
+                        pipe_name 
+                    );
+                }
+            }
+            PipeState::Pid(_pid) => {
+                // pipe process will not be running at this point
+                // check by `ps axuw | grep pipes | grep -v grep`
+            }
+        }
     }
 }

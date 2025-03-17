@@ -14,7 +14,7 @@ const vocabularyStore = localforage.createInstance({
     storeName: "corrections"
 })
 
-const CURRENT_STORAGE_VERSION = 1
+// const CURRENT_STORAGE_VERSION = 1
 
 export async function addVocabularyEntry(original: string, corrected: string, meetingId?: string): Promise<void> {
     try {
@@ -43,13 +43,13 @@ export async function getVocabularyEntries(): Promise<VocabularyEntry[]> {
         const entries = await vocabularyStore.getItem<VocabularyEntry[]>("vocabulary") || []
         
         // Log storage stats
-        const entriesCount = entries.length
-        const storageSize = new TextEncoder().encode(JSON.stringify(entries)).length / 1024
-
-        console.log("vocabulary storage stats:", {
-            entriesCount,
-            storageSize: `${storageSize.toFixed(2)}kb`,
-        })
+        // const entriesCount = entries.length
+        // const storageSize = new TextEncoder().encode(JSON.stringify(entries)).length / 1024
+// 
+        // console.log("vocabulary storage stats:", {
+        //     entriesCount,
+        //     storageSize: `${storageSize.toFixed(2)}kb`,
+        // })
 
         return entries
     } catch (error) {

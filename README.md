@@ -76,6 +76,8 @@ https://github.com/user-attachments/assets/973ee8e5-5240-4d36-83fe-d38c53efe6a9
 ---
 
 *news* 🔥
+- [2025/03] introducing [screenpipe operator](https://github.com/mediar-ai/screenpipe/tree/main/pipes/desktop-to-table): playwright but for your desktop. low level API, 100% accurate, not pixel based unreliable agents like openai/anthropic
+- [2025/02] we're throwing an [hackathon](https://www.nosu.io/hackathons/screenpipe), $12k in cash prizes, 28 Feb
 - [2025/01] we're partnering with Different AI to bring you [financial automations based on your screen](https://github.com/different-ai/hypr-v0) and [drop-in replacement for granola within obsidian](https://github.com/different-ai/file-organizer-2000)
 - [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Reddit agent, LinkedIn agent, Timeline ...)
 - [2024/11] [screenpipe is number 1 github trending repo (again)](https://x.com/louis030195/status/1859628763425931479)
@@ -143,6 +145,7 @@ screenpipe has a plugin system called "pipe" which lets you create desktop app i
 you can then publish these to our store and make money:
 
 ```bash
+cd foo
 bunx --bun @screenpipe/dev@latest pipe register --name foo [--paid --price 50] # subscription
 bun run build
 bunx --bun @screenpipe/dev@latest pipe publish --name foo
@@ -152,6 +155,7 @@ bunx --bun @screenpipe/dev@latest pipe publish --name foo
 
 - [template to build screenpipe-powered desktop native app using Tauri](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)
 - [template to build screenpipe-powered desktop native app using Electron](https://github.com/neo773/screenpipe-electron)
+- [community projects](https://www.sprint.dev/hackathons/screenpipe)
 
 ## star history
 

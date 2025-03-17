@@ -1,6 +1,6 @@
-import { OpenAI } from "openai"
 import type { Settings } from "@screenpipe/browser"
-import { TranscriptionChunk, Note } from "../../meeting-history/types"
+import { Note } from "../../meeting-history/types"
+import { callOpenAI, createAiClient } from "./ai-client"
 
 interface NoteContext {
     note: Note
@@ -20,13 +20,7 @@ export async function improveNote(
         model: settings.aiModel
     })
 
-    const openai = new OpenAI({
-        apiKey: settings.aiProviderType === "screenpipe-cloud" 
-            ? settings.user.token 
-            : settings.openaiApiKey,
-        baseURL: settings.aiUrl,
-        dangerouslyAllowBrowser: true,
-    })
+    const openai = createAiClient(settings)
 
     try {
         console.log("improving note with full context:", {
@@ -37,12 +31,6 @@ export async function improveNote(
                 provider: settings.aiProviderType,
                 model: settings.aiModel
             }
-        })
-
-        console.log("improving note:", {
-            note_text: context.note.text,
-            context: context.context,
-            title: context.title
         })
 
         const messages = [
@@ -70,14 +58,19 @@ export async function improveNote(
         ]
 
         console.log("sending request to openai for note improvement")
-        const response = await openai.chat.completions.create({
+        const response = await callOpenAI(openai, {
             model: settings.aiModel,
             messages,
             temperature: 0.3,
             max_tokens: context.note.text.length * 2,
+        }, {
+            maxRetries: 3,
+            initialDelay: 1000
         })
 
-        const improved = response.choices[0]?.message?.content?.trim() || context.note.text
+        const improved = 'choices' in response 
+            ? response.choices[0]?.message?.content?.trim() || context.note.text
+            : context.note.text
 
         console.log("improved note:", {
             original: context.note.text,
@@ -86,9 +79,10 @@ export async function improveNote(
 
         return improved
     } catch (error) {
-        console.error("error improving note (full):", {
+        console.error("error improving note:", {
             error,
-            context,
+            note_text: context.note.text,
+            title: context.title,
             settings: {
                 provider: settings.aiProviderType,
                 model: settings.aiModel

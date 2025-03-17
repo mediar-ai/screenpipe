@@ -1,5 +1,5 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "screenpipe",
   "identifier": "screenpi.pe",
   "build": {
@@ -16,6 +16,7 @@
     "targets": [
       "app",
       "dmg",
+      "deb",
       "appimage",
       "nsis"
     ],
@@ -98,9 +99,10 @@
     }
   },
   "app": {
+    "withGlobalTauri": true,
     "trayIcon": {
       "id": "screenpipe_main",
-      "iconPath": "icons/screenpipe-logo-tray-black.png",
+      "iconPath": "assets/screenpipe-logo-tray-white.png",
       "iconAsTemplate": true
     },
     "windows": [
@@ -108,8 +110,6 @@
         "title": "screenpipe",
         "width": 1200,
         "height": 850,
-        "minWidth": 1200,
-        "minHeight": 850,
         "resizable": true
       }
     ],

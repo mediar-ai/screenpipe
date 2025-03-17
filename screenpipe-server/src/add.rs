@@ -1,6 +1,7 @@
 use anyhow::Result;
 use image::DynamicImage;
 use regex::Regex;
+use screenpipe_db::DatabaseManager;
 use screenpipe_vision::utils::{compare_with_previous_image, OcrEngine};
 
 #[cfg(target_os = "macos")]
@@ -18,6 +19,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use tracing::error;
+use tracing::warn;
 use tracing::{debug, info};
 use uuid::Uuid;
 use walkdir::WalkDir;
@@ -26,7 +28,6 @@ use crate::{
     cli::CliOcrEngine,
     text_embeds::generate_embedding,
     video_utils::{extract_frames_from_video, get_video_metadata, VideoMetadataOverrides},
-    DatabaseManager,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -136,7 +137,7 @@ pub async fn handle_index_command(
             .create_video_with_frames(
                 video_path.to_str().unwrap(),
                 frames.clone(),
-                metadata.clone(),
+                metadata.into(),
             )
             .await?;
 
@@ -178,8 +179,6 @@ pub async fn handle_index_command(
                 }
             };
 
-            let engine_arc = Arc::new(engine.clone());
-
             // Do OCR processing directly
             let (text, _, confidence): (String, String, Option<f64>) = match engine.clone() {
                 #[cfg(target_os = "macos")]
@@ -188,9 +187,11 @@ pub async fn handle_index_command(
                 OcrEngine::WindowsNative => perform_ocr_windows(&frame).await.unwrap(),
                 _ => {
                     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                    perform_ocr_tesseract(&frame, vec![]);
-
-                    panic!("unsupported ocr engine");
+                    {
+                        perform_ocr_tesseract(&frame, Vec::new());
+                    }
+                    warn!("unsupported ocr engine");
+                    ("".to_string(), "".to_string(), None)
                 }
             };
 
@@ -225,10 +226,7 @@ pub async fn handle_index_command(
                     frame_ids[idx],
                     &text,
                     "{}", // empty json
-                    "",   // no app name
-                    "",   // no window name
-                    engine_arc.clone(),
-                    true, // focused
+                    ocr_engine.clone().unwrap().into(),
                 )
                 .await
             {

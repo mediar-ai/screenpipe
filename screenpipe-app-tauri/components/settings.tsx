@@ -13,14 +13,15 @@ import {
   Check,
   HardDrive,
   FolderInput,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { DialogHeader, DialogTitle } from "./ui/dialog";
 import { cn } from "@/lib/utils";
-import { RecordingSettings } from "./recording-settings";
 import { AccountSection } from "./settings/account-section";
 import ShortcutSection from "./settings/shortcut-section";
 import DiskUsage from "./settings/disk-usage";
 import AISection from "./settings/ai-section";
+import { AIPresets } from "./settings/ai-presets";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,8 +38,11 @@ import { toast } from "./ui/use-toast";
 import { DataImportSection } from "./settings/data-import-section";
 import { Dialog, DialogContent } from "./ui/dialog";
 import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
+import { RecordingSettings } from "./settings/recording-settings";
+import GeneralSettings from "./settings/general-settings";
 
 type SettingsSection =
+  | "general"
   | "ai"
   | "shortcuts"
   | "recording"
@@ -104,8 +108,10 @@ export function Settings() {
 
   const renderSection = () => {
     switch (activeSection) {
+      case "general":
+        return <GeneralSettings />;
       case "ai":
-        return <AISection />;
+        return <AIPresets />;
       case "account":
         return <AccountSection />;
       case "recording":
@@ -221,6 +227,11 @@ export function Settings() {
                   icon: <User className="h-4 w-4" />,
                 },
                 {
+                  id: "general",
+                  label: "general",
+                  icon: <SettingsIcon className="h-4 w-4" />,
+                },
+                {
                   id: "ai",
                   label: "ai settings",
                   icon: <Brain className="h-4 w-4" />,
@@ -255,7 +266,7 @@ export function Settings() {
                     "flex items-center space-x-2 px-4 py-1.5 rounded-lg transition-colors",
                     activeSection === section.id
                       ? "bg-black/90 text-white"
-                      : "hover:bg-black/10"
+                      : "hover:bg-black/10",
                   )}
                 >
                   {section.icon}

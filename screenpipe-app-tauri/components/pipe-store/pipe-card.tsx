@@ -1,21 +1,27 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  CheckCircle,
   Download,
   Puzzle,
   UserIcon,
   Loader2,
   Power,
   ArrowUpCircle,
+  AlertCircle,
 } from "lucide-react";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
-import { PipeWithStatus } from "./types";
+import { BuildStatus, PipeWithStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import posthog from "posthog-js";
 import { useSettings } from "@/lib/hooks/use-settings";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface PipeCardProps {
   pipe: PipeWithStatus;
@@ -25,6 +31,51 @@ interface PipeCardProps {
   isLoadingPurchase?: boolean;
   isLoadingInstall?: boolean;
   onToggle: (pipe: PipeWithStatus, onComplete: () => void) => Promise<any>;
+  setPipe: (pipe: PipeWithStatus) => void;
+}
+
+export function getBuildStatus(status: BuildStatus | undefined): string {
+  return typeof status === "object" ? status.status : status || "";
+}
+
+function getBuildStepMessage(buildStatus: BuildStatus | undefined): string {
+  if (typeof buildStatus !== "object") return "building...";
+
+  const { step, status } = buildStatus;
+  if (status === "not_started") {
+    return "waiting to start...";
+  }
+
+  switch (step) {
+    case "downloading":
+      return "downloading files...";
+    case "extracting":
+      return "extracting files...";
+    case "installing":
+      return "installing dependencies...";
+    case "completed":
+      return "completed installation";
+    case "building":
+      return "building application...";
+    default:
+      return step || "processing...";
+  }
+}
+
+function stripMarkdown(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/<\/?[^>]+(>|$)/g, "") // Remove HTML tags
+    .replace(/\*\*(.*?)\*\*|__(.*?)__/g, "$1$2") // Bold
+    .replace(/\*(.*?)\*|_(.*?)_/g, "$1$2") // Italic
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1") // Links
+    .replace(/!\[([^\]]+)\]\(([^)]+)\)/g, "$1") // Images
+    .replace(/#{1,6}\s+/g, "") // Headers
+    .replace(/`{1,3}(.*?)`{1,3}/gs, "$1") // Code blocks
+    .replace(/^\s*>[>\s]*/gm, "") // Blockquotes
+    .replace(/^\s*[-*+]\s+/gm, "") // Unordered lists
+    .replace(/^\s*\d+\.\s+/gm, "") // Ordered lists
+    .replace(/~~(.*?)~~/g, "$1"); // Strikethrough
 }
 
 export const PipeCard: React.FC<PipeCardProps> = ({
@@ -32,19 +83,21 @@ export const PipeCard: React.FC<PipeCardProps> = ({
   onInstall,
   onClick,
   onPurchase,
+  setPipe,
   isLoadingPurchase,
   isLoadingInstall,
   onToggle,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const { settings } = useSettings();
+
   const handleOpenWindow = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       if (pipe.installed_config?.port) {
         await invoke("open_pipe_window", {
           port: pipe.installed_config.port,
-          title: pipe.name, // atm we don't support pipes with same name
+          title: pipe.name,
         });
       }
     } catch (err) {
@@ -57,9 +110,183 @@ export const PipeCard: React.FC<PipeCardProps> = ({
     }
   };
 
+  useEffect(() => {
+    const pollBuildStatus = async () => {
+      const id = pipe.is_local ? pipe.id : pipe.name;
+      try {
+        const response = await fetch(
+          `http://localhost:3030/pipes/build-status/${id}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log(data, pipe.installed_config?.buildStatus);
+        if (
+          data.buildStatus?.length > 0 &&
+          JSON.stringify(data.buildStatus) !==
+            JSON.stringify(pipe.installed_config?.buildStatus)
+        ) {
+          setPipe({
+            ...pipe,
+            installed_config: {
+              ...pipe.installed_config,
+              is_nextjs: pipe.installed_config?.is_nextjs ?? false,
+              source: pipe.installed_config?.source ?? "",
+              buildStatus: data.buildStatus as BuildStatus,
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Error polling build status:", error);
+        setPipe({
+          ...pipe,
+          installed_config: {
+            ...pipe.installed_config,
+            is_nextjs: pipe.installed_config?.is_nextjs ?? false,
+            source: pipe.installed_config?.source ?? "",
+            buildStatus: {
+              status: "error",
+              step: "failed",
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Unknown error occurred",
+            } as BuildStatus,
+          },
+        });
+      }
+    };
+
+    let buildStatusInterval: NodeJS.Timeout | null = null;
+    const buildStatus = pipe.installed_config?.buildStatus;
+
+    const isUpdating =
+      buildStatus === "updating" ||
+      (typeof buildStatus === "object" && buildStatus.status === "updating");
+
+    if (isUpdating) {
+      return;
+    }
+
+    const isInProgress =
+      buildStatus === "in_progress" ||
+      (typeof buildStatus === "object" && buildStatus.status === "in_progress");
+
+    if (isInProgress) {
+      buildStatusInterval = setInterval(pollBuildStatus, 3000);
+    }
+
+    return () => {
+      if (buildStatusInterval) {
+        clearInterval(buildStatusInterval);
+      }
+    };
+  }, [pipe.installed_config?.buildStatus]);
+
+  const renderInstallationStatus = useCallback(() => {
+    const buildStatus = pipe.installed_config?.buildStatus;
+    const status = getBuildStatus(buildStatus);
+
+    if (status === "updating") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled
+          className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
+        >
+          <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+          <div className="flex flex-col items-start">
+            <span>updating...</span>
+          </div>
+        </Button>
+      );
+    }
+
+    if (status === "not_started" || status === "in_progress") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled
+          className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
+        >
+          <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+          <div className="flex flex-col items-start">
+            <span>{getBuildStepMessage(buildStatus)}</span>
+          </div>
+        </Button>
+      );
+    }
+
+    if (status === "error") {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsLoading(true);
+                  onToggle(pipe, () => setIsLoading(false));
+                }}
+                className="font-medium no-card-hover"
+                disabled={isLoading}
+              >
+                <AlertCircle className="h-3.5 w-3.5 mr-2" />
+                retry
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {typeof buildStatus === "object" && buildStatus.error
+                ? buildStatus.error
+                : "Installation failed"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    if (!pipe.is_enabled && buildStatus === "success") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsLoading(true);
+            onToggle(pipe, () => setIsLoading(false));
+          }}
+          className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
+          disabled={isLoading}
+        >
+          <Power className="h-3.5 w-3.5 mr-2" />
+          enable
+        </Button>
+      );
+    }
+
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={handleOpenWindow}
+        className="hover:bg-muted font-medium relative no-card-hover"
+      >
+        <Puzzle className="h-3.5 w-3.5 mr-2" />
+        open
+      </Button>
+    );
+  }, [pipe.installed_config?.buildStatus]);
+
   return (
     <motion.div
-      className="group border rounded-xl p-5 hover:bg-muted/40 has-[.no-card-hover:hover]:hover:bg-transparent transition-all duration-200 cursor-pointer backdrop-blur-sm"
+      className="group border rounded-xl p-5 hover:bg-muted/40 has-[.no-card-hover:hover]:hover:bg-transparent transition-all duration-200 cursor-pointer backdrop-blur-sm relative"
       onClick={() => onClick(pipe)}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
@@ -67,7 +294,6 @@ export const PipeCard: React.FC<PipeCardProps> = ({
         boxShadow: "0 0 10px rgba(255,255,255,0.1)",
         transition: { duration: 0.2 },
       }}
-      layout
     >
       <div className="flex flex-col h-full justify-between space-y-4">
         <div className="flex items-start justify-between gap-4">
@@ -76,44 +302,21 @@ export const PipeCard: React.FC<PipeCardProps> = ({
               <h3 className="font-semibold text-lg tracking-tight">
                 {pipe.name}
               </h3>
-              <p className="text-sm text-muted-foreground">
+              <div className="text-sm text-muted-foreground">
                 <PipeStoreMarkdown
-                  content={pipe.description?.substring(0, 90) || "" + "..."}
+                  content={
+                    (pipe.description
+                      ? stripMarkdown(pipe.description).substring(0, 90)
+                      : "") + "..."
+                  }
                   variant="compact"
                 />
-              </p>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 isolate">
             {pipe.is_installed ? (
-              <>
-                {!pipe.is_enabled ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsLoading(true);
-                      onToggle(pipe, () => setIsLoading(false));
-                    }}
-                    className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
-                    disabled={isLoading}
-                  >
-                    <Power className="h-3.5 w-3.5 mr-2" />
-                    enable
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleOpenWindow}
-                    className="hover:bg-muted font-medium relative no-card-hover"
-                  >
-                    <Puzzle className="h-3.5 w-3.5 mr-2" />
-                    open
-                  </Button>
-                )}
-              </>
+              renderInstallationStatus()
             ) : (
               <Button
                 size="sm"
@@ -140,9 +343,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                 disabled={isLoadingPurchase}
               >
                 {isLoadingPurchase ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  </>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : pipe.is_paid && !pipe.has_purchased ? (
                   `$${pipe.price}`
                 ) : (
@@ -200,6 +401,11 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                 <Download className="h-3 w-3" />
                 <span className="relative z-10 font-mono">source</span>
               </motion.a>
+            )}
+            {pipe.is_local && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted font-mono text-xs">
+                local
+              </span>
             )}
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 font-mono text-xs">
               {pipe.installed_config?.version && "v"}

@@ -1,5 +1,4 @@
 use crate::get_store;
-use crate::SidecarState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -10,6 +9,8 @@ use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
+
+pub struct SidecarState(pub Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {
@@ -93,43 +94,48 @@ pub async fn stop_screenpipe(
         }
     }
 
-    // Hard kill the sidecar
-    let kill_result = async {
-        #[cfg(not(target_os = "windows"))]
+    #[cfg(not(target_os = "windows"))]
+    {
+        match tokio::process::Command::new("pkill")
+            .arg("-9")
+            .arg("-f")
+            .arg("screenpipe")
+            .output()
+            .await
         {
-            tokio::process::Command::new("pkill")
-                .arg("-f")
-                .arg("screenpipe")
-                .output()
-                .await
-        }
-        #[cfg(target_os = "windows")]
-        {
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            tokio::process::Command::new("powershell")
-                .arg("-NoProfile")
-                .arg("-WindowStyle")
-                .arg("hidden")
-                .arg("-Command")
-                .arg(format!(
-                    r#"taskkill.exe /F /T /IM screenpipe.exe"#,
-                ))
-                .creation_flags(CREATE_NO_WINDOW)
-                .output()
-                .await
+            Ok(_) => {
+                debug!("Successfully killed screenpipe processes");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to kill screenpipe processes: {}", e);
+                Err(format!("Failed to kill screenpipe processes: {}", e))
+            }
         }
     }
-    .await;
 
-    match kill_result {
-        Ok(_) => {
-            debug!("Successfully killed screenpipe processes");
-            Ok(())
-        }
-        Err(e) => {
-            error!("Failed to kill screenpipe processes: {}", e);
-            Err(format!("Failed to kill screenpipe processes: {}", e))
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        match tokio::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-WindowStyle")
+            .arg("hidden")
+            .arg("-Command")
+            .arg(r#"taskkill.exe /F /T /IM screenpipe.exe"#)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .await
+        {
+            Ok(_) => {
+                debug!("Successfully killed screenpipe processes");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to kill screenpipe processes: {}", e);
+                Err(format!("Failed to kill screenpipe processes: {}", e))
+            }
         }
     }
 }
@@ -138,20 +144,21 @@ pub async fn stop_screenpipe(
 pub async fn spawn_screenpipe(
     state: tauri::State<'_, SidecarState>,
     app: tauri::AppHandle,
+    override_args: Option<Vec<String>>,
 ) -> Result<(), String> {
     let mut manager = state.0.lock().await;
     if manager.is_none() {
         *manager = Some(SidecarManager::new());
     }
     if let Some(manager) = manager.as_mut() {
-        manager.spawn(&app).await
+        manager.spawn(&app, override_args).await
     } else {
         debug!("Sidecar already running");
         Ok(())
     }
 }
 
-fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
+fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<CommandChild, String> {
     let store = get_store(app, None).unwrap();
 
     let audio_transcription_engine = store
@@ -255,6 +262,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     let enable_realtime_audio_transcription = store
         .get("enableRealtimeAudioTranscription")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let enable_realtime_vision = store
+        .get("enableRealtimeVision")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
@@ -384,6 +396,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-realtime-audio-transcription");
     }
 
+    if enable_realtime_vision {
+        args.push("--enable-realtime-vision");
+    }
+
     // if use_all_monitors {
     //     args.push("--use-all-monitors");
     // }
@@ -398,6 +414,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     // args.push("--debug");
+
+    let override_args_as_vec = override_args.unwrap_or_default();
 
     if cfg!(windows) {
         let mut c = app.shell().sidecar("screenpipe").unwrap();
@@ -424,6 +442,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
         c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
+        // only supports --enable-realtime-vision for now, avoid adding if already present
+        if !args.contains(&"--enable-realtime-vision") && override_args_as_vec.contains(&"--enable-realtime-vision".to_string()) {
+            args.extend(override_args_as_vec.iter().map(|s| s.as_str()));
+        }
         let c = c.args(&args);
 
         let (_, child) = c.spawn().map_err(|e| {
@@ -464,6 +486,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
+    // only supports --enable-realtime-vision for now, avoid adding if already present
+    if !args.contains(&"--enable-realtime-vision") && override_args_as_vec.contains(&"--enable-realtime-vision".to_string()) {
+        args.extend(override_args_as_vec.iter().map(|s| s.as_str()));
+    }
     let c = c.args(&args);
 
     let result = c.spawn();
@@ -512,16 +538,14 @@ impl SidecarManager {
         }
     }
 
-    
-
-    pub async fn spawn(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
+    pub async fn spawn(&mut self, app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<(), String> {
+        info!("Spawning sidecar with override args: {:?}", override_args);
         // Update settings from store
         self.update_settings(app).await?;
 
         // Spawn the sidecar
-        let child = spawn_sidecar(app)?;
+        let child = spawn_sidecar(app, override_args)?;
         self.child = Some(child);
-        
 
         Ok(())
     }
@@ -540,5 +564,4 @@ impl SidecarManager {
 
         Ok(())
     }
-
 }

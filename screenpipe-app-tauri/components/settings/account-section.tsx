@@ -100,19 +100,6 @@ export function AccountSection() {
       const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
         console.log("received deep link urls:", urls);
         for (const url of urls) {
-          // eg. user flow
-          if (url.includes("api_key=")) {
-            const apiKey = new URL(url).searchParams.get("api_key");
-            if (apiKey) {
-              updateSettings({ user: { token: apiKey } });
-              await loadUser(apiKey, true);
-
-              toast({
-                title: "logged in!",
-                description: "your api key has been set",
-              });
-            }
-          }
           // eg stripe / dev flow
           if (url.includes("stripe-connect")) {
             console.log("stripe connect url:", url);
@@ -289,7 +276,7 @@ export function AccountSection() {
       <div className="flex items-center justify-between">
         <div className="space-y-2">
           <h1 className="text-2xl font-bold">account settings</h1>
-          {settings.user?.email ? (
+          {settings.user?.token ? (
             <p className="text-sm text-muted-foreground flex items-center gap-2">
               <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
               logged in as {settings.user.email}

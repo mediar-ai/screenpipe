@@ -1,6 +1,7 @@
 use crate::stop_screenpipe;
 use crate::SidecarState;
 use anyhow::Error;
+use dark_light::Mode;
 use log::{error, info};
 use std::sync::Arc;
 use std::time::Duration;
@@ -70,11 +71,18 @@ impl UpdatesManager {
             }
 
             if let Some(tray) = self.app.tray_by_id("screenpipe_main") {
-                let path = self.app.path().resolve(
-                    "assets/update-logo-black.png",
-                    tauri::path::BaseDirectory::Resource,
-                )?;
-
+                let theme = dark_light::detect().unwrap_or(Mode::Dark);
+                let icon_path = if theme == Mode::Light {
+                    "assets/screenpipe-logo-tray-updates-black.png"
+                } else {
+                    "assets/screenpipe-logo-tray-updates-white.png"
+                };
+    
+                let path = self
+                    .app
+                    .path()
+                    .resolve(icon_path, tauri::path::BaseDirectory::Resource)?;
+    
                 if let Ok(image) = tauri::image::Image::from_path(path) {
                     tray.set_icon(Some(image))?;
                     tray.set_icon_as_template(true)?;
@@ -109,7 +117,6 @@ impl UpdatesManager {
                 if rx.await? {
                     #[cfg(target_os = "windows")]
                     {
-                        use crate::llm_sidecar::stop_ollama_sidecar;
 
                         self.update_menu_item.set_enabled(false)?;
                         self.update_menu_item
@@ -120,10 +127,6 @@ impl UpdatesManager {
                                 .await
                         {
                             error!("Failed to kill sidecar: {}", err);
-                        }
-                        // llm sidecar only need to kill in windows
-                        if let Err(err) = stop_ollama_sidecar(self.app.clone()).await {
-                            error!("Failed to stop ollama: {}", err);
                         }
 
                         update.download_and_install(|_, _| {}, || {}).await?;

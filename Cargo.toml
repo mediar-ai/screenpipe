@@ -5,14 +5,14 @@ members = [
     "screenpipe-audio",
     "screenpipe-server",
     "screenpipe-integrations",
-    "screenpipe-actions",
     "screenpipe-events",
+    "screenpipe-db",
 ]
 exclude = ["screenpipe-app-tauri/src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.52"
+version = "0.2.65"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"
@@ -21,32 +21,43 @@ edition = "2021"
 
 [workspace.dependencies]
 # AI
-candle = { package = "candle-core", version = "0.8.2" }
-candle-nn = { package = "candle-nn", version = "0.8.2" }
-candle-transformers = { package = "candle-transformers", version = "0.8.2" }
+# candle = { version = "0.8.3", package = "candle-core" }
+# candle-nn = { version = "0.8.3", package = "candle-nn" }
+# candle-transformers = { version = "0.8.3", package = "candle-transformers" }
+
+candle = { git = "https://github.com/huggingface/candle.git", rev = "c930ab7e1a234f02a0f49350bf38f03f45e53757", package = "candle-core" }
+candle-nn = { git = "https://github.com/huggingface/candle.git", rev = "c930ab7e1a234f02a0f49350bf38f03f45e53757", package = "candle-nn" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", rev = "c930ab7e1a234f02a0f49350bf38f03f45e53757", package = "candle-transformers" }
+
 tokenizers = "0.21.0"
 hf-hub = { version = "0.3.2", git = "https://github.com/neo773/hf-hub", features = [
     "native-tls",
 ] }
 log = "0.4"
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "chrono"] }
 tracing-appender = { version = "0.2.3" }
 tokio = { version = "1.15", features = ["full", "tracing"] }
 crossbeam = "0.8.4"
 dashmap = "6.1.0"
 image = "0.25"
-reqwest = { version = "0.11", features = ["blocking", "multipart", "json"] }
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 vcpkg = "0.2"
 cc = "1.0"
-
+oasgen = { version = "0.22.0", features = ["axum", "chrono"] }
 once_cell = "1.20.2"
 sentry = { version = "0.36.0", features = ["tracing"] }
+
+http-cache-reqwest = "0.15.0"
+reqwest = { version = "=0.12.12", features = ["blocking", "multipart", "json"] }
+reqwest-middleware = "0.4.1"
+
 
 [patch.crates-io]
 # enables chinese mirror (hf is banned in china) and native-tls
 hf-hub = { git = "https://github.com/neo773/hf-hub", features = ["native-tls"] }
+# Patch half to use a version compatible with both candle and ort
+half = { git = "https://github.com/starkat99/half-rs.git", tag = "v2.5.0" }
 
 [workspace.metadata.vcpkg]
 git = "https://github.com/microsoft/vcpkg"

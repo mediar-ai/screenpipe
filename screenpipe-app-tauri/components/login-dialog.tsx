@@ -1,23 +1,20 @@
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { ExternalLinkIcon } from 'lucide-react';
-import { open as openUrl } from '@tauri-apps/plugin-shell';
-import { useState } from 'react';
+} from "@/components/ui/dialog";
+import { ExternalLinkIcon } from "lucide-react";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { create } from "zustand";
 
-interface LoginDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
+export function LoginDialog() {
+  const { isOpen, setIsOpen } = useLoginDialog();
 
-export const LoginDialog: React.FC<LoginDialogProps> = ({ open, onOpenChange }) => {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>login required</DialogTitle>
@@ -25,32 +22,38 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({ open, onOpenChange }) 
             please login to continue. you will be redirected to screenpi.pe
           </DialogDescription>
         </DialogHeader>
-        <div className='flex justify-end'>
+        <div className="flex justify-end">
           <Button
-            variant='default'
+            variant="default"
             onClick={() => {
-              openUrl('https://screenpi.pe/login');
-              onOpenChange(false);
+              openUrl("https://screenpi.pe/login");
+              setIsOpen(false);
             }}
           >
-            login <ExternalLinkIcon className='w-4 h-4 ml-2' />
+            login <ExternalLinkIcon className="w-4 h-4 ml-2" />
           </Button>
         </div>
       </DialogContent>
     </Dialog>
   );
-};
+}
 
-export const useLoginCheck = () => {
-  const [showLoginDialog, setShowLoginDialog] = useState(false);
+interface LoginDialogState {
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+  checkLogin: (user: any | null, showDialog?: boolean) => boolean;
+}
 
-  const checkLogin = (user: any | null, showDialog: boolean = true) => {
+export const useLoginDialog = create<LoginDialogState>((set) => ({
+  isOpen: false,
+  setIsOpen: (open) => set({ isOpen: open }),
+  checkLogin: (user, showDialog = true) => {
     if (!user?.token) {
-      if (showDialog) setShowLoginDialog(true);
+      if (showDialog) {
+        set({ isOpen: true });
+      }
       return false;
     }
     return true;
-  };
-
-  return { showLoginDialog, setShowLoginDialog, checkLogin };
-}; 
+  },
+}));

@@ -1,9 +1,11 @@
 #[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
+    use screenpipe_vision::capture_screenshot_by_window::{CapturedWindow, WindowFilters};
     use screenpipe_vision::core::OcrTaskData;
     use screenpipe_vision::monitor::get_default_monitor;
     use screenpipe_vision::{process_ocr_task, OcrEngine};
+    use std::sync::Arc;
     use std::{path::PathBuf, time::Instant};
     use tokio::sync::mpsc;
 
@@ -27,12 +29,13 @@ mod tests {
         let (tx, _rx) = mpsc::channel(1);
         let ocr_engine = OcrEngine::WindowsNative;
 
-        let window_images = vec![(
-            image.clone(),
-            "test_app".to_string(),
-            "test_window".to_string(),
-            true,
-        )];
+        let window_images = vec![CapturedWindow {
+            app_name: "test_app".to_string(),
+            window_name: "test_window".to_string(),
+            image,
+            is_focused: true,
+            process_id: 1234,
+        }];
 
         let result = process_ocr_task(
             OcrTaskData {
@@ -42,8 +45,8 @@ mod tests {
                 timestamp,
                 result_tx: tx,
             },
-            false,
             &ocr_engine,
+            vec![],
         )
         .await;
 
@@ -64,16 +67,17 @@ mod tests {
         let interval = Duration::from_millis(1000);
         let save_text_files_flag = false;
         let ocr_engine = OcrEngine::WindowsNative;
+        let window_filters = Arc::new(WindowFilters::new(&[], &[]));
 
-        // Spawn the continuous_capture function
+        // Spawn the continuous_capture function with corrected parameter order
         let capture_handle = tokio::spawn(continuous_capture(
             result_tx,
             interval,
-            save_text_files_flag,
             ocr_engine,
             monitor,
-            &[],
-            &[],
+            window_filters, // window filters as empty vec
+            vec![],         // languages as empty vec
+            save_text_files_flag,
         ));
 
         // Wait for a short duration to allow some captures to occur
