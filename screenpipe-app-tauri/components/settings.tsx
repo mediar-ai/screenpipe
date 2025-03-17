@@ -287,4 +287,3 @@ export function Settings() {
     </Dialog>
   );
 }
-// /api/settings
