@@ -9,7 +9,8 @@ use crate::{core::device::parse_audio_device, device::device_manager::DeviceMana
 use super::{AudioManager, AudioManagerStatus};
 
 lazy_static::lazy_static! {
-  pub static ref DEVICE_MONITOR: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
+    pub static ref DEVICE_MONITOR: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
+    static ref DISCONNECTED_DEVICES: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
 }
 
 pub async fn start_device_monitor(
@@ -19,12 +20,11 @@ pub async fn start_device_monitor(
     stop_device_monitor().await?;
 
     *DEVICE_MONITOR.lock().await = Some(tokio::spawn(async move {
-        let mut disconnected_devices: HashSet<String> = HashSet::new();
         loop {
             if audio_manager.status().await == AudioManagerStatus::Running {
                 let currently_available_devices = device_manager.devices().await;
                 let enabled_devices = audio_manager.enabled_devices().await;
-                for device_name in disconnected_devices.clone() {
+                for device_name in DISCONNECTED_DEVICES.lock().await.clone() {
                     let device = match parse_audio_device(&device_name) {
                         Ok(device) => device,
                         Err(e) => {
@@ -34,7 +34,7 @@ pub async fn start_device_monitor(
                     };
 
                     if audio_manager.start_device(&device).await.is_ok() {
-                        disconnected_devices.remove(&device_name);
+                        DISCONNECTED_DEVICES.lock().await.remove(&device_name);
                     }
                 }
 
@@ -53,7 +53,10 @@ pub async fn start_device_monitor(
                         info!("Device {device_name} disconnected");
 
                         let _ = audio_manager.stop_device(device_name).await;
-                        disconnected_devices.insert(device_name.clone());
+                        DISCONNECTED_DEVICES
+                            .lock()
+                            .await
+                            .insert(device_name.clone());
                     } else {
                         if audio_manager.status().await != AudioManagerStatus::Running {
                             break;
