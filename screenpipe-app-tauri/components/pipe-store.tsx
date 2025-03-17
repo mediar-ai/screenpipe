@@ -1399,10 +1399,42 @@ export const PipeStore: React.FC = () => {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>reset all pipes</p>
+                  <p>delete all pipes</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            <Dialog open={confirmOpen} onOpenChange={isPurging ? () => {} : setConfirmOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>confirm deletion of all pipes?</DialogTitle>
+                  <DialogDescription>
+                    are you sure you want to delete all pipes? <br/> you&apos;ll have to install them again
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-end gap-4">
+                  <Button 
+                    onClick={() => setConfirmOpen(false)} 
+                    disabled={isPurging}
+                    variant={"outline"}
+                  >
+                    cancel
+                  </Button>
+                  <Button 
+                    onClick={handleResetAllPipes} 
+                    disabled={isPurging}
+                  >
+                    {isPurging ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        deleting all pipes...
+                      </>
+                    ) : (
+                        "confirm"
+                      )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>

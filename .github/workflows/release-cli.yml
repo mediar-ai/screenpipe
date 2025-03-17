@@ -168,6 +168,7 @@ jobs:
           $packageDir = "screenpipe-${{ env.VERSION }}-x86_64-pc-windows-msvc"
           New-Item -Path "$packageDir/bin" -ItemType Directory -Force
           Copy-Item "target/x86_64-pc-windows-msvc/release/screenpipe.exe" "$packageDir/bin/"
+          Copy-Item "target/x86_64-pc-windows-msvc/release/onnxruntime.dll" "$packageDir/bin/"
           7z a "$packageDir.zip" "./$packageDir/*"
 
       - name: Calculate SHA256

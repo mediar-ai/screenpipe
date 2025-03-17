@@ -215,7 +215,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
               {/* Audio Devices Status */}
               {!settings.disableAudio && health?.device_status_details && (
-                <div className="mt-1 mb-2">
+                <div className="mt-1 mb-2 relative">
                   <div className="flex items-center">
                     <Button
                       variant="ghost"
@@ -251,7 +251,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
                   <div
                     id="audio-devices-container"
-                    className="mt-1 max-h-32 overflow-y-auto rounded border border-border p-2 hidden"
+                    className="mt-1 max-h-32 bg-background z-10 overflow-y-auto absolute rounded border border-border p-2 hidden"
                   >
                     {health.device_status_details
                       .split(", ")
