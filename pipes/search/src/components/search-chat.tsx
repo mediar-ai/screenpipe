@@ -75,7 +75,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "@/components/ui/codeblock";
 import { SqlAutocompleteInput } from "@/components/sql-autocomplete-input";
-import { cn, removeDuplicateSelections } from "@/lib/utils";
+import { cn, removeDuplicateSelections, generateTitle } from "@/lib/utils";
 import {
 	ExampleSearch,
 	ExampleSearchCards,
@@ -102,6 +102,7 @@ import {
 } from "@/components/ui/popover";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { SearchFilterGenerator } from "./search-filter-generator";
+
 import {
 	MultiSelectCombobox,
 	type BaseOption,
@@ -111,6 +112,8 @@ import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 import type { Settings as AppSettings } from "@screenpipe/js";
 import { DEFAULT_PROMPT } from "./ai-presets-dialog";
 import { AIPresetsSelector } from "./ai-presets-selector";
+import { saveHistory, loadHistory, HistoryItem } from "@/hooks/actions/history";
+import { v4 as uuidv4 } from 'uuid';
 
 interface Agent {
 	id: string;
@@ -226,6 +229,7 @@ const getContextAroundKeyword = (
 };
 
 export function SearchChat() {
+
 	const {
 		searches,
 		currentSearchId,
@@ -673,6 +677,58 @@ export function SearchChat() {
 			return total + contentLength;
 		}, 0);
 	};
+ //Function to load chat history from local storage
+const loadChatHistory = async () => {
+  const historyId = localStorage.getItem("historyId");
+  if (historyId) {
+    const history = await loadHistory(historyId);
+    const historyItem = history[0];
+    if (historyItem) {
+      // Restore search parameters
+      setQuery(historyItem.searchParams.q || "");
+      setContentType(historyItem.searchParams.content_type);
+      setLimit(historyItem.searchParams.limit);
+      setStartDate(new Date(historyItem.searchParams.start_time));
+      setEndDate(new Date(historyItem.searchParams.end_time));
+      setAppName(historyItem.searchParams.app_name || "");
+      setWindowName(historyItem.searchParams.window_name || "");
+      setIncludeFrames(historyItem.searchParams.include_frames);
+      setMinLength(historyItem.searchParams.min_length);
+      setMaxLength(historyItem.searchParams.max_length);
+
+      // Restore results
+      setResults(historyItem.results);
+      setTotalResults(historyItem.results.length);
+      setHasSearched(true);
+      setShowExamples(false);
+
+      // Restore messages if any
+      if (historyItem.messages) {
+        setChatMessages(
+          historyItem.messages.map((msg) => ({
+            id: msg.id,
+            role: msg.type === "ai" ? "assistant" : "user",
+            content: msg.content,
+          }))
+        );
+      }
+    }
+    scrollToBottom();
+  }
+};
+
+useEffect(() => {
+  const handleChatUpdate = () => {
+    loadChatHistory();
+  };
+  window.addEventListener("historyUpdated", handleChatUpdate);
+  // Load chat history when the component mounts
+  loadChatHistory();
+  return () => {
+    window.removeEventListener("historyUpdated", handleChatUpdate);
+  };
+}, []);
+
 
 	const handleFloatingInputSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -814,7 +870,80 @@ export function SearchChat() {
 					{ id: generateId(), role: "assistant", content: fullResponse },
 				]);
 				scrollToBottom();
-			}
+          }
+    // Save history after the response is fully received
+    const historyId = localStorage.getItem("historyId");
+    let historyItem: HistoryItem;
+
+    if (historyId) {
+      const history = await loadHistory(historyId);
+      historyItem = history[0] || {
+        id: historyId,
+        title: await generateTitle(floatingInput, settings),
+        query: floatingInput,
+        timestamp: new Date().toISOString(),
+        searchParams: {
+          q: query,
+          content_type: contentType,
+          limit: limit,
+          offset: offset,
+          start_time: startDate.toISOString(),
+          end_time: endDate.toISOString(),
+          app_name: appName,
+          window_name: windowName,
+          include_frames: includeFrames,
+          min_length: minLength,
+          max_length: maxLength,
+        },
+        results: results,
+        messages: [],
+      };
+    } else {
+      historyItem = {
+        id: uuidv4(),
+        title: floatingInput,
+        query: floatingInput,
+        timestamp: new Date().toISOString(),
+        searchParams: {
+          q: query,
+          content_type: contentType,
+          limit: limit,
+          offset: offset,
+          start_time: startDate.toISOString(),
+          end_time: endDate.toISOString(),
+          app_name: appName,
+          window_name: windowName,
+          include_frames: includeFrames,
+          min_length: minLength,
+          max_length: maxLength,
+        },
+        results: results,
+        messages: [],
+      };
+      localStorage.setItem("historyId", historyItem.id);
+
+    }
+
+    // Add human message to history
+    historyItem.messages.push({
+      id: generateId(),
+      type: "user",
+      content: floatingInput,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Add AI message to history
+    historyItem.messages.push({
+      id: generateId(),
+      type: "ai",
+      content: fullResponse,
+      timestamp: new Date().toISOString(),
+    });
+
+    await saveHistory([historyItem]);
+    window.dispatchEvent(new Event("historyCreated"));
+
+
 		} catch (error: any) {
 			if (error.toString().includes("unauthorized")) {
 				toast({
@@ -1305,14 +1434,14 @@ export function SearchChat() {
 		<div className="w-full max-w-4xl mx-auto p-4 mt-12">
 			<div className="fixed top-4 left-4 z-50 flex items-center gap-2">
 				{/* <SidebarTrigger className="h-8 w-8" /> */}
-				<Button
-					variant="ghost"
-					size="icon"
-					onClick={handleNewSearch}
-					className="h-8 w-8"
-				>
-					<Plus className="h-4 w-4" />
-				</Button>
+	  		{/* <Button */}
+				{/* 	variant="ghost" */}
+				{/* 	size="icon" */}
+				{/* 	onClick={handleNewSearch} */}
+				{/* 	className="h-8 w-8" */}
+				{/* > */}
+				{/* 	<Plus className="h-4 w-4" /> */}
+				{/* </Button> */}
 			</div>
 
 			<div className="flex items-center justify-center mb-16">
