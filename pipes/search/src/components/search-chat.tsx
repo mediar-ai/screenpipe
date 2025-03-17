@@ -677,7 +677,7 @@ export function SearchChat() {
 			return total + contentLength;
 		}, 0);
 	};
- / Function to load chat history from local storage
+ //Function to load chat history from local storage
 const loadChatHistory = async () => {
   const historyId = localStorage.getItem("historyId");
   if (historyId) {
@@ -1434,14 +1434,14 @@ useEffect(() => {
 		<div className="w-full max-w-4xl mx-auto p-4 mt-12">
 			<div className="fixed top-4 left-4 z-50 flex items-center gap-2">
 				{/* <SidebarTrigger className="h-8 w-8" /> */}
-				<Button
-					variant="ghost"
-					size="icon"
-					onClick={handleNewSearch}
-					className="h-8 w-8"
-				>
-					<Plus className="h-4 w-4" />
-				</Button>
+	  		{/* <Button */}
+				{/* 	variant="ghost" */}
+				{/* 	size="icon" */}
+				{/* 	onClick={handleNewSearch} */}
+				{/* 	className="h-8 w-8" */}
+				{/* > */}
+				{/* 	<Plus className="h-4 w-4" /> */}
+				{/* </Button> */}
 			</div>
 
 			<div className="flex items-center justify-center mb-16">
