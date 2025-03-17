@@ -1,0 +1,32 @@
+name: Create Test Bounty
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  create-test-bounty:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v3
+      
+      - name: create test bounty issue
+        uses: peter-evans/create-issue-from-file@v4
+        with:
+          title: "🧪 Testing Bounty: PR #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
+          content-filepath: .github/ISSUE_TEMPLATE/test-bounty-template.md
+          token: ${{ secrets.GITHUB_TOKEN }}
+          labels: |
+            testing
+            bounty
+            algora
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_URL: ${{ github.event.pull_request.html_url }} 
