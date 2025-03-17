@@ -141,7 +141,7 @@ async function profileProcess(
   cookies: CookieParam[],
   openai: OpenAI,
   settings: Partial<Settings>,
-  scrollLimit: number = 10,
+  scrollLimit: number = 5,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
     await stopBot();
@@ -237,8 +237,7 @@ You are an AI assistant analyzing a Twitter user's profile and engagement patter
 - Analyze the user's bio, tweets, and engagement style to determine key themes.  
 - Summarize their primary interests in a way that reflects both their focus areas and any unique perspectives they bring.
 - Create a detailed description of their writing style (punctuation, grammar, habits, etc).
-- Mention any repeated hashtags or frequently mentioned accounts, highlighting any notable connections or communities they engage with. 
-- Keep the summary engaging and concise.
+- Keep the summary engaging and concise. Limit to 3 sentences and at most 300 characters.
 
 ### **User Profile Data**
 \`\`\`json
@@ -247,7 +246,7 @@ ${JSON.stringify(profileData, null, 2)}
 
 ### **User Tweets**
 \`\`\`json
-${JSON.stringify(tweetArray, null, 2)}
+${JSON.stringify(tweetArray.slice(0, 2), null, 2)}
 \`\`\`
             `,
         },
@@ -259,6 +258,8 @@ ${JSON.stringify(tweetArray, null, 2)}
 
     const summary = res?.choices[0]?.message?.content?.trim();
     if (summary) await store.pushSummary(summary);
+
+    await store.pushProfileTweets(tweetArray);
   } catch (e) {
     console.error("Error in profile process:", e);
     if (browser)
@@ -289,10 +290,16 @@ async function ocrProcess(
 
     const res = await pipe.queryScreenpipe({
       contentType: "ocr",
-      limit: 10,
+      limit: 3,
       startTime: lastCheck ? lastCheck.toISOString() : undefined,
     });
-    const context = res?.data.map((e) => e.content);
+    const context = (res?.data as any[])
+      .filter((e) => !e.content.appName.includes("screenpipe"))
+      .map((e) => ({
+        text: e.content.text,
+        appName: e.content.appName,
+        windowName: e.content.windowName,
+      }));
 
     const res2 = await openai.chat.completions.create({
       model: settings.aiModel!,
@@ -312,7 +319,7 @@ You are an AI assistant analyzing OCR-extracted text to identify key insights, t
 - Determine if the content relates to a specific niche, such as technology, politics, finance, gaming, or another domain.
 - Analyze tone and intent (e.g., is the text informative, promotional, opinion-based, or casual?).
 - Extract any actionable insights, such as trending discussions, important facts, or engagement opportunities.
-- If applicable, suggest relevant hashtags, mentions, or follow-up content based on the extracted text.
+- Limit summary to 3 sentences and at most 300 characters.
 
 ### **Extracted OCR Data**
 \`\`\`json
@@ -345,7 +352,7 @@ ${JSON.stringify(context, null, 2)}
 
 async function timelineProcess(
   cookies: CookieParam[],
-  scrollLimit: number = 10,
+  scrollLimit: number = 5,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
     await stopBot();
@@ -437,6 +444,7 @@ You are an AI assistant creating a concise and well-structured summary based on 
 - Eliminate redundant or overly specific details while preserving the most important information.
 - Make sure to include any information about their writing style.
 - Ensure the final summary is clear, engaging, and captures the essence of the original summaries.
+- Limit summary to 3 sentences and at most 300 characters.
 
 ### **User Summaries**
 \`\`\`json
@@ -481,8 +489,9 @@ async function suggestionProcess(
   try {
     console.log("Creating suggestions...");
 
-    const summaries = await store.getSummaries();
-    const tweets = (await store.getTweets()).slice(0, 10);
+    const summary = (await store.getSummaries()).slice(-1)[0];
+    const tweets = (await store.getTweets()).slice(0, 5);
+    const profileTweets = (await store.getProfileTweets()).slice(-2);
 
     let model = settings.aiModel!;
     if (model === "gpt-4") {
@@ -496,8 +505,9 @@ async function suggestionProcess(
           role: "system",
           content: `\
 You are an AI assistant analyzing tweet data to determine the best engagement opportunities. 
-Identify tweets that have high engagement, are relevant to the user’s niche, and invite discussion. 
-Use summaries of the user's data to add context and improve relevance.
+Identify tweets that have high engagement, are relevant to the user’s niche, and invite discussion.
+Use summary of the user's data to add context and improve relevance.
+Match the user's writing style based on their tweets. Personalize it, don't be generic.
 Generate recommended replies and timestamps for selected tweets. Return JSON output.\
             `,
         },
@@ -507,9 +517,12 @@ Generate recommended replies and timestamps for selected tweets. Return JSON out
 ### **Instructions:**
 ${prompt}
 
-### **User Summaries:**
+### **User Summary:**
+${summary}
+
+### **User Tweets:**
 \`\`\`json
-${JSON.stringify(summaries, null, 2)}
+${JSON.stringify(profileTweets, null, 2)}
 \`\`\`
 
 ### **Tweets To Analyze:**

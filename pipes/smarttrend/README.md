@@ -1,4 +1,4 @@
-# **SmartTrend: Your Twitter Engagement Assistant 🤖**
+# **SmartTrend: Your Twitter Engagement Assistant**
 
 ![SmartTrend Preview](https://raw.githubusercontent.com/mediar-ai/screenpipe/3163dbf999a50db79e168c965dc3cc5ace00c22d/pipes/smarttrend/preview.png)
 

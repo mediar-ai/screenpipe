@@ -71,6 +71,15 @@ export async function compileSummaries(compiled: string) {
   putData("summaries.json", [compiled]);
 }
 
+export async function getProfileTweets(): Promise<Tweet[]> {
+  return getData("profile.json") || [];
+}
+
+export async function pushProfileTweets(newTweets: Tweet[]) {
+  const tweets = getData("profile.json") || [];
+  putData("profile.json", [...tweets, ...newTweets]);
+}
+
 export async function getTweets(): Promise<Tweet[]> {
   return getData("tweets.json") || [];
 }
