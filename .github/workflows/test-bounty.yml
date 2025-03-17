@@ -1,7 +1,7 @@
 name: Create Test Bounty
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened]
 
 jobs:
@@ -9,24 +9,71 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      pull-requests: read
+      pull-requests: write  # Upgraded to write to allow commenting
+      contents: read
     
     steps:
-      - name: checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v3
+        
+      - name: Setup environment variables
+        run: |
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_ENV
+          echo "PR_AUTHOR=${{ github.event.pull_request.user.login }}" >> $GITHUB_ENV
+          echo "PR_URL=${{ github.event.pull_request.html_url }}" >> $GITHUB_ENV
       
-      - name: create test bounty issue
-        uses: peter-evans/create-issue-from-file@v4
+      - name: Generate issue body from template
+        id: generate-body
+        run: |
+          TEMPLATE_PATH=".github/ISSUE_TEMPLATE/test-bounty-template.md"
+          # Remove YAML frontmatter
+          tail -n +4 "$TEMPLATE_PATH" > temp_body.md
+          # Replace environment variables
+          envsubst < temp_body.md > issue_body.md
+          echo "ISSUE_BODY<<EOF" >> $GITHUB_ENV
+          cat issue_body.md >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+      
+      - name: Create test bounty issue
+        id: create-issue
+        uses: actions/github-script@v6
         with:
-          title: "🧪 Testing Bounty: PR #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
-          content-filepath: .github/ISSUE_TEMPLATE/test-bounty-template.md
-          token: ${{ secrets.GITHUB_TOKEN }}
-          labels: |
-            testing
-            bounty
-            algora
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_URL: ${{ github.event.pull_request.html_url }} 
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = process.env.PR_NUMBER;
+            const prTitle = process.env.PR_TITLE;
+            
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🧪 Testing Bounty: PR #${prNumber} - ${prTitle}`,
+              body: process.env.ISSUE_BODY,
+              labels: ['testing', 'bounty', 'algora']
+            });
+            
+            console.log(`Created issue #${issue.data.number}: ${issue.data.html_url}`);
+            return issue.data.html_url;
+        
+      - name: Comment on PR with issue link
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueUrl = ${{ steps.create-issue.outputs.result }};
+            const prNumber = process.env.PR_NUMBER;
+            
+            const comment = `
+            ## 🧪 testing bounty created!
+            
+            a testing bounty has been created for this PR: [view testing issue](${issueUrl})
+            
+            testers will be awarded $20 each for providing quality test reports. please check the issue for testing requirements.
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment
+            }); 
