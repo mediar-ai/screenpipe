@@ -11,6 +11,14 @@ use axum::{
 };
 use oasgen::{oasgen, OaSchema, Server};
 
+use screenpipe_core::Desktop;
+
+use chrono::TimeZone;
+use screenpipe_db::{
+    ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, Speaker,
+    TagContentType,
+};
+
 use tokio_util::io::ReaderStream;
 
 use tokio::fs::File;
@@ -22,22 +30,22 @@ use futures::{
 use image::ImageFormat::{self};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
-use crate::video_utils::extract_frame;
 use crate::{
-    db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
     embedding::embedding_endpoint::create_embeddings,
-    pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
-        extract_frame_from_video, extract_high_quality_frame, merge_videos, validate_media,
-        MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
+        extract_frame, extract_frame_from_video, extract_high_quality_frame, merge_videos,
+        validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
-    DatabaseManager,
+    PipeManager,
 };
 use chrono::{DateTime, Utc};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
+    audio_manager::AudioManager,
+    core::device::{
+        default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
+    },
 };
 use tracing::{debug, error, info};
 
@@ -67,16 +75,15 @@ use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 // At the top of the file, add:
 #[cfg(feature = "experimental")]
 use enigo::{Enigo, Key, Settings};
-
-use screenpipe_audio::LAST_AUDIO_CAPTURE;
-
 use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
 
+pub type FrameImageCache = LruCache<i64, (String, Instant)>;
+
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
-    // pub device_manager: Arc<DeviceManager>,
+    pub audio_manager: Arc<AudioManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -84,7 +91,7 @@ pub struct AppState {
     pub audio_disabled: bool,
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
-    pub frame_image_cache: Option<Arc<Mutex<LruCache<i64, (String, Instant)>>>>,
+    pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
 }
 
 // Update the SearchQuery struct
@@ -281,6 +288,7 @@ pub struct HealthCheckResponse {
     pub ui_status: String,
     pub message: String,
     pub verbose_instructions: Option<String>,
+    pub device_status_details: Option<String>,
 }
 
 #[derive(OaSchema, Serialize, Deserialize)]
@@ -383,7 +391,7 @@ pub(crate) async fn search(
                 offset_index: audio.offset_index,
                 tags: audio.tags.clone(),
                 device_name: audio.device_name.clone(),
-                device_type: audio.device_type.clone(),
+                device_type: audio.device_type.clone().into(),
                 speaker: audio.speaker.clone(),
                 start_time: audio.start_time,
                 end_time: audio.end_time,
@@ -450,7 +458,7 @@ pub(crate) async fn api_list_audio_devices(
         )
     })?;
 
-    let default_output_device = default_output_device().map_err(|e| {
+    let default_output_device = default_output_device().await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             JsonResponse(json!({"error": format!("Failed to get default output device: {}", e)})),
@@ -588,12 +596,44 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let app_uptime = (now as i64) - (state.app_start_time.timestamp());
     let grace_period = 120; // 2 minutes in seconds
 
-    let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
-    let audio_active = if app_uptime < grace_period {
-        true // Consider active during grace period
-    } else {
-        now - last_capture < 5 // Consider active if captured in last 5 seconds
-    };
+    // Get the status of all devices
+    let audio_devices = state.audio_manager.current_devices();
+    let mut device_statuses = Vec::new();
+    let mut global_audio_active = false;
+    let mut most_recent_audio_timestamp = 0; // Track the most recent timestamp
+
+    // Check each device
+    for device in &audio_devices {
+        let device_name = device.to_string();
+        let last_capture = screenpipe_audio::core::get_device_capture_time(&device_name);
+
+        // Update the most recent timestamp
+        most_recent_audio_timestamp = most_recent_audio_timestamp.max(last_capture);
+
+        let device_active = if app_uptime < grace_period {
+            true // Consider active during grace period
+        } else {
+            now - last_capture < 5 // Consider active if captured in last 5 seconds
+        };
+
+        // Track if any device is active
+        if device_active {
+            global_audio_active = true;
+        }
+        debug!(target: "server", "device status: {} {}", device_name, device_active);
+
+        device_statuses.push((device_name, device_active, last_capture));
+    }
+
+    // Fallback to global timestamp if no devices are detected
+    if audio_devices.is_empty() {
+        let last_capture = screenpipe_audio::core::LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
+        global_audio_active = if app_uptime < grace_period {
+            true // Consider active during grace period
+        } else {
+            now - last_capture < 5 // Consider active if captured in last 5 seconds
+        };
+    }
 
     let (last_frame, audio, last_ui) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio, ui)) => (frame, audio, ui),
@@ -604,7 +644,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     };
 
     let now = Utc::now();
-    let threshold = Duration::from_secs(3600); // 1 hour
+    let threshold = Duration::from_secs(1800); // 30 minutes
 
     let frame_status = if state.vision_disabled {
         "disabled"
@@ -617,16 +657,45 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
                 "ok"
             }
             Some(_) => "stale",
-            None => "no data",
+            None => "not_started",
         }
     };
 
     let audio_status = if state.audio_disabled {
-        "disabled"
-    } else if audio_active {
-        "ok"
+        "disabled".to_string()
+    } else if global_audio_active {
+        "ok".to_string()
     } else {
-        "stale"
+        match audio {
+            Some(timestamp)
+                if now.signed_duration_since(timestamp)
+                    < chrono::Duration::from_std(threshold).unwrap() =>
+            {
+                "stale".to_string()
+            }
+            Some(_) => "stale".to_string(),
+            None => "not_started".to_string(),
+        }
+    };
+
+    // Format device statuses as a string for a more detailed view
+    let device_status_details = if !device_statuses.is_empty() {
+        let now_secs = now.timestamp() as u64;
+        let device_details: Vec<String> = device_statuses
+            .iter()
+            .map(|(name, active, last_capture)| {
+                format!(
+                    "{}: {} (last activity: {}s ago)",
+                    name,
+                    if *active { "active" } else { "inactive" },
+                    now_secs.saturating_sub(*last_capture)
+                )
+            })
+            .collect();
+
+        Some(device_details.join(", "))
+    } else {
+        None
     };
 
     let ui_status = if !state.ui_monitoring_enabled {
@@ -640,7 +709,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
                 "ok"
             }
             Some(_) => "stale",
-            None => "no data",
+            None => "not_started",
         }
     };
 
@@ -664,15 +733,15 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             unhealthy_systems.push("audio");
         }
         if ui_status != "ok" && ui_status != "disabled" {
-            unhealthy_systems.push("ui monitoring");
+            unhealthy_systems.push("ui");
         }
 
+        let systems_str = unhealthy_systems.join(", ");
         (
-            "unhealthy",
-            format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}",
-                    unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
-            Some("if you're experiencing issues, please try contacting us on discord".to_string()),
-            500,
+            "degraded",
+            format!("some systems are not healthy: {}", systems_str),
+            Some(get_verbose_instructions(&unhealthy_systems)),
+            503,
         )
     };
 
@@ -680,15 +749,47 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         status: overall_status.to_string(),
         status_code,
         last_frame_timestamp: last_frame,
-        last_audio_timestamp: audio,
+        last_audio_timestamp: if most_recent_audio_timestamp > 0 {
+            Some(
+                Utc.timestamp_opt(most_recent_audio_timestamp as i64, 0)
+                    .unwrap(),
+            )
+        } else {
+            None
+        },
         last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
-        audio_status: audio_status.to_string(),
+        audio_status,
         ui_status: ui_status.to_string(),
         message,
         verbose_instructions,
+        device_status_details,
     })
 }
+
+fn get_verbose_instructions(unhealthy_systems: &[&str]) -> String {
+    let mut instructions = String::new();
+
+    if unhealthy_systems.contains(&"vision") {
+        instructions.push_str("Vision system is not working properly. Check if screen recording permissions are enabled.\n");
+    }
+
+    if unhealthy_systems.contains(&"audio") {
+        instructions.push_str("Audio system is not working properly. Check if microphone permissions are enabled and devices are connected.\n");
+    }
+
+    if unhealthy_systems.contains(&"ui") {
+        instructions.push_str("UI monitoring is not working properly. Check if accessibility permissions are enabled.\n");
+    }
+
+    if instructions.is_empty() {
+        instructions =
+            "If you're experiencing issues, please try contacting us on Discord.".to_string();
+    }
+
+    instructions
+}
+
 // Request and response structs
 #[derive(OaSchema, Deserialize)]
 struct DownloadPipeRequest {
@@ -932,7 +1033,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
 pub struct SCServer {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
-    // device_manager: Arc<DeviceManager>,
+    audio_manager: Arc<AudioManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -950,6 +1051,7 @@ impl SCServer {
         vision_disabled: bool,
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
+        audio_manager: Arc<AudioManager>,
     ) -> Self {
         SCServer {
             db,
@@ -959,16 +1061,39 @@ impl SCServer {
             vision_disabled,
             audio_disabled,
             ui_monitoring_enabled,
+            audio_manager,
         }
     }
 
     pub async fn start(self, enable_frame_cache: bool) -> Result<(), std::io::Error> {
+        // Create the OpenAPI server
+        let app = self.create_router(enable_frame_cache).await;
+
+        #[cfg(feature = "experimental")]
+        let app = app.route("/experimental/input_control", post(input_control_handler));
+
+        // Create the listener
+        let listener = TcpListener::bind(&self.addr).await?;
+        info!("Server listening on {}", self.addr);
+
+        // Start serving
+        serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        Ok(())
+    }
+
+    pub async fn create_router(&self, enable_frame_cache: bool) -> Router {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            // device_manager: self.device_manager.clone(),
+            audio_manager: self.audio_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
-            pipe_manager: self.pipe_manager,
+            pipe_manager: self.pipe_manager.clone(),
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
             ui_monitoring_enabled: self.ui_monitoring_enabled,
@@ -998,8 +1123,6 @@ impl SCServer {
                 axum::http::header::CONTENT_TYPE,
                 axum::http::header::CACHE_CONTROL,
             ]);
-
-        // Create the OpenAPI server
         let server = Server::axum()
             .get("/search", search)
             .get("/audio/list", api_list_audio_devices)
@@ -1029,22 +1152,23 @@ impl SCServer {
             .get("/speakers/similar", get_similar_speakers_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
-            // .post("/audio/start", start_audio_device)
-            // .post("/audio/stop", stop_audio_device)
+            .post("/experimental/operator", find_elements_handler)
+            .post("/experimental/operator/click", click_element_handler)
+            .post("/experimental/operator/type", type_text_handler)
+            .post("/audio/start", start_audio)
+            .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
             .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
             .get("/search/keyword", keyword_search_handler)
             .post("/v1/embeddings", create_embeddings)
-            // .post("/vision/start", start_vision_device)
-            // .post("/vision/stop", stop_vision_device)
-            // .post("/audio/restart", restart_audio_devices)
-            // .post("/vision/restart", restart_vision_devices)
+            .post("/audio/device/start", start_audio_device)
+            .post("/audio/device/stop", stop_audio_device)
             .route_yaml_spec("/openapi.yaml")
             .route_json_spec("/openapi.json")
             .freeze();
 
         // Build the main router with all routes
-        let app = Router::new()
+        Router::new()
             .merge(server.into_router())
             // NOTE: websockerts and sse is not supported by openapi so we move it down here
             .route("/stream/frames", get(stream_frames_handler))
@@ -1053,24 +1177,7 @@ impl SCServer {
             .route("/frames/export", get(handle_video_export_ws))
             .with_state(app_state)
             .layer(cors)
-            .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()));
-
-        #[cfg(feature = "experimental")]
-        let app = app.route("/experimental/input_control", post(input_control_handler));
-
-        // Create the listener
-        let listener = TcpListener::bind(&self.addr).await?;
-        info!("Server listening on {}", self.addr);
-
-        // Start serving
-        serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-        Ok(())
+            .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()))
     }
 }
 
@@ -1202,7 +1309,7 @@ async fn add_frame_to_db(
                 frame_id,
                 &ocr.text,
                 ocr.text_json.as_deref().unwrap_or(""),
-                Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
+                Arc::new(OcrEngine::default().into()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
             )
             .await?;
         }
@@ -1253,11 +1360,6 @@ async fn add_transcription_to_db(
 ) -> Result<(), anyhow::Error> {
     let db = &state.db;
 
-    let device = AudioDevice {
-        name: device_name.to_string(),
-        device_type: DeviceType::Input,
-    };
-
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
 
     db.insert_audio_transcription(
@@ -1265,7 +1367,10 @@ async fn add_transcription_to_db(
         &transcription.transcription,
         -1,
         &transcription.transcription_engine,
-        &device,
+        &screenpipe_db::AudioDevice {
+            name: device_name.to_string(),
+            device_type: DeviceType::Input.into(),
+        },
         None,
         None,
         None,
@@ -1761,7 +1866,7 @@ async fn get_similar_speakers_handler(
 //     device_type: Option<DeviceType>,
 // }
 
-#[derive(Serialize)]
+#[derive(Debug, OaSchema, Serialize)]
 pub struct AudioDeviceControlResponse {
     success: bool,
     message: String,
@@ -1873,7 +1978,7 @@ struct SemanticSearchQuery {
 async fn semantic_search_handler(
     Query(query): Query<SemanticSearchQuery>,
     State(state): State<Arc<AppState>>,
-) -> Result<JsonResponse<Vec<crate::db_types::OCRResult>>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<JsonResponse<Vec<screenpipe_db::OCRResult>>, (StatusCode, JsonResponse<Value>)> {
     let limit = query.limit.unwrap_or(10);
     let threshold = query.threshold.unwrap_or(0.3);
 
@@ -2092,6 +2197,71 @@ pub struct VideoExportRequest {
     fps: f64,
 }
 
+#[derive(OaSchema, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct AudioDeviceControlRequest {
+    device_name: String,
+}
+
+#[oasgen]
+async fn start_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<Json<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+    let device: AudioDevice;
+    // todo Better handling error
+    match AudioDevice::from_name(&payload.device_name) {
+        Ok(audio_device) => device = audio_device,
+        Err(e) => {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                JsonResponse(
+                    json!({"success": false, "message": format!("device {} not found: {}", device_name.clone(), e)}),
+                ),
+            ))
+        }
+    };
+
+    if let Err(e) = state.audio_manager.start_device(&device).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start recording device {}: {}", device_name.clone(), e)
+            })),
+        ));
+    }
+
+    Ok(Json(AudioDeviceControlResponse {
+        success: true,
+        message: format!("started device: {}", device_name),
+    }))
+}
+
+#[oasgen]
+async fn stop_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<Json<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+
+    if let Err(e) = state.audio_manager.stop_device(&device_name).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to stop recording device {}: {}", device_name.clone(), e)
+            })),
+        ));
+    }
+
+    Ok(Json(AudioDeviceControlResponse {
+        success: true,
+        message: format!("stopped recording audio device: {}", device_name),
+    }))
+}
+
 fn deserialize_frame_ids<'de, D>(deserializer: D) -> Result<Vec<i64>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -2106,6 +2276,38 @@ struct ExportProgress {
     progress: f32,
     video_data: Option<Vec<u8>>,
     error: Option<String>,
+}
+
+#[oasgen]
+async fn start_audio(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match state.audio_manager.start().await {
+        Ok(_) => Ok(Response::builder().status(200).body(Body::empty()).unwrap()),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start audio processing: {}", e),
+            })),
+        )),
+    }
+}
+
+#[oasgen]
+async fn stop_audio(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match state.audio_manager.stop().await {
+        Ok(_) => Ok(Response::builder().status(200).body(Body::empty()).unwrap()),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start audio processing: {}", e),
+            })),
+        )),
+    }
 }
 
 pub async fn handle_video_export_ws(
@@ -2315,65 +2517,131 @@ async fn get_pipe_build_status(
     State(state): State<Arc<AppState>>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     let pipe_dir = state.screenpipe_dir.join("pipes").join(&pipe_id);
+    let update_temp_dir = std::env::temp_dir().join(format!("{}_update", pipe_id));
     let temp_dir = pipe_dir.with_extension("_temp");
-
-    // First check temp directory if it exists
-    if temp_dir.exists() {
-        let temp_pipe_json = temp_dir.join("pipe.json");
-        if temp_pipe_json.exists() {
-            let pipe_json = tokio::fs::read_to_string(&temp_pipe_json)
+    
+    // 1. First check if the update temp directory exists
+    if update_temp_dir.exists() {
+        debug!("Update temp directory exists for pipe: {}", pipe_id);
+        
+        // Check if there's a pipe.json in the update temp directory
+        let update_pipe_json_path = update_temp_dir.join("pipe.json");
+        if update_pipe_json_path.exists() {
+            let pipe_json = tokio::fs::read_to_string(&update_pipe_json_path)
                 .await
                 .map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        JsonResponse(
-                            json!({"error": format!("Failed to read temp pipe config: {}", e)}),
-                        ),
+                        JsonResponse(json!({"error": format!("Failed to read update temp pipe config: {}", e)})),
                     )
                 })?;
 
             let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(
-                        json!({"error": format!("Failed to parse temp pipe config: {}", e)}),
-                    ),
+                    JsonResponse(json!({"error": format!("Failed to parse update temp pipe config: {}", e)})),
                 )
             })?;
 
-            info!("{:?}", pipe_config);
-            let build_status = pipe_config.get("buildStatus").unwrap_or(&Value::Null);
-            return Ok(JsonResponse(json!({ "buildStatus": build_status })));
+            // Return the buildStatus if it exists
+            if let Some(build_status) = pipe_config.get("buildStatus") {
+                debug!("Found build status in update temp directory for pipe: {}", pipe_id);
+                return Ok(JsonResponse(build_status.clone()));
+            }
         }
+        
+        // If no buildStatus found in update temp directory, return a default in_progress status
+        return Ok(JsonResponse(json!({
+            "status": "in_progress",
+            "step": "downloading",
+            "message": "Update in progress"
+        })));
     }
 
-    // If no temp directory or no pipe.json in temp, check the main pipe directory
-    let pipe_json_path = pipe_dir.join("pipe.json");
-    if !pipe_json_path.exists() {
+    // 2. Check if the pipe directory exists
+    if pipe_dir.exists() {
+        // Then check if there's a pipe.json file
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        if pipe_json_path.exists() {
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({"error": format!("Failed to read pipe config: {}", e)})),
+                    )
+                })?;
+
+            let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({"error": format!("Failed to parse pipe config: {}", e)})),
+                )
+            })?;
+
+            // Check if there's a buildStatus field
+            if let Some(build_status) = pipe_config.get("buildStatus") {
+                // Return the build status directly
+                return Ok(JsonResponse(build_status.clone()));
+            }
+        } else {
+            // Pipe directory exists but pipe.json doesn't exist yet
+            // This likely means the pipe is still being created
+            debug!("Pipe directory exists but pipe.json not found for pipe: {}", pipe_id);
+            return Ok(JsonResponse(json!({
+                "status": "in_progress",
+                "step": "creating_config",
+                "message": "Creating pipe configuration"
+            })));
+        }
+    } else {
+        // If pipe directory doesn't exist, check temp directory
+        if temp_dir.exists() {
+            let temp_pipe_json = temp_dir.join("pipe.json");
+            if temp_pipe_json.exists() {
+                let pipe_json = tokio::fs::read_to_string(&temp_pipe_json)
+                    .await
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(
+                                json!({"error": format!("Failed to read temp pipe config: {}", e)}),
+                            ),
+                        )
+                    })?;
+
+                let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(
+                            json!({"error": format!("Failed to parse temp pipe config: {}", e)}),
+                        ),
+                    )
+                })?;
+
+                debug!("Found build status in temp directory for pipe: {}", pipe_id);
+                if let Some(build_status) = pipe_config.get("buildStatus") {
+                    return Ok(JsonResponse(build_status.clone()));
+                }
+            }
+            
+            // Temp directory exists but no pipe.json or no buildStatus
+            return Ok(JsonResponse(json!({
+                "status": "in_progress",
+                "step": "initializing",
+                "message": "Initializing pipe"
+            })));
+        }
+        
+        // If neither pipe directory nor temp directory exists, return not found
         return Err((
             StatusCode::NOT_FOUND,
             JsonResponse(json!({"error": "Pipe not found"})),
         ));
     }
 
-    let pipe_json = tokio::fs::read_to_string(&pipe_json_path)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": format!("Failed to read pipe config: {}", e)})),
-            )
-        })?;
-
-    let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": format!("Failed to parse pipe config: {}", e)})),
-        )
-    })?;
-
-    let build_status = pipe_config.get("buildStatus").unwrap_or(&Value::Null);
-    Ok(JsonResponse(json!({ "buildStatus": build_status })))
+    // If we get here, there's a pipe.json but no buildStatus field
+    Ok(JsonResponse(json!(null)))
 }
 
 #[oasgen]
@@ -2793,127 +3061,364 @@ struct MergeSpeakersRequest {
     speaker_to_merge_id: i64,
 }
 
-#[derive(Serialize)]
-pub struct RestartAudioDevicesResponse {
-    success: bool,
-    message: String,
-    restarted_devices: Vec<String>,
-}
-
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
 
-// async fn restart_audio_devices(
-//     State(state): State<Arc<AppState>>,
-// ) -> Result<JsonResponse<RestartAudioDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
-//     debug!("restarting active audio devices");
+// New structs for UI automation API
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementSelector {
+    app_name: String,
+    window_name: Option<String>,
+    locator: String,
+    index: Option<usize>,
+    text: Option<String>,
+    label: Option<String>,
+    description: Option<String>,
+    element_id: Option<String>,
+    use_background_apps: Option<bool>,
+    /// If true, the app will be activated before finding elements (this is useful to refresh the tree or clicking on elements)
+    activate_app: Option<bool>,
+}
 
-//     // Get currently active devices from device manager
-//     let active_devices = state.device_manager.get_active_devices().await;
-//     let mut restarted_devices = Vec::new();
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ClickElementRequest {
+    selector: ElementSelector,
+}
 
-//     for (_, control) in active_devices {
-//         debug!("restarting audio device: {:?}", control.device);
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct TypeTextRequest {
+    selector: ElementSelector,
+    text: String,
+}
 
-//         let audio_device = match control.device {
-//             DeviceType::Audio(device) => device,
-//             _ => continue,
-//         };
-//         // Stop the device
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
-//                 is_running: false,
-//                 is_paused: false,
-//             })
-//             .await;
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct FindElementsRequest {
+    selector: ElementSelector,
+    max_results: Option<usize>,
+    max_depth: Option<usize>,
+}
 
-//         // Small delay to ensure clean shutdown
-//         tokio::time::sleep(Duration::from_millis(1000)).await;
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementPosition {
+    x: i32,
+    y: i32,
+}
 
-//         // Start the device again
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
-//                 is_running: true,
-//                 is_paused: false,
-//             })
-//             .await;
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementSize {
+    width: i32,
+    height: i32,
+}
 
-//         restarted_devices.push(audio_device.name.clone());
-//     }
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ElementInfo {
+    id: Option<String>,
+    role: String,
+    label: Option<String>,
+    description: Option<String>,
+    text: Option<String>,
+    position: Option<ElementPosition>,
+    size: Option<ElementSize>,
+    properties: serde_json::Value,
+}
 
-//     if restarted_devices.is_empty() {
-//         Ok(JsonResponse(RestartAudioDevicesResponse {
-//             success: true,
-//             message: "no active audio devices to restart".to_string(),
-//             restarted_devices,
-//         }))
-//     } else {
-//         Ok(JsonResponse(RestartAudioDevicesResponse {
-//             success: true,
-//             message: format!("restarted {} audio devices", restarted_devices.len()),
-//             restarted_devices,
-//         }))
-//     }
-// }
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct FindElementsResponse {
+    data: Vec<ElementInfo>,
+}
 
-#[derive(Serialize)]
-pub struct RestartVisionDevicesResponse {
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ActionResponse {
     success: bool,
     message: String,
-    restarted_devices: Vec<u32>,
 }
-// async fn restart_vision_devices(
-//     State(state): State<Arc<AppState>>,
-// ) -> Result<JsonResponse<RestartVisionDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
-//     debug!("restarting active vision devices");
 
-//     let active_devices = state.device_manager.get_active_devices().await;
-//     let mut restarted_devices = Vec::new();
+// Handler functions for UI automation
+#[oasgen]
+async fn find_elements_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<FindElementsRequest>,
+) -> Result<JsonResponse<FindElementsResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
 
-//     for (_, control) in active_devices {
-//         let vision_device = match control.device {
-//             DeviceType::Vision(device) => device,
-//             _ => continue,
-//         };
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
 
-//         debug!("restarting vision device: {:?}", vision_device);
+    debug!("app: {:?}", app.text(1).unwrap_or_default());
 
-//         // Stop the device
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
-//                 is_running: false,
-//                 is_paused: false,
-//             })
-//             .await;
+    let elements = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => {
+            if request.max_results.unwrap_or(1) > 1 {
+                // Get all matching elements if 'all' is true
+                match locator.all() {
+                    Ok(elements) => elements,
+                    Err(_) => {
+                        error!("No matching elements found");
+                        return Err((
+                            StatusCode::NOT_FOUND,
+                            JsonResponse(json!({ "error": "No matching elements found" })),
+                        ));
+                    }
+                }
+            } else {
+                // Get only the first element (current behavior)
+                match locator.first() {
+                    Ok(element) => {
+                        if let Some(el) = element {
+                            vec![el]
+                        } else {
+                            vec![]
+                        }
+                    }
+                    Err(_) => {
+                        error!("No matching element found");
+                        return Err((
+                            StatusCode::NOT_FOUND,
+                            JsonResponse(json!({ "error": "No matching element found" })),
+                        ));
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to create locator: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({ "error": format!("Failed to create locator: {}", e) })),
+            ));
+        }
+    };
 
-//         tokio::time::sleep(Duration::from_millis(1000)).await;
+    if elements.is_empty() {
+        error!("No matching elements found");
+        return Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({ "error": "No matching elements found" })),
+        ));
+    }
 
-//         // Start the device again
-//         let _ = state
-//             .device_manager
-//             .update_device(DeviceControl {
-//                 device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
-//                 is_running: true,
-//                 is_paused: false,
-//             })
-//             .await;
+    let elements_info: Vec<ElementInfo> = elements
+        .into_iter()
+        .map(|element| {
+            debug!("element: {:?}", element);
+            // Convert to ElementInfo
+            ElementInfo {
+                id: element.id(),
+                role: element.role(),
+                label: element.attributes().label,
+                description: element.attributes().description,
+                text: element.text(request.max_depth.unwrap_or(10)).ok(),
+                position: element.bounds().ok().map(|(x, y, _, _)| ElementPosition {
+                    x: x as i32,
+                    y: y as i32,
+                }),
+                size: element.bounds().ok().map(|(_, _, w, h)| ElementSize {
+                    width: w as i32,
+                    height: h as i32,
+                }),
+                properties: json!(element.attributes().properties),
+            }
+        })
+        .collect();
 
-//         restarted_devices.push(vision_device.clone());
-//     }
+    Ok(JsonResponse(FindElementsResponse {
+        data: elements_info,
+    }))
+}
 
-//     Ok(JsonResponse(RestartVisionDevicesResponse {
-//         success: true,
-//         message: if restarted_devices.is_empty() {
-//             "no active vision devices to restart".to_string()
-//         } else {
-//             format!("restarted {} vision devices", restarted_devices.len())
-//         },
-//         restarted_devices,
-//     }))
-// }
+#[oasgen]
+async fn click_element_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<ClickElementRequest>,
+) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            error!("Failed to initialize desktop automation: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("app: {:?}", app.text(1).unwrap_or_default());
+
+    // Find elements matching the selector
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
+            Err(e) => {
+                error!("Failed to find elements: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            error!("Failed to create locator: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("element: {:?}", element);
+
+    match element {
+        Some(element) => match element.click() {
+            Ok(_) => Ok(JsonResponse(ActionResponse {
+                success: true,
+                message: format!("Clicked element with role: {}", element.role()),
+            })),
+            Err(e) => {
+                error!("Failed to click element: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to click element: {}", e)
+                    })),
+                ))
+            }
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "No matching element found"
+            })),
+        )),
+    }
+}
+
+#[oasgen]
+async fn type_text_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<TypeTextRequest>,
+) -> Result<JsonResponse<ActionResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("app: {:?}", app);
+    // Find elements matching the selector
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
+            Err(e) => {
+                error!("Failed to find elements: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            error!("Failed to create locator: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!("element: {:?}", element);
+
+    match element {
+        Some(element) => match element.type_text(&request.text) {
+            Ok(_) => Ok(JsonResponse(ActionResponse {
+                success: true,
+                message: format!("Typed text into element with role: {}", element.role()),
+            })),
+            Err(e) => {
+                error!("Failed to type text: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to type text: {}", e)
+                    })),
+                ))
+            }
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "No matching element found"
+            })),
+        )),
+    }
+}

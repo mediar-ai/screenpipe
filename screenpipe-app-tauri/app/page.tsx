@@ -22,7 +22,8 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { PipeApi } from "@/lib/api";
 import localforage from "localforage";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { LoginDialog } from "@/components/login-dialog";
+import { LoginDialog } from "../components/login-dialog";
+import { ModelDownloadTracker } from "../components/model-download-tracker";
 
 export default function Home() {
   const { settings, updateSettings, loadUser, reloadStore } = useSettings();
@@ -33,6 +34,7 @@ export default function Home() {
   const { open: openStatusDialog } = useStatusDialog();
   const { setIsOpen: setSettingsOpen } = useSettingsDialog();
   const isProcessingRef = React.useRef(false);
+
   useEffect(() => {
     if (settings.user?.token) {
       loadUser(settings.user.token);
@@ -227,7 +229,7 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center flex-1 max-w-screen-2xl mx-auto relative">
       <LoginDialog />
-
+      <ModelDownloadTracker />
       <NotificationHandler />
       {showOnboarding ? (
         <Onboarding />

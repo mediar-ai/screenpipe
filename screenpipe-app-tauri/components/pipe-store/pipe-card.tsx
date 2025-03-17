@@ -125,7 +125,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
         const data = await response.json();
         console.log(data, pipe.installed_config?.buildStatus);
         if (
-          data.buildStatus.length > 0 &&
+          data.buildStatus?.length > 0 &&
           JSON.stringify(data.buildStatus) !==
             JSON.stringify(pipe.installed_config?.buildStatus)
         ) {
@@ -162,6 +162,15 @@ export const PipeCard: React.FC<PipeCardProps> = ({
 
     let buildStatusInterval: NodeJS.Timeout | null = null;
     const buildStatus = pipe.installed_config?.buildStatus;
+
+    const isUpdating =
+      buildStatus === "updating" ||
+      (typeof buildStatus === "object" && buildStatus.status === "updating");
+
+    if (isUpdating) {
+      return;
+    }
+
     const isInProgress =
       buildStatus === "in_progress" ||
       (typeof buildStatus === "object" && buildStatus.status === "in_progress");
@@ -180,6 +189,22 @@ export const PipeCard: React.FC<PipeCardProps> = ({
   const renderInstallationStatus = useCallback(() => {
     const buildStatus = pipe.installed_config?.buildStatus;
     const status = getBuildStatus(buildStatus);
+
+    if (status === "updating") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled
+          className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
+        >
+          <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+          <div className="flex flex-col items-start">
+            <span>updating...</span>
+          </div>
+        </Button>
+      );
+    }
 
     if (status === "not_started" || status === "in_progress") {
       return (

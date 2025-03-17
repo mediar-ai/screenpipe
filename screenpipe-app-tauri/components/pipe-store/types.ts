@@ -3,7 +3,7 @@ import { PipeStorePlugin } from "@/lib/api/store";
 export type BuildStatus =
   | string
   | {
-      status: "in_progress" | "error" | "success" | "not_started";
+      status: "in_progress" | "error" | "success" | "not_started" | "updating";
       step: string;
       progress?: number;
       error?: string;

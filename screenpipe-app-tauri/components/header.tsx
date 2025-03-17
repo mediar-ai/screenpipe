@@ -131,7 +131,7 @@ export default function Header() {
         <HealthStatus className="mt-3 cursor-pointer" />
         <Settings />
 
-        <Button
+        {/* <Button
           variant="ghost"
           size="icon"
           onClick={() => setShowInbox(!showInbox)}
@@ -139,7 +139,7 @@ export default function Header() {
         >
           <Bell className="h-4 w-4" />
           <span className="sr-only">notifications</span>
-        </Button>
+        </Button> */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

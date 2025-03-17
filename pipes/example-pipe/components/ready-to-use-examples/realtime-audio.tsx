@@ -6,12 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useSettings } from "@/lib/settings-provider";
 
-export function RealtimeAudio({ onDataChange }: { onDataChange?: (data: any, error: string | null) => void }) {
+export function RealtimeAudio({
+  onDataChange,
+}: {
+  onDataChange?: (data: any, error: string | null) => void;
+}) {
   const { settings } = useSettings();
-  const [transcription, setTranscription] = useState<TranscriptionChunk | null>(null);
+  const [transcription, setTranscription] = useState<TranscriptionChunk | null>(
+    null,
+  );
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState('');
+  const [history, setHistory] = useState("");
   const historyRef = useRef(history);
   const streamRef = useRef<any>(null);
 
@@ -22,80 +28,101 @@ export function RealtimeAudio({ onDataChange }: { onDataChange?: (data: any, err
 
   const startStreaming = async () => {
     try {
+      // Add logging to debug settings state
+      console.log("starting audio streaming, settings:", {
+        realtimeEnabled: settings?.enableRealtimeAudioTranscription,
+        model: settings?.audioTranscriptionModel,
+      });
+
       // Check if realtime transcription is enabled
-      if (!settings?.screenpipeAppSettings?.enableRealtimeAudioTranscription) {
-        const errorMessage = "realtime audio transcription is not enabled in settings, go to account-> settings -> recording -> enable realtime audiotranscription -> models to use: screenpipe cloud. Then Refresh. If it doesn't start you might need to restart.";
-        setError(errorMessage);
+      if (!settings?.enableRealtimeAudioTranscription) {
+        const errorMessage =
+          "realtime audio transcription is not enabled in settings, go to account-> settings -> recording -> enable realtime audiotranscription -> models to use: screenpipe cloud. Then Refresh. If it doesn't start you might need to restart.";
         
+        console.error("streaming failed: realtime audio transcription not enabled in settings");
+        setError(errorMessage);
+
         // Pass the error to the parent component
         if (onDataChange) {
           onDataChange(null, errorMessage);
         }
-        
+
         return; // Exit early
       }
-      
+
+      console.log("realtime audio enabled, attempting to start stream...");
       setError(null);
       setIsStreaming(true);
-      
+
       // Add error handling for the analytics connection issue
       const originalConsoleError = console.error;
-      console.error = function(msg, ...args) {
+      console.error = function (msg, ...args) {
         // Filter out the analytics connection errors
-        if (typeof msg === 'string' && 
-           (msg.includes('failed to fetch settings') || 
-            msg.includes('ERR_CONNECTION_REFUSED'))) {
+        if (
+          typeof msg === "string" &&
+          (msg.includes("failed to fetch settings") ||
+            msg.includes("ERR_CONNECTION_REFUSED"))
+        ) {
           // Suppress these specific errors
           return;
         }
         originalConsoleError.apply(console, [msg, ...args]);
       };
-      
+
       const stream = pipe.streamTranscriptions();
+      console.log("stream created successfully");
       streamRef.current = stream;
 
       for await (const event of stream) {
+        console.log("received stream event:", event);
         if (event.choices?.[0]?.text) {
           const chunk: TranscriptionChunk = {
             transcription: event.choices[0].text,
             timestamp: event.metadata?.timestamp || new Date().toISOString(),
-            device: event.metadata?.device || 'unknown',
+            device: event.metadata?.device || "unknown",
             is_input: event.metadata?.isInput || false,
-            is_final: event.choices[0].finish_reason !== null
+            is_final: event.choices[0].finish_reason !== null,
           };
-          
+
           setTranscription(chunk);
-          const newHistory = historyRef.current + ' ' + chunk.transcription;
+          const newHistory = historyRef.current + " " + chunk.transcription;
           setHistory(newHistory);
-          
+
           // Pass the raw data to the parent component for display in the raw output tab
           if (onDataChange) {
             onDataChange(chunk, null);
           }
-          
+
           console.log("transcription:", {
             text: chunk.transcription,
             device: chunk.device,
-            isFinal: chunk.is_final
+            isFinal: chunk.is_final,
           });
         }
       }
-      
+
       // Restore original console.error
       console.error = originalConsoleError;
-      
     } catch (error) {
       console.error("audio stream failed:", error);
-      const errorMessage = error instanceof Error 
-        ? `Failed to stream audio: ${error.message}`
-        : "Failed to stream audio";
-      setError(errorMessage);
+      // Log additional details that might help debugging
+      console.error("error details:", {
+        name: error instanceof Error ? error.name : "unknown",
+        stack: error instanceof Error ? error.stack : "no stack available",
+        settings: settings
+      });
       
+      const errorMessage =
+        error instanceof Error
+          ? `Failed to stream audio: ${error.message}`
+          : "Failed to stream audio";
+      setError(errorMessage);
+
       // Pass the error to the parent component
       if (onDataChange) {
         onDataChange(null, errorMessage);
       }
-      
+
       setIsStreaming(false);
     }
   };
@@ -130,19 +157,19 @@ export function RealtimeAudio({ onDataChange }: { onDataChange?: (data: any, err
           <div className="grid grid-cols-2 gap-2">
             <div>
               <span className="font-semibold">type: </span>
-              <span>{transcription.is_input ? 'Input' : 'Output'}</span>
+              <span>{transcription.is_input ? "Input" : "Output"}</span>
             </div>
             <div>
               <span className="font-semibold">final: </span>
-              <span>{transcription.is_final ? 'Yes' : 'No'}</span>
+              <span>{transcription.is_final ? "Yes" : "No"}</span>
             </div>
           </div>
         </div>
-        
+
         <div className="bg-slate-100 rounded p-2 overflow-auto max-h-[100px] whitespace-pre-wrap font-mono text-xs">
           {transcription.transcription}
         </div>
-        
+
         {history && (
           <div className="mt-2">
             <div className="text-slate-600 font-semibold mb-1">History:</div>
@@ -158,8 +185,8 @@ export function RealtimeAudio({ onDataChange }: { onDataChange?: (data: any, err
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-center">
-        <Button 
-          onClick={isStreaming ? stopStreaming : startStreaming} 
+        <Button
+          onClick={isStreaming ? stopStreaming : startStreaming}
           size="sm"
         >
           {isStreaming ? (
@@ -168,33 +195,35 @@ export function RealtimeAudio({ onDataChange }: { onDataChange?: (data: any, err
               Stop Streaming
             </>
           ) : (
-            'Start Audio Transcritpion Stream'
+            "Start Audio Transcritpion Stream"
           )}
         </Button>
-        
+
         {history && (
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => {
               navigator.clipboard.writeText(history);
-              setHistory('');
+              setHistory("");
             }}
           >
             Clear History
           </Button>
         )}
       </div>
-      
+
       {error && <p className="text-xs text-red-500">{error}</p>}
       {transcription && renderTranscriptionContent(transcription)}
-      
+
       <div className="flex items-center gap-1.5 text-right justify-end">
-        <div className={`w-1.5 h-1.5 rounded-full ${isStreaming ? 'bg-green-500' : 'bg-gray-400'}`} />
+        <div
+          className={`w-1.5 h-1.5 rounded-full ${isStreaming ? "bg-green-500" : "bg-gray-400"}`}
+        />
         <span className="text-xs text-gray-500 font-mono">
-          {isStreaming ? 'streaming' : 'stopped'}
+          {isStreaming ? "streaming" : "stopped"}
         </span>
       </div>
     </div>
   );
-} 
+}

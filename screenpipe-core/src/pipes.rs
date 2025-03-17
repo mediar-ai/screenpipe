@@ -77,17 +77,35 @@ fn generate_cron_secret() -> String {
 }
 
 // Update this function near the top of the file
-fn sanitize_pipe_name(name: &str) -> String {
+pub fn sanitize_pipe_name(name: &str) -> String {
     // First check if this is a GitHub URL and extract the repo name
     if let Ok(url) = Url::parse(name) {
         if url.host_str() == Some("github.com") {
             let path_segments: Vec<&str> = url.path_segments().unwrap().collect();
             if path_segments.len() >= 2 {
-                // Use the repository name (second segment) instead of branch name
-                let repo_name = path_segments[1];
-                debug!("Using repository name for pipe: {}", repo_name);
-                return repo_name.to_string();
+                if let Some(tree_index) = path_segments.iter().position(|&s| s == "tree") {
+                    let remaining_segments = &path_segments[tree_index + 1..];
+                    if remaining_segments.len() > 2 {
+                        debug!(
+                            "Using repository name for pipe: {:?}",
+                            remaining_segments.last().unwrap().to_string()
+                        );
+                        return remaining_segments.last().unwrap().to_string();
+                    } else {
+                        debug!("Using repository name for pipe: {:?}", path_segments[1]);
+                        return path_segments[1].to_string();
+                    }
+                } else {
+                    debug!("Using repository name for pipe: {:?}", path_segments[1]);
+                    return path_segments[1].to_string();
+                }
             }
+        }
+    }
+
+    if Path::new(name).is_dir() {
+        if let Some(basename) = Path::new(name).file_name() {
+            return basename.to_string_lossy().to_string();
         }
     }
 
@@ -798,28 +816,7 @@ async fn retry_install(bun_path: &Path, dest_dir: &Path, max_retries: u32) -> Re
 pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
     info!("Processing pipe from source: {}", source);
 
-    let is_local = Url::parse(source).is_err();
-
-    let mut pipe_name =
-        sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap());
-
-    // For GitHub URLs, extract the repository name directly
-    if !is_local {
-        if let Ok(url) = Url::parse(source) {
-            if url.host_str() == Some("github.com") {
-                let path_segments: Vec<&str> = url.path_segments().unwrap().collect();
-                if path_segments.len() >= 2 {
-                    pipe_name = path_segments[1].to_string();
-                    debug!("Using repository name for pipe: {}", pipe_name);
-                }
-            }
-        }
-    }
-
-    // Add _local suffix for local pipes
-    if is_local {
-        pipe_name.push_str("_local");
-    }
+    let pipe_name = sanitize_pipe_name(Path::new(source).to_str().unwrap());
 
     let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
 
@@ -1406,7 +1403,11 @@ async fn run_cron_schedule(
         let last_run = match get_last_cron_execution(&pipe_dir, path).await {
             Ok(time) => time,
             Err(e) => {
-                error!("failed to get last cron execution: {}", e);
+                error!(
+                    "[{}] failed to get last cron execution: {}",
+                    pipe_dir.file_name().unwrap_or_default().to_string_lossy(),
+                    e
+                );
                 None
             }
         };
@@ -1441,7 +1442,7 @@ async fn run_cron_schedule(
         };
 
         info!(
-            "next cron execution for pipe {} at path {} in {} seconds",
+            "[{}] next cron execution for pipe at path {} in {} seconds",
             pipe,
             path,
             duration.as_secs()
@@ -1502,25 +1503,65 @@ pub async fn cleanup_pipe_crons(pipe: &str) -> Result<()> {
 
 async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatus> {
     info!(
-        "checking if i need to build the next.js project in: {:?}",
-        pipe_dir
+        "[{}] checking if i need to build the next.js project",
+        pipe_dir.file_name().unwrap_or_default().to_string_lossy()
     );
 
-    // Check if build already exists and is valid
+    // read the build value from pipe.json
     let build_dir = pipe_dir.join(".next");
-    if build_dir.exists() {
-        let build_manifest = build_dir.join("build-manifest.json");
-        if build_manifest.exists() {
-            info!("found existing next.js build, skipping rebuild");
-            return Ok(BuildStatus::Success);
+    let pipe_json_path = pipe_dir.join("pipe.json");
+
+    // Check if both the pipe.json indicates a build AND the build directory contains a valid build
+    let should_skip_build = if pipe_json_path.exists() {
+        let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+        let pipe_config: Value = serde_json::from_str(&pipe_json)?;
+        let is_build = pipe_config
+            .get("build")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+
+        // Only skip if build flag is true AND the build directory exists with required files
+        if is_build && build_dir.exists() {
+            // Check for key files that indicate a valid Next.js build
+            let build_id_file = build_dir.join("BUILD_ID");
+            let server_dir = build_dir.join("server");
+
+            if build_id_file.exists() && server_dir.exists() {
+                debug!(
+                    "[{}] verified valid build exists, skipping rebuild",
+                    pipe_dir.file_name().unwrap_or_default().to_string_lossy()
+                );
+                true
+            } else {
+                debug!(
+                    "[{}] build flag is true but build appears invalid, forcing rebuild",
+                    pipe_dir.file_name().unwrap_or_default().to_string_lossy()
+                );
+                false
+            }
+        } else {
+            if !is_build && build_dir.exists() {
+                debug!(
+                    "[{}] removing invalid next.js build directory",
+                    pipe_dir.file_name().unwrap_or_default().to_string_lossy()
+                );
+                tokio::fs::remove_dir_all(&build_dir).await?;
+            }
+            false
         }
-        // Invalid/incomplete build directory - remove it
-        debug!("removing invalid next.js build directory");
-        tokio::fs::remove_dir_all(&build_dir).await?;
+    } else {
+        false
+    };
+
+    if should_skip_build {
+        info!(
+            "[{}] pipe is already built, skipping rebuild",
+            pipe_dir.file_name().unwrap_or_default().to_string_lossy()
+        );
+        return Ok(BuildStatus::Success);
     }
 
     // Update build status to InProgress in pipe.json
-    let pipe_json_path = pipe_dir.join("pipe.json");
     if pipe_json_path.exists() {
         let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
         let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
@@ -1529,7 +1570,10 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
         tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
     }
 
-    info!("running next.js build");
+    info!(
+        "[{}] running next.js build",
+        pipe_dir.file_name().unwrap_or_default().to_string_lossy()
+    );
     let build_output = Command::new(bun_path)
         .arg("run")
         .arg("--bun")
@@ -1539,11 +1583,30 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
         .await?;
 
     if build_output.status.success() {
-        info!("next.js build completed successfully");
+        let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+        let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+        pipe_config["build"] = json!(true);
+        let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+        let mut file = File::create(&pipe_json_path).await?;
+        file.write_all(updated_pipe_json.as_bytes()).await?;
+        info!(
+            "[{}] next.js pipe build successfully",
+            pipe_dir.file_name().unwrap_or_default().to_string_lossy()
+        );
         Ok(BuildStatus::Success)
     } else {
+        let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+        let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+        pipe_config["build"] = json!(false);
+        let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+        let mut file = File::create(&pipe_json_path).await?;
+        file.write_all(updated_pipe_json.as_bytes()).await?;
         let error_message = String::from_utf8_lossy(&build_output.stderr).to_string();
-        error!("next.js build failed: {}", error_message);
+        error!(
+            "[{}] next.js build failed: {}",
+            pipe_dir.file_name().unwrap_or_default().to_string_lossy(),
+            error_message
+        );
         Ok(BuildStatus::Failed(error_message))
     }
 }
@@ -1769,6 +1832,7 @@ pub async fn download_pipe_private(
             let pipe_json = tokio::fs::read_to_string(&final_pipe_json).await?;
             let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
             pipe_config["is_nextjs"] = json!(true);
+            pipe_config["build"] = json!(true);
             pipe_config["buildStatus"] = json!({
                 "status": "success",
                 "step": "completed"

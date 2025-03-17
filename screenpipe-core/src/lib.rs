@@ -36,9 +36,8 @@ pub mod network;
 pub use network::*;
 
 pub use language::{Language, TESSERACT_LANGUAGES};
-
-pub mod devices;
-pub use devices::*;
-
 pub mod embedding;
 pub use embedding::*;
+
+pub mod operator;
+pub use operator::*;

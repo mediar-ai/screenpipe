@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
   RefreshCw,
   Search,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,12 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface OcrText {
   frame_id: number;
@@ -50,6 +57,42 @@ interface OcrText {
   // ocr_engine: string;
   window_name: string | null;
   // focused: boolean;
+  timestamp: string;
+  browser_url: string | null;
+}
+
+// Component for cell content with click support
+interface CellContentProps {
+  value: string | null;
+  className?: string;
+}
+
+function CellContent({ value, className }: CellContentProps) {
+  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const displayValue = value || "N/A";
+
+  return (
+    <>
+      <div
+        className={className}
+        onClick={() => setIsDialogOpen(true)}
+        style={{ cursor: "pointer" }}
+      >
+        {displayValue}
+      </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>cell content</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto max-h-[60vh] font-mono p-4 border rounded-md bg-muted/50 whitespace-pre-wrap">
+            {displayValue}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 const columns: ColumnDef<OcrText>[] = [
@@ -68,6 +111,25 @@ const columns: ColumnDef<OcrText>[] = [
     },
   },
   {
+    accessorKey: "timestamp",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Time
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
+    cell: ({ row }) => (
+      <div className="whitespace-nowrap">
+        {new Date(row.getValue("timestamp")).toLocaleString()}
+      </div>
+    ),
+  },
+  {
     accessorKey: "text",
     header: ({ column }) => {
       return (
@@ -81,9 +143,10 @@ const columns: ColumnDef<OcrText>[] = [
       );
     },
     cell: ({ row }) => (
-      <div className="max-w-[500px] truncate font-mono">
-        {row.getValue("text")}
-      </div>
+      <CellContent
+        value={row.getValue("text")}
+        className="max-w-[500px] truncate font-mono"
+      />
     ),
   },
   {
@@ -117,9 +180,30 @@ const columns: ColumnDef<OcrText>[] = [
       );
     },
     cell: ({ row }) => (
-      <div className="max-w-[200px] truncate">
-        {row.getValue("window_name") || "N/A"}
-      </div>
+      <CellContent
+        value={row.getValue("window_name")}
+        className="max-w-[200px] truncate"
+      />
+    ),
+  },
+  {
+    accessorKey: "browser_url",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          URL
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
+    cell: ({ row }) => (
+      <CellContent
+        value={row.getValue("browser_url")}
+        className="max-w-[200px] truncate"
+      />
     ),
   },
   // {
@@ -244,16 +328,19 @@ export function OcrDataTable() {
         body: JSON.stringify({
           query: `
             SELECT 
-              frame_id,
-              text,
-              text_json,
-              app_name,
-              ocr_engine,
-              window_name,
-              focused
+              ocr_text.frame_id,
+              ocr_text.text,
+              ocr_text.text_json,
+              ocr_text.app_name,
+              ocr_text.ocr_engine,
+              ocr_text.window_name,
+              ocr_text.focused,
+              frames.timestamp,
+              frames.browser_url
             FROM ocr_text 
+            LEFT JOIN frames ON ocr_text.frame_id = frames.id
             WHERE ${filterClauses}
-            ORDER BY frame_id DESC
+            ORDER BY ocr_text.frame_id DESC
             LIMIT ${pageSize}
             OFFSET ${pageIndex * pageSize}
           `,

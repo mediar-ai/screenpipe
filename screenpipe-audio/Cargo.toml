@@ -31,19 +31,15 @@ clap = { version = "4.3", features = ["derive"] }
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Local Embeddings + STT
-# TODO: feature metal, cuda, etc. see https://github.com/huggingface/candle/blob/main/candle-core/Cargo.toml
-candle = { workspace = true }
-candle-nn = { workspace = true }
-candle-transformers = { workspace = true }
 vad-rs = "0.1.4"
-tokenizers = { workspace = true }
 anyhow = "1.0.86"
-byteorder = "1.5.0"
 hf-hub = "0.3.2"
 # https://github.com/pdeljanov/Symphonia/tree/master?tab=readme-ov-file#optimizations
 symphonia = { version = "0.5.4", features = ["aac", "isomp4", "opt-simd"] }
-rand = "0.8.5"
 rubato = "0.15.0"
+whisper-rs = { git = "https://github.com/tazz4843/whisper-rs.git", rev = "e0597486400ec436669e6ee3d8cc94b3859355f5", features = [
+  "tracing_backend",
+] } # pin revision to avoid breaking changes
 
 # Log
 log = { workspace = true }
@@ -64,6 +60,7 @@ reqwest = { workspace = true }
 
 screenpipe-core = { path = "../screenpipe-core" }
 screenpipe-events = { path = "../screenpipe-events" }
+screenpipe-db = { path = "../screenpipe-db" }
 
 # crossbeam
 crossbeam = { workspace = true }
@@ -74,7 +71,6 @@ dirs = "5.0.1"
 
 lazy_static = { version = "1.4.0" }
 realfft = "3.4.0"
-regex = "1.11.0"
 ndarray = "0.16"
 ort = "=2.0.0-rc.6"
 knf-rs = { git = "https://github.com/Neptune650/knf-rs.git" }
@@ -82,6 +78,7 @@ ort-sys = "=2.0.0-rc.8"
 futures = "0.3.31"
 deepgram = "0.6.4"
 bytes = { version = "1.9.0", features = ["serde"] }
+rand = "0.9.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "=2.0.0-rc.6", features = [
@@ -108,21 +105,12 @@ tracing-subscriber = "0.3.16"
 
 
 [features]
-metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
-cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
-mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
+metal = ["whisper-rs/metal"]
+cuda = ["whisper-rs/cuda"]
 
-[[bin]]
+[[example]]
 name = "screenpipe-audio"
-path = "src/bin/screenpipe-audio.rs"
-
-[[bench]]
-name = "pcm_decode_benchmark"
-harness = false
-
-[[bench]]
-name = "record_and_transcribe_benchmark"
-harness = false
+path = "examples/screenpipe-audio.rs"
 
 [package.metadata.cargo-machete]
 ignored = ["ort-sys"]

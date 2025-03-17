@@ -474,7 +474,7 @@ export async function saveToChrome(key: string, data: unknown) {
         
         // console.log('successfully saved to chrome storage:', key);
     } catch (err) {
-        console.log('failed to save to chrome storage:', {error: err, key});
+        // console.log('failed to save to chrome storage:', {error: err, key});
     }
 }
 

@@ -94,7 +94,7 @@ jobs:
           path: screenpipe-*.tar.gz
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2019
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -168,6 +168,7 @@ jobs:
           $packageDir = "screenpipe-${{ env.VERSION }}-x86_64-pc-windows-msvc"
           New-Item -Path "$packageDir/bin" -ItemType Directory -Force
           Copy-Item "target/x86_64-pc-windows-msvc/release/screenpipe.exe" "$packageDir/bin/"
+          Copy-Item "target/x86_64-pc-windows-msvc/release/onnxruntime.dll" "$packageDir/bin/"
           7z a "$packageDir.zip" "./$packageDir/*"
 
       - name: Calculate SHA256
@@ -183,7 +184,7 @@ jobs:
           path: screenpipe-*.zip
 
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         target: [x86_64-unknown-linux-gnu]

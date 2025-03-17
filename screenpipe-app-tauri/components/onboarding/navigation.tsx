@@ -20,7 +20,7 @@ const OnboardingNavigation: React.FC<OnboardingNavigationProps> = ({
   handleNextSlide,
 }) => {
   return (
-    <div className={`flex justify-between items-center mx-auto ${className} fixed bottom-0 left-20 right-20 p-4 bg-transparent max-w-screen-lg`}>
+    <div className={`flex justify-between items-center mx-auto ${className} w-full p-4 bg-transparent max-w-screen-lg`}>
       <Button 
         className="flex items-center w-fit min-w-32 disabled:!cursor-not-allowed disabled:!pointer-events-auto"
         variant={"outline"}
