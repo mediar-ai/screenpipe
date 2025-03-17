@@ -1,7 +1,7 @@
 name: Create Test Bounty
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened]
 
 jobs:
@@ -9,31 +9,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      pull-requests: write  # Upgraded to write to allow commenting
+      pull-requests: write
       contents: read
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        
-      - name: Setup environment variables
-        run: |
-          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_ENV
-          echo "PR_AUTHOR=${{ github.event.pull_request.user.login }}" >> $GITHUB_ENV
-          echo "PR_URL=${{ github.event.pull_request.html_url }}" >> $GITHUB_ENV
-      
-      - name: Generate issue body from template
-        id: generate-body
-        run: |
-          TEMPLATE_PATH=".github/ISSUE_TEMPLATE/test-bounty-template.md"
-          # Remove YAML frontmatter
-          tail -n +4 "$TEMPLATE_PATH" > temp_body.md
-          # Replace environment variables
-          envsubst < temp_body.md > issue_body.md
-          echo "ISSUE_BODY<<EOF" >> $GITHUB_ENV
-          cat issue_body.md >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
       
       - name: Create test bounty issue
         id: create-issue
@@ -41,14 +22,32 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const prNumber = process.env.PR_NUMBER;
-            const prTitle = process.env.PR_TITLE;
+            const fs = require('fs');
+            const prNumber = context.payload.pull_request.number;
+            const prTitle = context.payload.pull_request.title;
+            const prAuthor = context.payload.pull_request.user.login;
+            const prUrl = context.payload.pull_request.html_url;
             
+            // Read template file
+            let templateContent = fs.readFileSync('.github/ISSUE_TEMPLATE/test-bounty-template.md', 'utf8');
+            
+            // Skip YAML frontmatter
+            const frontmatterEnd = templateContent.indexOf('---', 3) + 3;
+            templateContent = templateContent.substring(frontmatterEnd);
+            
+            // Replace variables manually
+            const replacedContent = templateContent
+              .replace(/\$\{\{ env\.PR_NUMBER \}\}/g, prNumber)
+              .replace(/\$\{\{ env\.PR_TITLE \}\}/g, prTitle)
+              .replace(/\$\{\{ env\.PR_AUTHOR \}\}/g, prAuthor)
+              .replace(/\$\{\{ env\.PR_URL \}\}/g, prUrl);
+            
+            // Create the issue
             const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `🧪 Testing Bounty: PR #${prNumber} - ${prTitle}`,
-              body: process.env.ISSUE_BODY,
+              body: replacedContent,
               labels: ['testing', 'bounty', 'algora']
             });
             
@@ -61,7 +60,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issueUrl = ${{ steps.create-issue.outputs.result }};
-            const prNumber = process.env.PR_NUMBER;
+            const prNumber = context.payload.pull_request.number;
             
             const comment = `
             ## 🧪 testing bounty created!
