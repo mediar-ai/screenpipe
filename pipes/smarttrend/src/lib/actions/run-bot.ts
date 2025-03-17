@@ -221,7 +221,7 @@ async function profileProcess(
 
     const tweetArray = Array.from(tweets).map((s: string) => JSON.parse(s));
 
-    const res = await openai.chat.completions.create({
+    const stream = await openai.chat.completions.create({
       model: settings.aiModel!,
       messages: [
         {
@@ -254,10 +254,20 @@ ${JSON.stringify(tweetArray.slice(0, 2), null, 2)}
       response_format: {
         type: "text",
       },
+      stream: true,
     });
 
-    const summary = res?.choices[0]?.message?.content?.trim();
-    if (summary) await store.pushSummary(summary);
+    let summary = "";
+    for await (const chunk of stream) {
+      summary += chunk.choices[0]?.delta?.content || "";
+      eventEmitter.emit("updateProgress", {
+        process: 0,
+        value: Math.min(50 + (summary.length / 400) * 50, 99),
+      });
+    }
+    summary = summary.trim();
+
+    if (summary.length) await store.pushSummary(summary);
 
     await store.pushProfileTweets(tweetArray);
   } catch (e) {
@@ -301,7 +311,7 @@ async function ocrProcess(
         windowName: e.content.windowName,
       }));
 
-    const res2 = await openai.chat.completions.create({
+    const stream = await openai.chat.completions.create({
       model: settings.aiModel!,
       messages: [
         {
@@ -331,10 +341,20 @@ ${JSON.stringify(context, null, 2)}
       response_format: {
         type: "text",
       },
+      stream: true,
     });
 
-    const summary = res2?.choices[0]?.message?.content?.trim();
-    if (summary) await store.pushSummary(summary);
+    let summary = "";
+    for await (const chunk of stream) {
+      summary += chunk.choices[0]?.delta?.content || "";
+      eventEmitter.emit("updateProgress", {
+        process: 1,
+        value: Math.min((summary.length / 400) * 100, 99),
+      });
+    }
+    summary = summary.trim();
+
+    if (summary.length) await store.pushSummary(summary);
     lastCheck = new Date();
 
     console.log("Analyzed OCR data.");
@@ -427,7 +447,7 @@ async function summaryProcess(
   try {
     const summaries = await store.getSummaries();
 
-    const res = await openai.chat.completions.create({
+    const stream = await openai.chat.completions.create({
       model: settings.aiModel!,
       messages: [
         {
@@ -456,10 +476,20 @@ ${JSON.stringify(summaries, null, 2)}
       response_format: {
         type: "text",
       },
+      stream: true,
     });
 
-    const summary = res?.choices[0]?.message?.content?.trim();
-    if (summary) await store.compileSummaries(summary);
+    let summary = "";
+    for await (const chunk of stream) {
+      summary += chunk.choices[0]?.delta?.content || "";
+      eventEmitter.emit("updateProgress", {
+        process: 3,
+        value: Math.min((summary.length / 400) * 100, 99),
+      });
+    }
+    summary = summary.trim();
+
+    if (summary.length) await store.compileSummaries(summary);
 
     console.log("Summarized data.");
   } catch (e) {
@@ -498,7 +528,7 @@ async function suggestionProcess(
       model = "gpt-4o";
     }
 
-    const res = await openai.chat.completions.create({
+    const stream = await openai.chat.completions.create({
       model,
       messages: [
         {
@@ -573,10 +603,20 @@ Make sure to return only JSON in the following schema:
         type: "json_object",
       },
       temperature: 0.7,
+      stream: true,
     });
 
-    const content = res?.choices[0]?.message?.content?.trim();
-    if (content) {
+    let content = "";
+    for await (const chunk of stream) {
+      content += chunk.choices[0]?.delta?.content || "";
+      eventEmitter.emit("updateProgress", {
+        process: 4,
+        value: Math.min((content.length / 1000) * 100, 99),
+      });
+    }
+    content = content.trim();
+
+    if (content.length) {
       const data = JSON.parse(content);
       for (const suggestion of data.suggestions) {
         await store.pushSuggestion(suggestion);
