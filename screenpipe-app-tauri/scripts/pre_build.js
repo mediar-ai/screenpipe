@@ -45,8 +45,8 @@ const config = {
 		],
 	},
 	macos: {
-		ffmpegName: 'ffmpeg-7.0-macOS-default',
-		ffmpegUrl: 'https://master.dl.sourceforge.net/project/avbuild/macOS/ffmpeg-7.0-macOS-default.tar.xz?viasf=1',
+		ffmpegUrlArm: 'https://www.osxexperts.net/ffmpeg7arm.zip',
+		ffmpegUrlx86_64: 'https://evermeet.cx/ffmpeg/getrelease/zip',
 	},
 }
 
@@ -346,12 +346,22 @@ if (platform == 'macos') {
 		console.log(`screenpipe for ${arch} set up successfully.`);
 	}
 
-	// Setup FFMPEG
-	if (!(await fs.exists(config.ffmpegRealname))) {
-		await $`wget --no-config -nc ${config.macos.ffmpegUrl} -O ${config.macos.ffmpegName}.tar.xz`
-		await $`tar xf ${config.macos.ffmpegName}.tar.xz`
-		await $`mv ${config.macos.ffmpegName} ${config.ffmpegRealname}`
-		await $`rm ${config.macos.ffmpegName}.tar.xz`
+	// Setup FFMPEG for both arm64 and x86_64
+	if (!(await fs.exists(`${config.ffmpegRealname}-aarch64-apple-darwin`))
+    || !(await fs.exists(`${config.ffmpegRealname}-x86_64-apple-darwin`))) {
+    // ref: https://github.com/nathanbabcock/ffmpeg-sidecar/blob/b0ab2e1233451f219e302bf78cbbb6a5a8e85aa4/src/download.rs#L31
+
+    await $`wget --no-config -nc ${config.macos.ffmpegUrlArm} -O ${config.ffmpegRealname}-aarch64.zip`
+    await $`unzip ${config.ffmpegRealname}-aarch64.zip -d ${config.ffmpegRealname}-aarch64`
+    await $`cp ${config.ffmpegRealname}-aarch64/ffmpeg ${config.ffmpegRealname}-aarch64-apple-darwin`
+    await $`rm ${config.ffmpegRealname}-aarch64.zip`
+
+    // x86_64
+    await $`wget --no-config -nc ${config.macos.ffmpegUrlx86_64} -O ${config.ffmpegRealname}-x86_64.zip`
+    await $`unzip ${config.ffmpegRealname}-x86_64.zip -d ${config.ffmpegRealname}-x86_64`
+    await $`cp ${config.ffmpegRealname}-x86_64/ffmpeg ${config.ffmpegRealname}-x86_64-apple-darwin`
+    await $`rm ${config.ffmpegRealname}-x86_64.zip`
+
 	} else {
 		console.log('FFMPEG already exists');
 	}

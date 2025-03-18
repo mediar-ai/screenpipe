@@ -12,11 +12,8 @@
         "externalBin": [
             "screenpipe",
             "bun",
-            "ui_monitor"
-        ],
-        "resources": {
-            "ffmpeg/bin/*": "./",
-            "ffmpeg/lib/*.dylib": "./"
-        }
+            "ui_monitor",
+            "ffmpeg"
+        ]
     }
 }
