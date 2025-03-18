@@ -16,14 +16,7 @@
         ],
         "resources": {
             "ffmpeg/bin/*": "./ffmpeg/bin/",
-            "ffmpeg/lib/*": "./ffmpeg/lib/",
-            "ffmpeg/include/libavcodec": "./ffmpeg/include/libavcodec/",
-            "ffmpeg/include/libavdevice": "./ffmpeg/include/libavdevice/",
-            "ffmpeg/include/libavfilter": "./ffmpeg/include/libavfilter/",
-            "ffmpeg/include/libavformat": "./ffmpeg/include/libavformat/",
-            "ffmpeg/include/libavutil": "./ffmpeg/include/libavutil/",
-            "ffmpeg/include/libswresample": "./ffmpeg/include/libswresample/",
-            "ffmpeg/include/libswscale": "./ffmpeg/include/libswscale/"
+            "ffmpeg/lib/*": "./ffmpeg/lib/"
         }
     }
 }
