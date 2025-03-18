@@ -248,9 +248,10 @@ if (platform == 'linux') {
 	} else {
 		console.log('FFMPEG already exists');
 	}
-		// Setup FFMPEG
+		// Setup TESSERACT
 	if (!(await fs.exists(config.linux.tesseractName))) {
 		await $`wget --no-config -nc ${config.linux.tesseractUrl} -O ${config.linux.tesseractName}`
+		await $`chmod +x ${config.linux.tesseractName}` // Make the Tesseract binary executable
 	} else {
 		console.log('TESSERACT already exists');
 	}
