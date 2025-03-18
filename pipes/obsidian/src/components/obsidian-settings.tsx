@@ -37,7 +37,7 @@ export function ObsidianSettings() {
     updateSettings,
     getPreset,
   } = usePipeSettings("obsidian");
-  const { settings, loading } = useSettings();
+  const { settings, updateSettings: updateSettings2,loading } = useSettings();
   const [lastLog, setLastLog] = useState<any>(null);
   const { toast } = useToast();
   const [intelligence, setIntelligence] = useState<string | null>(null);
@@ -128,6 +128,18 @@ export function ObsidianSettings() {
       await updateSettings({
         ...obsidianSettings,
       });
+
+      // update the aiLogPresetId preset prompt
+      const preset = getPreset("aiLogPresetId");
+      if (preset) {
+        await updateSettings2({
+          ...settings!,
+          aiPresets: settings?.aiPresets?.map((p) =>
+            p.id === preset.id ? { ...p, prompt: customPrompt || "" } : p,
+          ),
+        });
+      }
+
       await updatePipeConfig(logTimeWindow / 60000);
 
       loadingToast.update({
@@ -786,7 +798,7 @@ export function ObsidianSettings() {
                       custom prompt
                     </Label>
                     <FileSuggestTextarea
-                      value={customPrompt || ""}
+                      value={getPreset("aiLogPresetId")?.prompt || ""}
                       setValue={setCustomPrompt}
                       disabled={!pathValidation.isValid}
                     />
