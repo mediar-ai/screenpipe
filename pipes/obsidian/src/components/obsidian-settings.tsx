@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import {
   Clock,
   ExternalLink,
   Loader2,
+  Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +38,7 @@ export function ObsidianSettings() {
     updateSettings,
     getPreset,
   } = usePipeSettings("obsidian");
-  const { settings, updateSettings: updateSettings2,loading } = useSettings();
+  const { settings, updateSettings: updateSettings2, loading } = useSettings();
   const [lastLog, setLastLog] = useState<any>(null);
   const { toast } = useToast();
   const [intelligence, setIntelligence] = useState<string | null>(null);
@@ -61,12 +62,22 @@ export function ObsidianSettings() {
     useState<boolean>(false);
   const [checkingModel, setCheckingModel] = useState<boolean>(false);
 
+  const logPreset = useMemo(
+    () => getPreset("aiLogPresetId"),
+    [pipeSettings?.aiLogPresetId],
+  );
+  const intelligencePreset = useMemo(
+    () => getPreset("aiPresetId"),
+    [pipeSettings?.aiPresetId],
+  );
+
   useEffect(() => {
     if (pipeSettings) {
       const preset = getPreset("aiLogPresetId");
+      console.log("preset", preset?.prompt);
       setCustomPrompt(preset?.prompt || "");
     }
-  }, [pipeSettings]);
+  }, [pipeSettings?.aiLogPresetId]);
 
   useEffect(() => {
     const fetchPaths = async () => {
@@ -130,16 +141,27 @@ export function ObsidianSettings() {
       });
 
       // update the aiLogPresetId preset prompt
-      const preset = getPreset("aiLogPresetId");
-      if (preset) {
+      const logPreset = getPreset("aiLogPresetId");
+      const intelligencePreset = getPreset("aiPresetId");
+
+      if (logPreset?.id === intelligencePreset?.id) {
         await updateSettings2({
           ...settings!,
           aiPresets: settings?.aiPresets?.map((p) =>
-            p.id === preset.id ? { ...p, prompt: customPrompt || "" } : p,
+            p.id === logPreset?.id ? { ...p, prompt: customPrompt || "" } : p,
+          ),
+        });
+      } else {
+        await updateSettings2({
+          ...settings!,
+          aiPresets: settings?.aiPresets?.map((p) =>
+            p.id === logPreset?.id || p.id === intelligencePreset?.id
+              ? { ...p, prompt: customPrompt || "" }
+              : p,
           ),
         });
       }
-
+      
       await updatePipeConfig(logTimeWindow / 60000);
 
       loadingToast.update({
@@ -571,13 +593,12 @@ export function ObsidianSettings() {
                     name="vaultPath"
                     defaultValue={pipeSettings?.vaultPath}
                     placeholder="/path/to/vault"
-                    className={`${
-                      pathValidation.isValid
+                    className={`${pathValidation.isValid
                         ? "border-green-500"
                         : pathValidation.message
                           ? "border-red-500"
                           : ""
-                    }`}
+                      }`}
                     onChange={(e) => validatePath(e.target.value)}
                   />
                   {pathValidation.isChecking && (
@@ -628,9 +649,8 @@ export function ObsidianSettings() {
 
               {pathValidation.message && (
                 <p
-                  className={`text-sm ${
-                    pathValidation.isValid ? "text-green-500" : "text-red-500"
-                  }`}
+                  className={`text-sm ${pathValidation.isValid ? "text-green-500" : "text-red-500"
+                    }`}
                 >
                   {pathValidation.message}
                 </p>
@@ -738,7 +758,38 @@ export function ObsidianSettings() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-2">log model</Label>
+                    <Label
+                      htmlFor="logModel"
+                      className="flex items-center gap-2"
+                    >
+                      <Brain className="h-4 w-4" />
+                      log generation model
+                      {logPreset?.provider === "native-ollama" && (
+                        <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
+                          ollama run{" "}
+                          {logPreset.model || "llama3.2:3b-instruct-q4_K_M"}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4 p-0"
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                `ollama run ${logPreset.model ||
+                                "llama3.2:3b-instruct-q4_K_M"
+                                }`,
+                              );
+                              toast({
+                                title: "copied to clipboard",
+                                duration: 1000,
+                              });
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </code>
+                      )}
+                    </Label>
                     <AIPresetsSelector
                       pipeName="obsidian"
                       aiKey="aiLogPresetId"
@@ -779,8 +830,38 @@ export function ObsidianSettings() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      analysis model
+                    <Label
+                      htmlFor="logModel"
+                      className="flex items-center gap-2"
+                    >
+                      <Brain className="h-4 w-4" />
+                      log generation model
+                      {intelligencePreset?.provider === "native-ollama" && (
+                        <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
+                          ollama run{" "}
+                          {intelligencePreset.model ||
+                            "llama3.2:3b-instruct-q4_K_M"}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4 p-0"
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                `ollama run ${intelligencePreset.model ||
+                                "llama3.2:3b-instruct-q4_K_M"
+                                }`,
+                              );
+                              toast({
+                                title: "copied to clipboard",
+                                duration: 1000,
+                              });
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </code>
+                      )}
                     </Label>
                     <AIPresetsSelector pipeName="obsidian" aiKey="aiPresetId" />
                   </div>
@@ -798,7 +879,7 @@ export function ObsidianSettings() {
                       custom prompt
                     </Label>
                     <FileSuggestTextarea
-                      value={getPreset("aiLogPresetId")?.prompt || ""}
+                      value={customPrompt || ""}
                       setValue={setCustomPrompt}
                       disabled={!pathValidation.isValid}
                     />
@@ -1006,5 +1087,5 @@ export function ObsidianSettings() {
         </div>
       </form>
     </div>
-  );
+  	);
 }
