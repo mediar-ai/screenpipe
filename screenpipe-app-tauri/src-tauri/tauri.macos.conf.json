@@ -15,8 +15,8 @@
             "ui_monitor"
         ],
         "resources": {
-            "ffmpeg/bin/*": "./ffmpeg/bin/",
-            "ffmpeg/lib/*.dylib": "./ffmpeg/lib/"
+            "ffmpeg/bin/*": "./",
+            "ffmpeg/lib/*.dylib": "./"
         }
     }
 }
