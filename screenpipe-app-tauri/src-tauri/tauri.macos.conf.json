@@ -16,7 +16,7 @@
         ],
         "resources": {
             "ffmpeg/bin/*": "./ffmpeg/bin/",
-            "ffmpeg/lib/*": "./ffmpeg/lib/"
+            "ffmpeg/lib/*.dylib": "./ffmpeg/lib/"
         }
     }
 }
