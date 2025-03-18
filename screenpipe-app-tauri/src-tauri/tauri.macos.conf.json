@@ -13,7 +13,8 @@
             "screenpipe",
             "bun",
             "ui_monitor",
-            "ffmpeg"
+            "ffmpeg",
+            "ffprobe"
         ]
     }
 }

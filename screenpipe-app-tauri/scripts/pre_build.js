@@ -46,7 +46,9 @@ const config = {
 	},
 	macos: {
 		ffmpegUrlArm: 'https://www.osxexperts.net/ffmpeg7arm.zip',
+		ffprobeUrlArm: 'https://www.osxexperts.net/ffprobe71arm.zip',
 		ffmpegUrlx86_64: 'https://evermeet.cx/ffmpeg/getrelease/zip',
+		ffprobeUrlx86_64: 'https://www.osxexperts.net/ffprobe71intel.zip',
 	},
 }
 
@@ -346,27 +348,37 @@ if (platform == 'macos') {
 		console.log(`screenpipe for ${arch} set up successfully.`);
 	}
 
-	// Setup FFMPEG for both arm64 and x86_64
-	if (!(await fs.exists(`${config.ffmpegRealname}-aarch64-apple-darwin`))
-    || !(await fs.exists(`${config.ffmpegRealname}-x86_64-apple-darwin`))) {
-    // ref: https://github.com/nathanbabcock/ffmpeg-sidecar/blob/b0ab2e1233451f219e302bf78cbbb6a5a8e85aa4/src/download.rs#L31
+  // Setup ffmpeg and ffprobe for both arm64 and x86_64
+  // ref: https://github.com/nathanbabcock/ffmpeg-sidecar/blob/b0ab2e1233451f219e302bf78cbbb6a5a8e85aa4/src/download.rs#L31
+  if (!(await fs.exists(`ffmpeg-aarch64-apple-darwin`))) {
+    await $`wget --no-config ${config.macos.ffmpegUrlArm} -O ffmpeg-aarch64.zip`;
+    await $`unzip -o ffmpeg-aarch64.zip -d ffmpeg-aarch64`;
+    await $`cp ffmpeg-aarch64/ffmpeg ffmpeg-aarch64-apple-darwin`;
+    await $`rm ffmpeg-aarch64.zip`;
+  }
 
-    await $`wget --no-config -nc ${config.macos.ffmpegUrlArm} -O ${config.ffmpegRealname}-aarch64.zip`
-    await $`unzip ${config.ffmpegRealname}-aarch64.zip -d ${config.ffmpegRealname}-aarch64`
-    await $`cp ${config.ffmpegRealname}-aarch64/ffmpeg ${config.ffmpegRealname}-aarch64-apple-darwin`
-    await $`rm ${config.ffmpegRealname}-aarch64.zip`
+  if (!(await fs.exists(`ffprobe-aarch64-apple-darwin`))) {
+    await $`wget --no-config ${config.macos.ffprobeUrlArm} -O ffprobe-aarch64.zip`;
+    await $`unzip -o ffprobe-aarch64.zip -d ffprobe-aarch64`;
+    await $`cp ffprobe-aarch64/ffprobe ffprobe-aarch64-apple-darwin`;
+    await $`rm ffprobe-aarch64.zip`;
+  }
 
-    // x86_64
-    await $`wget --no-config -nc ${config.macos.ffmpegUrlx86_64} -O ${config.ffmpegRealname}-x86_64.zip`
-    await $`unzip ${config.ffmpegRealname}-x86_64.zip -d ${config.ffmpegRealname}-x86_64`
-    await $`cp ${config.ffmpegRealname}-x86_64/ffmpeg ${config.ffmpegRealname}-x86_64-apple-darwin`
-    await $`rm ${config.ffmpegRealname}-x86_64.zip`
+  if (!(await fs.exists(`ffmpeg-x86_64-apple-darwin`))) {
+    await $`wget --no-config ${config.macos.ffmpegUrlx86_64} -O ffmpeg-x86_64.zip`;
+    await $`unzip -o ffmpeg-x86_64.zip -d ffmpeg-x86_64`;
+    await $`cp ffmpeg-x86_64/ffmpeg ffmpeg-x86_64-apple-darwin`;
+    await $`rm ffmpeg-x86_64.zip`;
+  }
 
-	} else {
-		console.log('FFMPEG already exists');
-	}
+  if (!(await fs.exists(`ffprobe-x86_64-apple-darwin`))) {
+    await $`wget --no-config ${config.macos.ffprobeUrlx86_64} -O ffprobe-x86_64.zip`;
+    await $`unzip -o ffprobe-x86_64.zip -d ffprobe-x86_64`;
+    await $`cp ffprobe-x86_64/ffprobe ffprobe-x86_64-apple-darwin`;
+    await $`rm ffprobe-x86_64.zip`;
+  }
 
-
+  console.log('FFMPEG and FFPROBE checks completed');
 	console.log('Moved and renamed ffmpeg binary for externalBin');
 
 	// Setup Swift UI monitoring
