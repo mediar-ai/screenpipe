@@ -439,3 +439,32 @@ now you can either dev screenpipe on linux or run screenpipe in the cloud that r
 say 👋 in our [public discord channel](https://discord.gg/dU9EBuw7Uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
 
 thank you for contributing to screen pipe! 🎉
+
+## paid testing
+
+screenpipe has an automated release testing program to ensure quality across different platforms:
+
+### how it works
+
+- regular `release-app` commits automatically setup testing bounties
+- `release-app-publish` commits skip testing by default and ship to prod immediately
+- you can explicitly control testing with these flags:
+  - `release-app-skip-test`: skip testing even for regular builds
+
+### when testing is needed
+
+consider requesting testing when:
+
+- making significant ui changes
+- changing core recording functionality
+- updating dependencies that affect major features
+- fixing critical bugs that need verification
+
+### testing workflow
+
+1. make your changes and commit with the appropriate flag
+2. github actions will automatically setup testing if needed
+3. community testers will receive bounties for testing
+4. review test reports for issues before final release
+
+see [TESTING.md](TESTING.md) for more details on the testing process.
