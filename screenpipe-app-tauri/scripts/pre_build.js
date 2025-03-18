@@ -355,6 +355,7 @@ if (platform == 'macos') {
     await $`unzip -o ffmpeg-aarch64.zip -d ffmpeg-aarch64`;
     await $`cp ffmpeg-aarch64/ffmpeg ffmpeg-aarch64-apple-darwin`;
     await $`rm ffmpeg-aarch64.zip`;
+    await $`rm -rf ffmpeg-aarch64`;
   }
 
   if (!(await fs.exists(`ffprobe-aarch64-apple-darwin`))) {
@@ -362,6 +363,7 @@ if (platform == 'macos') {
     await $`unzip -o ffprobe-aarch64.zip -d ffprobe-aarch64`;
     await $`cp ffprobe-aarch64/ffprobe ffprobe-aarch64-apple-darwin`;
     await $`rm ffprobe-aarch64.zip`;
+    await $`rm -rf ffprobe-aarch64`;
   }
 
   if (!(await fs.exists(`ffmpeg-x86_64-apple-darwin`))) {
@@ -369,6 +371,7 @@ if (platform == 'macos') {
     await $`unzip -o ffmpeg-x86_64.zip -d ffmpeg-x86_64`;
     await $`cp ffmpeg-x86_64/ffmpeg ffmpeg-x86_64-apple-darwin`;
     await $`rm ffmpeg-x86_64.zip`;
+    await $`rm -rf ffmpeg-x86_64`;
   }
 
   if (!(await fs.exists(`ffprobe-x86_64-apple-darwin`))) {
@@ -376,6 +379,7 @@ if (platform == 'macos') {
     await $`unzip -o ffprobe-x86_64.zip -d ffprobe-x86_64`;
     await $`cp ffprobe-x86_64/ffprobe ffprobe-x86_64-apple-darwin`;
     await $`rm ffprobe-x86_64.zip`;
+    await $`rm -rf ffprobe-x86_64`;
   }
 
   console.log('FFMPEG and FFPROBE checks completed');
