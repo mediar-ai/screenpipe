@@ -30,6 +30,7 @@ pub struct Frame {
     pub browser_url: String,
     pub app_name: String,
     pub window_name: String,
+    pub visible_percentage: f32,
 }
 #[derive(FromRow, Debug)]
 pub struct OCRResultRaw {
@@ -46,6 +47,7 @@ pub struct OCRResultRaw {
     pub tags: Option<String>,
     pub browser_url: Option<String>,
     pub focused: Option<bool>,
+    pub visible_percentage: f32,
 }
 
 #[derive(OaSchema, Debug, Serialize, Deserialize)]
@@ -63,6 +65,7 @@ pub struct OCRResult {
     pub tags: Vec<String>,
     pub browser_url: Option<String>,
     pub focused: Option<bool>,
+    pub visible_percentage: f32,
 }
 
 #[derive(OaSchema, Debug, Deserialize, PartialEq, Default, Clone)]
