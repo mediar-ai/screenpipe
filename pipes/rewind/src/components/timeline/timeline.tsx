@@ -224,7 +224,7 @@ export const TimelineSlider = ({
 						>
 							<div className="absolute top-0 left-1/2 w-5 h-5 rounded-full -translate-x-1/2 bg-background/50 backdrop-blur p-0.5">
 								<img
-									src={`http://localhost:11435/app-icon?name=${group.appName}`}
+									src={`http://localhost:3030/app/icon?name=${group.appName}`}
 									className="w-full h-full opacity-70"
 									alt={group.appName}
 									loading="lazy"
