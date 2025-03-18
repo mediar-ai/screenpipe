@@ -49,6 +49,7 @@
     "next": "15.1.0",
     "node-cron": "^3.0.3",
     "npm": "^10.9.2",
+    "ollama": "^0.5.14",
     "ollama-ai-provider": "^1.2.0",
     "open": "^10.1.0",
     "openai": "^4.87.3",

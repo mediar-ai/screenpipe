@@ -5,6 +5,7 @@ import { pipe, Settings } from "@screenpipe/js";
 import puppeteer from "puppeteer-core";
 import type { Browser, CookieParam, Page } from "puppeteer-core";
 import OpenAI from "openai";
+import ollama from "ollama";
 import * as store from "@/lib/store";
 import { eventEmitter } from "@/lib/events";
 import { getBrowserWSEndpoint } from "@/lib/actions/connect-browser";
@@ -106,7 +107,7 @@ async function launchProcesses(
   cookies: CookieParam[],
   frequency: number,
   prompt: string,
-  openai: OpenAI,
+  openai: OpenAI & { ollama: boolean },
   settings: Partial<Settings>,
 ): Promise<void> {
   await Promise.all([
@@ -139,7 +140,7 @@ async function launchProcesses(
 
 async function profileProcess(
   cookies: CookieParam[],
-  openai: OpenAI,
+  openai: OpenAI & { ollama: boolean },
   settings: Partial<Settings>,
   scrollLimit: number = 5,
 ): Promise<void> {
@@ -221,18 +222,16 @@ async function profileProcess(
 
     const tweetArray = Array.from(tweets).map((s: string) => JSON.parse(s));
 
-    const stream = await openai.chat.completions.create({
-      model: settings.aiModel!,
-      messages: [
-        {
-          role: "system",
-          content: `\
+    const stream = await getTextStream(openai, settings, [
+      {
+        role: "system",
+        content: `\
 You are an AI assistant analyzing a Twitter user's profile and engagement patterns to generate a concise summary.\
-            `,
-        },
-        {
-          role: "user",
-          content: `\
+          `,
+      },
+      {
+        role: "user",
+        content: `\
 ### **Instructions:**
 - Analyze the user's bio, tweets, and engagement style to determine key themes.  
 - Summarize their primary interests in a way that reflects both their focus areas and any unique perspectives they bring.
@@ -248,22 +247,30 @@ ${JSON.stringify(profileData, null, 2)}
 \`\`\`json
 ${JSON.stringify(tweetArray.slice(0, 2), null, 2)}
 \`\`\`
-            `,
-        },
-      ],
-      response_format: {
-        type: "text",
+          `,
       },
-      stream: true,
-    });
+    ]);
 
     let summary = "";
+    let thinking = false;
     for await (const chunk of stream) {
-      summary += chunk.choices[0]?.delta?.content || "";
-      eventEmitter.emit("updateProgress", {
-        process: 0,
-        value: Math.min(50 + (summary.length / 400) * 50, 99),
-      });
+      if (openai.ollama && chunk.message.content.trim() === "<think>") {
+        thinking = true;
+      }
+      if (openai.ollama && chunk.message.content.trim() === "</think>") {
+        thinking = false;
+      }
+      if (!thinking) {
+        if (openai.ollama) {
+          summary += chunk.message.content || "";
+        } else {
+          summary += chunk.choices[0]?.delta?.content || "";
+        }
+        eventEmitter.emit("updateProgress", {
+          process: 0,
+          value: Math.min(50 + (summary.length / 400) * 50, 99),
+        });
+      }
     }
     summary = summary.trim();
 
@@ -285,7 +292,7 @@ ${JSON.stringify(tweetArray.slice(0, 2), null, 2)}
 let lastCheck: Date | null = null;
 
 async function ocrProcess(
-  openai: OpenAI,
+  openai: OpenAI & { ollama: boolean },
   settings: Partial<Settings>,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
@@ -311,18 +318,16 @@ async function ocrProcess(
         windowName: e.content.windowName,
       }));
 
-    const stream = await openai.chat.completions.create({
-      model: settings.aiModel!,
-      messages: [
-        {
-          role: "system",
-          content: `\
+    const stream = await getTextStream(openai, settings, [
+      {
+        role: "system",
+        content: `\
 You are an AI assistant analyzing OCR-extracted text to identify key insights, trends, and relevant topics.\
-                `,
-        },
-        {
-          role: "user",
-          content: `\
+              `,
+      },
+      {
+        role: "user",
+        content: `\
 ### **Instructions:**
 - Summarize the main topics detected in the extracted text.
 - Identify recurring themes or keywords and their context.
@@ -335,22 +340,30 @@ You are an AI assistant analyzing OCR-extracted text to identify key insights, t
 \`\`\`json
 ${JSON.stringify(context, null, 2)}
 \`\`\`
-                `,
-        },
-      ],
-      response_format: {
-        type: "text",
+              `,
       },
-      stream: true,
-    });
+    ]);
 
     let summary = "";
+    let thinking = false;
     for await (const chunk of stream) {
-      summary += chunk.choices[0]?.delta?.content || "";
-      eventEmitter.emit("updateProgress", {
-        process: 1,
-        value: Math.min((summary.length / 400) * 100, 99),
-      });
+      if (openai.ollama && chunk.message.content.trim() === "<think>") {
+        thinking = true;
+      }
+      if (openai.ollama && chunk.message.content.trim() === "</think>") {
+        thinking = false;
+      }
+      if (!thinking) {
+        if (openai.ollama) {
+          summary += chunk.message.content || "";
+        } else {
+          summary += chunk.choices[0]?.delta?.content || "";
+        }
+        eventEmitter.emit("updateProgress", {
+          process: 1,
+          value: Math.min((summary.length / 400) * 100, 99),
+        });
+      }
     }
     summary = summary.trim();
 
@@ -434,7 +447,7 @@ async function timelineProcess(
 }
 
 async function summaryProcess(
-  openai: OpenAI,
+  openai: OpenAI & { ollama: boolean },
   settings: Partial<Settings>,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
@@ -447,18 +460,16 @@ async function summaryProcess(
   try {
     const summaries = await store.getSummaries();
 
-    const stream = await openai.chat.completions.create({
-      model: settings.aiModel!,
-      messages: [
-        {
-          role: "system",
-          content: `\
+    const stream = await getTextStream(openai, settings, [
+      {
+        role: "system",
+        content: `\
 You are an AI assistant creating a concise and well-structured summary based on multiple previous summaries.\
-            `,
-        },
-        {
-          role: "user",
-          content: `\
+          `,
+      },
+      {
+        role: "user",
+        content: `\
 ### **Instructions:**
 - Analyze the provided summaries to identify common themes, key insights, and recurring topics.
 - Eliminate redundant or overly specific details while preserving the most important information.
@@ -470,22 +481,30 @@ You are an AI assistant creating a concise and well-structured summary based on 
 \`\`\`json
 ${JSON.stringify(summaries, null, 2)}
 \`\`\`
-            `,
-        },
-      ],
-      response_format: {
-        type: "text",
+          `,
       },
-      stream: true,
-    });
+    ]);
 
     let summary = "";
+    let thinking = false;
     for await (const chunk of stream) {
-      summary += chunk.choices[0]?.delta?.content || "";
-      eventEmitter.emit("updateProgress", {
-        process: 3,
-        value: Math.min((summary.length / 400) * 100, 99),
-      });
+      if (openai.ollama && chunk.message.content.trim() === "<think>") {
+        thinking = true;
+      }
+      if (openai.ollama && chunk.message.content.trim() === "</think>") {
+        thinking = false;
+      }
+      if (!thinking) {
+        if (openai.ollama) {
+          summary += chunk.message.content || "";
+        } else {
+          summary += chunk.choices[0]?.delta?.content || "";
+        }
+        eventEmitter.emit("updateProgress", {
+          process: 3,
+          value: Math.min((summary.length / 400) * 100, 99),
+        });
+      }
     }
     summary = summary.trim();
 
@@ -506,7 +525,7 @@ ${JSON.stringify(summaries, null, 2)}
 
 async function suggestionProcess(
   prompt: string,
-  openai: OpenAI,
+  openai: OpenAI & { ollama: boolean },
   settings: Partial<Settings>,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
@@ -523,27 +542,20 @@ async function suggestionProcess(
     const tweets = (await store.getTweets()).slice(0, 5);
     const profileTweets = (await store.getProfileTweets()).slice(-2);
 
-    let model = settings.aiModel!;
-    if (model === "gpt-4") {
-      model = "gpt-4o";
-    }
-
-    const stream = await openai.chat.completions.create({
-      model,
-      messages: [
-        {
-          role: "system",
-          content: `\
+    const stream = await getObjectStream(openai, settings, [
+      {
+        role: "system",
+        content: `\
 You are an AI assistant analyzing tweet data to determine the best engagement opportunities. 
 Identify tweets that have high engagement, are relevant to the user’s niche, and invite discussion.
 Use summary of the user's data to add context and improve relevance.
 Match the user's writing style based on their tweets. Personalize it, don't be generic.
 Generate recommended replies and timestamps for selected tweets. Return JSON output.\
-            `,
-        },
-        {
-          role: "user",
-          content: `\
+          `,
+      },
+      {
+        role: "user",
+        content: `\
 ### **Instructions:**
 ${prompt}
 
@@ -563,56 +575,63 @@ ${JSON.stringify(tweets, null, 2)}
 Make sure to return only JSON in the following schema:
 \`\`\`
 {
-  type: "object",
-  properties: {
-    suggestions: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          tweetId: {
-            type: "string",
-            description: "Tweet ID to reply to.",
-          },
-          handle: {
-            type: "string",
-            description: "Handle of the Tweet's poster.",
-          },
-          reply: {
-            type: "string",
-            description: "Text of the reply.",
-          },
-          reason: {
-            type: "string",
-            description: "Reason for the reply.",
-          },
+type: "object",
+properties: {
+  suggestions: {
+    type: "array",
+    items: {
+      type: "object",
+      properties: {
+        tweetId: {
+          type: "string",
+          description: "Tweet ID to reply to.",
         },
-        additionalProperties: false,
-        required: ["tweetID", "handle", "reply", "reason"],
+        handle: {
+          type: "string",
+          description: "Handle of the Tweet's poster.",
+        },
+        reply: {
+          type: "string",
+          description: "Text of the reply.",
+        },
+        reason: {
+          type: "string",
+          description: "Reason for the reply.",
+        },
       },
+      additionalProperties: false,
+      required: ["tweetID", "handle", "reply", "reason"],
     },
   },
-  additionalProperties: false,
-  required: ["suggestions"],
+},
+additionalProperties: false,
+required: ["suggestions"],
 },
 \`\`\`
-            `,
-        },
-      ],
-      response_format: {
-        type: "json_object",
+          `,
       },
-      temperature: 0.7,
-      stream: true,
-    });
+    ]);
 
     let content = "";
+    let thinking = false;
     for await (const chunk of stream) {
-      content += chunk.choices[0]?.delta?.content || "";
-      eventEmitter.emit("updateProgress", {
-        process: 4,
-        value: Math.min((content.length / 1000) * 100, 99),
-      });
+      if (openai.ollama && chunk.message.content.trim() === "<think>") {
+        thinking = true;
+      }
+      if (openai.ollama && chunk.message.content.trim() === "</think>") {
+        thinking = false;
+      }
+      if (!thinking) {
+        if (openai.ollama) {
+          content += chunk.message.content || "";
+        } else {
+          content += chunk.choices[0]?.delta?.content || "";
+        }
+        eventEmitter.emit("updateProgress", {
+          process: 4,
+          value: Math.min((content.length / 1000) * 100, 99),
+        });
+      }
     }
     content = content.trim();
 
@@ -639,15 +658,72 @@ Make sure to return only JSON in the following schema:
   eventEmitter.emit("updateProgress", { process: 4, value: 100 });
 }
 
-async function getOpenAI(settings: Partial<Settings>): Promise<OpenAI> {
-  return new OpenAI({
+async function getOpenAI(
+  settings: Partial<Settings>,
+): Promise<OpenAI & { ollama: boolean }> {
+  const ai = new OpenAI({
     apiKey:
       settings.aiProviderType === "screenpipe-cloud"
         ? settings.user!.token
         : settings.openaiApiKey!,
     baseURL: settings.aiUrl!,
     dangerouslyAllowBrowser: true,
-  });
+  }) as OpenAI & { ollama: boolean };
+  ai.ollama = settings.aiProviderType === "native-ollama";
+  return ai;
+}
+
+async function getTextStream(
+  openai: OpenAI & { ollama: boolean },
+  settings: Partial<Settings>,
+  messages: any[],
+): Promise<any> {
+  if (openai.ollama) {
+    return await ollama.chat({
+      model: settings.aiModel!,
+      messages,
+      stream: true,
+    });
+  } else {
+    return await openai.chat.completions.create({
+      model: settings.aiModel!,
+      messages,
+      response_format: {
+        type: "text",
+      },
+      stream: true,
+    });
+  }
+}
+
+async function getObjectStream(
+  openai: OpenAI & { ollama: boolean },
+  settings: Partial<Settings>,
+  messages: any[],
+): Promise<any> {
+  if (openai.ollama) {
+    return await ollama.chat({
+      model: settings.aiModel!,
+      messages,
+      format: "json",
+      stream: true,
+    });
+  } else {
+    let model = settings.aiModel!;
+    if (model === "gpt-4") {
+      model = "gpt-4o";
+    }
+
+    return await openai.chat.completions.create({
+      model,
+      messages,
+      response_format: {
+        type: "json_object",
+      },
+      temperature: 0.7,
+      stream: true,
+    });
+  }
 }
 
 async function scrapeTweets(page: Page): Promise<Tweet[]> {
