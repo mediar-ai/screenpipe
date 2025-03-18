@@ -116,6 +116,7 @@ pub struct WindowOcrResult {
     pub focused: bool,
     pub confidence: f64,
     pub browser_url: Option<String>,
+    pub visible_percentage: f32,
 }
 
 pub struct OcrTaskData {
@@ -144,7 +145,7 @@ impl std::fmt::Display for ContinuousCaptureError {
     }
 }
 
-pub async fn continuous_capture(
+pub async fn continuous_capture( 
     result_tx: Sender<CaptureResult>,
     interval: Duration,
     ocr_engine: OcrEngine,
@@ -402,6 +403,7 @@ async fn process_window_ocr(
         focused: captured_window.is_focused,
         confidence: confidence.unwrap_or(0.0),
         browser_url,
+        visible_percentage: captured_window.visible_percentage,
     })
 }
 
@@ -539,6 +541,7 @@ pub struct WindowOcr {
     )]
     pub timestamp: Instant,
     pub browser_url: Option<String>,
+    pub visible_percentage: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
