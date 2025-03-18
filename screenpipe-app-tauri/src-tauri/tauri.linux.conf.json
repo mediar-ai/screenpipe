@@ -2,8 +2,7 @@
     "bundle": {
         "externalBin": [
             "screenpipe",
-            "bun",
-            "ffmpeg"
+            "bun"
         ],
         "linux": {
             "deb": {

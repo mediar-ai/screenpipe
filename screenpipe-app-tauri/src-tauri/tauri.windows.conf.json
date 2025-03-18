@@ -9,8 +9,7 @@
         },
         "externalBin": [
             "screenpipe",
-            "bun",
-            "ffmpeg"
+            "bun"
         ],
         "targets": [
             "nsis"
