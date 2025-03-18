@@ -113,7 +113,7 @@ fn find_ffmpeg_path_internal() -> Option<PathBuf> {
                     let resources_folder = exe_folder.join("../Resources");
                     debug!("Resources folder: {:?}", resources_folder);
                     let ffmpeg_in_resources = resources_folder.join(EXECUTABLE_NAME);
-                    if ffmpeg_in_resources.exists()) {
+                    if ffmpeg_in_resources.exists() {
                         debug!(
                             "Found ffmpeg in Resources folder: {:?}",
                             ffmpeg_in_resources
