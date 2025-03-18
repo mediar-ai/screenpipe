@@ -2,6 +2,7 @@ use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
 use dirs::home_dir;
+use reqwest::Client;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
 use screenpipe_audio::{
@@ -17,7 +18,7 @@ use screenpipe_db::{
 use screenpipe_server::{
     cli::{
         AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, MigrationSubCommand,
-        OutputFormat, PipeCommand, VisionCommand,
+        OutputFormat, PipeCommand, VisionCommand, McpCommand,
     },
     handle_index_command,
     pipe_manager::PipeInfo,
@@ -37,6 +38,9 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, Layer};
+use serde::Deserialize;
+use std::path::Path;
+use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 
 const DISPLAY: &str = r"
                                             _          
@@ -47,6 +51,16 @@ const DISPLAY: &str = r"
                                  /_/     /_/           
 
 ";
+
+// Add the struct definition with proper derive attributes
+#[derive(Deserialize, Debug)]
+struct GitHubContent {
+    name: String,
+    path: String,
+    download_url: Option<String>,
+    #[serde(rename = "type")]
+    content_type: String,
+}
 
 fn get_base_dir(custom_path: &Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = home_dir()
@@ -524,6 +538,10 @@ async fn main() -> anyhow::Result<()> {
                     *use_embedding,
                 )
                 .await?;
+                return Ok(());
+            }
+            Command::Mcp { subcommand } => {
+                handle_mcp_command(subcommand, &local_data_dir_clone).await?;
                 return Ok(());
             }
         }
@@ -1388,5 +1406,251 @@ async fn handle_pipe_command(
             }
         }
     }
+    Ok(())
+}
+
+pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) -> Result<(), anyhow::Error> {
+    let client = Client::new();
+
+    match command {
+        McpCommand::Setup { directory, output, port, update, purge } => {
+            let mcp_dir = directory
+                .as_ref()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| local_data_dir.join("mcp"));
+
+            // If purge flag is set, just remove the directory and return
+            if *purge {
+                if mcp_dir.exists() {
+                    info!("Purging MCP directory: {}", mcp_dir.display());
+                    tokio::fs::remove_dir_all(&mcp_dir).await?;
+                    
+                    match output {
+                        OutputFormat::Json => println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "data": {
+                                    "message": "MCP directory purged successfully",
+                                    "directory": mcp_dir.to_string_lossy(),
+                                },
+                                "success": true
+                            }))?
+                        ),
+                        OutputFormat::Text => {
+                            println!("MCP directory purged successfully");
+                            println!("Directory: {}", mcp_dir.display());
+                        }
+                    }
+                } else {
+                    match output {
+                        OutputFormat::Json => println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "data": {
+                                    "message": "MCP directory does not exist",
+                                    "directory": mcp_dir.to_string_lossy(),
+                                },
+                                "success": true
+                            }))?
+                        ),
+                        OutputFormat::Text => {
+                            println!("MCP directory does not exist: {}", mcp_dir.display());
+                        }
+                    }
+                }
+                return Ok(());
+            }
+
+            let should_download = if mcp_dir.exists() {
+                if *update {
+                    tokio::fs::remove_dir_all(&mcp_dir).await?;
+                    true
+                } else {
+                    let mut entries = tokio::fs::read_dir(&mcp_dir).await?;
+                    entries.next_entry().await?.is_none()
+                }
+            } else {
+                true
+            };
+
+            // Create config regardless of download status
+            let config = json!({
+                "mcpServers": {
+                    "screenpipe": {
+                        "command": "uv",
+                        "args": [
+                            "--directory",
+                            mcp_dir.to_string_lossy().to_string(),
+                            "run",
+                            "screenpipe-mcp",
+                            "--port",
+                            port.to_string()
+                        ]
+                    }
+                }
+            });
+
+            let run_command = format!(
+                "uv --directory {} run screenpipe-mcp --port {}",
+                mcp_dir.to_string_lossy(),
+                port
+            );
+
+            let config_path = mcp_dir.join("config.json");
+
+            if should_download {
+                tokio::fs::create_dir_all(&mcp_dir).await?;
+                
+                let owner = "mediar-ai";
+                let repo = "screenpipe";
+                let branch = "main";
+                let target_dir = "screenpipe-integrations/screenpipe-mcp";
+
+                let api_url = format!(
+                    "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+                    owner, repo, target_dir, branch
+                );
+
+                // Setup ctrl+c handler
+                let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+                let cancel_handle = tokio::spawn(async move {
+                    if signal::ctrl_c().await.is_ok() {
+                        let _ = tx.send(()).await;
+                    }
+                });
+
+                // Download with cancellation support
+                let download_result = tokio::select! {
+                    result = download_mcp_directory(&client, &api_url, &mcp_dir) => result,
+                    _ = rx.recv() => {
+                        info!("Received ctrl+c, canceling download...");
+                        Err(anyhow::anyhow!("Download cancelled by user"))
+                    }
+                };
+
+                // Clean up cancel handler
+                cancel_handle.abort();
+
+                // Handle download result
+                match download_result {
+                    Ok(_) => {
+                        tokio::fs::write(&config_path, serde_json::to_string_pretty(&config)?).await?;
+                    }
+                    Err(e) => {
+                        // Clean up on failure
+                        if mcp_dir.exists() {
+                            let _ = tokio::fs::remove_dir_all(&mcp_dir).await;
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+
+            // Always create/update config.json regardless of download
+            tokio::fs::write(&config_path, serde_json::to_string_pretty(&config)?).await?;
+
+            match output {
+                OutputFormat::Json => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "data": {
+                            "message": if should_download { "MCP setup completed successfully" } else { "MCP files already exist" },
+                            "config": config,
+                            "config_path": config_path.to_string_lossy(),
+                            "directory": mcp_dir.to_string_lossy(),
+                            "port": port
+                        },
+                        "success": true
+                    }))?
+                ),
+                OutputFormat::Text => {
+                    if should_download {
+                        println!("MCP setup completed successfully");
+                    } else {
+                        println!("MCP files already exist at: {}", mcp_dir.display());
+                        println!("Use --update flag to force update or --purge to start fresh");
+                    }
+                    println!("Directory: {}", mcp_dir.display());
+                    println!("Config file: {}", config_path.display());
+                    println!("\nTo run the MCP server, use this command:");
+                    println!("$ {}", run_command);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn download_mcp_directory(
+    client: &Client,
+    api_url: &str,
+    target_dir: &Path,
+) -> Result<(), anyhow::Error> {
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static("screenpipe-cli"));
+
+    let response = client
+        .get(api_url)
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to send request: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!("GitHub API error (status {}): {}", status, error_text));
+    }
+
+    let contents: Vec<GitHubContent> = response
+        .json()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to parse GitHub API response: {}", e))?;
+
+    for item in contents {
+        let target_path = target_dir.join(&item.name);
+        
+        match item.content_type.as_str() {
+            "file" => {
+                if let Some(download_url) = item.download_url {
+                    let file_response = client
+                        .get(&download_url)
+                        .send()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to download file {}: {}", download_url, e))?;
+
+                    let content = file_response
+                        .bytes()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to get file content: {}", e))?;
+
+                    tokio::fs::write(&target_path, content)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to write file {}: {}", target_path.display(), e))?;
+
+                    info!("Downloaded file: {}", target_path.display());
+                }
+            }
+            "dir" => {
+                tokio::fs::create_dir_all(&target_path)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to create directory {}: {}", target_path.display(), e))?;
+
+                let subdir_api_url = format!(
+                    "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+                    "mediar-ai", "screenpipe", item.path, "main"
+                );
+                
+                // Fix recursion with Box::pin
+                let future = Box::pin(download_mcp_directory(client, &subdir_api_url, &target_path));
+                future.await?;
+            }
+            _ => {
+                warn!("Skipping unsupported content type: {}", item.content_type);
+            }
+        }
+    }
+
     Ok(())
 }

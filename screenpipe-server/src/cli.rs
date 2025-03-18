@@ -322,6 +322,11 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
+    /// MCP Server management commands
+    Mcp {
+        #[command(subcommand)]
+        subcommand: McpCommand,
+    },
     /// Add video files to existing screenpipe data (OCR only) - DOES NOT SUPPORT AUDIO
     Add {
         /// Path to folder containing video files
@@ -505,6 +510,28 @@ pub enum PipeCommand {
         /// Server port
         #[arg(short = 'p', long, default_value_t = 3030)]
         port: u16,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum McpCommand {
+    /// Setup MCP server configuration
+    Setup {
+        /// Directory to save MCP files (default: $HOME/.screenpipe/mcp)
+        #[arg(long, value_hint = ValueHint::DirPath)]
+        directory: Option<String>,
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        /// Server port
+        #[arg(short = 'p', long, default_value_t = 3030)]
+        port: u16,
+        /// Force update existing files
+        #[arg(long)]
+        update: bool,
+        /// Purge existing MCP directory before setup
+        #[arg(long)]
+        purge: bool,
     },
 }
 

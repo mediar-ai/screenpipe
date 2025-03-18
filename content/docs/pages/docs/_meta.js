@@ -6,5 +6,6 @@ export default {
   "api-reference": "api reference",
   "cli-reference": "cli reference",
   "contributing": "contributing",
-  "faq": "faq"
+  "faq": "faq",
+  "mcp-server": "mcp server"
 };

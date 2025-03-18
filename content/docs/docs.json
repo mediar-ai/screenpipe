@@ -20,7 +20,8 @@
           "pages/docs/cli-reference",
           "pages/docs/plugins",
           "pages/docs/contributing",
-          "pages/docs/faq"
+          "pages/docs/faq",
+          "pages/docs/mcp-server"
         ]
       },
       {
