@@ -47,27 +47,25 @@ export default async function RootLayout({
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 			>
-				<SettingsProvider>
-					{!enabled ? (
-						<div className="flex items-center justify-center h-screen">
-							<div className="text-center space-y-4">
-								<h2 className="text-xl font-medium">Frame Cache Disabled</h2>
-								<p className="text-muted-foreground">
-									Please enable frame cache in settings to use the timeline
-									feature.
-								</p>
-							</div>
+				{!enabled ? (
+					<div className="flex items-center justify-center h-screen">
+						<div className="text-center space-y-4">
+							<h2 className="text-xl font-medium">Frame Cache Disabled</h2>
+							<p className="text-muted-foreground">
+								Please enable frame cache in settings to use the timeline
+								feature.
+							</p>
 						</div>
-					) : (
-						<>
-							<NuqsAdapter>
-								<SearchCommand />
-								{children}
-								<Toaster />
-							</NuqsAdapter>
-						</>
-					)}
-				</SettingsProvider>
+					</div>
+				) : (
+					<>
+						<NuqsAdapter>
+							<SearchCommand />
+							{children}
+							<Toaster />
+						</NuqsAdapter>
+					</>
+				)}
 			</body>
 		</html>
 	);
