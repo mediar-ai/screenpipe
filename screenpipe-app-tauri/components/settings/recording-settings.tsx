@@ -302,8 +302,8 @@ export function RecordingSettings() {
   const handleUpdate = async () => {
     setIsUpdating(true);
     toast({
-      title: "Updating screenpipe recording settings",
-      description: "This may take a few moments...",
+      title: "updating screenpipe recording settings",
+      description: "this may take a few moments...",
     });
 
     try {
