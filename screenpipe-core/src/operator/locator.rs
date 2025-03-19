@@ -96,7 +96,7 @@ impl Locator {
     // Convenience methods for common actions
 
     /// Click on the first matching element
-    pub async fn click(&self) -> Result<(), AutomationError> {
+    pub async fn click(&self) -> Result<crate::operator::platforms::macos::ClickResult, AutomationError> {
         self.wait().await?.click()
     }
 
