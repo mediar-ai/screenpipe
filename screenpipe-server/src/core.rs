@@ -245,6 +245,7 @@ async fn record_video(
                         Some(window_result.app_name.as_str()),
                         Some(window_result.window_name.as_str()),
                         window_result.focused,
+                        Some(window_result.visible_percentage)
                     )
                     .await;
 
@@ -286,6 +287,7 @@ async fn record_video(
                                     confidence: window_result.confidence,
                                     timestamp: frame.timestamp,
                                     browser_url: window_result.browser_url.clone(),
+                                    visible_percentage: window_result.visible_percentage,
                                 },
                             ) {
                                 Ok(_) => {

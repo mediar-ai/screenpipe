@@ -179,11 +179,11 @@ mod tests {
             .await
             .unwrap();
         let frame_id1 = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
         let frame_id2 = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -253,6 +253,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -273,6 +275,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -293,6 +297,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -313,6 +319,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -333,6 +341,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -353,6 +363,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -373,6 +385,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -389,7 +403,7 @@ mod tests {
             .await
             .unwrap();
         let frame_id1 = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
@@ -457,6 +471,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -478,6 +494,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -500,6 +518,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -526,6 +546,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -551,6 +573,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -570,6 +594,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -591,7 +617,7 @@ mod tests {
             .await
             .unwrap();
         let old_frame_id = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
 
@@ -601,7 +627,7 @@ mod tests {
             .await
             .unwrap();
         let recent_frame_id = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
 
@@ -655,6 +681,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -685,6 +713,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -731,6 +761,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -754,6 +786,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
