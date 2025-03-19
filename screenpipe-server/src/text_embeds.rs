@@ -17,11 +17,18 @@ struct OllamaResponse {
 /// Generates embeddings for text using Ollama's nomic-embed-text model
 pub async fn generate_embedding(text: &str, frame_id: i64) -> Result<Vec<f32>> {
     let client = Client::new();
-    
-    debug!("generating embedding for frame_id: {}, text: {}", frame_id, text);
+
+    debug!(
+        "generating embedding for frame_id: {}, text: {}",
+        frame_id, text
+    );
 
     // Check if Ollama server is running
-    if let Err(e) = client.get("http://localhost:11434/api/version").send().await {
+    if let Err(e) = client
+        .get("http://localhost:11434/api/version")
+        .send()
+        .await
+    {
         error!("ollama server not running: {}", e);
         return Err(anyhow::anyhow!("ollama server not running"));
     }
@@ -44,6 +51,6 @@ pub async fn generate_embedding(text: &str, frame_id: i64) -> Result<Vec<f32>> {
 
     let embedding = response.json::<OllamaResponse>().await?;
     info!("generated embedding for frame_id: {}", frame_id);
-    
+
     Ok(embedding.embedding)
 }

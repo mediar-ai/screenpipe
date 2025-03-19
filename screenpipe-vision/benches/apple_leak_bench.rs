@@ -1,6 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use image::GenericImageView;
 use memory_stats::memory_stats;
+#[cfg(target_os = "macos")]
 use screenpipe_vision::perform_ocr_apple;
 use std::path::PathBuf;
 
@@ -12,6 +13,7 @@ fn bytes_to_gb(bytes: usize) -> f64 {
     bytes as f64 / (1024.0 * 1024.0 * 1024.0)
 }
 
+#[cfg(target_os = "macos")]
 fn apple_ocr_benchmark(c: &mut Criterion) {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
@@ -91,6 +93,9 @@ fn apple_ocr_benchmark(c: &mut Criterion) {
     });
     group.finish();
 }
+
+#[cfg(not(target_os = "macos"))]
+fn apple_ocr_benchmark(_c: &mut Criterion) {}
 
 criterion_group!(benches, apple_ocr_benchmark);
 criterion_main!(benches);

@@ -6,12 +6,12 @@ use cidre::{
 };
 use image::DynamicImage;
 use image::GenericImageView;
-use tracing::error;
 use screenpipe_core::Language;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::{ffi::c_void, ptr::null_mut};
+use tracing::error;
 
 static APPLE_LANGUAGE_MAP: OnceLock<HashMap<Language, &'static str>> = OnceLock::new();
 

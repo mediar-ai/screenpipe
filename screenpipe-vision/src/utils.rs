@@ -6,10 +6,10 @@ use crate::custom_ocr::CustomOcrConfig;
 use crate::monitor::SafeMonitor;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity};
-use tracing::{debug, warn};
 use screenpipe_db::CustomOcrConfig as DBCustomOcrConfig;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, Instant};
+use tracing::{debug, warn};
 
 #[derive(Clone, Debug, Default)]
 pub enum OcrEngine {

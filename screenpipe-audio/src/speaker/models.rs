@@ -1,9 +1,9 @@
 use anyhow::Result;
 use lazy_static::lazy_static;
-use tracing::{debug, info};
 use std::path::PathBuf;
 use std::sync::Once;
 use tokio::sync::Mutex;
+use tracing::{debug, info};
 
 lazy_static! {
     static ref SEGMENTATION_MODEL_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);

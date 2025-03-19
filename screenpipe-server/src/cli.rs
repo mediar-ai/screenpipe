@@ -1,14 +1,17 @@
 use std::{path::PathBuf, sync::Arc};
 
+use clap::CommandFactory;
+use clap::ValueEnum;
 use clap::{Parser, Subcommand, ValueHint};
 use clap_complete::{generate, Shell};
-use clap::CommandFactory;
-use screenpipe_audio::{vad::{VadSensitivity, VadEngineEnum}, core::engine::AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
-use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
-use clap::ValueEnum;
+use screenpipe_audio::{
+    core::engine::AudioTranscriptionEngine as CoreAudioTranscriptionEngine,
+    vad::{VadEngineEnum, VadSensitivity},
+};
 use screenpipe_core::Language;
-use screenpipe_db::OcrEngine as DBOcrEngine;
 use screenpipe_db::CustomOcrConfig as DBCustomOcrConfig;
+use screenpipe_db::OcrEngine as DBOcrEngine;
+use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
     #[clap(name = "deepgram")]
@@ -32,9 +35,15 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
         match cli_engine {
             CliAudioTranscriptionEngine::Deepgram => CoreAudioTranscriptionEngine::Deepgram,
             CliAudioTranscriptionEngine::WhisperTiny => CoreAudioTranscriptionEngine::WhisperTiny,
-            CliAudioTranscriptionEngine::WhisperTinyQuantized => CoreAudioTranscriptionEngine::WhisperTinyQuantized,
-            CliAudioTranscriptionEngine::WhisperLargeV3 => CoreAudioTranscriptionEngine::WhisperLargeV3,
-            CliAudioTranscriptionEngine::WhisperLargeV3Quantized => CoreAudioTranscriptionEngine::WhisperLargeV3Quantized,
+            CliAudioTranscriptionEngine::WhisperTinyQuantized => {
+                CoreAudioTranscriptionEngine::WhisperTinyQuantized
+            }
+            CliAudioTranscriptionEngine::WhisperLargeV3 => {
+                CoreAudioTranscriptionEngine::WhisperLargeV3
+            }
+            CliAudioTranscriptionEngine::WhisperLargeV3Quantized => {
+                CoreAudioTranscriptionEngine::WhisperLargeV3Quantized
+            }
             CliAudioTranscriptionEngine::WhisperLargeV3Turbo => {
                 CoreAudioTranscriptionEngine::WhisperLargeV3Turbo
             }
@@ -135,9 +144,9 @@ impl From<CliVadSensitivity> for VadSensitivity {
 
 #[derive(Parser)]
 #[command(
-    author, 
+    author,
     version,
-    about, 
+    about,
     long_about = None,
     name = "screenpipe"
 )]
@@ -148,9 +157,9 @@ pub struct Cli {
     /// Optimise based on your needs.
     /// Your screen rarely change more than 1 times within a second, right?
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
-    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))] 
+    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))]
     pub fps: f64, // ! not crazy about this (inconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
-    
+
     /// Audio chunk duration in seconds
     #[arg(short = 'd', long, default_value_t = 30)]
     pub audio_chunk_duration: u64,
@@ -272,7 +281,7 @@ pub struct Cli {
     /// Enable UI monitoring (macOS only)
     #[arg(long, default_value_t = false)]
     pub enable_ui_monitoring: bool,
-    
+
     /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
     #[arg(long, default_value_t = true)]
     pub enable_frame_cache: bool,
@@ -283,10 +292,7 @@ pub struct Cli {
 
     #[command(subcommand)]
     pub command: Option<Command>,
-
 }
-
-
 
 impl Cli {
     pub fn unique_languages(&self) -> Result<Vec<Language>, String> {
