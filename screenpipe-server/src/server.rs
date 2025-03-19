@@ -2519,11 +2519,11 @@ async fn get_pipe_build_status(
     let pipe_dir = state.screenpipe_dir.join("pipes").join(&pipe_id);
     let update_temp_dir = std::env::temp_dir().join(format!("{}_update", pipe_id));
     let temp_dir = pipe_dir.with_extension("_temp");
-    
+
     // 1. First check if the update temp directory exists
     if update_temp_dir.exists() {
         debug!("Update temp directory exists for pipe: {}", pipe_id);
-        
+
         // Check if there's a pipe.json in the update temp directory
         let update_pipe_json_path = update_temp_dir.join("pipe.json");
         if update_pipe_json_path.exists() {
@@ -2539,17 +2539,22 @@ async fn get_pipe_build_status(
             let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(json!({"error": format!("Failed to parse update temp pipe config: {}", e)})),
+                    JsonResponse(
+                        json!({"error": format!("Failed to parse update temp pipe config: {}", e)}),
+                    ),
                 )
             })?;
 
             // Return the buildStatus if it exists
             if let Some(build_status) = pipe_config.get("buildStatus") {
-                debug!("Found build status in update temp directory for pipe: {}", pipe_id);
+                debug!(
+                    "Found build status in update temp directory for pipe: {}",
+                    pipe_id
+                );
                 return Ok(JsonResponse(build_status.clone()));
             }
         }
-        
+
         // If no buildStatus found in update temp directory, return a default in_progress status
         return Ok(JsonResponse(json!({
             "status": "in_progress",
@@ -2568,7 +2573,9 @@ async fn get_pipe_build_status(
                 .map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        JsonResponse(json!({"error": format!("Failed to read pipe config: {}", e)})),
+                        JsonResponse(
+                            json!({"error": format!("Failed to read pipe config: {}", e)}),
+                        ),
                     )
                 })?;
 
@@ -2587,7 +2594,10 @@ async fn get_pipe_build_status(
         } else {
             // Pipe directory exists but pipe.json doesn't exist yet
             // This likely means the pipe is still being created
-            debug!("Pipe directory exists but pipe.json not found for pipe: {}", pipe_id);
+            debug!(
+                "Pipe directory exists but pipe.json not found for pipe: {}",
+                pipe_id
+            );
             return Ok(JsonResponse(json!({
                 "status": "in_progress",
                 "step": "creating_config",
@@ -2624,7 +2634,7 @@ async fn get_pipe_build_status(
                     return Ok(JsonResponse(build_status.clone()));
                 }
             }
-            
+
             // Temp directory exists but no pipe.json or no buildStatus
             return Ok(JsonResponse(json!({
                 "status": "in_progress",
@@ -2632,7 +2642,7 @@ async fn get_pipe_build_status(
                 "message": "Initializing pipe"
             })));
         }
-        
+
         // If neither pipe directory nor temp directory exists, return not found
         return Err((
             StatusCode::NOT_FOUND,

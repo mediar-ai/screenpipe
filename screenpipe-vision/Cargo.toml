@@ -7,6 +7,10 @@ repository = { workspace = true }
 license = { workspace = true }
 edition = { workspace = true }
 
+[features]
+macos = []
+linux = []
+windows = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

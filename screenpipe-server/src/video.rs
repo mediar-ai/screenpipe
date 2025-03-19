@@ -273,10 +273,7 @@ impl VideoCapture {
                 check_interval.tick().await;
 
                 // Check if monitor is available
-                let monitor_exists = match get_monitor_by_id(monitor_id).await {
-                    Some(_) => true,
-                    None => false,
-                };
+                let monitor_exists = get_monitor_by_id(monitor_id).await.is_some();
 
                 // Update availability flag
                 let current_availability = monitor_available_clone.load(Ordering::SeqCst);

@@ -1,6 +1,5 @@
 use crate::UIFrame;
 use anyhow::Result;
-use tracing::{debug, error, info, warn};
 use screenpipe_events::send_event;
 use std::fs;
 use std::io;
@@ -13,6 +12,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::signal;
 use tokio::time::{sleep, timeout, Duration};
+use tracing::{debug, error, info, warn};
 use which::which;
 
 pub async fn run_ui() -> Result<()> {

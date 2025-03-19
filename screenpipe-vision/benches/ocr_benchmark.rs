@@ -134,7 +134,7 @@ fn bench_tesseract_ocr(c: &mut Criterion) {
 
             for _ in 0..iters {
                 let start = std::time::Instant::now();
-                let (result, _) = perform_ocr_tesseract(black_box(&image));
+                let (result, _, _confidence) = perform_ocr_tesseract(black_box(&image), vec![]);
                 total_duration += start.elapsed();
 
                 let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);
@@ -185,6 +185,10 @@ fn bench_windows_ocr(c: &mut Criterion) {
     group.finish();
 }
 
+// Default empty benchmark when no OS-specific features are enabled
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn bench_dummy(_c: &mut Criterion) {}
+
 // Criterion group definitions
 #[cfg(target_os = "macos")]
 criterion_group!(
@@ -198,5 +202,8 @@ criterion_group!(benches, bench_tesseract_ocr);
 
 #[cfg(target_os = "windows")]
 criterion_group!(benches, bench_windows_ocr);
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+criterion_group!(benches, bench_dummy);
 
 criterion_main!(benches);

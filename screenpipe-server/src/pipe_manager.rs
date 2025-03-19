@@ -626,7 +626,7 @@ impl PipeManager {
             Ok(dir) => {
                 debug!("downloaded new version to temp dir: {:?}", dir);
                 dir
-            },
+            }
             Err(e) => {
                 // Update build status to indicate download failure
                 if let Some(obj) = config.as_object_mut() {
@@ -660,7 +660,7 @@ impl PipeManager {
                 let updated_config = serde_json::to_string_pretty(&config)?;
                 tokio::fs::write(&pipe_json_path, updated_config).await?;
             }
-            
+
             error!("temp pipe directory not found: {:?}", tmp_pipe_dir);
             return Err(anyhow::anyhow!(
                 "temp pipe directory not found: {:?}",
@@ -705,7 +705,7 @@ impl PipeManager {
                         return Err(anyhow::anyhow!("failed to parse new package.json: {}", e));
                     }
                 }
-            },
+            }
             Err(e) => {
                 // Update build status to indicate reading failure
                 if let Some(obj) = config.as_object_mut() {
@@ -745,7 +745,7 @@ impl PipeManager {
                     "version".to_string(),
                     Value::String(new_version.to_string()),
                 );
-                
+
                 // Write updated config back to file
                 let updated_config = serde_json::to_string_pretty(&config)?;
                 tokio::fs::write(&pipe_json_path, updated_config).await?;
@@ -873,7 +873,7 @@ impl PipeManager {
                 Ok(future) => {
                     tokio::spawn(future);
                     debug!("restarted pipe");
-                    
+
                     // Update build status to indicate success
                     if let Some(obj) = config.as_object_mut() {
                         obj.insert(
@@ -887,7 +887,7 @@ impl PipeManager {
                         let updated_config = serde_json::to_string_pretty(&config)?;
                         tokio::fs::write(&pipe_json_path, updated_config).await?;
                     }
-                },
+                }
                 Err(e) => {
                     // Update build status to indicate restart failure
                     if let Some(obj) = config.as_object_mut() {

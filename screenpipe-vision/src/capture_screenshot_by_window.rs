@@ -277,7 +277,7 @@ pub async fn capture_all_visible_windows(
                 image,
                 app_name,
                 window_name,
-                process_id: process_id as i32,
+                process_id,
                 is_focused,
             });
         }

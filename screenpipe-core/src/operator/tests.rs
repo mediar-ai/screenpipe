@@ -1,9 +1,8 @@
-use tracing_subscriber::prelude::*;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use tracing_subscriber::{filter::LevelFilter, fmt, EnvFilter};
+    
+    
 
     #[cfg(target_os = "macos")]
     mod macos_tests {

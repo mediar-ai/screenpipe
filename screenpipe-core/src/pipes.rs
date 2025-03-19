@@ -1624,7 +1624,7 @@ pub async fn download_pipe_private(
 ) -> anyhow::Result<PathBuf> {
     info!("processing private pipe from zip: {}", source);
 
-    let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+    let dest_dir = screenpipe_dir.join("pipes").join(pipe_name);
     debug!("destination directory: {:?}", dest_dir);
 
     // Create temp directory for download
