@@ -172,6 +172,8 @@ pub struct ElementsCollectorWithWindows {
     predicate: Box<dyn Fn(&AXUIElement) -> bool>,
     depth: Cell<usize>,
     matches: RefCell<Vec<AXUIElement>>,
+    max_results: Option<usize>,
+    max_depth: Option<usize>,
 }
 
 impl ElementsCollectorWithWindows {
@@ -184,7 +186,15 @@ impl ElementsCollectorWithWindows {
             predicate: Box::new(predicate),
             depth: Cell::new(0),
             matches: RefCell::new(Vec::new()),
+            max_results: None,
+            max_depth: None,
         }
+    }
+
+    pub fn with_limits(mut self, max_results: Option<usize>, max_depth: Option<usize>) -> Self {
+        self.max_results = max_results;
+        self.max_depth = max_depth;
+        self
     }
 
     pub fn find_all(&self) -> Vec<AXUIElement> {
@@ -192,21 +202,46 @@ impl ElementsCollectorWithWindows {
         walker.walk(&self.root, self);
         self.matches.borrow().clone()
     }
+
+    pub fn with_max_results(self, max: Option<usize>) -> Self {
+        Self {
+            max_results: max,
+            ..self
+        }
+    }
+
+    pub fn with_max_depth(self, max: Option<usize>) -> Self {
+        Self {
+            max_depth: max,
+            ..self
+        }
+    }
 }
 
 impl TreeVisitor for ElementsCollectorWithWindows {
     fn enter_element(&self, element: &AXUIElement) -> TreeWalkerFlow {
         self.depth.set(self.depth.get() + 1);
 
-        if (self.predicate)(element) {
-            self.matches.borrow_mut().push(element.clone());
+        if let Some(max_depth) = self.max_depth {
+            if self.depth.get() > max_depth {
+                return TreeWalkerFlow::SkipSubtree;
+            }
+        } else if self.depth.get() > MAX_DEPTH {
+            return TreeWalkerFlow::SkipSubtree;
         }
 
-        if self.depth.get() > MAX_DEPTH {
-            TreeWalkerFlow::SkipSubtree
-        } else {
-            TreeWalkerFlow::Continue
+        if (self.predicate)(element) {
+            self.matches.borrow_mut().push(element.clone());
+            
+            if let Some(max_results) = self.max_results {
+                if self.matches.borrow().len() >= max_results {
+                    debug!(target: "operator", "Reached max_results limit of {}", max_results);
+                    return TreeWalkerFlow::Exit;
+                }
+            }
         }
+
+        TreeWalkerFlow::Continue
     }
 
     fn exit_element(&self, _element: &AXUIElement) {
