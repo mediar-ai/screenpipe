@@ -649,6 +649,48 @@ impl AccessibilityEngine for MacOSEngine {
     }
 }
 
+// Define a new struct to hold click result information - move to module level
+pub struct ClickResult {
+    pub method: ClickMethod,
+    pub coordinates: Option<(f64, f64)>,
+    pub details: String,
+}
+
+// Enum to represent which click method was used - move to module level
+pub enum ClickMethod {
+    AXPress,
+    AXClick,
+    MouseSimulation,
+}
+
+impl fmt::Display for ClickMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ClickMethod::AXPress => write!(f, "AXPress"),
+            ClickMethod::AXClick => write!(f, "AXClick"),
+            ClickMethod::MouseSimulation => write!(f, "MouseSimulation"),
+        }
+    }
+}
+
+// Define enum for click method selection
+pub enum ClickMethodSelection {
+    /// Try all methods in sequence (current behavior)
+    Auto,
+    /// Use only AXPress action
+    AXPress,
+    /// Use only AXClick action
+    AXClick,
+    /// Use only mouse simulation 
+    MouseSimulation,
+}
+
+impl Default for ClickMethodSelection {
+    fn default() -> Self {
+        ClickMethodSelection::Auto
+    }
+}
+
 // Our concrete UIElement implementation for macOS
 pub struct MacOSUIElement {
     element: ThreadSafeAXUIElement,
@@ -765,6 +807,150 @@ impl MacOSUIElement {
         }
 
         Ok(all_text.join("\n"))
+    }
+
+    // Add these methods to the MacOSUIElement impl block
+    fn click_auto(&self) -> Result<ClickResult, AutomationError> {
+        // 1. Try AXPress action first
+        match self.click_press() {
+            Ok(result) => return Ok(result),
+            Err(e) => debug!(target: "operator", "AXPress failed: {:?}, trying alternative methods", e),
+        }
+
+        // 2. Try AXClick action
+        match self.click_accessibility_click() {
+            Ok(result) => return Ok(result),
+            Err(e) => debug!(target: "operator", "AXClick failed: {:?}, trying alternative methods", e),
+        }
+
+        // 3. Try mouse simulation as last resort
+        self.click_mouse_simulation()
+    }
+
+    fn click_press(&self) -> Result<ClickResult, AutomationError> {
+        let press_attr = AXAttribute::new(&CFString::new("AXPress"));
+        match self.element.0.perform_action(&press_attr.as_CFString()) {
+            Ok(_) => {
+                debug!(target: "operator", "Successfully clicked element with AXPress");
+                Ok(ClickResult {
+                    method: ClickMethod::AXPress,
+                    coordinates: None,
+                    details: "Used accessibility AXPress action".to_string(),
+                })
+            },
+            Err(e) => {
+                Err(AutomationError::PlatformError(format!(
+                    "AXPress click failed: {:?}", e
+                )))
+            }
+        }
+    }
+
+    fn click_accessibility_click(&self) -> Result<ClickResult, AutomationError> {
+        let click_attr = AXAttribute::new(&CFString::new("AXClick"));
+        match self.element.0.perform_action(&click_attr.as_CFString()) {
+            Ok(_) => {
+                debug!(target: "operator", "Successfully clicked element with AXClick");
+                Ok(ClickResult {
+                    method: ClickMethod::AXClick,
+                    coordinates: None,
+                    details: "Used accessibility AXClick action".to_string(),
+                })
+            },
+            Err(e) => {
+                Err(AutomationError::PlatformError(format!(
+                    "AXClick click failed: {:?}", e
+                )))
+            }
+        }
+    }
+
+    fn click_mouse_simulation(&self) -> Result<ClickResult, AutomationError> {
+        match self.bounds() {
+            Ok((x, y, width, height)) => {
+                // Calculate center point of the element
+                let center_x = x + width / 2.0;
+                let center_y = y + height / 2.0;
+
+                // Use CGEventCreateMouseEvent to simulate mouse click
+                use core_graphics::event::{CGEvent, CGEventType, CGMouseButton};
+                use core_graphics::event_source::CGEventSource;
+                use core_graphics::geometry::CGPoint;
+
+                let point = CGPoint::new(center_x, center_y);
+
+                // Create event source
+                let source = CGEventSource::new(
+                    core_graphics::event_source::CGEventSourceStateID::HIDSystemState,
+                )
+                .map_err(|_| {
+                    AutomationError::PlatformError("Failed to create event source".to_string())
+                })?;
+
+                // Move mouse to position
+                let mouse_move = CGEvent::new_mouse_event(
+                    source.clone(),
+                    CGEventType::MouseMoved,
+                    point,
+                    CGMouseButton::Left,
+                )
+                .map_err(|_| {
+                    AutomationError::PlatformError("Failed to create mouse move event".to_string())
+                })?;
+                mouse_move.post(core_graphics::event::CGEventTapLocation::HID);
+
+                // Brief pause to allow UI to respond
+                std::thread::sleep(std::time::Duration::from_millis(50));
+
+                debug!(target: "operator", "Mouse down at ({}, {})", center_x, center_y);
+
+                // Mouse down
+                let mouse_down = CGEvent::new_mouse_event(
+                    source.clone(),
+                    CGEventType::LeftMouseDown,
+                    point,
+                    CGMouseButton::Left,
+                )
+                .map_err(|_| {
+                    AutomationError::PlatformError("Failed to create mouse down event".to_string())
+                })?;
+                mouse_down.post(core_graphics::event::CGEventTapLocation::HID);
+
+                // Brief pause
+                std::thread::sleep(std::time::Duration::from_millis(50));
+
+                debug!(target: "operator", "Mouse up at ({}, {})", center_x, center_y);
+
+                // Mouse up
+                let mouse_up = CGEvent::new_mouse_event(
+                    source,
+                    CGEventType::LeftMouseUp,
+                    point,
+                    CGMouseButton::Left,
+                )
+                .map_err(|_| {
+                    AutomationError::PlatformError("Failed to create mouse up event".to_string())
+                })?;
+                mouse_up.post(core_graphics::event::CGEventTapLocation::HID);
+
+                debug!(target: "operator", "Performed simulated mouse click at ({}, {})", center_x, center_y);
+                
+                Ok(ClickResult {
+                    method: ClickMethod::MouseSimulation,
+                    coordinates: Some((center_x, center_y)),
+                    details: format!(
+                        "Used mouse simulation at coordinates ({:.1}, {:.1}), element bounds: ({:.1}, {:.1}, {:.1}, {:.1})",
+                        center_x, center_y, x, y, width, height
+                    ),
+                })
+            },
+            Err(e) => {
+                Err(AutomationError::PlatformError(format!(
+                    "Failed to determine element bounds for click: {}",
+                    e
+                )))
+            }
+        }
     }
 }
 
@@ -1079,126 +1265,37 @@ impl UIElementImpl for MacOSUIElement {
         Ok((x, y, width, height))
     }
 
-    fn click(&self) -> Result<(), AutomationError> {
-        // Try multiple approaches to click the element
-
-        // 1. Try AXPress action first (the original approach)
-        let press_attr = AXAttribute::new(&CFString::new("AXPress"));
-        let press_result = self.element.0.perform_action(&press_attr.as_CFString());
-
-        if press_result.is_ok() {
-            debug!(target: "operator", "Successfully clicked element with AXPress");
-            // return Ok(());
-        } else {
-            debug!(target: "operator", "AXPress failed, trying alternative methods");
-        }
-
-        // 2. Try the more specific AXClick action
-        let click_attr = AXAttribute::new(&CFString::new("AXClick"));
-        let click_result = self.element.0.perform_action(&click_attr.as_CFString());
-
-        if click_result.is_ok() {
-            debug!(target: "operator", "Successfully clicked element with AXClick");
-            // return Ok(());
-        } else {
-            debug!(target: "operator", "AXClick failed, trying alternative methods");
-        }
-
-        // match self.click_with_applescript() {
-        //     Ok(_) => {
-        //         debug!(target: "operator", "Successfully clicked element with AppleScript");
-        //         return Ok(());
-        //     }
-        //     Err(e) => {
-        //         debug!(target: "operator", "AppleScript click failed: {}", e);
-        //     }
-        // }
-
-        // 3. If both direct methods failed, try simulating click using mouse events
-        // Only do this as a last resort, as it's more invasive
-        match self.bounds() {
-            Ok((x, y, width, height)) => {
-                // Calculate center point of the element
-                let center_x = x + width / 2.0;
-                let center_y = y + height / 2.0;
-
-                // Use CGEventCreateMouseEvent to simulate mouse click
-                use core_graphics::event::{CGEvent, CGEventType, CGMouseButton};
-                use core_graphics::event_source::CGEventSource;
-                use core_graphics::geometry::CGPoint;
-
-                let point = CGPoint::new(center_x, center_y);
-
-                // Create event source
-                let source = CGEventSource::new(
-                    core_graphics::event_source::CGEventSourceStateID::HIDSystemState,
-                )
-                .map_err(|_| {
-                    AutomationError::PlatformError("Failed to create event source".to_string())
-                })?;
-
-                // Move mouse to position
-                let mouse_move = CGEvent::new_mouse_event(
-                    source.clone(),
-                    CGEventType::MouseMoved,
-                    point,
-                    CGMouseButton::Left,
-                )
-                .map_err(|_| {
-                    AutomationError::PlatformError("Failed to create mouse move event".to_string())
-                })?;
-                mouse_move.post(core_graphics::event::CGEventTapLocation::HID);
-
-                // Brief pause to allow UI to respond
-                std::thread::sleep(std::time::Duration::from_millis(50));
-
-                debug!(target: "operator", "Mouse down at ({}, {})", center_x, center_y);
-
-                // Mouse down
-                let mouse_down = CGEvent::new_mouse_event(
-                    source.clone(),
-                    CGEventType::LeftMouseDown,
-                    point,
-                    CGMouseButton::Left,
-                )
-                .map_err(|_| {
-                    AutomationError::PlatformError("Failed to create mouse down event".to_string())
-                })?;
-                mouse_down.post(core_graphics::event::CGEventTapLocation::HID);
-
-                // Brief pause
-                std::thread::sleep(std::time::Duration::from_millis(50));
-
-                debug!(target: "operator", "Mouse up at ({}, {})", center_x, center_y);
-
-                // Mouse up
-                let mouse_up = CGEvent::new_mouse_event(
-                    source,
-                    CGEventType::LeftMouseUp,
-                    point,
-                    CGMouseButton::Left,
-                )
-                .map_err(|_| {
-                    AutomationError::PlatformError("Failed to create mouse up event".to_string())
-                })?;
-                mouse_up.post(core_graphics::event::CGEventTapLocation::HID);
-
-                debug!(target: "operator", "Performed simulated mouse click at ({}, {})", center_x, center_y);
-                return Ok(());
-            }
-            Err(e) => {
-                return Err(AutomationError::PlatformError(format!(
-                    "Failed to determine element bounds for click: {}",
-                    e
-                )));
-            }
+    fn click(&self) -> Result<ClickResult, AutomationError> {
+        // Use the default Auto selection
+        self.click_with_method(ClickMethodSelection::Auto)
+    }
+    
+    fn click_with_method(&self, method: ClickMethodSelection) -> Result<ClickResult, AutomationError> {
+        match method {
+            ClickMethodSelection::Auto => self.click_auto(),
+            ClickMethodSelection::AXPress => self.click_press(),
+            ClickMethodSelection::AXClick => self.click_accessibility_click(),
+            ClickMethodSelection::MouseSimulation => self.click_mouse_simulation(),
         }
     }
 
-    fn double_click(&self) -> Result<(), AutomationError> {
-        // Not directly supported, so call click twice
-        self.click()?;
-        self.click()
+    fn double_click(&self) -> Result<ClickResult, AutomationError> {
+        // First click
+        let first_click = self.click()?;
+        
+        // Second click - if this fails, return error from second click
+        match self.click() {
+            Ok(second_click) => {
+                // Return information about both clicks
+                Ok(ClickResult {
+                    method: second_click.method,
+                    coordinates: second_click.coordinates,
+                    details: format!("Double-click: First click: {}, Second click: {}", 
+                                    first_click.details, second_click.details),
+                })
+            },
+            Err(e) => Err(e)
+        }
     }
 
     fn right_click(&self) -> Result<(), AutomationError> {
@@ -1252,7 +1349,13 @@ impl UIElementImpl for MacOSUIElement {
         // If we can't use AXRaise or set focus directly, try to click the element
         // which often gives it focus as a side effect
         debug!(target: "operator", "Attempting to focus by clicking the element");
-        self.click()
+        
+        // Handle the ClickResult by mapping to unit result
+        self.click().map(|_result| {
+            // Optionally log the details of how the click was performed
+            debug!(target: "operator", "Focus achieved via click method: {}", _result.method);
+            ()
+        })
     }
 
     fn type_text(&self, text: &str) -> Result<(), AutomationError> {
@@ -1720,3 +1823,4 @@ fn element_contains_text(e: &AXUIElement, text: &str) -> bool {
 
     contains_in_title || contains_in_desc
 }
+
