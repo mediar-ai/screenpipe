@@ -134,6 +134,15 @@ static SKIP_TITLES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     ])
 });
 
+// List of transparent window titles that should not be considered for occlusion
+static TRANSPARENT_WINDOWS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    HashSet::from([
+        "Loom Control Menu",
+        "Loom Camera",
+        "CleanShot X",
+    ])
+});
+
 #[derive(Debug, Clone)]
 pub struct CapturedWindow {
     pub image: DynamicImage,
@@ -144,7 +153,7 @@ pub struct CapturedWindow {
     pub visible_percentage: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct WindowBounds {
     x: i32,
     y: i32,
@@ -224,7 +233,7 @@ impl WindowFilters {
 
 fn calculate_visible_percentage(
     window_bounds: &WindowBounds,
-    all_window_bounds: &[WindowBounds],
+    all_window_bounds: &[&WindowBounds],
     window_index: usize,
     monitor_bounds: &WindowBounds
 ) -> f32 {
@@ -326,6 +335,20 @@ pub async fn capture_all_visible_windows(
         })
         .collect();
 
+    // Create a list of window titles to track transparent windows
+    let transparent_window_indices: HashSet<usize> = all_windows
+        .iter()
+        .enumerate()
+        .filter_map(|(index, window)| {
+            let title = window.title().unwrap_or_default();
+            if TRANSPARENT_WINDOWS.contains(title.as_str()) {
+                Some(index)
+            } else {
+                None
+            }
+        })
+        .collect();
+
     // Get windows and immediately extract the data we need
     let windows_data = all_windows
         .into_iter()
@@ -340,11 +363,22 @@ pub async fn capture_all_visible_windows(
             // Capture image immediately while we have access to the window
             match window.capture_image() {
                 Ok(buffer) => {
-                    // Calculate visible percentage
+                    // Calculate visible percentage, passing the set of transparent window indices
+                    let filtered_bounds: Vec<&WindowBounds> = window_bounds.iter()
+                        .enumerate()
+                        .filter_map(|(i, bounds)| {
+                            if !transparent_window_indices.contains(&i) || i == index {
+                                Some(bounds)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
                     let visible_percentage = calculate_visible_percentage(
                         &window_bounds[index],
-                        &window_bounds,
-                        index,
+                        &filtered_bounds,
+                        filtered_bounds.iter().position(|&b| b == &window_bounds[index]).unwrap_or(0),
                         &monitor_bounds
                     ) as f32;
 
