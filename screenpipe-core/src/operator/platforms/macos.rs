@@ -726,88 +726,6 @@ impl MacOSUIElement {
         }
     }
 
-    // Add the extract_web_content_text method here as a regular method
-    fn extract_web_content_text(&self, max_depth: usize) -> Result<String, AutomationError> {
-        // Default to a reasonably high but not infinite depth
-        self.extract_web_content_text_with_depth(max_depth)
-    }
-
-    fn extract_web_content_text_with_depth(
-        &self,
-        max_depth: usize,
-    ) -> Result<String, AutomationError> {
-        let mut all_text = Vec::new();
-        let mut visited = HashSet::new();
-
-        // Simple breadth-first traversal with depth tracking
-        let mut queue = VecDeque::new();
-        queue.push_back((self.clone_box(), 0)); // (element, depth)
-
-        while let Some((element, depth)) = queue.pop_front() {
-            // Check depth limit
-            if depth > max_depth {
-                continue;
-            }
-
-            let elem = element.as_any().downcast_ref::<MacOSUIElement>().unwrap();
-            let id = elem.object_id();
-
-            if visited.contains(&id) {
-                continue;
-            }
-            visited.insert(id);
-
-            // Extract ALL text attributes, no filtering
-            for attr_name in &[
-                "AXValue",
-                "AXTitle",
-                "AXDescription",
-                "AXHelp",
-                "AXLabel",
-                "AXText",
-            ] {
-                let attr = AXAttribute::new(&CFString::new(attr_name));
-                if let Ok(value) = elem.element.0.attribute(&attr) {
-                    if let Some(cf_string) = value.downcast_into::<CFString>() {
-                        let text = cf_string.to_string();
-                        if !text.is_empty() && !all_text.contains(&text) {
-                            all_text.push(text);
-                        }
-                    }
-                }
-            }
-
-            // Get ALL children and add to queue with incremented depth
-            let next_depth = depth + 1;
-
-            // Try navigation order children first
-            let nav_attr = AXAttribute::new(&CFString::new("AXChildrenInNavigationOrder"));
-            if let Ok(value) = elem.element.0.attribute(&nav_attr) {
-                if let Some(array) = extract_children_from_array(value) {
-                    for child in array {
-                        queue.push_back((
-                            Box::new(MacOSUIElement {
-                                element: ThreadSafeAXUIElement::new(child),
-                                use_background_apps: elem.use_background_apps,
-                                activate_app: elem.activate_app,
-                            }),
-                            next_depth,
-                        ));
-                    }
-                }
-            }
-
-            // Add regular children too to be thorough
-            if let Ok(children) = elem.children() {
-                for child in children {
-                    let child_impl = child.as_any().downcast_ref::<MacOSUIElement>().unwrap();
-                    queue.push_back((child_impl.clone_box(), next_depth));
-                }
-            }
-        }
-
-        Ok(all_text.join("\n"))
-    }
 
     // Add these methods to the MacOSUIElement impl block
     fn click_auto(&self) -> Result<ClickResult, AutomationError> {
@@ -1438,71 +1356,35 @@ impl UIElementImpl for MacOSUIElement {
     }
 
     fn get_text(&self, max_depth: usize) -> Result<String, AutomationError> {
-        // Special case for web content - we need a different approach
-        if self
-            .element
-            .0
-            .role()
-            .map_or(false, |r| r.to_string() == "AXWebArea")
-            || self
-                .element
-                .0
-                .role()
-                .map_or(false, |r| r.to_string().contains("Browser"))
-        {
-            debug!(target: "operator", "Using specialized web content extraction for: {:?}", 
-                   self.element.0.role().map(|r| r.to_string()));
-
-            return self.extract_web_content_text(max_depth);
-        }
-
-        // Regular implementation for non-web elements
-        let mut text_parts = Vec::new();
-
-        // First try getting text from the current element's AXValue
-        let value_attr = AXAttribute::new(&CFString::new("AXValue"));
-        if let Ok(value) = self.element.0.attribute(&value_attr) {
-            if let Some(cf_string) = value.downcast_into::<CFString>() {
-                let val = cf_string.to_string();
-                if !val.is_empty() {
-                    text_parts.push(val);
-                }
-            }
-        }
-
-        // Then check for AXDescription and AXTitle
-        let desc_attr = AXAttribute::new(&CFString::new("AXDescription"));
-        if let Ok(desc) = self.element.0.attribute(&desc_attr) {
-            if let Some(cf_string) = desc.downcast_into::<CFString>() {
-                let text = cf_string.to_string();
-                if !text.is_empty() {
-                    text_parts.push(text);
-                }
-            }
-        }
-
-        let title_attr = AXAttribute::new(&CFString::new("AXTitle"));
-        if let Ok(title) = self.element.0.attribute(&title_attr) {
-            if let Some(cf_string) = title.downcast_into::<CFString>() {
-                let text = cf_string.to_string();
-                if !text.is_empty() {
-                    text_parts.push(text);
-                }
-            }
-        }
-
-        // Get text from children
-        if let Ok(children) = self.children() {
-            for child in children {
-                if let Ok(child_text) = child.text(max_depth) {
-                    if !child_text.is_empty() {
-                        text_parts.push(child_text);
+        debug!(target: "operator", "collecting all text with max_depth={}", max_depth);
+        
+        // Create a collector that matches ALL elements (predicate always returns true)
+        // This will collect every accessible element in the tree
+        let collector = ElementsCollectorWithWindows::new(&self.element.0, |_| true)
+            .with_limits(None, Some(max_depth));  // Apply the max_depth
+        
+        // Get all elements
+        let elements = collector.find_all();
+        debug!(target: "operator", "collected {} elements for text extraction", elements.len());
+        
+        // Extract text from all collected elements
+        let mut all_text: Vec<String> = Vec::new();
+        for element in elements {
+            // Extract text attributes from each element
+            for attr_name in &["AXValue", "AXTitle", "AXDescription", "AXHelp", "AXLabel", "AXText"] {
+                let attr = AXAttribute::new(&CFString::new(attr_name));
+                if let Ok(value) = element.attribute(&attr) {
+                    if let Some(cf_string) = value.downcast_into::<CFString>() {
+                        let text = cf_string.to_string();
+                        if !text.is_empty() && !all_text.contains(&text) {
+                            all_text.push(text);
+                        }
                     }
                 }
             }
         }
-
-        Ok(text_parts.join("\n"))
+        
+        Ok(all_text.join("\n"))
     }
 
     fn set_value(&self, value: &str) -> Result<(), AutomationError> {
