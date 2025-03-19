@@ -89,11 +89,11 @@ export function SearchCommand() {
 
           1. Screen Recording:
             - frames: captures of screen content
-              (id, video_chunk_id, offset_index, timestamp, name)
+              (id, video_chunk_id, offset_index, timestamp, name, app_name, window_name, focused, browser_url)
             - ocr_text: text extracted from screens
-              (frame_id, text, text_json, app_name, window_name, focused)
+              (frame_id, text, text_json)
             - ocr_text_fts: optimized text search
-              (text, app_name, window_name, frame_id)
+              (text, frame_id)
             - ocr_text_embeddings: vector embeddings
               (id, frame_id, embedding, created_at)
           

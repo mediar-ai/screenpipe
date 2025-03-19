@@ -23,12 +23,12 @@ export function useSqlAutocomplete(type: "app" | "window") {
       } else {
         const query = `
           SELECT ${
-            type === "app" ? "ocr.app_name" : "ocr.window_name"
+            type === "app" ? "f.app_name" : "f.window_name"
           } as name, COUNT(*) as count
           FROM ocr_text ocr
           JOIN frames f ON ocr.frame_id = f.id
           WHERE f.timestamp > datetime('now', '-7 days')
-          GROUP BY ${type === "app" ? "ocr.app_name" : "ocr.window_name"}
+          GROUP BY ${type === "app" ? "f.app_name" : "f.window_name"}
           ORDER BY count DESC
           LIMIT 100
         `;
