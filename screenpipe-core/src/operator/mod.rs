@@ -8,10 +8,11 @@ use std::sync::Arc;
 mod element;
 mod errors;
 mod locator;
-mod platforms;
+pub mod platforms;
 mod selector;
 #[cfg(test)]
 mod tests;
+
 
 pub use element::{UIElement, UIElementAttributes};
 pub use errors::AutomationError;
