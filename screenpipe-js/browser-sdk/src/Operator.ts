@@ -1,5 +1,16 @@
 import type { ElementInfo, ElementSelector } from "../../common/types";
 
+export interface ClickResult {
+  method: 'AXPress' | 'AXClick' | 'MouseSimulation';
+  coordinates?: [number, number];
+  details: string;
+}
+
+export interface ClickResponse {
+  success: boolean;
+  result?: ClickResult;
+}
+
 export class Operator {
   private baseUrl: string;
 
@@ -39,7 +50,7 @@ export class Operator {
     const selector: ElementSelector = {
       app_name: options.app,
       window_name: options.window,
-      locator: options.role || "*",
+      locator: options.role || "",
       index: options.index,
       text: options.text,
       label: options.label,
@@ -55,12 +66,15 @@ export class Operator {
   /**
    * Find and click an element on screen
    *
+   * @returns Detailed information about the click operation
+   *
    * @example
-   * // Click a button with text "Submit"
-   * await pipe.operator.click({
+   * // Click a button with text "Submit" and get details about how it was clicked
+   * const result = await pipe.operator.click({
    *   app: "Chrome",
    *   text: "Submit"
    * });
+   * console.log(`Click method: ${result.method}, Details: ${result.details}`);
    */
   async click(options: {
     app: string;
@@ -73,11 +87,11 @@ export class Operator {
     index?: number;
     useBackgroundApps?: boolean;
     activateApp?: boolean;
-  }) {
+  }): Promise<ClickResult> {
     const selector: ElementSelector = {
       app_name: options.app,
       window_name: options.window,
-      locator: options.role || "*",
+      locator: options.role || "",
       index: options.index,
       text: options.text,
       label: options.label,
@@ -103,8 +117,33 @@ export class Operator {
       );
     }
 
-    const result = await response.json();
-    return result.success;
+    const data = await response.json();
+    console.log("debug: click response data:", JSON.stringify(data, null, 2));
+    
+    if (!data.success) {
+      throw new Error(`click operation failed: ${data.error || "unknown error"}`);
+    }
+    
+    // Handle different possible response structures
+    if (data.result) {
+      // If data.result contains the expected structure
+      return data.result as ClickResult;
+    } else if (data.method) {
+      // If the ClickResult fields are directly on the data object
+      return {
+        method: data.method,
+        coordinates: data.coordinates,
+        details: data.details || "Click operation succeeded"
+      } as ClickResult;
+    } else {
+      // Fallback with minimal information
+      console.log("warning: click response missing expected structure, creating fallback object");
+      return {
+        method: "MouseSimulation",
+        coordinates: undefined,
+        details: "Click operation succeeded but returned unexpected data structure"
+      };
+    }
   }
 
   /**
@@ -134,7 +173,7 @@ export class Operator {
     const selector: ElementSelector = {
       app_name: options.app,
       window_name: options.window,
-      locator: options.role || "*",
+      locator: options.role || "",
       index: options.index,
       text: options.text,
       label: options.label,
@@ -265,14 +304,16 @@ class ElementLocator {
     }
 
     const result = await response.json();
-    console.log(result);
+    // console.log(result);
     return result.data;
   }
 
   /**
    * Click the first element matching the selector
+   *
+   * @returns Detailed information about the click operation
    */
-  async click(): Promise<boolean> {
+  async click(): Promise<ClickResult> {
     const response = await fetch(
       `${this.baseUrl}/experimental/operator/click`,
       {
@@ -294,8 +335,33 @@ class ElementLocator {
       );
     }
 
-    const result = await response.json();
-    return result.success;
+    const data = await response.json();
+    console.log("debug: click response data:", JSON.stringify(data, null, 2));
+    
+    if (!data.success) {
+      throw new Error(`click operation failed: ${data.error || "unknown error"}`);
+    }
+    
+    // Handle different possible response structures
+    if (data.result) {
+      // If data.result contains the expected structure
+      return data.result as ClickResult;
+    } else if (data.method) {
+      // If the ClickResult fields are directly on the data object
+      return {
+        method: data.method,
+        coordinates: data.coordinates,
+        details: data.details || "Click operation succeeded"
+      } as ClickResult;
+    } else {
+      // Fallback with minimal information
+      console.log("warning: click response missing expected structure, creating fallback object");
+      return {
+        method: "MouseSimulation",
+        coordinates: undefined,
+        details: "Click operation succeeded but returned unexpected data structure"
+      };
+    }
   }
 
   /**
