@@ -1,9 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use image::GenericImageView;
-use memory_stats::memory_stats;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::perform_ocr_apple;
-use std::path::PathBuf;
 
 fn bytes_to_mb(bytes: usize) -> f64 {
     bytes as f64 / (1024.0 * 1024.0)

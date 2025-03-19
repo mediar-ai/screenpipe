@@ -56,7 +56,7 @@ pub async fn poll_meetings_events() -> Result<()> {
                     && !meeting_in_progress
                     && !ui_frame.window.is_empty()
                     && is_meeting_keyword
-                    && last_meeting_end.map_or(true, |t| t.elapsed() >= MEETING_RESTART_TIMEOUT)
+                    && last_meeting_end.is_none_or(|t| t.elapsed() >= MEETING_RESTART_TIMEOUT)
                 {
                     meeting_in_progress = true;
                     send_event(
@@ -112,7 +112,7 @@ pub async fn poll_meetings_events() -> Result<()> {
 
                 if (is_meeting_app && (has_meeting_keywords || has_meeting_ui))
                     && !meeting_in_progress
-                    && last_meeting_end.map_or(true, |t| t.elapsed() >= MEETING_RESTART_TIMEOUT)
+                    && last_meeting_end.is_none_or(|t| t.elapsed() >= MEETING_RESTART_TIMEOUT)
                 {
                     meeting_in_progress = true;
                     send_event(
@@ -152,7 +152,7 @@ pub async fn poll_meetings_events() -> Result<()> {
 
                     if recent_speakers.len() >= 2
                         && !meeting_in_progress
-                        && last_meeting_end.map_or(true, |t| t.elapsed() >= MEETING_RESTART_TIMEOUT)
+                        && last_meeting_end.is_none_or(|t| t.elapsed() >= MEETING_RESTART_TIMEOUT)
                     {
                         meeting_in_progress = true;
                         send_event(

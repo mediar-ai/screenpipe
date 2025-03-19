@@ -1,6 +1,5 @@
 use anyhow::Result;
 use dirs::{self, home_dir};
-use screenpipe_core::Language;
 use screenpipe_server::video_utils::extract_frames_from_video;
 use screenpipe_vision::capture_screenshot_by_window::CapturedWindow;
 #[cfg(target_os = "macos")]

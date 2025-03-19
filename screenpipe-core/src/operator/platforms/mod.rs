@@ -63,10 +63,10 @@ pub fn create_engine(
     }
     #[cfg(target_os = "linux")]
     {
-        return Ok(Box::new(linux::LinuxEngine::new(
+        Ok(Box::new(linux::LinuxEngine::new(
             use_background_apps,
             activate_app,
-        )?));
+        )?))
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {

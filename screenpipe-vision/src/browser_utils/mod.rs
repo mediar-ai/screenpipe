@@ -20,6 +20,12 @@ pub fn create_url_detector() -> Box<dyn BrowserUrlDetector> {
 // Unsupported implementation
 pub struct UnsupportedUrlDetector;
 
+impl Default for UnsupportedUrlDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UnsupportedUrlDetector {
     pub fn new() -> Self {
         Self

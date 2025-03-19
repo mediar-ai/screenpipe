@@ -289,7 +289,7 @@ mod tests {
 
         let source_dir = temp_dir.path().join("source_pipe");
         let result = download_pipe(
-            &source_dir.to_str().expect("failed bathbuf to str"),
+            source_dir.to_str().expect("failed bathbuf to str"),
             screenpipe_dir.clone(),
         )
         .await;
@@ -321,7 +321,7 @@ mod tests {
 
         // Try to download the pipe using the Windows path
         let result = download_pipe(
-            &source_dir.to_str().expect("failed to convert to str"),
+            source_dir.to_str().expect("failed to convert to str"),
             screenpipe_dir.clone(),
         )
         .await;
