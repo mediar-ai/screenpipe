@@ -674,6 +674,7 @@ impl fmt::Display for ClickMethod {
 }
 
 // Define enum for click method selection
+#[derive(Debug)]
 pub enum ClickMethodSelection {
     /// Try all methods in sequence (current behavior)
     Auto,
