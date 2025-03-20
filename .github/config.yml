@@ -32,3 +32,5 @@ requestInfoOn:
 # exclude certain users (add your main contributors)
 requestInfoUserstoExclude:
   - louis030195
+  - m13v
+
