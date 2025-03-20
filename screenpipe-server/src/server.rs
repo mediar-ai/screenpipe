@@ -1060,6 +1060,7 @@ impl SCServer {
             .post("/experimental/operator", find_elements_handler)
             .post("/experimental/operator/click", click_element_handler)
             .post("/experimental/operator/type", type_text_handler)
+            .post("/experimental/operator/get_text", get_text_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -3264,4 +3265,91 @@ async fn type_text_handler(
             })),
         )),
     }
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct GetTextRequest {
+    app_name: String,
+    window_name: Option<String>,
+    max_depth: Option<usize>,
+    use_background_apps: Option<bool>,
+    activate_app: Option<bool>,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct GetTextResponse {
+    success: bool,
+    text: String,
+    metadata: GetTextMetadata,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct GetTextMetadata {
+    extraction_time_ms: u64,
+    element_count: usize,
+    app_name: String,
+    timestamp: DateTime<Utc>,
+}
+
+#[oasgen]
+async fn get_text_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<GetTextRequest>,
+) -> Result<JsonResponse<GetTextResponse>, (StatusCode, JsonResponse<Value>)> {
+    let start = Instant::now();
+    
+    let desktop = match Desktop::new(
+        request.use_background_apps.unwrap_or(false),
+        request.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Get text with specified max_depth or default to 10
+    let text = match app.text(request.max_depth.unwrap_or(10)) {
+        Ok(text) => text,
+        Err(e) => {
+            error!("Failed to extract text: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to extract text: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let duration = start.elapsed();
+    
+    Ok(JsonResponse(GetTextResponse {
+        success: true,
+        text,
+        metadata: GetTextMetadata {
+            extraction_time_ms: duration.as_millis() as u64,
+            element_count: 0, // You could add element counting if needed
+            app_name: request.app_name,
+            timestamp: Utc::now(),
+        },
+    }))
 }
