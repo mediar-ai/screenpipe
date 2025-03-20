@@ -319,16 +319,15 @@ const tauriStorage: PersistStorage = {
 		const flattenedValue = flattenObject(value.settings);
 
 		// Only delete keys that are present in the new settings
-		for (const key of Object.keys(flattenedValue)) {
+		for (const [key, val] of Object.entries(flattenedValue)) {
+			if (val === undefined) continue;
 			await tauriStore.delete(key);
 		}
 
 		// Set new flattened values
 		for (const [key, val] of Object.entries(flattenedValue)) {
-			if (!key || !key.length) continue;
-			const defaultValue =
-				key in DEFAULT_SETTINGS ? DEFAULT_SETTINGS[key as keyof Settings] : "";
-			await tauriStore.set(key, val === undefined ? defaultValue : val);
+			if (val === undefined) continue;
+			await tauriStore.set(key, val);
 		}
 
 		await tauriStore.save();
