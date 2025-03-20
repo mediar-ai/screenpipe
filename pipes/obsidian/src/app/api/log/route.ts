@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { embed, generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
-import { ContentItem } from "@screenpipe/js";
+import { AIPreset, ContentItem } from "@screenpipe/js";
 import { pipe } from "@screenpipe/js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { extractLinkedContent } from "@/lib/actions/obsidian";
+import { settingsStore } from "@/lib/store/settings-store";
+import { OpenAI } from "openai";
 
 const workLog = z.object({
   title: z.string(),
@@ -21,17 +23,20 @@ type WorkLog = z.infer<typeof workLog> & {
 };
 
 async function generateWorkLog(
-  screenData: ContentItem[],
-  model: string,
-  startTime: Date,
-  endTime: Date,
-  customPrompt?: string,
-  obsidianPath?: string
+  data: ContentItem[],
+  obsidianPath: string,
+  prevTime: Date,
+  curTime: Date,
+  aiPreset: ReturnType<typeof settingsStore.getPreset>,
 ): Promise<WorkLog> {
-  let enrichedPrompt = customPrompt || "";
+  if (!aiPreset) {
+    throw new Error("ai preset not configured");
+  }
 
-  if (customPrompt && obsidianPath) {
-    enrichedPrompt = await extractLinkedContent(customPrompt, obsidianPath);
+  let enrichedPrompt = aiPreset.prompt || "";
+
+  if (enrichedPrompt && obsidianPath) {
+    enrichedPrompt = await extractLinkedContent(enrichedPrompt, obsidianPath);
   }
 
   const defaultPrompt = `You are analyzing screen recording data from Screenpipe, a desktop app that records screens & mics 24/7 to provide context to AI systems.
@@ -42,8 +47,8 @@ async function generateWorkLog(
     Here are some user instructions:
     ${enrichedPrompt}
 
-    Screen data: ${JSON.stringify(screenData)}
-    
+    Screen data: ${JSON.stringify(data)}
+
     Rules:
     - analyze the screen data carefully to understand the user's work context and activities
     - generate a clear, specific title that reflects the main activity
@@ -56,7 +61,7 @@ async function generateWorkLog(
     - ensure description and content are properly escaped for markdown table cells (use <br> for newlines)
     - link to people using [[firstname]]
     - link to concepts using [[concept-name]]
-    
+
     Example outputs:
     {
         "title": "engineering: implemented rust error handling",
@@ -87,12 +92,21 @@ async function generateWorkLog(
         "mediaLinks": ["<video src=\"file:///absolute/path/to/video.mp4\" controls></video>"]
     }`;
 
-  const provider = ollama(model);
-  const response = await generateObject({
-    model: provider,
+  const openaiConfig = {
+    apiKey: aiPreset.apiKey,
+    model: aiPreset.model,
+    baseURL: aiPreset.url || undefined,
+  };
+
+  const openai = new OpenAI(openaiConfig);
+
+  const response = await openai.chat.completions.create({
+    model: aiPreset.model,
     messages: [{ role: "user", content: defaultPrompt }],
-    schema: workLog,
+    response_format: { type: "json_object" },
   });
+
+  const jsonResponse = JSON.parse(response.choices[0].message.content || "{}");
 
   const formatDate = (date: Date) => {
     return date.toLocaleString("en-US", {
@@ -106,22 +120,22 @@ async function generateWorkLog(
   };
 
   return {
-    ...response.object,
-    startTime: formatDate(startTime),
-    endTime: formatDate(endTime),
+    ...jsonResponse,
+    startTime: formatDate(prevTime),
+    endTime: formatDate(curTime),
   };
 }
 
 async function syncLogToObsidian(
   logEntry: WorkLog,
-  obsidianPath: string
+  obsidianPath: string,
 ): Promise<string> {
   const logsPath = path.join(path.normalize(obsidianPath), "logs");
   await fs.mkdir(logsPath, { recursive: true });
 
   const today = new Date();
   const filename = `${today.getFullYear()}-${String(
-    today.getMonth() + 1
+    today.getMonth() + 1,
   ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}.md`;
   const filePath = path.join(logsPath, filename);
 
@@ -132,13 +146,13 @@ async function syncLogToObsidian(
   };
 
   const timeRange = `${escapeTableCell(logEntry.startTime)} - ${escapeTableCell(
-    logEntry.endTime
+    logEntry.endTime,
   )}`;
 
   // Combine title with timestamp and description with tags
   const titleWithTime = `${escapeTableCell(logEntry.title)}<br>${timeRange}`;
   const descriptionWithTags = `${escapeTableCell(
-    logEntry.description
+    logEntry.description,
   )}<br>${escapeTableCell(logEntry.tags.join("<br>"))}`;
 
   const tableHeaders = `| Title | Description | Media |\n|-------|-------------|--------|\n`;
@@ -164,7 +178,7 @@ async function syncLogToObsidian(
       await fs.writeFile(
         filePath,
         tableHeaders + existingContent + tableRow,
-        "utf8"
+        "utf8",
       );
     } else {
       // Headers exist - append new row while preserving existing content
@@ -181,12 +195,12 @@ async function syncLogToObsidian(
 // Helper function to generate Obsidian URL
 function getObsidianUrl(vaultName: string, filename: string): string {
   return `obsidian://open?vault=${encodeURIComponent(
-    vaultName
+    vaultName,
   )}&file=${encodeURIComponent(filename)}`;
 }
 
 async function deduplicateScreenData(
-  screenData: ContentItem[]
+  screenData: ContentItem[],
 ): Promise<ContentItem[]> {
   if (!screenData.length) return screenData;
 
@@ -202,8 +216,8 @@ async function deduplicateScreenData(
           ? typeof item.content === "string"
             ? item.content
             : "text" in item.content
-            ? item.content.text
-            : JSON.stringify(item.content)
+              ? item.content.text
+              : JSON.stringify(item.content)
           : "";
 
       if (!textToEmbed.trim()) {
@@ -238,7 +252,7 @@ async function deduplicateScreenData(
     }
 
     console.log(
-      `deduplication: removed ${duplicatesRemoved} duplicates from ${screenData.length} items`
+      `deduplication: removed ${duplicatesRemoved} duplicates from ${screenData.length} items`,
     );
     return uniqueData;
   } catch (error) {
@@ -256,27 +270,32 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 export async function GET() {
   try {
-    const settings = await pipe.settings.getAll();
-    const interval =
-      settings.customSettings?.obsidian?.logTimeWindow || 3600000;
-    const obsidianPath = settings.customSettings?.obsidian?.vaultPath;
-    const customPrompt = settings.customSettings?.obsidian?.prompt;
-    const pageSize = settings.customSettings?.obsidian?.logPageSize || 100;
-    const model = settings.customSettings?.obsidian?.logModel;
-    const deduplicationEnabled =
-      settings.customSettings?.obsidian?.deduplicationEnabled;
+    const settings = await settingsStore.loadPipeSettings("obsidian");
+    const interval = settings.logTimeWindow || 3600000;
+    const obsidianPath = settings.vaultPath;
+    const pageSize = settings.logPageSize || 100;
+    const deduplicationEnabled = settings.deduplicationEnabled;
+
+    const aiPreset = settingsStore.getPreset("obsidian", "aiLogPresetId");
+
+    if (!aiPreset || !aiPreset.model) {
+      return NextResponse.json(
+        { error: "ai preset not configured" },
+        { status: 400 },
+      );
+    }
 
     if (!obsidianPath) {
       return NextResponse.json(
         { error: "obsidian path not configured" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - interval);
 
-    let screenData = await pipe.queryScreenpipe({
+    const screenData = await pipe.queryScreenpipe({
       startTime: oneHourAgo.toISOString(),
       endTime: now.toISOString(),
       limit: pageSize,
@@ -294,23 +313,22 @@ export async function GET() {
       } catch (error) {
         console.warn(
           "deduplication failed, continuing with original data:",
-          error
+          error,
         );
       }
     }
 
     const logEntry = await generateWorkLog(
       screenData.data,
-      model,
+      obsidianPath,
       oneHourAgo,
       now,
-      customPrompt,
-      obsidianPath
+      aiPreset,
     );
     const _ = await syncLogToObsidian(logEntry, obsidianPath);
 
     await pipe.captureEvent("obsidian_work_log_synced", {
-      model,
+      model: aiPreset?.model,
       interval,
       pageSize,
     });
@@ -323,7 +341,7 @@ export async function GET() {
     console.error("error in work log api:", error);
     return NextResponse.json(
       { error: `failed to process work log: ${error}` },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

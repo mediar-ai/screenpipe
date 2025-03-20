@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { settingsStore } from "@/lib/store/settings-store";
-import type { PipeSettings } from "@/lib/store/settings-store";
+import { settingsStore } from "@/lib/hooks/use-settings";
+import type { PipeSettings } from "@/lib/hooks/use-settings";
 
 export function usePipeSettings(pipeName: string) {
   const [settings, setSettings] = useState<Partial<PipeSettings> | null>(

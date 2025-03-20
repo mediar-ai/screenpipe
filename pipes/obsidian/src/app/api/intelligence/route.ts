@@ -6,10 +6,12 @@ import { pipe } from "@screenpipe/js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { extractLinkedContent } from "@/lib/actions/obsidian";
+import { settingsStore } from "@/lib/store/settings-store";
+import { OpenAI } from "openai";
 
 async function readRecentLogs(
   obsidianPath: string,
-  since: Date
+  since: Date,
 ): Promise<string> {
   const logsPath = path.join(path.normalize(obsidianPath), "logs");
   const today = new Date().toISOString().split("T")[0];
@@ -32,15 +34,16 @@ async function readRecentLogs(
 
 async function analyzeWithLLM(
   content: string,
-  prompt: string,
-  model: string,
-  obsidianPath?: string
-): Promise<any> {
-  const provider = ollama(model);
+  aiPreset: ReturnType<typeof settingsStore.getPreset>,
+  obsidianPath?: string,
+): Promise<string> {
+  if (!aiPreset) {
+    throw new Error("ai preset not configured");
+  }
 
-  let enrichedPrompt = prompt;
+  let enrichedPrompt = aiPreset.prompt || "";
   if (obsidianPath) {
-    enrichedPrompt = await extractLinkedContent(prompt, obsidianPath);
+    enrichedPrompt = await extractLinkedContent(enrichedPrompt, obsidianPath);
   }
 
   const systemPrompt = `You are an intelligent analysis system that processes user activity logs and creates higher-level insights.
@@ -68,7 +71,7 @@ Instructions for Media and Formatting:
 - Add relevant #tags for categorization
 - Escape any pipe characters (|) in tables with \\|
 - Do not hallucinate video paths, use the exact video path from the logs
-- All your outputs will be written directly in Obsidian note taking app so use the formatting of the app in your response to maximize readability, 
+- All your outputs will be written directly in Obsidian note taking app so use the formatting of the app in your response to maximize readability,
 embeding links, videos, etc. usually mp4 needs video html component and not the link format
 - If you do not know the answer or do not have the right context, say I do not know, do not hallucinate
 
@@ -93,22 +96,29 @@ Analysis Structure:
 
 Generate a structured analysis following the above format.`;
 
-  console.log("systemPrompt", systemPrompt);
+  const openaiConfig = {
+    apiKey: aiPreset.apiKey,
+    model: aiPreset.model,
+    baseURL: aiPreset.url || undefined,
+  };
 
-  const response = await generateText({
-    model: provider,
+  const openai = new OpenAI(openaiConfig);
+
+  const response = await openai.chat.completions.create({
+    model: aiPreset.model,
     messages: [{ role: "user", content: systemPrompt }],
-    maxRetries: 5,
   });
 
+  let transformedText = response.choices[0].message.content || "";
+
   // Transform <think> tags into Obsidian foldable callouts
-  let transformedText = response.text.replace(
+  transformedText = transformedText.replace(
     /<think>([\s\S]*?)<\/think>/g,
     (_, content) =>
       `> [!note]- Thinking Process\n${content
         .split("\n")
         .map((line: string) => `> ${line}`)
-        .join("\n")}`
+        .join("\n")}`,
   );
 
   // Transform <video> tags to just 'video'
@@ -121,7 +131,7 @@ Generate a structured analysis following the above format.`;
 async function saveMarkdown(
   content: string,
   obsidianPath: string,
-  filename: string
+  filename: string,
 ): Promise<string> {
   const analysesPath = path.join(path.normalize(obsidianPath), "analyses");
   await fs.mkdir(analysesPath, { recursive: true });
@@ -131,24 +141,29 @@ async function saveMarkdown(
 
   const vaultName = path.basename(path.resolve(obsidianPath));
   return `obsidian://open?vault=${encodeURIComponent(
-    vaultName
+    vaultName,
   )}&file=analyses/${encodeURIComponent(filename)}`;
 }
 
 export async function GET() {
   try {
-    const settings = await pipe.settings.getAll();
-    const obsidianPath = settings.customSettings?.obsidian?.vaultPath;
-    const model = settings.customSettings?.obsidian?.analysisModel;
-    const customPrompt = settings.customSettings?.obsidian?.prompt;
-    const timeWindow =
-      settings.customSettings?.obsidian?.analysisTimeWindow ||
-      1 * 60 * 60 * 1000;
+    const settings = await settingsStore.loadPipeSettings("obsidian");
+    const obsidianPath = settings.vaultPath;
+    const timeWindow = settings.analysisTimeWindow || 1 * 60 * 60 * 1000;
+
+    const aiPreset = settingsStore.getPreset("obsidian", "aiPresetId");
+
+    if (!aiPreset || !aiPreset.model) {
+      return NextResponse.json(
+        { error: "ai preset not configured" },
+        { status: 400 },
+      );
+    }
 
     if (!obsidianPath) {
       return NextResponse.json(
         { error: "obsidian path not configured" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -162,12 +177,7 @@ export async function GET() {
     }
 
     // Analyze with LLM
-    const analysis = await analyzeWithLLM(
-      recentLogs,
-      customPrompt,
-      model,
-      obsidianPath
-    );
+    const analysis = await analyzeWithLLM(recentLogs, aiPreset, obsidianPath);
 
     // Save results based on output format
     const filename = `${now
@@ -186,7 +196,7 @@ export async function GET() {
     const deepLink = await saveMarkdown(
       "\n" + analysis,
       obsidianPath,
-      filename
+      filename,
     );
 
     return NextResponse.json({
@@ -203,7 +213,7 @@ export async function GET() {
     console.error("error in intelligence api:", error);
     return NextResponse.json(
       { error: `failed to process intelligence: ${error}` },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
