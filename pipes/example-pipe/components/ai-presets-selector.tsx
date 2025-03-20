@@ -257,12 +257,7 @@ export function AIProviderConfig({
   useEffect(() => {
     setOpenAIModels([]);
     if (selectedProvider === "openai" && formData.apiKey) {
-      setOpenAIModels([
-        { id: "gpt-4" },
-        {
-          id: "gpt-3.5-turbo",
-        },
-      ]);
+      fetchOpenAIModels("https://api.openai.com/v1", formData.apiKey);
     } else if (selectedProvider === "native-ollama") {
       const baseUrl = "http://localhost:11434/v1";
       fetchOllamaModels(baseUrl);

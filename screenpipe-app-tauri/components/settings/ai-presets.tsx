@@ -316,12 +316,23 @@ const AISection = ({
               Authorization: `Bearer ${settingsPreset?.apiKey}`,
             },
           });
-          if (!r.ok) { // TODO better UX 
-            console.warn("failed to fetch openai models");
+          if (!r.ok) {
+            // TODO better UX for this
+            toast({
+              title: "error fetching models",
+              description: "please check your api key",
+              variant: "destructive",
+            });
             return;
           }
           const d = await r.json();
-          setModels(d.models);
+          console.log(d);
+          const models = d.data.map((model: { id: string }) => ({
+            id: model.id,
+            name: model.id,
+            provider: "openai",
+          }));
+          setModels(models);
           break;
         case "custom":
           try {
@@ -378,8 +389,14 @@ const AISection = ({
 
   useEffect(() => {
     console.log("hello");
+    if (
+      (settingsPreset?.provider === "openai" ||
+        settingsPreset?.provider === "custom") &&
+      !settingsPreset?.apiKey
+    )
+      return;
     fetchModels();
-  }, [settingsPreset?.provider, settingsPreset, settingsPreset?.url]);
+  }, [settingsPreset?.provider, settingsPreset?.url, apiKey]);
 
   return (
     <div className="w-full space-y-6 py-4">
