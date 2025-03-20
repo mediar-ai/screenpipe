@@ -79,10 +79,13 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
       }
       
       const { url, model, provider } = defaultPreset;
+
       // Get API key if available based on provider
       const apiKey = (provider === "openai" || provider === "custom") && "apiKey" in defaultPreset 
         ? defaultPreset.apiKey 
-        : "";
+        : provider === "screenpipe-cloud"
+          ? settings.user.token
+          : "";
       
       const t = toast({
         title: "Validating AI provider",
