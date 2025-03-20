@@ -11,7 +11,7 @@ import { OpenAI } from "openai";
 
 async function readRecentLogs(
   obsidianPath: string,
-  since: Date
+  since: Date,
 ): Promise<string> {
   const logsPath = path.join(path.normalize(obsidianPath), "logs");
   const today = new Date().toISOString().split("T")[0];
@@ -35,7 +35,7 @@ async function readRecentLogs(
 async function analyzeWithLLM(
   content: string,
   aiPreset: ReturnType<typeof settingsStore.getPreset>,
-  obsidianPath?: string
+  obsidianPath?: string,
 ): Promise<string> {
   if (!aiPreset) {
     throw new Error("ai preset not configured");
@@ -71,7 +71,7 @@ Instructions for Media and Formatting:
 - Add relevant #tags for categorization
 - Escape any pipe characters (|) in tables with \\|
 - Do not hallucinate video paths, use the exact video path from the logs
-- All your outputs will be written directly in Obsidian note taking app so use the formatting of the app in your response to maximize readability, 
+- All your outputs will be written directly in Obsidian note taking app so use the formatting of the app in your response to maximize readability,
 embeding links, videos, etc. usually mp4 needs video html component and not the link format
 - If you do not know the answer or do not have the right context, say I do not know, do not hallucinate
 
@@ -101,7 +101,7 @@ Generate a structured analysis following the above format.`;
     model: aiPreset.model,
     baseURL: aiPreset.url || undefined,
   };
-  
+
   const openai = new OpenAI(openaiConfig);
 
   const response = await openai.chat.completions.create({
@@ -118,7 +118,7 @@ Generate a structured analysis following the above format.`;
       `> [!note]- Thinking Process\n${content
         .split("\n")
         .map((line: string) => `> ${line}`)
-        .join("\n")}`
+        .join("\n")}`,
   );
 
   // Transform <video> tags to just 'video'
@@ -131,7 +131,7 @@ Generate a structured analysis following the above format.`;
 async function saveMarkdown(
   content: string,
   obsidianPath: string,
-  filename: string
+  filename: string,
 ): Promise<string> {
   const analysesPath = path.join(path.normalize(obsidianPath), "analyses");
   await fs.mkdir(analysesPath, { recursive: true });
@@ -141,7 +141,7 @@ async function saveMarkdown(
 
   const vaultName = path.basename(path.resolve(obsidianPath));
   return `obsidian://open?vault=${encodeURIComponent(
-    vaultName
+    vaultName,
   )}&file=analyses/${encodeURIComponent(filename)}`;
 }
 
@@ -151,19 +151,19 @@ export async function GET() {
     const obsidianPath = settings.vaultPath;
     const timeWindow = settings.analysisTimeWindow || 1 * 60 * 60 * 1000;
 
-    const aiPreset = settingsStore.getPreset("aiPresetId");
+    const aiPreset = settingsStore.getPreset("obsidian", "aiPresetId");
 
     if (!aiPreset || !aiPreset.model) {
       return NextResponse.json(
         { error: "ai preset not configured" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!obsidianPath) {
       return NextResponse.json(
         { error: "obsidian path not configured" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -177,11 +177,7 @@ export async function GET() {
     }
 
     // Analyze with LLM
-    const analysis = await analyzeWithLLM(
-      recentLogs,
-      aiPreset,
-      obsidianPath
-    );
+    const analysis = await analyzeWithLLM(recentLogs, aiPreset, obsidianPath);
 
     // Save results based on output format
     const filename = `${now
@@ -200,7 +196,7 @@ export async function GET() {
     const deepLink = await saveMarkdown(
       "\n" + analysis,
       obsidianPath,
-      filename
+      filename,
     );
 
     return NextResponse.json({
@@ -217,7 +213,7 @@ export async function GET() {
     console.error("error in intelligence api:", error);
     return NextResponse.json(
       { error: `failed to process intelligence: ${error}` },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
