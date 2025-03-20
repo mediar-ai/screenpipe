@@ -91,6 +91,7 @@ pub struct AppState {
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
     pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
+    pub element_cache: Arc<Mutex<Option<(Vec<UIElement>, Instant)>>>,
 }
 
 // Update the SearchQuery struct
@@ -1018,6 +1019,7 @@ impl SCServer {
             } else {
                 None
             },
+            element_cache: Arc::new(Mutex::new(None)),
         });
 
         let cors = CorsLayer::new()
@@ -1061,6 +1063,8 @@ impl SCServer {
             .post("/experimental/operator/click", click_element_handler)
             .post("/experimental/operator/type", type_text_handler)
             .post("/experimental/operator/get_text", get_text_handler)
+            .post("/experimental/list-interactable-elements", list_interactable_elements_handler)
+            .post("/experimental/click-by-index", click_by_index_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -2930,6 +2934,19 @@ pub struct ClickElementRequest {
 }
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ClickByIndexRequest {
+    element_index: usize,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct ClickByIndexResponse {
+    success: bool,
+    message: String,
+}
+
+
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
 pub struct TypeTextRequest {
     selector: ElementSelector,
     text: String,
@@ -3353,3 +3370,246 @@ async fn get_text_handler(
         },
     }))
 }
+
+// Add these new structs for the request/response
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ListInteractableElementsRequest {
+    app_name: String,
+    window_name: Option<String>,
+    with_text_only: Option<bool>,
+    interactable_only: Option<bool>,
+    include_sometimes_interactable: Option<bool>,
+    max_elements: Option<usize>,
+    use_background_apps: Option<bool>,
+    activate_app: Option<bool>,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct InteractableElement {
+    index: usize,
+    role: String,
+    interactability: String,  // "definite", "sometimes", "none"
+    text: String,
+    position: Option<ElementPosition>,
+    size: Option<ElementSize>,
+    element_id: Option<String>,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct ListInteractableElementsResponse {
+    elements: Vec<InteractableElement>,
+    stats: ElementStats,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct ElementStats {
+    total: usize,
+    definitely_interactable: usize,
+    sometimes_interactable: usize,
+    non_interactable: usize,
+    by_role: HashMap<String, usize>,
+}
+
+// In your route definitions, add:
+#[oasgen]
+async fn list_interactable_elements_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ListInteractableElementsRequest>,
+) -> Result<JsonResponse<ListInteractableElementsResponse>, (StatusCode, JsonResponse<Value>)> {
+    // First, set up the definitely and sometimes interactable role sets
+    let definitely_interactable: HashSet<&str> = [
+        "AXButton", "AXMenuItem", "AXMenuBarItem", "AXCheckBox", "AXPopUpButton",
+        "AXTextField", "AXTextArea", "AXComboBox", "AXLink", "AXScrollBar",
+        // ... other definitely interactable roles
+    ].iter().cloned().collect();
+    
+    let sometimes_interactable: HashSet<&str> = [
+        "AXImage", "AXCell", "AXSplitter", "AXRow", "AXStatusItem",
+        // ... other sometimes interactable roles
+    ].iter().cloned().collect();
+    
+    // Create desktop automation engine
+    let desktop = match Desktop::new(
+        request.use_background_apps.unwrap_or(false),
+        request.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Get application
+    let app = match desktop.application(&request.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+    
+    // Get elements from the application
+    let elements = match app.locator("*").all() {
+        Ok(elements) => elements,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to get elements: {}", e)
+                })),
+            ));
+        }
+    };
+    
+    info!("found {} elements in {}", elements.len(), request.app_name);
+
+    // Filter and convert elements
+    let mut result_elements = Vec::new();
+    let mut stats = ElementStats {
+        total: elements.len(),
+        definitely_interactable: 0,
+        sometimes_interactable: 0,
+        non_interactable: 0,
+        by_role: HashMap::new(),
+    };
+    
+    for (i, element) in elements.iter().enumerate() {
+        let role = element.role();
+        
+        // Count by role
+        *stats.by_role.entry(role.clone()).or_insert(0) += 1;
+        
+        // Determine interactability
+        let interactability = if definitely_interactable.contains(role.as_str()) {
+            stats.definitely_interactable += 1;
+            "definite"
+        } else if sometimes_interactable.contains(role.as_str()) {
+            stats.sometimes_interactable += 1;
+            "sometimes"
+        } else {
+            stats.non_interactable += 1;
+            "none"
+        };
+        
+        // Extract text from element
+        let text = element.text(10).unwrap_or_default();
+        
+        // Apply filters
+        let with_text_condition = !request.with_text_only.unwrap_or(false) || !text.is_empty();
+        let interactable_condition = !request.interactable_only.unwrap_or(false) || 
+            (interactability == "definite" || 
+             (request.include_sometimes_interactable.unwrap_or(false) && interactability == "sometimes"));
+        
+        if with_text_condition && interactable_condition {
+            let (x, y, width, height) = element.bounds().ok().unwrap_or((0.0, 0.0, 0.0, 0.0));
+            
+            result_elements.push(InteractableElement {
+                index: i,
+                role: role.clone(),
+                interactability: interactability.to_string(),
+                text,
+                position: Some(ElementPosition { x: x as i32, y: y as i32 }),
+                size: Some(ElementSize { width: width as i32, height: height as i32 }),
+                element_id: element.id(),
+            });
+        }
+    }
+    
+    // Apply max_elements limit if specified
+    if let Some(max) = request.max_elements {
+        if result_elements.len() > max {
+            result_elements.truncate(max);
+        }
+    }
+    
+    // Generate a cache ID and store elements in cache
+    let cache_id = Uuid::new_v4().to_string();
+    {
+        let mut cache = state.element_cache.lock().await;
+        *cache = Some((elements.clone(), Instant::now()));
+    }
+    
+    Ok(JsonResponse(ListInteractableElementsResponse {
+        elements: result_elements,
+        stats,
+    }))
+}
+
+#[oasgen]
+async fn click_by_index_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ClickByIndexRequest>,
+) -> Result<JsonResponse<ClickByIndexResponse>, (StatusCode, JsonResponse<Value>)> {
+    // Get elements from cache
+    let elements_opt = {
+        let cache = state.element_cache.lock().await;
+        cache.clone()
+    };
+    
+    // Check if cache entry exists and is still valid
+    match elements_opt {
+        Some((elements, timestamp)) if timestamp.elapsed() < Duration::from_secs(30) => {
+            // Use element_index directly
+            if request.element_index < elements.len() {
+                let element = &elements[request.element_index];
+                
+                match element.click() {
+                    Ok(_) => Ok(JsonResponse(ClickByIndexResponse {
+                        success: true,
+                        message: format!("Successfully clicked element with role: {}", element.role()),
+                    })),
+                    Err(e) => {
+                        error!("failed to click element: {}", e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({
+                                "error": format!("failed to click element: {}", e)
+                            })),
+                        ))
+                    }
+                }
+            } else {
+                error!("element index out of bounds: {} (max: {})", 
+                       request.element_index, elements.len() - 1);
+                Err((
+                    StatusCode::BAD_REQUEST,
+                    JsonResponse(json!({
+                        "error": format!("element index out of bounds: {} (max: {})", 
+                                        request.element_index, elements.len() - 1)
+                    })),
+                ))
+            }
+        },
+        Some(_) => {
+            // Cache entry expired
+            error!("cache entry expired for id: {}", request.cache_id);
+            Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({
+                    "error": "cache entry expired, please list elements again"
+                })),
+            ))
+        },
+        None => {
+            // Cache miss
+            error!("no cache entry found for id: {}", request.cache_id);
+            Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": "no cache entry found, please list elements again"
+                })),
+            ))
+        }
+    }
+}
+
