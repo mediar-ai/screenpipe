@@ -1,4 +1,4 @@
-import type { ElementInfo, ElementSelector } from "../../common/types";
+import type { ElementInfo, ElementSelector, ElementPosition, ElementSize, ElementStats } from "../../common/types";
 
 export interface ClickResult {
   method: 'AXPress' | 'AXClick' | 'MouseSimulation';
@@ -30,6 +30,32 @@ export interface TextResponse {
   success: boolean;
   text: string;
   metadata?: GetTextMetadata;
+}
+
+export interface InteractableElementsRequest {
+  app: string;
+  window?: string;
+  with_text_only?: boolean;
+  interactable_only?: boolean;
+  include_sometimes_interactable?: boolean;
+  max_elements?: boolean;
+  use_background_apps?: boolean;
+  activate_apps?: boolean;
+}
+
+export interface InteractableElement {
+  index: number, 
+  role: string,
+  interactability: string,   // "definite", "sometimes", "none"
+  text: string, 
+  position?: ElementPosition,
+  size?: ElementSize,
+  element_id?: string,
+}
+
+export interface InteractableElementsResponse {
+  elements: InteractableElementsRequest[];
+  status: ElementStats,
 }
 
 export class Operator {
@@ -338,6 +364,68 @@ export class Operator {
       
       return data as TextResponse;
     }
+
+  /**
+   * get text on the screen 
+   *
+   * @returns Detailed information about get_text operation
+   *
+   * @example
+   * // Gets all the text from an app
+   * await browserPipe.operator
+   *   .get_text({
+   *     app: app,
+   *   });
+   */
+    async get_interactable_elements(options: {
+      app: string;
+      window?: string;
+      with_text_only?: boolean;
+      interactable_only?: boolean;
+      include_sometimes_interactable?: boolean;
+      max_elements?: boolean;
+      use_background_apps?: boolean;
+      activate_apps?: boolean;
+    }): Promise<InteractableElementsResponse> {
+      const request: InteractableElementsRequest = {
+        app: options.app,
+        window: options.window,
+        with_text_only: options.with_text_only,
+        interactable_only: options.interactable_only,
+        include_sometimes_interactable: options.include_sometimes_interactable,
+        max_elements: options.max_elements,
+        use_background_apps: options.use_background_apps,
+        activate_apps: options.activate_apps,
+      };
+    
+      const response = await fetch(
+        `${this.baseUrl}/experimental/operator/list-interactable-elements`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        }
+      );
+  
+      if (!response.ok) {
+        console.log("error:", response)
+        const errorData = await response.json();
+        throw new Error(
+          `failed to get text: ${errorData.message || response.statusText}`
+        );
+      }
+  
+      const data = await response.json();
+      console.log("debug: text response data:", JSON.stringify(data, null, 2));
+      
+      if (!data.success) {
+        throw new Error(`get_text operation failed: ${data.error || "unknown error"}`);
+      }
+      
+      return data as InteractableElementsResponse;
+    }
+
+  
 }
 
 class ElementLocator {
