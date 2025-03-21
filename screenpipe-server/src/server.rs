@@ -95,7 +95,7 @@ pub struct AppState {
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
     pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
-    pub element_cache: Arc<Mutex<Option<(Vec<UIElement>, Instant)>>>,
+    pub element_cache: Arc<Mutex<Option<(Vec<UIElement>, Instant, String)>>>,
 }
 
 // Update the SearchQuery struct
@@ -1066,9 +1066,12 @@ impl SCServer {
             .post("/experimental/operator", find_elements_handler)
             .post("/experimental/operator/click", click_element_handler)
             .post("/experimental/operator/type", type_text_handler)
+            .post("/experimental/operator/press-key", press_key_handler)
             .post("/experimental/operator/get_text", get_text_handler)
             .post("/experimental/operator/list-interactable-elements", list_interactable_elements_handler)
             .post("/experimental/operator/click-by-index", click_by_index_handler)
+            .post("/experimental/operator/type-by-index", type_by_index_handler)
+            .post("/experimental/operator/press-key-by-index", press_key_by_index_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -3565,7 +3568,7 @@ async fn list_interactable_elements_handler(
     
     {
         let mut cache = state.element_cache.lock().await;
-        *cache = Some((elements.clone(), cache_timestamp));
+        *cache = Some((elements.clone(), cache_timestamp, request.app_name.clone()));
     }
     
     // Create cache info for response
@@ -3610,7 +3613,7 @@ async fn click_by_index_handler(
     
     // Then proceed with the rest of the logic...
     match elements_opt {
-        Some((elements, timestamp)) if timestamp.elapsed() < Duration::from_secs(30) => {
+        Some((elements, timestamp, _app_name)) if timestamp.elapsed() < Duration::from_secs(30) => {
             // Use element_index directly
             if request.element_index < elements.len() {
                 let element = &elements[request.element_index];
@@ -3655,6 +3658,324 @@ async fn click_by_index_handler(
         None => {
             // Cache miss
             // error!("no cache entry found for id: {}", request.cache_id);
+            Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": "no cache entry found, please list elements again"
+                })),
+            ))
+        }
+    }
+}
+
+// Add these new structs after ClickByIndexResponse
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct TypeByIndexRequest {
+    element_index: usize,
+    text: String,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct TypeByIndexResponse {
+    success: bool,
+    message: String,
+}
+
+// Add this new handler function after click_by_index_handler
+#[oasgen]
+async fn type_by_index_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<TypeByIndexRequest>,
+) -> Result<JsonResponse<TypeByIndexResponse>, (StatusCode, JsonResponse<Value>)> {
+    // Get elements from cache
+    let elements_opt = {
+        let cache = state.element_cache.lock().await;
+        cache.clone()
+    };
+    
+    // First check if cache exists at all
+    if elements_opt.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": "no element cache found, please run list_interactable_elements first"
+            })),
+        ));
+    }
+    
+    // Then proceed with the logic...
+    match elements_opt {
+        Some((elements, timestamp, _app_name)) if timestamp.elapsed() < Duration::from_secs(30) => {
+            // Use element_index directly
+            if request.element_index < elements.len() {
+                let element = &elements[request.element_index];
+                
+                match element.type_text(&request.text) {
+                    Ok(_) => Ok(JsonResponse(TypeByIndexResponse {
+                        success: true,
+                        message: format!("successfully typed text into element with role: {}", element.role()),
+                    })),
+                    Err(e) => {
+                        error!("failed to type text into element: {}", e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({
+                                "error": format!("failed to type text into element: {}", e)
+                            })),
+                        ))
+                    }
+                }
+            } else {
+                error!("element index out of bounds: {} (max: {})", 
+                       request.element_index, elements.len() - 1);
+                Err((
+                    StatusCode::BAD_REQUEST,
+                    JsonResponse(json!({
+                        "error": format!("element index out of bounds: {} (max: {})", 
+                                        request.element_index, elements.len() - 1)
+                    })),
+                ))
+            }
+        },
+        Some(_) => {
+            // Cache entry expired
+            Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({
+                    "error": "cache entry expired, please list elements again"
+                })),
+            ))
+        },
+        None => {
+            // Cache miss
+            Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": "no cache entry found, please list elements again"
+                })),
+            ))
+        }
+    }
+}
+
+// Add these new structs after TypeByIndexResponse
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct PressKeyRequest {
+    selector: ElementSelector,
+    key_combo: String,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct PressKeyResponse {
+    success: bool,
+    message: String,
+}
+
+// Add this new handler function
+#[oasgen]
+async fn press_key_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<PressKeyRequest>,
+) -> Result<JsonResponse<PressKeyResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!(target: "operator", "pressing key combination: {}", request.key_combo);
+    
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            error!("failed to initialize desktop automation: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!(target: "operator", "app: {:?}", app);
+    
+    // Find elements matching the selector
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
+            Err(e) => {
+                error!("failed to find elements: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            error!("failed to create locator: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!(target: "operator", "element: {:?}", element);
+
+    match element {
+        Some(element) => match element.press_key(&request.key_combo) {
+            Ok(_) => Ok(JsonResponse(PressKeyResponse {
+                success: true,
+                message: format!("successfully pressed key combination '{}' on element with role: {}", 
+                    request.key_combo, element.role()),
+            })),
+            Err(e) => {
+                error!("failed to press key: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("failed to press key: {}", e)
+                    })),
+                ))
+            }
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "no matching element found"
+            })),
+        )),
+    }
+}
+
+// Add these new structs after TypeByIndexRequest
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct PressKeyByIndexRequest {
+    element_index: usize,
+    key_combo: String,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct PressKeyByIndexResponse {
+    success: bool,
+    message: String,
+}
+
+// Add this handler function
+#[oasgen]
+async fn press_key_by_index_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<PressKeyByIndexRequest>,
+) -> Result<JsonResponse<PressKeyByIndexResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!(target: "operator", "pressing key combination by index: element_index={}, key_combo={}", 
+        request.element_index, request.key_combo);
+    
+    // Get elements from cache
+    let elements_opt = {
+        let cache = state.element_cache.lock().await;
+        cache.clone()
+    };
+    
+    // First check if cache exists at all
+    if elements_opt.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": "no element cache found, please run list_interactable_elements first"
+            })),
+        ));
+    }
+    
+    // Then proceed with the logic...
+    match elements_opt {
+        Some((elements, timestamp, app_name)) if timestamp.elapsed() < Duration::from_secs(30) => {
+            // Activate the app first
+            debug!(target: "operator", "activating app: {}", app_name);
+            let desktop = match Desktop::new(false, true) { // Set activate_app to true
+                Ok(d) => d,
+                Err(e) => {
+                    error!("failed to initialize desktop automation: {}", e);
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({
+                            "error": format!("failed to initialize desktop automation: {}", e)
+                        })),
+                    ));
+                }
+            };
+
+            // Get and activate the application
+            let _ = match desktop.application(&app_name) {
+                Ok(app) => app,
+                Err(e) => {
+                    error!("application not found: {}", e);
+                    return Err((
+                        StatusCode::NOT_FOUND,
+                        JsonResponse(json!({
+                            "error": format!("application not found: {}", e)
+                        })),
+                    ));
+                }
+            };
+            
+            // Use element_index directly
+            if request.element_index < elements.len() {
+                let element = &elements[request.element_index];
+                
+                match element.press_key(&request.key_combo) {
+                    Ok(_) => Ok(JsonResponse(PressKeyByIndexResponse {
+                        success: true,
+                        message: format!("successfully pressed key combination '{}' on element with role: {}", 
+                            request.key_combo, element.role()),
+                    })),
+                    Err(e) => {
+                        error!("failed to press key on element: {}", e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({
+                                "error": format!("failed to press key on element: {}", e)
+                            })),
+                        ))
+                    }
+                }
+            } else {
+                error!("element index out of bounds: {} (max: {})", 
+                       request.element_index, elements.len() - 1);
+                Err((
+                    StatusCode::BAD_REQUEST,
+                    JsonResponse(json!({
+                        "error": format!("element index out of bounds: {} (max: {})", 
+                                       request.element_index, elements.len() - 1)
+                    })),
+                ))
+            }
+        },
+        Some(_) => {
+            // Cache entry expired
+            Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({
+                    "error": "cache entry expired, please list elements again"
+                })),
+            ))
+        },
+        None => {
+            // Cache miss
             Err((
                 StatusCode::NOT_FOUND,
                 JsonResponse(json!({
