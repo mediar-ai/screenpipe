@@ -230,6 +230,8 @@ export class Operator {
       activate_app: options.activateApp !== false,
     };
 
+    console.log("selector", selector)
+
     const response = await fetch(`${this.baseUrl}/experimental/operator/type`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
