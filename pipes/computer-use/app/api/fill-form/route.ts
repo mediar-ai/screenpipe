@@ -5,23 +5,25 @@ export async function GET(request: Request) {
   try {
     // Get query parameters
     const url = new URL(request.url);
-    const app = url.searchParams.get("app") || "Chrome";
+    const app = url.searchParams.get("app") || "Messages";
+    const text = url.searchParams.get("text") || "iMessage";
+    const value = url.searchParams.get("value") || text;
     
+    console.log(`attempting to find ${text} in ${app} and fill with ${value}`);
     
     // Use the Operator SDK to locate UI elements
-    const text = "STOP";
-
     const elements = await browserPipe.operator.fill({
       app,
       text,
-      value: text
+      value
     });
-    
     
     console.log(`found ${elements} elements`);
     
     return NextResponse.json({
       app,
+      text,
+      value,
       elements,
     });
   } catch (error) {
