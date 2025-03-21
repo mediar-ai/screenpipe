@@ -38,9 +38,9 @@ export interface InteractableElementsRequest {
   with_text_only?: boolean;
   interactable_only?: boolean;
   include_sometimes_interactable?: boolean;
-  max_elements?: boolean;
+  max_elements?: number;
   use_background_apps?: boolean;
-  activate_apps?: boolean;
+  activate_app?: boolean;
 }
 
 export interface InteractableElement {
@@ -54,8 +54,8 @@ export interface InteractableElement {
 }
 
 export interface InteractableElementsResponse {
-  elements: InteractableElementsRequest[];
-  status: ElementStats,
+  elements: InteractableElement[];
+  stats: ElementStats,
 }
 
 export class Operator {
@@ -385,9 +385,9 @@ export class Operator {
       with_text_only?: boolean;
       interactable_only?: boolean;
       include_sometimes_interactable?: boolean;
-      max_elements?: boolean;
+      max_elements?: number;
       use_background_apps?: boolean;
-      activate_apps?: boolean;
+      activate_app?: boolean;
     }): Promise<InteractableElementsResponse> {
       const request: InteractableElementsRequest = {
         app_name: options.app,
@@ -397,7 +397,7 @@ export class Operator {
         include_sometimes_interactable: options.include_sometimes_interactable,
         max_elements: options.max_elements,
         use_background_apps: options.use_background_apps,
-        activate_apps: options.activate_apps,
+        activate_app: options.activate_app,
       };
     
       const response = await fetch(
@@ -441,10 +441,19 @@ export class Operator {
     );
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        `failed to click element by index: ${errorData.error || response.statusText}`
-      );
+      const responseText = await response.text();
+      console.log("error response:", responseText); // Add logging for debugging
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to click element by index: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to click element by index (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
     }
 
     const data = await response.json();
