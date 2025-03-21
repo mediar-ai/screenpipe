@@ -1068,7 +1068,7 @@ impl SCServer {
             .post("/experimental/operator/type", type_text_handler)
             .post("/experimental/operator/get_text", get_text_handler)
             .post("/experimental/operator/list-interactable-elements", list_interactable_elements_handler)
-            .post("/experimental/click-by-index", click_by_index_handler)
+            .post("/experimental/operator/click-by-index", click_by_index_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -3403,6 +3403,7 @@ pub struct InteractableElement {
 pub struct ListInteractableElementsResponse {
     elements: Vec<InteractableElement>,
     stats: ElementStats,
+    cache_info: ElementCacheInfo,  // Add this new field
 }
 
 #[derive(Debug, OaSchema, Serialize)]
@@ -3412,6 +3413,15 @@ pub struct ElementStats {
     sometimes_interactable: usize,
     non_interactable: usize,
     by_role: HashMap<String, usize>,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct ElementCacheInfo {
+    cache_id: String,
+    timestamp: String,
+    expires_at: String,
+    element_count: usize,
+    ttl_seconds: u64,
 }
 
 // In your route definitions, add:
@@ -3550,14 +3560,30 @@ async fn list_interactable_elements_handler(
     
     // Generate a cache ID and store elements in cache
     let cache_id = Uuid::new_v4().to_string();
+    let cache_timestamp = Instant::now();
+    let ttl_seconds: u64 = 30; // Explicitly specify u64 type
+    
     {
         let mut cache = state.element_cache.lock().await;
-        *cache = Some((elements.clone(), Instant::now()));
+        *cache = Some((elements.clone(), cache_timestamp));
     }
+    
+    // Create cache info for response
+    let now = Utc::now();
+    let expires_at = now + chrono::Duration::seconds(ttl_seconds as i64);
+    
+    let cache_info = ElementCacheInfo {
+        cache_id: cache_id.clone(),
+        timestamp: now.to_rfc3339(),
+        expires_at: expires_at.to_rfc3339(),
+        element_count: elements.len(),
+        ttl_seconds: ttl_seconds,
+    };
     
     Ok(JsonResponse(ListInteractableElementsResponse {
         elements: result_elements,
         stats,
+        cache_info,
     }))
 }
 
@@ -3572,7 +3598,17 @@ async fn click_by_index_handler(
         cache.clone()
     };
     
-    // Check if cache entry exists and is still valid
+    // First check if cache exists at all
+    if elements_opt.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": "no element cache found, please run list_interactable_elements first"
+            })),
+        ));
+    }
+    
+    // Then proceed with the rest of the logic...
     match elements_opt {
         Some((elements, timestamp)) if timestamp.elapsed() < Duration::from_secs(30) => {
             // Use element_index directly
