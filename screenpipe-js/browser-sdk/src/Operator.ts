@@ -11,6 +11,27 @@ export interface ClickResponse {
   result?: ClickResult;
 }
 
+export interface TextRequest {
+  app_name: string;
+  window_name?: string;
+  max_depth?: number;
+  use_background_apps?: boolean;
+  activate_app?: boolean;
+}
+
+export interface GetTextMetadata {
+  extraction_time_ms: number;
+  element_count: number;
+  app_name: string;
+  timestamp_utc: string;
+}
+
+export interface TextResponse {
+  success: boolean;
+  text: string;
+  metadata?: GetTextMetadata;
+}
+
 export class Operator {
   private baseUrl: string;
 
@@ -263,6 +284,60 @@ export class Operator {
 
     return null;
   }
+
+  /**
+   * get text on the screen 
+   *
+   * @returns Detailed information about get_text operation
+   *
+   * @example
+   * // Gets all the text from an app
+   * await browserPipe.operator
+   *   .get_text({
+   *     app: app,
+   *   });
+   */
+    async get_text(options: {
+      app: string;
+      window?: string;
+      max_depth?: number;
+      useBackgroundApps?: boolean;
+      activateApp?: boolean;
+    }): Promise<TextResponse> {
+      const text: TextRequest = {
+        app_name: options.app,
+        window_name: options.window,
+        max_depth: options.max_depth,
+        use_background_apps: options.useBackgroundApps,
+        activate_app: options.activateApp !== false,
+      };
+  
+      const response = await fetch(
+        `${this.baseUrl}/experimental/operator/get_text`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(text),
+        }
+      );
+  
+      if (!response.ok) {
+        console.log("error:", response)
+        const errorData = await response.json();
+        throw new Error(
+          `failed to get text: ${errorData.message || response.statusText}`
+        );
+      }
+  
+      const data = await response.json();
+      console.log("debug: text response data:", JSON.stringify(data, null, 2));
+      
+      if (!data.success) {
+        throw new Error(`get_text operation failed: ${data.error || "unknown error"}`);
+      }
+      
+      return data as TextResponse;
+    }
 }
 
 class ElementLocator {
