@@ -33,8 +33,8 @@ export interface TextResponse {
 }
 
 export interface InteractableElementsRequest {
-  app: string;
-  window?: string;
+  app_name: string;
+  window_name?: string;
   with_text_only?: boolean;
   interactable_only?: boolean;
   include_sometimes_interactable?: boolean;
@@ -388,8 +388,8 @@ export class Operator {
       activate_apps?: boolean;
     }): Promise<InteractableElementsResponse> {
       const request: InteractableElementsRequest = {
-        app: options.app,
-        window: options.window,
+        app_name: options.app,
+        window_name: options.window,
         with_text_only: options.with_text_only,
         interactable_only: options.interactable_only,
         include_sometimes_interactable: options.include_sometimes_interactable,
@@ -411,17 +411,13 @@ export class Operator {
         console.log("error:", response)
         const errorData = await response.json();
         throw new Error(
-          `failed to get text: ${errorData.message || response.statusText}`
+          `failed to get: ${errorData.message || response.statusText}`
         );
       }
   
       const data = await response.json();
       console.log("debug: text response data:", JSON.stringify(data, null, 2));
-      
-      if (!data.success) {
-        throw new Error(`get_text operation failed: ${data.error || "unknown error"}`);
-      }
-      
+            
       return data as InteractableElementsResponse;
     }
 
