@@ -1,3 +1,6 @@
+/*
+curl -X GET "http://localhost:3000/api/locator?app=Arc&role=AXButton"
+*/
 import { NextResponse } from "next/server";
 import { pipe as browserPipe } from "../../../../../screenpipe-js/browser-sdk/dist";
 export async function GET(request: Request) {
@@ -6,8 +9,6 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const app = url.searchParams.get("app") || "Chrome";
     const role = url.searchParams.get("role") || "AXButton";
-    const maxResults = parseInt(url.searchParams.get("maxResults") || "10");
-    const maxDepth = parseInt(url.searchParams.get("maxDepth") || "1");
     
     console.log(`searching for ${role} elements in ${app} app`);
     

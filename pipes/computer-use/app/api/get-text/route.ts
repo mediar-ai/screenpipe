@@ -1,3 +1,6 @@
+/*
+curl "http://localhost:3000/api/get_text?app=Messages" | jq
+*/
 import { NextResponse } from "next/server";
 import { pipe as browserPipe } from "../../../../../screenpipe-js/browser-sdk/dist";
 
