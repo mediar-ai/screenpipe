@@ -14,6 +14,8 @@ use core_foundation::boolean::CFBoolean;
 use core_foundation::dictionary::CFDictionary;
 use core_foundation::string::CFString;
 use core_graphics::display::{CGPoint, CGSize};
+use core_graphics::event::{CGEvent, CGKeyCode, CGEventFlags};
+use core_graphics::event_source::CGEventSource;
 use serde_json::{self, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -46,6 +48,24 @@ extern "C" {
 // Add these constant definitions instead - these are the official values from Apple's headers
 const K_AXVALUE_CGPOINT_TYPE: u32 = 1;
 const K_AXVALUE_CGSIZE_TYPE: u32 = 2;
+
+// Add these constant definitions for key codes
+const KEY_RETURN: u16 = 36;
+const KEY_TAB: u16 = 48;
+const KEY_SPACE: u16 = 49;
+const KEY_DELETE: u16 = 51;
+const KEY_ESCAPE: u16 = 53;
+const KEY_ARROW_LEFT: u16 = 123;
+const KEY_ARROW_RIGHT: u16 = 124;
+const KEY_ARROW_DOWN: u16 = 125;
+const KEY_ARROW_UP: u16 = 126;
+
+// Add these constants for modifier keys
+const MODIFIER_COMMAND: CGEventFlags = CGEventFlags::CGEventFlagCommand;
+const MODIFIER_SHIFT: CGEventFlags = CGEventFlags::CGEventFlagShift;
+const MODIFIER_OPTION: CGEventFlags = CGEventFlags::CGEventFlagAlternate;
+const MODIFIER_CONTROL: CGEventFlags = CGEventFlags::CGEventFlagControl;
+const MODIFIER_FN: CGEventFlags = CGEventFlags::CGEventFlagSecondaryFn;
 
 // Thread-safe wrapper for AXUIElement
 #[derive(Clone)]
@@ -132,13 +152,13 @@ impl MacOSEngine {
         let is_valid = match ax_element.0.role() {
             Ok(_) => true,
             Err(e) => {
-                debug!(target: "operator", "Warning: Potentially invalid AXUIElement: {:?}", e);
+                debug!("Warning: Potentially invalid AXUIElement: {:?}", e);
                 false
             }
         };
 
         if !is_valid {
-            debug!(target: "operator", "Warning: Wrapping possibly invalid AXUIElement");
+            debug!("Warning: Wrapping possibly invalid AXUIElement");
         }
 
         UIElement::new(Box::new(MacOSUIElement {
@@ -158,7 +178,7 @@ impl MacOSEngine {
             return Ok(());
         }
 
-        debug!(target: "operator", "Refreshing accessibility tree");
+        debug!("Refreshing accessibility tree");
 
         // If app name is provided, try to activate that app first
         if let Some(name) = app_name {
@@ -189,7 +209,7 @@ impl MacOSEngine {
                         if app_name_str.to_lowercase() == name.to_lowercase() {
                             // Found the app, activate it
                             let _: () = msg_send![app, activateWithOptions:1]; // NSApplicationActivateIgnoringOtherApps = 1
-                            debug!(target: "operator", "Activated application: {}", name);
+                            debug!("Activated application: {}", name);
 
                             // Give the system a moment to update
                             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -206,6 +226,114 @@ impl MacOSEngine {
         let _ = self.system_wide.0.attribute_names();
 
         Ok(())
+    }
+
+    pub fn focus_application_with_cache(
+        &self, 
+        app_name: &str,
+        app_cache: Option<&ThreadSafeAXUIElement>
+    ) -> Result<ThreadSafeAXUIElement, AutomationError> {
+        debug!("focusing application: {}", app_name);
+        
+        // If we have a cached element, try to use it first
+        if let Some(cached_element) = app_cache {
+            debug!("using cached application element");
+            
+            // Check if cached element is still valid
+            match cached_element.0.role() {
+                Ok(role) if role.to_string() == "AXApplication" => {
+                    // First try to activate the app using the cached element
+                    unsafe {
+                        use objc::{class, msg_send, sel, sel_impl};
+                        let pid = get_pid_for_element(cached_element);
+                        
+                        // Use NSRunningApplication API with the PID
+                        let nsra_class = class!(NSRunningApplication);
+                        let app: *mut objc::runtime::Object = msg_send![nsra_class, runningApplicationWithProcessIdentifier:pid];
+                        if !app.is_null() {
+                            let _: () = msg_send![app, activateWithOptions:1];
+                            debug!("Activated application using cached element");
+                            
+                            // Success - return the cached element
+                            return Ok(cached_element.clone());
+                        }
+                    }
+                }
+                _ => {
+                    debug!("Cached element is no longer valid");
+                    // Continue with normal flow if cached element is invalid
+                }
+            }
+        }
+        
+        // Fallback to existing method
+        self.refresh_accessibility_tree(Some(app_name))?;
+        
+        // Use the regular way to get application
+        unsafe {
+            use objc::{class, msg_send, sel, sel_impl};
+
+            let workspace_class = class!(NSWorkspace);
+            let shared_workspace: *mut objc::runtime::Object = msg_send![workspace_class, sharedWorkspace];
+            let apps: *mut objc::runtime::Object = msg_send![shared_workspace, runningApplications];
+            let count: usize = msg_send![apps, count];
+
+            for i in 0..count {
+                let app: *mut objc::runtime::Object = msg_send![apps, objectAtIndex:i];
+                let app_name_obj: *mut objc::runtime::Object = msg_send![app, localizedName];
+
+                if !app_name_obj.is_null() {
+                    let app_name_str: &str = {
+                        let nsstring = app_name_obj as *const objc::runtime::Object;
+                        let bytes: *const std::os::raw::c_char = msg_send![nsstring, UTF8String];
+                        let len: usize = msg_send![nsstring, lengthOfBytesUsingEncoding:4]; // NSUTF8StringEncoding = 4
+                        let bytes_slice = std::slice::from_raw_parts(bytes as *const u8, len);
+                        std::str::from_utf8_unchecked(bytes_slice)
+                    };
+
+                    if app_name_str.to_lowercase() == app_name.to_lowercase() {
+                        let pid: i32 = msg_send![app, processIdentifier];
+                        let ax_element = ThreadSafeAXUIElement::application(pid);
+                        
+                        // Create new element to return
+                        return Ok(ax_element);
+                    }
+                }
+            }
+        }
+        
+        // If we got here, we couldn't find the application
+        Err(AutomationError::ElementNotFound(format!(
+            "Application '{}' not found",
+            app_name
+        )))
+    }
+}
+
+// Helper function to get PID from an AXUIElement
+fn get_pid_for_element(element: &ThreadSafeAXUIElement) -> i32 {
+    // Use accessibility API to get the PID
+    unsafe {
+        let element_ref = element.0.as_concrete_TypeRef() as *mut ::std::os::raw::c_void;
+        
+        // Link with ApplicationServices framework
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" {
+            fn AXUIElementGetPid(
+                element: *mut ::std::os::raw::c_void,
+                pid: *mut i32,
+            ) -> i32;
+        }
+        
+        let mut pid: i32 = 0;
+        let result = AXUIElementGetPid(element_ref, &mut pid);
+        
+        if result == 0 {
+            return pid;
+        }
+        
+        // Fallback to -1 if we couldn't get the PID
+        -1
     }
 }
 
@@ -321,7 +449,7 @@ fn get_running_application_pids(use_background_apps: bool) -> Result<Vec<i32>, A
                     || bundle_id_str.contains(".helper")
                     || bundle_id_str.contains(".agent")
                 {
-                    debug!(target: "operator", "Filtered out background worker: {}", bundle_id_str);
+                    debug!("Filtered out background worker: {}", bundle_id_str);
                     continue;
                 }
             }
@@ -330,7 +458,7 @@ fn get_running_application_pids(use_background_apps: bool) -> Result<Vec<i32>, A
             pids.push(pid);
         }
 
-        debug!(target: "operator", "Found {} application PIDs", pids.len());
+        debug!("Found {} application PIDs", pids.len());
         Ok(pids)
     }
 }
@@ -340,12 +468,12 @@ impl AccessibilityEngine for MacOSEngine {
         // Get running application PIDs using NSWorkspace
         let pids = get_running_application_pids(self.use_background_apps)?;
 
-        debug!(target: "operator", "Found {} running applications", pids.len());
+        debug!("Found {} running applications", pids.len());
 
         // Create AXUIElements for each application
         let mut app_elements = Vec::new();
         for pid in pids {
-            trace!(target: "operator", "Creating AXUIElement for application with PID: {}", pid);
+            trace!("Creating AXUIElement for application with PID: {}", pid);
             let app_element = ThreadSafeAXUIElement::application(pid);
 
             app_elements.push(self.wrap_element(app_element));
@@ -371,16 +499,16 @@ impl AccessibilityEngine for MacOSEngine {
         // Get all applications first, then filter by name
         let apps = self.get_applications()?;
 
-        debug!(target: "operator", "Searching for application '{}' among {} applications", name, apps.len());
+        debug!("Searching for application '{}' among {} applications", name, apps.len());
 
         // Look for an application with a matching name
         for app in apps {
             let app_name = app.attributes().label.unwrap_or_default();
-            debug!(target: "operator", "Checking application: '{}'", app_name);
+            debug!("Checking application: '{}'", app_name);
 
             // Case-insensitive comparison since macOS app names might have different casing
             if app_name.to_lowercase() == name.to_lowercase() {
-                debug!(target: "operator", "Found matching application: '{}'", app_name);
+                debug!("Found matching application: '{}'", app_name);
                 return Ok(app);
             }
         }
@@ -733,13 +861,13 @@ impl MacOSUIElement {
         // 1. Try AXPress action first
         match self.click_press() {
             Ok(result) => return Ok(result),
-            Err(e) => debug!(target: "operator", "AXPress failed: {:?}, trying alternative methods", e),
+            Err(e) => debug!("AXPress failed: {:?}, trying alternative methods", e),
         }
 
         // 2. Try AXClick action
         match self.click_accessibility_click() {
             Ok(result) => return Ok(result),
-            Err(e) => debug!(target: "operator", "AXClick failed: {:?}, trying alternative methods", e),
+            Err(e) => debug!("AXClick failed: {:?}, trying alternative methods", e),
         }
 
         // 3. Try mouse simulation as last resort
@@ -750,7 +878,7 @@ impl MacOSUIElement {
         let press_attr = AXAttribute::new(&CFString::new("AXPress"));
         match self.element.0.perform_action(&press_attr.as_CFString()) {
             Ok(_) => {
-                debug!(target: "operator", "Successfully clicked element with AXPress");
+                debug!("Successfully clicked element with AXPress");
                 Ok(ClickResult {
                     method: ClickMethod::AXPress,
                     coordinates: None,
@@ -769,7 +897,7 @@ impl MacOSUIElement {
         let click_attr = AXAttribute::new(&CFString::new("AXClick"));
         match self.element.0.perform_action(&click_attr.as_CFString()) {
             Ok(_) => {
-                debug!(target: "operator", "Successfully clicked element with AXClick");
+                debug!("Successfully clicked element with AXClick");
                 Ok(ClickResult {
                     method: ClickMethod::AXClick,
                     coordinates: None,
@@ -821,7 +949,7 @@ impl MacOSUIElement {
                 // Brief pause to allow UI to respond
                 std::thread::sleep(std::time::Duration::from_millis(50));
 
-                debug!(target: "operator", "Mouse down at ({}, {})", center_x, center_y);
+                debug!("Mouse down at ({}, {})", center_x, center_y);
 
                 // Mouse down
                 let mouse_down = CGEvent::new_mouse_event(
@@ -838,7 +966,7 @@ impl MacOSUIElement {
                 // Brief pause
                 std::thread::sleep(std::time::Duration::from_millis(50));
 
-                debug!(target: "operator", "Mouse up at ({}, {})", center_x, center_y);
+                debug!("Mouse up at ({}, {})", center_x, center_y);
 
                 // Mouse up
                 let mouse_up = CGEvent::new_mouse_event(
@@ -852,7 +980,7 @@ impl MacOSUIElement {
                 })?;
                 mouse_up.post(core_graphics::event::CGEventTapLocation::HID);
 
-                debug!(target: "operator", "Performed simulated mouse click at ({}, {})", center_x, center_y);
+                debug!("Performed simulated mouse click at ({}, {})", center_x, center_y);
                 
                 Ok(ClickResult {
                     method: ClickMethod::MouseSimulation,
@@ -870,6 +998,64 @@ impl MacOSUIElement {
                 )))
             }
         }
+    }
+
+    fn get_key_code(&self, key: &str) -> Result<u16, AutomationError> {
+        let key_map: HashMap<&str, u16> = [
+            ("return", KEY_RETURN),
+            ("enter", KEY_RETURN),
+            ("tab", KEY_TAB),
+            ("space", KEY_SPACE),
+            ("delete", KEY_DELETE),
+            ("backspace", KEY_DELETE),
+            ("esc", KEY_ESCAPE),
+            ("escape", KEY_ESCAPE),
+            ("left", KEY_ARROW_LEFT),
+            ("right", KEY_ARROW_RIGHT),
+            ("down", KEY_ARROW_DOWN),
+            ("up", KEY_ARROW_UP),
+        ]
+        .iter()
+        .cloned()
+        .collect();
+
+        key_map
+            .get(key.to_lowercase().as_str())
+            .copied()
+            .ok_or_else(|| AutomationError::InvalidArgument(format!("Unknown key: {}", key)))
+    }
+
+    // Add a method to parse key combinations with modifiers
+    fn parse_key_combination(&self, key_combo: &str) -> Result<(u16, CGEventFlags), AutomationError> {
+        // Change Vec<&str> to Vec<String> to match the to_lowercase() output type
+        let parts: Vec<String> = key_combo.split('+').map(|s| s.trim().to_lowercase()).collect();
+        
+        if parts.is_empty() {
+            return Err(AutomationError::InvalidArgument(
+                "Empty key combination".to_string(),
+            ));
+        }
+        
+        // The last part is the actual key
+        let key = &parts[parts.len() - 1];
+        let key_code = self.get_key_code(key)?;
+        
+        // All parts except the last one are modifiers
+        let mut flags = CGEventFlags::empty();
+        for modifier in &parts[0..parts.len() - 1] {
+            match modifier.as_str() {
+                "cmd" | "command" => flags.insert(MODIFIER_COMMAND),
+                "shift" => flags.insert(MODIFIER_SHIFT),
+                "alt" | "option" => flags.insert(MODIFIER_OPTION),
+                "ctrl" | "control" => flags.insert(MODIFIER_CONTROL),
+                "fn" => flags.insert(MODIFIER_FN),
+                _ => return Err(AutomationError::InvalidArgument(
+                    format!("Unknown modifier: {}", modifier),
+                )),
+            }
+        }
+        
+        Ok((key_code, flags))
     }
 }
 
@@ -896,7 +1082,7 @@ impl UIElementImpl for MacOSUIElement {
             .map(|r| r.to_string())
             .unwrap_or_default();
 
-        debug!(target: "operator", "Original role from AXUIElement: {}", role);
+        debug!("Original role from AXUIElement: {}", role);
 
         // Map macOS-specific roles to generic roles
         // TODO: why first? any issue?
@@ -918,7 +1104,7 @@ impl UIElementImpl for MacOSUIElement {
 
         // Special case for windows
         if is_window {
-            debug!(target: "operator", "Getting attributes for window element");
+            debug!("Getting attributes for window element");
 
             let mut attrs = UIElementAttributes {
                 role: "window".to_string(),
@@ -942,7 +1128,7 @@ impl UIElementImpl for MacOSUIElement {
                 if let Ok(value) = self.element.0.attribute(&title_attr) {
                     if let Some(cf_string) = value.downcast_into::<CFString>() {
                         attrs.label = Some(cf_string.to_string());
-                        debug!(target: "operator", "Found window title via {}: {:?}", title_attr_name, attrs.label);
+                        debug!("Found window title via {}: {:?}", title_attr_name, attrs.label);
                         break;
                     }
                 }
@@ -951,7 +1137,7 @@ impl UIElementImpl for MacOSUIElement {
             // Try to get window position and size for debugging
             let pos_attr = AXAttribute::new(&CFString::new("AXPosition"));
             if let Ok(_) = self.element.0.attribute(&pos_attr) {
-                debug!(target: "operator", "Window has position attribute");
+                debug!("Window has position attribute");
             }
 
             // Try to get standard macOS window attributes
@@ -983,7 +1169,7 @@ impl UIElementImpl for MacOSUIElement {
         };
 
         // Debug attribute collection
-        debug!(target: "operator", "Collecting attributes for element");
+        debug!("Collecting attributes for element");
 
         // Directly try common macOS attributes one by one
         let label_attr = AXAttribute::new(&CFString::new("AXTitle"));
@@ -991,18 +1177,18 @@ impl UIElementImpl for MacOSUIElement {
             Ok(value) => {
                 if let Some(cf_string) = value.downcast_into::<CFString>() {
                     attrs.label = Some(cf_string.to_string());
-                    debug!(target: "operator", "Found AXTitle: {:?}", attrs.label);
+                    debug!("Found AXTitle: {:?}", attrs.label);
                 }
             }
             Err(e) => {
-                debug!(target: "operator", "Error getting AXTitle: {:?}", e);
+                debug!("Error getting AXTitle: {:?}", e);
 
                 // Fallback to AXLabel if AXTitle fails
                 let alt_label_attr = AXAttribute::new(&CFString::new("AXLabel"));
                 if let Ok(value) = self.element.0.attribute(&alt_label_attr) {
                     if let Some(cf_string) = value.downcast_into::<CFString>() {
                         attrs.label = Some(cf_string.to_string());
-                        debug!(target: "operator", "Found AXLabel: {:?}", attrs.label);
+                        debug!("Found AXLabel: {:?}", attrs.label);
                     }
                 }
             }
@@ -1014,17 +1200,17 @@ impl UIElementImpl for MacOSUIElement {
             Ok(value) => {
                 if let Some(cf_string) = value.downcast_into::<CFString>() {
                     attrs.description = Some(cf_string.to_string());
-                    debug!(target: "operator", "Found AXDescription: {:?}", attrs.description);
+                    debug!("Found AXDescription: {:?}", attrs.description);
                 }
             }
             Err(e) => {
-                debug!(target: "operator", "Error getting AXDescription: {:?}", e);
+                debug!("Error getting AXDescription: {:?}", e);
             }
         }
 
         // Collect all other attributes
         if let Ok(attr_names) = self.element.0.attribute_names() {
-            debug!(target: "operator", "Found {} attributes", attr_names.len());
+            debug!("Found {} attributes", attr_names.len());
 
             for name in attr_names.iter() {
                 let attr = AXAttribute::new(&name);
@@ -1041,25 +1227,25 @@ impl UIElementImpl for MacOSUIElement {
                                 | accessibility::Error::Ax(-25205)
                                 | accessibility::Error::Ax(-25204)
                         ) {
-                            debug!(target: "operator", "Error getting attribute {:?}: {:?}", name, e);
+                            debug!("Error getting attribute {:?}: {:?}", name, e);
                         }
                     }
                 }
             }
         } else {
-            debug!(target: "operator", "Failed to get attribute names");
+            debug!("Failed to get attribute names");
         }
 
         attrs
     }
 
     fn children(&self) -> Result<Vec<UIElement>, AutomationError> {
-        debug!(target: "operator", "Getting children for element: {:?}", self.element.0.role());
+        debug!("Getting children for element: {:?}", self.element.0.role());
         let mut all_children = Vec::new();
 
         // First try to get windows
         if let Ok(windows) = self.element.0.windows() {
-            debug!(target: "operator", "Found {} windows", windows.len());
+            debug!("Found {} windows", windows.len());
 
             // Add all windows to our collection
             for window in windows.iter() {
@@ -1072,7 +1258,7 @@ impl UIElementImpl for MacOSUIElement {
         }
         // try main window
         if let Ok(window) = self.element.0.main_window() {
-            debug!(target: "operator", "Found main window");
+            debug!("Found main window");
             all_children.push(UIElement::new(Box::new(MacOSUIElement {
                 element: ThreadSafeAXUIElement::new(window.clone()),
                 use_background_apps: self.use_background_apps,
@@ -1097,7 +1283,7 @@ impl UIElementImpl for MacOSUIElement {
             Err(e) => {
                 // If we have windows but failed to get children, return the windows
                 if !all_children.is_empty() {
-                    debug!(target: "operator", "Failed to get regular children but returning {} windows", all_children.len());
+                    debug!("Failed to get regular children but returning {} windows", all_children.len());
                     Ok(all_children)
                 } else {
                     // Otherwise return the error
@@ -1179,7 +1365,7 @@ impl UIElementImpl for MacOSUIElement {
             }
         }
 
-        debug!(target: "operator", "Element bounds: x={}, y={}, width={}, height={}", x, y, width, height);
+        debug!("Element bounds: x={}, y={}, width={}, height={}", x, y, width, height);
 
         Ok((x, y, width, height))
     }
@@ -1236,7 +1422,7 @@ impl UIElementImpl for MacOSUIElement {
         // First try using the AXRaise action
         let raise_attr = AXAttribute::new(&CFString::new("AXRaise"));
         if let Ok(_) = self.element.0.perform_action(&raise_attr.as_CFString()) {
-            debug!(target: "operator", "Successfully raised element");
+            debug!("Successfully raised element");
 
             // Now try to directly focus the element
             // Get the application element
@@ -1253,11 +1439,10 @@ impl UIElementImpl for MacOSUIElement {
 
                     let result = AXUIElementSetAttributeValue(app_ref, attr_str_ref, elem_ref);
                     if result == 0 {
-                        debug!(target: "operator", "Successfully set focus to element");
+                        debug!("Successfully set focus to element");
                         return Ok(());
                     } else {
                         debug!(
-                            target: "operator",
                             "Failed to set element as focused: error code {}", result
                         );
                     }
@@ -1267,12 +1452,12 @@ impl UIElementImpl for MacOSUIElement {
 
         // If we can't use AXRaise or set focus directly, try to click the element
         // which often gives it focus as a side effect
-        debug!(target: "operator", "Attempting to focus by clicking the element");
+        debug!("Attempting to focus by clicking the element");
         
         // Handle the ClickResult by mapping to unit result
         self.click().map(|_result| {
             // Optionally log the details of how the click was performed
-            debug!(target: "operator", "Focus achieved via click method: {}", _result.method);
+            debug!("Focus achieved via click method: {}", _result.method);
             ()
         })
     }
@@ -1280,12 +1465,12 @@ impl UIElementImpl for MacOSUIElement {
     fn type_text(&self, text: &str) -> Result<(), AutomationError> {
         // First, try to focus the element, but continue even if focus fails for web inputs
         match self.focus() {
-            Ok(_) => debug!(target: "operator", "Successfully focused element for typing"),
+            Ok(_) => debug!("Successfully focused element for typing"),
             Err(e) => {
-                debug!(target: "operator", "Focus failed, but continuing with type_text: {:?}", e);
+                debug!("Focus failed, but continuing with type_text: {:?}", e);
                 // Click the element, which is often needed for web inputs
                 if let Err(click_err) = self.click() {
-                    debug!(target: "operator", "Click also failed: {:?}", click_err);
+                    debug!("Click also failed: {:?}", click_err);
                 }
             }
         }
@@ -1298,7 +1483,7 @@ impl UIElementImpl for MacOSUIElement {
 
         // For web inputs, we might need a different approach
         if is_web_input {
-            debug!(target: "operator", "Detected web input, using specialized handling");
+            debug!("Detected web input, using specialized handling");
 
             // Try different attribute names that web inputs might use
             for attr_name in &["AXValue", "AXValueAttribute", "AXText"] {
@@ -1314,7 +1499,7 @@ impl UIElementImpl for MacOSUIElement {
 
                     let result = AXUIElementSetAttributeValue(element_ref, attr_str_ref, value_ref);
                     if result == 0 {
-                        debug!(target: "operator", "Successfully set text using {}", attr_name);
+                        debug!("Successfully set text using {}", attr_name);
                         return Ok(());
                     }
                 }
@@ -1336,7 +1521,6 @@ impl UIElementImpl for MacOSUIElement {
 
             if result != 0 {
                 debug!(
-                    target: "operator",
                     "Failed to set text value via AXValue: error code {}", result
                 );
 
@@ -1350,14 +1534,72 @@ impl UIElementImpl for MacOSUIElement {
         Ok(())
     }
 
-    fn press_key(&self, _key: &str) -> Result<(), AutomationError> {
-        Err(AutomationError::UnsupportedOperation(
-            "press_key not yet implemented for macOS".to_string(),
-        ))
+    fn press_key(&self, key_combo: &str) -> Result<(), AutomationError> {
+        debug!("Pressing key combination: {}", key_combo);
+        
+        // Get element role and details for better error reporting
+        let element_role = self.role();
+        let element_label = self.attributes().label.unwrap_or_default();
+        
+        // First, try to focus the element - FAIL if focus fails
+        match self.focus() {
+            Ok(_) => debug!("successfully focused element for key press"),
+            Err(e) => {
+                let error_msg = format!(
+                    "key press aborted - failed to focus {} element '{}' before pressing '{}': {}", 
+                    element_role, element_label, key_combo, e
+                );
+                debug!("{}", error_msg);
+                return Err(AutomationError::PlatformError(error_msg));
+            }
+        }
+        
+        // Parse the key combination
+        let (key_code, flags) = self.parse_key_combination(key_combo)?;
+        
+        // Create event source
+        let source = CGEventSource::new(
+            core_graphics::event_source::CGEventSourceStateID::HIDSystemState,
+        )
+        .map_err(|_| {
+            AutomationError::PlatformError("Failed to create event source".to_string())
+        })?;
+        
+        // Key down event with modifiers
+        let mut key_down = CGEvent::new_keyboard_event(source.clone(), key_code as CGKeyCode, true)
+            .map_err(|_| {
+                AutomationError::PlatformError("Failed to create key down event".to_string())
+            })?;
+            
+        // Set modifiers if any
+        if !flags.is_empty() {
+            key_down.set_flags(flags);
+        }
+        
+        key_down.post(core_graphics::event::CGEventTapLocation::HID);
+        
+        // Brief pause
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        
+        // Key up event with same modifiers
+        let mut key_up = CGEvent::new_keyboard_event(source, key_code as CGKeyCode, false)
+            .map_err(|_| {
+                AutomationError::PlatformError("Failed to create key up event".to_string())
+            })?;
+            
+        // Set the same modifiers for key up
+        if !flags.is_empty() {
+            key_up.set_flags(flags);
+        }
+        
+        key_up.post(core_graphics::event::CGEventTapLocation::HID);
+        
+        debug!("Successfully pressed key combination: {}", key_combo);
+        Ok(())
     }
 
     fn get_text(&self, max_depth: usize) -> Result<String, AutomationError> {
-        debug!(target: "operator", "collecting all text with max_depth={}", max_depth);
+        debug!("collecting all text with max_depth={}", max_depth);
         
         // Create a collector that matches ALL elements (predicate always returns true)
         // This will collect every accessible element in the tree
@@ -1366,7 +1608,7 @@ impl UIElementImpl for MacOSUIElement {
         
         // Get all elements
         let elements = collector.find_all();
-        debug!(target: "operator", "collected {} elements for text extraction", elements.len());
+        debug!("collected {} elements for text extraction", elements.len());
         
         // Extract text from all collected elements
         let mut all_text: Vec<String> = Vec::new();
@@ -1406,7 +1648,6 @@ impl UIElementImpl for MacOSUIElement {
 
             if result != 0 {
                 debug!(
-                    target: "operator",
                     "Failed to set value via AXValue: error code {}", result
                 );
 
@@ -1481,7 +1722,7 @@ impl UIElementImpl for MacOSUIElement {
 
         // Add some debug output to understand the current element
         let attrs = self.attributes();
-        debug!(target: "operator", "Creating locator for element: role={}, label={:?}", attrs.role, attrs.label);
+        debug!("Creating locator for element: role={}, label={:?}", attrs.role, attrs.label);
 
         // Create a new locator with this element as root
         let self_element = UIElement::new(Box::new(MacOSUIElement {
@@ -1624,7 +1865,7 @@ fn parse_ax_attribute_value(
 
         // For array types (children)
         name if name.starts_with("AXChildren") => {
-            debug!(target: "operator", "Processing AXChildren attribute");
+            debug!("Processing AXChildren attribute");
 
             unsafe {
                 let value_ref = value.as_CFTypeRef();
@@ -1634,7 +1875,7 @@ fn parse_ax_attribute_value(
                     // Cast to CFArrayRef
                     let array_ref = value_ref as *const __CFArray;
                     let count = CFArrayGetCount(array_ref);
-                    debug!(target: "operator", "AXChildren array with {} elements", count);
+                    debug!("AXChildren array with {} elements", count);
 
                     // Create an array of element addresses
                     let mut items = Vec::with_capacity(count as usize);
