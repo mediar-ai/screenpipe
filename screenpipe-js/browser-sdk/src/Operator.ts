@@ -58,6 +58,26 @@ export interface InteractableElementsResponse {
   stats: ElementStats,
 }
 
+export interface PressKeyRequest {
+  selector: ElementSelector;
+  key_combo: string;
+}
+
+export interface PressKeyResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface PressKeyByIndexRequest {
+  element_index: number;
+  key_combo: string;
+}
+
+export interface PressKeyByIndexResponse {
+  success: boolean;
+  message: string;
+}
+
 export class Operator {
   private baseUrl: string;
 
@@ -158,10 +178,19 @@ export class Operator {
     );
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        `failed to click element: ${errorData.message || response.statusText}`
-      );
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to click element: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to click element (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
     }
 
     const data = await response.json();
@@ -242,10 +271,19 @@ export class Operator {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        `failed to type text: ${errorData.message || response.statusText}`
-      );
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to type text: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to type text (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
     }
 
     const result = await response.json();
@@ -350,11 +388,19 @@ export class Operator {
       );
   
       if (!response.ok) {
-        console.log("error:", response)
-        const errorData = await response.json();
-        throw new Error(
-          `failed to get text: ${errorData.message || response.statusText}`
-        );
+        const responseText = await response.text();
+        console.log("error response:", responseText);
+        
+        try {
+          const errorData = JSON.parse(responseText);
+          throw new Error(
+            `failed to get text: ${errorData.error || response.statusText}`
+          );
+        } catch (parseError) {
+          throw new Error(
+            `failed to get text (status ${response.status}): ${responseText || response.statusText}`
+          );
+        }
       }
   
       const data = await response.json();
@@ -410,11 +456,19 @@ export class Operator {
       );
   
       if (!response.ok) {
-        console.log("error:", response)
-        const errorData = await response.json();
-        throw new Error(
-          `failed to get: ${errorData.message || response.statusText}`
-        );
+        const responseText = await response.text();
+        console.log("error response:", responseText);
+        
+        try {
+          const errorData = JSON.parse(responseText);
+          throw new Error(
+            `failed to get interactable elements: ${errorData.error || response.statusText}`
+          );
+        } catch (parseError) {
+          throw new Error(
+            `failed to get interactable elements (status ${response.status}): ${responseText || response.statusText}`
+          );
+        }
       }
   
       const data = await response.json();
@@ -464,6 +518,168 @@ export class Operator {
     
     return data.success;
   }
+
+  /**
+   * Type text into an element by its index from the cached element list
+   * 
+   * @example
+   * // Type "hello world" into the element at index 3
+   * await pipe.operator.typeByIndex(3, "hello world");
+   */
+  async typeByIndex(index: number, text: string): Promise<boolean> {
+    const response = await fetch(
+      `${this.baseUrl}/experimental/operator/type-by-index`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ element_index: index, text }),
+      }
+    );
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      console.log("error response:", responseText); // Add logging for debugging
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to type text into element by index: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to type text into element by index (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
+    }
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(`type operation failed: ${data.message || "unknown error"}`);
+    }
+    
+    return data.success;
+  }
+
+  /**
+   * Find an element and press a key combination on it
+   * 
+   * @example
+   * // Press Tab key on a text field
+   * await pipe.operator.pressKey({
+   *   app: "Chrome",
+   *   label: "Email",
+   *   key: "tab"
+   * });
+   * 
+   * @example
+   * // Press keyboard shortcut Command+C on a text field
+   * await pipe.operator.pressKey({
+   *   app: "Safari",
+   *   role: "textfield",
+   *   key: "cmd+c"
+   * });
+   */
+  async pressKey(options: {
+    app: string;
+    window?: string;
+    role?: string;
+    text?: string;
+    label?: string;
+    description?: string;
+    id?: string;
+    index?: number;
+    useBackgroundApps?: boolean;
+    activateApp?: boolean;
+    key: string;
+  }) {
+    const selector: ElementSelector = {
+      app_name: options.app,
+      window_name: options.window,
+      locator: options.role || "",
+      index: options.index,
+      text: options.text,
+      label: options.label,
+      description: options.description,
+      element_id: options.id,
+      use_background_apps: options.useBackgroundApps,
+      activate_app: options.activateApp !== false,
+    };
+
+    const response = await fetch(`${this.baseUrl}/experimental/operator/press-key`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        selector,
+        key_combo: options.key,
+      }),
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to press key: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to press key (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
+    }
+
+    const result = await response.json();
+    return result.success;
+  }
+
+  /**
+   * Press a key combination on an element by its index from the cached element list
+   * 
+   * @example
+   * // Press Tab key on the element at index 5
+   * await pipe.operator.pressKeyByIndex(5, "tab");
+   * 
+   * @example
+   * // Press Command+A (Select All) on the element at index 2
+   * await pipe.operator.pressKeyByIndex(2, "cmd+a");
+   */
+  async pressKeyByIndex(index: number, keyCombo: string): Promise<boolean> {
+    const response = await fetch(
+      `${this.baseUrl}/experimental/operator/press-key-by-index`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ element_index: index, key_combo: keyCombo }),
+      }
+    );
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to press key on element by index: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to press key on element by index (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
+    }
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(`press key operation failed: ${data.message || "unknown error"}`);
+    }
+    
+    return data.success;
+  }
 }
 
 class ElementLocator {
@@ -498,10 +714,19 @@ class ElementLocator {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        `failed to find elements: ${errorData.message || response.statusText}`
-      );
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to find elements: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to find elements (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
     }
 
     const result = await response.json();
@@ -530,10 +755,19 @@ class ElementLocator {
     );
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        `failed to click element: ${errorData.message || response.statusText}`
-      );
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to click element: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to click element (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
     }
 
     const data = await response.json();
@@ -582,10 +816,19 @@ class ElementLocator {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        `failed to type text: ${errorData.message || response.statusText}`
-      );
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to type text: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to type text (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
     }
 
     const result = await response.json();
@@ -628,5 +871,44 @@ class ElementLocator {
     }
 
     return null;
+  }
+
+  /**
+   * Press a key combination on the first element matching the selector
+   *
+   * @param keyCombo The key or key combination to press (e.g., "tab", "cmd+c", "shift+enter")
+   * @returns Whether the operation was successful
+   */
+  async pressKey(keyCombo: string): Promise<boolean> {
+    const response = await fetch(`${this.baseUrl}/experimental/operator/press-key`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        selector: {
+          ...this.selector,
+          activate_app: this.selector.activate_app !== false,
+        },
+        key_combo: keyCombo,
+      }),
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+      
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to press key: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to press key (status ${response.status}): ${responseText || response.statusText}`
+        );
+      }
+    }
+
+    const result = await response.json();
+    return result.success;
   }
 }
