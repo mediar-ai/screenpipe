@@ -1067,8 +1067,8 @@ impl SCServer {
             .post("/experimental/operator/click", click_element_handler)
             .post("/experimental/operator/type", type_text_handler)
             .post("/experimental/operator/get_text", get_text_handler)
-            .post("/experimental/list-interactable-elements", list_interactable_elements_handler)
-            .post("/experimental/click-by-index", click_by_index_handler)
+            .post("/experimental/operator/list-interactable-elements", list_interactable_elements_handler)
+            .post("/experimental/operator/click-by-index", click_by_index_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -3375,6 +3375,7 @@ async fn get_text_handler(
     }))
 }
 
+// here
 // Add these new structs for the request/response
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
 pub struct ListInteractableElementsRequest {
