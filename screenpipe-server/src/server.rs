@@ -78,6 +78,10 @@ use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
 
+use std::collections::{HashMap, HashSet};
+use screenpipe_core::UIElement;
+use uuid::Uuid; // or sentry::protocol::Uuid depending on which you want to use
+
 pub type FrameImageCache = LruCache<i64, (String, Instant)>;
 
 pub struct AppState {
@@ -3459,13 +3463,23 @@ async fn list_interactable_elements_handler(
     };
     
     // Get elements from the application
-    let elements = match app.locator("*").all() {
-        Ok(elements) => elements,
+    let elements = match app.locator("*") {
+        Ok(locator) => match locator.all() {
+            Ok(elements) => elements,
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to get elements: {}", e)
+                    })),
+                ));
+            }
+        },
         Err(e) => {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 JsonResponse(json!({
-                    "error": format!("Failed to get elements: {}", e)
+                    "error": format!("Failed to create locator: {}", e)
                 })),
             ));
         }
@@ -3592,7 +3606,7 @@ async fn click_by_index_handler(
         },
         Some(_) => {
             // Cache entry expired
-            error!("cache entry expired for id: {}", request.cache_id);
+            // error!("cache entry expired for id: {}", request.cache_id);
             Err((
                 StatusCode::BAD_REQUEST,
                 JsonResponse(json!({
@@ -3602,7 +3616,7 @@ async fn click_by_index_handler(
         },
         None => {
             // Cache miss
-            error!("no cache entry found for id: {}", request.cache_id);
+            // error!("no cache entry found for id: {}", request.cache_id);
             Err((
                 StatusCode::NOT_FOUND,
                 JsonResponse(json!({

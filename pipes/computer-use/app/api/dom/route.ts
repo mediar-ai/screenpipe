@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { pipe as browserPipe } from "@screenpipe/browser";
-
+import { pipe as browserPipe } from "../../../../../screenpipe-js/browser-sdk/dist";
 export async function GET(request: Request) {
   try {
     // Get query parameters
@@ -20,7 +19,7 @@ export async function GET(request: Request) {
         useBackgroundApps: true,
         activateApp: false, // Default to not activating to avoid disrupting the user
       })
-      .all(maxResults, maxDepth);
+      .all();
     
     console.log(`found ${elements.length} elements`);
     
