@@ -425,7 +425,38 @@ export class Operator {
       return data as InteractableElementsResponse;
     }
 
-  
+  /**
+   * Click an element by its index from the cached element list
+   * 
+   * @example
+   * // Click the element at index 5
+   * await pipe.operator.clickByIndex(5);
+   */
+  async clickByIndex(index: number): Promise<boolean> {
+    const response = await fetch(
+      `${this.baseUrl}/experimental/operator/click-by-index`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ element_index: index }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        `failed to click element by index: ${errorData.error || response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(`click operation failed: ${data.message || "unknown error"}`);
+    }
+    
+    return data.success;
+  }
 }
 
 class ElementLocator {
