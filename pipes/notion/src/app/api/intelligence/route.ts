@@ -4,7 +4,9 @@ import { generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
 import { Client } from "@notionhq/client";
 import { NotionClient } from "@/lib/notion/client";
-import { getScreenpipeAppSettings } from "@/lib/actions/get-screenpipe-app-settings";
+import { settingsStore } from "@/lib/store/settings-store";
+import { OpenAI } from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
 
 // rich schema for relationship intelligence
 const contactSchema = z.object({
@@ -26,8 +28,13 @@ const relationshipIntelligence = z.object({
 
 async function analyzeRelationships(
 	recentLogs: string,
-	model: string,
+	aiPreset: ReturnType<typeof settingsStore.getPreset>,
 ): Promise<z.infer<typeof relationshipIntelligence>> {
+
+	if (!aiPreset) {
+		throw new Error("ai preset not found");
+	}
+
 	const prompt = `analyze these work logs and create a comprehensive relationship intelligence report.
     focus on:
     - identifying key people and their roles
@@ -66,17 +73,24 @@ async function analyzeRelationships(
     of course adapt the example response to the actual data you have, do not use John Doe in your example response, use the names and companies of the people you see in the logs.
     `;
 
-	const provider = ollama(model);
-	console.log("prompt", prompt);
-	const response = await generateObject({
-		model: provider,
-		messages: [{ role: "user", content: prompt }],
-		schema: relationshipIntelligence,
-		maxRetries: 5,
+	const openai = new OpenAI({
+		apiKey: aiPreset.apiKey,
+		baseURL: aiPreset.url,
+		dangerouslyAllowBrowser: true,
 	});
 
-	console.log(response.object);
-	return response.object;
+	console.log("prompt", prompt);
+
+
+	const response = await openai.chat.completions.create({
+		model: aiPreset.model,
+		messages: [{ role: "user", content: prompt }],
+		// response_format: { type: "json_object" },
+		response_format: zodResponseFormat(relationshipIntelligence, "relationshipIntelligence"),
+	});
+
+	console.log("relationship intelligence response", response.choices[0].message.content);
+	return JSON.parse(response.choices[0].message.content || "{}");
 }
 
 async function readRecentLogs(
@@ -121,9 +135,11 @@ async function readRecentLogs(
 
 export async function GET() {
 	try {
-		const settings = (await getScreenpipeAppSettings())["customSettings"]![
-			"notion"
-		];
+		const settings = await settingsStore.loadPipeSettings("notion");
+
+		console.log("settings", settings);
+
+		const aiPreset = settingsStore.getPreset("notion", "aiLogPresetId");
 
 		if (
 			!settings?.notion?.accessToken ||
@@ -157,7 +173,7 @@ export async function GET() {
 
 		const intelligence = await analyzeRelationships(
 			recentLogs,
-			settings.aiModel || "mistral",
+			aiPreset
 		);
 
 		const notion = new NotionClient(settings.notion);

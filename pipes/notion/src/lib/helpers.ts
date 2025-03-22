@@ -5,7 +5,8 @@ import { ollama } from "ollama-ai-provider";
 import { z } from "zod";
 import { Client } from "@notionhq/client";
 import { NotionToMarkdown } from "notion-to-md";
-import { getScreenpipeAppSettings } from "./actions/get-screenpipe-app-settings";
+import { settingsStore } from "./store/settings-store";
+import OpenAI from "openai";
 
 export const workLog = z.object({
   title: z.string(),
@@ -18,11 +19,11 @@ async function extractLinkedContent(prompt: string): Promise<string> {
     // Match @[[file]] or @[[folder/file]] patterns
     const linkRegex = /@\[\[(.*?)\]\]/g;
     const matches = [...prompt.matchAll(linkRegex)];
-    const settings = await getScreenpipeAppSettings();
+    const settings = await settingsStore.loadPipeSettings("notion");
     let enrichedPrompt = prompt;
 
     const notion = new Client({
-      auth: settings?.customSettings?.notion?.accessToken,
+      auth: settings?.notion?.accessToken,
     });
 
     const n2m = new NotionToMarkdown({ notionClient: notion });
@@ -50,12 +51,17 @@ async function extractLinkedContent(prompt: string): Promise<string> {
 
 export async function generateWorkLog(
   screenData: ContentItem[],
-  model: string,
+  aiPreset: ReturnType<typeof settingsStore.getPreset>,
   startTime: Date,
   endTime: Date,
   customPrompt?: string
 ): Promise<WorkLog> {
-  let enrichedPrompt = customPrompt || "";
+
+  if (!aiPreset) {
+    throw new Error("ai preset not found");
+  }
+
+  let enrichedPrompt = customPrompt || aiPreset.prompt || "";
 
   if (customPrompt) {
     enrichedPrompt = await extractLinkedContent(customPrompt);
@@ -80,11 +86,16 @@ export async function generateWorkLog(
 
   console.log("enrichedPrompt prompt:", enrichedPrompt);
 
-  const provider = ollama(model);
-  const response = await generateObject({
-    model: provider,
+  const openai = new OpenAI({
+    apiKey: aiPreset.apiKey,
+    baseURL: aiPreset.url,
+    dangerouslyAllowBrowser: true,
+  });
+
+  const response = await openai.chat.completions.create({
+    model: aiPreset.model,
     messages: [{ role: "user", content: defaultPrompt }],
-    schema: workLog,
+    response_format: { type: "json_object" },
   });
 
   const formatDate = (date: Date) => {
@@ -99,7 +110,7 @@ export async function generateWorkLog(
   };
 
   return {
-    ...response.object,
+    ...JSON.parse(response.choices[0].message.content || "{}"),
     startTime: formatDate(startTime),
     endTime: formatDate(endTime),
   };
