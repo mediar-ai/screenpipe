@@ -7,6 +7,7 @@ import { Client } from "@notionhq/client";
 import { NotionToMarkdown } from "notion-to-md";
 import { settingsStore } from "./store/settings-store";
 import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod.mjs";
 
 export const workLog = z.object({
   title: z.string(),
@@ -95,7 +96,7 @@ export async function generateWorkLog(
   const response = await openai.chat.completions.create({
     model: aiPreset.model,
     messages: [{ role: "user", content: defaultPrompt }],
-    response_format: { type: "json_object" },
+    response_format: zodResponseFormat(workLog, "workLog"),
   });
 
   const formatDate = (date: Date) => {
