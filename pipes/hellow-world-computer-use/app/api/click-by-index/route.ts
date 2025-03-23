@@ -1,3 +1,8 @@
+/*
+curl -X POST "http://localhost:3000/api/click-by-index" \
+  -H "Content-Type: application/json" \
+  -d '{"element_index": 2}' | jq
+*/
 import { NextResponse } from "next/server";
 import { pipe as browserPipe } from "../../../../../screenpipe-js/browser-sdk/dist";
 

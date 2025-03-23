@@ -1,6 +1,7 @@
 /*
-curl -X POST "http://localhost:3000/api/type-by-index" \    -H "Content-Type: application/json" \           
-  -d '{"element_index": 69, "text": "hello world"}' | jq
+curl -X POST "http://localhost:3000/api/type-by-index" \
+-H "Content-Type: application/json" \
+-d '{"element_index": 32, "text":"hello world😊"}' | jq
 */
 
 import { NextResponse } from "next/server";

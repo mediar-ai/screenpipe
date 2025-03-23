@@ -1,10 +1,5 @@
 /*
-curl -X GET \
-  "http://localhost:3000/api/get-interactive-list" \
-  --data-urlencode "app=Messages" \
-  --data-urlencode "with_text_only=true" \
-  --data-urlencode "interactable_only=true" \
-  | jq
+curl -X GET "http://localhost:3000/api/get-interactive-list?app=Messages&with_text_only=true&include_sometimes_interactable=true" | jq
 */
 import { NextResponse } from "next/server";
 import { pipe as browserPipe } from "../../../../../screenpipe-js/browser-sdk/dist";

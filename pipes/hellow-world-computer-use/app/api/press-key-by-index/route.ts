@@ -1,7 +1,7 @@
 /* 
 curl -X POST "http://localhost:3000/api/press-key-by-index" \
   -H "Content-Type: application/json" \
-  -d '{"element_index": [TYPE HERE], "key_combo": "return"}'
+  -d '{"element_index": 32, "key_combo": "return"}'
 */
 import { NextResponse } from "next/server";
 import { pipe as browserPipe } from "../../../../../screenpipe-js/browser-sdk/dist";
