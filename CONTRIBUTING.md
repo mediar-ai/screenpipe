@@ -25,28 +25,28 @@ before you begin:
    xcodebuild -runFirstLaunch
    ```
 
-3. **install bun cli**:
+2. **install bun cli**:
    ```bash
    curl -fsSL https://bun.sh/install | bash
    ```
 
-4. **clone the repository**:
+3. **clone the repository**:
    ```bash
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
    ```
 
-5. **build the project**:
+4. **build the project**:
    ```bash
    cargo build --release --features metal
    ```
 
-6. **run screenpipe**:
+5. **run screenpipe**:
    ```bash
    ./target/release/screenpipe
    ```
 
-7. **build the desktop app**:
+6. **build the desktop app**:
    ```bash
    cd screenpipe-app-tauri
    bun install
