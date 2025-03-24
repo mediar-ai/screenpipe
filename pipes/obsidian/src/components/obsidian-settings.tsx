@@ -884,7 +884,7 @@ export function ObsidianSettings() {
                       disabled={!pathValidation.isValid}
                     />
                     <p className="text-xs text-muted-foreground">
-                      customize how activity logs and insights are generated
+                      customize how activity logs and insights are generated. you can also link other obsidian notes by typing "@[[notes]]"
                     </p>
                   </div>
                 </CardContent>
