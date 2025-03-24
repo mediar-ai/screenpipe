@@ -19,29 +19,34 @@ before you begin:
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    brew install pkg-config ffmpeg jq cmake wget
    ```
+   Install Xcode via App Store (or elsewhere) and initialize. Xcode command line tools only installation is insufficent. 
+   ```
+   sudo xcodebuild -license
+   xcodebuild -runFirstLaunch
+   ```
 
-2. **install bun cli**:
+3. **install bun cli**:
    ```bash
    curl -fsSL https://bun.sh/install | bash
    ```
 
-3. **clone the repository**:
+4. **clone the repository**:
    ```bash
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
    ```
 
-4. **build the project**:
+5. **build the project**:
    ```bash
    cargo build --release --features metal
    ```
 
-5. **run screenpipe**:
+6. **run screenpipe**:
    ```bash
    ./target/release/screenpipe
    ```
 
-6. **build the desktop app**:
+7. **build the desktop app**:
    ```bash
    cd screenpipe-app-tauri
    bun install
