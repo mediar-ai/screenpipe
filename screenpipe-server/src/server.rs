@@ -1475,8 +1475,9 @@ pub(crate) async fn add_to_database(
 
 #[oasgen]
 async fn input_control_handler(
-    JsonResponse(payload): JsonResponse<InputControlRequest>,
-) -> Result<JsonResponse<InputControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    State(_): State<Arc<AppState>>,
+    Json(payload): Json<InputControlRequest>,
+) -> Result<JsonResponse<InputControlResponse>, (StatusCode, Json<serde_json::Value>)> {
     use enigo::{Keyboard, Mouse};
 
     info!("input control handler {:?}", payload);
@@ -1535,12 +1536,12 @@ fn mouse_button_from_string(
 }
 
 // Add these new structs:
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, OaSchema)]
 struct InputControlRequest {
     action: InputAction,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, OaSchema)]
 #[serde(tag = "type", content = "data")]
 enum InputAction {
     KeyPress(String),
@@ -1549,7 +1550,7 @@ enum InputAction {
     WriteText(String),
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, OaSchema)]
 struct InputControlResponse {
     success: bool,
 }
