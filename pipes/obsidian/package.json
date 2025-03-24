@@ -1,12 +1,13 @@
 {
   "name": "obsidian",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --no-lint",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "publish": "bunx --bun @screenpipe/dev@latest pipe publish --name obsidian"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.2",

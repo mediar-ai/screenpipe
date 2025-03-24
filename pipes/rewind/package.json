@@ -1,12 +1,13 @@
 {
   "name": "rewind",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "publish": "bunx --bun @screenpipe/dev@latest pipe publish --name rewind"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.2",
