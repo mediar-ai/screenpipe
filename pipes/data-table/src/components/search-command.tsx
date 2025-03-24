@@ -2,13 +2,16 @@
 
 import * as React from "react";
 import { useState } from "react";
-import { Search, Database, Bot, Copy } from "lucide-react";
+import { Database, Bot, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CommandDialog, CommandInput } from "@/components/ui/command";
+import {
+  CommandDialog,
+  CommandInput,
+  CommandList,
+} from "@/components/ui/command";
 import OpenAI from "openai";
 import { toast } from "@/components/ui/use-toast";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { DialogTitle } from "./ui/dialog";
 import { SheetTitle } from "./ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -26,6 +29,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AIPresetsSelector } from "./ai-presets-selector";
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 
 export function SearchCommand() {
   const [open, setOpen] = useState(false);
@@ -33,6 +38,7 @@ export function SearchCommand() {
   const [sqlQuery, setSqlQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { settings } = useSettings();
+  const { getPreset } = usePipeSettings("data-table");
   const [results, setResults] = useState<any[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -61,12 +67,18 @@ export function SearchCommand() {
     setIsLoading(true);
 
     try {
+      const aiPreset = getPreset();
+
+      if (!aiPreset) {
+        throw Error("please select a preset");
+      }
+
       const openai = new OpenAI({
         apiKey:
-          settings.aiProviderType === "screenpipe-cloud"
-            ? settings.user.token
-            : settings.openaiApiKey,
-        baseURL: settings.aiUrl,
+          aiPreset?.provider === "screenpipe-cloud"
+            ? settings?.user?.token
+            : aiPreset?.apiKey,
+        baseURL: aiPreset?.url,
         dangerouslyAllowBrowser: true,
       });
 
@@ -96,7 +108,7 @@ export function SearchCommand() {
               (text, frame_id)
             - ocr_text_embeddings: vector embeddings
               (id, frame_id, embedding, created_at)
-          
+
           2. Audio Recording:
             - audio_chunks: recorded audio segments
               (id, file_path, timestamp)
@@ -106,13 +118,13 @@ export function SearchCommand() {
               (transcription, device, audio_chunk_id, speaker_id, start_time, end_time)
             - speakers: voice identification
               (id, name, metadata, hallucination)
-          
+
           3. UI Monitoring:
             - ui_monitoring: app/window state
               (id, text_output, timestamp, app, window, initial_traversal_at)
             - ui_monitoring_fts: optimized UI search
               (text_output, app, window, ui_id)
-          
+
           4. Tagging System:
             - tags: user-defined categories
               (id, name, created_at)
@@ -128,7 +140,7 @@ export function SearchCommand() {
           - Voice transcriptions: JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
           - UI events: JOIN ui_monitoring_fts umf ON um.id = umf.ui_id
           - Tagged content: JOIN tags t ON vt.tag_id = t.id
-          
+
           Performance Indexes:
           - frames: timestamp, video_chunk_id
           - ocr_text: frame_id, app_name, window_name
@@ -151,14 +163,17 @@ export function SearchCommand() {
       ];
 
       const completion = await openai.chat.completions.create({
-        model: settings.aiModel,
+        model: aiPreset?.model,
         messages,
         temperature: 0.3,
       });
 
       let sql = completion.choices[0].message.content!;
       // Remove SQL code fence markers if present
-      sql = sql.trim().replace(/```sql\n?|\n?```/g, "").trim();
+      sql = sql
+        .trim()
+        .replace(/```sql\n?|\n?```/g, "")
+        .trim();
       setSqlQuery(sql);
 
       // Here you would execute the SQL query
@@ -224,7 +239,7 @@ export function SearchCommand() {
         (row) =>
           `| ${columns
             .map((col) => row[col]?.toString() || "N/A")
-            .join(" | ")} |`
+            .join(" | ")} |`,
       )
       .join("\n");
 
@@ -265,6 +280,10 @@ export function SearchCommand() {
             }
           }}
         />
+        <CommandList></CommandList>
+        <div className="w-full">
+          <AIPresetsSelector pipeName="data-table" />
+        </div>
         <div className="px-4 pb-4">
           <div className="mt-4 space-y-4">
             <div className="flex justify-between items-center gap-2">
@@ -274,7 +293,7 @@ export function SearchCommand() {
                     <Bot className="h-4 w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    <p className="text-xs">using {settings.aiModel}</p>
+                    <p className="text-xs">using {getPreset()?.model}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -305,7 +324,7 @@ export function SearchCommand() {
                 onChange={(e) => setSqlQuery(e.target.value)}
                 className={cn(
                   "min-h-[100px] resize-none font-mono",
-                  error && "border-red-500"
+                  error && "border-red-500",
                 )}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && e.shiftKey) {
