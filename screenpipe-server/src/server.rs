@@ -1473,6 +1473,7 @@ pub(crate) async fn add_to_database(
     }))
 }
 
+#[oasgen]
 async fn input_control_handler(
     JsonResponse(payload): JsonResponse<InputControlRequest>,
 ) -> Result<JsonResponse<InputControlResponse>, (StatusCode, JsonResponse<Value>)> {
