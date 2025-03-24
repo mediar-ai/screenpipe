@@ -1,0 +1,71 @@
+name: Release Test Bounty
+
+on:
+  workflow_run:
+    workflows: ["Release App"]
+    types:
+      - completed
+
+jobs:
+  create-release-test-bounty:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      issues: write
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+      
+      - name: Get version info
+        id: get_version
+        run: |
+          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
+          # Check if this is a test-needed release
+          git fetch origin ${{ github.event.workflow_run.head_branch }}
+          COMMIT_MSG=$(git log -1 --pretty=%B ${{ github.event.workflow_run.head_sha }})
+          if echo "$COMMIT_MSG" | grep -q "release-app"; then
+            echo "NEED_TEST=true" >> $GITHUB_ENV
+          else
+            echo "NEED_TEST=false" >> $GITHUB_ENV
+          fi
+
+      - name: Create test bounty issue
+        if: env.NEED_TEST == 'true'
+        id: create-issue
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const version = process.env.VERSION;
+            const releaseUrl = "https://web.crabnebula.cloud/mediar/screenpipe/releases";
+            
+            // Read template file
+            let templateContent = fs.readFileSync('.github/ISSUE_TEMPLATE/release-test-bounty-template.md', 'utf8');
+            
+            // Skip YAML frontmatter
+            const frontmatterEnd = templateContent.indexOf('---', 3) + 3;
+            templateContent = templateContent.substring(frontmatterEnd);
+            
+            // Replace variables
+            const replacedContent = templateContent
+              .replace(/\$\{\{ env\.VERSION \}\}/g, version)
+              .replace(/\$\{\{ env\.RELEASE_URL \}\}/g, releaseUrl);
+            
+            // Create the issue
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🧪 testing bounty: release v${version}`,
+              body: replacedContent,
+              labels: ['testing', 'bounty', 'release', 'algora']
+            });
+            
+            console.log(`created issue #${issue.data.number}: ${issue.data.html_url}`);
+            return issue.data.html_url; 

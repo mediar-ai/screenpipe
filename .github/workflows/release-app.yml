@@ -12,6 +12,10 @@ on:
       version:
         description: "Version to set in Cargo.toml (required if commit_hash is provided)"
         required: false
+      needs_testing:
+        description: "Whether this release needs community testing"
+        type: boolean
+        default: false
   push:
     branches: [main]
 
@@ -21,6 +25,7 @@ jobs:
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       should_publish: ${{ steps.check.outputs.should_publish }}
+      should_test: ${{ steps.check.outputs.should_test }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +42,19 @@ jobs:
             echo "should_publish=true" >> $GITHUB_OUTPUT
           else
             echo "should_publish=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check for explicit testing or skip flags first
+          if echo "$COMMIT_MSG" | grep -q "release-app"; then
+            echo "should_test=true" >> $GITHUB_OUTPUT
+          elif echo "$COMMIT_MSG" | grep -q "release-app-skip-test"; then
+            echo "should_test=false" >> $GITHUB_OUTPUT
+          # For regular release-app (not publish), default to testing=true
+          elif echo "$COMMIT_MSG" | grep -q "release-app" && ! echo "$COMMIT_MSG" | grep -q "release-app-publish"; then
+            echo "should_test=true" >> $GITHUB_OUTPUT
+          # For manual workflow runs, use the input parameter
+          else
+            echo "should_test=${{ github.event.inputs.needs_testing }}" >> $GITHUB_OUTPUT
           fi
 
   generate_changelog:
@@ -609,6 +627,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
       - name: Get version from Cargo.toml
         id: get_version
@@ -621,3 +641,35 @@ jobs:
         with:
           command: release publish ${{ secrets.CN_APP_SLUG }} ${{ env.VERSION }}
           api-key: ${{ secrets.CN_API_KEY }}
+          
+      - name: Create testing notification
+        if: needs.check_commit.outputs.should_test == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Get CrabNebula release URL from environment
+            const releaseUrl = "https://web.crabnebula.cloud/mediar/screenpipe/releases";
+            
+            // Create release discussion issue
+            const message = `
+            ## 🧪 testing needed for v${{ env.VERSION }}
+            
+            this release needs community testing. a testing bounty issue will be created shortly.
+            
+            - download the release: [crabnebula cloud](${ releaseUrl })
+            - testing guidelines: [testing.md](https://github.com/mediar-ai/screenpipe/blob/main/TESTING.md)
+            
+            each tester who provides quality feedback will receive a $20 bounty through algora.
+            `;
+            
+            // Create a new issue for testing discussion
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🧪 Testing Discussion: v${{ env.VERSION }}`,
+              body: message,
+              labels: ['testing', 'discussion']
+            });
+            
+            console.log(`Created testing discussion issue: ${issue.data.html_url}`);
