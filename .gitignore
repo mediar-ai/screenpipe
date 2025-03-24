@@ -10,7 +10,6 @@
 
 # Rust/Cargo specific files
 *target
-*Cargo.lock
 
 # IDE specific files
 .idea/
