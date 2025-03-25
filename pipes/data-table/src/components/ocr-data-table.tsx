@@ -54,9 +54,7 @@ interface OcrText {
   text: string;
   text_json: string | null;
   app_name: string;
-  // ocr_engine: string;
   window_name: string | null;
-  // focused: boolean;
   timestamp: string;
   browser_url: string | null;
 }
@@ -206,22 +204,6 @@ const columns: ColumnDef<OcrText>[] = [
       />
     ),
   },
-  // {
-  //   accessorKey: "ocr_engine",
-  //   header: "Engine",
-  //   cell: ({ row }) => (
-  //     <Badge variant="secondary">{row.getValue("ocr_engine")}</Badge>
-  //   ),
-  // },
-  // {
-  //   accessorKey: "focused",
-  //   header: "Focused",
-  //   cell: ({ row }) => (
-  //     <Badge variant={row.getValue("focused") ? "default" : "outline"}>
-  //       {row.getValue("focused") ? "yes" : "no"}
-  //     </Badge>
-  //   ),
-  // },
   {
     id: "actions",
     cell: ({ row }) => {
@@ -291,7 +273,7 @@ export function OcrDataTable() {
               .replace(/'/g, "''")}%'`
           : null,
         appFilter
-          ? `LOWER(app_name) LIKE '%${appFilter
+          ? `LOWER(frames.app_name) LIKE '%${appFilter
               .toLowerCase()
               .replace(/'/g, "''")}%'`
           : null,
@@ -308,6 +290,7 @@ export function OcrDataTable() {
           query: `
             SELECT COUNT(*) as total
             FROM ocr_text 
+            JOIN frames ON ocr_text.frame_id = frames.id
             WHERE ${filterClauses}
           `,
         }),
@@ -331,14 +314,12 @@ export function OcrDataTable() {
               ocr_text.frame_id,
               ocr_text.text,
               ocr_text.text_json,
-              ocr_text.app_name,
-              ocr_text.ocr_engine,
-              ocr_text.window_name,
-              ocr_text.focused,
+              frames.app_name,
+              frames.window_name,
               frames.timestamp,
               frames.browser_url
             FROM ocr_text 
-            LEFT JOIN frames ON ocr_text.frame_id = frames.id
+            JOIN frames ON ocr_text.frame_id = frames.id
             WHERE ${filterClauses}
             ORDER BY ocr_text.frame_id DESC
             LIMIT ${pageSize}

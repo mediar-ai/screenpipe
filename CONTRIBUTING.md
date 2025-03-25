@@ -19,6 +19,11 @@ before you begin:
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    brew install pkg-config ffmpeg jq cmake wget
    ```
+   Install Xcode via App Store (or elsewhere) and initialize. Xcode command line tools only installation is insufficent. 
+   ```
+   sudo xcodebuild -license
+   xcodebuild -runFirstLaunch
+   ```
 
 2. **install bun cli**:
    ```bash
