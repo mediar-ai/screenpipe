@@ -4211,31 +4211,32 @@ async fn press_key_by_index_handler(
 }
 
 // Add these new structs for opening applications
-#[derive(Deserialize)]
+#[derive(Deserialize, OaSchema)]
 pub struct OpenApplicationRequest {
     app_name: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, OaSchema)]
 pub struct OpenApplicationResponse {
     success: bool,
     message: String,
 }
 
 // Add these new structs for opening URLs
-#[derive(Deserialize)]
+#[derive(Deserialize, OaSchema)]
 pub struct OpenUrlRequest {
     url: String,
     browser: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, OaSchema)]
 pub struct OpenUrlResponse {
     success: bool,
     message: String,
 }
 
 // Add handler for opening applications
+#[oasgen]
 async fn open_application_handler(
     State(_): State<Arc<AppState>>,
     Json(request): Json<OpenApplicationRequest>,
@@ -4265,6 +4266,7 @@ async fn open_application_handler(
 }
 
 // Add handler for opening URLs
+#[oasgen]
 async fn open_url_handler(
     State(_): State<Arc<AppState>>,
     Json(request): Json<OpenUrlRequest>,
