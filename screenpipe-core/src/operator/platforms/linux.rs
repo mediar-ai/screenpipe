@@ -1,6 +1,7 @@
 use crate::operator::element::UIElementImpl;
 use crate::operator::platforms::AccessibilityEngine;
 use crate::operator::{AutomationError, Locator, Selector, UIElement, UIElementAttributes};
+use crate::operator::platforms::macos::{ClickResult, ClickMethod, ClickMethodSelection};
 use std::fmt::Debug;
 
 pub struct LinuxEngine;
@@ -107,13 +108,19 @@ impl UIElementImpl for LinuxUIElement {
         ))
     }
 
-    fn click(&self) -> Result<(), AutomationError> {
+    fn click(&self) -> Result<ClickResult, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Linux implementation is not yet available".to_string(),
         ))
     }
 
-    fn double_click(&self) -> Result<(), AutomationError> {
+    fn click_with_method(&self, _method: ClickMethodSelection) -> Result<ClickResult, AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Linux implementation is not yet available".to_string(),
+        ))
+    }
+
+    fn double_click(&self) -> Result<ClickResult, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Linux implementation is not yet available".to_string(),
         ))

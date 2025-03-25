@@ -1,5 +1,6 @@
 use crate::operator::errors::AutomationError;
 use crate::operator::selector::Selector;
+use crate::operator::platforms::macos::{ClickResult, ClickMethodSelection};
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -29,8 +30,9 @@ pub(crate) trait UIElementImpl: Send + Sync + Debug {
     fn children(&self) -> Result<Vec<UIElement>, AutomationError>;
     fn parent(&self) -> Result<Option<UIElement>, AutomationError>;
     fn bounds(&self) -> Result<(f64, f64, f64, f64), AutomationError>; // x, y, width, height
-    fn click(&self) -> Result<(), AutomationError>;
-    fn double_click(&self) -> Result<(), AutomationError>;
+    fn click(&self) -> Result<ClickResult, AutomationError>;
+    fn click_with_method(&self, method: ClickMethodSelection) -> Result<ClickResult, AutomationError>;
+    fn double_click(&self) -> Result<ClickResult, AutomationError>;
     fn right_click(&self) -> Result<(), AutomationError>;
     fn hover(&self) -> Result<(), AutomationError>;
     fn focus(&self) -> Result<(), AutomationError>;
@@ -86,12 +88,17 @@ impl UIElement {
     }
 
     /// Click on this element
-    pub fn click(&self) -> Result<(), AutomationError> {
+    pub fn click(&self) -> Result<ClickResult, AutomationError> {
         self.inner.click()
     }
 
+    /// Click on this element using a specific click method
+    pub fn click_with_method(&self, method: ClickMethodSelection) -> Result<ClickResult, AutomationError> {
+        self.inner.click_with_method(method)
+    }
+
     /// Double-click on this element
-    pub fn double_click(&self) -> Result<(), AutomationError> {
+    pub fn double_click(&self) -> Result<ClickResult, AutomationError> {
         self.inner.double_click()
     }
 

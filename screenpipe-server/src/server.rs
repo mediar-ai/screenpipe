@@ -77,6 +77,10 @@ use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
 
+use screenpipe_core::UIElement;
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid; // or sentry::protocol::Uuid depending on which you want to use
+
 pub type FrameImageCache = LruCache<i64, (String, Instant)>;
 
 pub struct AppState {
@@ -90,6 +94,7 @@ pub struct AppState {
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
     pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
+    pub element_cache: Arc<Mutex<Option<(Vec<UIElement>, Instant, String)>>>,
 }
 
 // Update the SearchQuery struct
@@ -1108,6 +1113,7 @@ impl SCServer {
             } else {
                 None
             },
+            element_cache: Arc::new(Mutex::new(None)),
         });
 
         let cors = CorsLayer::new()
@@ -1150,7 +1156,33 @@ impl SCServer {
             .post("/experimental/operator", find_elements_handler)
             .post("/experimental/operator/click", click_element_handler)
             .post("/experimental/operator/type", type_text_handler)
+
+            .post("/experimental/operator/press-key", press_key_handler)
+            .post("/experimental/operator/get_text", get_text_handler)
+            .post(
+                "/experimental/operator/list-interactable-elements",
+                list_interactable_elements_handler,
+            )
+            .post(
+                "/experimental/operator/click-by-index",
+                click_by_index_handler,
+            )
+            .post(
+                "/experimental/operator/type-by-index",
+                type_by_index_handler,
+            )
+            .post(
+                "/experimental/operator/press-key-by-index",
+                press_key_by_index_handler,
+            )
+            .post(
+                "/experimental/operator/open-application",
+                open_application_handler,
+            )
+            .post("/experimental/operator/open-url", open_url_handler)
+
             .post("/experimental/input_control", input_control_handler)
+
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -3088,6 +3120,17 @@ pub struct ClickElementRequest {
 }
 
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ClickByIndexRequest {
+    element_index: usize,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct ClickByIndexResponse {
+    success: bool,
+    message: String,
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
 pub struct TypeTextRequest {
     selector: ElementSelector,
     text: String,
@@ -3421,6 +3464,832 @@ async fn type_text_handler(
             JsonResponse(json!({
                 "error": "No matching element found"
             })),
+        )),
+    }
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct GetTextRequest {
+    app_name: String,
+    window_name: Option<String>,
+    max_depth: Option<usize>,
+    use_background_apps: Option<bool>,
+    activate_app: Option<bool>,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct GetTextResponse {
+    success: bool,
+    text: String,
+    metadata: GetTextMetadata,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct GetTextMetadata {
+    extraction_time_ms: u64,
+    element_count: usize,
+    app_name: String,
+    timestamp: DateTime<Utc>,
+}
+
+#[oasgen]
+async fn get_text_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<GetTextRequest>,
+) -> Result<JsonResponse<GetTextResponse>, (StatusCode, JsonResponse<Value>)> {
+    let start = Instant::now();
+
+    let desktop = match Desktop::new(
+        request.use_background_apps.unwrap_or(false),
+        request.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Get text with specified max_depth or default to 10
+    let text = match app.text(request.max_depth.unwrap_or(10)) {
+        Ok(text) => text,
+        Err(e) => {
+            error!("Failed to extract text: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to extract text: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let duration = start.elapsed();
+
+    Ok(JsonResponse(GetTextResponse {
+        success: true,
+        text,
+        metadata: GetTextMetadata {
+            extraction_time_ms: duration.as_millis() as u64,
+            element_count: 0, // You could add element counting if needed
+            app_name: request.app_name,
+            timestamp: Utc::now(),
+        },
+    }))
+}
+
+// Add these new structs for the request/response
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ListInteractableElementsRequest {
+    app_name: String,
+    window_name: Option<String>,
+    with_text_only: Option<bool>,
+    interactable_only: Option<bool>,
+    include_sometimes_interactable: Option<bool>,
+    max_elements: Option<usize>,
+    use_background_apps: Option<bool>,
+    activate_app: Option<bool>,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct InteractableElement {
+    index: usize,
+    role: String,
+    interactability: String, // "definite", "sometimes", "none"
+    text: String,
+    position: Option<ElementPosition>,
+    size: Option<ElementSize>,
+    element_id: Option<String>,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct ListInteractableElementsResponse {
+    elements: Vec<InteractableElement>,
+    stats: ElementStats,
+    cache_info: ElementCacheInfo, // Add this new field
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct ElementStats {
+    total: usize,
+    definitely_interactable: usize,
+    sometimes_interactable: usize,
+    non_interactable: usize,
+    by_role: HashMap<String, usize>,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct ElementCacheInfo {
+    cache_id: String,
+    timestamp: String,
+    expires_at: String,
+    element_count: usize,
+    ttl_seconds: u64,
+}
+
+// In your route definitions, add:
+#[oasgen]
+async fn list_interactable_elements_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ListInteractableElementsRequest>,
+) -> Result<JsonResponse<ListInteractableElementsResponse>, (StatusCode, JsonResponse<Value>)> {
+    // First, set up the definitely and sometimes interactable role sets
+    let definitely_interactable: HashSet<&str> = [
+        "AXButton",
+        "AXMenuItem",
+        "AXMenuBarItem",
+        "AXCheckBox",
+        "AXPopUpButton",
+        "AXTextField",
+        "AXTextArea",
+        "AXComboBox",
+        "AXLink",
+        "AXScrollBar",
+        // ... other definitely interactable roles
+    ]
+    .iter()
+    .cloned()
+    .collect();
+
+    let sometimes_interactable: HashSet<&str> = [
+        "AXImage",
+        "AXCell",
+        "AXSplitter",
+        "AXRow",
+        "AXStatusItem",
+        // ... other sometimes interactable roles
+    ]
+    .iter()
+    .cloned()
+    .collect();
+
+    // Create desktop automation engine
+    let desktop = match Desktop::new(
+        request.use_background_apps.unwrap_or(false),
+        request.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Get application
+    let app = match desktop.application(&request.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("Application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // Get elements from the application
+    let locator = match app.locator("") {
+        Ok(locator) => locator,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to get elements: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let elements = match locator.all() {
+        Ok(elements) => elements,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to get elements: {}", e)
+                })),
+            ));
+        }
+    };
+
+    info!("found {} elements in {}", elements.len(), request.app_name);
+
+    // Filter and convert elements
+    let mut result_elements = Vec::new();
+    let mut stats = ElementStats {
+        total: elements.len(),
+        definitely_interactable: 0,
+        sometimes_interactable: 0,
+        non_interactable: 0,
+        by_role: HashMap::new(),
+    };
+
+    for (i, element) in elements.iter().enumerate() {
+        let role = element.role();
+
+        // Count by role
+        *stats.by_role.entry(role.clone()).or_insert(0) += 1;
+
+        // Determine interactability
+        let interactability = if definitely_interactable.contains(role.as_str()) {
+            stats.definitely_interactable += 1;
+            "definite"
+        } else if sometimes_interactable.contains(role.as_str()) {
+            stats.sometimes_interactable += 1;
+            "sometimes"
+        } else {
+            stats.non_interactable += 1;
+            "none"
+        };
+
+        // Extract text from element
+        let text = element.text(10).unwrap_or_default();
+
+        // Apply filters
+        let with_text_condition = !request.with_text_only.unwrap_or(false) || !text.is_empty();
+        let interactable_condition = !request.interactable_only.unwrap_or(false)
+            || (interactability == "definite"
+                || (request.include_sometimes_interactable.unwrap_or(false)
+                    && interactability == "sometimes"));
+
+        if with_text_condition && interactable_condition {
+            let (x, y, width, height) = element.bounds().ok().unwrap_or((0.0, 0.0, 0.0, 0.0));
+
+            result_elements.push(InteractableElement {
+                index: i,
+                role: role.clone(),
+                interactability: interactability.to_string(),
+                text,
+                position: Some(ElementPosition {
+                    x: x as i32,
+                    y: y as i32,
+                }),
+                size: Some(ElementSize {
+                    width: width as i32,
+                    height: height as i32,
+                }),
+                element_id: element.id(),
+            });
+        }
+    }
+
+    // Apply max_elements limit if specified
+    if let Some(max) = request.max_elements {
+        if result_elements.len() > max {
+            result_elements.truncate(max);
+        }
+    }
+
+    // Generate a cache ID and store elements in cache
+    let cache_id = Uuid::new_v4().to_string();
+    let cache_timestamp = Instant::now();
+    let ttl_seconds: u64 = 30; // Explicitly specify u64 type
+
+    {
+        let mut cache = state.element_cache.lock().await;
+        *cache = Some((elements.clone(), cache_timestamp, request.app_name.clone()));
+    }
+
+    // Create cache info for response
+    let now = Utc::now();
+    let expires_at = now + chrono::Duration::seconds(ttl_seconds as i64);
+
+    let cache_info = ElementCacheInfo {
+        cache_id: cache_id.clone(),
+        timestamp: now.to_rfc3339(),
+        expires_at: expires_at.to_rfc3339(),
+        element_count: elements.len(),
+        ttl_seconds: ttl_seconds,
+    };
+
+    Ok(JsonResponse(ListInteractableElementsResponse {
+        elements: result_elements,
+        stats,
+        cache_info,
+    }))
+}
+
+#[oasgen]
+async fn click_by_index_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ClickByIndexRequest>,
+) -> Result<JsonResponse<ClickByIndexResponse>, (StatusCode, JsonResponse<Value>)> {
+    // Get elements from cache
+    let elements_opt = {
+        let cache = state.element_cache.lock().await;
+        cache.clone()
+    };
+
+    // First check if cache exists at all
+    if elements_opt.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": "no element cache found, please run list_interactable_elements first"
+            })),
+        ));
+    }
+
+    // Then proceed with the rest of the logic...
+    match elements_opt {
+        Some((elements, timestamp, _app_name)) if timestamp.elapsed() < Duration::from_secs(30) => {
+            // Use element_index directly
+            if request.element_index < elements.len() {
+                let element = &elements[request.element_index];
+
+                match element.click() {
+                    Ok(_) => Ok(JsonResponse(ClickByIndexResponse {
+                        success: true,
+                        message: format!(
+                            "Successfully clicked element with role: {}",
+                            element.role()
+                        ),
+                    })),
+                    Err(e) => {
+                        error!("failed to click element: {}", e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({
+                                "error": format!("failed to click element: {}", e)
+                            })),
+                        ))
+                    }
+                }
+            } else {
+                error!(
+                    "element index out of bounds: {} (max: {})",
+                    request.element_index,
+                    elements.len() - 1
+                );
+                Err((
+                    StatusCode::BAD_REQUEST,
+                    JsonResponse(json!({
+                        "error": format!("element index out of bounds: {} (max: {})",
+                                        request.element_index, elements.len() - 1)
+                    })),
+                ))
+            }
+        }
+        Some(_) => {
+            // Cache entry expired
+            // error!("cache entry expired for id: {}", request.cache_id);
+            Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({
+                    "error": "cache entry expired, please list elements again"
+                })),
+            ))
+        }
+        None => {
+            // Cache miss
+            // error!("no cache entry found for id: {}", request.cache_id);
+            Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": "no cache entry found, please list elements again"
+                })),
+            ))
+        }
+    }
+}
+
+// Add these new structs after ClickByIndexResponse
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct TypeByIndexRequest {
+    element_index: usize,
+    text: String,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct TypeByIndexResponse {
+    success: bool,
+    message: String,
+}
+
+// Add this new handler function after click_by_index_handler
+#[oasgen]
+async fn type_by_index_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<TypeByIndexRequest>,
+) -> Result<JsonResponse<TypeByIndexResponse>, (StatusCode, JsonResponse<Value>)> {
+    // Get elements from cache
+    let elements_opt = {
+        let cache = state.element_cache.lock().await;
+        cache.clone()
+    };
+
+    // First check if cache exists at all
+    if elements_opt.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": "no element cache found, please run list_interactable_elements first"
+            })),
+        ));
+    }
+
+    // Then proceed with the logic...
+    match elements_opt {
+        Some((elements, timestamp, _app_name)) if timestamp.elapsed() < Duration::from_secs(30) => {
+            // Use element_index directly
+            if request.element_index < elements.len() {
+                let element = &elements[request.element_index];
+
+                match element.type_text(&request.text) {
+                    Ok(_) => Ok(JsonResponse(TypeByIndexResponse {
+                        success: true,
+                        message: format!(
+                            "successfully typed text into element with role: {}",
+                            element.role()
+                        ),
+                    })),
+                    Err(e) => {
+                        error!("failed to type text into element: {}", e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({
+                                "error": format!("failed to type text into element: {}", e)
+                            })),
+                        ))
+                    }
+                }
+            } else {
+                error!(
+                    "element index out of bounds: {} (max: {})",
+                    request.element_index,
+                    elements.len() - 1
+                );
+                Err((
+                    StatusCode::BAD_REQUEST,
+                    JsonResponse(json!({
+                        "error": format!("element index out of bounds: {} (max: {})",
+                                        request.element_index, elements.len() - 1)
+                    })),
+                ))
+            }
+        }
+        Some(_) => {
+            // Cache entry expired
+            Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({
+                    "error": "cache entry expired, please list elements again"
+                })),
+            ))
+        }
+        None => {
+            // Cache miss
+            Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": "no cache entry found, please list elements again"
+                })),
+            ))
+        }
+    }
+}
+
+// Add these new structs after TypeByIndexResponse
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct PressKeyRequest {
+    selector: ElementSelector,
+    key_combo: String,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct PressKeyResponse {
+    success: bool,
+    message: String,
+}
+
+// Add this new handler function
+#[oasgen]
+async fn press_key_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<PressKeyRequest>,
+) -> Result<JsonResponse<PressKeyResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!(target: "operator", "pressing key combination: {}", request.key_combo);
+
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            error!("failed to initialize desktop automation: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("application not found: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": format!("application not found: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!(target: "operator", "app: {:?}", app);
+
+    // Find elements matching the selector
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => match locator.first() {
+            Ok(element) => element,
+            Err(e) => {
+                error!("failed to find elements: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("failed to find elements: {}", e)
+                    })),
+                ));
+            }
+        },
+        Err(e) => {
+            error!("failed to create locator: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("failed to create locator: {}", e)
+                })),
+            ));
+        }
+    };
+
+    debug!(target: "operator", "element: {:?}", element);
+
+    match element {
+        Some(element) => match element.press_key(&request.key_combo) {
+            Ok(_) => Ok(JsonResponse(PressKeyResponse {
+                success: true,
+                message: format!(
+                    "successfully pressed key combination '{}' on element with role: {}",
+                    request.key_combo,
+                    element.role()
+                ),
+            })),
+            Err(e) => {
+                error!("failed to press key: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("failed to press key: {}", e)
+                    })),
+                ))
+            }
+        },
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "no matching element found"
+            })),
+        )),
+    }
+}
+
+// Add these new structs after TypeByIndexRequest
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct PressKeyByIndexRequest {
+    element_index: usize,
+    key_combo: String,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct PressKeyByIndexResponse {
+    success: bool,
+    message: String,
+}
+
+// Add this handler function
+#[oasgen]
+async fn press_key_by_index_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<PressKeyByIndexRequest>,
+) -> Result<JsonResponse<PressKeyByIndexResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!(target: "operator", "pressing key combination by index: element_index={}, key_combo={}", 
+        request.element_index, request.key_combo);
+
+    // Get elements from cache
+    let elements_opt = {
+        let cache = state.element_cache.lock().await;
+        cache.clone()
+    };
+
+    // First check if cache exists at all
+    if elements_opt.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": "no element cache found, please run list_interactable_elements first"
+            })),
+        ));
+    }
+
+    // Then proceed with the logic...
+    match elements_opt {
+        Some((elements, timestamp, app_name)) if timestamp.elapsed() < Duration::from_secs(30) => {
+            // Activate the app first
+            debug!(target: "operator", "activating app: {}", app_name);
+            let desktop = match Desktop::new(false, true) {
+                // Set activate_app to true
+                Ok(d) => d,
+                Err(e) => {
+                    error!("failed to initialize desktop automation: {}", e);
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({
+                            "error": format!("failed to initialize desktop automation: {}", e)
+                        })),
+                    ));
+                }
+            };
+
+            // Get and activate the application
+            let _ = match desktop.application(&app_name) {
+                Ok(app) => app,
+                Err(e) => {
+                    error!("application not found: {}", e);
+                    return Err((
+                        StatusCode::NOT_FOUND,
+                        JsonResponse(json!({
+                            "error": format!("application not found: {}", e)
+                        })),
+                    ));
+                }
+            };
+
+            // Use element_index directly
+            if request.element_index < elements.len() {
+                let element = &elements[request.element_index];
+
+                match element.press_key(&request.key_combo) {
+                    Ok(_) => Ok(JsonResponse(PressKeyByIndexResponse {
+                        success: true,
+                        message: format!(
+                            "successfully pressed key combination '{}' on element with role: {}",
+                            request.key_combo,
+                            element.role()
+                        ),
+                    })),
+                    Err(e) => {
+                        error!("failed to press key on element: {}", e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({
+                                "error": format!("failed to press key on element: {}", e)
+                            })),
+                        ))
+                    }
+                }
+            } else {
+                error!(
+                    "element index out of bounds: {} (max: {})",
+                    request.element_index,
+                    elements.len() - 1
+                );
+                Err((
+                    StatusCode::BAD_REQUEST,
+                    JsonResponse(json!({
+                        "error": format!("element index out of bounds: {} (max: {})",
+                                       request.element_index, elements.len() - 1)
+                    })),
+                ))
+            }
+        }
+        Some(_) => {
+            // Cache entry expired
+            Err((
+                StatusCode::BAD_REQUEST,
+                JsonResponse(json!({
+                    "error": "cache entry expired, please list elements again"
+                })),
+            ))
+        }
+        None => {
+            // Cache miss
+            Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": "no cache entry found, please list elements again"
+                })),
+            ))
+        }
+    }
+}
+
+// Add these new structs for opening applications
+#[derive(Deserialize)]
+pub struct OpenApplicationRequest {
+    app_name: String,
+}
+
+#[derive(Serialize)]
+pub struct OpenApplicationResponse {
+    success: bool,
+    message: String,
+}
+
+// Add these new structs for opening URLs
+#[derive(Deserialize)]
+pub struct OpenUrlRequest {
+    url: String,
+    browser: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct OpenUrlResponse {
+    success: bool,
+    message: String,
+}
+
+// Add handler for opening applications
+async fn open_application_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<OpenApplicationRequest>,
+) -> Result<JsonResponse<OpenApplicationResponse>, (StatusCode, JsonResponse<Value>)> {
+    // Create Desktop automation instance
+    let desktop = match Desktop::new(false, true) {
+        Ok(desktop) => desktop,
+        Err(err) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("Failed to initialize automation: {}", err)})),
+            ));
+        }
+    };
+
+    // Open the application
+    match desktop.open_application(&request.app_name) {
+        Ok(_) => Ok(JsonResponse(OpenApplicationResponse {
+            success: true,
+            message: format!("Successfully opened application: {}", request.app_name),
+        })),
+        Err(err) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": format!("Failed to open application: {}", err)})),
+        )),
+    }
+}
+
+// Add handler for opening URLs
+async fn open_url_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<OpenUrlRequest>,
+) -> Result<JsonResponse<OpenUrlResponse>, (StatusCode, JsonResponse<Value>)> {
+    // Create Desktop automation instance
+    let desktop = match Desktop::new(false, true) {
+        Ok(desktop) => desktop,
+        Err(err) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("Failed to initialize automation: {}", err)})),
+            ));
+        }
+    };
+
+    // Open the URL
+    let browser_ref = request.browser.as_deref();
+    match desktop.open_url(&request.url, browser_ref) {
+        Ok(_) => Ok(JsonResponse(OpenUrlResponse {
+            success: true,
+            message: format!("Successfully opened URL: {}", request.url),
+        })),
+        Err(err) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": format!("Failed to open URL: {}", err)})),
         )),
     }
 }

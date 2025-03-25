@@ -1,0 +1,23 @@
+{
+  "name": "mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --loader ts-node/esm src/test.ts",
+    "build": "tsc",
+    "start": "node --loader ts-node/esm src/server.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.13.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.7.0",
+    "zod": "^3.22.4"
+  }
+}
