@@ -27,6 +27,26 @@ export async function updateFiles(
     ...options,
   };
 
+  // Check if src directory exists
+  const hasSrcDir = fs.existsSync(path.join(options.cwd, "src"));
+
+  // Modify target paths if src directory doesn't exist
+  if (!hasSrcDir) {
+    logger.info(
+      "No src directory found. Components will be installed in the root directory instead."
+    );
+
+    componentLocations = componentLocations.map((location) => {
+      if (location.target.startsWith("./src/")) {
+        return {
+          ...location,
+          target: "./" + location.target.substring(6), // Remove the 'src/' part
+        };
+      }
+      return location;
+    });
+  }
+
   const filesCreatedSpinner = spinner(`Creating files...`, {
     silent: options.silent,
   });
@@ -44,7 +64,9 @@ export async function updateFiles(
       filesCreatedSpinner.stop();
 
       const overwrite = await p.confirm({
-        message: `The file ${highlighter.info(location.target)} already exists. Would you like to overwrite?`,
+        message: `The file ${highlighter.info(
+          location.target
+        )} already exists. Would you like to overwrite?`,
       });
 
       if (p.isCancel(overwrite) || !overwrite) {
@@ -79,30 +101,42 @@ export async function updateFiles(
 
   if (!options.silent) {
     filesCreatedSpinner.stop();
-    
+
     if (filesCreated.length) {
       p.note(
-        [`Created ${filesCreated.length} ${filesCreated.length === 1 ? "file" : "files"}:`,
-        ...filesCreated.map(file => `  - ${file}`)].join('\n'),
-        'Created'
+        [
+          `Created ${filesCreated.length} ${
+            filesCreated.length === 1 ? "file" : "files"
+          }:`,
+          ...filesCreated.map((file) => `  - ${file}`),
+        ].join("\n"),
+        "Created"
       );
     }
 
     if (filesUpdated.length) {
       p.note(
-        [`Updated ${filesUpdated.length} ${filesUpdated.length === 1 ? "file" : "files"}:`,
-        ...filesUpdated.map(file => `  - ${file}`)].join('\n'),
-        'Updated'
+        [
+          `Updated ${filesUpdated.length} ${
+            filesUpdated.length === 1 ? "file" : "files"
+          }:`,
+          ...filesUpdated.map((file) => `  - ${file}`),
+        ].join("\n"),
+        "Updated"
       );
     }
 
     if (filesSkipped.length) {
       p.note(
-        [`Skipped ${filesSkipped.length} ${filesSkipped.length === 1 ? "file" : "files"}:`,
-        ...filesSkipped.map(file => `  - ${file}`),
-        '',
-        'Use --overwrite to overwrite existing files'].join('\n'),
-        'Skipped'
+        [
+          `Skipped ${filesSkipped.length} ${
+            filesSkipped.length === 1 ? "file" : "files"
+          }:`,
+          ...filesSkipped.map((file) => `  - ${file}`),
+          "",
+          "Use --overwrite to overwrite existing files",
+        ].join("\n"),
+        "Skipped"
       );
     }
   }

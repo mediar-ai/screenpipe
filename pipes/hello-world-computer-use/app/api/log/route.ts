@@ -1,22 +1,9 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { generateObject } from "ai";
-import { ollama } from "ollama-ai-provider";
-import { createOpenAI } from "@ai-sdk/openai";
 import { pipe } from "@screenpipe/js";
 import { pipe as browserPipe, ElementInfo } from "@screenpipe/browser";
 import { join } from "path";
 import fs from "fs/promises";
 import OpenAI from "openai/index.mjs";
-
-// Define the schema for our LinkedIn messages
-const linkedInMessageSchema = z.object({
-  sender: z.string(),
-  text: z.string(),
-  timestamp: z.string(),
-  contactName: z.string().optional(),
-  conversationUrl: z.string().optional(),
-});
 
 // Make sure to include the deduplicateByStringSimilarity function if it's used client-side
 function deduplicateByStringSimilarity(
@@ -72,21 +59,17 @@ function deduplicateByStringSimilarity(
   return groups;
 }
 
-const messagesArraySchema = z.object({
-  messages: z.array(linkedInMessageSchema),
-});
-
 // Function to sync messages to CSV file
 async function syncToCSV(messages: any, storagePath: string) {
   try {
     // Create timestamp for filename
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `linkedin-messages-${timestamp}.csv`;
+    const filename = `computer-use-${timestamp}.csv`;
     const filePath = join(storagePath, filename);
 
     // Create CSV header
     const header =
-      "Sender,Message,Timestamp,ContactName,ConversationURL,SyncedAt\n";
+      "AppName,Text,Timestamp,SyncedAt\n";
 
     // Format CSV rows
     const rows = messages
@@ -224,37 +207,34 @@ export async function GET(request: Request) {
         } items`
       );
 
-      const prompt = `You are analyzing text extracted from LinkedIn messages.
-      Based on the following extracted text, identify and structure the LinkedIn messages.
+      const prompt = `You are analyzing text extracted from a computer app.
+      Based on the following extracted text, identify and structure the app data.
       
       Extracted text:
       ${batchTexts.join("\n\n")}
       
-      Analyze this text and extract structured LinkedIn message data, including:
-      - The message sender (who wrote the message)
-      - The message text content
+      Analyze this text and extract structured app data, including:
+      - The app name
+      - The text content
       - Approximate timestamp (use current time if not identifiable)
-      - Contact name if it can be identified
       
-      Focus on identifying message patterns, such as:
-      - Name: message format
-      - Conversation segments with clear sender/content boundaries
-      - Dialog patterns
+      Focus on identifying patterns, such as:
+      - Name: text content
+      - Text content: text content
+      - Timestamp: approximate timestamp
       
-      Return an array of message objects with the following structure:
+      Return an array of app data objects with the following structure:
       {
         "messages": [
           {
-            "sender": "Person Name",
-            "text": "Message content",
-            "timestamp": "ISO timestamp",
-            "contactName": "Contact name if available",
-            "conversationUrl": "Conversation URL if available"
+            "appName": "App name",
+            "text": "Text content",
+            "timestamp": "ISO timestamp"
           }
         ]
       }
       
-      Only include data that is clearly a message. Skip header/UI text, navigation elements, etc.
+      Skip header/UI text, navigation elements, etc.
       Do not add \`\`\`json or \`\`\` at the beginning or end of your response.
       If you cannot identify structured messages, return an empty array.`;
 

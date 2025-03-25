@@ -296,27 +296,6 @@ export default function LinkedInToCrmSync() {
           <div className="space-y-4">
             <Command>
               <CommandList>
-                <AIPresetsDialog
-                  pipeName={"desktop-to-table"}
-                  recommendedPresets={[
-                    {
-                      id: "gemma",
-                      model: "gemma:2b",
-                      provider: "native-ollama",
-                      prompt: DEFAULT_PROMPT,
-                      maxContextChars: 512000,
-                    },
-                  ]}
-                >
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className=" p-2"
-                  >
-                    <SparklesIcon className="h-4 w-4" />
-                  </Button>
-                </AIPresetsDialog>
                 <AIPresetsSelector pipeName="desktop-to-table" />
               </CommandList>
             </Command>

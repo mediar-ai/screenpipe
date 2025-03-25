@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { SettingsProvider } from "@/lib/settings-provider";
 
 export const metadata: Metadata = {
-  title: "Example Pipe • Screenpipe",
+  title: "Hello World Computer Use • Screenpipe",
   description: "A clean starting point for your Screenpipe pipe",
 };
 

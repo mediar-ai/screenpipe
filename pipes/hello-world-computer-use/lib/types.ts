@@ -26,7 +26,6 @@ export interface Intelligence {
 }
 
 export interface Settings {
-  exampleSetting?: string;
   prompt: string;
   vaultPath: string;
   logTimeWindow: number;

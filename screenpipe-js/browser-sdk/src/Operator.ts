@@ -325,6 +325,121 @@ export class Operator {
   }
 
   /**
+   * Get locator for an element in a specific app (by app name)
+   *
+   * @example
+   * // Get and click a button in Chrome
+   * await pipe.operator.getByAppName('Chrome').getByRole('button').click();
+   */
+  getByAppName(appName: string): ElementLocator {
+    return this.locator({ app: appName });
+  }
+
+  /**
+   * Get locator for an element in a specific window
+   *
+   * @example
+   * // Get elements in Chrome's settings window
+   * await pipe.operator.getByWindowName('Settings').getByText('Privacy').click();
+   */
+  getByWindowName(
+    windowName: string,
+    options?: { app?: string }
+  ): ElementLocator {
+    return this.locator({ app: options?.app || "", window: windowName });
+  }
+
+  /**
+   * Get locator for elements with the specified role
+   *
+   * @example
+   * // Find all buttons in Chrome
+   * const buttons = await pipe.operator.getByRole('button', { app: 'Chrome' });
+   */
+  getByRole(
+    role: string,
+    options?: { app?: string; window?: string }
+  ): ElementLocator {
+    return this.locator({
+      app: options?.app || "",
+      window: options?.window,
+      role,
+    });
+  }
+
+  /**
+   * Get locator for elements with the specified text
+   *
+   * @example
+   * // Find and click on text in Chrome
+   * await pipe.operator.getByText('Submit', { app: 'Chrome' }).click();
+   */
+  getByText(
+    text: string,
+    options?: { app?: string; window?: string }
+  ): ElementLocator {
+    return this.locator({
+      app: options?.app || "",
+      window: options?.window,
+      text,
+    });
+  }
+
+  /**
+   * Get locator for elements with the specified label
+   *
+   * @example
+   * // Find and fill a field with a specific label in Chrome
+   * await pipe.operator.getByLabel('Username', { app: 'Chrome' }).fill('john');
+   */
+  getByLabel(
+    label: string,
+    options?: { app?: string; window?: string }
+  ): ElementLocator {
+    return this.locator({
+      app: options?.app || "",
+      window: options?.window,
+      label,
+    });
+  }
+
+  /**
+   * Get locator for elements with the specified description
+   *
+   * @example
+   * // Find and click an element with a specific description
+   * await pipe.operator.getByDescription('Settings button', { app: 'Chrome' }).click();
+   */
+  getByDescription(
+    description: string,
+    options?: { app?: string; window?: string }
+  ): ElementLocator {
+    return this.locator({
+      app: options?.app || "",
+      window: options?.window,
+      description,
+    });
+  }
+
+  /**
+   * Get locator for elements with the specified id
+   *
+   * @example
+   * // Find and click an element with a specific ID
+   * await pipe.operator.getById('submit-button', { app: 'Chrome' }).click();
+   */
+  getById(
+    id: string,
+    options?: { app?: string; window?: string }
+  ): ElementLocator {
+    return this.locator({
+      app: options?.app || "",
+      window: options?.window,
+      id,
+    });
+  }
+
+  /**
    * Take a screenshot of the specified app window
    *
    * @example
@@ -397,7 +512,7 @@ export class Operator {
    *     app: app,
    *   });
    */
-  async get_text(options: {
+  async getText(options: {
     app: string;
     window?: string;
     max_depth?: number;
@@ -463,7 +578,7 @@ export class Operator {
    *     app: app,
    *   });
    */
-  async get_interactable_elements(options: {
+  async getInteractableElements(options: {
     app: string;
     window?: string;
     with_text_only?: boolean;

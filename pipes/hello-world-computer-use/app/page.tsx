@@ -5,19 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, FolderOpen, SparklesIcon } from "lucide-react";
+import { Loader2, FolderOpen } from "lucide-react";
 import { useSettings } from "@/lib/settings-provider";
-import {
-  AIPresetsSelector,
-  AIProviderConfig,
-} from "@/components/ai-presets-selector";
-import {
-  AIPresetsDialog,
-  DEFAULT_PROMPT,
-} from "@/components/ai-presets-dialog";
-import { Command, CommandList } from "@/components/ui/command";
+import { AIPresetsSelector } from "@/components/ai-presets-selector";
 
-export default function LinkedInToCrmSync() {
+import { Command, CommandList } from "@/components/ui/command";
+import { pipe } from "@screenpipe/browser";
+
+export default function HelloWorldComputerUse() {
+  const [app, setApp] = useState("cursor");
   const [csvStoragePath, setCsvStoragePath] = useState("");
   const [syncSchedule, setSyncSchedule] = useState("manual"); // manual, daily, hourly
   const [isLoading, setIsLoading] = useState(false);
@@ -30,33 +26,54 @@ export default function LinkedInToCrmSync() {
     message: "",
   });
   const { settings, updateSettings } = useSettings();
-  console.log("settings", settings);
 
   // Load settings from localStorage on component mount
   useEffect(() => {
-    const savedPath = settings?.customSettings?.desktopToTable?.csvStoragePath;
+    const savedApp = settings?.customSettings?.helloWorldComputerUse?.app;
+    if (savedApp) setApp(savedApp);
+
+    const savedPath =
+      settings?.customSettings?.helloWorldComputerUse?.csvStoragePath;
     if (savedPath) setCsvStoragePath(savedPath);
 
     const savedSyncSchedule =
-      settings?.customSettings?.desktopToTable?.syncSchedule;
+      settings?.customSettings?.helloWorldComputerUse?.syncSchedule;
     if (savedSyncSchedule) setSyncSchedule(savedSyncSchedule);
 
     const savedLastSync =
-      settings?.customSettings?.desktopToTable?.lastSyncTime;
+      settings?.customSettings?.helloWorldComputerUse?.lastSyncTime;
     if (savedLastSync) setLastSyncTime(savedLastSync);
   }, [settings]);
 
-  // Function to extract LinkedIn messages and save to CSV
-  const extractAndSyncMessages = async () => {
+  const extractAndSyncData = async () => {
     try {
       setIsLoading(true);
-      toast({
-        title: "starting linkedin message extraction",
-        description: "please keep linkedin messaging open in a browser window",
+      const t = toast({
+        title: "starting data extraction",
+        description: "please do not close the chosen app",
       });
 
-      // Open LinkedIn messaging in another tab
-      window.open("https://www.linkedin.com/messaging", "_blank");
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // open the app
+      t.update({
+        id: t.id,
+        title: "opening app",
+        description: "please do not close the chosen app",
+      });
+
+      await pipe.operator.openApplication(app);
+
+      t.update({
+        id: t.id,
+        title: "extracting data",
+        description: "please do not close the chosen app",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const appElement = pipe.operator.getByAppName(app);
+      const text = await appElement.first();
+      console.log("text", text?.text);
 
       // Wait for the page to be fully loaded
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -64,7 +81,8 @@ export default function LinkedInToCrmSync() {
       // Save storage path and settings
       await updateSettings({
         customSettings: {
-          desktopToTable: {
+          helloWorldComputerUse: {
+            app,
             csvStoragePath,
             syncSchedule,
             lastSyncTime,
@@ -168,7 +186,8 @@ export default function LinkedInToCrmSync() {
 
       await updateSettings({
         customSettings: {
-          desktopToTable: {
+          helloWorldComputerUse: {
+            app,
             csvStoragePath: fullPath,
             syncSchedule,
             lastSyncTime,
@@ -232,17 +251,36 @@ export default function LinkedInToCrmSync() {
   return (
     <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-gray-50 dark:bg-gray-900">
       <header className="w-full max-w-2xl text-center mb-8">
-        <h1 className="text-2xl font-bold mb-2">linkedin to csv sync</h1>
+        <h1 className="text-2xl font-bold mb-2">app to csv sync</h1>
         <p className="text-gray-600 dark:text-gray-400">
-          save your linkedin conversations to csv files
+          scrape your computer apps into csv files
         </p>
       </header>
 
       <Card className="w-full max-w-2xl p-6 shadow-md">
         {/* Storage Location Setup */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-4">storage location</h2>
+          <h2 className="text-lg font-semibold mb-4">app to use</h2>
           <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                app to use
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="app name"
+                  value={app}
+                  onChange={(e) => {
+                    setApp(e.target.value);
+                  }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                what app to use for data extraction
+              </p>
+            </div>
+
             <div>
               <label className="text-sm font-medium mb-1 block">
                 csv storage location
@@ -275,7 +313,7 @@ export default function LinkedInToCrmSync() {
                 </Button>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                where to save linkedin message csv files
+                where to save data extraction csv files
               </p>
               {pathValidation.message && (
                 <p
@@ -296,27 +334,6 @@ export default function LinkedInToCrmSync() {
           <div className="space-y-4">
             <Command>
               <CommandList>
-                <AIPresetsDialog
-                  pipeName={"desktop-to-table"}
-                  recommendedPresets={[
-                    {
-                      id: "gemma",
-                      model: "gemma:2b",
-                      provider: "native-ollama",
-                      prompt: DEFAULT_PROMPT,
-                      maxContextChars: 512000,
-                    },
-                  ]}
-                >
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className=" p-2"
-                  >
-                    <SparklesIcon className="h-4 w-4" />
-                  </Button>
-                </AIPresetsDialog>
                 <AIPresetsSelector pipeName="desktop-to-table" />
               </CommandList>
             </Command>
@@ -330,7 +347,7 @@ export default function LinkedInToCrmSync() {
           <div className="space-y-4">
             <div className="flex gap-2">
               <Button
-                onClick={extractAndSyncMessages}
+                onClick={extractAndSyncData}
                 disabled={isLoading || !csvStoragePath}
                 className="flex-1"
               >
@@ -390,7 +407,7 @@ export default function LinkedInToCrmSync() {
           <h2 className="text-sm font-semibold mb-2">quick start</h2>
           <ol className="text-xs space-y-2 list-decimal pl-4">
             <li>select a directory to store the csv files</li>
-            <li>open linkedin in your browser and click "sync now"</li>
+            <li>click "sync now"</li>
             <li>csv files will be saved with date-based filenames</li>
             <li>each sync creates a new csv file with timestamp</li>
           </ol>
@@ -398,7 +415,7 @@ export default function LinkedInToCrmSync() {
       </Card>
 
       <footer className="w-full max-w-2xl mt-6 text-center text-xs text-gray-500">
-        <p>linkedin to csv sync by screenpipe</p>
+        <p>desktop app to csv sync by screenpipe</p>
         <p className="mt-1">
           questions?{" "}
           <a href="https://discord.gg/screenpipe" className="underline">
