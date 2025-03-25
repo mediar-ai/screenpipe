@@ -1639,7 +1639,7 @@ async fn download_mcp_directory(
                         .await
                         .map_err(|e| anyhow::anyhow!("Failed to write file {}: {}", target_path.display(), e))?;
 
-                    info!("Downloaded file: {}", target_path.display());
+                    debug!("Downloaded file: {}", target_path.display());
                 }
             }
             "dir" => {
