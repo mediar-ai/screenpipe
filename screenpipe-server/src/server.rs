@@ -78,8 +78,8 @@ use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
 
-use std::collections::{HashMap, HashSet};
 use screenpipe_core::UIElement;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid; // or sentry::protocol::Uuid depending on which you want to use
 
 pub type FrameImageCache = LruCache<i64, (String, Instant)>;
@@ -1068,10 +1068,27 @@ impl SCServer {
             .post("/experimental/operator/type", type_text_handler)
             .post("/experimental/operator/press-key", press_key_handler)
             .post("/experimental/operator/get_text", get_text_handler)
-            .post("/experimental/operator/list-interactable-elements", list_interactable_elements_handler)
-            .post("/experimental/operator/click-by-index", click_by_index_handler)
-            .post("/experimental/operator/type-by-index", type_by_index_handler)
-            .post("/experimental/operator/press-key-by-index", press_key_by_index_handler)
+            .post(
+                "/experimental/operator/list-interactable-elements",
+                list_interactable_elements_handler,
+            )
+            .post(
+                "/experimental/operator/click-by-index",
+                click_by_index_handler,
+            )
+            .post(
+                "/experimental/operator/type-by-index",
+                type_by_index_handler,
+            )
+            .post(
+                "/experimental/operator/press-key-by-index",
+                press_key_by_index_handler,
+            )
+            .post(
+                "/experimental/operator/open-application",
+                open_application_handler,
+            )
+            .post("/experimental/operator/open-url", open_url_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -2951,8 +2968,6 @@ pub struct ClickByIndexResponse {
     message: String,
 }
 
-
-
 #[derive(Debug, OaSchema, Deserialize, Serialize)]
 pub struct TypeTextRequest {
     selector: ElementSelector,
@@ -3321,7 +3336,7 @@ async fn get_text_handler(
     Json(request): Json<GetTextRequest>,
 ) -> Result<JsonResponse<GetTextResponse>, (StatusCode, JsonResponse<Value>)> {
     let start = Instant::now();
-    
+
     let desktop = match Desktop::new(
         request.use_background_apps.unwrap_or(false),
         request.activate_app.unwrap_or(false),
@@ -3365,7 +3380,7 @@ async fn get_text_handler(
     };
 
     let duration = start.elapsed();
-    
+
     Ok(JsonResponse(GetTextResponse {
         success: true,
         text,
@@ -3395,7 +3410,7 @@ pub struct ListInteractableElementsRequest {
 pub struct InteractableElement {
     index: usize,
     role: String,
-    interactability: String,  // "definite", "sometimes", "none"
+    interactability: String, // "definite", "sometimes", "none"
     text: String,
     position: Option<ElementPosition>,
     size: Option<ElementSize>,
@@ -3406,7 +3421,7 @@ pub struct InteractableElement {
 pub struct ListInteractableElementsResponse {
     elements: Vec<InteractableElement>,
     stats: ElementStats,
-    cache_info: ElementCacheInfo,  // Add this new field
+    cache_info: ElementCacheInfo, // Add this new field
 }
 
 #[derive(Debug, OaSchema, Serialize)]
@@ -3435,16 +3450,34 @@ async fn list_interactable_elements_handler(
 ) -> Result<JsonResponse<ListInteractableElementsResponse>, (StatusCode, JsonResponse<Value>)> {
     // First, set up the definitely and sometimes interactable role sets
     let definitely_interactable: HashSet<&str> = [
-        "AXButton", "AXMenuItem", "AXMenuBarItem", "AXCheckBox", "AXPopUpButton",
-        "AXTextField", "AXTextArea", "AXComboBox", "AXLink", "AXScrollBar",
+        "AXButton",
+        "AXMenuItem",
+        "AXMenuBarItem",
+        "AXCheckBox",
+        "AXPopUpButton",
+        "AXTextField",
+        "AXTextArea",
+        "AXComboBox",
+        "AXLink",
+        "AXScrollBar",
         // ... other definitely interactable roles
-    ].iter().cloned().collect();
-    
+    ]
+    .iter()
+    .cloned()
+    .collect();
+
     let sometimes_interactable: HashSet<&str> = [
-        "AXImage", "AXCell", "AXSplitter", "AXRow", "AXStatusItem",
+        "AXImage",
+        "AXCell",
+        "AXSplitter",
+        "AXRow",
+        "AXStatusItem",
         // ... other sometimes interactable roles
-    ].iter().cloned().collect();
-    
+    ]
+    .iter()
+    .cloned()
+    .collect();
+
     // Create desktop automation engine
     let desktop = match Desktop::new(
         request.use_background_apps.unwrap_or(false),
@@ -3474,7 +3507,7 @@ async fn list_interactable_elements_handler(
             ));
         }
     };
-    
+
     // Get elements from the application
     let locator = match app.locator("") {
         Ok(locator) => locator,
@@ -3499,7 +3532,7 @@ async fn list_interactable_elements_handler(
             ));
         }
     };
-    
+
     info!("found {} elements in {}", elements.len(), request.app_name);
 
     // Filter and convert elements
@@ -3511,13 +3544,13 @@ async fn list_interactable_elements_handler(
         non_interactable: 0,
         by_role: HashMap::new(),
     };
-    
+
     for (i, element) in elements.iter().enumerate() {
         let role = element.role();
-        
+
         // Count by role
         *stats.by_role.entry(role.clone()).or_insert(0) += 1;
-        
+
         // Determine interactability
         let interactability = if definitely_interactable.contains(role.as_str()) {
             stats.definitely_interactable += 1;
@@ -3529,52 +3562,59 @@ async fn list_interactable_elements_handler(
             stats.non_interactable += 1;
             "none"
         };
-        
+
         // Extract text from element
         let text = element.text(10).unwrap_or_default();
-        
+
         // Apply filters
         let with_text_condition = !request.with_text_only.unwrap_or(false) || !text.is_empty();
-        let interactable_condition = !request.interactable_only.unwrap_or(false) || 
-            (interactability == "definite" || 
-             (request.include_sometimes_interactable.unwrap_or(false) && interactability == "sometimes"));
-        
+        let interactable_condition = !request.interactable_only.unwrap_or(false)
+            || (interactability == "definite"
+                || (request.include_sometimes_interactable.unwrap_or(false)
+                    && interactability == "sometimes"));
+
         if with_text_condition && interactable_condition {
             let (x, y, width, height) = element.bounds().ok().unwrap_or((0.0, 0.0, 0.0, 0.0));
-            
+
             result_elements.push(InteractableElement {
                 index: i,
                 role: role.clone(),
                 interactability: interactability.to_string(),
                 text,
-                position: Some(ElementPosition { x: x as i32, y: y as i32 }),
-                size: Some(ElementSize { width: width as i32, height: height as i32 }),
+                position: Some(ElementPosition {
+                    x: x as i32,
+                    y: y as i32,
+                }),
+                size: Some(ElementSize {
+                    width: width as i32,
+                    height: height as i32,
+                }),
                 element_id: element.id(),
             });
         }
     }
-    
+
     // Apply max_elements limit if specified
     if let Some(max) = request.max_elements {
         if result_elements.len() > max {
             result_elements.truncate(max);
         }
     }
-    
+
     // Generate a cache ID and store elements in cache
     let cache_id = Uuid::new_v4().to_string();
     let cache_timestamp = Instant::now();
     let ttl_seconds: u64 = 30; // Explicitly specify u64 type
-    
+
     {
         let mut cache = state.element_cache.lock().await;
         *cache = Some((elements.clone(), cache_timestamp, request.app_name.clone()));
     }
-    
+
     // Create cache info for response
     let now = Utc::now();
     let expires_at = now + chrono::Duration::seconds(ttl_seconds as i64);
-    
+
     let cache_info = ElementCacheInfo {
         cache_id: cache_id.clone(),
         timestamp: now.to_rfc3339(),
@@ -3582,7 +3622,7 @@ async fn list_interactable_elements_handler(
         element_count: elements.len(),
         ttl_seconds: ttl_seconds,
     };
-    
+
     Ok(JsonResponse(ListInteractableElementsResponse {
         elements: result_elements,
         stats,
@@ -3600,7 +3640,7 @@ async fn click_by_index_handler(
         let cache = state.element_cache.lock().await;
         cache.clone()
     };
-    
+
     // First check if cache exists at all
     if elements_opt.is_none() {
         return Err((
@@ -3610,18 +3650,21 @@ async fn click_by_index_handler(
             })),
         ));
     }
-    
+
     // Then proceed with the rest of the logic...
     match elements_opt {
         Some((elements, timestamp, _app_name)) if timestamp.elapsed() < Duration::from_secs(30) => {
             // Use element_index directly
             if request.element_index < elements.len() {
                 let element = &elements[request.element_index];
-                
+
                 match element.click() {
                     Ok(_) => Ok(JsonResponse(ClickByIndexResponse {
                         success: true,
-                        message: format!("Successfully clicked element with role: {}", element.role()),
+                        message: format!(
+                            "Successfully clicked element with role: {}",
+                            element.role()
+                        ),
                     })),
                     Err(e) => {
                         error!("failed to click element: {}", e);
@@ -3634,17 +3677,20 @@ async fn click_by_index_handler(
                     }
                 }
             } else {
-                error!("element index out of bounds: {} (max: {})", 
-                       request.element_index, elements.len() - 1);
+                error!(
+                    "element index out of bounds: {} (max: {})",
+                    request.element_index,
+                    elements.len() - 1
+                );
                 Err((
                     StatusCode::BAD_REQUEST,
                     JsonResponse(json!({
-                        "error": format!("element index out of bounds: {} (max: {})", 
+                        "error": format!("element index out of bounds: {} (max: {})",
                                         request.element_index, elements.len() - 1)
                     })),
                 ))
             }
-        },
+        }
         Some(_) => {
             // Cache entry expired
             // error!("cache entry expired for id: {}", request.cache_id);
@@ -3654,7 +3700,7 @@ async fn click_by_index_handler(
                     "error": "cache entry expired, please list elements again"
                 })),
             ))
-        },
+        }
         None => {
             // Cache miss
             // error!("no cache entry found for id: {}", request.cache_id);
@@ -3692,7 +3738,7 @@ async fn type_by_index_handler(
         let cache = state.element_cache.lock().await;
         cache.clone()
     };
-    
+
     // First check if cache exists at all
     if elements_opt.is_none() {
         return Err((
@@ -3702,18 +3748,21 @@ async fn type_by_index_handler(
             })),
         ));
     }
-    
+
     // Then proceed with the logic...
     match elements_opt {
         Some((elements, timestamp, _app_name)) if timestamp.elapsed() < Duration::from_secs(30) => {
             // Use element_index directly
             if request.element_index < elements.len() {
                 let element = &elements[request.element_index];
-                
+
                 match element.type_text(&request.text) {
                     Ok(_) => Ok(JsonResponse(TypeByIndexResponse {
                         success: true,
-                        message: format!("successfully typed text into element with role: {}", element.role()),
+                        message: format!(
+                            "successfully typed text into element with role: {}",
+                            element.role()
+                        ),
                     })),
                     Err(e) => {
                         error!("failed to type text into element: {}", e);
@@ -3726,17 +3775,20 @@ async fn type_by_index_handler(
                     }
                 }
             } else {
-                error!("element index out of bounds: {} (max: {})", 
-                       request.element_index, elements.len() - 1);
+                error!(
+                    "element index out of bounds: {} (max: {})",
+                    request.element_index,
+                    elements.len() - 1
+                );
                 Err((
                     StatusCode::BAD_REQUEST,
                     JsonResponse(json!({
-                        "error": format!("element index out of bounds: {} (max: {})", 
+                        "error": format!("element index out of bounds: {} (max: {})",
                                         request.element_index, elements.len() - 1)
                     })),
                 ))
             }
-        },
+        }
         Some(_) => {
             // Cache entry expired
             Err((
@@ -3745,7 +3797,7 @@ async fn type_by_index_handler(
                     "error": "cache entry expired, please list elements again"
                 })),
             ))
-        },
+        }
         None => {
             // Cache miss
             Err((
@@ -3778,7 +3830,7 @@ async fn press_key_handler(
     Json(request): Json<PressKeyRequest>,
 ) -> Result<JsonResponse<PressKeyResponse>, (StatusCode, JsonResponse<Value>)> {
     debug!(target: "operator", "pressing key combination: {}", request.key_combo);
-    
+
     let desktop = match Desktop::new(
         request.selector.use_background_apps.unwrap_or(false),
         request.selector.activate_app.unwrap_or(false),
@@ -3809,7 +3861,7 @@ async fn press_key_handler(
     };
 
     debug!(target: "operator", "app: {:?}", app);
-    
+
     // Find elements matching the selector
     let element = match app.locator(request.selector.locator.as_str()) {
         Ok(locator) => match locator.first() {
@@ -3841,8 +3893,11 @@ async fn press_key_handler(
         Some(element) => match element.press_key(&request.key_combo) {
             Ok(_) => Ok(JsonResponse(PressKeyResponse {
                 success: true,
-                message: format!("successfully pressed key combination '{}' on element with role: {}", 
-                    request.key_combo, element.role()),
+                message: format!(
+                    "successfully pressed key combination '{}' on element with role: {}",
+                    request.key_combo,
+                    element.role()
+                ),
             })),
             Err(e) => {
                 error!("failed to press key: {}", e);
@@ -3884,13 +3939,13 @@ async fn press_key_by_index_handler(
 ) -> Result<JsonResponse<PressKeyByIndexResponse>, (StatusCode, JsonResponse<Value>)> {
     debug!(target: "operator", "pressing key combination by index: element_index={}, key_combo={}", 
         request.element_index, request.key_combo);
-    
+
     // Get elements from cache
     let elements_opt = {
         let cache = state.element_cache.lock().await;
         cache.clone()
     };
-    
+
     // First check if cache exists at all
     if elements_opt.is_none() {
         return Err((
@@ -3900,13 +3955,14 @@ async fn press_key_by_index_handler(
             })),
         ));
     }
-    
+
     // Then proceed with the logic...
     match elements_opt {
         Some((elements, timestamp, app_name)) if timestamp.elapsed() < Duration::from_secs(30) => {
             // Activate the app first
             debug!(target: "operator", "activating app: {}", app_name);
-            let desktop = match Desktop::new(false, true) { // Set activate_app to true
+            let desktop = match Desktop::new(false, true) {
+                // Set activate_app to true
                 Ok(d) => d,
                 Err(e) => {
                     error!("failed to initialize desktop automation: {}", e);
@@ -3932,16 +3988,19 @@ async fn press_key_by_index_handler(
                     ));
                 }
             };
-            
+
             // Use element_index directly
             if request.element_index < elements.len() {
                 let element = &elements[request.element_index];
-                
+
                 match element.press_key(&request.key_combo) {
                     Ok(_) => Ok(JsonResponse(PressKeyByIndexResponse {
                         success: true,
-                        message: format!("successfully pressed key combination '{}' on element with role: {}", 
-                            request.key_combo, element.role()),
+                        message: format!(
+                            "successfully pressed key combination '{}' on element with role: {}",
+                            request.key_combo,
+                            element.role()
+                        ),
                     })),
                     Err(e) => {
                         error!("failed to press key on element: {}", e);
@@ -3954,17 +4013,20 @@ async fn press_key_by_index_handler(
                     }
                 }
             } else {
-                error!("element index out of bounds: {} (max: {})", 
-                       request.element_index, elements.len() - 1);
+                error!(
+                    "element index out of bounds: {} (max: {})",
+                    request.element_index,
+                    elements.len() - 1
+                );
                 Err((
                     StatusCode::BAD_REQUEST,
                     JsonResponse(json!({
-                        "error": format!("element index out of bounds: {} (max: {})", 
+                        "error": format!("element index out of bounds: {} (max: {})",
                                        request.element_index, elements.len() - 1)
                     })),
                 ))
             }
-        },
+        }
         Some(_) => {
             // Cache entry expired
             Err((
@@ -3973,7 +4035,7 @@ async fn press_key_by_index_handler(
                     "error": "cache entry expired, please list elements again"
                 })),
             ))
-        },
+        }
         None => {
             // Cache miss
             Err((
@@ -3986,3 +4048,86 @@ async fn press_key_by_index_handler(
     }
 }
 
+// Add these new structs for opening applications
+#[derive(Deserialize)]
+pub struct OpenApplicationRequest {
+    app_name: String,
+}
+
+#[derive(Serialize)]
+pub struct OpenApplicationResponse {
+    success: bool,
+    message: String,
+}
+
+// Add these new structs for opening URLs
+#[derive(Deserialize)]
+pub struct OpenUrlRequest {
+    url: String,
+    browser: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct OpenUrlResponse {
+    success: bool,
+    message: String,
+}
+
+// Add handler for opening applications
+async fn open_application_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<OpenApplicationRequest>,
+) -> Result<JsonResponse<OpenApplicationResponse>, (StatusCode, JsonResponse<Value>)> {
+    // Create Desktop automation instance
+    let desktop = match Desktop::new(false, true) {
+        Ok(desktop) => desktop,
+        Err(err) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("Failed to initialize automation: {}", err)})),
+            ));
+        }
+    };
+
+    // Open the application
+    match desktop.open_application(&request.app_name) {
+        Ok(_) => Ok(JsonResponse(OpenApplicationResponse {
+            success: true,
+            message: format!("Successfully opened application: {}", request.app_name),
+        })),
+        Err(err) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": format!("Failed to open application: {}", err)})),
+        )),
+    }
+}
+
+// Add handler for opening URLs
+async fn open_url_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<OpenUrlRequest>,
+) -> Result<JsonResponse<OpenUrlResponse>, (StatusCode, JsonResponse<Value>)> {
+    // Create Desktop automation instance
+    let desktop = match Desktop::new(false, true) {
+        Ok(desktop) => desktop,
+        Err(err) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("Failed to initialize automation: {}", err)})),
+            ));
+        }
+    };
+
+    // Open the URL
+    let browser_ref = request.browser.as_deref();
+    match desktop.open_url(&request.url, browser_ref) {
+        Ok(_) => Ok(JsonResponse(OpenUrlResponse {
+            success: true,
+            message: format!("Successfully opened URL: {}", request.url),
+        })),
+        Err(err) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": format!("Failed to open URL: {}", err)})),
+        )),
+    }
+}

@@ -13,7 +13,6 @@ mod selector;
 #[cfg(test)]
 mod tests;
 
-
 pub use element::{UIElement, UIElementAttributes};
 pub use errors::AutomationError;
 pub use locator::Locator;
@@ -56,5 +55,15 @@ impl Desktop {
     /// Find an application by name
     pub fn application(&self, name: &str) -> Result<UIElement, AutomationError> {
         self.engine.get_application_by_name(name)
+    }
+
+    /// Open an application by name
+    pub fn open_application(&self, app_name: &str) -> Result<UIElement, AutomationError> {
+        self.engine.open_application(app_name)
+    }
+
+    /// Open a URL in a specified browser (or default browser if None)
+    pub fn open_url(&self, url: &str, browser: Option<&str>) -> Result<UIElement, AutomationError> {
+        self.engine.open_url(url, browser)
     }
 }

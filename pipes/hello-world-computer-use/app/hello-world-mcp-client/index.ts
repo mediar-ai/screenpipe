@@ -1,11 +1,11 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { desktopClient } from './start-here';
 import { setupEnvironment } from './setup';
 
 // Initialize everything in sequence
 async function main() {
   // Set up environment first
-  setupEnvironment();
+  await setupEnvironment();
   
   // Connect to server once
   console.log("connecting to mcp server...");
