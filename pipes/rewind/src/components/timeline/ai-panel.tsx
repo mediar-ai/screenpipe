@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { ExportButton } from "../export-button";
+import { AIPresetsSelector } from "../ai-presets-selector";
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 
 interface AIPanelProps {
 	position: { x: number; y: number };
@@ -40,6 +42,7 @@ export function AIPanel({
 	onExpandedChange,
 }: AIPanelProps) {
 	const { settings } = useSettings();
+	const { getPreset } = usePipeSettings("rewind");
 	const [chatMessages, setChatMessages] = useState<Array<Message>>([]);
 	const [isAiLoading, setIsAiLoading] = useState(false);
 	const [isStreaming, setIsStreaming] = useState(false);
@@ -267,12 +270,11 @@ export function AIPanel({
 					new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
 			);
 
+			const aiPreset = getPreset();
+
 			const openai = new OpenAI({
-				apiKey:
-					settings?.aiProviderType === "screenpipe-cloud"
-						? settings?.user?.token
-						: settings?.openaiApiKey,
-				baseURL: settings?.aiUrl,
+				apiKey: aiPreset?.apiKey,
+				baseURL: aiPreset?.url,
 				dangerouslyAllowBrowser: true,
 			});
 
@@ -286,7 +288,7 @@ export function AIPanel({
 				relevantFrames,
 				openai,
 				{
-					model: settings?.aiModel || "",
+					model: aiPreset?.model || "",
 					onProgress: (chunk) => {
 						currentResponse = chunk;
 						setChatMessages((prev) => [
@@ -320,7 +322,7 @@ export function AIPanel({
 	return (
 		<div
 			ref={aiPanelRef}
-			className="ai-panel bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-[100]"
+			className="ai-panel bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-10"
 			style={{
 				position: "fixed",
 				left: position.x,
@@ -443,6 +445,11 @@ export function AIPanel({
 									))}
 								</select>
 							</div>
+
+							<div>
+								<AIPresetsSelector pipeName="rewind" />
+							</div>
+
 							<div className="flex gap-2">
 								<TooltipProvider>
 									<Tooltip open={!isAvailable}>

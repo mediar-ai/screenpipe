@@ -43,6 +43,8 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       envVars.push(
         shell === "cmd"
           ? "SET HF_ENDPOINT=https://hf-mirror.com"
+          : shell === "powershell"
+          ? '$env:HF_ENDPOINT="https://hf-mirror.com"'
           : 'HF_ENDPOINT="https://hf-mirror.com"'
       );
     }
@@ -53,17 +55,33 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       settings.realtimeAudioTranscriptionEngine === "screenpipe-cloud" &&
       settings.userId
     ) {
-      const cmdPrefix = shell === "cmd" ? "SET " : "";
+      if (shell === "cmd") {
+        envVars.push(
+          `SET DEEPGRAM_API_URL=https://ai-proxy.i-f9f.workers.dev/v1/listen`
+        );
+        envVars.push(
+          `SET DEEPGRAM_WEBSOCKET_URL=wss://ai-proxy.i-f9f.workers.dev`
+        );
+        envVars.push(`SET CUSTOM_DEEPGRAM_API_TOKEN=${settings.userId}`);
+      } else if (shell === "powershell") {
+        envVars.push(
+          `$env:DEEPGRAM_API_URL="https://ai-proxy.i-f9f.workers.dev/v1/listen"`
+        );
+        envVars.push(
+          `$env:DEEPGRAM_WEBSOCKET_URL="wss://ai-proxy.i-f9f.workers.dev"`
+        );
+        envVars.push(`$env:CUSTOM_DEEPGRAM_API_TOKEN="${settings.userId}"`);
+      } else {
+        envVars.push(
+          `DEEPGRAM_API_URL="https://ai-proxy.i-f9f.workers.dev/v1/listen"`
+        );
+        envVars.push(
+          `DEEPGRAM_WEBSOCKET_URL="wss://ai-proxy.i-f9f.workers.dev"`
+        );
+        envVars.push(`CUSTOM_DEEPGRAM_API_TOKEN="${settings.userId}"`);
+      }
+
       const quoteChar = shell === "cmd" ? "" : '"';
-      envVars.push(
-        `${cmdPrefix}DEEPGRAM_API_URL=${quoteChar}https://ai-proxy.i-f9f.workers.dev/v1/listen${quoteChar}`
-      );
-      envVars.push(
-        `${cmdPrefix}DEEPGRAM_WEBSOCKET_URL=${quoteChar}wss://ai-proxy.i-f9f.workers.dev${quoteChar}`
-      );
-      envVars.push(
-        `${cmdPrefix}CUSTOM_DEEPGRAM_API_TOKEN=${quoteChar}${settings.userId}${quoteChar}`
-      );
       args.push(
         `--deepgram-api-key ${quoteChar}${settings.userId}${quoteChar}`
       );
@@ -142,7 +160,9 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
 
     const envVarsStr =
       envVars.length > 0
-        ? `${envVars.join(shell === "cmd" ? " && " : " ")} `
+        ? `${envVars.join(
+            shell === "cmd" ? " && " : shell === "powershell" ? "; " : " "
+          )} `
         : "";
     const cmdPrefix = shell === "cmd" ? "&& " : "";
     return `${envVarsStr}${cmdPrefix}${cliPath} ${args.join(" ")}`;

@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.41.10"
+version = "0.42.11"
 description = ""
 authors = ["you"]
 license = ""
@@ -45,6 +45,9 @@ http = "0.2"
 
 # Logging
 log = "0.4.17"
+
+# Dark mode or light mode
+dark-light = "2.0.0"
 
 # Tokio
 tokio = { version = "1.36.0", features = ["full"] }

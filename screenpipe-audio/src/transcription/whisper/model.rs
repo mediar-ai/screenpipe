@@ -26,7 +26,7 @@ pub fn download_whisper_model(engine: Arc<AudioTranscriptionEngine>) -> Result<P
 
     let model = api_repo.get(model_name)?;
 
-    info!("whisper model downloaded {}", model_name);
+    info!("model downloaded {}", model_name);
 
     Ok(model)
 }

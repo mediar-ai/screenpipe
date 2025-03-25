@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
   RefreshCw,
   Search,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -41,15 +42,55 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface OcrText {
   frame_id: number;
   text: string;
   text_json: string | null;
   app_name: string;
-  // ocr_engine: string;
   window_name: string | null;
-  // focused: boolean;
+  timestamp: string;
+  browser_url: string | null;
+}
+
+// Component for cell content with click support
+interface CellContentProps {
+  value: string | null;
+  className?: string;
+}
+
+function CellContent({ value, className }: CellContentProps) {
+  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const displayValue = value || "N/A";
+
+  return (
+    <>
+      <div
+        className={className}
+        onClick={() => setIsDialogOpen(true)}
+        style={{ cursor: "pointer" }}
+      >
+        {displayValue}
+      </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>cell content</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto max-h-[60vh] font-mono p-4 border rounded-md bg-muted/50 whitespace-pre-wrap">
+            {displayValue}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 const columns: ColumnDef<OcrText>[] = [
@@ -68,6 +109,25 @@ const columns: ColumnDef<OcrText>[] = [
     },
   },
   {
+    accessorKey: "timestamp",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Time
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
+    cell: ({ row }) => (
+      <div className="whitespace-nowrap">
+        {new Date(row.getValue("timestamp")).toLocaleString()}
+      </div>
+    ),
+  },
+  {
     accessorKey: "text",
     header: ({ column }) => {
       return (
@@ -81,9 +141,10 @@ const columns: ColumnDef<OcrText>[] = [
       );
     },
     cell: ({ row }) => (
-      <div className="max-w-[500px] truncate font-mono">
-        {row.getValue("text")}
-      </div>
+      <CellContent
+        value={row.getValue("text")}
+        className="max-w-[500px] truncate font-mono"
+      />
     ),
   },
   {
@@ -117,27 +178,32 @@ const columns: ColumnDef<OcrText>[] = [
       );
     },
     cell: ({ row }) => (
-      <div className="max-w-[200px] truncate">
-        {row.getValue("window_name") || "N/A"}
-      </div>
+      <CellContent
+        value={row.getValue("window_name")}
+        className="max-w-[200px] truncate"
+      />
     ),
   },
-  // {
-  //   accessorKey: "ocr_engine",
-  //   header: "Engine",
-  //   cell: ({ row }) => (
-  //     <Badge variant="secondary">{row.getValue("ocr_engine")}</Badge>
-  //   ),
-  // },
-  // {
-  //   accessorKey: "focused",
-  //   header: "Focused",
-  //   cell: ({ row }) => (
-  //     <Badge variant={row.getValue("focused") ? "default" : "outline"}>
-  //       {row.getValue("focused") ? "yes" : "no"}
-  //     </Badge>
-  //   ),
-  // },
+  {
+    accessorKey: "browser_url",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          URL
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
+    cell: ({ row }) => (
+      <CellContent
+        value={row.getValue("browser_url")}
+        className="max-w-[200px] truncate"
+      />
+    ),
+  },
   {
     id: "actions",
     cell: ({ row }) => {
@@ -207,7 +273,7 @@ export function OcrDataTable() {
               .replace(/'/g, "''")}%'`
           : null,
         appFilter
-          ? `LOWER(app_name) LIKE '%${appFilter
+          ? `LOWER(frames.app_name) LIKE '%${appFilter
               .toLowerCase()
               .replace(/'/g, "''")}%'`
           : null,
@@ -224,6 +290,7 @@ export function OcrDataTable() {
           query: `
             SELECT COUNT(*) as total
             FROM ocr_text 
+            JOIN frames ON ocr_text.frame_id = frames.id
             WHERE ${filterClauses}
           `,
         }),
@@ -244,16 +311,17 @@ export function OcrDataTable() {
         body: JSON.stringify({
           query: `
             SELECT 
-              frame_id,
-              text,
-              text_json,
-              app_name,
-              ocr_engine,
-              window_name,
-              focused
+              ocr_text.frame_id,
+              ocr_text.text,
+              ocr_text.text_json,
+              frames.app_name,
+              frames.window_name,
+              frames.timestamp,
+              frames.browser_url
             FROM ocr_text 
+            JOIN frames ON ocr_text.frame_id = frames.id
             WHERE ${filterClauses}
-            ORDER BY frame_id DESC
+            ORDER BY ocr_text.frame_id DESC
             LIMIT ${pageSize}
             OFFSET ${pageIndex * pageSize}
           `,

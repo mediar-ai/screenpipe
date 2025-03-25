@@ -6,6 +6,7 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 import mcp.types as types
 import mcp.server.stdio
+import argparse
 
 import json
 
@@ -13,11 +14,16 @@ import json
 # Enable nested event loops (needed for some environments)
 nest_asyncio.apply()
 
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Screenpipe MCP Server')
+parser.add_argument('--port', type=int, default=3030, help='Port number for the screenpipe API (default: 3030)')
+args = parser.parse_args()
+
 # Initialize server
 server = Server("screenpipe")
 
 # Constants
-SCREENPIPE_API = "http://localhost:3030"
+SCREENPIPE_API = f"http://localhost:{args.port}"
 
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:

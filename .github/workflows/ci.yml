@@ -54,7 +54,7 @@ jobs:
       #   working-directory: ./screenpipe-js
 
   test-windows:
-    runs-on: windows-latest
+    runs-on: windows-2019
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4

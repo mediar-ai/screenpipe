@@ -57,7 +57,7 @@ mod tests {
         setup();
 
         // Setup
-        let device_spec = Arc::new(default_output_device().unwrap());
+        let device_spec = Arc::new(default_output_device().await.unwrap());
         let duration = Duration::from_secs(30); // Record for 3 seconds
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_{}.mp4", time));
@@ -117,7 +117,7 @@ mod tests {
         setup();
 
         // Setup
-        let device_spec = Arc::new(default_output_device().unwrap());
+        let device_spec = Arc::new(default_output_device().await.unwrap());
         let duration = Duration::from_secs(30);
         let time = Utc::now().timestamp_millis();
         let output_path = PathBuf::from(format!("test_output_interrupt_{}.mp4", time));
@@ -316,7 +316,7 @@ mod tests {
             data: Arc::new(audio_data.0),
             sample_rate: 16000, // Adjust this based on your test audio
             channels: 1,
-            device: Arc::new(default_output_device().unwrap()),
+            device: Arc::new(default_output_device().await.unwrap()),
         };
 
         let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

@@ -19,6 +19,11 @@ before you begin:
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    brew install pkg-config ffmpeg jq cmake wget
    ```
+   Install Xcode via App Store (or elsewhere) and initialize. Xcode command line tools only installation is insufficent. 
+   ```
+   sudo xcodebuild -license
+   xcodebuild -runFirstLaunch
+   ```
 
 2. **install bun cli**:
    ```bash
@@ -86,6 +91,7 @@ before you begin:
    ```
 
 5. **setup Intel OpenMP DLLs**:
+   - make sure your in root of the project i.e screenpipe
    - Ensure Python and `pip` are installed before running the script.
    
    ```powershell
@@ -108,8 +114,38 @@ before you begin:
    # Clean up the temporary directory
    Remove-Item -Path $temp_dir -Recurse -Force
    ```
+6. **make sure vcredist is present on system**:
+   - make sure your in root of the project i.e screenpipe
 
-6. **clone and build**:
+   ```powershell
+   $path = "C:\Windows\System32\vcruntime140.dll"
+   
+   if (-Not (Test-Path $path)) {
+       Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command "& {
+           Set-ExecutionPolicy Bypass -Scope Process -Force
+           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+           $url = ''https://vcredist.com/install.ps1''
+           $scriptPath = ''$env:TEMP\install_vcredist.ps1''
+           Invoke-WebRequest -Uri $url -OutFile $scriptPath
+           & $scriptPath
+       }"' -Wait
+   }
+   
+   # Verify installation
+   if (-Not (Test-Path $path)) {
+       Write-Host "Installation failed. Exiting."
+       exit 1
+   }
+   
+   # Copy vcruntime140.dll to the specified directory
+   $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+   New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
+   Copy-Item $path -Destination $vcredist_dir -Force
+   
+   Write-Host "vcruntime140.dll copied successfully!"
+   ```
+
+7. **clone and build**:
    ```powershell
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
@@ -408,3 +444,32 @@ now you can either dev screenpipe on linux or run screenpipe in the cloud that r
 say 👋 in our [public discord channel](https://discord.gg/dU9EBuw7Uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
 
 thank you for contributing to screen pipe! 🎉
+
+## paid testing
+
+screenpipe has an automated release testing program to ensure quality across different platforms:
+
+### how it works
+
+- regular `release-app` commits automatically setup testing bounties
+- `release-app-publish` commits skip testing by default and ship to prod immediately
+- you can explicitly control testing with these flags:
+  - `release-app-skip-test`: skip testing even for regular builds
+
+### when testing is needed
+
+consider requesting testing when:
+
+- making significant ui changes
+- changing core recording functionality
+- updating dependencies that affect major features
+- fixing critical bugs that need verification
+
+### testing workflow
+
+1. make your changes and commit with the appropriate flag
+2. github actions will automatically setup testing if needed
+3. community testers will receive bounties for testing
+4. review test reports for issues before final release
+
+see [TESTING.md](TESTING.md) for more details on the testing process.

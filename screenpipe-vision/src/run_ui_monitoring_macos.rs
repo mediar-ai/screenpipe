@@ -1,6 +1,6 @@
 use crate::UIFrame;
 use anyhow::Result;
-use log::{debug, error, info, warn};
+use tracing::{debug, error, info, warn};
 use screenpipe_events::send_event;
 use std::fs;
 use std::io;

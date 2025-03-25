@@ -19,12 +19,12 @@ const allTables: TableItem[] = [
   },
   {
     name: "video_chunks",
-    displayName: "Video chunks",
+    displayName: "Video files",
     icon: <Database className="h-4 w-4" />,
   },
   {
     name: "ocr_text",
-    displayName: "OCR text",
+    displayName: "OCR",
     icon: <Database className="h-4 w-4" />,
   },
   {

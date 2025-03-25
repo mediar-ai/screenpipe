@@ -51,6 +51,7 @@ pub async fn start_device_monitor(
                         && !currently_available_devices.contains(&device)
                     {
                         info!("Device {device_name} disconnected");
+
                         let _ = audio_manager.stop_device(device_name).await;
                         disconnected_devices.insert(device_name.clone());
                     } else {

@@ -132,16 +132,8 @@ paths:
     post:
       operationId: server_add_tags
       parameters:
-      - name: content_type
-        schema:
-          type: string
-        in: path
-        style: simple
-      - name: id
-        schema:
-          type: integer
-        in: path
-        style: simple
+      - $ref: '#/components/parameters/ContentTypeParam'
+      - $ref: '#/components/parameters/IdParam'
       requestBody:
         content:
           application/json:
@@ -158,16 +150,8 @@ paths:
     delete:
       operationId: server_remove_tags
       parameters:
-      - name: content_type
-        schema:
-          type: string
-        in: path
-        style: simple
-      - name: id
-        schema:
-          type: integer
-        in: path
-        style: simple
+      - $ref: '#/components/parameters/ContentTypeParam'
+      - $ref: '#/components/parameters/IdParam'
       requestBody:
         content:
           application/json:
@@ -185,11 +169,7 @@ paths:
     get:
       operationId: server_get_pipe_info_handler
       parameters:
-      - name: pipe_id
-        schema:
-          type: string
-        in: path
-        style: simple
+      - $ref: '#/components/parameters/PipeIdParam'
       responses:
         '200':
           description: ''
@@ -339,11 +319,7 @@ paths:
     get:
       operationId: server_get_frame_data
       parameters:
-      - name: frame_id
-        schema:
-          type: integer
-        in: path
-        style: simple
+      - $ref: '#/components/parameters/FrameIdParam'
       responses:
         '200':
           description: ''
@@ -595,11 +571,7 @@ paths:
     get:
       operationId: server_get_pipe_build_status
       parameters:
-      - name: pipe_id
-        schema:
-          type: string
-        in: path
-        style: simple
+      - $ref: '#/components/parameters/PipeIdParam'
       responses:
         '200':
           description: ''
@@ -2045,3 +2017,32 @@ components:
           type: integer
       required:
       - device_id
+  parameters:
+    ContentTypeParam:
+      name: content_type
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/TagContentType'
+      style: simple
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      style: simple
+    PipeIdParam:
+      name: pipe_id
+      in: path
+      required: true
+      schema:
+        type: string
+      style: simple
+    FrameIdParam:
+      name: frame_id
+      in: path
+      required: true
+      schema:
+        type: integer
+      style: simple

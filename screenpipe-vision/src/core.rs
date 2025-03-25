@@ -13,7 +13,6 @@ use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
-use log::{debug, error, warn};
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde::Deserialize;
@@ -29,10 +28,9 @@ use std::{
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
-use tokio::time::sleep;
+use tracing::{debug, error, warn};
 
 use crate::browser_utils::create_url_detector;
-use crate::monitor::SafeMonitor;
 
 fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -132,6 +130,20 @@ const BROWSER_NAMES: [&str; 9] = [
     "chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera",
 ];
 
+#[derive(Debug)]
+pub enum ContinuousCaptureError {
+    MonitorNotFound,
+    ErrorCapturingScreenshot(String),
+    ErrorProcessingOcr(String),
+    ErrorSendingOcrResult(String),
+}
+
+impl std::fmt::Display for ContinuousCaptureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
@@ -140,75 +152,40 @@ pub async fn continuous_capture(
     window_filters: Arc<WindowFilters>,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
-) {
+) -> Result<(), ContinuousCaptureError> {
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<DynamicImage> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
-    // Add failure tracking
-    let mut consecutive_failures = 0;
-    let failure_threshold = 10;
-
-    // Add heartbeat counter
-    let mut last_heartbeat = Instant::now();
-    let heartbeat_interval = Duration::from_secs(60);
-
-    // Add monitor retrieval failure tracking
-    let mut monitor_retrieval_failures = 0;
-    let max_monitor_retrieval_attempts = 3;
-
     debug!(
         "continuous_capture: Starting using monitor: {:?}",
         monitor_id
     );
+    // 1. Get monitor
+    let monitor = match get_monitor_by_id(monitor_id).await {
+        Some(m) => m,
+        None => {
+            error!("Monitor not found");
+            return Err(ContinuousCaptureError::MonitorNotFound);
+        }
+    };
 
     loop {
-        // 1. Get monitor
-        let monitor = match get_monitor(
-            &monitor_id,
-            &mut monitor_retrieval_failures,
-            max_monitor_retrieval_attempts,
-        )
-        .await
-        {
-            Some(m) => m,
-            None => {
-                sleep(Duration::from_secs(1)).await;
-                continue;
-            }
-        };
-
-        // 2. Log heartbeat if needed
-        log_heartbeat_if_needed(
-            &mut last_heartbeat,
-            heartbeat_interval,
-            monitor_id,
-            frame_counter,
-        );
-
         // 3. Capture screenshot
-        let capture_result = match capture_screenshot_with_retry(
-            &monitor,
-            &window_filters,
-            capture_unfocused_windows,
-            &mut consecutive_failures,
-            failure_threshold,
-            monitor_id,
-            frame_counter,
-        )
-        .await
-        {
-            Some(result) => result,
-            None => {
-                frame_counter += 1;
-                tokio::time::sleep(interval).await;
-                continue;
-            }
-        };
+        let capture_result =
+            match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
+                Ok(result) => result,
+                Err(e) => {
+                    debug!("error capturing screenshot: {}", e);
+                    return Err(ContinuousCaptureError::ErrorCapturingScreenshot(
+                        e.to_string(),
+                    ));
+                }
+            };
 
         // 4. Process captured image
-        let (image, window_images, image_hash) = capture_result;
+        let (image, window_images, image_hash, _capture_duration) = capture_result;
 
         let should_skip = should_skip_frame(
             &previous_image,
@@ -232,95 +209,17 @@ pub async fn continuous_capture(
 
         // 5. Process max average frame if available
         if let Some(max_avg_frame) = max_average.take() {
-            process_max_average_frame(max_avg_frame, &ocr_engine, languages.clone()).await;
+            if let Err(e) =
+                process_max_average_frame(max_avg_frame, &ocr_engine, languages.clone()).await
+            {
+                error!("Error processing max average frame: {}", e);
+            }
             frame_counter = 0;
             max_avg_value = 0.0;
         }
 
         frame_counter += 1;
         tokio::time::sleep(interval).await;
-    }
-}
-
-// Helper functions to break down the complex continuous_capture function
-async fn get_monitor(
-    monitor_id: &u32,
-    retrieval_failures: &mut u32,
-    max_attempts: u32,
-) -> Option<SafeMonitor> {
-    match get_monitor_by_id(*monitor_id).await {
-        Some(m) => {
-            // Reset the counter when successful
-            *retrieval_failures = 0;
-            Some(m)
-        }
-        None => {
-            *retrieval_failures += 1;
-            error!(
-                "continuous_capture: Failed to get monitor {} (attempt {}/{})",
-                monitor_id, retrieval_failures, max_attempts
-            );
-
-            if *retrieval_failures >= max_attempts {
-                error!("continuous_capture: Failed to get monitor after {} attempts, stopping capture process", 
-                       max_attempts);
-                None
-            } else {
-                None
-            }
-        }
-    }
-}
-
-fn log_heartbeat_if_needed(
-    last_heartbeat: &mut Instant,
-    heartbeat_interval: Duration,
-    monitor_id: u32,
-    frame_counter: u64,
-) {
-    if last_heartbeat.elapsed() >= heartbeat_interval {
-        debug!(
-            "continuous_capture: Heartbeat for monitor {} - frame {}",
-            monitor_id, frame_counter
-        );
-        *last_heartbeat = Instant::now();
-    }
-}
-
-async fn capture_screenshot_with_retry(
-    monitor: &SafeMonitor,
-    window_filters: &Arc<WindowFilters>,
-    capture_unfocused_windows: bool,
-    consecutive_failures: &mut u32,
-    failure_threshold: u32,
-    monitor_id: u32,
-    frame_counter: u64,
-) -> Option<(DynamicImage, Vec<CapturedWindow>, u64)> {
-    match capture_screenshot(monitor, window_filters, capture_unfocused_windows).await {
-        Ok((image, window_images, image_hash, _capture_duration)) => {
-            debug!(
-                "Captured screenshot on monitor {} with hash: {} (frame {})",
-                monitor_id, image_hash, frame_counter
-            );
-            *consecutive_failures = 0; // Reset failure counter on success
-            Some((image, window_images, image_hash))
-        }
-        Err(e) => {
-            *consecutive_failures += 1;
-            error!(
-                "Failed to capture screenshot on monitor {} (attempt {}/{} failures): {}",
-                monitor_id, consecutive_failures, failure_threshold, e
-            );
-
-            if *consecutive_failures >= failure_threshold {
-                error!(
-                    "continuous_capture: Too many consecutive capture failures, will retry in 5s"
-                );
-                sleep(Duration::from_secs(5)).await;
-                *consecutive_failures = 0; // Reset after longer wait
-            }
-            None
-        }
     }
 }
 
@@ -383,7 +282,7 @@ async fn process_max_average_frame(
     max_avg_frame: MaxAverageFrame,
     ocr_engine: &OcrEngine,
     languages: Vec<Language>,
-) {
+) -> Result<(), ContinuousCaptureError> {
     let ocr_task_data = OcrTaskData {
         image: max_avg_frame.image,
         window_images: max_avg_frame.window_images,
@@ -394,7 +293,10 @@ async fn process_max_average_frame(
 
     if let Err(e) = process_ocr_task(ocr_task_data, ocr_engine, languages).await {
         error!("Error processing OCR task: {}", e);
+        return Err(ContinuousCaptureError::ErrorProcessingOcr(e.to_string()));
     }
+
+    Ok(())
 }
 
 pub struct MaxAverageFrame {
@@ -411,7 +313,7 @@ pub async fn process_ocr_task(
     ocr_task_data: OcrTaskData,
     ocr_engine: &OcrEngine,
     languages: Vec<Language>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), ContinuousCaptureError> {
     let OcrTaskData {
         image,
         window_images,
@@ -438,7 +340,8 @@ pub async fn process_ocr_task(
             &mut total_confidence,
             &mut window_count,
         )
-        .await?;
+        .await
+        .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string()))?;
 
         window_ocr_results.push(ocr_result);
     }
@@ -451,7 +354,9 @@ pub async fn process_ocr_task(
         window_ocr_results,
     };
 
-    send_ocr_result(&result_tx, capture_result).await?;
+    send_ocr_result(&result_tx, capture_result)
+        .await
+        .map_err(|e| ContinuousCaptureError::ErrorSendingOcrResult(e.to_string()))?;
 
     // Log performance metrics
     log_ocr_performance(start_time, window_count, total_confidence, frame_number);
@@ -465,7 +370,7 @@ async fn process_window_ocr(
     languages: &[Language],
     total_confidence: &mut f64,
     window_count: &mut u32,
-) -> Result<WindowOcrResult, std::io::Error> {
+) -> Result<WindowOcrResult, ContinuousCaptureError> {
     let app_name = captured_window.app_name.clone();
 
     // Get browser URL if applicable
@@ -478,7 +383,9 @@ async fn process_window_ocr(
 
     // Perform OCR based on the selected engine
     let (window_text, window_json_output, confidence) =
-        perform_ocr_with_engine(ocr_engine, &captured_window.image, languages.to_vec()).await?;
+        perform_ocr_with_engine(ocr_engine, &captured_window.image, languages.to_vec())
+            .await
+            .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string()))?;
 
     // Update confidence metrics
     if let Some(conf) = confidence {
@@ -531,24 +438,23 @@ async fn perform_ocr_with_engine(
     ocr_engine: &OcrEngine,
     image: &DynamicImage,
     languages: Vec<Language>,
-) -> Result<(String, String, Option<f64>), std::io::Error> {
+) -> Result<(String, String, Option<f64>), ContinuousCaptureError> {
     match ocr_engine {
         OcrEngine::Unstructured => perform_ocr_cloud(image, languages)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+            .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string())),
         OcrEngine::Tesseract => Ok(perform_ocr_tesseract(image, languages)),
         #[cfg(target_os = "windows")]
         OcrEngine::WindowsNative => perform_ocr_windows(image)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+            .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string())),
         #[cfg(target_os = "macos")]
         OcrEngine::AppleNative => Ok(perform_ocr_apple(image, &languages)),
         OcrEngine::Custom(config) => perform_ocr_custom(image, languages, config)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
-        _ => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Unsupported OCR engine",
+            .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string())),
+        _ => Err(ContinuousCaptureError::ErrorProcessingOcr(
+            "Unsupported OCR engine".to_string(),
         )),
     }
 }
@@ -556,7 +462,7 @@ async fn perform_ocr_with_engine(
 async fn send_ocr_result(
     result_tx: &Sender<CaptureResult>,
     capture_result: CaptureResult,
-) -> Result<(), std::io::Error> {
+) -> Result<(), ContinuousCaptureError> {
     // Add channel health check
     if result_tx.capacity() == 0 {
         warn!("OCR task channel at capacity - receiver may be blocked or slow");
@@ -565,17 +471,16 @@ async fn send_ocr_result(
     if let Err(e) = result_tx.send(capture_result).await {
         if e.to_string().contains("channel closed") {
             error!("OCR task channel closed, recording may have stopped: {}", e);
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                "Channel closed - recording appears to have stopped",
+            return Err(ContinuousCaptureError::ErrorSendingOcrResult(
+                "Channel closed - recording appears to have stopped".to_string(),
             ));
         }
 
         error!("Failed to send OCR result: {}", e);
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to send OCR result: {}", e),
-        ));
+        return Err(ContinuousCaptureError::ErrorSendingOcrResult(format!(
+            "Failed to send OCR result: {}",
+            e
+        )));
     }
 
     Ok(())

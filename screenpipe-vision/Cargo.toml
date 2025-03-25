@@ -24,12 +24,8 @@ rusty-tesseract = { git = "https://github.com/louis030195/rusty-tesseract.git", 
 
 anyhow = "1.0.86"
 
-# Log
-log = { workspace = true }
-
 image-compare = "0.4.1"
 clap = { version = "4.0", features = ["derive"] }
-# tokio = { version = "1", features = ["full"] }
 
 # Integrations
 screenpipe-integrations = { path = "../screenpipe-integrations" }
@@ -44,7 +40,7 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-xcap = "0.3.3" # non broken version
+xcap = { git = "https://github.com/nashaofu/xcap.git", rev = "09c11cc67a37434f6cdcf73f3305ee8608dac83c" }
 
 once_cell = { workspace = true }
 base64 = "0.22.1"
@@ -92,7 +88,7 @@ windows = { version = "0.58", features = [
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
-cidre = { git = "https://github.com/yury/cidre.git" } # idk why cant pin version / rev 
+cidre = { git = "https://github.com/mediar-ai/cidre.git" }
 accessibility-sys = "0.1.3"
 core-foundation = "=0.10.0"
 url = "2.5.0"

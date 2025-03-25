@@ -41,6 +41,12 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface UiMonitoring {
   id: number;
@@ -80,9 +86,10 @@ const columns: ColumnDef<UiMonitoring>[] = [
       );
     },
     cell: ({ row }) => (
-      <div className="max-w-[500px] truncate font-mono">
-        {row.getValue("text_output")}
-      </div>
+      <CellContent
+        value={row.getValue("text_output")}
+        className="max-w-[500px] truncate font-mono"
+      />
     ),
   },
   {
@@ -114,9 +121,10 @@ const columns: ColumnDef<UiMonitoring>[] = [
       );
     },
     cell: ({ row }) => (
-      <div className="max-w-[200px] truncate">
-        {row.getValue("window") || "N/A"}
-      </div>
+      <CellContent
+        value={row.getValue("window")}
+        className="max-w-[200px] truncate"
+      />
     ),
   },
   {
@@ -174,6 +182,40 @@ const columns: ColumnDef<UiMonitoring>[] = [
     },
   },
 ];
+
+// Component for cell content with click support
+interface CellContentProps {
+  value: string | null;
+  className?: string;
+}
+
+function CellContent({ value, className }: CellContentProps) {
+  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const displayValue = value || "N/A";
+
+  return (
+    <>
+      <div
+        className={className}
+        onClick={() => setIsDialogOpen(true)}
+        style={{ cursor: "pointer" }}
+      >
+        {displayValue}
+      </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>cell content</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto max-h-[60vh] font-mono p-4 border rounded-md bg-muted/50 whitespace-pre-wrap">
+            {displayValue}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 export function UiMonitoringTable() {
   const [data, setData] = React.useState<UiMonitoring[]>([]);

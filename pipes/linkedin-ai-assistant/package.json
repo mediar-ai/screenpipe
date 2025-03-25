@@ -1,13 +1,14 @@
 {
   "name": "linkedin-ai-assistant",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "commonjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "publish": "bunx --bun @screenpipe/dev@latest pipe publish --name linkedin-ai-assistant"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.1",
