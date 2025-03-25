@@ -62,6 +62,18 @@ impl AccessibilityEngine for WindowsEngine {
             "Windows implementation is not yet available".to_string(),
         ))
     }
+
+    fn open_application(&self, _app_name: &str) -> Result<UIElement, AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Windows implementation is not yet available".to_string(),
+        ))
+    }
+
+    fn open_url(&self, _url: &str, _browser: Option<&str>) -> Result<UIElement, AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Windows implementation is not yet available".to_string(),
+        ))
+    }
 }
 
 // Placeholder WindowsUIElement that implements UIElementImpl

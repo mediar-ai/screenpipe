@@ -56,6 +56,18 @@ impl AccessibilityEngine for LinuxEngine {
             "Linux implementation is not yet available".to_string(),
         ))
     }
+
+    fn open_application(&self, _app_name: &str) -> Result<UIElement, AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Linux implementation is not yet available".to_string(),
+        ))
+    }
+
+    fn open_url(&self, _url: &str, _browser: Option<&str>) -> Result<UIElement, AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Linux implementation is not yet available".to_string(),
+        ))
+    }
 }
 
 // Placeholder LinuxUIElement that implements UIElementImpl
