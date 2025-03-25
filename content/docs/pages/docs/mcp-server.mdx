@@ -5,6 +5,34 @@ import Image from 'next/image'
 
 Screenpipe offers robust capabilities for integrating with various MCP clients, allowing users to leverage its features across different platforms. This guide will walk you through the setup and usage of Screenpipe with supported MCP clients.
 
+## Prerequisites
+
+Before setting up the MCP server, ensure you have the following installed:
+
+### 1. Python
+Install Python from the [official Python website](https://www.python.org/). Make sure to add Python to your system's PATH during installation.
+
+### 2. uv Package Manager
+Install uv using one of these commands based on your operating system:
+
+<Tabs items={['macOS/Linux', 'Windows']}>
+  <Tab>
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+  </Tab>
+  <Tab>
+    ```powershell
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```
+  </Tab>
+</Tabs>
+
+Verify the installation by running:
+```bash
+uv --version
+```
+
 ## Supported MCP Clients
 
 - [Claude Desktop](#claude-desktop)
@@ -119,13 +147,13 @@ After making changes to the configuration, restart Claude Desktop to apply the u
   unoptimized 
 />  
 
-If the setup is successful, you’ll see a **hammer icon** appear in the interface.  
+If the setup is successful, you'll see a **hammer icon** appear in the interface.  
 
 ## 5ire Desktop App
 
 Screenpipe allows seamless integration with the **5ire Desktop App**, enabling users to utilize its features efficiently. This guide walks you through the setup process.
 
-Before configuring the 5ire Desktop App, you need to set up the **MCP server**. If you haven’t done so yet, refer to the following [MCP Server Setup](#setting-up-the-mcp-server) :
+Before configuring the 5ire Desktop App, you need to set up the **MCP server**. If you haven't done so yet, refer to the following [MCP Server Setup](#setting-up-the-mcp-server) :
 
 ### 1. Open the 5ire Desktop App
 Launch the **5ire Desktop App** on your system.

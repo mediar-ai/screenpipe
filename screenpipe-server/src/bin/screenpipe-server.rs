@@ -1412,6 +1412,16 @@ async fn handle_pipe_command(
 pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) -> Result<(), anyhow::Error> {
     let client = Client::new();
 
+    // Check if Python is installed
+    if !is_command_available("python") {
+        println!("note: python is not installed. please install it from the official website: https://www.python.org/");
+    }
+
+    // Check if uv is installed
+    if !is_command_available("uv") {
+        println!("note: uv is not installed. please install it using the instructions at: https://docs.astral.sh/uv/#installation");
+    }
+
     match command {
         McpCommand::Setup { directory, output, port, update, purge } => {
             let mcp_dir = directory
@@ -1653,4 +1663,13 @@ async fn download_mcp_directory(
     }
 
     Ok(())
+}
+
+// Helper function to check if a command is available
+fn is_command_available(command: &str) -> bool {
+    std::process::Command::new(command)
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
 }
