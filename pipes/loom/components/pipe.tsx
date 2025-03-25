@@ -100,12 +100,13 @@ const Pipe: React.FC = () => {
     }
   };
 
-  const handleContentMerging = async (type: 'ocr' | 'audio') => {
+  const handleContentMerging = async () => {
+    localStorage.removeItem('historyId');
     try {
       setIsMerging(true);
       toast({
         title: "merging",
-        description: "video merging in process...",
+        description: "video media in process...",
         duration: 3000,
       });
       const startTimeStr = startTime.toISOString();
@@ -185,7 +186,7 @@ const Pipe: React.FC = () => {
         });
       }
     } catch (error :any) {
-      console.error('error merging videos:', error);
+      console.error('error merging media:', error);
       toast({
         title: "error",
         variant: "destructive",
@@ -228,6 +229,7 @@ const Pipe: React.FC = () => {
 
   useEffect(() => {
     setKey(prevKey => prevKey + 1);
+    localStorage.removeItem('historyId');
   }, [mergedVideoPath, mergedAudioPath]);
 
   const setHistory = async () => {
@@ -325,7 +327,7 @@ const Pipe: React.FC = () => {
           <TooltipTrigger className="mt-10" asChild>
             <span>
               <Button 
-                onClick={() => handleContentMerging('ocr')}
+                onClick={() => handleContentMerging()}
                 disabled={isMerging || isServerDown}
                 className="disabled:!cursor-not-allowed min-w-40 shadow-lg text-md"
               >
@@ -361,15 +363,24 @@ const Pipe: React.FC = () => {
 
       {(mergedVideoPath || mergedAudioPath) && (
         <div className="border-2 mt-16 pt-10 w-[1200px] relative rounded-lg flex-col flex items-center justify-center" >
-          <Button
-            variant={"outline"} 
-            size={"icon"}
-            onClick={copyMediaToClipboard}
-            className="mt-4 absolute !border-none right-5 top-5"
-          >
-            {isCopied ? <IconCheck /> : <IconCopy />}
-            <span className="sr-only">Copy video</span>
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild className="cursor-pointer">
+                <Button
+                  variant={"outline"} 
+                  size={"icon"}
+                  onClick={copyMediaToClipboard}
+                  className="mt-4 absolute !border-none right-5 top-5"
+                >
+                  {isCopied ? <IconCheck /> : <IconCopy />}
+                  <span className="sr-only">Copy media</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                copy this media to <br/> system clipboard
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <MediaComponent
             filePath={mergedVideoPath ? mergedVideoPath : mergedAudioPath}
             type={mergedAudioPath ? "audio" : "video"}

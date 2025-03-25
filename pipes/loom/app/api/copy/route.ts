@@ -18,7 +18,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   let command: string;
   if (os.platform() === 'win32') {
-    command = `powershell.exe -NoProfile -WindowStyle hidden -File copyToClipboard.ps1 -FilePath "${path}"`;
+    command = `powershell.exe -NoProfile -WindowStyle hidden Set-Clipboard -Path "${path}"`;
   } else if (os.platform() === 'darwin') {
     command = `osascript -e 'tell application "Finder" to set the clipboard to (POSIX file "${path}")'`;
   } else {

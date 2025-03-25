@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -15,12 +16,21 @@ import {
 } from "@/components/ui/sidebar";
 import { SidebarSearch } from "@/components/histort-sidebar-search";
 import { listHistory, HistoryItem, deleteHistoryItem } from "@/lib/actions/history";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function HistorySidebar() {
   const [todayItems, setTodayItems] = useState<HistoryItem[]>([]);
   const [yesterdayItems, setYesterdayItems] = useState<HistoryItem[]>([]);
   const [previous7DaysItems, setPrevious7DaysItems] = useState<HistoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchHistory = async () => {
     const history: HistoryItem[] = await listHistory();
@@ -52,8 +62,10 @@ export function HistorySidebar() {
   };
 
   const handleDeleteHistory = async (id: string) => {
+    setIsDeleting(true);
     await deleteHistoryItem(id);
     fetchHistory();
+    setIsDeleting(true);
   };
 
   const handleHistoryClick = (id: string) => {
@@ -93,14 +105,46 @@ export function HistorySidebar() {
     filterItems(items).map(item => (
       <SidebarMenuItem key={item.id}>
         <SidebarMenuButton asChild>
-          <div className="p-1">
-            <a className="" href="#" onClick={() => handleHistoryClick(item.id)}>
-              <span>{item.title.substring(0, 30)}...</span>
+          <div className="p-1 cursor-pointer" onClick={() => handleHistoryClick(item.id)}>
+            <a className="" href="#">
+              {item.title.substring(0, 28)}....
             </a>
             <Trash2
-              className="absolute right-0 ml-2 cursor-pointer"
-              onClick={() => handleDeleteHistory(item.id)}
+              className="absolute right-0 ml-2 cursor-pointer bg-muted z-20"
+              onClick={() => setConfirmOpen(true)}
             />
+            <Dialog open={confirmOpen} onOpenChange={isDeleting ? () => {} : setConfirmOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>confirm deletion of loom</DialogTitle>
+                  <DialogDescription>
+                    are you sure you want this loom? <br/> this loom media will delete from your storage as well
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-end gap-4">
+                  <Button 
+                    onClick={() => setConfirmOpen(false)} 
+                    disabled={isDeleting}
+                    variant={"outline"}
+                  >
+                    cancel
+                  </Button>
+                  <Button 
+                    onClick={() => handleDeleteHistory(item.id)} 
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        deleting...
+                      </>
+                    ) : (
+                        "confirm"
+                      )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </SidebarMenuButton>
       </SidebarMenuItem>

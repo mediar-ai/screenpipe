@@ -37,7 +37,8 @@ const DialogSettings: React.FC<SettingsDialogProps> = ({
   const [windowName, setWindowName] = useState("");
   const [contentType, setContentType] = useState("");
 
-const defaultCustomRules = `- Create a concise  summary of the given context 
+const defaultCustomRules = `- Create a concise summary of the given context 
+- The context is from OCR of media, media can be audio & video
 - Don't ask any type of questions
 - Don't include any type of absolute path in answer
 - Ensure the summary is precise and captures the essence of the content.

@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Toaster } from "@/components/toaster";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
-import { HistorySidebar } from "@/components/history-sidebar"
 
 export const metadata: Metadata = {
   title: "Loom • Screenpipe",
@@ -20,19 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <SidebarProvider defaultOpen={true}>
-          <div className="flex w-full h-full">
-            <div className="absolute left-0 top-0 h-full z-[10]">
-              <HistorySidebar />
-            </div>
-            <div className="fixed left-1 top-2 z-[20]">
-              <SidebarTrigger />
-            </div>
-            <div className="flex-1 overflow-auto">
-              {children}
-            </div>
-          </div>
-        </SidebarProvider>
+          {children}
         <Toaster />
       </body>
     </html>
