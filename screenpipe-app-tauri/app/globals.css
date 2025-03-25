@@ -108,9 +108,10 @@
 @layer base {
   * {
     @apply border-border;
+    scrollbar-width: thin !important;
   }
   body {
-    @apply bg-background text-foreground !pointer-events-auto;
+    @apply bg-background text-foreground !pointer-events-auto !overscroll-none;
   }
 
   *,
