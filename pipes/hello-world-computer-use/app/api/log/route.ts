@@ -68,21 +68,17 @@ async function syncToCSV(messages: any, storagePath: string) {
     const filePath = join(storagePath, filename);
 
     // Create CSV header
-    const header =
-      "AppName,Text,Timestamp,SyncedAt\n";
+    const header = "AppName,Text,Timestamp,SyncedAt\n";
 
     // Format CSV rows
     const rows = messages
       .map((msg: any) => {
         // Escape quotes in text fields
         const escapedMessage = msg.text.replace(/"/g, '""');
-        const escapedSender = msg.sender.replace(/"/g, '""');
-        const escapedContactName = (msg.contactName || "").replace(/"/g, '""');
+        const escapedAppName = msg.appName.replace(/"/g, '""');
 
-        return `"${escapedSender}","${escapedMessage}","${
+        return `"${escapedAppName}","${escapedMessage}","${
           msg.timestamp
-        }","${escapedContactName}","${
-          msg.conversationUrl || ""
         }","${new Date().toISOString()}"`;
       })
       .join("\n");
@@ -124,9 +120,15 @@ export async function GET(request: Request) {
       );
     }
 
+    const app = settings.customSettings?.helloWorldComputerUse?.app;
+
+    if (!app) {
+      return NextResponse.json({ error: "no app found" }, { status: 400 });
+    }
+
     // Get CSV storage path
     const csvStoragePath =
-      settings.customSettings?.desktopToTable?.csvStoragePath;
+      settings.customSettings?.helloWorldComputerUse?.csvStoragePath;
 
     if (!csvStoragePath) {
       return NextResponse.json(
@@ -151,20 +153,20 @@ export async function GET(request: Request) {
       );
     }
 
-    const linkedinMessages = await browserPipe.operator
+    const data = await browserPipe.operator
       .locator({
-        app: "Arc",
+        app: app,
         role: "AXGroup",
         useBackgroundApps: true,
         activateApp: true,
       })
       .all(3, 1);
 
-    const texts = deduplicateByStringSimilarity(linkedinMessages, 0.5).map(
+    const texts = deduplicateByStringSimilarity(data, 0.5).map(
       (group) => group.text
     );
 
-    console.log("non deduplicated length", linkedinMessages.length);
+    console.log("non deduplicated length", data.length);
     console.log("deduplicated length", texts.length);
     console.log("texts", texts);
 

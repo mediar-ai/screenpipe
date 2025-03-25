@@ -27,6 +27,13 @@ export default function HelloWorldComputerUse() {
   });
   const { settings, updateSettings } = useSettings();
 
+  const [tauri, setTauri] = useState<any>(undefined);
+
+  useEffect(() => {
+    // @ts-ignore - Tauri API
+    setTauri(!!window.__TAURI__);
+  }, []);
+
   // Load settings from localStorage on component mount
   useEffect(() => {
     const savedApp = settings?.customSettings?.helloWorldComputerUse?.app;
@@ -47,6 +54,9 @@ export default function HelloWorldComputerUse() {
 
   const extractAndSyncData = async () => {
     try {
+      // get browser name
+      const browser = getBrowserName();
+
       setIsLoading(true);
       const t = toast({
         title: "starting data extraction",
@@ -60,6 +70,8 @@ export default function HelloWorldComputerUse() {
         title: "opening app",
         description: "please do not close the chosen app",
       });
+
+      console.log("opening app", app);
 
       await pipe.operator.openApplication(app);
 
@@ -97,8 +109,11 @@ export default function HelloWorldComputerUse() {
 
       setLastSyncTime(new Date().toISOString());
 
+      // now open back current app (eg tauri app is "screenpipe" otherwise get browser name)
+      await pipe.operator.openApplication(tauri ? "screenpipe" : browser);
+
       toast({
-        title: "linkedin messages saved to csv",
+        title: "data saved to csv",
         description: `successfully saved ${data.messages.length} messages to ${csvStoragePath}`,
       });
     } catch (error) {
@@ -116,79 +131,29 @@ export default function HelloWorldComputerUse() {
   // Function to select CSV storage directory
   const openPath = async () => {
     try {
-      // Check if File System Access API is supported
-      if (!("showDirectoryPicker" in window)) {
-        toast({
-          variant: "destructive",
-          title: "error",
-          description:
-            "your browser doesn't support directory selection. please enter the path manually or try a different browser.",
-        });
-        return;
-      }
-
-      // Open directory picker dialog
-      const dirHandle = await (window as any).showDirectoryPicker();
-
-      // Request permission to access the directory
-      if (dirHandle.requestPermission) {
-        const permission = await dirHandle.requestPermission({
-          mode: "readwrite",
-        });
-        if (permission !== "granted") {
-          throw new Error("Permission to access the directory was denied");
-        }
-      }
-
-      // For Tauri apps, get the full system path
-      let fullPath = "";
-
-      try {
-        // If running in Tauri, use the native dialog
-        // @ts-ignore - Tauri API
-        if (window.__TAURI__) {
-          // @ts-ignore - Tauri API
-          fullPath = await window.__TAURI__.dialog.open({
-            directory: true,
-            multiple: false,
-            title: "Select CSV Storage Directory",
-          });
-        } else {
-          // For web browsers, try to get a more detailed path
-          // This is limited by browser security, so we need to handle this case
-          fullPath = dirHandle.name;
-
-          // Try to use File System API to get full path if possible
-          if ((dirHandle as any).getSystemDirectory) {
-            fullPath = await (dirHandle as any).getSystemDirectory();
-          }
-
-          // If we just have a name, we'll warn the user
-          if (fullPath.indexOf("/") === -1 && fullPath.indexOf("\\") === -1) {
-            toast({
-              title: "limited path information",
-              description:
-                "browser security limits access to full path. you may need to enter the full path manually.",
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("failed to get full path:", err);
-        // Fallback to just the directory name
-        fullPath = dirHandle.name;
-      }
-
-      setCsvStoragePath(fullPath);
-      setPathValidation({
-        isValid: true,
-        message: "path selected: " + fullPath,
+      // for tauri apps, use the native dialog directly which gives absolute path
+      const selectedPath = await tauri.dialog.open({
+        directory: true,
+        multiple: false,
+        title: "select csv storage directory",
       });
 
+      if (selectedPath === null) {
+        return; // user canceled
+      }
+
+      setCsvStoragePath(selectedPath);
+      setPathValidation({
+        isValid: true,
+        message: "path selected: " + selectedPath,
+      });
+
+      // Save to settings
       await updateSettings({
         customSettings: {
           helloWorldComputerUse: {
             app,
-            csvStoragePath: fullPath,
+            csvStoragePath: selectedPath,
             syncSchedule,
             lastSyncTime,
           },
@@ -246,6 +211,27 @@ export default function HelloWorldComputerUse() {
         message: "invalid path",
       });
     }
+  };
+
+  const getBrowserName = () => {
+    if (
+      getComputedStyle(document.documentElement).getPropertyValue(
+        "--arc-palette-title"
+      )
+    )
+      return "arc";
+    const userAgent = window.navigator.userAgent;
+
+    if (userAgent.includes("Firefox")) return "firefox";
+    if (userAgent.includes("Edge") || userAgent.includes("Edg")) return "edge";
+    if (userAgent.includes("Chrome") && !userAgent.includes("Edg"))
+      return "chrome";
+    if (userAgent.includes("Safari") && !userAgent.includes("Chrome"))
+      return "safari";
+    if (userAgent.includes("Opera") || userAgent.includes("OPR"))
+      return "opera";
+
+    return "unknown";
   };
 
   return (
@@ -306,6 +292,8 @@ export default function HelloWorldComputerUse() {
                   type="button"
                   variant="outline"
                   onClick={openPath}
+                  // disable on web due to browser security
+                  disabled={isLoading || !tauri}
                   className="px-3"
                   title="select directory"
                 >
@@ -313,7 +301,7 @@ export default function HelloWorldComputerUse() {
                 </Button>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                where to save data extraction csv files
+                where to save data extraction csv files (use absolute path)
               </p>
               {pathValidation.message && (
                 <p

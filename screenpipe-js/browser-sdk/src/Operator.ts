@@ -874,7 +874,7 @@ export class Operator {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ application_name: applicationName }),
+        body: JSON.stringify({ app_name: applicationName }),
       }
     );
 
