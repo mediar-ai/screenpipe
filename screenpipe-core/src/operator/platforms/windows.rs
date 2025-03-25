@@ -2,6 +2,7 @@ use crate::operator::element::UIElementImpl;
 use crate::operator::platforms::AccessibilityEngine;
 use crate::operator::{AutomationError, Locator, Selector, UIElement, UIElementAttributes};
 use std::fmt::Debug;
+use crate::operator::ClickResult;
 
 pub struct WindowsEngine;
 
