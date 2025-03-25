@@ -2,10 +2,11 @@ name: Create Test Bounty
 
 on:
   pull_request_target:
-    types: [opened, reopened]
+    types: [opened, reopened, closed]
 
 jobs:
   create-test-bounty:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -75,4 +76,48 @@ jobs:
               repo: context.repo.repo,
               issue_number: prNumber,
               body: comment
-            }); 
+            });
+
+  close-test-bounty:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Find and close test bounty issue
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            
+            // Search for issues with the bounty label and PR number in title
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'bounty',
+              state: 'open'
+            });
+            
+            const bountyIssue = issues.data.find(issue => 
+              issue.title.includes(`PR #${prNumber}`)
+            );
+            
+            if (bountyIssue) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: bountyIssue.number,
+                state: 'closed'
+              });
+              
+              console.log(`Closed test bounty issue #${bountyIssue.number}`);
+            } else {
+              console.log('No matching test bounty issue found');
+            } 

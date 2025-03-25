@@ -1414,7 +1414,7 @@ pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) 
     let client = Client::new();
 
     // Check if Python is installed
-    if !is_command_available("python") {
+    if !is_command_available("python") || !is_command_available("python3") {
         warn!("note: python is not installed. please install it from the official website: https://www.python.org/");
     }
 

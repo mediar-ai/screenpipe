@@ -1,15 +1,15 @@
 /// TLDR: default TreeWalker does not traverse windows, so we need to traverse windows manually
 use accessibility::{AXAttribute, AXUIElement, AXUIElementAttributes, Error};
 use core_foundation::array::CFArray;
+use core_foundation::base::TCFType;
 use std::{
     cell::{Cell, RefCell},
-    thread,
-    time::{Duration, Instant},
     collections::HashSet,
     hash::{Hash, Hasher},
+    thread,
+    time::{Duration, Instant},
 };
 use tracing::debug;
-use core_foundation::base::TCFType;
 
 pub trait TreeVisitor {
     fn enter_element(&self, element: &AXUIElement) -> TreeWalkerFlow;
@@ -53,27 +53,19 @@ impl TreeWalkerWithWindows {
         let element_wrapper = AXUIElementWrapper {
             element: root.clone(),
         };
-        
+
         // Check if already visited
         if self.visited.borrow().contains(&element_wrapper) {
             // Increment cycle counter
             let mut count = self.cycle_count.borrow_mut();
             *count += 1;
-            
-            // Log when we detect a cycle
-            let role = root.role().map_or("unknown".to_string(), |r| r.to_string());
-            let title = root.title().map_or("".to_string(), |t| t.to_string());
-            // debug!(target: "operator", "Cycle detected! Skipping already visited element: {}{}. Total cycles: {}", 
-            //        role, 
-            //        if !title.is_empty() { format!(" ({})", title) } else { "".to_string() },
-            //        *count);
-            
+
             return TreeWalkerFlow::SkipSubtree;
         }
-        
+
         // Mark as visited
         self.visited.borrow_mut().insert(element_wrapper);
-        
+
         let mut flow = visitor.enter_element(root);
 
         // debug!(target: "operator", "Walking element: {:?}", root.role());
@@ -236,13 +228,13 @@ impl ElementsCollectorWithWindows {
     pub fn find_all(&self) -> Vec<AXUIElement> {
         let walker = TreeWalkerWithWindows::new();
         walker.walk(&self.root, self);
-        
+
         // After traversal is done, log how many cycles were detected
         let cycles = walker.get_cycle_count();
         if cycles > 0 {
             debug!(target: "operator", "UI traversal complete - detected {} cycles in the accessibility tree", cycles);
         }
-        
+
         self.matches.borrow().clone()
     }
 
@@ -275,7 +267,7 @@ impl TreeVisitor for ElementsCollectorWithWindows {
 
         if (self.predicate)(element) {
             self.matches.borrow_mut().push(element.clone());
-            
+
             if let Some(max_results) = self.max_results {
                 if self.matches.borrow().len() >= max_results {
                     debug!(target: "operator", "Reached max_results limit of {}", max_results);
@@ -303,7 +295,7 @@ impl PartialEq for AXUIElementWrapper {
         unsafe {
             let self_ref = self.element.as_concrete_TypeRef();
             let other_ref = other.element.as_concrete_TypeRef();
-            
+
             // CFEqual returns a Boolean (u8), convert to bool
             core_foundation::base::CFEqual(self_ref as _, other_ref as _) != 0
         }

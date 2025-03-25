@@ -1672,7 +1672,7 @@ impl UIElementImpl for MacOSUIElement {
             })?;
 
         // Key down event with modifiers
-        let mut key_down = CGEvent::new_keyboard_event(source.clone(), key_code as CGKeyCode, true)
+        let key_down = CGEvent::new_keyboard_event(source.clone(), key_code as CGKeyCode, true)
             .map_err(|_| {
                 AutomationError::PlatformError("Failed to create key down event".to_string())
             })?;
@@ -1688,8 +1688,8 @@ impl UIElementImpl for MacOSUIElement {
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Key up event with same modifiers
-        let mut key_up = CGEvent::new_keyboard_event(source, key_code as CGKeyCode, false)
-            .map_err(|_| {
+        let key_up =
+            CGEvent::new_keyboard_event(source, key_code as CGKeyCode, false).map_err(|_| {
                 AutomationError::PlatformError("Failed to create key up event".to_string())
             })?;
 
@@ -1858,34 +1858,6 @@ impl UIElementImpl for MacOSUIElement {
             activate_app: self.activate_app,
         })
     }
-}
-
-// Helper function to extract children from an array attribute
-fn extract_children_from_array(value: core_foundation::base::CFType) -> Option<Vec<AXUIElement>> {
-    use core_foundation::array::{CFArrayGetCount, CFArrayGetTypeID, CFArrayGetValueAtIndex};
-    use core_foundation::base::{CFGetTypeID, TCFType};
-
-    unsafe {
-        let value_ref = value.as_CFTypeRef();
-        let type_id = CFGetTypeID(value_ref);
-
-        if type_id == CFArrayGetTypeID() {
-            let array_ref = value_ref as *const __CFArray;
-            let count = CFArrayGetCount(array_ref);
-
-            let mut children = Vec::with_capacity(count as usize);
-            for i in 0..count {
-                let item = CFArrayGetValueAtIndex(array_ref, i as isize);
-                if !item.is_null() {
-                    let ax_element = AXUIElement::wrap_under_get_rule(item as *mut _);
-                    children.push(ax_element);
-                }
-            }
-            return Some(children);
-        }
-    }
-
-    None
 }
 
 // Helper function to parse AXUIElement attribute values into appropriate types
