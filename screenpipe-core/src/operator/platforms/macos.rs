@@ -1,4 +1,5 @@
 use crate::operator::platforms::AccessibilityEngine;
+use crate::operator::ClickResult;
 use crate::operator::{
     element::UIElementImpl, AutomationError, Locator, Selector, UIElement, UIElementAttributes,
 };
@@ -17,7 +18,7 @@ use core_graphics::display::{CGPoint, CGSize};
 use core_graphics::event::{CGEvent, CGEventFlags, CGKeyCode};
 use core_graphics::event_source::CGEventSource;
 use serde_json::{self, Value};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use tracing::{debug, trace};
@@ -864,13 +865,6 @@ impl AccessibilityEngine for MacOSEngine {
     }
 }
 
-// Define a new struct to hold click result information - move to module level
-pub struct ClickResult {
-    pub method: ClickMethod,
-    pub coordinates: Option<(f64, f64)>,
-    pub details: String,
-}
-
 // Enum to represent which click method was used - move to module level
 pub enum ClickMethod {
     AXPress,
@@ -942,6 +936,18 @@ impl MacOSUIElement {
         }
     }
 
+    fn click_with_method(
+        &self,
+        method: ClickMethodSelection,
+    ) -> Result<ClickResult, AutomationError> {
+        match method {
+            ClickMethodSelection::Auto => self.click_auto(),
+            ClickMethodSelection::AXPress => self.click_press(),
+            ClickMethodSelection::AXClick => self.click_accessibility_click(),
+            ClickMethodSelection::MouseSimulation => self.click_mouse_simulation(),
+        }
+    }
+
     // Add these methods to the MacOSUIElement impl block
     fn click_auto(&self) -> Result<ClickResult, AutomationError> {
         // 1. Try AXPress action first
@@ -966,7 +972,7 @@ impl MacOSUIElement {
             Ok(_) => {
                 debug!("Successfully clicked element with AXPress");
                 Ok(ClickResult {
-                    method: ClickMethod::AXPress,
+                    method: "AXPress".to_string(),
                     coordinates: None,
                     details: "Used accessibility AXPress action".to_string(),
                 })
@@ -984,7 +990,7 @@ impl MacOSUIElement {
             Ok(_) => {
                 debug!("Successfully clicked element with AXClick");
                 Ok(ClickResult {
-                    method: ClickMethod::AXClick,
+                    method: "AXClick".to_string(),
                     coordinates: None,
                     details: "Used accessibility AXClick action".to_string(),
                 })
@@ -1070,7 +1076,7 @@ impl MacOSUIElement {
                 );
 
                 Ok(ClickResult {
-                    method: ClickMethod::MouseSimulation,
+                    method: "MouseSimulation".to_string(),
                     coordinates: Some((center_x, center_y)),
                     details: format!(
                         "Used mouse simulation at coordinates ({:.1}, {:.1}), element bounds: ({:.1}, {:.1}, {:.1}, {:.1})",
@@ -1476,18 +1482,6 @@ impl UIElementImpl for MacOSUIElement {
     fn click(&self) -> Result<ClickResult, AutomationError> {
         // Use the default Auto selection
         self.click_with_method(ClickMethodSelection::Auto)
-    }
-
-    fn click_with_method(
-        &self,
-        method: ClickMethodSelection,
-    ) -> Result<ClickResult, AutomationError> {
-        match method {
-            ClickMethodSelection::Auto => self.click_auto(),
-            ClickMethodSelection::AXPress => self.click_press(),
-            ClickMethodSelection::AXClick => self.click_accessibility_click(),
-            ClickMethodSelection::MouseSimulation => self.click_mouse_simulation(),
-        }
     }
 
     fn double_click(&self) -> Result<ClickResult, AutomationError> {

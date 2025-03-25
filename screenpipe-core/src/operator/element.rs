@@ -1,10 +1,10 @@
 use crate::operator::errors::AutomationError;
 use crate::operator::selector::Selector;
-use crate::operator::platforms::macos::{ClickResult, ClickMethodSelection};
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use super::Locator;
+use super::{ClickResult, Locator};
+
 /// Represents a UI element in a desktop application
 #[derive(Debug)]
 pub struct UIElement {
@@ -31,7 +31,6 @@ pub(crate) trait UIElementImpl: Send + Sync + Debug {
     fn parent(&self) -> Result<Option<UIElement>, AutomationError>;
     fn bounds(&self) -> Result<(f64, f64, f64, f64), AutomationError>; // x, y, width, height
     fn click(&self) -> Result<ClickResult, AutomationError>;
-    fn click_with_method(&self, method: ClickMethodSelection) -> Result<ClickResult, AutomationError>;
     fn double_click(&self) -> Result<ClickResult, AutomationError>;
     fn right_click(&self) -> Result<(), AutomationError>;
     fn hover(&self) -> Result<(), AutomationError>;
@@ -90,11 +89,6 @@ impl UIElement {
     /// Click on this element
     pub fn click(&self) -> Result<ClickResult, AutomationError> {
         self.inner.click()
-    }
-
-    /// Click on this element using a specific click method
-    pub fn click_with_method(&self, method: ClickMethodSelection) -> Result<ClickResult, AutomationError> {
-        self.inner.click_with_method(method)
     }
 
     /// Double-click on this element

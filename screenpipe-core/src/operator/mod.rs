@@ -18,6 +18,13 @@ pub use errors::AutomationError;
 pub use locator::Locator;
 pub use selector::Selector;
 
+// Define a new struct to hold click result information - move to module level
+pub struct ClickResult {
+    pub method: String,
+    pub coordinates: Option<(f64, f64)>,
+    pub details: String,
+}
+
 /// The main entry point for UI automation
 pub struct Desktop {
     engine: Arc<dyn platforms::AccessibilityEngine>,

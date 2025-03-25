@@ -3,6 +3,8 @@ use crate::operator::{AutomationError, Selector, UIElement};
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::ClickResult;
+
 /// A high-level API for finding and interacting with UI elements
 pub struct Locator {
     engine: Arc<dyn AccessibilityEngine>,
@@ -96,7 +98,7 @@ impl Locator {
     // Convenience methods for common actions
 
     /// Click on the first matching element
-    pub async fn click(&self) -> Result<crate::operator::platforms::macos::ClickResult, AutomationError> {
+    pub async fn click(&self) -> Result<ClickResult, AutomationError> {
         self.wait().await?.click()
     }
 
