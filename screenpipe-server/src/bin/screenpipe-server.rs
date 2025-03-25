@@ -1414,12 +1414,12 @@ pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) 
 
     // Check if Python is installed
     if !is_command_available("python") {
-        println!("note: python is not installed. please install it from the official website: https://www.python.org/");
+        warn!("note: python is not installed. please install it from the official website: https://www.python.org/");
     }
 
     // Check if uv is installed
     if !is_command_available("uv") {
-        println!("note: uv is not installed. please install it using the instructions at: https://docs.astral.sh/uv/#installation");
+        warn!("note: uv is not installed. please install it using the instructions at: https://docs.astral.sh/uv/#installation");
     }
 
     match command {
@@ -1511,6 +1511,9 @@ pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) 
             if should_download {
                 tokio::fs::create_dir_all(&mcp_dir).await?;
                 
+                // Log the start of the download process
+                info!("starting download process for MCP directory");
+
                 let owner = "mediar-ai";
                 let repo = "screenpipe";
                 let branch = "main";
