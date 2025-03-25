@@ -17,7 +17,7 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
 
     let window_filters = Arc::new(WindowFilters::new(&[], &[]));
     let capture_handle = tokio::spawn(async move {
-        continuous_capture(
+        if let Err(e) = continuous_capture(
             result_tx,
             Duration::from_millis(100),
             OcrEngine::Tesseract,
@@ -26,7 +26,10 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
             vec![],
             false,
         )
-        .await;
+        .await
+        {
+            eprintln!("Error in continuous capture: {}", e);
+        }
     });
 
     // Run for specified duration
