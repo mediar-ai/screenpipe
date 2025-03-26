@@ -12,19 +12,45 @@
     "tabs": [
       {
         "tab": "Documentation",
+        "icon": "fa-book",
         "pages": [
-          "pages/index",
-          "pages/getting-started",
-          "pages/sdk-reference",
-          "pages/architecture",
-          "pages/cli-reference",
-          "pages/plugins",
-          "pages/contributing",
-          "pages/faq"
+          {
+            "group": "Getting Started",
+            "icon": "fa-rocket",
+            "pages": [
+              "pages/index",
+              "pages/getting-started"
+            ]
+          },
+          {
+            "group": "Reference",
+            "icon": "fa-code",
+            "pages": [
+              "pages/sdk-reference",
+              "pages/architecture",
+              "pages/cli-reference"
+            ]
+          },
+          {
+            "group": "Extend",
+            "icon": "fa-puzzle-piece",
+            "pages": [
+              "pages/plugins",
+              "pages/contributing"
+            ]
+          },
+          {
+            "group": "Help",
+            "icon": "fa-question-circle",
+            "pages": [
+              "pages/faq"
+            ]
+          }
         ]
       },
       {
         "tab": "API Reference",
+        "icon": "fa-terminal",
         "openapi": "openapi.yaml"
       }
     ]
@@ -37,12 +63,14 @@
     "links": [
       {
         "label": "support",
+        "icon": "fa-life-ring",
         "href": "mailto:support@screenpipe.co"
       }
     ],
     "primary": {
       "type": "button",
       "label": "get app",
+      "icon": "fa-download",
       "href": "https://screenpi.pe/onboarding"
     }
   },
