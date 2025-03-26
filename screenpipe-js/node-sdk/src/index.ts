@@ -5,7 +5,7 @@ import type {
   ScreenpipeResponse,
   NotificationOptions,
 } from "../../common/types";
-import { toSnakeCase, convertToCamelCase } from "../../common/utils";
+import { toSnakeCase, convertObjectToCamelCase } from "../../common/utils";
 import { SettingsManager } from "./SettingsManager";
 import { InboxManager } from "./InboxManager";
 import { PipesManager } from "../../common/PipesManager";
@@ -15,6 +15,8 @@ import {
   setAnalyticsClient,
 } from "../../common/analytics";
 import posthog from "posthog-js";
+import { Operator } from "../../common/Operator";
+import mcpClient from "./mcp";
 
 setAnalyticsClient({
   init: posthog.init.bind(posthog),
@@ -24,6 +26,8 @@ setAnalyticsClient({
 class NodePipe {
   private analyticsInitialized = false;
   private analyticsEnabled = true;
+
+  public mcp = mcpClient;
 
   public input = {
     type: (text: string) =>
@@ -39,7 +43,7 @@ class NodePipe {
   public settings = new SettingsManager();
   public inbox = new InboxManager();
   public pipes = new PipesManager();
-
+  public operator = new Operator();
   public async sendDesktopNotification(
     options: NotificationOptions
   ): Promise<boolean> {
@@ -227,7 +231,7 @@ class NodePipe {
         content_type: params.contentType,
         result_count: data.pagination.total,
       });
-      return convertToCamelCase(data) as ScreenpipeResponse;
+      return convertObjectToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
       console.error("error querying screenpipe:", error);
       throw error;
@@ -270,7 +274,7 @@ class NodePipe {
 
 const pipe = new NodePipe();
 
-export { pipe };
-
 export * from "../../common/types";
 export { getDefaultSettings } from "../../common/utils";
+
+export { pipe };

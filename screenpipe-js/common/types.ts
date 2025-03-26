@@ -374,6 +374,14 @@ export interface ElementInfo {
   properties: Record<string, any>;
 }
 
+export interface ElementStats {
+  total: number,
+  definitely_interactable: number, 
+  sometimes_interactable: number,
+  non_interactable: number,
+  by_role: { [key: string]: number }
+}
+
 export interface FindElementsRequest {
   selector: ElementSelector;
   max_results?: number;

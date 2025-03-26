@@ -1926,6 +1926,12 @@ function preFlightAdd(cwd) {
       errors
     };
   }
+  const hasSrcDir = fs5.existsSync(path4.join(cwd, "src"));
+  if (!hasSrcDir) {
+    logger.warn(
+      "No src directory found. Components will be installed in the root directory instead."
+    );
+  }
 }
 
 // src/commands/components/commands/add/utils/updaters/update-dependencies.ts
@@ -2018,6 +2024,22 @@ async function updateFiles(componentLocations, options) {
     silent: false,
     ...options
   };
+  const hasSrcDir = fs7.existsSync(path5.join(options.cwd, "src"));
+  if (!hasSrcDir) {
+    logger.info(
+      "No src directory found. Components will be installed in the root directory instead."
+    );
+    componentLocations = componentLocations.map((location) => {
+      if (location.target.startsWith("./src/")) {
+        return {
+          ...location,
+          target: "./" + location.target.substring(6)
+          // Remove the 'src/' part
+        };
+      }
+      return location;
+    });
+  }
   const filesCreatedSpinner = spinner2(`Creating files...`, {
     silent: options.silent
   });
@@ -2031,7 +2053,9 @@ async function updateFiles(componentLocations, options) {
     if (existingFile && !options.overwrite) {
       filesCreatedSpinner.stop();
       const overwrite = await p8.confirm({
-        message: `The file ${highlighter.info(location.target)} already exists. Would you like to overwrite?`
+        message: `The file ${highlighter.info(
+          location.target
+        )} already exists. Would you like to overwrite?`
       });
       if (p8.isCancel(overwrite) || !overwrite) {
         filesSkipped.push(path5.relative(options.cwd, location.target));
@@ -2274,21 +2298,15 @@ async function addComponents(components, options) {
     return handleError(new Error("Failed to fetch components from registry."));
   }
   registrySpinner.succeed("Registry checked successfully.");
-  await updateDependencies(
-    tree.dependencies,
-    {
-      cwd: options.cwd,
-      silent: options.silent
-    }
-  );
-  await updateDependencies(
-    tree.devDependencies,
-    {
-      cwd: options.cwd,
-      silent: options.silent,
-      devDependency: true
-    }
-  );
+  await updateDependencies(tree.dependencies, {
+    cwd: options.cwd,
+    silent: options.silent
+  });
+  await updateDependencies(tree.devDependencies, {
+    cwd: options.cwd,
+    silent: options.silent,
+    devDependency: true
+  });
   await installShadcnComponents(tree.shadcnComponent ?? [], {
     cwd: options.cwd,
     silent: options.silent,

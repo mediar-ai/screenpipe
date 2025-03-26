@@ -3,7 +3,8 @@ use crate::operator::selector::Selector;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use super::Locator;
+use super::{ClickResult, Locator};
+
 /// Represents a UI element in a desktop application
 #[derive(Debug)]
 pub struct UIElement {
@@ -29,8 +30,8 @@ pub(crate) trait UIElementImpl: Send + Sync + Debug {
     fn children(&self) -> Result<Vec<UIElement>, AutomationError>;
     fn parent(&self) -> Result<Option<UIElement>, AutomationError>;
     fn bounds(&self) -> Result<(f64, f64, f64, f64), AutomationError>; // x, y, width, height
-    fn click(&self) -> Result<(), AutomationError>;
-    fn double_click(&self) -> Result<(), AutomationError>;
+    fn click(&self) -> Result<ClickResult, AutomationError>;
+    fn double_click(&self) -> Result<ClickResult, AutomationError>;
     fn right_click(&self) -> Result<(), AutomationError>;
     fn hover(&self) -> Result<(), AutomationError>;
     fn focus(&self) -> Result<(), AutomationError>;
@@ -86,12 +87,12 @@ impl UIElement {
     }
 
     /// Click on this element
-    pub fn click(&self) -> Result<(), AutomationError> {
+    pub fn click(&self) -> Result<ClickResult, AutomationError> {
         self.inner.click()
     }
 
     /// Double-click on this element
-    pub fn double_click(&self) -> Result<(), AutomationError> {
+    pub fn double_click(&self) -> Result<ClickResult, AutomationError> {
         self.inner.double_click()
     }
 
