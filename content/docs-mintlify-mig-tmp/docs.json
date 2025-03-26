@@ -18,32 +18,32 @@
             "group": "Getting Started",
             "icon": "rocket",
             "pages": [
-              "pages/index",
-              "pages/getting-started"
+              "index",
+              "getting-started"
             ]
           },
           {
             "group": "Reference",
             "icon": "code",
             "pages": [
-              "pages/sdk-reference",
-              "pages/architecture",
-              "pages/cli-reference"
+              "sdk-reference",
+              "architecture",
+              "cli-reference"
             ]
           },
           {
             "group": "Extend",
             "icon": "puzzle-piece",
             "pages": [
-              "pages/plugins",
-              "pages/contributing"
+              "plugins",
+              "contributing"
             ]
           },
           {
             "group": "Help",
             "icon": "question-circle",
             "pages": [
-              "pages/faq"
+              "faq"
             ]
           }
         ]
@@ -63,14 +63,12 @@
     "links": [
       {
         "label": "support",
-        "icon": "fa-life-ring",
         "href": "mailto:support@screenpipe.co"
       }
     ],
     "primary": {
       "type": "button",
       "label": "get app",
-      "icon": "fa-download",
       "href": "https://screenpi.pe/onboarding"
     }
   },
@@ -78,9 +76,6 @@
     "socials": {
       "github": "https://github.com/mediar-ai/screenpipe"
     }
-  },
-  "modeToggle": {
-    "default": "dark"
   },
   "search": {
     "prompt": "search documentation..."
