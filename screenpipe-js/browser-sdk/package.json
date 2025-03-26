@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/browser",
-  "version": "0.1.38-beta.3",
+  "version": "0.1.38-beta.7",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

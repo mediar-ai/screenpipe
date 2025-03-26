@@ -3104,11 +3104,6 @@ pub struct ElementSelector {
     app_name: String,
     window_name: Option<String>,
     locator: String,
-    index: Option<usize>,
-    text: Option<String>,
-    label: Option<String>,
-    description: Option<String>,
-    element_id: Option<String>,
     use_background_apps: Option<bool>,
     /// If true, the app will be activated before finding elements (this is useful to refresh the tree or clicking on elements)
     activate_app: Option<bool>,

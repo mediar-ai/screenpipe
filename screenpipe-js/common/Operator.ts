@@ -77,34 +77,33 @@ export class Operator {
    *   role: "button"
    * }).all();
    *
+   * You can also use MacOS accessibility roles (eg. "AXButton", "AXTextField", "AXCheckbox", etc.), check MacOS Accessibility App to see the list of roles
+   *
    * @example
-   * // Find a specific text field by label
-   * const emailField = await pipe.operator.locator({
-   *   app: "Firefox",
-   *   label: "Email"
+   * // Find a specific element by id
+   * const element = await pipe.operator.locator({
+   *   app: "WhatsApp",
+   *   id: "1234"
    * }).first();
    */
   locator(options: {
     app: string;
     window?: string;
     role?: string;
-    text?: string;
-    label?: string;
-    description?: string;
     id?: string;
-    index?: number;
     useBackgroundApps?: boolean;
     activateApp?: boolean;
   }) {
+    if (options.role && options.id) {
+      throw new Error(
+        "only one of 'role' or 'id' can be specified. need both? dm us!"
+      );
+    }
+
     const selector: ElementSelector = {
       app_name: options.app,
       window_name: options.window,
-      locator: options.role || "",
-      index: options.index,
-      text: options.text,
-      label: options.label,
-      description: options.description,
-      element_id: options.id,
+      locator: options.role || (options.id ? `#${options.id}` : ""),
       use_background_apps: options.useBackgroundApps,
       activate_app: options.activateApp,
     };
@@ -121,31 +120,21 @@ export class Operator {
    * // Click a button with text "Submit" and get details about how it was clicked
    * const result = await pipe.operator.click({
    *   app: "Chrome",
-   *   text: "Submit"
+   *   id: "1234"
    * });
    * console.log(`Click method: ${result.method}, Details: ${result.details}`);
    */
   async click(options: {
+    id: string;
     app: string;
     window?: string;
-    role?: string;
-    text?: string;
-    label?: string;
-    description?: string;
-    id?: string;
-    index?: number;
     useBackgroundApps?: boolean;
     activateApp?: boolean;
   }): Promise<ClickResult> {
     const selector: ElementSelector = {
       app_name: options.app,
       window_name: options.window,
-      locator: options.role || "",
-      index: options.index,
-      text: options.text,
-      label: options.label,
-      description: options.description,
-      element_id: options.id,
+      locator: `#${options.id}`,
       use_background_apps: options.useBackgroundApps,
       activate_app: options.activateApp !== false,
     };
@@ -215,35 +204,23 @@ export class Operator {
    * Find an element and type text into it
    *
    * @example
-   * // Type "hello@example.com" into the email field
+   * // Type "hi darling" into the message field
    * await pipe.operator.fill({
-   *   app: "Firefox",
-   *   label: "Email",
-   *   text: "hello@example.com"
+   *   app: "WhatsApp",
+   *   id: "1234",
+   *   value: "hi darling"
    * });
    */
   async fill(options: {
     app: string;
-    window?: string;
-    role?: string;
-    text?: string;
-    label?: string;
-    description?: string;
     id?: string;
-    index?: number;
     useBackgroundApps?: boolean;
     activateApp?: boolean;
     value: string;
   }) {
     const selector: ElementSelector = {
       app_name: options.app,
-      window_name: options.window,
-      locator: options.role || "",
-      index: options.index,
-      text: options.text,
-      label: options.label,
-      description: options.description,
-      element_id: options.id,
+      locator: `#${options.id}`,
       use_background_apps: options.useBackgroundApps,
       activate_app: options.activateApp !== false,
     };
@@ -282,35 +259,11 @@ export class Operator {
   }
 
   /**
-   * Get locator for an element in a specific app (by app name)
+   * Get locator for elements with the specified role (eg. "button", "textfield", "checkbox", etc.)
+   * You can also use MacOS accessibility roles (eg. "AXButton", "AXTextField", "AXCheckbox", etc.), check MacOS Accessibility App to see the list of roles
    *
    * @example
-   * // Get and click a button in Chrome
-   * await pipe.operator.getByAppName('Chrome').getByRole('button').click();
-   */
-  getByAppName(appName: string): ElementLocator {
-    return this.locator({ app: appName });
-  }
-
-  /**
-   * Get locator for an element in a specific window
-   *
-   * @example
-   * // Get elements in Chrome's settings window
-   * await pipe.operator.getByWindowName('Settings').getByText('Privacy').click();
-   */
-  getByWindowName(
-    windowName: string,
-    options?: { app?: string }
-  ): ElementLocator {
-    return this.locator({ app: options?.app || "", window: windowName });
-  }
-
-  /**
-   * Get locator for elements with the specified role
-   *
-   * @example
-   * // Find all buttons in Chrome
+   * // Find element(s) with role "button" in Chrome
    * const buttons = await pipe.operator.getByRole('button', { app: 'Chrome' });
    */
   getByRole(
@@ -325,65 +278,11 @@ export class Operator {
   }
 
   /**
-   * Get locator for elements with the specified text
-   *
-   * @example
-   * // Find and click on text in Chrome
-   * await pipe.operator.getByText('Submit', { app: 'Chrome' }).click();
-   */
-  getByText(
-    text: string,
-    options?: { app?: string; window?: string }
-  ): ElementLocator {
-    return this.locator({
-      app: options?.app || "",
-      window: options?.window,
-      text,
-    });
-  }
-
-  /**
-   * Get locator for elements with the specified label
-   *
-   * @example
-   * // Find and fill a field with a specific label in Chrome
-   * await pipe.operator.getByLabel('Username', { app: 'Chrome' }).fill('john');
-   */
-  getByLabel(
-    label: string,
-    options?: { app?: string; window?: string }
-  ): ElementLocator {
-    return this.locator({
-      app: options?.app || "",
-      window: options?.window,
-      label,
-    });
-  }
-
-  /**
-   * Get locator for elements with the specified description
-   *
-   * @example
-   * // Find and click an element with a specific description
-   * await pipe.operator.getByDescription('Settings button', { app: 'Chrome' }).click();
-   */
-  getByDescription(
-    description: string,
-    options?: { app?: string; window?: string }
-  ): ElementLocator {
-    return this.locator({
-      app: options?.app || "",
-      window: options?.window,
-      description,
-    });
-  }
-
-  /**
    * Get locator for elements with the specified id
    *
    * @example
-   * // Find and click an element with a specific ID
-   * await pipe.operator.getById('submit-button', { app: 'Chrome' }).click();
+   * // Find an element with a specific ID
+   * await pipe.operator.getById('submit-button', { app: 'Chrome' })
    */
   getById(
     id: string,
@@ -392,69 +291,7 @@ export class Operator {
     return this.locator({
       app: options?.app || "",
       window: options?.window,
-      id,
     });
-  }
-
-  /**
-   * Take a screenshot of the specified app window
-   *
-   * @example
-   * // Take a screenshot of the active Chrome window
-   * const screenshot = await pipe.operator.screenshot({
-   *   app: "Chrome"
-   * });
-   */
-  async screenshot(options: {
-    app: string;
-    window?: string;
-    activateApp?: boolean;
-  }): Promise<string> {
-    // TODO: Implement when screenshot API is available
-    throw new Error("screenshot API not yet implemented");
-  }
-
-  /**
-   * Wait for a specific element to appear
-   *
-   * @example
-   * // Wait for a success message to appear
-   * await pipe.operator.waitFor({
-   *   app: "Chrome",
-   *   text: "Success!",
-   *   timeout: 5000
-   * });
-   */
-  async waitFor(options: {
-    app: string;
-    window?: string;
-    role?: string;
-    text?: string;
-    label?: string;
-    description?: string;
-    id?: string;
-    index?: number;
-    useBackgroundApps?: boolean;
-    timeout?: number;
-  }): Promise<ElementInfo | null> {
-    const startTime = Date.now();
-    const timeout = options.timeout || 30000;
-
-    while (Date.now() - startTime < timeout) {
-      try {
-        const element = await this.locator(options).first();
-        if (element) {
-          return element;
-        }
-      } catch (error) {
-        // Element not found, try again
-      }
-
-      // Wait before retrying
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    return null;
   }
 
   /**
@@ -709,12 +546,7 @@ export class Operator {
   async pressKey(options: {
     app: string;
     window?: string;
-    role?: string;
-    text?: string;
-    label?: string;
-    description?: string;
     id?: string;
-    index?: number;
     useBackgroundApps?: boolean;
     activateApp?: boolean;
     key: string;
@@ -722,12 +554,7 @@ export class Operator {
     const selector: ElementSelector = {
       app_name: options.app,
       window_name: options.window,
-      locator: options.role || "",
-      index: options.index,
-      text: options.text,
-      label: options.label,
-      description: options.description,
-      element_id: options.id,
+      locator: `#${options.id}`,
       use_background_apps: options.useBackgroundApps,
       activate_app: options.activateApp !== false,
     };
