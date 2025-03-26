@@ -1,0 +1,155 @@
+---
+title: "mcp server"
+---
+
+screenpipe integrates with various mcp clients, enabling ai tools to access your context. this guide covers setup and configuration across different platforms.
+
+## prerequisites
+
+before setting up the mcp server, ensure you have installed:
+
+### python
+install python from the [official python website](https://www.python.org/). make sure to add python to your system's path during installation.
+
+### uv package manager
+install uv using one of these commands:
+
+```bash
+# macos/linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# windows
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+verify the installation:
+```bash
+uv --version
+```
+
+## setting up mcp server
+
+run this command in your terminal:
+
+```bash
+screenpipe mcp setup
+```
+
+upon successful setup, you'll see:
+
+```
+mcp setup completed successfully
+directory: C:\Users\username\.screenpipe\mcp
+config file: C:\Users\username\.screenpipe\mcp\config.json
+
+to run the mcp server, use this command:
+$ uv --directory C:\Users\username\.screenpipe\mcp run screenpipe-mcp --port 3030
+```
+
+## configuration
+
+the configuration is stored in `config.json` in the `.screenpipe\mcp` directory:
+
+```json
+{
+  "mcpServers": {
+    "screenpipe": {
+      "args": [
+        "--directory",
+        "C:\\Users\\username\\.screenpipe\\mcp",
+        "run",
+        "screenpipe-mcp",
+        "--port",
+        "3030"
+      ],
+      "command": "uv"
+    }
+  }
+}
+```
+
+## supported clients
+
+### claude desktop
+
+1. open the configuration file:
+
+```bash
+# windows (powershell)
+notepad $env:AppData\Claude\claude_desktop_config.json
+
+# macos
+code "~/Library/Application Support/Claude/claude_desktop_config.json"
+```
+
+2. update the configuration with:
+
+```json
+{
+    "mcpServers": {
+        "screenpipe": {
+            "command": "uv",
+            "args": [
+                "--directory",
+                "C:\\Users\\username\\.screenpipe\\mcp",
+                "run",
+                "screenpipe-mcp",
+                "--port",
+                "3030"
+            ]
+        }
+    }
+}
+```
+
+3. restart claude desktop
+
+when setup is successful, you'll see a hammer icon in the interface.
+
+### 5ire desktop app
+
+1. launch the 5ire desktop app
+2. click on "tools" from the left sidebar
+3. click "new" to add a tool
+4. enter "screenpipe" in the "tool key" field
+5. paste the mcp server command in the "command" field:
+
+```
+uv --directory C:\Users\username\.screenpipe\mcp run screenpipe-mcp --port 3030
+```
+
+6. save the configuration
+7. toggle the switch to enable the tool
+
+### cursor ide
+
+1. launch cursor ide
+2. open settings (gear icon)
+3. select "mcp" from the left sidebar
+4. click "add new global mcp server"
+5. create or update configuration file:
+
+```json
+{
+  "mcpServers": {
+    "screenpipe": {
+      "args": [
+        "--directory",
+        "C:\\Users\\username\\.screenpipe\\mcp",
+        "run",
+        "screenpipe-mcp",
+        "--port",
+        "3030"
+      ],
+      "command": "uv"
+    }
+  }
+}
+```
+
+6. click the refresh icon next to mcp servers
+7. open a new composer and enable agent mode
+
+## advanced usage
+
+for more details on integrating screenpipe with mcp clients, visit our [github repository](https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-integrations/screenpipe-mcp).

@@ -12,11 +12,11 @@
     "tabs": [
       {
         "tab": "Documentation",
-        "icon": "fa-book",
+        "icon": "book",
         "pages": [
           {
             "group": "Getting Started",
-            "icon": "fa-rocket",
+            "icon": "rocket",
             "pages": [
               "pages/index",
               "pages/getting-started"
@@ -24,7 +24,7 @@
           },
           {
             "group": "Reference",
-            "icon": "fa-code",
+            "icon": "code",
             "pages": [
               "pages/sdk-reference",
               "pages/architecture",
@@ -33,7 +33,7 @@
           },
           {
             "group": "Extend",
-            "icon": "fa-puzzle-piece",
+            "icon": "puzzle-piece",
             "pages": [
               "pages/plugins",
               "pages/contributing"
@@ -41,7 +41,7 @@
           },
           {
             "group": "Help",
-            "icon": "fa-question-circle",
+            "icon": "question-circle",
             "pages": [
               "pages/faq"
             ]
@@ -50,7 +50,7 @@
       },
       {
         "tab": "API Reference",
-        "icon": "fa-terminal",
+        "icon": "terminal",
         "openapi": "openapi.yaml"
       }
     ]
