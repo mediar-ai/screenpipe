@@ -4,20 +4,40 @@ import Pipe from "@/components/pipe"
 import { useEffect, useState } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { HistorySidebar } from "@/components/history-sidebar"
+import localforage from "localforage";
 
 export default function Home() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
-    const savedState = localStorage.getItem("sidebarOpen");
-    return savedState !== null ? JSON.parse(savedState) : false;
-  });
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
-    localStorage.setItem("sidebarOpen", JSON.stringify(isSidebarOpen));
+    const fetchSidebarState = async () => {
+      const savedState = await localforage.getItem("sidebarOpen");
+      if (savedState !== undefined) {
+        setIsSidebarOpen(JSON.parse(savedState as string));
+      } else {
+        setIsSidebarOpen(false);
+      }
+    };
+
+    fetchSidebarState();
+  }, []);
+
+  useEffect(() => {
+    if (isSidebarOpen !== undefined) {
+      localforage.setItem("sidebarOpen", JSON.stringify(isSidebarOpen));
+    }
   }, [isSidebarOpen]);
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
+
+  if (isSidebarOpen === undefined) {
+    return undefined;
+  }
+
+  console.log("SIDEBAR", isSidebarOpen)
 
   return (
     <main className="max-h-fit mb-[200px]">
