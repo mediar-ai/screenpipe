@@ -183,7 +183,7 @@ mod tests {
             setup_tracing();
 
             // Create a desktop automation instance
-            let desktop = match Desktop::new(true, false) {
+            let desktop = match Desktop::new(true, true) {
                 Ok(d) => {
                     println!("Successfully created Desktop automation");
                     d
@@ -204,9 +204,53 @@ mod tests {
                 println!("App child #{}: {:?}", i, child.role());
             }
 
-            let input = app.locator("window").unwrap().first().unwrap_or_default();
-            println!("found input: {:?}", input.is_some());
-            println!("found input: {:?}", input.unwrap().text(10).unwrap());
+            let inputs = app
+                .locator("AXTextField")
+                .unwrap()
+                .all()
+                .unwrap_or_default();
+
+            for input in inputs.clone() {
+                println!("input: {:?}", input.id());
+                println!("input: {:?}", input.text(10).unwrap());
+                println!("input: {:?}", input.type_text("foo").unwrap());
+                println!("input: {:?}", input.role());
+            }
+
+            let specific_input = app
+                .locator("AXTextField")
+                .unwrap()
+                .first()
+                .unwrap()
+                .unwrap()
+                .locator(&*format!("#{}", inputs[0].id().unwrap()))
+                .unwrap()
+                .first()
+                .unwrap()
+                .unwrap();
+
+            println!("specific_input: {:?}", specific_input.text(10).unwrap());
+            println!(
+                "specific_input: {:?}",
+                specific_input.type_text("foobar").unwrap()
+            );
+            println!("specific_input: {:?}", specific_input.role());
+
+            let specific_input = app
+                .locator(&*format!("#{}", inputs[0].id().unwrap()))
+                .unwrap()
+                .first()
+                .unwrap()
+                .unwrap();
+
+            println!("specific_input: {:?}", specific_input.text(10).unwrap());
+            println!(
+                "specific_input: {:?}",
+                specific_input.type_text("foobarbaz").unwrap()
+            );
+            println!("specific_input: {:?}", specific_input.role());
+
+            let _ = Desktop::new(true, true).unwrap().application("cursor");
         }
 
         #[test]

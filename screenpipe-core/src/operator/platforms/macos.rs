@@ -18,8 +18,10 @@ use core_graphics::display::{CGPoint, CGSize};
 use core_graphics::event::{CGEvent, CGEventFlags, CGKeyCode};
 use core_graphics::event_source::CGEventSource;
 use serde_json::{self, Value};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use tracing::{debug, trace};
 
@@ -589,8 +591,13 @@ impl AccessibilityEngine for MacOSEngine {
                 let collector = ElementFinderWithWindows::new(
                     &self.system_wide.0,
                     move |e| {
-                        // Use move to take ownership of id_owned
-                        e.identifier().unwrap_or(CFString::new("")).to_string() == id_owned
+                        // Create temporary MacOSUIElement to generate stable ID
+                        let element = MacOSUIElement {
+                            element: ThreadSafeAXUIElement::new(e.clone()),
+                            use_background_apps: false, // temporary value
+                            activate_app: false,        // temporary value
+                        };
+                        element.id().unwrap_or_default() == id_owned
                     },
                     None,
                 );
@@ -673,12 +680,51 @@ impl AccessibilityEngine for MacOSEngine {
             Selector::Path(_) => Err(AutomationError::UnsupportedOperation(
                 "Path selector not implemented".to_string(),
             )),
-            _ => {
-                // For more complex selectors, we'll mark as unimplemented for now
-                Err(AutomationError::UnsupportedOperation(
-                    "Complex selector not implemented".to_string(),
-                ))
+            Selector::Chain(selectors) => {
+                // For now, only support role -> id pattern
+                if selectors.len() != 2 {
+                    return Err(AutomationError::UnsupportedOperation(
+                        "Only role -> id chains are supported".to_string(),
+                    ));
+                }
+
+                // Check if it's a role -> id pattern
+                if let (Selector::Role { role, name: _ }, Selector::Id(id)) =
+                    (&selectors[0], &selectors[1])
+                {
+                    debug!("Processing chain: role '{}' -> id '{}'", role, id);
+
+                    // First find elements matching the role
+                    let role_elements = self.find_elements(&selectors[0], root)?;
+                    debug!(
+                        "Found {} elements matching role '{}'",
+                        role_elements.len(),
+                        role
+                    );
+
+                    // Then find the one with matching id
+                    for element in role_elements {
+                        if let Some(element_id) = element.id() {
+                            if element_id == *id {
+                                debug!("Found matching element with id '{}'", id);
+                                return Ok(element);
+                            }
+                        }
+                    }
+
+                    return Err(AutomationError::ElementNotFound(format!(
+                        "No element found with role '{}' and id '{}'",
+                        role, id
+                    )));
+                } else {
+                    return Err(AutomationError::UnsupportedOperation(
+                        "Only role -> id chains are supported".to_string(),
+                    ));
+                }
             }
+            Selector::Filter(_) => Err(AutomationError::UnsupportedOperation(
+                "Filter selector not implemented".to_string(),
+            )),
         }
     }
 
@@ -1157,12 +1203,73 @@ impl MacOSUIElement {
 
         Ok((key_code, flags))
     }
+
+    fn generate_stable_id(&self) -> String {
+        let mut hasher = DefaultHasher::new();
+
+        // Collect stable attributes
+        let role = self
+            .element
+            .0
+            .role()
+            .map(|r| r.to_string())
+            .unwrap_or_default();
+        let title = self
+            .element
+            .0
+            .title()
+            .map(|t| t.to_string())
+            .unwrap_or_default();
+        let desc = self
+            .element
+            .0
+            .description()
+            .map(|d| d.to_string())
+            .unwrap_or_default();
+
+        // Get position if available (as integers to be more stable)
+        let (x, y, w, h) = self
+            .bounds()
+            .map(|(x, y, w, h)| {
+                (
+                    x.round() as i32,
+                    y.round() as i32,
+                    w.round() as i32,
+                    h.round() as i32,
+                )
+            })
+            .unwrap_or((0, 0, 0, 0));
+
+        // Hash combination of stable attributes
+        role.hash(&mut hasher);
+        title.hash(&mut hasher);
+        desc.hash(&mut hasher);
+        x.hash(&mut hasher);
+        y.hash(&mut hasher);
+        w.hash(&mut hasher);
+        h.hash(&mut hasher);
+
+        // Get parent info if available to make ID more unique
+        if let Ok(Some(parent)) = self.parent() {
+            if let Some(parent_role) = parent.attributes().label {
+                parent_role.hash(&mut hasher);
+            }
+        }
+
+        format!("ax_{:x}", hasher.finish())
+    }
 }
 
 impl UIElementImpl for MacOSUIElement {
     fn object_id(&self) -> usize {
-        // Use the pointer address of the inner AXUIElement as a unique ID
-        self.element.0.as_ref() as *const _ as usize
+        // Convert stable string ID to usize
+        let stable_id = self.generate_stable_id();
+        let mut hasher = DefaultHasher::new();
+        stable_id.hash(&mut hasher);
+        let id = hasher.finish() as usize;
+        debug!("Stable ID: {:?}", stable_id);
+        debug!("Hash: {:?}", id);
+        id
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
