@@ -1154,9 +1154,9 @@ impl SCServer {
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
             .post("/experimental/operator", find_elements_handler)
+            .post("/experimental/operator/scroll", scroll_element_handler)
             .post("/experimental/operator/click", click_element_handler)
             .post("/experimental/operator/type", type_text_handler)
-
             .post("/experimental/operator/press-key", press_key_handler)
             .post("/experimental/operator/get_text", get_text_handler)
             .post(
@@ -1180,9 +1180,7 @@ impl SCServer {
                 open_application_handler,
             )
             .post("/experimental/operator/open-url", open_url_handler)
-
             .post("/experimental/input_control", input_control_handler)
-
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
@@ -3214,7 +3212,11 @@ async fn find_elements_handler(
             if request.max_results.unwrap_or(1) > 1 {
                 // Get all matching elements if 'all' is true
                 match locator.all() {
-                    Ok(elements) => elements,
+                    Ok(elements) => elements
+                        .into_iter()
+                        // inefficient but works
+                        .take(request.max_results.unwrap_or(1))
+                        .collect(),
                     Err(_) => {
                         error!("No matching elements found");
                         return Err((
@@ -4287,6 +4289,97 @@ async fn open_url_handler(
         Err(err) => Err((
             StatusCode::BAD_REQUEST,
             JsonResponse(json!({"error": format!("Failed to open URL: {}", err)})),
+        )),
+    }
+}
+
+#[derive(Debug, OaSchema, Deserialize, Serialize)]
+pub struct ScrollElementRequest {
+    selector: ElementSelector,
+    direction: String,
+    amount: f64,
+}
+
+#[derive(Debug, OaSchema, Serialize)]
+pub struct ScrollElementResponse {
+    success: bool,
+    message: String,
+}
+
+// Add the handler function
+#[oasgen]
+async fn scroll_element_handler(
+    State(_): State<Arc<AppState>>,
+    Json(request): Json<ScrollElementRequest>,
+) -> Result<JsonResponse<ScrollElementResponse>, (StatusCode, JsonResponse<Value>)> {
+    let desktop = match Desktop::new(
+        request.selector.use_background_apps.unwrap_or(false),
+        request.selector.activate_app.unwrap_or(false),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            error!("Failed to initialize desktop automation: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to initialize desktop automation: {}", e)
+                })),
+            ));
+        }
+    };
+
+    // app
+    let app = match desktop.application(&request.selector.app_name) {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Failed to find application: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({"error": format!("Failed to find application: {}", e)})),
+            ));
+        }
+    };
+
+    let element = match app.locator(request.selector.locator.as_str()) {
+        Ok(locator) => locator.first(),
+        Err(e) => {
+            error!("Failed to find element: {}", e);
+            return Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({"error": format!("Failed to find element: {}", e)})),
+            ));
+        }
+    }
+    .map_err(|e| {
+        error!("Failed to find element: {}", e);
+        (
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({"error": format!("Failed to find element: {}", e)})),
+        )
+    })?;
+
+    match element {
+        Some(element) => {
+            // Perform scroll
+            match element.scroll(&request.direction, request.amount) {
+                Ok(_) => Ok(JsonResponse(ScrollElementResponse {
+                    success: true,
+                    message: format!(
+                        "Successfully scrolled {} by {}",
+                        request.direction, request.amount
+                    ),
+                })),
+                Err(e) => Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({
+                        "error": format!("Failed to scroll element: {}", e)
+                    })),
+                )),
+            }
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({"error": "No element found"})),
         )),
     }
 }

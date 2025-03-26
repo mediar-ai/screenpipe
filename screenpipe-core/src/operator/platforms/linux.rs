@@ -211,4 +211,10 @@ impl UIElementImpl for LinuxUIElement {
     fn clone_box(&self) -> Box<dyn UIElementImpl> {
         Box::new(LinuxUIElement)
     }
+
+    fn scroll(&self, _direction: &str, _amount: f64) -> Result<(), AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Linux implementation is not yet available".to_string(),
+        ))
+    }
 }

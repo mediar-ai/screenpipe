@@ -45,6 +45,7 @@ pub(crate) trait UIElementImpl: Send + Sync + Debug {
     fn perform_action(&self, action: &str) -> Result<(), AutomationError>;
     fn as_any(&self) -> &dyn std::any::Any;
     fn create_locator(&self, selector: Selector) -> Result<Locator, AutomationError>;
+    fn scroll(&self, direction: &str, amount: f64) -> Result<(), AutomationError>;
 
     // Add a method to clone the box
     fn clone_box(&self) -> Box<dyn UIElementImpl>;
@@ -160,6 +161,11 @@ impl UIElement {
     pub fn locator(&self, selector: impl Into<Selector>) -> Result<Locator, AutomationError> {
         let selector = selector.into();
         self.inner.create_locator(selector)
+    }
+
+    /// Scroll the element in a given direction
+    pub fn scroll(&self, direction: &str, amount: f64) -> Result<(), AutomationError> {
+        self.inner.scroll(direction, amount)
     }
 }
 

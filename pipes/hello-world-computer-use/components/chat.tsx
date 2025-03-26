@@ -141,50 +141,40 @@ export const Chat = () => {
       Be as specific as possible when selecting elements by role. If a role does not work, try a different role.
       
       `,
-      onChunk: (chunk) => {
-        console.log(chunk);
-      },
+      // onChunk: (chunk) => {
+      //   console.log(chunk);
+      // },
       onError: (error) => {
         console.log(JSON.stringify(error, null, 2));
       },
       tools: {
-        // click: {
-        //   description: "Click an element in an application",
-        //   parameters: z.object({
-        //     app: z.string().describe("The name of the application"),
-        //     window: z.string().optional().describe("Optional window name"),
-        //     text: z
-        //       .string()
-        //       .optional()
-        //       .describe("Text content of the element to click"),
-        //     role: z.string().optional().describe("Role of the element"),
-        //     label: z
-        //       .string()
-        //       .optional()
-        //       .describe("Accessibility label of the element"),
-        //   }),
-        //   execute: async ({ app, window, text, role, label }) => {
-        //     console.log("[tool:click] params:", {
-        //       app,
-        //       window,
-        //       text,
-        //       role,
-        //       label,
-        //     });
-        //     try {
-        //       const result = await pipe.operator.click({
-        //         app,
-        //         window,
-        //         role,
-        //       });
-        //       console.log("[tool:click] result:", result);
-        //       return `Successfully clicked element using ${result.method}`;
-        //     } catch (error) {
-        //       console.error("[tool:click] error:", error);
-        //       throw new Error(`Failed to click element: ${error}`);
-        //     }
-        //   },
-        // },
+        click: {
+          description: "Click an element in an application",
+          parameters: z.object({
+            app: z.string().describe("The name of the application"),
+            id: z.string().optional().describe("Id of the element"),
+          }),
+          execute: async ({ app, id }) => {
+            console.log("[tool:click] params:", {
+              app,
+              id,
+            });
+            try {
+              const result = await pipe.operator
+                .getById(id, {
+                  app,
+                  activateApp: true,
+                  useBackgroundApps: true,
+                })
+                .click();
+              console.log("[tool:click] result:", result);
+              return `Successfully clicked element using ${result.method}`;
+            } catch (error) {
+              console.error("[tool:click] error:", error);
+              throw new Error(`Failed to click element: ${error}`);
+            }
+          },
+        },
 
         fill: {
           description: "Fill text in a form field",
@@ -201,14 +191,12 @@ export const Chat = () => {
             });
             try {
               const success = await pipe.operator
-                .fill({
-                  value,
+                .getById(id, {
                   app,
-                  id,
-                });
-              // const success = await pipe.operator
-              //   .getById(id, { app })
-              //   .fill(value);
+                  activateApp: true,
+                  useBackgroundApps: true,
+                })
+                .fill(value);
               console.log("[tool:fill] result:", success);
               return success
                 ? `Successfully entered text`
@@ -227,6 +215,9 @@ export const Chat = () => {
           }),
           execute: async ({ appName }) => {
             try {
+              console.log("[tool:open_application] params:", {
+                appName,
+              });
               const success = await pipe.operator.openApplication(appName);
               return success
                 ? `Successfully opened application '${appName}'`
@@ -258,17 +249,14 @@ export const Chat = () => {
         },
 
         find_by_role: {
-          description:
-            "Find elements with a specific role",
+          description: "Find elements with a specific role",
           parameters: z.object({
             app: z
               .string()
               .describe(
                 "The application name (e.g., 'Chrome', 'Firefox', 'Arc')"
               ),
-            role: z
-              .string()
-              .describe("The role to search for"),
+            role: z.string().describe("The role to search for"),
             maxResults: z
               .number()
               .optional()
@@ -282,10 +270,13 @@ export const Chat = () => {
             });
             try {
               const elements = await pipe.operator
-                .getByRole(role, { app })
+                .getByRole(role, {
+                  app,
+                  activateApp: true,
+                  useBackgroundApps: true,
+                })
                 .all(maxResults);
               console.log("[tool:find_by_role] found elements:", elements);
-              currentSelectedElement = elements[0];
               return JSON.stringify(elements);
             } catch (error) {
               console.error("[tool:find_by_role] error:", error);
@@ -293,9 +284,45 @@ export const Chat = () => {
             }
           },
         },
+
+        scroll: {
+          description: "Scroll an element in a specific direction",
+          parameters: z.object({
+            app: z.string().describe("The name of the application"),
+            id: z.string().optional().describe("Id of the element"),
+            direction: z
+              .enum(["up", "down", "left", "right"])
+              .describe("Direction to scroll"),
+            amount: z.number().describe("Amount to scroll in pixels"),
+          }),
+          execute: async ({ app, id, direction, amount }) => {
+            console.log("[tool:scroll] params:", {
+              app,
+              id,
+              direction,
+              amount,
+            });
+            try {
+              const success = await pipe.operator
+                .getById(id, {
+                  app,
+                  activateApp: true,
+                  useBackgroundApps: true,
+                })
+                .scroll(direction, amount);
+              console.log("[tool:scroll] result:", success);
+              return success
+                ? `Successfully scrolled element ${direction} by ${amount}px`
+                : "Failed to scroll element";
+            } catch (error) {
+              console.error("[tool:scroll] error:", error);
+              throw new Error(`Failed to scroll element: ${error}`);
+            }
+          },
+        },
       },
       toolCallStreaming: true,
-      maxSteps: 5,
+      maxSteps: 10,
     });
 
     for await (const chunk of result.textStream) {

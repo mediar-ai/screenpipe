@@ -965,20 +965,35 @@ impl std::fmt::Debug for MacOSUIElement {
 impl MacOSUIElement {
     // Helper function to get the containing application
     fn get_application(&self) -> Option<MacOSUIElement> {
-        let attr = AXAttribute::new(&CFString::new("AXTopLevelUIElement"));
-        match self.element.0.attribute(&attr) {
-            Ok(value) => {
-                if let Some(app) = value.downcast::<AXUIElement>() {
-                    Some(MacOSUIElement {
-                        element: ThreadSafeAXUIElement::new(app),
+        // inefficient but works
+        // Start with current element
+        let mut current = self.element.clone();
+
+        // Keep traversing up until we find an application or hit the top
+        loop {
+            // Check if current element is an application
+            if let Ok(role) = current.0.role() {
+                if role.to_string() == "AXApplication" {
+                    return Some(MacOSUIElement {
+                        element: current,
                         use_background_apps: self.use_background_apps,
                         activate_app: self.activate_app,
-                    })
-                } else {
-                    None
+                    });
                 }
             }
-            Err(_) => None,
+
+            // Try to get parent
+            let parent_attr = AXAttribute::new(&CFString::new("AXParent"));
+            match current.0.attribute(&parent_attr) {
+                Ok(value) => {
+                    if let Some(parent) = value.downcast::<AXUIElement>() {
+                        current = ThreadSafeAXUIElement::new(parent);
+                    } else {
+                        return None;
+                    }
+                }
+                Err(_) => return None,
+            }
         }
     }
 
@@ -996,6 +1011,27 @@ impl MacOSUIElement {
 
     // Add these methods to the MacOSUIElement impl block
     fn click_auto(&self) -> Result<ClickResult, AutomationError> {
+        // only mouse simulation works on web and it seems function don't fail on web so let's try to detect if we are on web based on app
+        // eg chrome, arc, safari, etc
+        let app_name = self.get_application();
+
+        if let Some(app) = app_name {
+            // kind of dirty and hacky but it works
+            let app_name = app.get_text(1).unwrap_or_default().to_lowercase();
+            if app_name.contains("chrome")
+                || app_name.contains("safari")
+                || app_name.contains("arc")
+                || app_name.contains("firefox")
+                || app_name.contains("edge")
+                || app_name.contains("brave")
+                || app_name.contains("opera")
+                || app_name.contains("vivaldi")
+                || app_name.contains("microsoft edge")
+            {
+                return self.click_mouse_simulation();
+            }
+        }
+
         // 1. Try AXPress action first
         match self.click_press() {
             Ok(result) => return Ok(result),
@@ -1228,7 +1264,7 @@ impl MacOSUIElement {
             .unwrap_or_default();
 
         // Get position if available (as integers to be more stable)
-        let (x, y, w, h) = self
+        let (_, _, w, h) = self
             .bounds()
             .map(|(x, y, w, h)| {
                 (
@@ -1240,15 +1276,18 @@ impl MacOSUIElement {
             })
             .unwrap_or((0, 0, 0, 0));
 
+        let count_of_children = self.children().unwrap_or_default().len();
+
         // Hash combination of stable attributes
         role.hash(&mut hasher);
         title.hash(&mut hasher);
         desc.hash(&mut hasher);
-        x.hash(&mut hasher);
-        y.hash(&mut hasher);
+        // not using position because things more likely move than change size
+        // x.hash(&mut hasher);
+        // y.hash(&mut hasher);
         w.hash(&mut hasher);
         h.hash(&mut hasher);
-
+        count_of_children.hash(&mut hasher);
         // Get parent info if available to make ID more unique
         if let Ok(Some(parent)) = self.parent() {
             if let Some(parent_role) = parent.attributes().label {
@@ -1958,6 +1997,57 @@ impl UIElementImpl for MacOSUIElement {
             use_background_apps: self.use_background_apps,
             activate_app: self.activate_app,
         })
+    }
+
+    fn scroll(&self, direction: &str, amount: f64) -> Result<(), AutomationError> {
+        // First try to focus the element to ensure it can receive scroll events
+        let _ = self.focus();
+
+        // Get element bounds to determine where to scroll
+        let (x, y, width, height) = self.bounds()?;
+        let center_x = x + width / 2.0;
+        let center_y = y + height / 2.0;
+
+        // Create event source
+        let source =
+            CGEventSource::new(core_graphics::event_source::CGEventSourceStateID::HIDSystemState)
+                .map_err(|_| {
+                AutomationError::PlatformError("Failed to create event source".to_string())
+            })?;
+
+        // Convert amount to scroll units (typically lines)
+        let scroll_amount = amount as i32;
+
+        // Create scroll event based on direction
+        let (scroll_x, scroll_y) = match direction.to_lowercase().as_str() {
+            "up" => (0, -scroll_amount),
+            "down" => (0, scroll_amount),
+            "left" => (-scroll_amount, 0),
+            "right" => (scroll_amount, 0),
+            _ => {
+                return Err(AutomationError::InvalidArgument(format!(
+                    "Invalid scroll direction: {}. Must be up, down, left, or right",
+                    direction
+                )))
+            }
+        };
+
+        // Create scroll wheel event
+        let scroll_event = CGEvent::new_scroll_event(
+            source, 0, 1, // number of wheels (1 for standard mouse wheel)
+            scroll_y, scroll_x, 0, // z scroll amount (unused)
+        )
+        .map_err(|_| AutomationError::PlatformError("Failed to create scroll event".to_string()))?;
+
+        // Post the event at the center point location
+        scroll_event.post(core_graphics::event::CGEventTapLocation::HID);
+
+        debug!(
+            "Scrolled {} by {} lines at position ({}, {})",
+            direction, amount, center_x, center_y
+        );
+
+        Ok(())
     }
 }
 

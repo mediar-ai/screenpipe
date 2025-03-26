@@ -268,12 +268,19 @@ export class Operator {
    */
   getByRole(
     role: string,
-    options?: { app?: string; window?: string }
+    options?: {
+      app?: string;
+      window?: string;
+      useBackgroundApps?: boolean;
+      activateApp?: boolean;
+    }
   ): ElementLocator {
     return this.locator({
       app: options?.app || "",
       window: options?.window,
       role,
+      useBackgroundApps: options?.useBackgroundApps,
+      activateApp: options?.activateApp,
     });
   }
 
@@ -286,11 +293,19 @@ export class Operator {
    */
   getById(
     id: string,
-    options?: { app?: string; window?: string }
+    options?: {
+      app?: string;
+      window?: string;
+      useBackgroundApps?: boolean;
+      activateApp?: boolean;
+    }
   ): ElementLocator {
     return this.locator({
       app: options?.app || "",
       window: options?.window,
+      id,
+      useBackgroundApps: options?.useBackgroundApps,
+      activateApp: options?.activateApp,
     });
   }
 
@@ -747,6 +762,70 @@ export class Operator {
 
     return data.success;
   }
+
+  /**
+   * Scroll an element in the specified direction
+   *
+   * @example
+   * // Scroll down in a scrollable element
+   * await pipe.operator.scroll({
+   *   app: "Chrome",
+   *   id: "content-area",
+   *   direction: "down",
+   *   amount: 100
+   * });
+   */
+  async scroll(options: {
+    app: string;
+    id?: string;
+    window?: string;
+    useBackgroundApps?: boolean;
+    activateApp?: boolean;
+    direction: "up" | "down" | "left" | "right";
+    amount: number;
+  }): Promise<boolean> {
+    const selector: ElementSelector = {
+      app_name: options.app,
+      window_name: options.window,
+      locator: options.id ? `#${options.id}` : "",
+      use_background_apps: options.useBackgroundApps,
+      activate_app: options.activateApp !== false,
+    };
+
+    const response = await fetch(
+      `${this.baseUrl}/experimental/operator/scroll`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selector,
+          direction: options.direction,
+          amount: options.amount,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to scroll element: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to scroll element (status ${response.status}): ${
+            responseText || response.statusText
+          }`
+        );
+      }
+    }
+
+    const data = await response.json();
+    return data.success;
+  }
 }
 
 class ElementLocator {
@@ -985,6 +1064,55 @@ class ElementLocator {
       } catch (parseError) {
         throw new Error(
           `failed to press key (status ${response.status}): ${
+            responseText || response.statusText
+          }`
+        );
+      }
+    }
+
+    const result = await response.json();
+    return result.success;
+  }
+
+  /**
+   * Scroll the first element matching the selector
+   *
+   * @param direction The direction to scroll: "up", "down", "left", or "right"
+   * @param amount The amount to scroll in pixels
+   * @returns Whether the scroll operation was successful
+   */
+  async scroll(
+    direction: "up" | "down" | "left" | "right",
+    amount: number
+  ): Promise<boolean> {
+    const response = await fetch(
+      `${this.baseUrl}/experimental/operator/scroll`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selector: {
+            ...this.selector,
+            activate_app: this.selector.activate_app !== false,
+          },
+          direction,
+          amount,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      console.log("error response:", responseText);
+
+      try {
+        const errorData = JSON.parse(responseText);
+        throw new Error(
+          `failed to scroll element: ${errorData.error || response.statusText}`
+        );
+      } catch (parseError) {
+        throw new Error(
+          `failed to scroll element (status ${response.status}): ${
             responseText || response.statusText
           }`
         );
