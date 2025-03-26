@@ -7,7 +7,7 @@
     "light": "#333333",
     "dark": "#000000"
   },
-  "favicon": "/favicon.ico",
+  "favicon": "public/favicon.ico",
   "navigation": {
     "tabs": [
       {
@@ -30,8 +30,8 @@
     ]
   },
   "logo": {
-    "light": "/favicon.ico",
-    "dark": "/favicon.ico"
+    "light": "public/favicon.ico",
+    "dark": "public/favicon.ico"
   },
   "navbar": {
     "links": [
@@ -42,13 +42,13 @@
     ],
     "primary": {
       "type": "button",
-      "label": "download",
-      "href": "https://screenpipe.co/download"
+      "label": "get app",
+      "href": "https://screenpi.pe/onboarding"
     }
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/screenpipe"
+      "github": "https://github.com/mediar-ai/screenpipe"
     }
   },
   "modeToggle": {
