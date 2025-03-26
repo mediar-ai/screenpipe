@@ -410,8 +410,7 @@ async fn get_browser_url_if_needed(
     is_focused: bool,
     process_id: i32,
 ) -> Option<String> {
-    if cfg!(not(target_os = "linux"))
-        && is_focused
+    if is_focused
         && BROWSER_NAMES
             .iter()
             .any(|&browser| app_name.to_lowercase().contains(browser))
