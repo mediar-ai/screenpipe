@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { SettingsProvider } from "@/lib/settings-provider";
+import { AssistantProvider } from "./assistant-provider";
 
 export const metadata: Metadata = {
-  title: "Example Pipe • Screenpipe",
+  title: "Hello World Computer Use • Screenpipe",
   description: "A clean starting point for your Screenpipe pipe",
 };
 
@@ -21,9 +22,11 @@ export default function RootLayout({
         data-suppress-hydration-warning={true}
       >
         <SettingsProvider>
-          <Toaster />
+          <AssistantProvider>
+            <Toaster />
 
-          {children}
+            {children}
+          </AssistantProvider>
         </SettingsProvider>
       </body>
     </html>

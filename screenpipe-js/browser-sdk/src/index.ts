@@ -10,14 +10,14 @@ import type {
   VisionEvent,
   VisionStreamResponse,
 } from "../../common/types";
-import { toSnakeCase, convertToCamelCase } from "../../common/utils";
+import { toSnakeCase, convertObjectToCamelCase } from "../../common/utils";
 import {
   captureEvent,
   captureMainFeatureEvent,
   setAnalyticsClient,
 } from "../../common/analytics";
 import posthog from "posthog-js";
-import { Operator } from "./Operator";
+import { Operator } from "../../common/Operator";
 
 setAnalyticsClient({
   init: posthog.init.bind(posthog),
@@ -441,7 +441,7 @@ class BrowserPipeImpl implements BrowserPipe {
         result_count: data.pagination.total,
         email: email,
       });
-      return convertToCamelCase(data) as ScreenpipeResponse;
+      return convertObjectToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
       console.error("error querying screenpipe:", error);
       throw error;
