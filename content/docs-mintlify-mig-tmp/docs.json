@@ -79,5 +79,11 @@
   },
   "search": {
     "prompt": "search documentation..."
+  },
+  "integrations": {
+    "posthog": {
+      "apiKey": "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce",
+      "apiHost": "https://eu.i.posthog.com"
+    }
   }
 }
