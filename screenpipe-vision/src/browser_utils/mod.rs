@@ -2,7 +2,7 @@ use anyhow::Result;
 
 // Trait definition
 pub trait BrowserUrlDetector {
-    fn get_active_url(&self, app_name: &str, process_id: i32) -> Result<Option<String>>;
+    fn get_active_url(&self, app_name: &str, process_id: i32, window_title: &str) -> Result<Option<String>>;
 }
 
 // Factory function

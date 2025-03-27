@@ -9,6 +9,8 @@ use atspi::{
 use atspi_proxies::document::DocumentProxy;
 use atspi_common::State;
 use zbus::fdo::DBusProxy;
+use std::pin::Pin;
+use std::future::Future;
 
 use super::BrowserUrlDetector;
 
@@ -21,6 +23,19 @@ pub struct LinuxUrlDetector;
 impl LinuxUrlDetector {
     pub fn new() -> Self {
         Self
+    }
+
+    fn validate_url(url: &str) -> Option<String> {
+        if url.is_empty() {
+            return None;
+        }
+
+        // If URL already has a protocol, validate it
+        if url.starts_with("http://") || url.starts_with("https://") {
+            return Some(url.to_string());
+        }
+
+        None
     }
 
     async fn setup_connection() -> Result<(AccessibilityConnection, AccessibleProxy<'static>)> {
@@ -52,20 +67,19 @@ impl LinuxUrlDetector {
         conn: &'a Connection,
         root: &AccessibleProxy<'_>,
         target_pid: i32,
-    ) -> Result<AccessibleProxy<'a>> {
+    ) -> Result<(AccessibleProxy<'a>, bool)> {
         let child_objects = root.get_children().await?;
-        let dbus_proxy = DBusProxy::new(conn).await?;
-
+        
         for child in child_objects {
             let proxy = child.into_accessible_proxy(conn).await?;
             if let Ok(application) = proxy.get_application().await {
-                // First get the unique bus name
+                // Only create DBusProxy if we have a potential match
+                let dbus_proxy = DBusProxy::new(conn).await?;
                 if let Ok(unique_name) = dbus_proxy.get_name_owner((&application.name).into()).await {
-                    // Then get the process ID using the unique bus name
                     if let Ok(pid) = dbus_proxy.get_connection_unix_process_id(unique_name.into()).await {
                         if pid == target_pid as u32 {
-                            debug!("Found browser process (PID: {})", pid);
-                            return Ok(proxy);
+                            debug!("Found browser process with PID: {}", pid);
+                            return Ok((proxy, false));
                         }
                     }
                 }
@@ -78,18 +92,27 @@ impl LinuxUrlDetector {
     async fn find_active_frame<'a>(
         conn: &'a Connection,
         browser_proxy: &AccessibleProxy<'_>,
+        window_title: &str,
     ) -> Result<Option<AccessibleProxy<'a>>> {
         let frames = browser_proxy.get_children().await?;
         
         for frame in frames {
             let frame_proxy = frame.into_accessible_proxy(conn).await?;
             if frame_proxy.get_role().await? == Role::Frame {
+                // Try title first
+                if let Ok(title) = frame_proxy.name().await {
+                    if title == window_title {
+                        debug!("Found matching frame by title: {}", title);
+                        return Ok(Some(frame_proxy));
+                    }
+                }
+                
+                // Then try state
                 let state = frame_proxy.get_state().await?;
-                // Check if any of the states we care about are set
                 if state.contains(State::Focused) || 
                    state.contains(State::Active) || 
                    state.contains(State::Selected) {
-                    debug!("Found active frame: {}", frame_proxy.name().await.unwrap_or_default());
+                    debug!("Found active frame by state: {}", frame_proxy.name().await.unwrap_or_default());
                     return Ok(Some(frame_proxy));
                 }
             }
@@ -137,36 +160,55 @@ impl LinuxUrlDetector {
 
     async fn get_url_from_document(
         document_proxy: &DocumentProxy<'_>,
+        _is_vivaldi: bool,
     ) -> Result<Option<String>> {
         // Try DocURL first
         if let Ok(doc_url) = document_proxy.get_attribute_value("DocURL").await {
-            if !doc_url.is_empty() {
-                return Ok(Some(doc_url));
+            if let Some(url) = Self::validate_url(&doc_url) {
+                return Ok(Some(url));
             }
         }
 
         // If DocURL fails or is empty, try URI
         if let Ok(doc_url) = document_proxy.get_attribute_value("URI").await {
-            if !doc_url.is_empty() {
-                Ok(Some(doc_url))
-            } else {
-                Ok(None)
+            if let Some(url) = Self::validate_url(&doc_url) {
+                return Ok(Some(url));
             }
-        } else {
-            Ok(None)
         }
+
+        Ok(None)
     }
 
     async fn find_document_web_with_url<'a>(
         conn: &'a Connection,
         targets: Vec<AccessibleProxy<'a>>,
+        is_vivaldi: bool,
     ) -> Result<AccessibleProxy<'a>> {
         for target in targets {
             if target.get_role().await? == Role::DocumentWeb {
                 let doc_proxy = Self::create_document_proxy(conn, &target).await?;
-                if let Ok(Some(url)) = Self::get_url_from_document(&doc_proxy).await {
+                if let Ok(Some(url)) = Self::get_url_from_document(&doc_proxy, is_vivaldi).await {
                     debug!("Found DocumentWeb with valid URL: {}", url);
                     return Ok(target);
+                }
+            }
+
+            // For Vivaldi, recursively check children
+            if is_vivaldi {
+                if let Ok(children) = target.get_children().await {
+                    let mut child_proxies = Vec::new();
+                    for child in children {
+                        if let Ok(proxy) = child.into_accessible_proxy(conn).await {
+                            child_proxies.push(proxy);
+                        }
+                    }
+
+                    // Box the recursive call to fix the recursion issue
+                    let future: Pin<Box<dyn Future<Output = Result<AccessibleProxy<'a>>> + 'a>> = 
+                        Box::pin(Self::find_document_web_with_url(conn, child_proxies, is_vivaldi));
+                    if let Ok(result) = future.await {
+                        return Ok(result);
+                    }
                 }
             }
         }
@@ -176,22 +218,24 @@ impl LinuxUrlDetector {
     async fn get_document_url_from_relation(
         conn: &Connection,
         frame_proxy: &AccessibleProxy<'_>,
+        is_vivaldi: bool,
     ) -> Result<Option<String>> {
         let embed_targets = Self::get_embed_relation(conn, frame_proxy).await?;
-        let document_proxy = Self::find_document_web_with_url(conn, embed_targets).await?;
+        let document_proxy = Self::find_document_web_with_url(conn, embed_targets, is_vivaldi).await?;
         let document = Self::create_document_proxy(conn, &document_proxy).await?;
-        Self::get_url_from_document(&document).await
+        Self::get_url_from_document(&document, is_vivaldi).await
     }
 
-    async fn get_active_url_from_window(pid: i32) -> Result<Option<String>> {
+    async fn get_active_url_from_window(pid: i32, window_title: &str, app_name: &str) -> Result<Option<String>> {
         let (connection, root) = Self::setup_connection().await?;
         let conn = connection.connection();
+        let is_vivaldi = app_name.to_lowercase().contains("vivaldi");
 
         match Self::find_browser_process(conn, &root, pid).await {
-            Ok(browser_proxy) => {
+            Ok((browser_proxy, _)) => {
                 // Find the active frame first
-                if let Ok(Some(frame_proxy)) = Self::find_active_frame(conn, &browser_proxy).await {
-                    match Self::get_document_url_from_relation(conn, &frame_proxy).await {
+                if let Ok(Some(frame_proxy)) = Self::find_active_frame(conn, &browser_proxy, window_title).await {
+                    match Self::get_document_url_from_relation(conn, &frame_proxy, is_vivaldi).await {
                         Ok(Some(url)) => {
                             debug!("Found URL: {}", url);
                             Ok(Some(url))
@@ -201,7 +245,7 @@ impl LinuxUrlDetector {
                             Ok(None)
                         }
                         Err(e) => {
-                            error!("Failed to get URL from relation: {}", e);
+                            error!("Error getting URL from relation: {}", e);
                             Ok(None)
                         }
                     }
@@ -211,7 +255,7 @@ impl LinuxUrlDetector {
                 }
             }
             Err(e) => {
-                error!("Could not find browser process: {}", e);
+                error!("Error finding browser process: {}", e);
                 Ok(None)
             }
         }
@@ -219,10 +263,9 @@ impl LinuxUrlDetector {
 }
 
 impl BrowserUrlDetector for LinuxUrlDetector {
-    fn get_active_url(&self, _app_name: &str, process_id: i32) -> Result<Option<String>> {
-        // Since we're using async functions, we need to block on the runtime
+    fn get_active_url(&self, app_name: &str, process_id: i32, window_title: &str) -> Result<Option<String>> {
         tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(Self::get_active_url_from_window(process_id))
+            .block_on(Self::get_active_url_from_window(process_id, window_title, app_name))
     }
 } 
