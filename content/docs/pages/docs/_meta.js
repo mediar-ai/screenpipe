@@ -6,7 +6,7 @@ export default {
   "operator-api": "operator api",
   "api-reference": "api reference",
   "cli-reference": "cli reference",
+  "mcp-server": "mcp server",
   "contributing": "contributing",
   "faq": "faq",
-  "mcp-server": "mcp server"
 };
