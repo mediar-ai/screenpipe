@@ -1,0 +1,366 @@
+import { Tabs, Tab } from 'nextra/components'
+
+# operator api
+
+the operator api allows for powerful desktop automation using accessibility roles and elements. it provides a robust way to interact with applications programmatically.
+
+<div className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+  <p><strong>compatibility note:</strong> operator api currently works on macos only. on windows/linux, please use the <a href="/docs/sdk-reference#input-control-api">input control api</a> instead.</p>
+</div>
+
+to understand roles better, open the macos accessibility inspector and examine the roles for any application.
+
+## installation
+
+<Tabs items={['npm', 'pnpm', 'bun', 'yarn']}>
+  <Tab>
+    ```bash copy
+    npm install @screenpipe/browser
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm add @screenpipe/browser
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun add @screenpipe/browser
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn add @screenpipe/browser
+    ```
+  </Tab>
+</Tabs>
+
+## basic usage
+
+```typescript copy
+import { pipe } from '@screenpipe/browser'
+
+async function simpleAutomation() {
+  try {
+    // open an application
+    await pipe.operator.openApplication("Chrome")
+    
+    // navigate to a website
+    await pipe.operator.openUrl("https://github.com/mediar-ai/screenpipe")
+    
+    // find search fields by role
+    const searchFields = await pipe.operator
+      .getByRole("searchfield", {
+        app: "Chrome",
+        activateApp: true
+      })
+      .all(3)
+    
+    if (searchFields.length > 0) {
+      // fill the search field
+      await pipe.operator
+        .getById(searchFields[0].id, { app: "Chrome" })
+        .fill("automation")
+      
+      // click a button
+      const buttons = await pipe.operator
+        .getByRole("button", { app: "Chrome" })
+        .all(5)
+      
+      if (buttons.length > 0) {
+        await pipe.operator
+          .getById(buttons[0].id, { app: "Chrome" })
+          .click()
+      }
+      
+      // scroll page content
+      await pipe.operator
+        .getById(searchFields[0].id, { app: "Chrome" })
+        .scroll("down", 300)
+    }
+  } catch (error) {
+    console.error("automation failed:", error)
+  }
+}
+```
+
+## core methods
+
+the operator api provides a set of intuitive methods for automating desktop interactions:
+
+| method | description | example |
+|--------|-------------|---------|
+| `openApplication(name)` | launches an application | `pipe.operator.openApplication("Chrome")` |
+| `openUrl(url, browser?)` | opens a url in a browser | `pipe.operator.openUrl("github.com")` |
+| `getByRole(role, options)` | finds elements by accessibility role | `pipe.operator.getByRole("button", {app: "Chrome"})` |
+| `getById(id, options)` | gets element by id | `pipe.operator.getById("element-123", {app: "Chrome"})` |
+| `.click()` | clicks an element | `pipe.operator.getById(id).click()` |
+| `.fill(text)` | enters text in a field | `pipe.operator.getById(id).fill("hello")` |
+| `.scroll(direction, amount)` | scrolls an element | `pipe.operator.getById(id).scroll("down", 300)` |
+
+## common accessibility roles
+
+when using `getByRole()`, you'll need to specify the accessibility role. here are common ones:
+
+- `"button"` - clickable buttons
+- `"textfield"` - text input fields
+- `"searchfield"` - search input fields
+- `"checkbox"` - checkbox elements
+- `"radiobutton"` - radio button elements
+- `"combobox"` - dropdown menus
+- `"link"` - hyperlinks
+- `"image"` - images
+- `"statictext"` - text labels
+- `"scrollarea"` - scrollable containers
+
+## advanced usage examples
+
+### automating form filling
+
+```typescript copy
+async function fillContactForm() {
+  // open the app and navigate to form
+  await pipe.operator.openApplication("Chrome")
+  await pipe.operator.openUrl("https://example.com/contact")
+  
+  // wait for page to load (simple delay)
+  await new Promise(resolve => setTimeout(resolve, 2000))
+  
+  // find form fields
+  const nameField = await pipe.operator
+    .getByRole("textfield", { 
+      app: "Chrome",
+      activateApp: true,
+      nameContains: "name" 
+    })
+    .first()
+  
+  const emailField = await pipe.operator
+    .getByRole("textfield", { 
+      app: "Chrome",
+      nameContains: "email" 
+    })
+    .first()
+  
+  const messageField = await pipe.operator
+    .getByRole("textfield", { 
+      app: "Chrome",
+      nameContains: "message" 
+    })
+    .first()
+  
+  // fill the form
+  await pipe.operator
+    .getById(nameField.id, { app: "Chrome" })
+    .fill("john doe")
+  
+  await pipe.operator
+    .getById(emailField.id, { app: "Chrome" })
+    .fill("john@example.com")
+  
+  await pipe.operator
+    .getById(messageField.id, { app: "Chrome" })
+    .fill("this is an automated message from screenpipe!")
+  
+  // find and click submit button
+  const submitButton = await pipe.operator
+    .getByRole("button", { 
+      app: "Chrome",
+      nameContains: "submit" 
+    })
+    .first()
+  
+  await pipe.operator
+    .getById(submitButton.id, { app: "Chrome" })
+    .click()
+}
+```
+
+### automating app workflows
+
+```typescript copy
+async function processImages() {
+  // open photoshop
+  await pipe.operator.openApplication("Adobe Photoshop")
+  await new Promise(resolve => setTimeout(resolve, 3000)) // wait for app to launch
+  
+  // open file
+  await pipe.operator
+    .getByRole("menuitem", { 
+      app: "Adobe Photoshop",
+      nameContains: "file" 
+    })
+    .first()
+    .then(menu => pipe.operator.getById(menu.id, { app: "Adobe Photoshop" }).click())
+  
+  await pipe.operator
+    .getByRole("menuitem", { 
+      app: "Adobe Photoshop",
+      nameContains: "open" 
+    })
+    .first()
+    .then(menu => pipe.operator.getById(menu.id, { app: "Adobe Photoshop" }).click())
+  
+  // navigate file picker (simplified)
+  // in practice, you'd need more complex logic to navigate the file picker
+  
+  // apply filter
+  await pipe.operator
+    .getByRole("menuitem", { 
+      app: "Adobe Photoshop",
+      nameContains: "filter" 
+    })
+    .first()
+    .then(menu => pipe.operator.getById(menu.id, { app: "Adobe Photoshop" }).click())
+  
+  // and so on...
+}
+```
+
+## ai-powered automation
+
+for more powerful automation, combine the operator api with vercel ai sdk to enable ai-driven desktop interactions:
+
+```typescript copy
+import { useState } from "react"
+import { streamText, convertToCoreMessages } from "ai"
+import { createOpenAI } from "@ai-sdk/openai"
+import { pipe } from "@screenpipe/browser"
+import { z } from "zod"
+
+export function AIAutomationAgent() {
+  const [input, setInput] = useState("")
+  const [output, setOutput] = useState("")
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setOutput("")
+    
+    const model = createOpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    })("gpt-4o")
+    
+    const result = streamText({
+      model,
+      messages: convertToCoreMessages([{
+        role: "user",
+        content: input
+      }]),
+      system: "you are a desktop automation assistant. help users by performing actions on their computer.",
+      tools: {
+        openApplication: {
+          description: "open an application",
+          parameters: z.object({
+            appName: z.string().describe("the name of the application to open")
+          }),
+          execute: async ({ appName }) => {
+            const success = await pipe.operator.openApplication(appName)
+            return success
+              ? `opened ${appName} successfully`
+              : `failed to open ${appName}`
+          }
+        },
+        
+        openUrl: {
+          description: "open a url in a browser",
+          parameters: z.object({
+            url: z.string().describe("the url to open"),
+            browser: z.string().optional().describe("the browser to use")
+          }),
+          execute: async ({ url, browser }) => {
+            const success = await pipe.operator.openUrl(url, browser)
+            return success
+              ? `opened ${url} in ${browser || "default browser"}`
+              : `failed to open ${url}`
+          }
+        },
+        
+        findAndClick: {
+          description: "find an element by role and click it",
+          parameters: z.object({
+            app: z.string().describe("the application name"),
+            role: z.string().describe("the accessibility role of the element")
+          }),
+          execute: async ({ app, role }) => {
+            try {
+              const elements = await pipe.operator
+                .getByRole(role, { app, activateApp: true })
+                .all(5)
+                
+              if (elements.length > 0) {
+                await pipe.operator
+                  .getById(elements[0].id, { app })
+                  .click()
+                return `clicked ${role} element in ${app}`
+              }
+              return `no ${role} elements found in ${app}`
+            } catch (error) {
+              return `error: ${error.message}`
+            }
+          }
+        },
+        
+        fillText: {
+          description: "fill text in a form field",
+          parameters: z.object({
+            app: z.string().describe("the application name"),
+            role: z.string().describe("the role of the element to fill"),
+            text: z.string().describe("the text to enter")
+          }),
+          execute: async ({ app, role, text }) => {
+            try {
+              const elements = await pipe.operator
+                .getByRole(role, { app, activateApp: true })
+                .all(5)
+                
+              if (elements.length > 0) {
+                await pipe.operator
+                  .getById(elements[0].id, { app })
+                  .fill(text)
+                return `filled text in ${role} element in ${app}`
+              }
+              return `no ${role} elements found in ${app}`
+            } catch (error) {
+              return `error: ${error.message}`
+            }
+          }
+        }
+      },
+      toolCallStreaming: true,
+      maxSteps: 5
+    })
+    
+    for await (const chunk of result.textStream) {
+      setOutput(prev => prev + chunk)
+    }
+  }
+  
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          placeholder="e.g., 'open chrome and go to github'"
+        />
+        <button type="submit">run</button>
+      </form>
+      <div>{output}</div>
+    </div>
+  )
+}
+```
+
+for a complete implementation with automatic tool selection, see the [hello-world-computer-use](https://github.com/mediar-ai/screenpipe/blob/main/pipes/hello-world-computer-use/components/chat.tsx) example pipe.
+
+## troubleshooting
+
+if you're having issues with the operator api:
+
+1. **macos permissions**: ensure screenpipe has accessibility permissions in system settings > privacy & security > accessibility
+2. **app names**: use exact app names as they appear in the applications folder
+3. **timing issues**: add delays between operations, as ui elements may take time to load
+4. **debugging**: log element ids and roles to help identify the right elements
+5. **app focus**: use the `activateApp: true` option to ensure the target app is in focus
+
+for more detailed debugging, use the macos accessibility inspector to identify exact roles and properties of ui elements. 
