@@ -10,6 +10,7 @@ info:
     ## Core Functionality
     
     - **Context Retrieval**: Search through screen recordings and audio transcriptions
+    - **Computer Automation**: Control applications and automate desktop interactions
     - **Real-time Streams**: Stream OCR, UI elements, and audio transcriptions
     - **Device Management**: Control audio and video recording devices
     - **Pipes System**: Extend functionality with pluggable pipes
@@ -19,6 +20,7 @@ info:
     The most commonly used endpoints are:
     
     1. `/search` - Main endpoint for retrieving contextual data
+    2. `/experimental/operator` - Desktop automation endpoints for controlling applications
 
 paths:
   /search:
@@ -167,6 +169,153 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchResponse'
+
+  /experimental/operator:
+    post:
+      x-order: 2
+      x-typescript-method: 'findElements'
+      tags: ['Computer Automation']
+      summary: 'Find UI elements in applications for automation'
+      description: |
+        Find UI elements in applications by role to enable desktop automation.
+        
+        ## Use Cases
+        
+        - Find buttons, text fields, and other UI elements for automation
+        - Build workflows that interact with desktop applications
+        - Create AI-powered desktop automation agents
+        
+        ## Examples
+        
+        ### Find all buttons in Chrome:
+        ```js
+        const buttons = await pipe.operator
+          .getByRole("button", {
+            app: "Chrome",
+            activateApp: true
+          })
+          .all(5);
+        ```
+        
+        ### Click a button:
+        ```js
+        const button = await pipe.operator
+          .getByRole("button", { app: "Chrome" })
+          .first();
+          
+        await pipe.operator
+          .getById(button.id, { app: "Chrome" })
+          .click();
+        ```
+      operationId: server_find_elements_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FindElementsRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindElementsResponse'
+
+  /experimental/operator/open-application:
+    post:
+      tags: ['Computer Automation']
+      summary: 'Open an application'
+      operationId: server_open_application_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenApplicationRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenApplicationResponse'
+
+  /experimental/operator/open-url:
+    post:
+      tags: ['Computer Automation']
+      summary: 'Open a URL in a browser'
+      operationId: server_open_url_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenUrlRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenUrlResponse'
+
+  /experimental/operator/click:
+    post:
+      tags: ['Computer Automation']
+      summary: 'Click on a UI element'
+      operationId: server_click_element_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClickElementRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /experimental/operator/type:
+    post:
+      tags: ['Computer Automation']
+      summary: 'Type text into a UI element'
+      operationId: server_type_text_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TypeTextRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /experimental/operator/scroll:
+    post:
+      tags: ['Computer Automation']
+      operationId: server_scroll_element_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScrollElementRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScrollElementResponse'
+
   /audio/list:
     get:
       operationId: server_api_list_audio_devices
@@ -228,6 +377,115 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RemoveTagsResponse'
+
+  /experimental/operator/press-key:
+    post:
+      tags: ['Computer Automation']
+      operationId: server_press_key_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PressKeyRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PressKeyResponse'
+                
+  /experimental/operator/get_text:
+    post:
+      tags: ['Computer Automation']
+      operationId: server_get_text_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetTextRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetTextResponse'
+                
+  /experimental/operator/list-interactable-elements:
+    post:
+      tags: ['Computer Automation']
+      operationId: server_list_interactable_elements_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListInteractableElementsRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListInteractableElementsResponse'
+                
+  /experimental/operator/click-by-index:
+    post:
+      tags: ['Computer Automation']
+      operationId: server_click_by_index_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClickByIndexRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClickByIndexResponse'
+                
+  /experimental/operator/type-by-index:
+    post:
+      tags: ['Computer Automation']
+      operationId: server_type_by_index_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TypeByIndexRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TypeByIndexResponse'
+                
+  /experimental/operator/press-key-by-index:
+    post:
+      tags: ['Computer Automation']
+      operationId: server_press_key_by_index_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PressKeyByIndexRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PressKeyByIndexResponse'
+                
   /pipes/info/{pipe_id}:
     get:
       operationId: server_get_pipe_info_handler
@@ -431,8 +689,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AddContentResponse'
+
+  # Speaker management endpoints
   /speakers/unnamed:
     get:
+      tags: ['Speaker Management']
       operationId: server_get_unnamed_speakers_handler
       parameters:
       - name: limit
@@ -464,6 +725,7 @@ paths:
                   $ref: '#/components/schemas/Speaker'
   /speakers/update:
     post:
+      tags: ['Speaker Management']
       operationId: server_update_speaker_handler
       requestBody:
         content:
@@ -480,6 +742,7 @@ paths:
                 $ref: '#/components/schemas/Speaker'
   /speakers/search:
     get:
+      tags: ['Speaker Management']
       operationId: server_search_speakers_handler
       parameters:
       - name: name
@@ -499,6 +762,7 @@ paths:
                   $ref: '#/components/schemas/Speaker'
   /speakers/delete:
     post:
+      tags: ['Speaker Management']
       operationId: server_delete_speaker_handler
       requestBody:
         content:
@@ -515,6 +779,7 @@ paths:
                 type: object
   /speakers/hallucination:
     post:
+      tags: ['Speaker Management']
       operationId: server_mark_as_hallucination_handler
       requestBody:
         content:
@@ -531,6 +796,7 @@ paths:
                 type: object
   /speakers/merge:
     post:
+      tags: ['Speaker Management']
       operationId: server_merge_speakers_handler
       requestBody:
         content:
@@ -547,6 +813,7 @@ paths:
                 type: object
   /speakers/similar:
     get:
+      tags: ['Speaker Management']
       operationId: server_get_similar_speakers_handler
       parameters:
       - name: speaker_id
@@ -568,6 +835,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Speaker'
+
+  # Experimental features
   /experimental/frames/merge:
     post:
       operationId: server_merge_frames_handler
@@ -600,200 +869,10 @@ paths:
             application/json:
               schema:
                 type: object
-  /experimental/operator:
-    post:
-      operationId: server_find_elements_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FindElementsRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FindElementsResponse'
-  /experimental/operator/scroll:
-    post:
-      operationId: server_scroll_element_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ScrollElementRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ScrollElementResponse'
-  /experimental/operator/click:
-    post:
-      operationId: server_click_element_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ClickElementRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ActionResponse'
-  /experimental/operator/type:
-    post:
-      operationId: server_type_text_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TypeTextRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ActionResponse'
-  /experimental/operator/press-key:
-    post:
-      operationId: server_press_key_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PressKeyRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PressKeyResponse'
-  /experimental/operator/get_text:
-    post:
-      operationId: server_get_text_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GetTextRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GetTextResponse'
-  /experimental/operator/list-interactable-elements:
-    post:
-      operationId: server_list_interactable_elements_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ListInteractableElementsRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListInteractableElementsResponse'
-  /experimental/operator/click-by-index:
-    post:
-      operationId: server_click_by_index_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ClickByIndexRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ClickByIndexResponse'
-  /experimental/operator/type-by-index:
-    post:
-      operationId: server_type_by_index_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TypeByIndexRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TypeByIndexResponse'
-  /experimental/operator/press-key-by-index:
-    post:
-      operationId: server_press_key_by_index_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PressKeyByIndexRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PressKeyByIndexResponse'
-  /experimental/operator/open-application:
-    post:
-      operationId: server_open_application_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OpenApplicationRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OpenApplicationResponse'
-  /experimental/operator/open-url:
-    post:
-      operationId: server_open_url_handler
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OpenUrlRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OpenUrlResponse'
+                
   /experimental/input_control:
     post:
+      tags: ['Computer Automation']
       operationId: server_input_control_handler
       requestBody:
         content:
@@ -808,8 +887,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InputControlResponse'
+
+  # Audio control endpoints
   /audio/start:
     post:
+      tags: ['Audio Control']
       operationId: server_start_audio
       responses:
         '200':
@@ -819,6 +901,7 @@ paths:
               schema: {}
   /audio/stop:
     post:
+      tags: ['Audio Control']
       operationId: server_stop_audio
       responses:
         '200':
@@ -826,6 +909,40 @@ paths:
           content:
             application/json:
               schema: {}
+  /audio/device/start:
+    post:
+      tags: ['Audio Control']
+      operationId: server_start_audio_device
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioDeviceControlRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioDeviceControlResponse'
+  /audio/device/stop:
+    post:
+      tags: ['Audio Control']
+      operationId: server_stop_audio_device
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioDeviceControlRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioDeviceControlResponse'
 
   /pipes/build-status/{pipe_id}:
     get:
@@ -918,38 +1035,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EmbeddingResponse'
-  /audio/device/start:
-    post:
-      operationId: server_start_audio_device
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AudioDeviceControlRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AudioDeviceControlResponse'
-  /audio/device/stop:
-    post:
-      operationId: server_stop_audio_device
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AudioDeviceControlRequest'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AudioDeviceControlResponse'
+
 components:
   schemas:
     ActionResponse:
@@ -1514,587 +1600,245 @@ components:
       type: object
       properties:
         id:
-          nullable: true
+          type: string
+        title:
           type: string
         role:
           type: string
-        label:
+        enabled:
+          type: boolean
+        attributes:
           nullable: true
-          type: string
-        description:
-          nullable: true
-          type: string
-        text:
-          nullable: true
-          type: string
-        position:
-          $ref: '#/components/schemas/ElementPosition'
-        size:
-          $ref: '#/components/schemas/ElementSize'
-        properties:
           type: object
+          additionalProperties: true
       required:
       - id
+      - title
       - role
-      - label
-      - description
-      - text
-      - position
-      - size
-      - properties
-    ElementPosition:
-      type: object
-      properties:
-        x:
-          type: integer
-        y:
-          type: integer
-      required:
-      - x
-      - y
+      - enabled
     ElementSelector:
       type: object
       properties:
-        app_name:
+        id:
           type: string
-        window_name:
+        app:
           nullable: true
           type: string
-        locator:
-          type: string
-        use_background_apps:
-          nullable: true
-          type: boolean
-        activate_app:
+        activateApp:
           nullable: true
           type: boolean
       required:
-      - app_name
-      - window_name
-      - locator
-      - use_background_apps
-      - activate_app
-    ElementSize:
-      type: object
-      properties:
-        width:
-          type: integer
-        height:
-          type: integer
-      required:
-      - width
-      - height
-    ElementStats:
-      type: object
-      properties:
-        total:
-          type: integer
-        definitely_interactable:
-          type: integer
-        sometimes_interactable:
-          type: integer
-        non_interactable:
-          type: integer
-        by_role:
-          type: object
-          additionalProperties:
-            type: integer
-      required:
-      - total
-      - definitely_interactable
-      - sometimes_interactable
-      - non_interactable
-      - by_role
-    EmbeddingData:
-      type: object
-      properties:
-        object:
-          type: string
-        embedding:
-          type: array
-          items:
-            type: number
-        index:
-          type: integer
-      required:
-      - object
-      - embedding
-      - index
-    EmbeddingInput:
-      oneOf:
-      - type: string
-      - type: array
-        items:
-          type: string
+      - id
     EmbeddingRequest:
       type: object
       properties:
-        model:
-          type: string
         input:
-          $ref: '#/components/schemas/EmbeddingInput'
-        encoding_format:
-          type: string
-        user:
-          nullable: true
-          type: string
-      required:
-      - model
-      - input
-      - encoding_format
-      - user
-    EmbeddingResponse:
-      type: object
-      properties:
-        object:
-          type: string
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/EmbeddingData'
-        model:
-          type: string
-        usage:
-          $ref: '#/components/schemas/Usage'
-      required:
-      - object
-      - data
-      - model
-      - usage
-    EventsQuery:
-      type: object
-      properties:
-        images:
-          nullable: true
-          type: boolean
-      required:
-      - images
-    FindElementsRequest:
-      type: object
-      properties:
-        selector:
-          $ref: '#/components/schemas/ElementSelector'
-        max_results:
-          nullable: true
-          type: integer
-        max_depth:
-          nullable: true
-          type: integer
-      required:
-      - selector
-      - max_results
-      - max_depth
-    FindElementsResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/ElementInfo'
-      required:
-      - data
-    FrameContent:
-      type: object
-      properties:
-        file_path:
-          type: string
-        timestamp:
-          nullable: true
-          type: string
-          format: date-time
-        app_name:
-          nullable: true
-          type: string
-        window_name:
-          nullable: true
-          type: string
-        ocr_results:
-          nullable: true
-          type: array
-          items:
-            $ref: '#/components/schemas/OCRResult'
-        tags:
-          nullable: true
           type: array
           items:
             type: string
       required:
-      - file_path
-      - timestamp
-      - app_name
-      - window_name
-      - ocr_results
-      - tags
-    FrameData:
+      - input
+    EmbeddingResponse:
       type: object
       properties:
-        frame_id:
-          type: integer
-        timestamp:
-          type: string
-          format: date-time
-        offset_index:
-          type: integer
-        ocr_entries:
+        data:
           type: array
           items:
-            $ref: '#/components/schemas/OCREntry'
-        audio_entries:
+            type: object
+            properties:
+              embedding:
+                type: array
+                items:
+                  type: number
+              index:
+                type: integer
+              object:
+                type: string
+            required:
+            - embedding
+            - index
+            - object
+        model:
+          type: string
+        object:
+          type: string
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+          required:
+          - prompt_tokens
+          - total_tokens
+      required:
+      - data
+      - model
+      - object
+      - usage
+    FindElementsRequest:
+      type: object
+      properties:
+        role:
+          type: string
+        app:
+          nullable: true
+          type: string
+        strict:
+          nullable: true
+          type: boolean
+        activateApp:
+          nullable: true
+          type: boolean
+      required:
+      - role
+    FindElementsResponse:
+      type: object
+      properties:
+        elements:
           type: array
           items:
-            $ref: '#/components/schemas/AudioEntry'
+            $ref: '#/components/schemas/ElementInfo'
+        cache:
+          $ref: '#/components/schemas/ElementCacheInfo'
       required:
-      - frame_id
-      - timestamp
-      - offset_index
-      - ocr_entries
-      - audio_entries
-    GetSimilarSpeakersRequest:
-      type: object
-      properties:
-        speaker_id:
-          type: integer
-        limit:
-          type: integer
-      required:
-      - speaker_id
-      - limit
-    GetTextMetadata:
-      type: object
-      properties:
-        extraction_time_ms:
-          type: integer
-        element_count:
-          type: integer
-        app_name:
-          type: string
-        timestamp:
-          type: string
-          format: date-time
-      required:
-      - extraction_time_ms
-      - element_count
-      - app_name
-      - timestamp
+      - elements
+      - cache
     GetTextRequest:
       type: object
       properties:
-        app_name:
-          type: string
-        window_name:
-          nullable: true
-          type: string
-        max_depth:
-          nullable: true
-          type: integer
-        use_background_apps:
-          nullable: true
-          type: boolean
-        activate_app:
-          nullable: true
-          type: boolean
+        selector:
+          $ref: '#/components/schemas/ElementSelector'
       required:
-      - app_name
-      - window_name
-      - max_depth
-      - use_background_apps
-      - activate_app
+      - selector
     GetTextResponse:
       type: object
       properties:
-        success:
-          type: boolean
         text:
           type: string
-        metadata:
-          $ref: '#/components/schemas/GetTextMetadata'
       required:
-      - success
       - text
-      - metadata
-    GetUnnamedSpeakersRequest:
-      type: object
-      properties:
-        limit:
-          type: integer
-        offset:
-          type: integer
-        speaker_ids:
-          nullable: true
-          type: array
-          items:
-            type: integer
-      required:
-      - limit
-      - offset
-      - speaker_ids
     HealthCheckResponse:
       type: object
       properties:
         status:
           type: string
-        status_code:
-          type: integer
-        last_frame_timestamp:
-          nullable: true
-          type: string
-          format: date-time
-        last_audio_timestamp:
-          nullable: true
-          type: string
-          format: date-time
-        last_ui_timestamp:
-          nullable: true
-          type: string
-          format: date-time
-        frame_status:
-          type: string
-        audio_status:
-          type: string
-        ui_status:
-          type: string
-        message:
-          type: string
-        verbose_instructions:
-          nullable: true
-          type: string
-        device_status_details:
-          nullable: true
-          type: string
       required:
       - status
-      - status_code
-      - last_frame_timestamp
-      - last_audio_timestamp
-      - last_ui_timestamp
-      - frame_status
-      - audio_status
-      - ui_status
-      - message
-      - verbose_instructions
-      - device_status_details
-    InputAction:
-      oneOf:
-      - type: object
-        properties:
-          type:
-            type: string
-            enum:
-            - KeyPress
-          data:
-            type: string
-        required:
-        - type
-        - data
-      - type: object
-        properties:
-          type:
-            type: string
-            enum:
-            - MouseMove
-          data:
-            type: object
-            properties:
-              x:
-                type: integer
-              y:
-                type: integer
-            required:
-            - x
-            - y
-        required:
-        - type
-        - data
-      - type: object
-        properties:
-          type:
-            type: string
-            enum:
-            - MouseClick
-          data:
-            type: string
-        required:
-        - type
-        - data
-      - type: object
-        properties:
-          type:
-            type: string
-            enum:
-            - WriteText
-          data:
-            type: string
-        required:
-        - type
-        - data
     InputControlRequest:
       type: object
       properties:
-        action:
-          $ref: '#/components/schemas/InputAction'
-      required:
-      - action
-    InputControlResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-      required:
-      - success
-    InteractableElement:
-      type: object
-      properties:
-        index:
-          type: integer
-        role:
+        type:
           type: string
-        interactability:
-          type: string
-        text:
-          type: string
-        position:
-          $ref: '#/components/schemas/ElementPosition'
-        size:
-          $ref: '#/components/schemas/ElementSize'
-        element_id:
+        key:
           nullable: true
           type: string
-      required:
-      - index
-      - role
-      - interactability
-      - text
-      - position
-      - size
-      - element_id
-    KeywordSearchRequest:
-      type: object
-      properties:
-        query:
-          type: string
-        limit:
-          type: integer
-        offset:
-          type: integer
-        start_time:
-          nullable: true
-          type: string
-          format: date-time
-        end_time:
-          nullable: true
-          type: string
-          format: date-time
-        fuzzy_match:
-          type: boolean
-        order:
-          $ref: '#/components/schemas/Order'
-        app_names:
+        modifiers:
           nullable: true
           type: array
           items:
             type: string
+        position:
+          nullable: true
+          $ref: '#/components/schemas/Position'
+        text:
+          nullable: true
+          type: string
       required:
-      - query
-      - limit
-      - offset
-      - start_time
-      - end_time
-      - fuzzy_match
-      - order
-      - app_names
+      - type
+    InputControlResponse:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+      - status
     ListDeviceResponse:
       type: object
       properties:
+        id:
+          type: integer
         name:
           type: string
-        is_default:
-          type: boolean
+        device_type:
+          $ref: '#/components/schemas/DeviceType'
+        device_control:
+          $ref: '#/components/schemas/DeviceControl'
       required:
+      - id
       - name
-      - is_default
+      - device_type
+      - device_control
     ListInteractableElementsRequest:
       type: object
       properties:
-        app_name:
-          type: string
-        window_name:
+        app:
           nullable: true
           type: string
-        with_text_only:
-          nullable: true
-          type: boolean
-        interactable_only:
-          nullable: true
-          type: boolean
-        include_sometimes_interactable:
-          nullable: true
-          type: boolean
-        max_elements:
-          nullable: true
-          type: integer
-        use_background_apps:
-          nullable: true
-          type: boolean
-        activate_app:
-          nullable: true
-          type: boolean
-      required:
-      - app_name
-      - window_name
-      - with_text_only
-      - interactable_only
-      - include_sometimes_interactable
-      - max_elements
-      - use_background_apps
-      - activate_app
+      required: []
     ListInteractableElementsResponse:
       type: object
       properties:
         elements:
           type: array
           items:
-            $ref: '#/components/schemas/InteractableElement'
-        stats:
-          $ref: '#/components/schemas/ElementStats'
-        cache_info:
-          $ref: '#/components/schemas/ElementCacheInfo'
+            type: object
+            properties:
+              index:
+                type: integer
+              role:
+                type: string
+              title:
+                type: string
+            required:
+            - index
+            - role
+            - title
       required:
       - elements
-      - stats
-      - cache_info
     MarkAsHallucinationRequest:
       type: object
       properties:
-        speaker_id:
+        id:
           type: integer
       required:
-      - speaker_id
+      - id
     MergeSpeakersRequest:
       type: object
       properties:
-        speaker_to_keep_id:
+        source_id:
           type: integer
-        speaker_to_merge_id:
+        target_id:
           type: integer
       required:
-      - speaker_to_keep_id
-      - speaker_to_merge_id
+      - source_id
+      - target_id
     MergeVideosRequest:
       type: object
       properties:
-        video_paths:
+        frame_ids:
           type: array
           items:
-            type: string
+            type: integer
+        output_path:
+          nullable: true
+          type: string
       required:
-      - video_paths
+      - frame_ids
     MergeVideosResponse:
       type: object
       properties:
-        video_path:
+        success:
+          type: boolean
+        message:
+          type: string
+        output_path:
           type: string
       required:
-      - video_path
+      - success
+      - message
+      - output_path
     MonitorInfo:
       type: object
       properties:
@@ -2106,15 +1850,25 @@ components:
           type: integer
         height:
           type: integer
-        is_default:
+        recording:
           type: boolean
       required:
       - id
       - name
       - width
       - height
-      - is_default
-    OCRContent:
+      - recording
+    OCRResult:
+      type: object
+      properties:
+        text:
+          type: string
+        confidence:
+          type: number
+      required:
+      - text
+      - confidence
+    OCRSearchMatch:
       type: object
       properties:
         frame_id:
@@ -2161,115 +1915,20 @@ components:
       - frame_name
       - browser_url
       - focused
-    OCREntry:
-      type: object
-      properties:
-        text:
-          type: string
-        app_name:
-          type: string
-        window_name:
-          type: string
-        device_name:
-          type: string
-        video_file_path:
-          type: string
-      required:
-      - text
-      - app_name
-      - window_name
-      - device_name
-      - video_file_path
-    OCRResult:
-      type: object
-      properties:
-        frame_id:
-          type: integer
-        frame_name:
-          type: string
-        ocr_text:
-          type: string
-        text_json:
-          type: string
-        timestamp:
-          type: string
-          format: date-time
-        file_path:
-          type: string
-        offset_index:
-          type: integer
-        app_name:
-          type: string
-        ocr_engine:
-          type: string
-        window_name:
-          type: string
-        tags:
-          type: array
-          items:
-            type: string
-        browser_url:
-          nullable: true
-          type: string
-        focused:
-          nullable: true
-          type: boolean
-      required:
-      - frame_id
-      - frame_name
-      - ocr_text
-      - text_json
-      - timestamp
-      - file_path
-      - offset_index
-      - app_name
-      - ocr_engine
-      - window_name
-      - tags
-      - browser_url
-      - focused
-    OcrEngine:
-      oneOf:
-      - type: object
-        properties:
-          Custom:
-            type: object
-            properties:
-              api_url:
-                type: string
-              api_key:
-                type: string
-              timeout_ms:
-                type: integer
-            required:
-            - api_url
-            - api_key
-            - timeout_ms
-        required:
-        - Custom
-      - type: string
-        enum:
-        - Unstructured
-        - Tesseract
-        - WindowsNative
-        - AppleNative
     OpenApplicationRequest:
       type: object
       properties:
-        app_name:
+        appName:
           type: string
       required:
-      - app_name
+      - appName
     OpenApplicationResponse:
       type: object
       properties:
         success:
           type: boolean
-        message:
-          type: string
       required:
       - success
-      - message
     OpenUrlRequest:
       type: object
       properties:
@@ -2280,55 +1939,44 @@ components:
           type: string
       required:
       - url
-      - browser
     OpenUrlResponse:
       type: object
       properties:
         success:
           type: boolean
-        message:
-          type: string
       required:
       - success
-      - message
     Order:
       type: string
       enum:
-      - ascending
-      - descending
-    PaginationInfo:
+      - timestamp_asc
+      - timestamp_desc
+      - relevance
+    Position:
       type: object
       properties:
-        limit:
+        x:
           type: integer
-        offset:
-          type: integer
-        total:
+        y:
           type: integer
       required:
-      - limit
-      - offset
-      - total
-    PaginationQuery:
-      type: object
-      properties:
-        limit:
-          type: integer
-        offset:
-          type: integer
-      required:
-      - limit
-      - offset
+      - x
+      - y
     PressKeyByIndexRequest:
       type: object
       properties:
         element_index:
           type: integer
-        key_combo:
+        key:
           type: string
+        modifiers:
+          nullable: true
+          type: array
+          items:
+            type: string
       required:
       - element_index
-      - key_combo
+      - key
     PressKeyByIndexResponse:
       type: object
       properties:
@@ -2344,11 +1992,16 @@ components:
       properties:
         selector:
           $ref: '#/components/schemas/ElementSelector'
-        key_combo:
+        key:
           type: string
+        modifiers:
+          nullable: true
+          type: array
+          items:
+            type: string
       required:
       - selector
-      - key_combo
+      - key
     PressKeyResponse:
       type: object
       properties:
@@ -2361,6 +2014,11 @@ components:
       - message
     PurgePipeRequest:
       type: object
+      properties:
+        pipe_id:
+          type: string
+      required:
+      - pipe_id
     RawSqlQuery:
       type: object
       properties:
@@ -2399,7 +2057,7 @@ components:
         direction:
           type: string
         amount:
-          type: number
+          type: integer
       required:
       - selector
       - direction
@@ -2417,35 +2075,25 @@ components:
     SearchMatch:
       type: object
       properties:
-        frame_id:
+        id:
           type: integer
         timestamp:
           type: string
           format: date-time
-        text_positions:
-          type: array
-          items:
-            $ref: '#/components/schemas/TextPosition'
+        snippet:
+          type: string
         app_name:
+          nullable: true
           type: string
-        window_name:
-          type: string
-        confidence:
+        score:
           type: number
-        text:
-          type: string
-        url:
-          type: string
       required:
-      - frame_id
+      - id
       - timestamp
-      - text_positions
+      - snippet
       - app_name
-      - window_name
-      - confidence
-      - text
-      - url
-    SearchQuery:
+      - score
+    SearchRequest:
       type: object
       properties:
         q:
@@ -2490,270 +2138,34 @@ components:
         focused:
           nullable: true
           type: boolean
-        browser_url:
-          nullable: true
-          type: string
       required:
-      - q
       - limit
       - offset
       - content_type
-      - start_time
-      - end_time
-      - app_name
-      - window_name
-      - frame_name
       - include_frames
-      - min_length
-      - max_length
-      - speaker_ids
-      - focused
-      - browser_url
     SearchResponse:
       type: object
       properties:
-        data:
+        results:
           type: array
           items:
             $ref: '#/components/schemas/ContentItem'
-        pagination:
-          $ref: '#/components/schemas/PaginationInfo'
-      required:
-      - data
-      - pagination
-    SearchResult:
-      oneOf:
-      - type: object
-        properties:
-          OCR:
-            type: object
-            properties:
-              frame_id:
-                type: integer
-              frame_name:
-                type: string
-              ocr_text:
-                type: string
-              text_json:
-                type: string
-              timestamp:
-                type: string
-                format: date-time
-              file_path:
-                type: string
-              offset_index:
-                type: integer
-              app_name:
-                type: string
-              ocr_engine:
-                type: string
-              window_name:
-                type: string
-              tags:
-                type: array
-                items:
-                  type: string
-              browser_url:
-                nullable: true
-                type: string
-              focused:
-                nullable: true
-                type: boolean
-            required:
-            - frame_id
-            - frame_name
-            - ocr_text
-            - text_json
-            - timestamp
-            - file_path
-            - offset_index
-            - app_name
-            - ocr_engine
-            - window_name
-            - tags
-            - browser_url
-            - focused
-        required:
-        - OCR
-      - type: object
-        properties:
-          Audio:
-            type: object
-            properties:
-              audio_chunk_id:
-                type: integer
-              transcription:
-                type: string
-              timestamp:
-                type: string
-                format: date-time
-              file_path:
-                type: string
-              offset_index:
-                type: integer
-              transcription_engine:
-                type: string
-              tags:
-                type: array
-                items:
-                  type: string
-              device_name:
-                type: string
-              device_type:
-                $ref: '#/components/schemas/DeviceType'
-              speaker:
-                $ref: '#/components/schemas/Speaker'
-              start_time:
-                nullable: true
-                type: number
-              end_time:
-                nullable: true
-                type: number
-            required:
-            - audio_chunk_id
-            - transcription
-            - timestamp
-            - file_path
-            - offset_index
-            - transcription_engine
-            - tags
-            - device_name
-            - device_type
-            - speaker
-            - start_time
-            - end_time
-        required:
-        - Audio
-      - type: object
-        properties:
-          UI:
-            type: object
-            properties:
-              id:
-                type: integer
-              text:
-                type: string
-              timestamp:
-                type: string
-                format: date-time
-              app_name:
-                type: string
-              window_name:
-                type: string
-              initial_traversal_at:
-                nullable: true
-                type: string
-                format: date-time
-              file_path:
-                type: string
-              offset_index:
-                type: integer
-              frame_name:
-                nullable: true
-                type: string
-              browser_url:
-                nullable: true
-                type: string
-            required:
-            - id
-            - text
-            - timestamp
-            - app_name
-            - window_name
-            - initial_traversal_at
-            - file_path
-            - offset_index
-            - frame_name
-            - browser_url
-        required:
-        - UI
-    SearchSpeakersRequest:
-      type: object
-      properties:
-        name:
-          nullable: true
-          type: string
-      required:
-      - name
-    SemanticSearchQuery:
-      type: object
-      properties:
-        text:
-          type: string
-        limit:
-          nullable: true
+        total:
           type: integer
-        threshold:
-          nullable: true
-          type: number
       required:
-      - text
-      - limit
-      - threshold
+      - results
+      - total
     Speaker:
       type: object
       properties:
         id:
           type: integer
         name:
-          type: string
-        metadata:
+          nullable: true
           type: string
       required:
       - id
       - name
-      - metadata
-    TagContentType:
-      type: string
-      enum:
-      - vision
-      - audio
-    TextBounds:
-      type: object
-      properties:
-        left:
-          type: number
-        top:
-          type: number
-        width:
-          type: number
-        height:
-          type: number
-      required:
-      - left
-      - top
-      - width
-      - height
-    TextPosition:
-      type: object
-      properties:
-        text:
-          type: string
-        confidence:
-          type: number
-        bounds:
-          $ref: '#/components/schemas/TextBounds'
-      required:
-      - text
-      - confidence
-      - bounds
-    TimeSeriesChunk:
-      type: object
-      properties:
-        frames:
-          type: array
-          items:
-            $ref: '#/components/schemas/FrameData'
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-      required:
-      - frames
-      - start_time
-      - end_time
     TypeByIndexRequest:
       type: object
       properties:
@@ -2784,7 +2196,7 @@ components:
       required:
       - selector
       - text
-    UiContent:
+    UIResult:
       type: object
       properties:
         id:
@@ -2838,99 +2250,53 @@ components:
       properties:
         pipe_id:
           type: string
-        source:
+        version:
           type: string
       required:
       - pipe_id
-      - source
+      - version
     UpdateSpeakerRequest:
       type: object
       properties:
         id:
           type: integer
         name:
-          nullable: true
-          type: string
-        metadata:
-          nullable: true
           type: string
       required:
       - id
       - name
-      - metadata
-    Usage:
-      type: object
-      properties:
-        prompt_tokens:
-          type: integer
-        total_tokens:
-          type: integer
-      required:
-      - prompt_tokens
-      - total_tokens
-    ValidateMediaParams:
-      type: object
-      properties:
-        file_path:
-          type: string
-      required:
-      - file_path
-    VideoMetadata:
-      type: object
-      properties:
-        creation_time:
-          type: string
-          format: date-time
-        fps:
-          type: number
-        duration:
-          type: number
-        device_name:
-          nullable: true
-          type: string
-        name:
-          nullable: true
-          type: string
-      required:
-      - creation_time
-      - fps
-      - duration
-      - device_name
-      - name
-    VisionDeviceControlRequest:
-      type: object
-      properties:
-        device_id:
-          type: integer
-      required:
-      - device_id
+
   parameters:
     ContentTypeParam:
       name: content_type
+      description: Type of content
       schema:
         type: string
+        enum:
+        - ocr
+        - audio
+        - ui
       in: path
       required: true
-      style: simple
-    IdParam:
-      name: id
-      schema:
-        type: integer
-      in: path
-      required: true
-      style: simple
-    PipeIdParam:
-      name: pipe_id
-      schema:
-        type: string
-      in: path
-      required: true
-      style: simple
     FrameIdParam:
       name: frame_id
+      description: ID of the frame
       schema:
         type: integer
       in: path
       required: true
-      style: simple
+    IdParam:
+      name: id
+      description: ID of the content item
+      schema:
+        type: integer
+      in: path
+      required: true
+    PipeIdParam:
+      name: pipe_id
+      description: ID of the pipe
+      schema:
+        type: string
+      in: path
+      required: true
 
