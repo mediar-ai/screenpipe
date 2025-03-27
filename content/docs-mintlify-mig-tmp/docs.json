@@ -18,7 +18,7 @@
             "group": "Getting Started",
             "icon": "rocket",
             "pages": [
-              "index",
+              "home",
               "getting-started"
             ]
           },
