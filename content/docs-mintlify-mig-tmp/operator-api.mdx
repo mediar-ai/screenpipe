@@ -6,31 +6,37 @@ icon: "computer-mouse"
 the operator api allows for powerful desktop automation using accessibility roles and elements. it provides a robust way to interact with applications programmatically.
 
 <Note>
-  <strong>compatibility note:</strong> operator api currently works on macos only. on windows/linux, please use the <a href="/sdk-reference#input-control-api">input control api</a> instead.
+  compatibility note:
+
+   operator api currently works on macos only. on windows/linux, please use the input control api
+
+   instead.
 </Note>
 
 to understand roles better, open the macos accessibility inspector and examine the roles for any application.
+
+[feel free to use our docs as context in cursor agent through MCP](https://docs.screenpi.pe/mcp-server#mintlify-mcp-use-our-docs-in-cursor%2C-claude%2C-etc)
 
 ## installation
 
 <Tabs>
   <Tab title="npm">
-    ```bash 
+    ```bash
     npm install @screenpipe/browser
     ```
   </Tab>
   <Tab title="pnpm">
-    ```bash 
+    ```bash
     pnpm add @screenpipe/browser
     ```
   </Tab>
   <Tab title="bun">
-    ```bash 
+    ```bash
     bun add @screenpipe/browser
     ```
   </Tab>
   <Tab title="yarn">
-    ```bash 
+    ```bash
     yarn add @screenpipe/browser
     ```
   </Tab>
@@ -91,15 +97,15 @@ async function simpleAutomation() {
 
 the operator api provides a set of intuitive methods for automating desktop interactions:
 
-| method | description | example |
-|--------|-------------|---------|
-| `openApplication(name)` | launches an application | `pipe.operator.openApplication("Chrome")` |
-| `openUrl(url, browser?)` | opens a url in a browser | `pipe.operator.openUrl("github.com")` |
-| `getByRole(role, options)` | finds elements by accessibility role | `pipe.operator.getByRole("button", {app: "Chrome"})` |
-| `getById(id, options)` | gets element by id | `pipe.operator.getById("element-123", {app: "Chrome"})` |
-| `.click()` | clicks an element | `pipe.operator.getById(id).click()` |
-| `.fill(text)` | enters text in a field | `pipe.operator.getById(id).fill("hello")` |
-| `.scroll(direction, amount)` | scrolls an element | `pipe.operator.getById(id).scroll("down", 300)` |
+| method                       | description                          | example                                                 |
+| ---------------------------- | ------------------------------------ | ------------------------------------------------------- |
+| `openApplication(name)`      | launches an application              | `pipe.operator.openApplication("Chrome")`               |
+| `openUrl(url, browser?)`     | opens a url in a browser             | `pipe.operator.openUrl("github.com")`                   |
+| `getByRole(role, options)`   | finds elements by accessibility role | `pipe.operator.getByRole("button", {app: "Chrome"})`    |
+| `getById(id, options)`       | gets element by id                   | `pipe.operator.getById("element-123", {app: "Chrome"})` |
+| `.click()`                   | clicks an element                    | `pipe.operator.getById(id).click()`                     |
+| `.fill(text)`                | enters text in a field               | `pipe.operator.getById(id).fill("hello")`               |
+| `.scroll(direction, amount)` | scrolls an element                   | `pipe.operator.getById(id).scroll("down", 300)`         |
 
 ## common accessibility roles
 
@@ -353,10 +359,10 @@ for a complete implementation with automatic tool selection, see the [hello-worl
 
 if you're having issues with the operator api:
 
-1. **macos permissions**: ensure screenpipe has accessibility permissions in system settings > privacy & security > accessibility
+1. **macos permissions**: ensure screenpipe has accessibility permissions in system settings \> privacy & security \> accessibility
 2. **app names**: use exact app names as they appear in the applications folder
 3. **timing issues**: add delays between operations, as ui elements may take time to load
 4. **debugging**: log element ids and roles to help identify the right elements
 5. **app focus**: use the `activateApp: true` option to ensure the target app is in focus
 
-for more detailed debugging, use the macos accessibility inspector to identify exact roles and properties of ui elements. 
+for more detailed debugging, use the macos accessibility inspector to identify exact roles and properties of ui elements.

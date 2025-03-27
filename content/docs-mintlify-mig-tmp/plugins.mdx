@@ -7,6 +7,8 @@ screenpipe is built for extensibility through plugins that interact with capture
 
 plugins run within screenpipe's sandboxed environment. written in typescript/javascript and nextjs.
 
+[feel free to use our docs as context in cursor agent through MCP](https://docs.screenpi.pe/mcp-server#mintlify-mcp-use-our-docs-in-cursor%2C-claude%2C-etc)
+
 ### why build pipes? 🚀
 
 regardless of progress in AI architecture, it's as good as the given context. screenpipe is the bridge between dull hallunicating AI and super intelligent agents.
@@ -14,7 +16,7 @@ regardless of progress in AI architecture, it's as good as the given context. sc
 #### for developers
 
 - **zero infrastructure**: 100% local by default, no servers or complex setups, access to your auth tokens (unlike cloud agents)
-- **typescript + rust + bun**: blazing fast environment, highly optimized pipeline, 4 AI models, running on $200 laptops, best local STT in the market
+- **typescript \+ rust \+ bun**: blazing fast environment, highly optimized pipeline, 4 AI models, running on $200 laptops, best local STT in the market
 - **full context**: rich OCR, desktop scrapping, keyboard/mouse, and audio transcription APIs
 - **open source**: no BS, no tricks, MIT license
 - **monetization ready**: Stripe integration to monetize your pipes
@@ -42,10 +44,9 @@ we recommend using `bun`, [install](https://bun.sh/docs/installation) or make su
 
 The fastest way to create a new pipe is using our CLI:
 
-
 follow installation instructions & test your pipe locally
 
-```bash 
+```bash
 bun dev
 ```
 
@@ -59,7 +60,7 @@ prerequisite: connect your Stripe account in settings/account to obtain your dev
 
 available commands:
 
-```bash 
+```bash
 # authenticate with your API key
 bunx --bun @screenpipe/dev@latest login 
 
@@ -100,16 +101,16 @@ PS: monetization requires a stripe account and US bank account, we recommend [wi
 
 ### available pipes
 
-|                        |                                                                        |      |
-| ---------------------- | ---------------------------------------------------------------------- | ---- |
-|                        | automate your second brain by logging activities to obsidian           |      |
-|                        | google-photo like gallery of your screen recordings with AI insights   |      |
-|                        | explore your data in a powerful table view with filtering and sorting  |      |
-|                        | search through your screen recordings and audio transcripts with AI    |      |
-|                        | visualize your day with AI-powered timeline of activities              |      |
-|                        | automatically identify and label different speakers using AI           |      |
-|                        | organize and summarize meetings with AI - get transcripts and insights |      |
-|                        | automate business development on linkedin                              |      |
+| |                                                                        | |
+| --- | ---------------------------------------------------------------------- | --- |
+| | automate your second brain by logging activities to obsidian           | |
+| | google-photo like gallery of your screen recordings with AI insights   | |
+| | explore your data in a powerful table view with filtering and sorting  | |
+| | search through your screen recordings and audio transcripts with AI    | |
+| | visualize your day with AI-powered timeline of activities              | |
+| | automatically identify and label different speakers using AI           | |
+| | organize and summarize meetings with AI - get transcripts and insights | |
+| | automate business development on linkedin                              | |
 
 to install a pipe from the store, just add the url of the folder in the UI and click install.
 
