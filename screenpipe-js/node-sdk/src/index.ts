@@ -16,7 +16,6 @@ import {
 } from "../../common/analytics";
 import posthog from "posthog-js";
 import { Operator } from "../../common/Operator";
-import mcpClient from "./mcp";
 
 setAnalyticsClient({
   init: posthog.init.bind(posthog),
@@ -27,7 +26,6 @@ class NodePipe {
   private analyticsInitialized = false;
   private analyticsEnabled = true;
 
-  public mcp = mcpClient;
 
   public input = {
     type: (text: string) =>

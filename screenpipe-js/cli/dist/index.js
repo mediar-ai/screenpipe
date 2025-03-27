@@ -2336,7 +2336,7 @@ var addComponentCommand = new Command10().name("add").description("add component
     const result = preFlightAdd(opts.cwd);
     if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
       logger.warn(
-        "you need to create a pipe first. run bunx --bun @screenpipe/dev@latest pipe create or visit https://docs.screenpi.pe/docs/plugins for more information."
+        "you need to create a pipe first. run bunx --bun @screenpipe/dev@latest pipe create or visit https://docs.screenpi.pe/plugins for more information."
       );
       process.exit(1);
     }

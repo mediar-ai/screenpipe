@@ -8,6 +8,7 @@
     "dark": "#000000"
   },
   "favicon": "public/favicon.ico",
+  "logo": "public/favicon.ico",
   "navigation": {
     "tabs": [
       {
@@ -37,6 +38,7 @@
             "icon": "puzzle-piece",
             "pages": [
               "plugins",
+              "mcp-server",
               "contributing"
             ]
           },
@@ -61,15 +63,15 @@
       "display": "none"
     }
   },
-  "logo": {
-    "light": "public/favicon.ico",
-    "dark": "public/favicon.ico"
-  },
   "navbar": {
     "links": [
       {
         "label": "Support",
-        "href": "mailto:louis@screenpi.pe"
+        "href": "https://discord.gg/dU9EBuw7Uq"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/mediar-ai/screenpipe"
       }
     ],
     "primary": {
