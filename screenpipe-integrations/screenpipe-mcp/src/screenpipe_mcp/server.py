@@ -93,6 +93,46 @@ async def handle_list_tools() -> list[types.Tool]:
                 }
             },
         ),
+        types.Tool(
+            name="pixel-control",
+            description=(
+                "Control mouse and keyboard at the pixel level. This is a cross-platform tool that works on all operating systems. "
+                "Use this to type text, press keys, move the mouse, and click buttons."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "action_type": {
+                        "type": "string",
+                        "enum": ["WriteText", "KeyPress", "MouseMove", "MouseClick"],
+                        "description": "Type of input action to perform",
+                    },
+                    "data": {
+                        "oneOf": [
+                            {
+                                "type": "string",
+                                "description": "Text to type or key to press (for WriteText and KeyPress)",
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "integer", "description": "X coordinate for mouse movement"},
+                                    "y": {"type": "integer", "description": "Y coordinate for mouse movement"},
+                                },
+                                "description": "Coordinates for MouseMove",
+                            },
+                            {
+                                "type": "string",
+                                "enum": ["left", "right", "middle"],
+                                "description": "Button to click for MouseClick",
+                            },
+                        ],
+                        "description": "Action-specific data",
+                    },
+                },
+                "required": ["action_type", "data"]
+            },
+        ),
     ]
     
     # Add MacOS-specific tools only if running on MacOS
@@ -391,6 +431,53 @@ async def handle_call_tool(
                 type="text",
                 text="Search Results:\n\n" + "\n".join(formatted_results)
             )]
+    
+    elif name == "pixel-control":
+        async with httpx.AsyncClient() as client:
+            try:
+                action = {
+                    "type": arguments.get("action_type"),
+                    "data": arguments.get("data")
+                }
+                
+                response = await client.post(
+                    f"{SCREENPIPE_API}/experimental/operator/pixel",
+                    json={"action": action},
+                    timeout=10.0
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                if not data.get("success", False):
+                    return [types.TextContent(
+                        type="text",
+                        text=f"failed to perform input control: {data.get('error', 'unknown error')}"
+                    )]
+                
+                action_type = arguments.get("action_type")
+                action_data = arguments.get("data")
+                
+                if action_type == "WriteText":
+                    result_text = f"successfully typed text: '{action_data}'"
+                elif action_type == "KeyPress":
+                    result_text = f"successfully pressed key: '{action_data}'"
+                elif action_type == "MouseMove":
+                    result_text = f"successfully moved mouse to coordinates: x={action_data.get('x')}, y={action_data.get('y')}"
+                elif action_type == "MouseClick":
+                    result_text = f"successfully clicked {action_data} mouse button"
+                else:
+                    result_text = "successfully performed input control action"
+                
+                return [types.TextContent(
+                    type="text",
+                    text=result_text
+                )]
+                
+            except Exception as e:
+                return [types.TextContent(
+                    type="text",
+                    text=f"failed to perform input control: {str(e)}"
+                )]
     
     # MacOS-only tools from here
     elif name == "click-element" and IS_MACOS:

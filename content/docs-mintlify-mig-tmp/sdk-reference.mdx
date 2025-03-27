@@ -788,68 +788,6 @@ async function streamMeetingInsights(settings: Settings) {
 
 check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) on github to see more ai integration patterns.
 
-### operator api
-
-for detailed information about using the operator api for desktop automation, see the dedicated [operator api](/operator-api) page.
-
-OPERATOR ONLY WORKS ON MACOS FOR NOW - screenpipe backend need to be running also
-
-on Windows/Linux, please use the [input control api](#input-control-api) instead.
-
-to understand better roles, feel free to open MacOS Accessibility Inspector and see the roles for any application.
-
-### input control api
-
-requires building the backend with the `experimental` feature flag.
-
-`cargo build --release --features experimental`
-
-```typescript
-// type text
-await pipe.input.type("hello world")
-
-// press key
-await pipe.input.press("enter")
-
-// move mouse
-await pipe.input.moveMouse(100, 200)
-
-// click
-await pipe.input.click("left") // "left" | "right" | "middle"
-```
-
-#### automating repetitive tasks
-
-```typescript
-// Example: Automate filling a form
-async function fillForm() {
-  // Move to input field and click
-  await pipe.input.moveMouse(300, 200)
-  await pipe.input.click("left")
-  
-  // Type name
-  await pipe.input.type("John Doe")
-  
-  // Tab to next field
-  await pipe.input.press("tab")
-  
-  // Type email
-  await pipe.input.type("john@example.com")
-  
-  // Tab to next field 
-  await pipe.input.press("tab")
-  
-  // Type message
-  await pipe.input.type("This is an automated message")
-  
-  // Submit form
-  await pipe.input.press("tab")
-  await pipe.input.press("enter")
-}
-
-// Call the function
-await fillForm()
-```
 
 ### notifications (desktop)
 

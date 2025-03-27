@@ -1180,7 +1180,7 @@ impl SCServer {
                 open_application_handler,
             )
             .post("/experimental/operator/open-url", open_url_handler)
-            .post("/experimental/input_control", input_control_handler)
+            .post("/experimental/operator/pixel", input_control_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)

@@ -8,7 +8,9 @@ the operator api allows for powerful desktop automation using accessibility role
 <Note>
   compatibility note:
 
-   operator api currently works on macos only. on windows/linux, please use the input control api
+   some functions of the operator api currently works on macos only. on windows/linux, please use the pixel api
+
+   [windows in progress](https://github.com/mediar-ai/screenpipe/pull/1694)
 
    instead.
 </Note>
@@ -97,17 +99,43 @@ async function simpleAutomation() {
 
 the operator api provides a set of intuitive methods for automating desktop interactions:
 
-| method                       | description                          | example                                                 |
-| ---------------------------- | ------------------------------------ | ------------------------------------------------------- |
-| `openApplication(name)`      | launches an application              | `pipe.operator.openApplication("Chrome")`               |
-| `openUrl(url, browser?)`     | opens a url in a browser             | `pipe.operator.openUrl("github.com")`                   |
-| `getByRole(role, options)`   | finds elements by accessibility role | `pipe.operator.getByRole("button", {app: "Chrome"})`    |
-| `getById(id, options)`       | gets element by id                   | `pipe.operator.getById("element-123", {app: "Chrome"})` |
-| `.click()`                   | clicks an element                    | `pipe.operator.getById(id).click()`                     |
-| `.fill(text)`                | enters text in a field               | `pipe.operator.getById(id).fill("hello")`               |
-| `.scroll(direction, amount)` | scrolls an element                   | `pipe.operator.getById(id).scroll("down", 300)`         |
+| method                          | description                          | compatibility     | example                                                 |
+| ------------------------------- | ------------------------------------ | ----------------- | ------------------------------------------------------- |
+| `openApplication(name)`         | launches an application              | macOS only        | `pipe.operator.openApplication("Chrome")`               |
+| `openUrl(url, browser?)`        | opens a url in a browser             | macOS only        | `pipe.operator.openUrl("github.com")`                   |
+| `getByRole(role, options)`      | finds elements by accessibility role | macOS only        | `pipe.operator.getByRole("button", {app: "Chrome"})`    |
+| `getById(id, options)`          | gets element by id                   | macOS only        | `pipe.operator.getById("element-123", {app: "Chrome"})` |
+| `.click()`                      | clicks an element                    | macOS only        | `pipe.operator.getById(id).click()`                     |
+| `.fill(text)`                   | enters text in a field               | macOS only        | `pipe.operator.getById(id).fill("hello")`               |
+| `.scroll(direction, amount)`    | scrolls an element                   | macOS only        | `pipe.operator.getById(id).scroll("down", 300)`         |
+| `pixel.type(text)`              | types text                           | all platforms     | `pipe.operator.pixel.type("hello world")`                        |
+| `pixel.press(key)`              | presses a keyboard key               | all platforms     | `pipe.operator.pixel.press("enter")`                             |
+| `pixel.moveMouse(x, y)`         | moves mouse cursor to position       | all platforms     | `pipe.operator.pixel.moveMouse(100, 200)`                        |
+| `pixel.click(button)`           | clicks mouse button                  | all platforms     | `pipe.operator.pixel.click("left")`                              |
+
+### pixel api
+
+pixel API is a higher level API that is useful for:
+- controlling your iPhone through iPhone mirroring (because you cannot parse the screen of your iPhone)
+- Windows and Linux which does not support yet the functions like `openApplication`, `getByRole`, `click`, etc.
+
+```typescript
+// type text
+await pipe.operator.pixel.type("hello world")
+
+// press key
+await pipe.operator.pixel.press("enter")
+
+// move mouse
+await pipe.operator.pixel.moveMouse(100, 200)
+
+// click
+await pipe.operator.pixel.click("left") // "left" | "right" | "middle"
+```
 
 ## common accessibility roles
+
+to understand better roles, feel free to open MacOS Accessibility Inspector and see the roles for any application.
 
 when using `getByRole()`, you'll need to specify the accessibility role. here are common ones:
 
