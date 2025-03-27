@@ -7,8 +7,8 @@
     "light": "#333333",
     "dark": "#000000"
   },
-  "favicon": "public/favicon.ico",
-  "logo": "public/favicon.ico",
+  "favicon": "favicon.ico",
+  "logo": "favicon.ico",
   "navigation": {
     "tabs": [
       {
