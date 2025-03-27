@@ -38,6 +38,7 @@
             "icon": "puzzle-piece",
             "pages": [
               "plugins",
+              "mcp-server",
               "contributing"
             ]
           },
