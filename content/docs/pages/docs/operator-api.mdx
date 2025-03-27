@@ -126,34 +126,13 @@ async function fillContactForm() {
   // wait for page to load (simple delay)
   await new Promise(resolve => setTimeout(resolve, 2000))
   
-  // find form fields
-  const nameField = await pipe.operator
-    .getByRole("textfield", { 
-      app: "Chrome",
-      activateApp: true,
-      nameContains: "name" 
-    })
-    .first()
-  
   const emailField = await pipe.operator
     .getByRole("textfield", { 
       app: "Chrome",
-      nameContains: "email" 
+      activateApp: true,
     })
     .first()
-  
-  const messageField = await pipe.operator
-    .getByRole("textfield", { 
-      app: "Chrome",
-      nameContains: "message" 
-    })
-    .first()
-  
-  // fill the form
-  await pipe.operator
-    .getById(nameField.id, { app: "Chrome" })
-    .fill("john doe")
-  
+
   await pipe.operator
     .getById(emailField.id, { app: "Chrome" })
     .fill("john@example.com")
@@ -166,7 +145,6 @@ async function fillContactForm() {
   const submitButton = await pipe.operator
     .getByRole("button", { 
       app: "Chrome",
-      nameContains: "submit" 
     })
     .first()
   
@@ -188,7 +166,6 @@ async function processImages() {
   await pipe.operator
     .getByRole("menuitem", { 
       app: "Adobe Photoshop",
-      nameContains: "file" 
     })
     .first()
     .then(menu => pipe.operator.getById(menu.id, { app: "Adobe Photoshop" }).click())
@@ -196,7 +173,6 @@ async function processImages() {
   await pipe.operator
     .getByRole("menuitem", { 
       app: "Adobe Photoshop",
-      nameContains: "open" 
     })
     .first()
     .then(menu => pipe.operator.getById(menu.id, { app: "Adobe Photoshop" }).click())
@@ -208,7 +184,6 @@ async function processImages() {
   await pipe.operator
     .getByRole("menuitem", { 
       app: "Adobe Photoshop",
-      nameContains: "filter" 
     })
     .first()
     .then(menu => pipe.operator.getById(menu.id, { app: "Adobe Photoshop" }).click())
