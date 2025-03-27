@@ -37,7 +37,7 @@ mod tests {
             .await
             .unwrap();
         let frame_id = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false, Some(1.0))
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -65,6 +65,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -113,6 +115,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -134,6 +138,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -189,6 +195,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -210,6 +218,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -232,7 +242,7 @@ mod tests {
             .await
             .unwrap();
         let frame_id = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false, Some(1.0))
             .await
             .unwrap();
 
@@ -297,6 +307,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -318,6 +330,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -348,7 +362,7 @@ mod tests {
             .await
             .unwrap();
         let frame_id1 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false, Some(1.0))
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -388,7 +402,7 @@ mod tests {
 
         // Insert remaining data
         let frame_id2 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false, Some(1.0))
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -489,6 +503,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -513,6 +529,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -536,6 +554,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -563,6 +583,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -585,6 +607,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -603,7 +627,7 @@ mod tests {
             .await
             .unwrap();
         let frame_id1 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false, Some(1.0))
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -641,7 +665,7 @@ mod tests {
 
         // Insert remaining data
         let frame_id2 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false, Some(1.0))
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -690,6 +714,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -716,6 +742,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1074,7 +1102,7 @@ mod tests {
 
         // Insert first frame with OCR
         let frame_id1 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false, Some(1.0))
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -1088,7 +1116,7 @@ mod tests {
 
         // Insert second frame with OCR
         let frame_id2 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false, Some(1.0))
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -1117,6 +1145,8 @@ mod tests {
                 Some("test_video"),
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1144,6 +1174,8 @@ mod tests {
                 Some("non_existent"),
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1171,6 +1203,8 @@ mod tests {
                 Some("test_video"),
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1196,6 +1230,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1245,6 +1281,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1274,6 +1312,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1296,6 +1336,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1318,6 +1360,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1334,7 +1378,7 @@ mod tests {
             .await
             .unwrap();
         let frame_id = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false, Some(1.0))
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -1400,6 +1444,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1420,6 +1466,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();
@@ -1440,6 +1488,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None
             )
             .await
             .unwrap();

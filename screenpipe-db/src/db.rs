@@ -305,6 +305,7 @@ impl DatabaseManager {
         app_name: Option<&str>,
         window_name: Option<&str>,
         focused: bool,
+        visible_percentage: Option<f32>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
@@ -339,9 +340,12 @@ impl DatabaseManager {
 
         let timestamp = timestamp.unwrap_or_else(Utc::now);
 
+        // Default set to 0% -> fully hidden
+        let visible_percentage = visible_percentage.unwrap_or(0.0) as f64;
+
         // Insert the new frame with file_path as name and app/window metadata
         let id = sqlx::query(
-            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url, app_name, window_name, focused) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url, app_name, window_name, focused, visible_percentage) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         )
         .bind(video_chunk_id)
         .bind(offset_index)
@@ -351,6 +355,7 @@ impl DatabaseManager {
         .bind(app_name)
         .bind(window_name)
         .bind(focused)
+        .bind(visible_percentage)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -402,6 +407,8 @@ impl DatabaseManager {
         frame_name: Option<&str>,
         browser_url: Option<&str>,
         focused: Option<bool>,
+        min_visible_percentage: Option<f32>,
+        max_visible_percentage: Option<f32>
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
@@ -429,6 +436,8 @@ impl DatabaseManager {
                                 frame_name,
                                 browser_url,
                                 focused,
+                                min_visible_percentage,
+                                max_visible_percentage,
                             ),
                             self.search_audio(
                                 query,
@@ -467,6 +476,8 @@ impl DatabaseManager {
                                 frame_name,
                                 browser_url,
                                 focused,
+                                min_visible_percentage,
+                                max_visible_percentage,
                             ),
                             self.search_ui_monitoring(
                                 query,
@@ -502,6 +513,8 @@ impl DatabaseManager {
                         frame_name,
                         browser_url,
                         focused,
+                        min_visible_percentage,
+                        max_visible_percentage,
                     )
                     .await?;
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
@@ -580,6 +593,8 @@ impl DatabaseManager {
                         frame_name,
                         browser_url,
                         focused,
+                        min_visible_percentage,
+                        max_visible_percentage,
                     )
                     .await?;
                 let ui_results = self
@@ -624,6 +639,8 @@ impl DatabaseManager {
                         frame_name,
                         browser_url,
                         focused,
+                        min_visible_percentage,
+                        max_visible_percentage,
                     )
                     .await?;
 
@@ -672,6 +689,8 @@ impl DatabaseManager {
         frame_name: Option<&str>,
         browser_url: Option<&str>,
         focused: Option<bool>,
+        min_visible_percentage: Option<f32>,
+        max_visible_percentage: Option<f32>
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
         let mut frame_fts_parts = Vec::new();
 
@@ -716,7 +735,8 @@ impl DatabaseManager {
             frames.window_name,
             GROUP_CONCAT(tags.name, ',') as tags,
             frames.browser_url,
-            frames.focused
+            frames.focused,
+            frames.visible_percentage
         FROM frames
         JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
         JOIN ocr_text ON frames.id = ocr_text.frame_id
@@ -731,6 +751,8 @@ impl DatabaseManager {
             AND (?3 IS NULL OR frames.timestamp <= ?3)
             AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
             AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
+            AND (?9 IS NULL OR frames.visible_percentage >= ?9)
+            AND (?10 IS NULL OR frames.visible_percentage <= ?10)
         GROUP BY frames.id
         ORDER BY frames.timestamp DESC
         LIMIT ?7 OFFSET ?8
@@ -776,6 +798,8 @@ impl DatabaseManager {
             })
             .bind(limit)
             .bind(offset)
+            .bind(min_visible_percentage)
+            .bind(max_visible_percentage)
             .fetch_all(&self.pool)
             .await?;
 
@@ -798,6 +822,7 @@ impl DatabaseManager {
                     .unwrap_or_default(),
                 browser_url: raw.browser_url,
                 focused: raw.focused,
+                visible_percentage: raw.visible_percentage
             })
             .collect())
     }
@@ -980,6 +1005,8 @@ impl DatabaseManager {
         frame_name: Option<&str>,
         browser_url: Option<&str>,
         focused: Option<bool>,
+        min_visible_percentage: Option<f32>,
+        max_visible_percentage: Option<f32>
     ) -> Result<usize, sqlx::Error> {
         // if focused or browser_url is present, we run only on OCR
         if focused.is_some() || browser_url.is_some() {
@@ -1001,6 +1028,8 @@ impl DatabaseManager {
                 frame_name,
                 browser_url,
                 focused,
+                min_visible_percentage,
+                max_visible_percentage
             ));
 
             let ui_future = Box::pin(self.count_search_results(
@@ -1016,6 +1045,8 @@ impl DatabaseManager {
                 None,
                 None,
                 None,
+                None,
+                None
             ));
 
             if app_name.is_none() && window_name.is_none() {
@@ -1032,6 +1063,8 @@ impl DatabaseManager {
                     None,
                     None,
                     None,
+                    None,
+                    None
                 ));
 
                 let (ocr_count, audio_count, ui_count) =
@@ -1096,7 +1129,9 @@ impl DatabaseManager {
                        AND (?3 IS NULL OR frames.timestamp <= ?3)
                        AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
                        AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
-                       AND (?6 IS NULL OR frames.name LIKE '%' || ?6 || '%')"#,
+                       AND (?6 IS NULL OR frames.name LIKE '%' || ?6 || '%')
+                       AND (?7 IS NULL OR frames.visible_percentage >= ?7)
+                       AND (?8 IS NULL OR frames.visible_percentage <= ?8)"#,
                 base_table = if ocr_query.is_empty() {
                     "frames
                      JOIN ocr_text ON frames.id = ocr_text.frame_id"
@@ -1169,6 +1204,8 @@ impl DatabaseManager {
                     .bind(min_length.map(|l| l as i64))
                     .bind(max_length.map(|l| l as i64))
                     .bind(frame_name)
+                    .bind(min_visible_percentage)
+                    .bind(max_visible_percentage)
                     .fetch_one(&self.pool)
                     .await?
             }
@@ -2098,6 +2135,7 @@ impl DatabaseManager {
                     .unwrap_or_default(),
                 browser_url: raw.browser_url,
                 focused: raw.focused,
+                visible_percentage: raw.visible_percentage
             })
             .collect())
     }

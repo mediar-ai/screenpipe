@@ -130,6 +130,10 @@ pub(crate) struct SearchQuery {
     focused: Option<bool>,
     #[serde(default)]
     browser_url: Option<String>,
+    #[serde(default)]
+    min_visible_percentage: Option<f32>,
+    #[serde(default)]
+    max_visible_percentage: Option<f32>
 }
 
 #[derive(OaSchema, Deserialize)]
@@ -208,6 +212,7 @@ pub struct OCRContent {
     pub frame_name: Option<String>,
     pub browser_url: Option<String>,
     pub focused: Option<bool>,
+    pub visible_percentage: Option<f32>,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Debug)]
@@ -307,7 +312,7 @@ pub(crate) async fn search(
     State(state): State<Arc<AppState>>,
 ) -> Result<JsonResponse<SearchResponse>, (StatusCode, JsonResponse<serde_json::Value>)> {
     info!(
-        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}, browser_url={:?}, focused={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}, browser_url={:?}, focused={:?}, min_visible_percentage={:?}, max_visible_percentage={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -322,6 +327,8 @@ pub(crate) async fn search(
         query.frame_name,
         query.browser_url,
         query.focused,
+        query.min_visible_percentage,
+        query.max_visible_percentage,
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -344,6 +351,8 @@ pub(crate) async fn search(
             query.frame_name.as_deref(),
             query.browser_url.as_deref(),
             query.focused,
+            query.min_visible_percentage,
+            query.max_visible_percentage,
         ),
         state.db.count_search_results(
             query_str,
@@ -358,6 +367,8 @@ pub(crate) async fn search(
             query.frame_name.as_deref(),
             query.browser_url.as_deref(),
             query.focused,
+            query.min_visible_percentage,
+            query.max_visible_percentage,
         ),
     )
     .await
@@ -385,6 +396,7 @@ pub(crate) async fn search(
                 frame_name: Some(ocr.frame_name.clone()),
                 browser_url: ocr.browser_url.clone(),
                 focused: ocr.focused,
+                visible_percentage: Some(ocr.visible_percentage.clone())
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
                 chunk_id: audio.audio_chunk_id,
@@ -1289,6 +1301,7 @@ pub struct FrameContent {
     pub window_name: Option<String>,
     pub ocr_results: Option<Vec<OCRResult>>,
     pub tags: Option<Vec<String>>,
+    pub visible_percentage: Option<f32>,
 }
 
 #[derive(Serialize, OaSchema, Deserialize, Debug)]
@@ -1326,6 +1339,7 @@ async fn add_frame_to_db(
             frame.app_name.as_deref(),
             frame.window_name.as_deref(),
             false,
+            Some(frame.visible_percentage.unwrap_or(0.0))
         )
         .await?;
 
@@ -2435,6 +2449,7 @@ async fn handle_video_export(
                             app_name: None,
                             ocr_results: None,
                             tags: None,
+                            visible_percentage: Some(0.0)
                         });
                     }
                     Err(e) => {

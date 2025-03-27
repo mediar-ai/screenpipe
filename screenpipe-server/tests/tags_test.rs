@@ -371,6 +371,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
             Some("test_app"),
             Some("test_window"),
             true,
+            None
         )
         .await
         .unwrap();
