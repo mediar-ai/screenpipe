@@ -3,53 +3,65 @@ title: "MCP"
 icon: "server"
 ---
 
-screenpipe integrates with various mcp clients, enabling ai tools to access your context. this guide covers setup and configuration across different platforms.
 
-## prerequisites
+Screenpipe offers robust capabilities for integrating with various MCP clients, allowing users to leverage its features across different platforms. This guide will walk you through the setup and usage of Screenpipe with supported MCP clients.
 
-before setting up the mcp server, ensure you have installed:
+## Prerequisites
 
-### python
-install python from the [official python website](https://www.python.org/). make sure to add python to your system's path during installation.
+Before setting up the MCP server, ensure you have the following installed:
 
-### uv package manager
-install uv using one of these commands:
+### 1. Python
+Install Python from the [official Python website](https://www.python.org/). Make sure to add Python to your system's PATH during installation.
 
+### 2. uv Package Manager
+Install uv using one of these commands based on your operating system:
+
+<Tabs>
+  <Tab title="macOS/Linux">
 ```bash
-# macos/linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# windows
+```
+  </Tab>
+  <Tab title="Windows">
+```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
+  </Tab>
+</Tabs>
 
-verify the installation:
+Verify the installation by running:
 ```bash
 uv --version
 ```
 
-## setting up mcp server
+## Supported MCP Clients
 
-run this command in your terminal:
+- [Claude Desktop](#claude-desktop)
+- [5ire Desktop App](#5ire-desktop-app)
+- [Cursor IDE](#cursor-ide)
+
+## Setting Up the MCP Server
+
+To set up the MCP server, execute the following command in your terminal:
 
 ```bash
 screenpipe mcp setup
 ```
 
-upon successful setup, you'll see:
+Upon successful setup, you will see the following confirmation:
 
 ```
-mcp setup completed successfully
-directory: C:\Users\username\.screenpipe\mcp
-config file: C:\Users\username\.screenpipe\mcp\config.json
+MCP setup completed successfully
+Directory: C:\Users\divan\.screenpipe\mcp
+Config file: C:\Users\divan\.screenpipe\mcp\config.json
 
-to run the mcp server, use this command:
-$ uv --directory C:\Users\username\.screenpipe\mcp run screenpipe-mcp --port 3030
+To run the MCP server, use this command:
+$ uv --directory C:\Users\divan\.screenpipe\mcp run screenpipe-mcp --port 3030
 ```
 
-## configuration
+## Configuration
 
-the configuration is stored in `config.json` in the `.screenpipe\mcp` directory:
+The configuration for the MCP server is stored in `config.json` located in the `.screenpipe\mcp` directory. Here is an example configuration:
 
 ```json
 {
@@ -57,7 +69,7 @@ the configuration is stored in `config.json` in the `.screenpipe\mcp` directory:
     "screenpipe": {
       "args": [
         "--directory",
-        "C:\\Users\\username\\.screenpipe\\mcp",
+        "C:\\Users\\divan\\.screenpipe\\mcp",
         "run",
         "screenpipe-mcp",
         "--port",
@@ -69,21 +81,39 @@ the configuration is stored in `config.json` in the `.screenpipe\mcp` directory:
 }
 ```
 
-## supported clients
+## Claude Desktop
 
-### claude desktop
+Screenpipe integrates with **Claude Desktop**, allowing seamless interaction via MCP. Follow this guide to set it up properly.
 
-1. open the configuration file:
+### 1. Open the Configuration File  
 
-```bash
-# windows (powershell)
-notepad $env:AppData\Claude\claude_desktop_config.json
+<Tabs>  
+  <Tab title="Windows">  
+  Open the configuration file using Notepad:  
+    <Tabs>  
+      <Tab title="PowerShell">  
+```powershell  
+notepad $env:AppData\Claude\claude_desktop_config.json  
+```  
+      </Tab>  
+      <Tab title="CMD">  
+```cmd  
+notepad %APPDATA%\Claude\claude_desktop_config.json  
+```  
+      </Tab>  
+    </Tabs>  
+  </Tab>  
+  <Tab title="macOS">  
+    Open the configuration file using your preferred editor (e.g., VSCode, Cursor, or Vim):  
+```bash  
+code "~/Library/Application Support/Claude/claude_desktop_config.json"  
+```  
+  </Tab>  
+</Tabs>  
 
-# macos
-code "~/Library/Application Support/Claude/claude_desktop_config.json"
-```
+### 2. Update the Configuration  
 
-2. update the configuration with:
+Modify the `claude_desktop_config.json` file to include the following configuration:  
 
 ```json
 {
@@ -92,7 +122,7 @@ code "~/Library/Application Support/Claude/claude_desktop_config.json"
             "command": "uv",
             "args": [
                 "--directory",
-                "C:\\Users\\username\\.screenpipe\\mcp",
+                "C:\\Users\\divan\\.screenpipe\\mcp",
                 "run",
                 "screenpipe-mcp",
                 "--port",
@@ -101,56 +131,52 @@ code "~/Library/Application Support/Claude/claude_desktop_config.json"
         }
     }
 }
-```
+```  
 
-3. restart claude desktop
+> **Note:** Ensure that this configuration matches the generated `config.json` by the [MCP server setup](#setting-up-the-mcp-server).  
 
-when setup is successful, you'll see a hammer icon in the interface.
+### 3. Restart Claude Desktop  
 
-### 5ire desktop app
+After making changes to the configuration, restart Claude Desktop to apply the updates.  
 
-1. launch the 5ire desktop app
-2. click on "tools" from the left sidebar
-3. click "new" to add a tool
-4. enter "screenpipe" in the "tool key" field
-5. paste the mcp server command in the "command" field:
+<Frame>
+  <img  
+    src="public/claude-setup.gif"  
+    alt="Claude Desktop App"  
+  /> 
+</Frame>
 
-```
-uv --directory C:\Users\username\.screenpipe\mcp run screenpipe-mcp --port 3030
-```
+If the setup is successful, you'll see a **hammer icon** appear in the interface.  
 
-6. save the configuration
-7. toggle the switch to enable the tool
+## Cursor IDE
 
-### cursor ide
+Screenpipe MCP can be integrated with **Cursor IDE** to make it available across all your projects. Follow these steps to set it up.
 
-1. launch cursor ide
-2. open settings (gear icon)
-3. select "mcp" from the left sidebar
-4. click "add new global mcp server"
-5. create or update configuration file:
+### 1. Open Cursor Settings
+- Launch **Cursor IDE**.
+- Click on the **gear icon** to open **Settings**.
+- In the left sidebar, select **MCP**.
 
-```json
-{
-  "mcpServers": {
-    "screenpipe": {
-      "args": [
-        "--directory",
-        "C:\\Users\\username\\.screenpipe\\mcp",
-        "run",
-        "screenpipe-mcp",
-        "--port",
-        "3030"
-      ],
-      "command": "uv"
-    }
-  }
-}
-```
+### 2. Add a Global MCP Server
+- Click on **"Add New Global MCP Server"**.
+- If the configuration file doesn't exist yet, click **"Create File"** (as shown in Cursor IDE).
+- Paste the configuration from the [Configuration](#configuration) section.
 
-6. click the refresh icon next to mcp servers
-7. open a new composer and enable agent mode
+### 3. Restart MCP in Cursor
+- Navigate back to the **Cursor Settings** tab.
+- Click the **refresh icon** next to MCP servers.
+    <Frame>
+      <img  
+        src="public/cursor-setup.gif"  
+        alt="Cursor IDE" 
+      /> 
+    </Frame>
 
-## advanced usage
+That's it! Now Cursor IDE should recognize and use the Screenpipe MCP server.
+- Start by opening a new Composer and enable Agent mode
+- From there onwards you can use this tool
 
-for more details on integrating screenpipe with mcp clients, visit our [github repository](https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-integrations/screenpipe-mcp).
+
+## Important Note
+
+For more detailed information, please refer to our [GitHub repository](https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-integrations/screenpipe-mcp). 
