@@ -1,5 +1,3 @@
-
-
 # javascript sdk reference
 
 screenpipe provides two sdk packages:
@@ -14,23 +12,23 @@ both sdks provide type-safe interfaces to interact with screenpipe's core functi
 #### node.js sdk
 
 <Tabs>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="npm">
+    ```bash 
     npm install @screenpipe/js
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="pnpm">
+    ```bash 
     pnpm add @screenpipe/js
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="bun">
+    ```bash 
     bun add @screenpipe/js
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="yarn">
+    ```bash 
     yarn add @screenpipe/js
     ```
   </Tab>
@@ -39,23 +37,23 @@ both sdks provide type-safe interfaces to interact with screenpipe's core functi
 #### browser sdk
 
 <Tabs>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="npm">
+    ```bash 
     npm install @screenpipe/browser
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="pnpm">
+    ```bash 
     pnpm add @screenpipe/browser
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="bun">
+    ```bash 
     bun add @screenpipe/browser
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="yarn">
+    ```bash 
     yarn add @screenpipe/browser
     ```
   </Tab>
@@ -785,28 +783,212 @@ async function streamMeetingInsights(settings: Settings) {
 
 check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) on github to see more ai integration patterns.
 
-### notifications (desktop)
+
+
+### operator api
+
+the operator api allows for more powerful desktop automation using accessibility roles and elements. it provides a robust way to interact with applications programmatically.
+
+OPERATOR ONLY WORKS ON MACOS FOR NOW - screenpipe backend need to be running also
+
+on Windows/Linux, please use the [input control api](#input-control-api) instead.
+
+to understand better roles, feel free to open MacOS Accessibility Inspector and see the roles for any application.
 
 ```typescript
-await pipe.sendDesktopNotification({
-  title: "meeting starting",
-  body: "your standup begins in 5 minutes",
-})
+import { pipe } from '@screenpipe/browser'
+
+async function simpleAutomation() {
+  try {
+    // open an application
+    await pipe.operator.openApplication("Chrome")
+    
+    // navigate to a website
+    await pipe.operator.openUrl("https://github.com/mediar-ai/screenpipe")
+    
+    // find search fields by role
+    const searchFields = await pipe.operator
+      .getByRole("searchfield", {
+        app: "Chrome",
+        activateApp: true
+      })
+      .all(3)
+    
+    if (searchFields.length > 0) {
+      // fill the search field
+      await pipe.operator
+        .getById(searchFields[0].id, { app: "Chrome" })
+        .fill("automation")
+      
+      // click a button
+      const buttons = await pipe.operator
+        .getByRole("button", { app: "Chrome" })
+        .all(5)
+      
+      if (buttons.length > 0) {
+        await pipe.operator
+          .getById(buttons[0].id, { app: "Chrome" })
+          .click()
+      }
+      
+      // scroll page content
+      await pipe.operator
+        .getById(searchFields[0].id, { app: "Chrome" })
+        .scroll("down", 300)
+    }
+  } catch (error) {
+    console.error("automation failed:", error)
+  }
+}
 ```
 
-### node.js specific features
+#### core operator methods
 
-the node sdk includes additional features not available in the browser:
+| method | description | example |
+|--------|-------------|---------|
+| `openApplication(name)` | launches an application | `pipe.operator.openApplication("Chrome")` |
+| `openUrl(url, browser?)` | opens a url in a browser | `pipe.operator.openUrl("github.com")` |
+| `getByRole(role, options)` | finds elements by accessibility role | `pipe.operator.getByRole("button", {app: "Chrome"})` |
+| `getById(id, options)` | gets element by id | `pipe.operator.getById("element-123", {app: "Chrome"})` |
+| `.click()` | clicks an element | `pipe.operator.getById(id).click()` |
+| `.fill(text)` | enters text in a field | `pipe.operator.getById(id).fill("hello")` |
+| `.scroll(direction, amount)` | scrolls an element | `pipe.operator.getById(id).scroll("down", 300)` |
+
+#### using operator api with vercel ai sdk
+
+for more powerful automation, combine the operator api with vercel ai sdk to enable ai-driven desktop interactions:
 
 ```typescript
-// settings management
-const settings = await pipe.settings.getAll()
-await pipe.settings.update({ aiModel: "gpt-4" })
+import { useState } from "react"
+import { streamText, convertToCoreMessages } from "ai"
+import { createOpenAI } from "@ai-sdk/openai"
+import { pipe } from "@screenpipe/browser"
+import { z } from "zod"
 
-// inbox management (node only)
-const messages = await pipe.inbox.getMessages()
-await pipe.inbox.clearMessages()
+export function AIAutomationAgent() {
+  const [input, setInput] = useState("")
+  const [output, setOutput] = useState("")
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setOutput("")
+    
+    const model = createOpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    })("gpt-4o")
+    
+    const result = streamText({
+      model,
+      messages: convertToCoreMessages([{
+        role: "user",
+        content: input
+      }]),
+      system: "you are a desktop automation assistant. help users by performing actions on their computer.",
+      tools: {
+        openApplication: {
+          description: "open an application",
+          parameters: z.object({
+            appName: z.string().describe("the name of the application to open")
+          }),
+          execute: async ({ appName }) => {
+            const success = await pipe.operator.openApplication(appName)
+            return success
+              ? `opened ${appName} successfully`
+              : `failed to open ${appName}`
+          }
+        },
+        
+        openUrl: {
+          description: "open a url in a browser",
+          parameters: z.object({
+            url: z.string().describe("the url to open"),
+            browser: z.string().optional().describe("the browser to use")
+          }),
+          execute: async ({ url, browser }) => {
+            const success = await pipe.operator.openUrl(url, browser)
+            return success
+              ? `opened ${url} in ${browser || "default browser"}`
+              : `failed to open ${url}`
+          }
+        },
+        
+        findAndClick: {
+          description: "find an element by role and click it",
+          parameters: z.object({
+            app: z.string().describe("the application name"),
+            role: z.string().describe("the accessibility role of the element")
+          }),
+          execute: async ({ app, role }) => {
+            try {
+              const elements = await pipe.operator
+                .getByRole(role, { app, activateApp: true })
+                .all(5)
+                
+              if (elements.length > 0) {
+                await pipe.operator
+                  .getById(elements[0].id, { app })
+                  .click()
+                return `clicked ${role} element in ${app}`
+              }
+              return `no ${role} elements found in ${app}`
+            } catch (error) {
+              return `error: ${error.message}`
+            }
+          }
+        },
+        
+        fillText: {
+          description: "fill text in a form field",
+          parameters: z.object({
+            app: z.string().describe("the application name"),
+            role: z.string().describe("the role of the element to fill"),
+            text: z.string().describe("the text to enter")
+          }),
+          execute: async ({ app, role, text }) => {
+            try {
+              const elements = await pipe.operator
+                .getByRole(role, { app, activateApp: true })
+                .all(5)
+                
+              if (elements.length > 0) {
+                await pipe.operator
+                  .getById(elements[0].id, { app })
+                  .fill(text)
+                return `filled text in ${role} element in ${app}`
+              }
+              return `no ${role} elements found in ${app}`
+            } catch (error) {
+              return `error: ${error.message}`
+            }
+          }
+        }
+      },
+      toolCallStreaming: true,
+      maxSteps: 5
+    })
+    
+    for await (const chunk of result.textStream) {
+      setOutput(prev => prev + chunk)
+    }
+  }
+  
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          placeholder="e.g., 'open chrome and go to github'"
+        />
+        <button type="submit">run</button>
+      </form>
+      <div>{output}</div>
+    </div>
+  )
+}
 ```
+
+for a complete implementation with automatic tool selection, see the [hello-world-computer-use](https://github.com/mediar-ai/screenpipe/blob/main/pipes/hello-world-computer-use/components/chat.tsx) example pipe.
 
 ### input control api
 
@@ -861,9 +1043,33 @@ async function fillForm() {
 await fillForm()
 ```
 
+### notifications (desktop)
+
+```typescript
+await pipe.sendDesktopNotification({
+  title: "meeting starting",
+  body: "your standup begins in 5 minutes",
+})
+```
+
+### node.js specific features
+
+the node sdk includes additional features not available in the browser:
+
+```typescript
+// settings management
+const settings = await pipe.settings.getAll()
+await pipe.settings.update({ aiModel: "gpt-4" })
+
+// inbox management (node only)
+const messages = await pipe.inbox.getMessages()
+await pipe.inbox.clearMessages()
+```
+
 ### LLM links
 
 paste these links into your Cursor chat for context:
 
-- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts>
-- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/node-sdk/src/index.ts>
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/node-sdk/src/index.ts
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/common/Operator.ts

@@ -14,14 +14,14 @@
 ### install cli
 
 <Tabs>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="macos/linux">
+    ```bash 
     curl -fsSL get.screenpi.pe/cli | sh
     screenpipe
     ```
   </Tab>
-  <Tab title="Tab">
-    ```powershell copy
+  <Tab title="windows">
+    ```powershell 
     iwr get.screenpi.pe/cli.ps1 | iex
     screenpipe.exe
     ```
@@ -36,7 +36,7 @@
 
 then query the data using our javaScript sdk:
 
-```typescript copy
+```typescript 
 import { pipe } from "@screenpipe/js";
 
 async function queryScreenpipe() {
@@ -76,10 +76,10 @@ now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to a
 screenpipe can connect to various AI providers to process your data. here's how to set up popular local AI providers:
 
 <Tabs>
-  <Tab title="Tab">
+  <Tab title="ollama">
     1. install ollama from [ollama.ai](https://ollama.ai) and run your preferred model
 
-    ```bash copy
+    ```bash 
     # start ollama with your preferred model
     ollama run phi4:14b-q4_K_M
     ```
@@ -88,36 +88,42 @@ screenpipe can connect to various AI providers to process your data. here's how 
 
     that's it\! screenpipe will now use ollama for AI like search, rewind, and more. you can change the model in settings.
   </Tab>
-  <Tab title="Tab">
+  <Tab title="LMStudio">
     to use LMStudio:
 
     1. download and install [LMStudio](https://lmstudio.ai)
     2. select your preferred model
     3. start the local server
 
-    <img
-      src="/lmstudio2.png"
-      alt="Select model in LMStudio"
-      width={800}
-      height={450}
-      className="rounded-lg"
-    />
+    <Frame>
+      <img
+        src="/lmstudio2.png"
+        alt="Select model in LMStudio"
+        width={800}
+        height={450}
+        className="rounded-lg"
+      />
+    </Frame>
 
-    <img
-      src="/lmstudio3.png"
-      alt="Start server in LMStudio"
-      width={800}
-      height={450}
-      className="rounded-lg"
-    />
+    <Frame>
+      <img
+        src="/lmstudio3.png"
+        alt="Start server in LMStudio"
+        width={800}
+        height={450}
+        className="rounded-lg"
+      />
+    </Frame>
 
-    <img
-      src="/lmstudio1.png"
-      alt="LMStudio setup"
-      width={800}
-      height={450}
-      className="rounded-lg"
-    />
+    <Frame> 
+      <img
+        src="/lmstudio1.png"
+        alt="LMStudio setup"
+        width={800}
+        height={450}
+        className="rounded-lg"
+      />
+    </Frame>
   </Tab>
 </Tabs>
 
