@@ -8,6 +8,7 @@
     "dark": "#000000"
   },
   "favicon": "public/favicon.ico",
+  "logo": "public/favicon.ico",
   "navigation": {
     "tabs": [
       {
@@ -60,10 +61,6 @@
     "playground": {
       "display": "none"
     }
-  },
-  "logo": {
-    "light": "public/favicon.ico",
-    "dark": "public/favicon.ico"
   },
   "navbar": {
     "links": [
