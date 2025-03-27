@@ -439,6 +439,37 @@ az vm user update \
 
 now you can either dev screenpipe on linux or run screenpipe in the cloud that record your local macos. make sure to configure microsoft remote desktop to forward audio
 
+## generating openapi.yaml
+
+run screenpipe first and then go to http://localhost:3030/openapi.yaml
+
+```bash
+open http://localhost:3030/openapi.yaml
+```
+
+we use this for our docs through mintlify, usually the output is broken and i use cursor agent to fix it using ths prompt:
+
+```
+please run this command:
+npx @mintlify/scraping@latest openapi-file content/docs-mintlify-mig-tmp/openapi.yaml -o /tmp
+and fix the openapi.yaml file and rerun the command until it works
+```
+
+i also run this prompt in agent mode ...
+
+```
+how can i improve this openapi?
+mainly want to showcase most useful endpoint in priority and stuff like getting context ...
+get rid of semantic search bcs not prod rdy also
+ @index.ts 
+```
+
+make sure to run 
+
+`npx @mintlify/scraping@latest openapi-file content/docs-mintlify-mig-tmp/openapi.yaml -o /tmp`
+
+to validate the openapi.yaml file is valid btw before pushing 
+
 ## join the community
 
 say 👋 in our [public discord channel](https://discord.gg/dU9EBuw7Uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.

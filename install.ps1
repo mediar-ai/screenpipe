@@ -64,22 +64,20 @@ try {
     }
     else {
         Write-Host "Installing bun..."
-        powershell -c "irm bun.sh/install.ps1|iex"
+        Invoke-Expression (Invoke-RestMethod -Uri "https://bun.sh/install.ps1")
     }
     
     # Install Visual Studio Redistributables to avoid any ort issues
     Write-Host "Installing Visual Studio Redistributables..."
-    Write-Host ""
-    # Inform the user about the need for elevation
     Write-Host "The script requires administrative privileges. You will be prompted to allow this action."
-    
-    Start-Process powershell -Verb RunAs -ArgumentList @"
-    -NoProfile -ExecutionPolicy Bypass -Command "& {
+
+    $installScript = @"
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
     Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
-    }"
-    "@
+"@
+
+    Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$installScript`""
 
     Write-Host "Installation Complete"
     Write-Host ""

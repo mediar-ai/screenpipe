@@ -1,8 +1,8 @@
 use crate::operator::element::UIElementImpl;
 use crate::operator::platforms::AccessibilityEngine;
+use crate::operator::ClickResult;
 use crate::operator::{AutomationError, Locator, Selector, UIElement, UIElementAttributes};
 use std::fmt::Debug;
-use crate::operator::ClickResult;
 
 pub struct WindowsEngine;
 
@@ -216,5 +216,11 @@ impl UIElementImpl for WindowsUIElement {
 
     fn clone_box(&self) -> Box<dyn UIElementImpl> {
         Box::new(WindowsUIElement)
+    }
+
+    fn scroll(&self, _direction: &str, _amount: f64) -> Result<(), AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Windows implementation is not yet available".to_string(),
+        ))
     }
 }

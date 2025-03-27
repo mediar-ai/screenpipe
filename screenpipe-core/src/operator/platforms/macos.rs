@@ -18,8 +18,10 @@ use core_graphics::display::{CGPoint, CGSize};
 use core_graphics::event::{CGEvent, CGEventFlags, CGKeyCode};
 use core_graphics::event_source::CGEventSource;
 use serde_json::{self, Value};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use tracing::{debug, trace};
 
@@ -589,8 +591,13 @@ impl AccessibilityEngine for MacOSEngine {
                 let collector = ElementFinderWithWindows::new(
                     &self.system_wide.0,
                     move |e| {
-                        // Use move to take ownership of id_owned
-                        e.identifier().unwrap_or(CFString::new("")).to_string() == id_owned
+                        // Create temporary MacOSUIElement to generate stable ID
+                        let element = MacOSUIElement {
+                            element: ThreadSafeAXUIElement::new(e.clone()),
+                            use_background_apps: false, // temporary value
+                            activate_app: false,        // temporary value
+                        };
+                        element.id().unwrap_or_default() == id_owned
                     },
                     None,
                 );
@@ -673,12 +680,51 @@ impl AccessibilityEngine for MacOSEngine {
             Selector::Path(_) => Err(AutomationError::UnsupportedOperation(
                 "Path selector not implemented".to_string(),
             )),
-            _ => {
-                // For more complex selectors, we'll mark as unimplemented for now
-                Err(AutomationError::UnsupportedOperation(
-                    "Complex selector not implemented".to_string(),
-                ))
+            Selector::Chain(selectors) => {
+                // For now, only support role -> id pattern
+                if selectors.len() != 2 {
+                    return Err(AutomationError::UnsupportedOperation(
+                        "Only role -> id chains are supported".to_string(),
+                    ));
+                }
+
+                // Check if it's a role -> id pattern
+                if let (Selector::Role { role, name: _ }, Selector::Id(id)) =
+                    (&selectors[0], &selectors[1])
+                {
+                    debug!("Processing chain: role '{}' -> id '{}'", role, id);
+
+                    // First find elements matching the role
+                    let role_elements = self.find_elements(&selectors[0], root)?;
+                    debug!(
+                        "Found {} elements matching role '{}'",
+                        role_elements.len(),
+                        role
+                    );
+
+                    // Then find the one with matching id
+                    for element in role_elements {
+                        if let Some(element_id) = element.id() {
+                            if element_id == *id {
+                                debug!("Found matching element with id '{}'", id);
+                                return Ok(element);
+                            }
+                        }
+                    }
+
+                    return Err(AutomationError::ElementNotFound(format!(
+                        "No element found with role '{}' and id '{}'",
+                        role, id
+                    )));
+                } else {
+                    return Err(AutomationError::UnsupportedOperation(
+                        "Only role -> id chains are supported".to_string(),
+                    ));
+                }
             }
+            Selector::Filter(_) => Err(AutomationError::UnsupportedOperation(
+                "Filter selector not implemented".to_string(),
+            )),
         }
     }
 
@@ -919,20 +965,35 @@ impl std::fmt::Debug for MacOSUIElement {
 impl MacOSUIElement {
     // Helper function to get the containing application
     fn get_application(&self) -> Option<MacOSUIElement> {
-        let attr = AXAttribute::new(&CFString::new("AXTopLevelUIElement"));
-        match self.element.0.attribute(&attr) {
-            Ok(value) => {
-                if let Some(app) = value.downcast::<AXUIElement>() {
-                    Some(MacOSUIElement {
-                        element: ThreadSafeAXUIElement::new(app),
+        // inefficient but works
+        // Start with current element
+        let mut current = self.element.clone();
+
+        // Keep traversing up until we find an application or hit the top
+        loop {
+            // Check if current element is an application
+            if let Ok(role) = current.0.role() {
+                if role.to_string() == "AXApplication" {
+                    return Some(MacOSUIElement {
+                        element: current,
                         use_background_apps: self.use_background_apps,
                         activate_app: self.activate_app,
-                    })
-                } else {
-                    None
+                    });
                 }
             }
-            Err(_) => None,
+
+            // Try to get parent
+            let parent_attr = AXAttribute::new(&CFString::new("AXParent"));
+            match current.0.attribute(&parent_attr) {
+                Ok(value) => {
+                    if let Some(parent) = value.downcast::<AXUIElement>() {
+                        current = ThreadSafeAXUIElement::new(parent);
+                    } else {
+                        return None;
+                    }
+                }
+                Err(_) => return None,
+            }
         }
     }
 
@@ -950,6 +1011,27 @@ impl MacOSUIElement {
 
     // Add these methods to the MacOSUIElement impl block
     fn click_auto(&self) -> Result<ClickResult, AutomationError> {
+        // only mouse simulation works on web and it seems function don't fail on web so let's try to detect if we are on web based on app
+        // eg chrome, arc, safari, etc
+        let app_name = self.get_application();
+
+        if let Some(app) = app_name {
+            // kind of dirty and hacky but it works
+            let app_name = app.get_text(1).unwrap_or_default().to_lowercase();
+            if app_name.contains("chrome")
+                || app_name.contains("safari")
+                || app_name.contains("arc")
+                || app_name.contains("firefox")
+                || app_name.contains("edge")
+                || app_name.contains("brave")
+                || app_name.contains("opera")
+                || app_name.contains("vivaldi")
+                || app_name.contains("microsoft edge")
+            {
+                return self.click_mouse_simulation();
+            }
+        }
+
         // 1. Try AXPress action first
         match self.click_press() {
             Ok(result) => return Ok(result),
@@ -1157,12 +1239,76 @@ impl MacOSUIElement {
 
         Ok((key_code, flags))
     }
+
+    fn generate_stable_id(&self) -> String {
+        let mut hasher = DefaultHasher::new();
+
+        // Collect stable attributes
+        let role = self
+            .element
+            .0
+            .role()
+            .map(|r| r.to_string())
+            .unwrap_or_default();
+        let title = self
+            .element
+            .0
+            .title()
+            .map(|t| t.to_string())
+            .unwrap_or_default();
+        let desc = self
+            .element
+            .0
+            .description()
+            .map(|d| d.to_string())
+            .unwrap_or_default();
+
+        // Get position if available (as integers to be more stable)
+        let (_, _, w, h) = self
+            .bounds()
+            .map(|(x, y, w, h)| {
+                (
+                    x.round() as i32,
+                    y.round() as i32,
+                    w.round() as i32,
+                    h.round() as i32,
+                )
+            })
+            .unwrap_or((0, 0, 0, 0));
+
+        let count_of_children = self.children().unwrap_or_default().len();
+
+        // Hash combination of stable attributes
+        role.hash(&mut hasher);
+        title.hash(&mut hasher);
+        desc.hash(&mut hasher);
+        // not using position because things more likely move than change size
+        // x.hash(&mut hasher);
+        // y.hash(&mut hasher);
+        w.hash(&mut hasher);
+        h.hash(&mut hasher);
+        count_of_children.hash(&mut hasher);
+        // Get parent info if available to make ID more unique
+        if let Ok(Some(parent)) = self.parent() {
+            if let Some(parent_role) = parent.attributes().label {
+                parent_role.hash(&mut hasher);
+            }
+        }
+
+        format!("ax_{:x}", hasher.finish())
+    }
 }
 
 impl UIElementImpl for MacOSUIElement {
     fn object_id(&self) -> usize {
-        // Use the pointer address of the inner AXUIElement as a unique ID
-        self.element.0.as_ref() as *const _ as usize
+        // Convert stable string ID to usize
+        let stable_id = self.generate_stable_id();
+        let mut hasher = DefaultHasher::new();
+        stable_id.hash(&mut hasher);
+        let id = hasher.finish() as usize;
+        debug!("Stable ID: {:?}", stable_id);
+        debug!("Hash: {:?}", id);
+        id
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -1851,6 +1997,57 @@ impl UIElementImpl for MacOSUIElement {
             use_background_apps: self.use_background_apps,
             activate_app: self.activate_app,
         })
+    }
+
+    fn scroll(&self, direction: &str, amount: f64) -> Result<(), AutomationError> {
+        // First try to focus the element to ensure it can receive scroll events
+        let _ = self.focus();
+
+        // Get element bounds to determine where to scroll
+        let (x, y, width, height) = self.bounds()?;
+        let center_x = x + width / 2.0;
+        let center_y = y + height / 2.0;
+
+        // Create event source
+        let source =
+            CGEventSource::new(core_graphics::event_source::CGEventSourceStateID::HIDSystemState)
+                .map_err(|_| {
+                AutomationError::PlatformError("Failed to create event source".to_string())
+            })?;
+
+        // Convert amount to scroll units (typically lines)
+        let scroll_amount = amount as i32;
+
+        // Create scroll event based on direction
+        let (scroll_x, scroll_y) = match direction.to_lowercase().as_str() {
+            "up" => (0, -scroll_amount),
+            "down" => (0, scroll_amount),
+            "left" => (-scroll_amount, 0),
+            "right" => (scroll_amount, 0),
+            _ => {
+                return Err(AutomationError::InvalidArgument(format!(
+                    "Invalid scroll direction: {}. Must be up, down, left, or right",
+                    direction
+                )))
+            }
+        };
+
+        // Create scroll wheel event
+        let scroll_event = CGEvent::new_scroll_event(
+            source, 0, 1, // number of wheels (1 for standard mouse wheel)
+            scroll_y, scroll_x, 0, // z scroll amount (unused)
+        )
+        .map_err(|_| AutomationError::PlatformError("Failed to create scroll event".to_string()))?;
+
+        // Post the event at the center point location
+        scroll_event.post(core_graphics::event::CGEventTapLocation::HID);
+
+        debug!(
+            "Scrolled {} by {} lines at position ({}, {})",
+            direction, amount, center_x, center_y
+        );
+
+        Ok(())
     }
 }
 

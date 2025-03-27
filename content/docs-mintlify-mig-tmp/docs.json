@@ -1,60 +1,89 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Screenpipe Documentation",
+  "name": "screenpipe documentation",
   "colors": {
     "primary": "#000000",
     "light": "#333333",
     "dark": "#000000"
   },
-  "favicon": "/favicon.ico",
+  "favicon": "public/favicon.ico",
   "navigation": {
     "tabs": [
       {
         "tab": "Documentation",
+        "icon": "book",
         "pages": [
-          "pages/index",
-          "pages/getting-started",
-          "pages/sdk-reference",
-          "pages/architecture",
-          "pages/cli-reference",
-          "pages/plugins",
-          "pages/contributing",
-          "pages/faq"
+          {
+            "group": "Getting Started",
+            "icon": "rocket",
+            "pages": [
+              "home",
+              "getting-started"
+            ]
+          },
+          {
+            "group": "Reference",
+            "icon": "code",
+            "pages": [
+              "sdk-reference",
+              "operator-api",
+              "architecture",
+              "cli-reference"
+            ]
+          },
+          {
+            "group": "Extend",
+            "icon": "puzzle-piece",
+            "pages": [
+              "plugins",
+              "contributing"
+            ]
+          },
+          {
+            "group": "Help",
+            "icon": "question-circle",
+            "pages": [
+              "faq"
+            ]
+          }
         ]
       },
       {
         "tab": "API Reference",
+        "icon": "terminal",
         "openapi": "openapi.yaml"
       }
     ]
   },
+  "api": {
+    "playground": {
+      "display": "none"
+    }
+  },
   "logo": {
-    "light": "/favicon.ico",
-    "dark": "/favicon.ico"
+    "light": "public/favicon.ico",
+    "dark": "public/favicon.ico"
   },
   "navbar": {
     "links": [
       {
-        "label": "support",
-        "href": "mailto:support@screenpipe.co"
+        "label": "Support",
+        "href": "mailto:louis@screenpi.pe"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "download",
-      "href": "https://screenpipe.co/download"
+      "label": "Get App",
+      "href": "https://screenpi.pe/onboarding"
     }
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/screenpipe"
+      "github": "https://github.com/mediar-ai/screenpipe"
     }
   },
-  "modeToggle": {
-    "default": "dark"
-  },
   "search": {
-    "prompt": "search documentation..."
+    "prompt": "Search documentation..."
   }
 }

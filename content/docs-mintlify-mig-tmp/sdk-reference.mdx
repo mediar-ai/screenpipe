@@ -1,6 +1,7 @@
-
-
-# javascript sdk reference
+---
+title: "Javascript SDK Reference"
+icon: "package"
+---
 
 screenpipe provides two sdk packages:
 
@@ -14,23 +15,23 @@ both sdks provide type-safe interfaces to interact with screenpipe's core functi
 #### node.js sdk
 
 <Tabs>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="npm">
+    ```bash 
     npm install @screenpipe/js
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="pnpm">
+    ```bash 
     pnpm add @screenpipe/js
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="bun">
+    ```bash 
     bun add @screenpipe/js
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="yarn">
+    ```bash 
     yarn add @screenpipe/js
     ```
   </Tab>
@@ -39,23 +40,23 @@ both sdks provide type-safe interfaces to interact with screenpipe's core functi
 #### browser sdk
 
 <Tabs>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="npm">
+    ```bash 
     npm install @screenpipe/browser
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="pnpm">
+    ```bash 
     pnpm add @screenpipe/browser
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="bun">
+    ```bash 
     bun add @screenpipe/browser
     ```
   </Tab>
-  <Tab title="Tab">
-    ```bash copy
+  <Tab title="yarn">
+    ```bash 
     yarn add @screenpipe/browser
     ```
   </Tab>
@@ -785,28 +786,15 @@ async function streamMeetingInsights(settings: Settings) {
 
 check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) on github to see more ai integration patterns.
 
-### notifications (desktop)
+### operator api
 
-```typescript
-await pipe.sendDesktopNotification({
-  title: "meeting starting",
-  body: "your standup begins in 5 minutes",
-})
-```
+for detailed information about using the operator api for desktop automation, see the dedicated [operator api](/operator-api) page.
 
-### node.js specific features
+OPERATOR ONLY WORKS ON MACOS FOR NOW - screenpipe backend need to be running also
 
-the node sdk includes additional features not available in the browser:
+on Windows/Linux, please use the [input control api](#input-control-api) instead.
 
-```typescript
-// settings management
-const settings = await pipe.settings.getAll()
-await pipe.settings.update({ aiModel: "gpt-4" })
-
-// inbox management (node only)
-const messages = await pipe.inbox.getMessages()
-await pipe.inbox.clearMessages()
-```
+to understand better roles, feel free to open MacOS Accessibility Inspector and see the roles for any application.
 
 ### input control api
 
@@ -861,9 +849,33 @@ async function fillForm() {
 await fillForm()
 ```
 
+### notifications (desktop)
+
+```typescript
+await pipe.sendDesktopNotification({
+  title: "meeting starting",
+  body: "your standup begins in 5 minutes",
+})
+```
+
+### node.js specific features
+
+the node sdk includes additional features not available in the browser:
+
+```typescript
+// settings management
+const settings = await pipe.settings.getAll()
+await pipe.settings.update({ aiModel: "gpt-4" })
+
+// inbox management (node only)
+const messages = await pipe.inbox.getMessages()
+await pipe.inbox.clearMessages()
+```
+
 ### LLM links
 
 paste these links into your Cursor chat for context:
 
-- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts>
-- <https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/node-sdk/src/index.ts>
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/node-sdk/src/index.ts
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/common/Operator.ts
