@@ -67,7 +67,11 @@
     "links": [
       {
         "label": "Support",
-        "href": "mailto:louis@screenpi.pe"
+        "href": "https://discord.gg/dU9EBuw7Uq"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/mediar-ai/screenpipe"
       }
     ],
     "primary": {
