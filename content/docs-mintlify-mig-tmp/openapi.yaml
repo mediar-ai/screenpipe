@@ -1776,7 +1776,6 @@ components:
         app:
           nullable: true
           type: string
-      required: []
     ListInteractableElementsResponse:
       type: object
       properties:
