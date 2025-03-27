@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Screenpipe Documentation",
+  "name": "screenpipe documentation",
   "colors": {
     "primary": "#000000",
     "light": "#333333",
@@ -27,6 +27,7 @@
             "icon": "code",
             "pages": [
               "sdk-reference",
+              "operator-api",
               "architecture",
               "cli-reference"
             ]
@@ -62,13 +63,13 @@
   "navbar": {
     "links": [
       {
-        "label": "support",
-        "href": "mailto:support@screenpipe.co"
+        "label": "Support",
+        "href": "mailto:louis@screenpi.pe"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "get app",
+      "label": "Get App",
       "href": "https://screenpi.pe/onboarding"
     }
   },
@@ -78,12 +79,6 @@
     }
   },
   "search": {
-    "prompt": "search documentation..."
-  },
-  "integrations": {
-    "posthog": {
-      "apiKey": "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce",
-      "apiHost": "https://eu.i.posthog.com"
-    }
+    "prompt": "Search documentation..."
   }
 }
