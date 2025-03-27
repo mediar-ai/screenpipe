@@ -104,7 +104,7 @@ screenpipe
 macOSでは画面とマイクの許可を必ず設定してください
 
 - [デスクトップアプリをダウンロード](https://screenpi.pe/)
-- [ドキュメント & ソースからビルド](https://docs.screenpi.pe/docs/getting-started)
+- [ドキュメント & ソースからビルド](https://docs.screenpi.pe/getting-started)
 
 ## プラグインの作成
 
@@ -112,7 +112,7 @@ macOSでは画面とマイクの許可を必ず設定してください
 bunx --bun @screenpipe/dev@latest pipe create
 ```
 
-ScreenPipeには「パイプ」と呼ばれるプラグインシステムがあり、Rustコード内のサンドボックス環境でNext.jsデスクトップアプリを作成できます。[詳細はこちら](https://docs.screenpi.pe/docs/plugins)
+ScreenPipeには「パイプ」と呼ばれるプラグインシステムがあり、Rustコード内のサンドボックス環境でNext.jsデスクトップアプリを作成できます。[詳細はこちら](https://docs.screenpi.pe/plugins)
 
 ## スター履歴
 

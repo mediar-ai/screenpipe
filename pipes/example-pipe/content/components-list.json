@@ -4,7 +4,7 @@
     "endpoint_optional": "http://localhost:3030/health",
     "llmModel": "claude-3.7-sonnet",
     "llmUserPrompt": "can we have another component to call screenpipe health endpoint and render raw json output? can we display the output more user friendly, with some animation (framer motion), etc., keep code short",
-    "llmContextUrl": "https://docs.screenpi.pe/docs/api-reference",
+    "llmContextUrl": "https://docs.screenpi.pe/api-reference",
     "title": "health status check"
   },
   {
@@ -13,7 +13,7 @@
     "title": "latest UI record",
     "llmModel": "claude-3.7-sonnet",
     "llmUserPrompt": "create a component that fetches and displays the latest UI_monitoring record from screenpipe, showing details like app name, window name, timestamp, and text content",
-    "llmContextUrl": "https://docs.screenpi.pe/docs/sdk-reference"
+    "llmContextUrl": "https://docs.screenpi.pe/sdk-reference"
   },
   {
     "componentPath": "/pipes/example-pipe/components/ready-to-use-examples/last-ocr-image.tsx",
@@ -21,7 +21,7 @@
     "title": "latest OCR record",
     "llmModel": "claude-3.7-sonnet",
     "llmUserPrompt": "create a component that fetches and displays the latest OCR image from screenpipe, showing the image along with any extracted text and metadata",
-    "llmContextUrl": "https://docs.screenpi.pe/docs/sdk-reference"
+    "llmContextUrl": "https://docs.screenpi.pe/sdk-reference"
   },
   {
     "componentPath": "/pipes/example-pipe/components/ready-to-use-examples/last-audio-transcription.tsx",
@@ -29,7 +29,7 @@
     "title": "latest audio transcription",
     "llmModel": "claude-3.7-sonnet",
     "llmUserPrompt": "create a component that fetches and displays the latest audio transcription from screenpipe, showing the transcription text along with metadata like device name, timestamp, and speaker information",
-    "llmContextUrl": "https://docs.screenpi.pe/docs/sdk-reference"
+    "llmContextUrl": "https://docs.screenpi.pe/sdk-reference"
   },
   {
     "componentPath": "/pipes/example-pipe/components/ready-to-use-examples/realtime-screen.tsx",
@@ -37,7 +37,7 @@
     "title": "screen streaming",
     "llmModel": "claude-3.7-sonnet",
     "llmUserPrompt": "create a component that streams real-time screen captures with OCR text using the pipe.streamVision API, showing both the screen image and extracted text with appropriate controls to start/stop streaming",
-    "llmContextUrl": "https://docs.screenpi.pe/docs/sdk-reference"
+    "llmContextUrl": "https://docs.screenpi.pe/sdk-reference"
   },
   {
     "componentPath": "/pipes/example-pipe/components/ready-to-use-examples/realtime-audio.tsx",
@@ -45,6 +45,6 @@
     "title": "audio streaming",
     "llmModel": "claude-3.7-sonnet",
     "llmUserPrompt": "create a component that streams real-time audio transcriptions using the pipe.streamTranscriptions API, showing both the current transcription and history with appropriate controls to start/stop streaming",
-    "llmContextUrl": "https://docs.screenpi.pe/docs/sdk-reference"
+    "llmContextUrl": "https://docs.screenpi.pe/sdk-reference"
   }
 ]
