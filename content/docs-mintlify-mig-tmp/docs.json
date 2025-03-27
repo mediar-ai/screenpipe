@@ -56,6 +56,11 @@
       }
     ]
   },
+  "api": {
+    "playground": {
+      "display": "none"
+    }
+  },
   "logo": {
     "light": "public/favicon.ico",
     "dark": "public/favicon.ico"
