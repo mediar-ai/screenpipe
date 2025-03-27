@@ -184,7 +184,7 @@ pub struct Cli {
     /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
     /// WhisperDistilLargeV3 is a local, lightweight transcription model (-a whisper-large), recommended for higher quality audio than tiny.
     /// WhisperLargeV3Turbo is a local, lightweight transcription model (-a whisper-large-v3-turbo), recommended for higher quality audio than tiny.
-    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperLargeV3Turbo)]
+    #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperTinyQuantized)]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
 
     /// Enable realtime audio transcription
