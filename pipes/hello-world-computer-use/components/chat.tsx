@@ -208,6 +208,92 @@ export const Chat = () => {
           },
         },
 
+        pixel_type: {
+          description:
+            "Type text directly without focusing on a specific element",
+          parameters: z.object({
+            text: z.string().describe("The text to type"),
+          }),
+          execute: async ({ text }) => {
+            console.log("[tool:pixel_type] params:", { text });
+            try {
+              const success = await pipe.operator.pixel.type(text);
+              console.log("[tool:pixel_type] result:", success);
+              return success
+                ? `Successfully typed text: "${text}"`
+                : `Failed to type text`;
+            } catch (error) {
+              console.error("[tool:pixel_type] error:", error);
+              throw new Error(`Failed to type text: ${error}`);
+            }
+          },
+        },
+
+        pixel_press: {
+          description: "Press a keyboard key or key combination",
+          parameters: z.object({
+            key: z
+              .string()
+              .describe("The key to press (e.g., 'enter', 'tab', 'esc')"),
+          }),
+          execute: async ({ key }) => {
+            console.log("[tool:pixel_press] params:", { key });
+            try {
+              const success = await pipe.operator.pixel.press(key);
+              console.log("[tool:pixel_press] result:", success);
+              return success
+                ? `Successfully pressed key: "${key}"`
+                : `Failed to press key`;
+            } catch (error) {
+              console.error("[tool:pixel_press] error:", error);
+              throw new Error(`Failed to press key: ${error}`);
+            }
+          },
+        },
+
+        pixel_move_mouse: {
+          description: "Move the mouse cursor to specific coordinates",
+          parameters: z.object({
+            x: z.number().describe("The X coordinate to move to"),
+            y: z.number().describe("The Y coordinate to move to"),
+          }),
+          execute: async ({ x, y }) => {
+            console.log("[tool:pixel_move_mouse] params:", { x, y });
+            try {
+              const success = await pipe.operator.pixel.moveMouse(x, y);
+              console.log("[tool:pixel_move_mouse] result:", success);
+              return success
+                ? `Successfully moved mouse to coordinates (${x}, ${y})`
+                : `Failed to move mouse`;
+            } catch (error) {
+              console.error("[tool:pixel_move_mouse] error:", error);
+              throw new Error(`Failed to move mouse: ${error}`);
+            }
+          },
+        },
+
+        pixel_click: {
+          description: "Click a mouse button at the current cursor position",
+          parameters: z.object({
+            button: z
+              .enum(["left", "right", "middle"])
+              .describe("The mouse button to click"),
+          }),
+          execute: async ({ button }) => {
+            console.log("[tool:pixel_click] params:", { button });
+            try {
+              const success = await pipe.operator.pixel.click(button);
+              console.log("[tool:pixel_click] result:", success);
+              return success
+                ? `Successfully clicked ${button} mouse button`
+                : `Failed to click mouse button`;
+            } catch (error) {
+              console.error("[tool:pixel_click] error:", error);
+              throw new Error(`Failed to click mouse button: ${error}`);
+            }
+          },
+        },
+
         open_application: {
           description: "Open an application",
           parameters: z.object({
