@@ -7,6 +7,7 @@ pub trait AccessibilityEngine: Send + Sync {
 
     #[cfg(target_os = "windows")]
     fn get_element_by_id(&self, _id: &str) -> Result<UIElement, AutomationError>;
+
     /// Get the currently focused element
     fn get_focused_element(&self) -> Result<UIElement, AutomationError>;
 
