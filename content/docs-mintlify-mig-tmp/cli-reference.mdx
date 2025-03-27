@@ -1,5 +1,5 @@
 ---
-title: "cli reference for screenpipe"
+title: "CLI reference for screenpipe"
 icon: "terminal"
 ---
 
@@ -275,43 +275,43 @@ The `screenpipe` CLI supports generating shell completions for popular shells. F
 
 1. Add the following to your `.bashrc` profile:
 
-   ```bash
-   eval "$(screenpipe completions bash)" 
-   ```
+```bash
+eval "$(screenpipe completions bash)" 
+```
 2. Reload your profile:
 
-   ```bash
-   source ~/.bashrc  
-   ```
+```bash
+source ~/.bashrc  
+```
 
 #### Zsh
 
 1. Add the following to your `.zshrc` profile:
 
-   ```bash
-   eval "$(screenpipe completions zsh)"
-   ```
+```bash
+eval "$(screenpipe completions zsh)"
+```
 2. Reload your profile:
 
-   ```bash
-   source ~/.zshrc  
-   ```
+```bash
+source ~/.zshrc  
+```
 
 #### Fish
 
 1. Create `\~/.config/fish/conf.d/screenpipe.fish` and add this line to it:
 
-   ```fish
-   screenpipe completions fish | source  
-   ```
+```fish
+screenpipe completions fish | source  
+```
 
 #### PowerShell
 
 1. Add the following to the end of your profile file:
 
-   ```powershell
-   screenpipe completions powershell | Out-String | Invoke-Expression 
-   ```
+```powershell
+screenpipe completions powershell | Out-String | Invoke-Expression 
+```
 
 - For macOS/Linux, the profile is located at `\~/.config/powershell/Microsoft.PowerShell_profile.ps1`
 - For Windows location is either:
@@ -319,20 +319,20 @@ The `screenpipe` CLI supports generating shell completions for popular shells. F
   - `%userprofile%\\Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1` Powershell 6+
 - To create the profile file you can run this in PowerShell:
 
-  ```powershell
-  if (-not (Test-Path $profile)) { New-Item $profile -Force }
-  ```
+```powershell
+if (-not (Test-Path $profile)) { New-Item $profile -Force }
+```
 - To edit your profile run this in PowerShell:
 
-  ```powershell
-  Invoke-Item $profile
-  ```
+```powershell
+Invoke-Item $profile
+```
 
 1. Reload your profile:
 
-   ```powershell
-   . $PROFILE  
-   ```
+```powershell
+. $PROFILE  
+```
 
 ### LLM links
 
