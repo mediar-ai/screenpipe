@@ -364,12 +364,6 @@ paths:
       parameters:
       - $ref: '#/components/parameters/ContentTypeParam'
       - $ref: '#/components/parameters/IdParam'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RemoveTagsRequest'
-        required: true
       responses:
         '200':
           description: ''
