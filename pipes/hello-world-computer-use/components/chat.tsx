@@ -739,15 +739,15 @@ export const Chat = () => {
           {isMacOS && (
             <QuickActionCard
               title="open x.com & say hello"
-              prompt="1. open chrome app 2. open x.com in chrome 3. find the first input on the chrome page 4. type hello, check out this amazing tool: 'https://screenpi.pe' 5. press enter"
+              prompt="open chrome app"
               onClick={handleQuickAction}
             />
           )}
 
           {isMacOS && (
             <QuickActionCard
-              title="checkout screenpipe docs on safari"
-              prompt="1. open safari 2. type docs.screenpi.pe 3. press enter"
+              title="open whatsapp"
+              prompt="open whatsapp"
               onClick={handleQuickAction}
             />
           )}
