@@ -501,15 +501,26 @@ export const Chat = () => {
     const model =
       preset.provider === "openai"
         ? createOpenAI({
-            baseURL: preset.url,
             apiKey: apiKey,
           })(preset.model)
         : preset.provider === "native-ollama"
         ? ollama(preset.model)
-        : createOpenAI({
+        : preset.provider === "custom"
+        ? createOpenAI({
             baseURL: preset.url,
             apiKey: apiKey,
-          })(preset.model);
+          })(preset.model)
+        : preset.provider === "screenpipe-cloud"
+        ? createOpenAI({
+            baseURL: preset.url,
+            apiKey: apiKey,
+          })(preset.model)
+        : null;
+
+    if (!model) {
+      toast.message("please select a valid provider");
+      return;
+    }
 
     console.log("model", model);
     const messages = [
