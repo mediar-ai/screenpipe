@@ -53,8 +53,6 @@ export default function Page() {
   return (
     <SettingsProvider>
       <ClientOnly>
-        <AIPresetsDialog pipeName="example-pipe"></AIPresetsDialog>
-        <AIPresetsSelector pipeName="example-pipe" />
         <div
           className={`flex flex-col gap-6 items-center justify-center h-full mt-12 px-4 pb-12 ${inter.className}`}
         >
@@ -73,11 +71,28 @@ export default function Page() {
 
           <div className="w-full max-w-4xl mt-8 font-mono">
             <h2 className="text-xl font-semibold mb-4 text-left">
+              other pre-built components
+            </h2>
+            <p className="mb-6 text-left text-gray-600">
+              you can install other pre-built components like this:
+              <br />
+              <br />
+              <code className="bg-gray-100 p-1 rounded">
+                bunx --bun @screenpipe/dev@latest components add
+              </code>
+              <br />
+              <br />
+              or use npx
+            </p>
+
+            <h2 className="text-xl font-semibold mb-4 text-left">
               open source pipes
             </h2>
             <p className="mb-6 text-left text-gray-600">
-              # All pipes are open source and you can directly fork or reuse
-              pipes or components. # Source:{" "}
+              All pipes are open source and you can directly fork or reuse pipes
+              or components.
+              <br />
+              Source:{" "}
               <a
                 href="https://github.com/mediar-ai/screenpipe/tree/main/pipes"
                 className="text-blue-500 underline"
