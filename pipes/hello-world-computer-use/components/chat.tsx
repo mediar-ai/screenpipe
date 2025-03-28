@@ -507,6 +507,7 @@ export const Chat = () => {
         : preset.provider === "native-ollama"
         ? ollama(preset.model)
         : createOpenAI({
+            baseURL: preset.url,
             apiKey: apiKey,
           })(preset.model);
 
