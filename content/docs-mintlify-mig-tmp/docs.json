@@ -7,8 +7,8 @@
     "light": "#333333",
     "dark": "#000000"
   },
-  "favicon": { 
-    "light": "favicon.ico", 
+  "favicon": {
+    "light": "favicon.ico",
     "dark": "favicon.ico"
   },
   "logo": "favicon.ico",
@@ -90,5 +90,11 @@
   },
   "search": {
     "prompt": "Search documentation..."
+  },
+  "integrations": {
+    "posthog": {
+      "apiKey": "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce",
+      "apiHost": "https://eu.i.posthog.com"
+    }
   }
 }
