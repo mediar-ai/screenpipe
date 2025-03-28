@@ -192,7 +192,7 @@ export function AIProviderConfig({
     const isDuplicate = settings?.aiPresets?.some(
       (preset) =>
         preset.id.toLowerCase() === id.toLowerCase() &&
-        preset.id !== defaultPreset?.id,
+        preset.id !== defaultPreset?.id
     );
 
     if (isDuplicate) {
@@ -264,7 +264,7 @@ export function AIProviderConfig({
     } else if (selectedProvider === "screenpipe-cloud") {
       fetchOpenAIModels(
         "https://ai-proxy.i-f9f.workers.dev/v1",
-        settings?.user?.token ?? "",
+        settings?.user?.token ?? ""
       );
     } else if (
       selectedProvider === "custom" &&
@@ -324,7 +324,7 @@ export function AIProviderConfig({
             onChange={(e) => handleIdChange(e.target.value)}
             className={cn(
               "font-mono",
-              idError && "border-destructive focus-visible:ring-destructive",
+              idError && "border-destructive focus-visible:ring-destructive"
             )}
             autoComplete="off"
             autoCorrect="off"
@@ -601,33 +601,45 @@ export function AIProviderConfig({
             </div>
             <div className="space-y-2">
               <Label htmlFor="model">model</Label>
-              <Select
-                value={formData.modelName}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, modelName: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      isLoadingModels ? "loading models..." : "select model"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {openaiModels.length > 0 ? (
-                    openaiModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.id}
+              {openaiModels.length > 0 ? (
+                <Select
+                  value={formData.modelName}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, modelName: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        isLoadingModels ? "loading models..." : "select model"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {openaiModels.length > 0 ? (
+                      openaiModels.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.id}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-models" disabled>
+                        {isLoadingModels ? "loading..." : "no models found"}
                       </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-models" disabled>
-                      {isLoadingModels ? "loading..." : "no models found"}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+                    )}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="model"
+                  type="text"
+                  placeholder="enter model name"
+                  value={formData.modelName || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, modelName: e.target.value })
+                  }
+                />
+              )}
             </div>
           </div>
         )}
@@ -795,7 +807,7 @@ export const AIPresetsSelector = ({
 
   const selectedPreset = useMemo(() => {
     const preset = settings?.aiPresets?.find(
-      (preset) => preset.id == pipeSettings?.[aiKey],
+      (preset) => preset.id == pipeSettings?.[aiKey]
     );
 
     return preset?.id;
@@ -852,7 +864,7 @@ export const AIPresetsSelector = ({
       ) {
         // Check for duplicate ID
         const existingPreset = settings.aiPresets.find(
-          (pre) => pre.id === preset.id,
+          (pre) => pre.id === preset.id
         );
 
         if (existingPreset) {
@@ -881,7 +893,7 @@ export const AIPresetsSelector = ({
         const updatedPresets = settings.aiPresets.map((p) =>
           p.id === selectedPresetToEdit.id
             ? ({ ...preset, defaultPreset: p.defaultPreset } as AIPreset)
-            : p,
+            : p
         );
 
         // If editing the default preset, update the global settings as well
@@ -911,7 +923,7 @@ export const AIPresetsSelector = ({
     } else {
       // Check for duplicate ID only when creating new preset
       const existingPreset = settings.aiPresets.find(
-        (pre) => pre.id === preset.id,
+        (pre) => pre.id === preset.id
       );
 
       if (existingPreset) {
@@ -1044,7 +1056,7 @@ export const AIPresetsSelector = ({
                       <span className="font-medium min-w-[80px] max-w-[30%] truncate text-left">
                         {
                           aiPresets.find(
-                            (preset) => preset.id === selectedPreset,
+                            (preset) => preset.id === selectedPreset
                           )?.id
                         }
                       </span>
@@ -1052,21 +1064,21 @@ export const AIPresetsSelector = ({
                         <span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
                           {
                             aiPresets.find(
-                              (preset) => preset.id === selectedPreset,
+                              (preset) => preset.id === selectedPreset
                             )?.provider
                           }
                         </span>
                         <span className="hidden sm:block truncate max-w-[30%]">
                           {
                             aiPresets.find(
-                              (preset) => preset.id === selectedPreset,
+                              (preset) => preset.id === selectedPreset
                             )?.model
                           }
                         </span>
                         <span className="whitespace-nowrap">
                           {(
                             (aiPresets.find(
-                              (preset) => preset.id === selectedPreset,
+                              (preset) => preset.id === selectedPreset
                             )?.maxContextChars || 0) / 1000
                           ).toFixed(0)}
                           k
@@ -1110,7 +1122,7 @@ export const AIPresetsSelector = ({
                                 "h-4 w-4 shrink-0",
                                 selectedPreset === preset.id
                                   ? "opacity-100"
-                                  : "opacity-0",
+                                  : "opacity-0"
                               )}
                             />
                             <span className="font-medium truncate max-w-[30%]">
@@ -1147,10 +1159,10 @@ export const AIPresetsSelector = ({
                                       preset.provider === "openai"
                                         ? "https://api.openai.com/v1"
                                         : preset.provider === "screenpipe-cloud"
-                                          ? "https://ai-proxy.i-f9f.workers.dev/v1"
-                                          : preset.provider === "native-ollama"
-                                            ? "http://localhost:11434/v1"
-                                            : "",
+                                        ? "https://ai-proxy.i-f9f.workers.dev/v1"
+                                        : preset.provider === "native-ollama"
+                                        ? "http://localhost:11434/v1"
+                                        : "",
                                     defaultPreset: false,
                                   } as AIPreset;
                                   setSelectedPresetToEdit(fullPreset);
@@ -1187,7 +1199,7 @@ export const AIPresetsSelector = ({
                               "h-4 w-4 shrink-0",
                               selectedPreset === preset.id
                                 ? "opacity-100"
-                                : "opacity-0",
+                                : "opacity-0"
                             )}
                           />
                           <span className="font-medium truncate max-w-[120px]">

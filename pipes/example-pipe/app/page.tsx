@@ -6,6 +6,11 @@ import { ClientOnly } from "@/lib/client-only";
 import { Inter } from "next/font/google";
 import componentsList from "../content/components-list.json";
 import { useEffect, useState } from "react";
+import {
+  AIPresetDialog,
+  AIPresetsDialog,
+} from "@/components/ai-presets-dialog";
+import { AIPresetsSelector } from "@/components/ai-presets-selector";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -48,6 +53,8 @@ export default function Page() {
   return (
     <SettingsProvider>
       <ClientOnly>
+        <AIPresetsDialog pipeName="example-pipe"></AIPresetsDialog>
+        <AIPresetsSelector pipeName="example-pipe" />
         <div
           className={`flex flex-col gap-6 items-center justify-center h-full mt-12 px-4 pb-12 ${inter.className}`}
         >
