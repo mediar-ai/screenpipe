@@ -46,5 +46,21 @@
     "llmModel": "claude-3.7-sonnet",
     "llmUserPrompt": "create a component that streams real-time audio transcriptions using the pipe.streamTranscriptions API, showing both the current transcription and history with appropriate controls to start/stop streaming",
     "llmContextUrl": "https://docs.screenpi.pe/sdk-reference"
+  },
+  {
+    "componentPath": "/pipes/example-pipe/components/ready-to-use-examples/move-mouse-click.tsx",
+    "endpoint_optional": "SDK: pipe.operator",
+    "title": "move mouse and click",
+    "llmModel": "claude-3.7-sonnet",
+    "llmUserPrompt": "create a component that uses the operator API to move the mouse to specific coordinates and perform a click action, demonstrating basic interaction capabilities",
+    "llmContextUrl": "https://docs.screenpi.pe/operator-api"
+  },
+  {
+    "componentPath": "/pipes/example-pipe/components/ready-to-use-examples/open-app-get-text.tsx",
+    "endpoint_optional": "SDK: pipe.operator",
+    "title": "open app and get text",
+    "llmModel": "claude-3.7-sonnet",
+    "llmUserPrompt": "create a component that opens an application and retrieves text from a specific element, demonstrating basic interaction capabilities",
+    "llmContextUrl": "https://docs.screenpi.pe/operator-api"
   }
 ]
