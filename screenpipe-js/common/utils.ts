@@ -37,7 +37,7 @@ const unflattenObject = (obj: Record<string, any>): any => {
 // Helper functions that work in both environments
 function toCamelCase(str: string): string {
   return str.replace(/([-_][a-z])/g, (group) =>
-    group.toUpperCase().replace("-", "").replace("_", ""),
+    group.toUpperCase().replace("-", "").replace("_", "")
   );
 }
 
@@ -45,13 +45,22 @@ function toSnakeCase(str: string): string {
   return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 }
 
-function convertToCamelCase(obj: any): any {
+// function to convert any object all properties to snake case
+function convertObjectToSnakeCase(obj: any): any {
+  return Object.keys(obj).reduce((result, key) => {
+    const snakeKey = toSnakeCase(key);
+    result[snakeKey] = convertObjectToSnakeCase(obj[key]);
+    return result;
+  }, {} as any);
+}
+
+function convertObjectToCamelCase(obj: any): any {
   if (Array.isArray(obj)) {
-    return obj.map(convertToCamelCase);
+    return obj.map(convertObjectToCamelCase);
   } else if (obj !== null && typeof obj === "object") {
     return Object.keys(obj).reduce((result, key) => {
       const camelKey = toCamelCase(key);
-      result[camelKey] = convertToCamelCase(obj[key]);
+      result[camelKey] = convertObjectToCamelCase(obj[key]);
       return result;
     }, {} as any);
   }
@@ -104,6 +113,7 @@ export {
   unflattenObject,
   toCamelCase,
   toSnakeCase,
-  convertToCamelCase,
+  convertObjectToSnakeCase,
+  convertObjectToCamelCase,
   getDefaultSettings,
 };

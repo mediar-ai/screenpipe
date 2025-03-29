@@ -1,7 +1,7 @@
 import { Message } from "ai";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "@/components/ui/codeblock";
@@ -16,6 +16,7 @@ import { ChatMessageActions } from "@/components/chat-message-actions";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { VideoComponent } from "./video";
 import { ArrowDown, ChevronDown } from "lucide-react";
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 
 export interface ChatMessageProps {
 	message: Message;
@@ -23,6 +24,7 @@ export interface ChatMessageProps {
 
 export function ChatMessage({ message, ...props }: ChatMessageProps) {
 	const { settings } = useSettings();
+	const { settings: pipeSettings, getPreset } = usePipeSettings("rewind");
 	const [isThinking, setIsThinking] = useState(false);
 	const [thinkingContent, setThinkingContent] = useState<string[]>([]);
 	const [thinkingTime, setThinkingTime] = useState(0);
@@ -77,6 +79,8 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 		return null;
 	}
 
+	const aiPreset = useMemo(() => getPreset(), [pipeSettings]);
+
 	return (
 		<div
 			className={cn("group relative mb-4 flex items-start w-full")}
@@ -92,11 +96,11 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 			>
 				{message.role === "user" ? (
 					<IconUser />
-				) : settings?.aiModel?.includes("gpt") ? (
+				) : aiPreset?.model.includes("gpt") ? (
 					<IconOpenAI />
-				) : settings?.aiModel?.includes("claude") ? (
+				) : aiPreset?.model?.includes("claude") ? (
 					<IconClaude />
-				) : settings?.aiModel?.includes("gemini") ? (
+				) : aiPreset?.model?.includes("gemini") ? (
 					<IconGemini />
 				) : (
 					<>🦙</>

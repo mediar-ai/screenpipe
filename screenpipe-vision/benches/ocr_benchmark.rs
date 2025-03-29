@@ -134,7 +134,7 @@ fn bench_tesseract_ocr(c: &mut Criterion) {
 
             for _ in 0..iters {
                 let start = std::time::Instant::now();
-                let (result, _) = perform_ocr_tesseract(black_box(&image));
+                let (result, _, _) = perform_ocr_tesseract(black_box(&image), vec![]);
                 total_duration += start.elapsed();
 
                 let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);

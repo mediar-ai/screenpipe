@@ -7,4 +7,4 @@ crons won't work unless you are installing the pipe to screenpipe:
 screenpipe pipe install <path/to/pipe>
 ```
 
-check [docs](https://docs.screenpi.pe/docs/plugins).
+check [docs](https://docs.screenpi.pe/plugins).

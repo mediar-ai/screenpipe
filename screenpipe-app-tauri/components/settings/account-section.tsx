@@ -494,7 +494,7 @@ export function AccountSection() {
                   </div>
                 </div>
                 <a
-                  href="https://docs.screenpi.pe/docs/plugins"
+                  href="https://docs.screenpi.pe/plugins"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors rounded-md bg-secondary hover:bg-secondary/80"

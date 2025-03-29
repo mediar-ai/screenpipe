@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
-use tracing::error;
+use tracing::{debug, error};
 
 use xcap::{Window, XCapError};
 
@@ -205,7 +205,8 @@ pub async fn capture_all_visible_windows(
                 Ok(name) => name.to_string(),
                 Err(e) => {
                     // Log warning and skip this window
-                    error!("Failed to get app_name for window: {}", e);
+                    // mostly noise
+                    debug!("Failed to get app_name for window: {}", e);
                     return None;
                 }
             };

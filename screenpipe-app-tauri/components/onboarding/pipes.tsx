@@ -47,7 +47,7 @@ const OnboardingPipes: React.FC<OnboardingPipesProps> = ({
         <a
           onClick={() =>
             open(
-              "https://docs.screenpi.pe/docs/plugins#quick-tour---developing-pipes-in-screenpipe"
+              "https://docs.screenpi.pe/plugins"
             )
           }
           href="#"
