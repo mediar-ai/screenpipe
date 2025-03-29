@@ -95,14 +95,13 @@ const defaultCustomRules = `- Create a concise summary of the given context
         open={open}
         onOpenChange={onOpenChange}
       >
-      <DialogContent className="sm:max-w-[900px] h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[900px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-semibold text-2xl">settings</DialogTitle>
           <DialogDescription>
             adjust additional loom pipe settings
           </DialogDescription>
         </DialogHeader>
-
         <form onSubmit={handleSave} className="space-y-4 w-full">
           <div className="space-y-2">
             <Label htmlFor="contentType">
