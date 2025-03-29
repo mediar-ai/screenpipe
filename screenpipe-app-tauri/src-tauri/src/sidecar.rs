@@ -82,7 +82,7 @@ pub async fn stop_screenpipe(
 ) -> Result<(), String> {
     debug!("Killing screenpipe");
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
         let mut manager = state.0.lock().await;
         if let Some(manager) = manager.as_mut() {
@@ -92,10 +92,6 @@ pub async fn stop_screenpipe(
                 }
             }
         }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
         match tokio::process::Command::new("pkill")
             .arg("-9")
             .arg("-f")
@@ -125,6 +121,30 @@ pub async fn stop_screenpipe(
             .arg("-Command")
             .arg(r#"taskkill.exe /F /T /IM screenpipe.exe"#)
             .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .await
+        {
+            Ok(_) => {
+                debug!("Successfully killed screenpipe processes");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to kill screenpipe processes: {}", e);
+                Err(format!("Failed to kill screenpipe processes: {}", e))
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // -15 from gnu man page
+        // ref: https://www.gnu.org/software/coreutils/manual/html_node/kill-invocation.html
+        let command = format!(
+            "pgrep -x screenpipe | xargs -I {{}} kill -15 {{}}",
+        );
+        match tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(command)
             .output()
             .await
         {
