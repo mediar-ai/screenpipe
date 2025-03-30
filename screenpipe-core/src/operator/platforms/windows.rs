@@ -7,6 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::fmt::Debug;
 use std::sync::Arc;
 use uiautomation::UIAutomation;
+use uiautomation::core::UICondition;
 use uiautomation::controls::ControlType;
 use uiautomation::variants::Variant;
 use tracing::debug;
@@ -103,12 +104,23 @@ impl AccessibilityEngine for WindowsEngine {
         Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
     }
 
-    fn find_elements(&self, selector: &Selector, root: Option<&UIElement>) -> Result<Vec<UIElement>, AutomationError> {
-        let root_ele = match root {
-            Some(root) => root.clone(),
-            None => self.get_root_element(),
+    fn find_elements(
+        &self,
+        selector: &Selector,
+        root: Option<&UIElement>
+    ) -> Result<Vec<UIElement>, AutomationError> {
+
+        let root_ele = if let Some(el) = root {
+            if let Some(ele) = el.as_any().downcast_ref::<WindowsUIElement>() {
+                &ele.element.0
+            } else {
+                panic!("Root element not found")
+            }
+        } else {
+            &Arc::new(self.automation.0.get_root_element().unwrap())
         };
 
+        // make condition according to selector
         let condition = match selector {
             Selector::Role { role, name } => {
                 let role_condition = self.automation.0.create_property_condition(
@@ -143,93 +155,19 @@ impl AccessibilityEngine for WindowsEngine {
                 Variant::from(text.as_str()),
                 None
             ).unwrap(),
-            Selector::Path(path) => self.automation.0.create_property_condition(
-                UIProperty::XPath,
-                Variant::from(path.as_str()),
-                None
-            ).unwrap(),
-            Selector::Attributes(attributes) => {
-                let mut conditions = vec![];
-                for (key, value) in attributes {
-                    let condition = self.automation.0.create_property_condition(
-                        UIProperty::from(key.as_str()),
-                        Variant::from(value.as_str()),
-                        None
-                    ).unwrap();
-                    conditions.push(condition);
-                }
-                self.automation.0.create_and_condition_from_vec(&conditions).unwrap()
+            Selector::Path(_) => {
+                return Err(AutomationError::UnsupportedOperation("`Path` selector not supported".to_string()));
             },
-            Selector::Filter(_) => {
-                return Err(AutomationError::Internal("Filter selector not supported".to_string()));
+            Selector::Attributes(_attributes) => {
+                return Err(AutomationError::UnsupportedOperation("`Attributes` selector not supported".to_string()));
             },
-
-            Selector::Chain(selectors) => {
-                let mut conditions = vec![];
-                for sel in selectors {
-                    let condition = match sel {
-                        Selector::Role { role, name } => {
-                            let role_condition = self.automation.0.create_property_condition(
-                                UIProperty::ControlType,
-                                Variant::from(role.as_str()),
-                                None
-                            ).unwrap();
-
-                            if let Some(name) = name {
-                                let name_condition = self.automation.0.create_property_condition(
-                                    UIProperty::Name,
-                                    Variant::from(name.as_str()),
-                                    None
-                                ).unwrap();
-                                self.automation.0.create_and_condition(role_condition, name_condition).unwrap()
-                            } else {
-                                role_condition
-                            }
-                        },
-                        Selector::Id(id) => self.automation.0.create_property_condition(
-                            UIProperty::AutomationId,
-                            Variant::from(id.as_str()),
-                            None
-                        ).unwrap(),
-                        Selector::Name(name) => self.automation.0.create_property_condition(
-                            UIProperty::Name,
-                            Variant::from(name.as_str()),
-                            None
-                        ).unwrap(),
-                        Selector::Text(text) => self.automation.0.create_property_condition(
-                            UIProperty::Name,
-                            Variant::from(text.as_str()),
-                            None
-                        ).unwrap(),
-                        Selector::Path(path) => self.automation.0.create_property_condition(
-                            UIProperty::XPath,
-                            Variant::from(path.as_str()),
-                            None
-                        ).unwrap(),
-                        Selector::Attributes(attributes) => {
-                            let mut attr_conditions = vec![];
-                            for (key, value) in attributes {
-                                let condition = self.automation.0.create_property_condition(
-                                    UIProperty::from(key.as_str()),
-                                    Variant::from(value.as_str()),
-                                    None
-                                ).unwrap();
-                                attr_conditions.push(condition);
-                            }
-                            self.automation.0.create_and_condition_from_vec(&attr_conditions).unwrap()
-                        },
-                        Selector::Filter(_) => {
-                            return Err(AutomationError::Internal("Filter selector not supported".to_string()));
-                        },
-                        Selector::Chain(_) => {
-                            return Err(AutomationError::Internal("Nested chain selector not supported".to_string()));
-                        },
-                    };
-                    conditions.push(condition);
-                }
-                self.automation.0.create_and_condition_from_vec(&conditions).unwrap()
+            Selector::Filter(_filter) => {
+                return Err(AutomationError::UnsupportedOperation("`Filter` selector not supported".to_string()));
             },
-        }
+            Selector::Chain(_selectors) => {
+                return Err(AutomationError::UnsupportedOperation("`selectors` selector not supported".to_string()));
+            },
+        };
 
         let elements = root_ele.find_all(TreeScope::Subtree, &condition)
             .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
@@ -243,16 +181,65 @@ impl AccessibilityEngine for WindowsEngine {
     }
 
     fn find_element(&self, selector: &Selector, root: Option<&UIElement>) -> Result<UIElement, AutomationError> {
-        let root_element = match root {
-            Some(root) => root.clone(),
-            None => self.get_root_element(),
+        let root_ele = if let Some(el) = root {
+            if let Some(ele) = el.as_any().downcast_ref::<WindowsUIElement>() {
+                &ele.element.0
+            } else {
+                panic!("Root element not found")
+            }
+        } else {
+            &Arc::new(self.automation.0.get_root_element().unwrap())
         };
-        let condition = self.automation.0.create_property_condition(
-            UIProperty::Name,
-            Variant::from(selector),
-            None
-        ).unwrap();
-        let ele = root_element.find_first(TreeScope::Subtree, &condition)
+        // make condition according to selector
+        let condition = match selector {
+            Selector::Role { role, name } => {
+                let role_condition = self.automation.0.create_property_condition(
+                    UIProperty::ControlType,
+                    Variant::from(role.as_str()),
+                    None
+                ).unwrap();
+
+                if let Some(name) = name {
+                    let name_condition = self.automation.0.create_property_condition(
+                        UIProperty::Name,
+                        Variant::from(name.as_str()),
+                        None
+                    ).unwrap();
+                    self.automation.0.create_and_condition(role_condition, name_condition).unwrap()
+                } else {
+                    role_condition
+                }
+            },
+            Selector::Id(id) => self.automation.0.create_property_condition(
+                UIProperty::AutomationId,
+                Variant::from(id.as_str()),
+                None
+            ).unwrap(),
+            Selector::Name(name) => self.automation.0.create_property_condition(
+                UIProperty::Name,
+                Variant::from(name.as_str()),
+                None
+            ).unwrap(),
+            Selector::Text(text) => self.automation.0.create_property_condition(
+                UIProperty::Name,
+                Variant::from(text.as_str()),
+                None
+            ).unwrap(),
+            Selector::Path(_) => {
+                return Err(AutomationError::UnsupportedOperation("`Path` selector not supported".to_string()));
+            },
+            Selector::Attributes(_attributes) => {
+                return Err(AutomationError::UnsupportedOperation("`Attributes` selector not supported".to_string()));
+            },
+            Selector::Filter(_filter) => {
+                return Err(AutomationError::UnsupportedOperation("`Filter` selector not supported".to_string()));
+            },
+            Selector::Chain(_selectors) => {
+                return Err(AutomationError::UnsupportedOperation("`selectors` selector not supported".to_string()));
+            },
+        };
+
+        let ele = root_ele.find_first(TreeScope::Subtree, &condition)
             .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
         let arc_ele = ThreadSafeWinUIElement(Arc::new(ele));
 
