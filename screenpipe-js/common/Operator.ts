@@ -60,11 +60,58 @@ export interface InteractableElementsResponse {
   stats: ElementStats;
 }
 
+export interface InputAction {
+  type: string;
+  data: any;
+}
+
+export interface InputControlResponse {
+  success: boolean;
+}
+
 export class Operator {
   private baseUrl: string;
+  public pixel: {
+    type: (text: string) => Promise<boolean>;
+    press: (key: string) => Promise<boolean>;
+    moveMouse: (x: number, y: number) => Promise<boolean>;
+    click: (button: "left" | "right" | "middle") => Promise<boolean>;
+  };
 
   constructor(baseUrl: string = "http://localhost:3030") {
     this.baseUrl = baseUrl;
+
+    this.pixel = {
+      type: (text: string) =>
+        this.sendInputControl({ type: "WriteText", data: text }),
+      press: (key: string) =>
+        this.sendInputControl({ type: "KeyPress", data: key }),
+      moveMouse: (x: number, y: number) =>
+        this.sendInputControl({ type: "MouseMove", data: { x, y } }),
+      click: (button: "left" | "right" | "middle") =>
+        this.sendInputControl({ type: "MouseClick", data: button }),
+    };
+  }
+
+  private async sendInputControl(action: InputAction): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/experimental/operator/pixel`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        }
+      );
+      if (!response.ok) {
+        throw new Error(`http error! status: ${response.status}`);
+      }
+      const data: InputControlResponse = await response.json();
+      return data.success;
+    } catch (error) {
+      console.error("failed to control input:", error);
+      return false;
+    }
   }
 
   /**

@@ -34,7 +34,7 @@ export const addComponentCommand = new Command()
       // If the current directory is not a pipe, create one
       if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
         logger.warn(
-          "you need to create a pipe first. run bunx --bun @screenpipe/dev@latest pipe create or visit https://docs.screenpi.pe/docs/plugins for more information."
+          "you need to create a pipe first. run bunx --bun @screenpipe/dev@latest pipe create or visit https://docs.screenpi.pe/plugins for more information."
         );
         process.exit(1);
       }

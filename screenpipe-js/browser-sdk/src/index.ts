@@ -1,7 +1,5 @@
 import type {
   EventStreamResponse,
-  InputAction,
-  InputControlResponse,
   NotificationOptions,
   ScreenpipeQueryParams,
   ScreenpipeResponse,
@@ -99,36 +97,11 @@ async function* wsEvents(
   }
 }
 
-async function sendInputControl(action: InputAction): Promise<boolean> {
-  const apiUrl = "http://localhost:3030";
-  try {
-    const response = await fetch(`${apiUrl}/experimental/input_control`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-    if (!response.ok) {
-      throw new Error(`http error! status: ${response.status}`);
-    }
-    const data: InputControlResponse = await response.json();
-    return data.success;
-  } catch (error) {
-    console.error("failed to control input:", error);
-    return false;
-  }
-}
-
 export interface BrowserPipe {
   sendDesktopNotification(options: NotificationOptions): Promise<boolean>;
   queryScreenpipe(
     params: ScreenpipeQueryParams
   ): Promise<ScreenpipeResponse | null>;
-  input: {
-    type: (text: string) => Promise<boolean>;
-    press: (key: string) => Promise<boolean>;
-    moveMouse: (x: number, y: number) => Promise<boolean>;
-    click: (button: "left" | "right" | "middle") => Promise<boolean>;
-  };
   operator: Operator;
   streamTranscriptions(): AsyncGenerator<
     TranscriptionStreamResponse,
@@ -447,20 +420,6 @@ class BrowserPipeImpl implements BrowserPipe {
       throw error;
     }
   }
-
-  input: {
-    type: (text: string) => Promise<boolean>;
-    press: (key: string) => Promise<boolean>;
-    moveMouse: (x: number, y: number) => Promise<boolean>;
-    click: (button: "left" | "right" | "middle") => Promise<boolean>;
-  } = {
-    type: (text: string) => sendInputControl({ type: "WriteText", data: text }),
-    press: (key: string) => sendInputControl({ type: "KeyPress", data: key }),
-    moveMouse: (x: number, y: number) =>
-      sendInputControl({ type: "MouseMove", data: { x, y } }),
-    click: (button: "left" | "right" | "middle") =>
-      sendInputControl({ type: "MouseClick", data: button }),
-  };
 
   pipes: {
     list: () => Promise<Result<string[]>>;

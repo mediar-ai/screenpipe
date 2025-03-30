@@ -52,7 +52,7 @@
 - [2024/11] [screenpipe再次成为GitHub趋势榜第一](https://x.com/louis030195/status/1859628763425931479)
 - [2024/10] screenpipe获得[Founders, Inc](https://f.inc/)支持
 - [2024/09] [screenpipe登上GitHub趋势榜第一并登上Hacker News！](https://x.com/louis030195/status/1840859691754344483)
-- [2024/08] 现在任何人都可以通过应用界面基于GitHub仓库/目录[创建、分享、安装pipes](https://docs.screenpi.pe/docs/plugins)（插件）
+- [2024/08] 现在任何人都可以通过应用界面基于GitHub仓库/目录[创建、分享、安装pipes](https://docs.screenpi.pe/plugins)（插件）
 - [2024/08] 我们正在进行赏金计划！为screenpipe做贡献并赚钱，[查看issues](https://github.com/mediar-ai/screenpipe/issues)
 - [2024/08] 我们发布了Apple和Windows原生OCR
 - [2024/07] 🎁 screenpipe在AGI House赢得Friends（AI项链）黑客马拉松（即将推出集成）
@@ -101,7 +101,7 @@ screenpipe
 bunx --bun @screenpipe/dev@latest pipe create
 ```
 
-screenpipe有一个名为"pipe"的插件系统，允许你在Rust代码的沙盒环境中运行代码，[了解更多](https://docs.screenpi.pe/docs/plugins)
+screenpipe有一个名为"pipe"的插件系统，允许你在Rust代码的沙盒环境中运行代码，[了解更多](https://docs.screenpi.pe/plugins)
 
 ## Star历史
 

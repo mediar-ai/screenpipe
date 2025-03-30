@@ -83,7 +83,7 @@ https://github.com/user-attachments/assets/973ee8e5-5240-4d36-83fe-d38c53efe6a9
 - [2024/11] [screenpipe is number 1 github trending repo (again)](https://x.com/louis030195/status/1859628763425931479)
 - [2024/10] screenpipe has been backed by [Founders, Inc](https://f.inc/)
 - [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)
-- [2024/08] anyone can now [create, share, install pipes](https://docs.screenpi.pe/docs/plugins) (plugins) from the app interface based on a github repo/dir
+- [2024/08] anyone can now [create, share, install pipes](https://docs.screenpi.pe/plugins) (plugins) from the app interface based on a github repo/dir
 - [2024/08] we're running bounties! contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
 - [2024/08] we released Apple & Windows Native OCR.
 - [2024/07] **we just launched the desktop app! [Download now!](https://screenpi.pe)**
@@ -132,7 +132,7 @@ screenpipe
 make sure to allow permissions on macos (screen, mic)
 
 - [get the desktop app](https://screenpi.pe/)
-- [docs & build from source](https://docs.screenpi.pe/docs/getting-started)
+- [docs & build from source](https://docs.screenpi.pe/getting-started)
 
 ## create plugins
 
@@ -140,7 +140,7 @@ make sure to allow permissions on macos (screen, mic)
 bunx --bun @screenpipe/dev@latest pipe create
 ```
 
-screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
+screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/plugins)
 
 you can then publish these to our store and make money:
 

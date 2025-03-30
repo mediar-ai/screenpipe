@@ -13,7 +13,7 @@ export function RealtimeAudio({
 }) {
   const { settings } = useSettings();
   const [transcription, setTranscription] = useState<TranscriptionChunk | null>(
-    null,
+    null
   );
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,15 +31,17 @@ export function RealtimeAudio({
       // Add logging to debug settings state
       console.log("starting audio streaming, settings:", {
         realtimeEnabled: settings?.enableRealtimeAudioTranscription,
-        model: settings?.audioTranscriptionModel,
+        model: settings?.realtimeAudioTranscriptionEngine,
       });
 
       // Check if realtime transcription is enabled
       if (!settings?.enableRealtimeAudioTranscription) {
         const errorMessage =
           "realtime audio transcription is not enabled in settings, go to account-> settings -> recording -> enable realtime audiotranscription -> models to use: screenpipe cloud. Then Refresh. If it doesn't start you might need to restart.";
-        
-        console.error("streaming failed: realtime audio transcription not enabled in settings");
+
+        console.error(
+          "streaming failed: realtime audio transcription not enabled in settings"
+        );
         setError(errorMessage);
 
         // Pass the error to the parent component
@@ -109,9 +111,9 @@ export function RealtimeAudio({
       console.error("error details:", {
         name: error instanceof Error ? error.name : "unknown",
         stack: error instanceof Error ? error.stack : "no stack available",
-        settings: settings
+        settings: settings,
       });
-      
+
       const errorMessage =
         error instanceof Error
           ? `Failed to stream audio: ${error.message}`
@@ -184,6 +186,16 @@ export function RealtimeAudio({
 
   return (
     <div className="space-y-2">
+      <div className="flex-col items-center gap-2">
+        <p className="text-xs text-gray-500 font-mono">
+          using model: {settings?.realtimeAudioTranscriptionEngine}
+        </p>
+        <p className="text-xs text-gray-500 font-mono">
+          make sure to enable realtime transcription in settings, currently it
+          is{" "}
+          {settings?.enableRealtimeAudioTranscription ? "enabled" : "disabled"}
+        </p>
+      </div>
       <div className="flex justify-between items-center">
         <Button
           onClick={isStreaming ? stopStreaming : startStreaming}
@@ -218,7 +230,9 @@ export function RealtimeAudio({
 
       <div className="flex items-center gap-1.5 text-right justify-end">
         <div
-          className={`w-1.5 h-1.5 rounded-full ${isStreaming ? "bg-green-500" : "bg-gray-400"}`}
+          className={`w-1.5 h-1.5 rounded-full ${
+            isStreaming ? "bg-green-500" : "bg-gray-400"
+          }`}
         />
         <span className="text-xs text-gray-500 font-mono">
           {isStreaming ? "streaming" : "stopped"}

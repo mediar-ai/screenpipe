@@ -264,6 +264,13 @@ mod tests {
                     return;
                 }
             };
+            let apps = desktop.engine.get_applications().unwrap();
+            println!("apps: {:?}", apps.len());
+            for app in apps {
+                println!("app: {:?}", app.attributes().label);
+            }
+
+            return;
 
             let app = desktop.application("Arc").unwrap();
 

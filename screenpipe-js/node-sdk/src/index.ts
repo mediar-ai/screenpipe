@@ -1,6 +1,4 @@
 import type {
-  InputAction,
-  InputControlResponse,
   ScreenpipeQueryParams,
   ScreenpipeResponse,
   NotificationOptions,
@@ -16,7 +14,6 @@ import {
 } from "../../common/analytics";
 import posthog from "posthog-js";
 import { Operator } from "../../common/Operator";
-import mcpClient from "./mcp";
 
 setAnalyticsClient({
   init: posthog.init.bind(posthog),
@@ -26,19 +23,6 @@ setAnalyticsClient({
 class NodePipe {
   private analyticsInitialized = false;
   private analyticsEnabled = true;
-
-  public mcp = mcpClient;
-
-  public input = {
-    type: (text: string) =>
-      this.sendInputControl({ type: "WriteText", data: text }),
-    press: (key: string) =>
-      this.sendInputControl({ type: "KeyPress", data: key }),
-    moveMouse: (x: number, y: number) =>
-      this.sendInputControl({ type: "MouseMove", data: { x, y } }),
-    click: (button: "left" | "right" | "middle") =>
-      this.sendInputControl({ type: "MouseClick", data: button }),
-  };
 
   public settings = new SettingsManager();
   public inbox = new InboxManager();
@@ -61,26 +45,6 @@ class NodePipe {
       return true;
     } catch (error) {
       console.error("failed to send notification:", error);
-      return false;
-    }
-  }
-
-  public async sendInputControl(action: InputAction): Promise<boolean> {
-    await this.initAnalyticsIfNeeded();
-    const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
-    try {
-      const response = await fetch(`${apiUrl}/experimental/input_control`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      if (!response.ok) {
-        throw new Error(`http error! status: ${response.status}`);
-      }
-      const data: InputControlResponse = await response.json();
-      return data.success;
-    } catch (error) {
-      console.error("failed to control input:", error);
       return false;
     }
   }

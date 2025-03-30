@@ -40,6 +40,6 @@ each playground card includes:
 ## getting started
 
 1. install this pipe from UI and play with it
-2. follow docs to create your pipe (it will create this app) (https://docs.screenpi.pe/docs/plugins)
+2. follow docs to create your pipe (it will create this app) (https://docs.screenpi.pe/plugins)
 3. modify code from ready-to-use-examples directory
 
