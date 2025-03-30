@@ -2,15 +2,19 @@ use crate::operator::element::UIElementImpl;
 use crate::operator::platforms::AccessibilityEngine;
 use crate::operator::ClickResult;
 use crate::operator::{AutomationError, Locator, Selector, UIElement, UIElementAttributes};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::fmt::Debug;
 use std::sync::Arc;
+use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use uiautomation::UIAutomation;
-use uiautomation::core::UICondition;
 use uiautomation::controls::ControlType;
+use uiautomation::inputs::Mouse;
+use uiautomation::inputs::Keyboard;
 use uiautomation::variants::Variant;
 use tracing::debug;
+use std::collections::{
+    HashMap,
+    hash_map::DefaultHasher
+};
 use uiautomation::types::{
     TreeScope,
     UIProperty
@@ -312,71 +316,153 @@ impl UIElementImpl for WindowsUIElement {
     }
 
     fn attributes(&self) -> UIElementAttributes {
-        // UIElementAttributes {
-        //     role: self.role(),
-        //     label: self.element.0.get_labeled_by(),
-        //     value: self.element.0,
-        //     description: self.element.0.get_help_text().ok(),
-        //     properties,
-        // }
-        unimplemented!()
+        let mut properties = HashMap::new();
+        // there are alot of properties, should i include all ??
+        // ref: https://docs.rs/uiautomation/0.16.1/uiautomation/types/enum.UIProperty.html
+        let property_list = vec![
+            UIProperty::Name,
+            UIProperty::HelpText,
+            UIProperty::LabeledBy,
+            UIProperty::ValueValue,
+            UIProperty::ControlType,
+            UIProperty::AutomationId,
+            UIProperty::FullDescription,
+        ];
+        for property in property_list {
+            if let Ok(value) = self.element.0.get_property_value(property) {
+                properties.insert(
+                    format!("{:?}", property),
+                    Some(serde_json::to_value(value.to_string()).unwrap_or_default()),
+                );
+            } else {
+                properties.insert(format!("{:?}", property), None);
+            }
+        }
+        UIElementAttributes {
+            role: self.role(),
+            label: self.element.0.get_labeled_by().ok()
+                .map(|e| e.get_name().unwrap_or_default()),
+            value: self.element.0.get_property_value(UIProperty::ValueValue)
+                .ok().and_then(|v| v.get_string().ok()),
+            description: self.element.0.get_help_text().ok(),
+            properties,
+        }
     }
 
     fn children(&self) -> Result<Vec<UIElement>, AutomationError> {
-        // let children = self.element.0.find_all_children().map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
-        // Ok(children.into_iter().map(|e| UIElement::new(Box::new(WindowsUIElement { element: e }))).collect())
-
-        unimplemented!()
+        let children = self.element.0.get_cached_children()
+            .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
+        Ok(children.into_iter()
+            .map(|ele| UIElement::new(
+                Box::new(WindowsUIElement {
+                    element: ThreadSafeWinUIElement(Arc::new(ele)) 
+                }))).collect()
+        )
     }
 
     fn parent(&self) -> Result<Option<UIElement>, AutomationError> {
-        // let parent = self.element.0.get_parent()
-        //     .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
-        // Ok(parent.map(|e| UIElement::new(Box::new(WindowsUIElement { element: e }))))
-        unimplemented!()
+        let parent = self.element.0.get_cached_parent();
+        match parent {
+            Ok(par) => {
+                let par_ele = UIElement::new(Box::new(WindowsUIElement {
+                    element: ThreadSafeWinUIElement(Arc::new(par)),
+                }));
+                Ok(Some(par_ele))
+            }
+            Err(e) => Err(AutomationError::ElementNotFound(e.to_string())),
+        }
     }
 
     fn bounds(&self) -> Result<(f64, f64, f64, f64), AutomationError> {
-        // let rect = self.element.0.get_bounding_rectangle()
-        //     .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
-        // Ok((rect.left, rect.top, rect.width, rect.height))
-        unimplemented!()
+        let rect = self.element.0.get_bounding_rectangle().map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
+        Ok((
+            rect.get_left() as f64,
+            rect.get_top() as f64,
+            rect.get_width() as f64,
+            rect.get_height() as f64,
+        ))
     }
 
     fn click(&self) -> Result<ClickResult, AutomationError> {
-        // self.element.invoke().map_err(|e| AutomationError::ActionFailed(e.to_string()))?;
-        // Ok(ClickResult::Success)
-        unimplemented!()
+        self.element.0.try_focus();
+        let point = self.element.0.get_clickable_point()
+            .map_err(|e| AutomationError::Internal(e.to_string()))?
+            .ok_or_else(|| AutomationError::Internal("No clickable point found".to_string()))?;
+        let mouse = Mouse::default();
+        mouse.click(point).map_err(|e| AutomationError::Internal(e.to_string()))?;
+
+        Ok(ClickResult {
+            method: "Single Click".to_string(),
+            coordinates: Some((point.get_x() as f64, point.get_y() as f64)),
+            details: "Clicked by Mouse".to_string(),
+        })
     }
 
     fn double_click(&self) -> Result<ClickResult, AutomationError> {
-        unimplemented!()
+        self.element.0.try_focus();
+        let point = self.element.0.get_clickable_point()
+            .map_err(|e| AutomationError::Internal(e.to_string()))?
+            .ok_or_else(|| AutomationError::Internal("No clickable point found".to_string()))?;
+        let mouse = Mouse::default();
+        mouse.double_click(point).map_err(|e| AutomationError::Internal(e.to_string()))?;
+        Ok(ClickResult {
+            method: "Double Click".to_string(),
+            coordinates: Some((point.get_x() as f64, point.get_y() as f64)),
+            details: "Clicked by Mouse".to_string(),
+        })
     }
 
     fn right_click(&self) -> Result<(), AutomationError> {
-        unimplemented!()
+        self.element.0.try_focus();
+        let point = self.element.0.get_clickable_point()
+            .map_err(|e| AutomationError::Internal(e.to_string()))?
+            .ok_or_else(|| AutomationError::Internal("No clickable point found".to_string()))?;
+        let mouse = Mouse::default();
+        mouse.right_click(point).map_err(|e| AutomationError::Internal(e.to_string()))?;
+        Ok(())
     }
 
     fn hover(&self) -> Result<(), AutomationError> {
-        unimplemented!()
+        return Err(AutomationError::UnsupportedOperation("`hover` doesn't not support".to_string()));
     }
 
     fn focus(&self) -> Result<(), AutomationError> {
-        // self.element.set_focus().map_err(|e| AutomationError::ActionFailed(e.to_string()))
-        unimplemented!()
+        self.element.0.set_focus()
+            .map_err(|e| AutomationError::Internal(e.to_string()))
     }
 
     fn type_text(&self, text: &str) -> Result<(), AutomationError> {
-        // self.element.set_value(text).map_err(|e| AutomationError::ActionFailed(e.to_string()))
-        unimplemented!()
+        let control_type = self.element.0.get_control_type()
+            .map_err(|e| AutomationError::Internal(e.to_string()))?;
+        // check if element accepts input
+        if control_type == ControlType::Edit {
+            let keyboard = Keyboard::default();
+            keyboard.send_text(text)
+                .map_err(|e| AutomationError::Internal(e.to_string()))?;
+            Ok(())
+        } else {
+            Err(AutomationError::Internal("Element is not editable".to_string()))
+        }
     }
 
     fn press_key(&self, key: &str) -> Result<(), AutomationError> {
-        unimplemented!()
+        let control_type = self.element.0.get_control_type()
+            .map_err(|e| AutomationError::Internal(e.to_string()))?;
+        // check if element accepts input, similar :D
+        if control_type == ControlType::Edit {
+            let keyboard = Keyboard::default();
+            keyboard.send_keys(key)
+                .map_err(|e| AutomationError::Internal(e.to_string()))?;
+            Ok(())
+        } else {
+            Err(AutomationError::Internal("Element is not editable".to_string()))
+        }
     }
 
     fn get_text(&self, max_depth: usize) -> Result<String, AutomationError> {
-        // self.element.get_name().map_err(|e| AutomationError::ElementNotFound(e.to_string()))
+        // use uiautomation::patterns::UITextChildPattern;
+        // UITextChildPattern::get_text_range(&self);
+        // self.element.0.get_name().map_err(|e| AutomationError::ElementNotFound(e.to_string()))
         unimplemented!()
     }
 
