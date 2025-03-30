@@ -81,7 +81,7 @@ impl WindowsUrlDetector {
 }
 
 impl BrowserUrlDetector for WindowsUrlDetector {
-    fn get_active_url(&self, _app_name: &str, process_id: i32) -> Result<Option<String>> {
+    fn get_active_url(&self, _app_name: &str, process_id: i32, _window_title: &str) -> Result<Option<String>> {
          return Self::get_active_url_from_window(process_id);
     }
 }
