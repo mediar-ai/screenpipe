@@ -10,6 +10,8 @@ use uiautomation::controls::ControlType;
 use uiautomation::inputs::Mouse;
 use uiautomation::inputs::Keyboard;
 use uiautomation::variants::Variant;
+use uiautomation::patterns;
+use uiautomation::actions::Scroll;
 use tracing::debug;
 use std::collections::{
     HashMap,
@@ -37,7 +39,7 @@ pub struct WindowsEngine {
 
 impl WindowsEngine {
     pub fn new(use_background_apps: bool, activate_app: bool) -> Result<Self, AutomationError> {
-        let automation = UIAutomation::new().map_err(|e| AutomationError::Internal(e.to_string()))?;
+        let automation = UIAutomation::new().map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         let arc_automation = ThreadSafeWinUIAutomation(Arc::new(automation));
         Ok(Self {
             automation: arc_automation,
@@ -254,9 +256,9 @@ impl AccessibilityEngine for WindowsEngine {
         let status = std::process::Command::new("powershell")
             .args(["-NoProfile", "-WindowStyle", "hidden", "-Command","start", app_name])
             .status()
-            .map_err(|e| AutomationError::Internal(e.to_string()))?;
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         if !status.success() {
-            return Err(AutomationError::Internal("Failed to open application".to_string()));
+            return Err(AutomationError::PlatformError("Failed to open application".to_string()));
         }
 
         self.get_application_by_name(app_name)
@@ -267,9 +269,9 @@ impl AccessibilityEngine for WindowsEngine {
         let status = std::process::Command::new("powershell")
             .args(["-NoProfile", "-WindowStyle", "hidden", "-Command", "start", browser, url])
             .status()
-            .map_err(|e| AutomationError::Internal(e.to_string()))?;
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         if !status.success() {
-            return Err(AutomationError::Internal("Failed to open URL".to_string()));
+            return Err(AutomationError::PlatformError("Failed to open URL".to_string()));
         }
 
         self.get_application_by_name(browser)
@@ -386,10 +388,10 @@ impl UIElementImpl for WindowsUIElement {
     fn click(&self) -> Result<ClickResult, AutomationError> {
         self.element.0.try_focus();
         let point = self.element.0.get_clickable_point()
-            .map_err(|e| AutomationError::Internal(e.to_string()))?
-            .ok_or_else(|| AutomationError::Internal("No clickable point found".to_string()))?;
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?
+            .ok_or_else(|| AutomationError::PlatformError("No clickable point found".to_string()))?;
         let mouse = Mouse::default();
-        mouse.click(point).map_err(|e| AutomationError::Internal(e.to_string()))?;
+        mouse.click(point).map_err(|e| AutomationError::PlatformError(e.to_string()))?;
 
         Ok(ClickResult {
             method: "Single Click".to_string(),
@@ -401,10 +403,10 @@ impl UIElementImpl for WindowsUIElement {
     fn double_click(&self) -> Result<ClickResult, AutomationError> {
         self.element.0.try_focus();
         let point = self.element.0.get_clickable_point()
-            .map_err(|e| AutomationError::Internal(e.to_string()))?
-            .ok_or_else(|| AutomationError::Internal("No clickable point found".to_string()))?;
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?
+            .ok_or_else(|| AutomationError::PlatformError("No clickable point found".to_string()))?;
         let mouse = Mouse::default();
-        mouse.double_click(point).map_err(|e| AutomationError::Internal(e.to_string()))?;
+        mouse.double_click(point).map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         Ok(ClickResult {
             method: "Double Click".to_string(),
             coordinates: Some((point.get_x() as f64, point.get_y() as f64)),
@@ -415,10 +417,10 @@ impl UIElementImpl for WindowsUIElement {
     fn right_click(&self) -> Result<(), AutomationError> {
         self.element.0.try_focus();
         let point = self.element.0.get_clickable_point()
-            .map_err(|e| AutomationError::Internal(e.to_string()))?
-            .ok_or_else(|| AutomationError::Internal("No clickable point found".to_string()))?;
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?
+            .ok_or_else(|| AutomationError::PlatformError("No clickable point found".to_string()))?;
         let mouse = Mouse::default();
-        mouse.right_click(point).map_err(|e| AutomationError::Internal(e.to_string()))?;
+        mouse.right_click(point).map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         Ok(())
     }
 
@@ -428,47 +430,87 @@ impl UIElementImpl for WindowsUIElement {
 
     fn focus(&self) -> Result<(), AutomationError> {
         self.element.0.set_focus()
-            .map_err(|e| AutomationError::Internal(e.to_string()))
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))
     }
 
     fn type_text(&self, text: &str) -> Result<(), AutomationError> {
         let control_type = self.element.0.get_control_type()
-            .map_err(|e| AutomationError::Internal(e.to_string()))?;
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         // check if element accepts input
         if control_type == ControlType::Edit {
             let keyboard = Keyboard::default();
             keyboard.send_text(text)
-                .map_err(|e| AutomationError::Internal(e.to_string()))?;
+                .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
             Ok(())
         } else {
-            Err(AutomationError::Internal("Element is not editable".to_string()))
+            Err(AutomationError::PlatformError("Element is not editable".to_string()))
         }
     }
 
     fn press_key(&self, key: &str) -> Result<(), AutomationError> {
         let control_type = self.element.0.get_control_type()
-            .map_err(|e| AutomationError::Internal(e.to_string()))?;
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         // check if element accepts input, similar :D
         if control_type == ControlType::Edit {
             let keyboard = Keyboard::default();
             keyboard.send_keys(key)
-                .map_err(|e| AutomationError::Internal(e.to_string()))?;
+                .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
             Ok(())
         } else {
-            Err(AutomationError::Internal("Element is not editable".to_string()))
+            Err(AutomationError::PlatformError("Element is not editable".to_string()))
         }
     }
 
     fn get_text(&self, max_depth: usize) -> Result<String, AutomationError> {
-        // use uiautomation::patterns::UITextChildPattern;
-        // UITextChildPattern::get_text_range(&self);
-        // self.element.0.get_name().map_err(|e| AutomationError::ElementNotFound(e.to_string()))
-        unimplemented!()
+        fn collect_text(
+            element: &uiautomation::UIElement,
+            depth: usize,
+            max_depth: usize
+        ) -> Result<String, AutomationError> {
+            if depth > max_depth {
+                return Ok(String::new());
+            }
+            let mut text = String::new();
+
+            if let Ok(text_pattern) = element.get_pattern::<patterns::UITextPattern>() {
+                if let Ok(range) = text_pattern.get_document_range() {
+                    // -1 for retriving all possible texts
+                    if let Ok(range_text) = range.get_text(-1) {
+                        text.push_str(&range_text);
+                    }
+                }
+            } else {
+                // fallback to `get_name` if TextPattern isn't available.
+                // but it'll get only name
+                text.push_str(&element.get_name().unwrap_or_default());
+            }
+            if depth < max_depth {
+                if let Ok(children) = element.get_cached_children() {
+                    for child in children {
+                        // collect recursively
+                        let child_text = collect_text(&child, depth + 1, max_depth)?;
+                        if !child_text.is_empty() {
+                            text.push_str(&format!(" {}", child_text));
+                        }
+                    }
+                }
+            }
+            Ok(text)
+        }
+        collect_text(&self.element.0, 0, max_depth)
     }
 
     fn set_value(&self, value: &str) -> Result<(), AutomationError> {
-        // self.element.0.set_value(value).map_err(|e| AutomationError::Internal(e.to_string()))
-        unimplemented!()
+        // uiautomation::actions::Value::set_value(&self, value)
+        // self.element.0.set_value(value).map_err(|e| AutomationError::PlatformError(e.to_string()))
+        let value_par = self.element.0.get_pattern::<patterns::UIValuePattern>()
+            .map_err(|e| AutomationError::PlatformError(e.to_string()));
+
+        if let Ok(v) = value_par {
+            v.set_value(value).map_err(|e| AutomationError::PlatformError(e.to_string()))
+        } else {
+            Err(AutomationError::PlatformError("`UIValuePattern` is not found".to_string()))
+        }
     }
 
     fn is_enabled(&self) -> Result<bool, AutomationError> {
@@ -476,15 +518,35 @@ impl UIElementImpl for WindowsUIElement {
     }
 
     fn is_visible(&self) -> Result<bool, AutomationError> {
-        unimplemented!()
+        // offscreen means invisible, right?
+        self.element.0.is_offscreen().map_err(|e| AutomationError::ElementNotFound(e.to_string()))
     }
 
     fn is_focused(&self) -> Result<bool, AutomationError> {
-        // self.element.0.try_focus().map_err(|e| AutomationError::ElementNotFound(e.to_string()))
-        unimplemented!()
+        // start a sperate instance of `uiautomation` just to check
+        // the current focused element is same as focused element or not
+        let automation = UIAutomation::new().map_err(|e| AutomationError::Internal(e.to_string()))?;
+        let focused_element = automation.get_focused_element()
+            .map_err(|e| AutomationError::Internal(e.to_string()))?;
+        if Arc::ptr_eq(&self.element.0, &Arc::new(focused_element)) {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     fn perform_action(&self, action: &str) -> Result<(), AutomationError> {
+        // the actions can be
+        // focus
+        // invoke
+        // enable
+        // click
+        // double click
+        // righ click
+        // scroll
+        // toggle
+        // set value
+        // expand collapse 
         unimplemented!()
     }
 
