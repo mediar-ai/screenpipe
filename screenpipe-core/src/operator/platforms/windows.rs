@@ -31,6 +31,9 @@ unsafe impl Send for ThreadSafeWinUIAutomation {}
 unsafe impl Sync for ThreadSafeWinUIAutomation {}
 
 #[allow(unused)]
+// there is no need of `use_background_apps` or `activate_app`
+// windows IUIAutomation will always get current running app 
+// & background running app spontaneously, keeping it anyway!!
 pub struct WindowsEngine {
     automation: ThreadSafeWinUIAutomation,
     use_background_apps: bool,
@@ -319,7 +322,7 @@ impl UIElementImpl for WindowsUIElement {
 
     fn attributes(&self) -> UIElementAttributes {
         let mut properties = HashMap::new();
-        // there are alot of properties, should i include all ??
+        // there are alot of properties, including neccessary ones
         // ref: https://docs.rs/uiautomation/0.16.1/uiautomation/types/enum.UIProperty.html
         let property_list = vec![
             UIProperty::Name,
@@ -501,10 +504,9 @@ impl UIElementImpl for WindowsUIElement {
     }
 
     fn set_value(&self, value: &str) -> Result<(), AutomationError> {
-        // uiautomation::actions::Value::set_value(&self, value)
-        // self.element.0.set_value(value).map_err(|e| AutomationError::PlatformError(e.to_string()))
         let value_par = self.element.0.get_pattern::<patterns::UIValuePattern>()
             .map_err(|e| AutomationError::PlatformError(e.to_string()));
+        debug!("Setting value: {:#?} to ui element {:#?}", &value, &self.element.0);
 
         if let Ok(v) = value_par {
             v.set_value(value).map_err(|e| AutomationError::PlatformError(e.to_string()))
@@ -523,11 +525,12 @@ impl UIElementImpl for WindowsUIElement {
     }
 
     fn is_focused(&self) -> Result<bool, AutomationError> {
-        // start a sperate instance of `uiautomation` just to check
-        // the current focused element is same as focused element or not
-        let automation = UIAutomation::new().map_err(|e| AutomationError::Internal(e.to_string()))?;
-        let focused_element = automation.get_focused_element()
-            .map_err(|e| AutomationError::Internal(e.to_string()))?;
+        // start a instance of `uiautomation` just to check the 
+        // current focused element is same as focused element or not
+        let automation = WindowsEngine::new(false, false)
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+        let focused_element = automation.automation.0.get_focused_element()
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         if Arc::ptr_eq(&self.element.0, &Arc::new(focused_element)) {
             Ok(true)
         } else {
