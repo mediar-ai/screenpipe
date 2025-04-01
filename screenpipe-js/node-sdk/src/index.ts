@@ -1,11 +1,9 @@
 import type {
-  InputAction,
-  InputControlResponse,
   ScreenpipeQueryParams,
   ScreenpipeResponse,
   NotificationOptions,
 } from "../../common/types";
-import { toSnakeCase, convertToCamelCase } from "../../common/utils";
+import { toSnakeCase, convertObjectToCamelCase } from "../../common/utils";
 import { SettingsManager } from "./SettingsManager";
 import { InboxManager } from "./InboxManager";
 import { PipesManager } from "../../common/PipesManager";
@@ -15,6 +13,7 @@ import {
   setAnalyticsClient,
 } from "../../common/analytics";
 import posthog from "posthog-js";
+import { Operator } from "../../common/Operator";
 
 setAnalyticsClient({
   init: posthog.init.bind(posthog),
@@ -25,21 +24,10 @@ class NodePipe {
   private analyticsInitialized = false;
   private analyticsEnabled = true;
 
-  public input = {
-    type: (text: string) =>
-      this.sendInputControl({ type: "WriteText", data: text }),
-    press: (key: string) =>
-      this.sendInputControl({ type: "KeyPress", data: key }),
-    moveMouse: (x: number, y: number) =>
-      this.sendInputControl({ type: "MouseMove", data: { x, y } }),
-    click: (button: "left" | "right" | "middle") =>
-      this.sendInputControl({ type: "MouseClick", data: button }),
-  };
-
   public settings = new SettingsManager();
   public inbox = new InboxManager();
   public pipes = new PipesManager();
-
+  public operator = new Operator();
   public async sendDesktopNotification(
     options: NotificationOptions
   ): Promise<boolean> {
@@ -57,26 +45,6 @@ class NodePipe {
       return true;
     } catch (error) {
       console.error("failed to send notification:", error);
-      return false;
-    }
-  }
-
-  public async sendInputControl(action: InputAction): Promise<boolean> {
-    await this.initAnalyticsIfNeeded();
-    const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
-    try {
-      const response = await fetch(`${apiUrl}/experimental/input_control`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      if (!response.ok) {
-        throw new Error(`http error! status: ${response.status}`);
-      }
-      const data: InputControlResponse = await response.json();
-      return data.success;
-    } catch (error) {
-      console.error("failed to control input:", error);
       return false;
     }
   }
@@ -227,7 +195,7 @@ class NodePipe {
         content_type: params.contentType,
         result_count: data.pagination.total,
       });
-      return convertToCamelCase(data) as ScreenpipeResponse;
+      return convertObjectToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
       console.error("error querying screenpipe:", error);
       throw error;
@@ -270,7 +238,7 @@ class NodePipe {
 
 const pipe = new NodePipe();
 
-export { pipe };
-
 export * from "../../common/types";
 export { getDefaultSettings } from "../../common/utils";
+
+export { pipe };

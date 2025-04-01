@@ -1,5 +1,6 @@
 use crate::operator::element::UIElementImpl;
 use crate::operator::platforms::AccessibilityEngine;
+use crate::operator::ClickResult;
 use crate::operator::{AutomationError, Locator, Selector, UIElement, UIElementAttributes};
 use std::fmt::Debug;
 
@@ -51,6 +52,18 @@ impl AccessibilityEngine for LinuxEngine {
         _selector: &Selector,
         _root: Option<&UIElement>,
     ) -> Result<Vec<UIElement>, AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Linux implementation is not yet available".to_string(),
+        ))
+    }
+
+    fn open_application(&self, _app_name: &str) -> Result<UIElement, AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Linux implementation is not yet available".to_string(),
+        ))
+    }
+
+    fn open_url(&self, _url: &str, _browser: Option<&str>) -> Result<UIElement, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Linux implementation is not yet available".to_string(),
         ))
@@ -107,13 +120,13 @@ impl UIElementImpl for LinuxUIElement {
         ))
     }
 
-    fn click(&self) -> Result<(), AutomationError> {
+    fn click(&self) -> Result<ClickResult, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Linux implementation is not yet available".to_string(),
         ))
     }
 
-    fn double_click(&self) -> Result<(), AutomationError> {
+    fn double_click(&self) -> Result<ClickResult, AutomationError> {
         Err(AutomationError::UnsupportedPlatform(
             "Linux implementation is not yet available".to_string(),
         ))
@@ -197,5 +210,11 @@ impl UIElementImpl for LinuxUIElement {
 
     fn clone_box(&self) -> Box<dyn UIElementImpl> {
         Box::new(LinuxUIElement)
+    }
+
+    fn scroll(&self, _direction: &str, _amount: f64) -> Result<(), AutomationError> {
+        Err(AutomationError::UnsupportedPlatform(
+            "Linux implementation is not yet available".to_string(),
+        ))
     }
 }

@@ -4,7 +4,7 @@ use crate::operator::{AutomationError, Selector, UIElement};
 pub trait AccessibilityEngine: Send + Sync {
     /// Get the root UI element
     fn get_root_element(&self) -> UIElement;
-    
+
     #[cfg(target_os = "windows")]
     fn get_element_by_id(&self, _id: &str) -> Result<UIElement, AutomationError>;
     /// Get the currently focused element
@@ -31,14 +31,20 @@ pub trait AccessibilityEngine: Send + Sync {
         selector: &Selector,
         root: Option<&UIElement>,
     ) -> Result<Vec<UIElement>, AutomationError>;
+
+    /// Open an application by name
+    fn open_application(&self, app_name: &str) -> Result<UIElement, AutomationError>;
+
+    /// Open a URL in a specified browser (or default if None)
+    fn open_url(&self, url: &str, browser: Option<&str>) -> Result<UIElement, AutomationError>;
 }
 
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
-mod macos;
+pub mod macos;
 #[cfg(target_os = "macos")]
-mod tree_search;
+pub mod tree_search;
 #[cfg(target_os = "windows")]
 mod windows;
 

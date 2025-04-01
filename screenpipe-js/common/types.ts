@@ -344,11 +344,6 @@ export interface ElementSelector {
   app_name: string;
   window_name?: string;
   locator: string;
-  index?: number;
-  text?: string;
-  label?: string;
-  description?: string;
-  element_id?: string;
   use_background_apps?: boolean;
   activate_app?: boolean;
 }
@@ -372,6 +367,14 @@ export interface ElementInfo {
   position?: ElementPosition;
   size?: ElementSize;
   properties: Record<string, any>;
+}
+
+export interface ElementStats {
+  total: number;
+  definitely_interactable: number;
+  sometimes_interactable: number;
+  non_interactable: number;
+  by_role: { [key: string]: number };
 }
 
 export interface FindElementsRequest {

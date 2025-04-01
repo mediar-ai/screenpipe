@@ -29,6 +29,6 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 The easiest way to deploy your Next.js pipe is to use the [screenpipe Platform](https://screenpi.pe).
 
-Check out our [pipe deployment documentation](https://docs.screenpi.pe/docs/plugins) for more details.
+Check out our [pipe deployment documentation](https://docs.screenpi.pe/plugins) for more details.
 
 

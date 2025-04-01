@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,12 +15,10 @@ import {
   Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { OllamaModelsList } from "./ollama-models-list";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import path from "path";
 import { FileSuggestTextarea } from "./file-suggest-textarea";
-import { Skeleton } from "@/components/ui/skeleton";
 import { debounce } from "lodash";
 import { updatePipeConfig } from "@/lib/actions/update-pipe-config";
 import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
@@ -30,9 +28,17 @@ import remarkMath from "remark-math";
 import { CodeBlock } from "./ui/codeblock";
 import { VideoComponent } from "./video";
 import { Switch } from "@/components/ui/switch";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { AIPresetsSelector } from "./ai-presets-selector";
+import { Skeleton } from "./ui/skeleton";
 
 export function ObsidianSettings() {
-  const { settings, updateSettings, loading } = usePipeSettings();
+  const {
+    settings: pipeSettings,
+    updateSettings,
+    getPreset,
+  } = usePipeSettings("obsidian");
+  const { settings, updateSettings: updateSettings2, loading } = useSettings();
   const [lastLog, setLastLog] = useState<any>(null);
   const { toast } = useToast();
   const [intelligence, setIntelligence] = useState<string | null>(null);
@@ -56,11 +62,22 @@ export function ObsidianSettings() {
     useState<boolean>(false);
   const [checkingModel, setCheckingModel] = useState<boolean>(false);
 
+  const logPreset = useMemo(
+    () => getPreset("aiLogPresetId"),
+    [pipeSettings?.aiLogPresetId],
+  );
+  const intelligencePreset = useMemo(
+    () => getPreset("aiPresetId"),
+    [pipeSettings?.aiPresetId],
+  );
+
   useEffect(() => {
-    if (settings) {
-      setCustomPrompt(settings.prompt || "");
+    if (pipeSettings) {
+      const preset = getPreset("aiLogPresetId");
+      console.log("preset", preset?.prompt);
+      setCustomPrompt(preset?.prompt || "");
     }
-  }, [settings]);
+  }, [pipeSettings?.aiLogPresetId]);
 
   useEffect(() => {
     const fetchPaths = async () => {
@@ -120,9 +137,31 @@ export function ObsidianSettings() {
       };
 
       await updateSettings({
-        ...settings!,
         ...obsidianSettings,
       });
+
+      // update the aiLogPresetId preset prompt
+      const logPreset = getPreset("aiLogPresetId");
+      const intelligencePreset = getPreset("aiPresetId");
+
+      if (logPreset?.id === intelligencePreset?.id) {
+        await updateSettings2({
+          ...settings!,
+          aiPresets: settings?.aiPresets?.map((p) =>
+            p.id === logPreset?.id ? { ...p, prompt: customPrompt || "" } : p,
+          ),
+        });
+      } else {
+        await updateSettings2({
+          ...settings!,
+          aiPresets: settings?.aiPresets?.map((p) =>
+            p.id === logPreset?.id || p.id === intelligencePreset?.id
+              ? { ...p, prompt: customPrompt || "" }
+              : p,
+          ),
+        });
+      }
+      
       await updatePipeConfig(logTimeWindow / 60000);
 
       loadingToast.update({
@@ -234,11 +273,11 @@ export function ObsidianSettings() {
   };
 
   const openObsidianVault = async () => {
-    if (!settings?.vaultPath) return;
+    if (!pipeSettings?.vaultPath) return;
 
     try {
       // Start from the current path and walk up until we find .obsidian folder
-      let currentPath = settings.vaultPath;
+      let currentPath = pipeSettings.vaultPath;
       let vaultPath = null;
 
       while (currentPath !== "/") {
@@ -269,13 +308,13 @@ export function ObsidianSettings() {
 
       const vaultName = path.basename(vaultPath);
       // Get relative path from vault root to AI folder
-      const relativePath = settings.vaultPath
+      const relativePath = pipeSettings.vaultPath
         .replace(vaultPath, "")
         .replace(/^\//, "");
       const searchQuery = `path:"${relativePath}"`;
 
       const deepLink = `obsidian://search?vault=${encodeURIComponent(
-        vaultName
+        vaultName,
       )}&query=${encodeURIComponent(searchQuery)}`;
 
       window.open(deepLink, "_blank");
@@ -371,15 +410,15 @@ export function ObsidianSettings() {
         });
       }
     }, 500),
-    []
+    [],
   );
 
   // Add this new useEffect for initial path validation
   useEffect(() => {
-    if (settings?.vaultPath) {
-      validatePath(settings.vaultPath);
+    if (pipeSettings?.vaultPath) {
+      validatePath(pipeSettings.vaultPath);
     }
-  }, [settings?.vaultPath, validatePath]);
+  }, [pipeSettings?.vaultPath, validatePath]);
 
   const setupDeduplication = async () => {
     setCheckingModel(true);
@@ -389,7 +428,7 @@ export function ObsidianSettings() {
       const models = await checkRes.json();
 
       const hasEmbeddingModel = models.models?.some(
-        (m: { name: string }) => m.name === "nomic-embed-text"
+        (m: { name: string }) => m.name === "nomic-embed-text",
       );
 
       if (!hasEmbeddingModel) {
@@ -438,7 +477,7 @@ export function ObsidianSettings() {
             // Update toast with progress if available
             if (response.total && response.completed) {
               const progress = Math.round(
-                (response.completed / response.total) * 100
+                (response.completed / response.total) * 100,
               );
               loadingToast.update({
                 id: loadingToast.id,
@@ -488,9 +527,9 @@ export function ObsidianSettings() {
   // Add this useEffect to initialize the state from settings
   useEffect(() => {
     if (settings) {
-      setDeduplicationEnabled(settings.deduplicationEnabled || false);
+      setDeduplicationEnabled(pipeSettings?.deduplicationEnabled || false);
     }
-  }, [settings]);
+  }, [pipeSettings?.deduplicationEnabled]);
 
   if (loading) {
     return (
@@ -530,6 +569,7 @@ export function ObsidianSettings() {
       </div>
     );
   }
+
   const hasMP4File = (content: string) =>
     content.trim().toLowerCase().includes(".mp4");
   return (
@@ -551,15 +591,14 @@ export function ObsidianSettings() {
                   <Input
                     id="vaultPath"
                     name="vaultPath"
-                    defaultValue={settings?.vaultPath}
+                    defaultValue={pipeSettings?.vaultPath}
                     placeholder="/path/to/vault"
-                    className={`${
-                      pathValidation.isValid
+                    className={`${pathValidation.isValid
                         ? "border-green-500"
                         : pathValidation.message
-                        ? "border-red-500"
-                        : ""
-                    }`}
+                          ? "border-red-500"
+                          : ""
+                      }`}
                     onChange={(e) => validatePath(e.target.value)}
                   />
                   {pathValidation.isChecking && (
@@ -573,7 +612,7 @@ export function ObsidianSettings() {
                         className="cursor-pointer hover:bg-muted"
                         onClick={() => {
                           const input = document.getElementById(
-                            "vaultPath"
+                            "vaultPath",
                           ) as HTMLInputElement;
                           if (input) {
                             input.value = path;
@@ -610,9 +649,8 @@ export function ObsidianSettings() {
 
               {pathValidation.message && (
                 <p
-                  className={`text-sm ${
-                    pathValidation.isValid ? "text-green-500" : "text-red-500"
-                  }`}
+                  className={`text-sm ${pathValidation.isValid ? "text-green-500" : "text-red-500"
+                    }`}
                 >
                   {pathValidation.message}
                 </p>
@@ -685,8 +723,8 @@ export function ObsidianSettings() {
                       step="1"
                       max="60"
                       defaultValue={
-                        settings?.logTimeWindow
-                          ? settings?.logTimeWindow / 60000
+                        pipeSettings?.logTimeWindow
+                          ? pipeSettings?.logTimeWindow / 60000
                           : 5
                       }
                     />
@@ -711,7 +749,7 @@ export function ObsidianSettings() {
                       type="number"
                       min="1"
                       step="1"
-                      defaultValue={settings?.logPageSize || 100}
+                      defaultValue={pipeSettings?.logPageSize || 100}
                     />
                     <p className="text-xs text-muted-foreground">
                       how many screenpipe results to include in the AI prompt
@@ -726,56 +764,36 @@ export function ObsidianSettings() {
                     >
                       <Brain className="h-4 w-4" />
                       log generation model
-                      <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
-                        ollama run{" "}
-                        {settings?.logModel || "llama3.2:3b-instruct-q4_K_M"}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-4 w-4 p-0"
-                          onClick={() => {
-                            navigator.clipboard.writeText(
-                              `ollama run ${
-                                settings?.logModel ||
+                      {logPreset?.provider === "native-ollama" && (
+                        <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
+                          ollama run{" "}
+                          {logPreset.model || "llama3.2:3b-instruct-q4_K_M"}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4 p-0"
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                `ollama run ${logPreset.model ||
                                 "llama3.2:3b-instruct-q4_K_M"
-                              }`
-                            );
-                            toast({
-                              title: "copied to clipboard",
-                              duration: 1000,
-                            });
-                          }}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                      </code>
-                    </Label>
-                    <OllamaModelsList
-                      disabled={!pathValidation.isValid}
-                      defaultValue={
-                        settings?.logModel || "llama3.2:3b-instruct-q4_K_M"
-                      }
-                      onChange={(value) => {
-                        updateSettings({
-                          ...settings,
-                          logModel: value,
-                        });
-                      }}
-                    />
-                    {settings?.logModel &&
-                      (settings.logModel.includes("deepseek") ||
-                        settings.logModel.includes("o3") ||
-                        settings.logModel.includes("o1")) && (
-                        <p className="text-sm text-red-500">
-                          warning: reasoning models like deepseek are not
-                          recommended for log generation.
-                        </p>
+                                }`,
+                              );
+                              toast({
+                                title: "copied to clipboard",
+                                duration: 1000,
+                              });
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </code>
                       )}
-                    <p className="text-xs text-muted-foreground">
-                      local AI model used for generating individual activity
-                      logs
-                    </p>
+                    </Label>
+                    <AIPresetsSelector
+                      pipeName="obsidian"
+                      aiKey="aiLogPresetId"
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -801,8 +819,8 @@ export function ObsidianSettings() {
                       min="1"
                       step="1"
                       defaultValue={
-                        settings?.analysisTimeWindow
-                          ? settings.analysisTimeWindow / (60 * 60 * 1000)
+                        pipeSettings?.analysisTimeWindow
+                          ? pipeSettings.analysisTimeWindow / (60 * 60 * 1000)
                           : 1
                       }
                     />
@@ -813,54 +831,39 @@ export function ObsidianSettings() {
 
                   <div className="space-y-2">
                     <Label
-                      htmlFor="analysisModel"
+                      htmlFor="logModel"
                       className="flex items-center gap-2"
                     >
                       <Brain className="h-4 w-4" />
-                      analysis model
-                      <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
-                        ollama run{" "}
-                        {settings?.analysisModel ||
-                          "deepseek-r1:7b-qwen-distill-q4_K_M"}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-4 w-4 p-0"
-                          onClick={() => {
-                            navigator.clipboard.writeText(
-                              `ollama run ${
-                                settings?.analysisModel ||
-                                "deepseek-r1:7b-qwen-distill-q4_K_M"
-                              }`
-                            );
-                            toast({
-                              title: "copied to clipboard",
-                              duration: 1000,
-                            });
-                          }}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                      </code>
+                      log generation model
+                      {intelligencePreset?.provider === "native-ollama" && (
+                        <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
+                          ollama run{" "}
+                          {intelligencePreset.model ||
+                            "llama3.2:3b-instruct-q4_K_M"}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-4 w-4 p-0"
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                `ollama run ${intelligencePreset.model ||
+                                "llama3.2:3b-instruct-q4_K_M"
+                                }`,
+                              );
+                              toast({
+                                title: "copied to clipboard",
+                                duration: 1000,
+                              });
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </code>
+                      )}
                     </Label>
-                    <OllamaModelsList
-                      disabled={!pathValidation.isValid}
-                      defaultValue={
-                        settings?.analysisModel ||
-                        "deepseek-r1:7b-qwen-distill-q4_K_M"
-                      }
-                      onChange={(value) => {
-                        updateSettings({
-                          ...settings,
-                          analysisModel: value,
-                        });
-                      }}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      local AI model used for generating high-level insights
-                      (typically larger model)
-                    </p>
+                    <AIPresetsSelector pipeName="obsidian" aiKey="aiPresetId" />
                   </div>
                 </CardContent>
               </Card>
@@ -881,7 +884,7 @@ export function ObsidianSettings() {
                       disabled={!pathValidation.isValid}
                     />
                     <p className="text-xs text-muted-foreground">
-                      customize how activity logs and insights are generated
+                      customize how activity logs and insights are generated. you can also link other obsidian notes by typing "@[[notes]]"
                     </p>
                   </div>
                 </CardContent>
@@ -897,7 +900,9 @@ export function ObsidianSettings() {
               onClick={testLog}
               variant="outline"
               disabled={
-                testLogLoading || !pathValidation.isValid || !settings?.logModel
+                testLogLoading ||
+                !pathValidation.isValid ||
+                !Boolean(pipeSettings?.aiLogPresetId)
               }
               className="flex-1"
             >
@@ -921,7 +926,7 @@ export function ObsidianSettings() {
               disabled={
                 intelligenceLoading ||
                 !pathValidation.isValid ||
-                !settings?.analysisModel
+                !Boolean(pipeSettings?.aiPresetId)
               }
               className="flex-1"
             >
@@ -1082,5 +1087,5 @@ export function ObsidianSettings() {
         </div>
       </form>
     </div>
-  );
+  	);
 }

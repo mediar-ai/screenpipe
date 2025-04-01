@@ -57,7 +57,7 @@ export const AddPipeForm: React.FC<AddPipeFormProps> = ({
       </div>
       <div className="text-sm text-muted-foreground">
         <a
-          href="https://docs.screenpi.pe/docs/plugins"
+          href="https://docs.screenpi.pe/plugins"
           target="_blank"
           rel="noopener noreferrer"
           className="hover:underline flex items-center gap-1"
