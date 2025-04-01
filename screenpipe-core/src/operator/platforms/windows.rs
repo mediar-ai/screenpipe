@@ -635,17 +635,21 @@ impl UIElementImpl for WindowsUIElement {
             ScrollAmount::NoAmount
         };
 
-        match direction {
-            "up" => scroll_pattern.scroll(ScrollAmount::NoAmount, scroll_amount)
-                .map_err(|e| AutomationError::PlatformError(e.to_string())),
-            "down" => scroll_pattern.scroll(ScrollAmount::NoAmount, scroll_amount)
-                .map_err(|e| AutomationError::PlatformError(e.to_string())),
-            "left" => scroll_pattern.scroll(scroll_amount, ScrollAmount::NoAmount)
-                .map_err(|e| AutomationError::PlatformError(e.to_string())),
-            "right" => scroll_pattern.scroll(scroll_amount, ScrollAmount::NoAmount)
-                .map_err(|e| AutomationError::PlatformError(e.to_string())),
-            _ => Err(AutomationError::UnsupportedOperation("Invalid scroll direction".to_string())),
+        let times = amount.abs() as usize;
+        for _ in 0..times {
+            match direction {
+                "up" => scroll_pattern.scroll(ScrollAmount::NoAmount, scroll_amount)
+                    .map_err(|e| AutomationError::PlatformError(e.to_string())),
+                "down" => scroll_pattern.scroll(ScrollAmount::NoAmount, scroll_amount)
+                    .map_err(|e| AutomationError::PlatformError(e.to_string())),
+                "left" => scroll_pattern.scroll(scroll_amount, ScrollAmount::NoAmount)
+                    .map_err(|e| AutomationError::PlatformError(e.to_string())),
+                "right" => scroll_pattern.scroll(scroll_amount, ScrollAmount::NoAmount)
+                    .map_err(|e| AutomationError::PlatformError(e.to_string())),
+                _ => Err(AutomationError::UnsupportedOperation("Invalid scroll direction".to_string())),
+            }?
         }
+        Ok(())
     }
 }
 
