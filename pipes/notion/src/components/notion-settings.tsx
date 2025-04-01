@@ -31,7 +31,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
-import { NotionIdInput } from "./notion-url-to-input";
+import { NotionDatabaseSelector, NotionIdInput } from "./notion-url-to-input";
 import { INTEGRATION_NAME } from "@/lib/utils";
 import {
   Tabs,
@@ -66,6 +66,7 @@ export function NotionSettings() {
   }, [settings]);
 
   const handleValidate = async () => {
+    console.log("handleValidate", settings?.notion);
     setIsSettingUp(true);
     try {
       const isValid = await validateCredentials({
@@ -217,7 +218,11 @@ export function NotionSettings() {
       });
 
       if (localSettings?.interval !== settings?.interval) {
-        await updatePipeConfig(localSettings?.interval || 5);
+        await updatePipeConfig(localSettings?.interval || 5, "/api/log", "minute");
+      }
+
+      if (localSettings?.shortTasksInterval !== settings?.shortTasksInterval) {
+        await updatePipeConfig(localSettings?.shortTasksInterval || 1, "/api/intelligence", "hour");
       }
 
       toast({
@@ -267,7 +272,7 @@ export function NotionSettings() {
     };
     
     checkConnection();
-  }, [settings?.notion]);
+  }, [settings?.notion?.accessToken, settings?.notion?.databaseId, settings?.notion?.intelligenceDbId]);
 
   // Check if manual connection is ready
   const isManualConnectionReady = !!(
@@ -342,7 +347,7 @@ export function NotionSettings() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="connection" className="space-y-4">
+          <TabsContent value="connection" className="space-y-4 px-5">
             <div className="space-y-2">
               <Label htmlFor="workspace">Workspace Name</Label>
               <Input
@@ -412,8 +417,12 @@ export function NotionSettings() {
                     </p>
                   </div>
                   
+                    {
+                      isConnectedToNotion && (
+                        <>
                   <div className="space-y-2">
-                    <NotionIdInput
+                      <NotionDatabaseSelector
+                      accessToken={localSettings?.notion?.accessToken || ""}
                       label="Database ID"
                       value={localSettings?.notion?.databaseId || ""}
                       onChange={(value) =>
@@ -427,12 +436,12 @@ export function NotionSettings() {
                           },
                         })
                       }
-                      dialogTitle="Extract Database ID from URL"
-                    />
+                        />
                   </div>
                   
                   <div className="space-y-2">
-                    <NotionIdInput
+                    <NotionDatabaseSelector
+                      accessToken={localSettings?.notion?.accessToken || ""}
                       label="Intelligence ID"
                       value={localSettings?.notion?.intelligenceDbId || ""}
                       onChange={(value) =>
@@ -446,9 +455,11 @@ export function NotionSettings() {
                           },
                         })
                       }
-                      dialogTitle="Extract Intelligence Database ID from URL"
                     />
                   </div>
+                  </>
+                )
+                }
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -591,7 +602,7 @@ export function NotionSettings() {
           <TabsContent value="sync" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="interval">Sync Interval (minutes)</Label>
+                <Label htmlFor="interval">Sync Interval (short tasks) (minutes)</Label>
                 <Input
                   id="interval"
                   name="interval"
@@ -603,7 +614,7 @@ export function NotionSettings() {
                   onChange={(e) => {
                     setLocalSettings({
                       ...localSettings!,
-                      interval: parseInt(e.target.value),
+                      interval: parseInt(e.target.value) || 5,
                     });
                   }}
                 />
@@ -624,13 +635,29 @@ export function NotionSettings() {
                   onChange={(e) =>
                     setLocalSettings({
                       ...localSettings!,
-                      pageSize: parseInt(e.target.value),
+                      pageSize: parseInt(e.target.value) || 50,
                     })
                   }
                 />
                 <p className="text-xs text-muted-foreground">
                   Number of items to fetch per sync (10-100)
                 </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="shortTasksInterval"> Sync Interval (long tasks) (hours)</Label>
+                <Input
+                  id="shortTasksInterval"
+                  name="shortTasksInterval"
+                  type="number"
+                  defaultValue={settings?.shortTasksInterval || 1}
+                  onChange={(e) => {
+                    setLocalSettings({
+                      ...localSettings!,
+                      shortTasksInterval: parseInt(e.target.value) || 1,
+                    });
+                  }}
+                />
               </div>
             </div>
           </TabsContent>

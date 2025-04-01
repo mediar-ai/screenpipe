@@ -1178,10 +1178,12 @@ export const AIPresetsSelector = ({
                       key={preset.id}
                       value={preset.id}
                       onSelect={(currentValue) => {
+                        console.log("currentValue", currentValue);
                         updatePipeSettings({
                           [aiKey]:
                             currentValue === selectedPreset ? "" : currentValue,
                         });
+                        console.log("pipeSettings", pipeSettings);
                         setOpen(false);
                       }}
                       className="flex py-2"
