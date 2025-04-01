@@ -10,8 +10,8 @@ use uiautomation::controls::ControlType;
 use uiautomation::inputs::Mouse;
 use uiautomation::inputs::Keyboard;
 use uiautomation::variants::Variant;
+use uiautomation::core::UICondition;
 use uiautomation::patterns;
-use uiautomation::actions::Scroll;
 use tracing::debug;
 use std::collections::{
     HashMap,
@@ -19,7 +19,8 @@ use std::collections::{
 };
 use uiautomation::types::{
     TreeScope,
-    UIProperty
+    UIProperty,
+    ScrollAmount
 };
 
 // thread-safety
@@ -32,8 +33,8 @@ unsafe impl Sync for ThreadSafeWinUIAutomation {}
 
 #[allow(unused)]
 // there is no need of `use_background_apps` or `activate_app`
-// windows IUIAutomation will always get current running app 
-// & background running app spontaneously, keeping it anyway!!
+// windows IUIAutomation will get current running app & 
+// background running app spontaneously, keeping it anyway!!
 pub struct WindowsEngine {
     automation: ThreadSafeWinUIAutomation,
     use_background_apps: bool,
@@ -123,7 +124,7 @@ impl AccessibilityEngine for WindowsEngine {
             if let Some(ele) = el.as_any().downcast_ref::<WindowsUIElement>() {
                 &ele.element.0
             } else {
-                panic!("Root element not found")
+                &Arc::new(self.automation.0.get_root_element().unwrap())
             }
         } else {
             &Arc::new(self.automation.0.get_root_element().unwrap())
@@ -131,37 +132,40 @@ impl AccessibilityEngine for WindowsEngine {
 
         // make condition according to selector
         let condition = match selector {
-            Selector::Role { role, name } => {
-                let role_condition = self.automation.0.create_property_condition(
-                    UIProperty::ControlType,
-                    Variant::from(role.as_str()),
-                    None
-                ).unwrap();
+            Selector::Role { role, name: _ } => {
+                let roles = map_generic_role_to_win_roles(role);
+                let mut role_conditions: Vec<UICondition> = roles.iter()
+                    .map(|&role| {
+                        self.automation.0.create_property_condition(
+                            UIProperty::ControlType,
+                            Variant::from(role as i32),
+                            None
+                        ).unwrap()
+                    }).collect();
 
-                if let Some(name) = name {
-                    let name_condition = self.automation.0.create_property_condition(
-                        UIProperty::Name,
-                        Variant::from(name.as_str()),
-                        None
-                    ).unwrap();
-                    self.automation.0.create_and_condition(role_condition, name_condition).unwrap()
-                } else {
-                    role_condition
+                debug!("role conditions: {:#?} for finding element: {:#?}",
+                    role_conditions, root_ele);
+
+                let mut combined_condition = role_conditions.remove(0);
+                for condition in role_conditions {
+                    combined_condition = self.automation.0
+                        .create_or_condition(combined_condition, condition).unwrap();
                 }
+                combined_condition
             },
             Selector::Id(id) => self.automation.0.create_property_condition(
                 UIProperty::AutomationId,
                 Variant::from(id.as_str()),
                 None
             ).unwrap(),
-            Selector::Name(name) => self.automation.0.create_property_condition(
+            Selector::Name(_name) => self.automation.0.create_property_condition(
                 UIProperty::Name,
-                Variant::from(name.as_str()),
+                Variant::from(ControlType::Window as i32),
                 None
             ).unwrap(),
-            Selector::Text(text) => self.automation.0.create_property_condition(
+            Selector::Text(_text) => self.automation.0.create_property_condition(
                 UIProperty::Name,
-                Variant::from(text.as_str()),
+                Variant::from(ControlType::Text as i32),
                 None
             ).unwrap(),
             Selector::Path(_) => {
@@ -194,46 +198,84 @@ impl AccessibilityEngine for WindowsEngine {
             if let Some(ele) = el.as_any().downcast_ref::<WindowsUIElement>() {
                 &ele.element.0
             } else {
-                panic!("Root element not found")
+                &Arc::new(self.automation.0.get_root_element().unwrap())
             }
         } else {
             &Arc::new(self.automation.0.get_root_element().unwrap())
         };
-        // make condition according to selector
-        let condition = match selector {
-            Selector::Role { role, name } => {
-                let role_condition = self.automation.0.create_property_condition(
-                    UIProperty::ControlType,
-                    Variant::from(role.as_str()),
+
+        match selector {
+            Selector::Role { role, name: _ } => {
+                let roles = map_generic_role_to_win_roles(role);
+                let mut role_conditions: Vec<UICondition> = roles.iter()
+                    .map(|&role| {
+                        self.automation.0.create_property_condition(
+                            UIProperty::ControlType,
+                            Variant::from(role as i32),
+                            None
+                        ).unwrap()
+                    }).collect();
+
+                debug!("role conditions: {:#?} for finding element: {:#?}",
+                    role_conditions, root_ele);
+
+                let mut combined_condition = role_conditions.remove(0);
+                for condition in role_conditions {
+                    combined_condition = self.automation.0
+                        .create_or_condition(combined_condition, condition).unwrap();
+                }
+
+                // find a element that satisfies all the roles
+                let element = root_ele.find_first(TreeScope::Subtree, &combined_condition).unwrap();
+                debug!("found element: {:#?}", element);
+
+                let arc_ele = ThreadSafeWinUIElement(Arc::new(element));
+
+                Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
+            },
+            Selector::Id(id) => {
+                let condition = self.automation.0.create_property_condition(
+                    UIProperty::AutomationId,
+                    Variant::from(id.as_str()),
+                        None
+                    ).unwrap();
+
+                let ele = root_ele.find_first(TreeScope::Subtree, &condition)
+                    .map_err(|e| AutomationError::ElementNotFound(
+                        format!("ID: '{}', Err: {}", id, e.to_string())))?;
+                let arc_ele = ThreadSafeWinUIElement(Arc::new(ele));
+
+                Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
+            },  
+            Selector::Name(name) => {
+                // `name` and `window` can be same
+                let condition = self.automation.0.create_property_condition(
+                    UIProperty::Name,
+                    Variant::from(ControlType::Window as i32),
                     None
                 ).unwrap();
 
-                if let Some(name) = name {
-                    let name_condition = self.automation.0.create_property_condition(
-                        UIProperty::Name,
-                        Variant::from(name.as_str()),
-                        None
-                    ).unwrap();
-                    self.automation.0.create_and_condition(role_condition, name_condition).unwrap()
-                } else {
-                    role_condition
-                }
+                let ele = root_ele.find_first(TreeScope::Subtree, &condition)
+                    .map_err(|e| AutomationError::ElementNotFound(
+                        format!("Name: '{}', Err: {}", name, e.to_string())))?;
+                let arc_ele = ThreadSafeWinUIElement(Arc::new(ele));
+
+                Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
             },
-            Selector::Id(id) => self.automation.0.create_property_condition(
-                UIProperty::AutomationId,
-                Variant::from(id.as_str()),
-                None
-            ).unwrap(),
-            Selector::Name(name) => self.automation.0.create_property_condition(
-                UIProperty::Name,
-                Variant::from(name.as_str()),
-                None
-            ).unwrap(),
-            Selector::Text(text) => self.automation.0.create_property_condition(
-                UIProperty::Name,
-                Variant::from(text.as_str()),
-                None
-            ).unwrap(),
+            Selector::Text(text) => { 
+                let condition = self.automation.0.create_property_condition(
+                    UIProperty::Name,
+                    Variant::from(ControlType::Text as i32),
+                    None
+                ).unwrap();
+
+                let ele = root_ele.find_first(TreeScope::Subtree, &condition)
+                    .map_err(|e| AutomationError::ElementNotFound(
+                        format!("Text: '{}', Err: {}", text, e.to_string())))?;
+                let arc_ele = ThreadSafeWinUIElement(Arc::new(ele));
+
+                Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
+            }
             Selector::Path(_) => {
                 return Err(AutomationError::UnsupportedOperation("`Path` selector not supported".to_string()));
             },
@@ -246,13 +288,7 @@ impl AccessibilityEngine for WindowsEngine {
             Selector::Chain(_selectors) => {
                 return Err(AutomationError::UnsupportedOperation("`selectors` selector not supported".to_string()));
             },
-        };
-
-        let ele = root_ele.find_first(TreeScope::Subtree, &condition)
-            .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
-        let arc_ele = ThreadSafeWinUIElement(Arc::new(ele));
-
-        Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
+        }
     }
 
     fn open_application(&self, app_name: &str) -> Result<UIElement, AutomationError> {
@@ -301,9 +337,9 @@ impl Debug for WindowsUIElement {
 
 impl UIElementImpl for WindowsUIElement {
     fn object_id(&self) -> usize {
-        // similar to macos :D
+        // use hashed `AutomationId` as object_id
         let stable_id = format!("{:?}",
-            self.element.0.get_runtime_id().unwrap_or_default()); 
+            self.element.0.get_automation_id().unwrap_or_default()); 
         let mut hasher = DefaultHasher::new();
         stable_id.hash(&mut hasher);
         let id = hasher.finish() as usize;
@@ -506,7 +542,7 @@ impl UIElementImpl for WindowsUIElement {
     fn set_value(&self, value: &str) -> Result<(), AutomationError> {
         let value_par = self.element.0.get_pattern::<patterns::UIValuePattern>()
             .map_err(|e| AutomationError::PlatformError(e.to_string()));
-        debug!("Setting value: {:#?} to ui element {:#?}", &value, &self.element.0);
+        debug!("setting value: {:#?} to ui element {:#?}", &value, &self.element.0);
 
         if let Ok(v) = value_par {
             v.set_value(value).map_err(|e| AutomationError::PlatformError(e.to_string()))
@@ -539,18 +575,29 @@ impl UIElementImpl for WindowsUIElement {
     }
 
     fn perform_action(&self, action: &str) -> Result<(), AutomationError> {
-        // the actions can be
-        // focus
-        // invoke
-        // enable
-        // click
-        // double click
-        // righ click
-        // scroll
-        // toggle
-        // set value
-        // expand collapse 
-        unimplemented!()
+        // actions those don't take args
+        match action {
+            "focus" => self.focus(),
+            "invoke" => {
+                let invoke_pat = self.element.0.get_pattern::<patterns::UIInvokePattern>()
+                    .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+                invoke_pat.invoke().map_err(|e| AutomationError::PlatformError(e.to_string()))
+            },
+            "click" => self.click().map(|_| ()),
+            "double_click" => self.double_click().map(|_| ()),
+            "right_click" => self.right_click().map(|_| ()),
+            "toggle" => {
+                let toggle_pattern = self.element.0.get_pattern::<patterns::UITogglePattern>()
+                    .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+                toggle_pattern.toggle().map_err(|e| AutomationError::PlatformError(e.to_string()))
+            },
+            "expand_collapse" => {
+                let expand_collapse_pattern = self.element.0.get_pattern::<patterns::UIExpandCollapsePattern>()
+                    .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+                expand_collapse_pattern.expand().map_err(|e| AutomationError::PlatformError(e.to_string()))
+            },
+            _ => Err(AutomationError::UnsupportedOperation(format!("action '{}' not supported", action))),
+        }
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -558,7 +605,18 @@ impl UIElementImpl for WindowsUIElement {
     }
 
     fn create_locator(&self, selector: Selector) -> Result<Locator, AutomationError> {
-        unimplemented!()
+        let automation = WindowsEngine::new(false, false)
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+
+        let attrs = self.attributes();
+        debug!("creating locator for element: control_type={:#?}, label={:#?}",
+            attrs.role, attrs.label);
+
+        let self_element = UIElement::new(Box::new(WindowsUIElement {
+            element: self.element.clone(),
+        }));
+
+        Ok(Locator::new(std::sync::Arc::new(automation), selector).within(self_element))
     }
 
     fn clone_box(&self) -> Box<dyn UIElementImpl> {
@@ -566,7 +624,96 @@ impl UIElementImpl for WindowsUIElement {
     }
 
     fn scroll(&self, direction: &str, amount: f64) -> Result<(), AutomationError> {
-        unimplemented!()
+        let scroll_pattern = self.element.0.get_pattern::<patterns::UIScrollPattern>()
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+
+        let scroll_amount = if amount > 0.0 {
+            ScrollAmount::SmallIncrement
+        } else if amount < 0.0 {
+            ScrollAmount::SmallDecrement
+        } else {
+            ScrollAmount::NoAmount
+        };
+
+        match direction {
+            "up" => scroll_pattern.scroll(ScrollAmount::NoAmount, scroll_amount)
+                .map_err(|e| AutomationError::PlatformError(e.to_string())),
+            "down" => scroll_pattern.scroll(ScrollAmount::NoAmount, scroll_amount)
+                .map_err(|e| AutomationError::PlatformError(e.to_string())),
+            "left" => scroll_pattern.scroll(scroll_amount, ScrollAmount::NoAmount)
+                .map_err(|e| AutomationError::PlatformError(e.to_string())),
+            "right" => scroll_pattern.scroll(scroll_amount, ScrollAmount::NoAmount)
+                .map_err(|e| AutomationError::PlatformError(e.to_string())),
+            _ => Err(AutomationError::UnsupportedOperation("Invalid scroll direction".to_string())),
+        }
+    }
+}
+
+// make easier to pass roles
+fn map_generic_role_to_win_roles(role: &str) -> Vec<ControlType> {
+    match role.to_lowercase().as_str() {
+        "window" => vec![ControlType::Window],
+        "button" => vec![
+            ControlType::Button,
+            ControlType::MenuItem,
+            ControlType::Text,
+            ControlType::Image,
+        ],
+        "checkbox" => vec![ControlType::CheckBox],
+        "menu" => vec![ControlType::Menu],
+        "menuitem" => vec![ControlType::MenuItem],
+        "dialog" => vec![ControlType::Window], // treat dialogs as window
+        "text" | "textfield" | "input" | "textbox" => vec![
+            ControlType::Edit,
+            ControlType::Text,
+            ControlType::Group,
+            ControlType::ComboBox,
+            ControlType::Header,
+            ControlType::HeaderItem,
+            ControlType::ToolTip,
+            ControlType::ToolBar,
+        ],
+        "tree" | "treeitem" => vec![
+            ControlType::Tree,
+            ControlType::TreeItem,
+        ],
+        "data" | "dataitem" => vec![
+            ControlType::DataItem,
+        ],
+        "url" | "urlfield" => vec![ControlType::Edit],
+        "list" => vec![ControlType::List],
+        "image" => vec![ControlType::Image],
+        "title" => vec![ControlType::TitleBar],
+        "listitem" => vec![ControlType::ListItem],
+        "combobox" => vec![ControlType::ComboBox],
+        "tab" => vec![ControlType::Tab],
+        "tabitem" => vec![ControlType::TabItem],
+        "toolbar" => vec![ControlType::ToolBar],
+        "appbar" => vec![ControlType::AppBar],
+        "calendar" => vec![ControlType::Calendar],
+        "edit" => vec![ControlType::Edit],
+        "hyperlink" => vec![ControlType::Hyperlink],
+        "progressbar" => vec![ControlType::ProgressBar],
+        "radiobutton" => vec![ControlType::RadioButton],
+        "scrollbar" => vec![ControlType::ScrollBar],
+        "slider" => vec![ControlType::Slider],
+        "spinner" => vec![ControlType::Spinner],
+        "statusbar" => vec![ControlType::StatusBar],
+        "tooltip" => vec![ControlType::ToolTip],
+        "custom" => vec![ControlType::Custom],
+        "group" => vec![ControlType::Group],
+        "thumb" => vec![ControlType::Thumb],
+        "datagrid" => vec![ControlType::DataGrid],
+        "document" => vec![ControlType::Document],
+        "splitbutton" => vec![ControlType::SplitButton],
+        "pane" => vec![ControlType::Pane],
+        "header" => vec![ControlType::Header],
+        "headeritem" => vec![ControlType::HeaderItem],
+        "table" => vec![ControlType::Table],
+        "titlebar" => vec![ControlType::TitleBar],
+        "separator" => vec![ControlType::Separator],
+        "semanticzoom" => vec![ControlType::SemanticZoom],
+        _ => vec![ControlType::Custom], // keep as it is for unknown roles
     }
 }
 
