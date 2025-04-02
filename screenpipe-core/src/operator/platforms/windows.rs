@@ -102,26 +102,42 @@ impl AccessibilityEngine for WindowsEngine {
 
     fn get_application_by_name(&self, name: &str) -> Result<UIElement, AutomationError> {
         debug!("searching application from name: {}", name);
-        let pid = match get_pid_by_name(name) {
-            Some(pid) => pid,
-            None => {
-                return Err(AutomationError::PlatformError(
-                    "No running application found from name".to_string()
-                ));
+
+        // first find element by matcher
+        let root_ele = self.automation.0.get_root_element().unwrap();
+        let automation = WindowsEngine::new(false, false)
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+        let matcher = automation.automation.0.create_matcher()
+            .contains_name(name)
+            .from_ref(&root_ele)
+            .depth(7)
+            .timeout(5000);
+        let ele_res = matcher.find_first()
+            .map_err(|e| AutomationError::ElementNotFound(e.to_string()));
+
+        // fallback to find by pid
+        let ele = match ele_res {
+            Ok(ele) => ele,
+            Err(_) => {
+                let pid = match get_pid_by_name(name) {
+                    Some(pid) => pid,
+                    None => {
+                        return Err(AutomationError::PlatformError(
+                            format!("no running application found from name: {:?}", name)
+                        ));
+                    }
+                };
+                let condition = automation.automation.0.create_property_condition(
+                    UIProperty::ProcessId,
+                    Variant::from(pid as i32),
+                    None
+                ).unwrap();
+                root_ele.find_first(TreeScope::Subtree, &condition)
+                    .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?
             }
         };
-        let root = self.automation.0.get_root_element().unwrap();
-        let condition = self.automation.0.create_property_condition(
-            UIProperty::ProcessId,
-            Variant::from(pid as i32),
-            None
-        ).unwrap();
-
-        let ele = root.find_first(TreeScope::Subtree, &condition)
-            .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
         let arc_ele = ThreadSafeWinUIElement(Arc::new(ele));
-
-        Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
+        return Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })));
     }
 
     fn find_elements(

@@ -23,8 +23,8 @@ fn main() -> Result<(), AutomationError> {
     // println!("running applications element: {:?}", applications);
 
     // Get an application by name
-    // let app_by_name = engine.get_application_by_name("terminal")?;
-    // println!("Application by name: {:?}", app_by_name);
+    let app_by_name = engine.get_application_by_name("terminal")?;
+    println!("Application by name: {:?}", app_by_name);
     //
     // // find elements
     // let selector = Selector::Role { role: "button".to_string(), name: None };
@@ -41,8 +41,8 @@ fn main() -> Result<(), AutomationError> {
     // println!("opened application: {:?}", opened_app);
 
     // // open a URL in a browser
-    let ele = engine.open_url("https://github.com", Some("msedge"))?;
-    println!("ele: {:?}", ele);
+    // let ele = engine.open_url("https://github.com", Some("msedge"))?;
+    // println!("ele: {:?}", ele);
     //
     // // perform actions on an element
     // let element = engine.get_application_by_name("msedge")?;
