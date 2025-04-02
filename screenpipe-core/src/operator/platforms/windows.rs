@@ -60,7 +60,7 @@ impl AccessibilityEngine for WindowsEngine {
         UIElement::new(Box::new(WindowsUIElement { element: arc_root }))
     }
 
-    fn get_element_by_id(&self, id: &str) -> Result<UIElement, AutomationError> {
+    fn get_element_by_id(&self, id: i32) -> Result<UIElement, AutomationError> {
         let root_element = self.automation.0.get_root_element().unwrap();
         let condition = self.automation.0.create_property_condition(
             UIProperty::ProcessId, 
@@ -86,7 +86,7 @@ impl AccessibilityEngine for WindowsEngine {
         let root = self.automation.0.get_root_element().unwrap();
         let condition = self.automation.0.create_property_condition(
             UIProperty::ControlType, 
-            Variant::from(ControlType::Window.to_string()),
+            Variant::from(ControlType::Window as i32),
             None
         ).unwrap();
         let elements = root.find_all(TreeScope::Subtree, &condition)
@@ -101,12 +101,22 @@ impl AccessibilityEngine for WindowsEngine {
     }
 
     fn get_application_by_name(&self, name: &str) -> Result<UIElement, AutomationError> {
+        debug!("searching application from name: {}", name);
+        let pid = match get_pid_by_name(name) {
+            Some(pid) => pid,
+            None => {
+                return Err(AutomationError::PlatformError(
+                    "No running application found from name".to_string()
+                ));
+            }
+        };
         let root = self.automation.0.get_root_element().unwrap();
         let condition = self.automation.0.create_property_condition(
-            UIProperty::Name,
-            Variant::from(name),
+            UIProperty::ProcessId,
+            Variant::from(pid as i32),
             None
         ).unwrap();
+
         let ele = root.find_first(TreeScope::Subtree, &condition)
             .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
         let arc_ele = ThreadSafeWinUIElement(Arc::new(ele));
@@ -250,7 +260,7 @@ impl AccessibilityEngine for WindowsEngine {
             Selector::Name(name) => {
                 // `name` and `window` can be same
                 let condition = self.automation.0.create_property_condition(
-                    UIProperty::Name,
+                    UIProperty::ControlType,
                     Variant::from(ControlType::Window as i32),
                     None
                 ).unwrap();
@@ -264,7 +274,7 @@ impl AccessibilityEngine for WindowsEngine {
             },
             Selector::Text(text) => { 
                 let condition = self.automation.0.create_property_condition(
-                    UIProperty::Name,
+                    UIProperty::ControlType,
                     Variant::from(ControlType::Text as i32),
                     None
                 ).unwrap();
@@ -300,6 +310,8 @@ impl AccessibilityEngine for WindowsEngine {
             return Err(AutomationError::PlatformError("Failed to open application".to_string()));
         }
 
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
         self.get_application_by_name(app_name)
     }
 
@@ -312,6 +324,8 @@ impl AccessibilityEngine for WindowsEngine {
         if !status.success() {
             return Err(AutomationError::PlatformError("Failed to open URL".to_string()));
         }
+
+        std::thread::sleep(std::time::Duration::from_millis(200));
 
         self.get_application_by_name(browser)
     }
@@ -721,3 +735,23 @@ fn map_generic_role_to_win_roles(role: &str) -> Vec<ControlType> {
     }
 }
 
+fn get_pid_by_name(name: &str) -> Option<i32> {
+    // window title shouldn't be empty
+    let command = format!(
+        "Get-Process | Where-Object {{ $_.MainWindowTitle -ne '' -and $_.Name -like '*{}*' }} | ForEach-Object {{ $_.Id }}",
+        name
+    );
+
+    let output = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-WindowStyle", "hidden", "-Command", &command])
+        .output()
+        .expect("Failed to execute PowerShell script");
+
+    if output.status.success() {
+        // return only parent pid
+        let pid_str = String::from_utf8_lossy(&output.stdout);
+        pid_str.lines().next()?.trim().parse().ok()
+    } else {
+        None
+    }
+}
