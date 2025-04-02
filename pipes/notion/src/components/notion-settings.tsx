@@ -418,7 +418,7 @@ export function NotionSettings() {
                   </div>
                   
                     {
-                      isConnectedToNotion && (
+                      localSettings?.notion?.accessToken && (
                         <>
                   <div className="space-y-2">
                       <NotionDatabaseSelector
