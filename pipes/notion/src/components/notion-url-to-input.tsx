@@ -141,7 +141,7 @@ export function NotionDatabaseSelector({
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger>
         <SelectValue placeholder={isLoading ? "Loading databases..." : label}>
-          {isLoading ? "Loading..." : databases.find(db => db.id === value)?.title || label}
+          {isLoading ? "Loading..." : databases.find(db => db.id.replaceAll("-", "") === value.replaceAll("-", ""))?.title || label}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
