@@ -540,7 +540,7 @@ export function NotionSettings() {
                 </div>
                 
                 <div className="space-y-4 p-4 bg-card rounded-lg border shadow-sm">
-                  <h4 className="text-sm font-medium">Intelligence (Long Tasks)</h4>
+                  <h4 className="text-sm font-medium">Intelligence (Long-term)</h4>
                   <AIPresetsSelector 
                     pipeName="notion" 
                     aiKey="aiPresetId"
@@ -551,7 +551,7 @@ export function NotionSettings() {
                 </div>
                 
                 <div className="space-y-4 p-4 bg-card rounded-lg border shadow-sm">
-                  <h4 className="text-sm font-medium">Logs (Short Tasks)</h4>
+                  <h4 className="text-sm font-medium">Logs (Short-term)</h4>
                   <AIPresetsSelector 
                     pipeName="notion" 
                     aiKey="aiLogPresetId"
@@ -602,7 +602,7 @@ export function NotionSettings() {
           <TabsContent value="sync" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="interval">Sync Interval (short tasks) (minutes)</Label>
+                <Label htmlFor="interval">Sync Interval (short-term) (minutes)</Label>
                 <Input
                   id="interval"
                   name="interval"
@@ -645,7 +645,7 @@ export function NotionSettings() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="shortTasksInterval"> Sync Interval (long tasks) (hours)</Label>
+                <Label htmlFor="shortTasksInterval"> Sync Interval (long-term) (hours)</Label>
                 <Input
                   id="shortTasksInterval"
                   name="shortTasksInterval"

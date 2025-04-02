@@ -68,22 +68,27 @@ export async function generateWorkLog(
     enrichedPrompt = await extractLinkedContent(customPrompt);
   }
 
-  const defaultPrompt = `Based on the following screen data, generate a concise work activity log entry.
-    Rules:
-    - use the screen data to generate the log entry
-    - focus on describing the activity and tags
-    - use the following context to better understand the user's goals and priorities:
+  const defaultPrompt = `You are a helpful assistant that analyzes the following screen data and generates an accurate work activity log entry.
+
+    Instructions:
+    - Carefully examine the screen data to identify the main activities performed
+    - Extract specific application names, websites visited, and documents worked on
+    - Create a precise, factual description of the work completed
+    - Identify relevant tags based on the actual content (projects, tools, topics)
+    - Use the following context to understand the user's goals and priorities:
 
     ${enrichedPrompt}
 
     Screen data: ${JSON.stringify(screenData)}
 
-    Return a JSON object with:
+    Return a valid JSON object with exactly this structure:
     {
-        "title": "Brief title of the activity",
-        "description": "Concise description of what was done",
-        "tags": ["#tag1", "#tag2", "#tag3"]
-    }`;
+        "title": "Specific, accurate title reflecting the main activity",
+        "description": "Detailed but concise description of what was accomplished, mentioning specific tools and content",
+        "tags": ["#relevant_tag1", "#relevant_tag2", "#relevant_tag3"]
+    }
+
+    Ensure the JSON is properly formatted and contains only the requested fields.`;
 
   console.log("enrichedPrompt prompt:", enrichedPrompt);
 

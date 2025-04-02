@@ -35,42 +35,50 @@ async function analyzeRelationships(
 		throw new Error("ai preset not found");
 	}
 
-	const prompt = `analyze these work logs and create a comprehensive relationship intelligence report.
-    focus on:
-    - identifying key people and their roles
-    - tracking interaction patterns and sentiment
-    - spotting business opportunities
-    - suggesting follow-ups and introductions
-    - finding patterns in topics discussed
+	const prompt = `You are a professional relationship intelligence analyst. Your task is to analyze work logs and generate a comprehensive relationship intelligence report.
 
-    recent logs: ${recentLogs}
+    ANALYSIS OBJECTIVES:
+    1. Extract all individuals mentioned, including their full names and organizations
+    2. Determine the nature and quality of each interaction (positive, neutral, negative)
+    3. Calculate sentiment scores (-1 to 1) based on interaction context
+    4. Identify recurring discussion topics and their importance
+    5. Recognize potential business opportunities and collaboration possibilities
+    6. Suggest specific, actionable follow-ups for each contact
 
-    todays date: ${new Date().toISOString().split("T")[0]}
-    local time: ${new Date().toLocaleTimeString()}
-    timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
+    CONTEXT:
+    Today's date: ${new Date().toISOString().split("T")[0]}
+    Current time: ${new Date().toLocaleTimeString()}
+    Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
 
-    return a detailed json object following this structure for relationship intelligence.
+    WORK LOGS TO ANALYZE:
+    ${recentLogs}
 
-    example response from you:
-
+    RESPONSE FORMAT:
+    Return a JSON object with the following structure:
     {
       "contacts": [
         {
-          "name": "John Doe",
-          "company": "Acme Inc.",
-          "lastInteraction": "2024-01-01",
-          "sentiment": 0.8,
-          "topics": ["sales", "marketing"],
-          "nextSteps": ["schedule a call", "send a follow-up email"]
-        }
+          "name": "Full Name",
+          "company": "Organization Name",
+          "lastInteraction": "YYYY-MM-DD",
+          "sentiment": 0.X, // Range from -1.0 (negative) to 1.0 (positive)
+          "topics": ["topic1", "topic2", "topic3"],
+          "nextSteps": ["specific action 1", "specific action 2"]
+        },
+        // Additional contacts...
       ],
       "insights": {
-        "followUps": ["schedule a call", "send a follow-up email"],
-        "opportunities": ["schedule a call", "send a follow-up email"]
+        "followUps": ["priority follow-up 1", "priority follow-up 2"],
+        "opportunities": ["business opportunity 1", "business opportunity 2"]
       }
     }
 
-    of course adapt the example response to the actual data you have, do not use John Doe in your example response, use the names and companies of the people you see in the logs.
+    IMPORTANT:
+    - Use only real names and companies found in the logs
+    - Ensure sentiment scores accurately reflect interaction quality
+    - Provide specific, actionable next steps tailored to each contact
+    - Prioritize follow-ups based on urgency and potential value
+    - Identify concrete business opportunities with clear potential benefits
     `;
 
 	const openai = new OpenAI({
