@@ -730,7 +730,7 @@ const NotionConnectButton = ({
           className={isAutoDisabled ? "opacity-50 cursor-not-allowed" : ""}
         >
           Automatic
-          <span className="text-xs ml-2 text-muted-foreground">(Recommended)</span>
+
         </DropdownMenuItem>
         <DropdownMenuItem 
           onClick={handleManual} 
@@ -738,6 +738,7 @@ const NotionConnectButton = ({
           className={isManualDisabled ? "opacity-50 cursor-not-allowed" : ""}
         >
           Manual
+          <span className="text-xs ml-2 text-muted-foreground">(Recommended)</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
