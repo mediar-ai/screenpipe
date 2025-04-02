@@ -10,7 +10,6 @@ use uiautomation::controls::ControlType;
 use uiautomation::inputs::Mouse;
 use uiautomation::inputs::Keyboard;
 use uiautomation::variants::Variant;
-use uiautomation::core::UICondition;
 use uiautomation::patterns;
 use tracing::debug;
 use std::collections::{
@@ -108,6 +107,7 @@ impl AccessibilityEngine for WindowsEngine {
         let automation = WindowsEngine::new(false, false)
             .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         let matcher = automation.automation.0.create_matcher()
+            .control_type(ControlType::Window)
             .contains_name(name)
             .from_ref(&root_ele)
             .depth(7)
@@ -160,24 +160,14 @@ impl AccessibilityEngine for WindowsEngine {
         let condition = match selector {
             Selector::Role { role, name: _ } => {
                 let roles = map_generic_role_to_win_roles(role);
-                let mut role_conditions: Vec<UICondition> = roles.iter()
-                    .map(|&role| {
-                        self.automation.0.create_property_condition(
+                let role_condition  = self.automation.0.create_property_condition(
                             UIProperty::ControlType,
-                            Variant::from(role as i32),
+                            Variant::from(roles as i32),
                             None
-                        ).unwrap()
-                    }).collect();
-
+                        ).unwrap();
                 debug!("role conditions: {:#?} for finding element: {:#?}",
-                    role_conditions, root_ele);
-
-                let mut combined_condition = role_conditions.remove(0);
-                for condition in role_conditions {
-                    combined_condition = self.automation.0
-                        .create_or_condition(combined_condition, condition).unwrap();
-                }
-                combined_condition
+                    role_condition, root_ele);
+                role_condition
             },
             Selector::Id(id) => self.automation.0.create_property_condition(
                 UIProperty::AutomationId,
@@ -185,12 +175,12 @@ impl AccessibilityEngine for WindowsEngine {
                 None
             ).unwrap(),
             Selector::Name(_name) => self.automation.0.create_property_condition(
-                UIProperty::Name,
+                UIProperty::ControlType,
                 Variant::from(ControlType::Window as i32),
                 None
             ).unwrap(),
             Selector::Text(_text) => self.automation.0.create_property_condition(
-                UIProperty::Name,
+                UIProperty::ControlType,
                 Variant::from(ControlType::Text as i32),
                 None
             ).unwrap(),
@@ -233,26 +223,18 @@ impl AccessibilityEngine for WindowsEngine {
         match selector {
             Selector::Role { role, name: _ } => {
                 let roles = map_generic_role_to_win_roles(role);
-                let mut role_conditions: Vec<UICondition> = roles.iter()
-                    .map(|&role| {
-                        self.automation.0.create_property_condition(
+                let role_condition  = self.automation.0.create_property_condition(
                             UIProperty::ControlType,
-                            Variant::from(role as i32),
+                            Variant::from(roles as i32),
                             None
-                        ).unwrap()
-                    }).collect();
-
+                        ).unwrap();
                 debug!("role conditions: {:#?} for finding element: {:#?}",
-                    role_conditions, root_ele);
-
-                let mut combined_condition = role_conditions.remove(0);
-                for condition in role_conditions {
-                    combined_condition = self.automation.0
-                        .create_or_condition(combined_condition, condition).unwrap();
-                }
-
-                // find a element that satisfies all the roles
-                let element = root_ele.find_first(TreeScope::Subtree, &combined_condition).unwrap();
+                    role_condition, root_ele);
+                // find a element that satisfies the roles
+                let element = root_ele.find_first(TreeScope::Subtree, &role_condition)
+                    .map_err(|e| AutomationError::ElementNotFound(
+                            format!("element not found, Err: {}", e.to_string()
+                        )))?;
                 debug!("found element: {:#?}", element);
 
                 let arc_ele = ThreadSafeWinUIElement(Arc::new(element));
@@ -531,42 +513,33 @@ impl UIElementImpl for WindowsUIElement {
     }
 
     fn get_text(&self, max_depth: usize) -> Result<String, AutomationError> {
-        fn collect_text(
-            element: &uiautomation::UIElement,
-            depth: usize,
-            max_depth: usize
-        ) -> Result<String, AutomationError> {
-            if depth > max_depth {
-                return Ok(String::new());
-            }
-            let mut text = String::new();
+        let automation = WindowsEngine::new(false, false)
+            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+        let mut all_texts = String::new();
+        // run the text matcher
+        let txt_matcher = automation.automation.0.create_matcher()
+            .control_type(ControlType::Text)
+            .from_ref(&self.element.0)
+            .depth(max_depth as u32)
+            .timeout(1000);
 
-            if let Ok(text_pattern) = element.get_pattern::<patterns::UITextPattern>() {
-                if let Ok(range) = text_pattern.get_document_range() {
-                    // -1 for retriving all possible texts
-                    if let Ok(range_text) = range.get_text(-1) {
-                        text.push_str(&range_text);
+        if let Ok(text_eles) = txt_matcher.find_all() {
+            for text_ele in text_eles {
+                // get name
+                if let Ok(name) = text_ele.get_property_value(UIProperty::Name) {
+                    if let Ok(name_text) = name.get_string() {
+                        all_texts.push_str(&name_text);
                     }
                 }
-            } else {
-                // fallback to `get_name` if TextPattern isn't available.
-                // but it'll get only name
-                text.push_str(&element.get_name().unwrap_or_default());
-            }
-            if depth < max_depth {
-                if let Ok(children) = element.get_cached_children() {
-                    for child in children {
-                        // collect recursively
-                        let child_text = collect_text(&child, depth + 1, max_depth)?;
-                        if !child_text.is_empty() {
-                            text.push_str(&format!(" {}", child_text));
-                        }
+                // get value
+                if let Ok(value) = text_ele.get_property_value(UIProperty::ValueValue) {
+                    if let Ok(val_text) = value.get_string(){
+                        all_texts.push_str(&val_text);
                     }
                 }
             }
-            Ok(text)
         }
-        collect_text(&self.element.0, 0, max_depth)
+        Ok(all_texts)
     }
 
     fn set_value(&self, value: &str) -> Result<(), AutomationError> {
@@ -684,70 +657,52 @@ impl UIElementImpl for WindowsUIElement {
 }
 
 // make easier to pass roles
-fn map_generic_role_to_win_roles(role: &str) -> Vec<ControlType> {
+fn map_generic_role_to_win_roles(role: &str) -> ControlType {
     match role.to_lowercase().as_str() {
-        "window" => vec![ControlType::Window],
-        "button" => vec![
-            ControlType::Button,
-            ControlType::MenuItem,
-            ControlType::Text,
-            ControlType::Image,
-        ],
-        "checkbox" => vec![ControlType::CheckBox],
-        "menu" => vec![ControlType::Menu],
-        "menuitem" => vec![ControlType::MenuItem],
-        "dialog" => vec![ControlType::Window], // treat dialogs as window
-        "text" | "textfield" | "input" | "textbox" => vec![
-            ControlType::Edit,
-            ControlType::Text,
-            ControlType::Group,
-            ControlType::ComboBox,
-            ControlType::Header,
-            ControlType::HeaderItem,
-            ControlType::ToolTip,
-            ControlType::ToolBar,
-        ],
-        "tree" | "treeitem" => vec![
-            ControlType::Tree,
-            ControlType::TreeItem,
-        ],
-        "data" | "dataitem" => vec![
-            ControlType::DataItem,
-        ],
-        "url" | "urlfield" => vec![ControlType::Edit],
-        "list" => vec![ControlType::List],
-        "image" => vec![ControlType::Image],
-        "title" => vec![ControlType::TitleBar],
-        "listitem" => vec![ControlType::ListItem],
-        "combobox" => vec![ControlType::ComboBox],
-        "tab" => vec![ControlType::Tab],
-        "tabitem" => vec![ControlType::TabItem],
-        "toolbar" => vec![ControlType::ToolBar],
-        "appbar" => vec![ControlType::AppBar],
-        "calendar" => vec![ControlType::Calendar],
-        "edit" => vec![ControlType::Edit],
-        "hyperlink" => vec![ControlType::Hyperlink],
-        "progressbar" => vec![ControlType::ProgressBar],
-        "radiobutton" => vec![ControlType::RadioButton],
-        "scrollbar" => vec![ControlType::ScrollBar],
-        "slider" => vec![ControlType::Slider],
-        "spinner" => vec![ControlType::Spinner],
-        "statusbar" => vec![ControlType::StatusBar],
-        "tooltip" => vec![ControlType::ToolTip],
-        "custom" => vec![ControlType::Custom],
-        "group" => vec![ControlType::Group],
-        "thumb" => vec![ControlType::Thumb],
-        "datagrid" => vec![ControlType::DataGrid],
-        "document" => vec![ControlType::Document],
-        "splitbutton" => vec![ControlType::SplitButton],
-        "pane" => vec![ControlType::Pane],
-        "header" => vec![ControlType::Header],
-        "headeritem" => vec![ControlType::HeaderItem],
-        "table" => vec![ControlType::Table],
-        "titlebar" => vec![ControlType::TitleBar],
-        "separator" => vec![ControlType::Separator],
-        "semanticzoom" => vec![ControlType::SemanticZoom],
-        _ => vec![ControlType::Custom], // keep as it is for unknown roles
+        "window" => ControlType::Window,
+        "button" => ControlType::Button,
+        "checkbox" => ControlType::CheckBox,
+        "menu" => ControlType::Menu, 
+        "menuitem" => ControlType::MenuItem,
+        "dialog" => ControlType::Window,
+        "text" => ControlType::Text, 
+        "tree"  =>  ControlType::Tree, 
+        "treeitem" =>  ControlType::TreeItem,
+        "data" | "dataitem" => ControlType::DataGrid,
+        "datagrid" => ControlType::DataGrid,
+        "url" | "urlfield" => ControlType::Edit, 
+        "list" => ControlType::List, 
+        "image" => ControlType::Image, 
+        "title" => ControlType::TitleBar,
+        "listitem" => ControlType::ListItem,
+        "combobox" => ControlType::ComboBox,
+        "tab" => ControlType::Tab, 
+        "tabitem" => ControlType::TabItem,
+        "toolbar" => ControlType::ToolBar,
+        "appbar" => ControlType::AppBar,
+        "calendar" => ControlType::Calendar,
+        "edit" => ControlType::Edit, 
+        "hyperlink" => ControlType::Hyperlink,
+        "progressbar" => ControlType::ProgressBar,
+        "radiobutton" => ControlType::RadioButton,
+        "scrollbar" => ControlType::ScrollBar,
+        "slider" => ControlType::Slider,
+        "spinner" => ControlType::Spinner,
+        "statusbar" => ControlType::StatusBar,
+        "tooltip" => ControlType::ToolTip,
+        "custom" => ControlType::Custom,
+        "group" => ControlType::Group, 
+        "thumb" => ControlType::Thumb, 
+        "document" => ControlType::Document,
+        "splitbutton" => ControlType::SplitButton,
+        "pane" => ControlType::Pane, 
+        "header" => ControlType::Header,
+        "headeritem" => ControlType::HeaderItem,
+        "table" => ControlType::Table, 
+        "titlebar" => ControlType::TitleBar,
+        "separator" => ControlType::Separator,
+        "semanticzoom" => ControlType::SemanticZoom,
+        _ => ControlType::Custom, // keep as it is for unknown roles
     }
 }
 
