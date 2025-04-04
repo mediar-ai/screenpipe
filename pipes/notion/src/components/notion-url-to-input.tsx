@@ -8,7 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getAvailableDatabases } from "@/lib/notion/notion";
+import { NotionCredentials } from "@/lib/types";
+import { Select, SelectItem, SelectTrigger, SelectValue, SelectContent } from "@/components/ui/select";
 
 interface NotionIdInputProps {
   label: string;
@@ -94,4 +97,67 @@ export function NotionIdInput({
       </Dialog>
     </div>
   );
+}
+
+interface NotionDatabaseSelectorProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  accessToken: string;
+}
+
+interface Database {
+  id: string;
+  title: string;
+}
+
+export function NotionDatabaseSelector({
+  label,
+  value,
+  onChange,
+  accessToken,
+}: NotionDatabaseSelectorProps) {
+  const [databases, setDatabases] = useState<Database[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchDatabases = async () => {
+      if (!accessToken) return;
+      setIsLoading(true);
+      try {
+        const databases = await getAvailableDatabases(accessToken);
+        setDatabases(databases);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchDatabases();
+  }, [accessToken]);
+  
+
+  return (
+   <div className="space-y-2">
+    <Label>{label}</Label>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger>
+        <SelectValue placeholder={isLoading ? "Loading databases..." : label}>
+          {isLoading ? "Loading..." : databases.find(db => db.id.replaceAll("-", "") === value.replaceAll("-", ""))?.title || label}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {isLoading ? (
+          <SelectItem value="loading">Loading...</SelectItem>
+        ) : databases.length > 0 ?  (
+          databases.map((database) => (
+            <SelectItem key={database.id} value={database.id}>
+              {database.title}
+            </SelectItem>
+          ))
+        ) : (
+          <SelectItem value="no-databases">No databases found</SelectItem>
+        )}
+      </SelectContent>
+    </Select>
+   </div>
+  )
 }

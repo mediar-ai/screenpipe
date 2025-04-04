@@ -2,7 +2,7 @@
 
 import { Client } from "@notionhq/client";
 import { WorkLog, Intelligence, NotionCredentials } from "@/lib/types";
-import { BlockObjectRequest } from "@notionhq/client/build/src/api-endpoints";
+import { BlockObjectRequest, DatabaseObjectResponse } from "@notionhq/client/build/src/api-endpoints";
 
 export async function validateCredentials(
 	credentials: NotionCredentials,
@@ -292,4 +292,22 @@ function generateInsightsSection(
 	});
 
 	return blocks;
+}
+
+export async function getAvailableDatabases(accessToken: string) {
+	const client = new Client({ auth: accessToken });
+	const databases = await client.search({
+		query: "",
+		filter: {
+			property: "object",
+			value: "database",
+		},
+	});
+	return databases.results
+		.filter((database): database is DatabaseObjectResponse => 
+			database.object === "database" && "title" in database)
+		.map((database) => ({
+			id: database.id,
+			title: database.title[0].plain_text,
+		}));
 }
