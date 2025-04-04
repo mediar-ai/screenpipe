@@ -2,9 +2,11 @@ use crate::operator::element::UIElementImpl;
 use crate::operator::platforms::AccessibilityEngine;
 use crate::operator::ClickResult;
 use crate::operator::{AutomationError, Locator, Selector, UIElement, UIElementAttributes};
+use std::error::Error;
 use std::sync::Arc;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use uiautomation::filters::{ControlTypeFilter, NameFilter, OrFilter};
 use uiautomation::UIAutomation;
 use uiautomation::controls::ControlType;
 use uiautomation::inputs::Mouse;
@@ -17,9 +19,7 @@ use std::collections::{
     hash_map::DefaultHasher
 };
 use uiautomation::types::{
-    TreeScope,
-    UIProperty,
-    ScrollAmount
+    Point, PropertyConditionFlags, ScrollAmount, TreeScope, UIProperty
 };
 
 // thread-safety
@@ -179,11 +179,30 @@ impl AccessibilityEngine for WindowsEngine {
                 Variant::from(ControlType::Window as i32),
                 None
             ).unwrap(),
-            Selector::Text(_text) => self.automation.0.create_property_condition(
-                UIProperty::ControlType,
-                Variant::from(ControlType::Text as i32),
-                None
-            ).unwrap(),
+            Selector::Text(text) => {
+                
+                let filter = OrFilter {
+                    left: Box::new(NameFilter { value: String::from(text), casesensitive: false, partial: true }),
+                    right: Box::new(ControlTypeFilter { control_type: ControlType::Text }),
+                };
+                // Create a matcher that uses contains_name which is more reliable for text searching
+                let matcher = self.automation.0.create_matcher()
+                    .from_ref(root_ele)
+                    .filter(Box::new(filter))// This is the key improvement from the example
+                    .depth(10)            // Search deep enough to find most elements
+                    .timeout(3000);       // Allow enough time for search
+                
+                // Get the first matching element
+                let elements = matcher.find_all()
+                    .map_err(|e| AutomationError::ElementNotFound(
+                        format!("Text: '{}', Err: {}", text, e.to_string())))?;
+                
+                return Ok(
+                    elements.into_iter()
+                        .map(|ele| UIElement::new(Box::new(WindowsUIElement { element: ThreadSafeWinUIElement(Arc::new(ele)) })))
+                        .collect()
+                );
+            },
             Selector::Path(_) => {
                 return Err(AutomationError::UnsupportedOperation("`Path` selector not supported".to_string()));
             },
@@ -223,22 +242,14 @@ impl AccessibilityEngine for WindowsEngine {
         match selector {
             Selector::Role { role, name: _ } => {
                 let roles = map_generic_role_to_win_roles(role);
-                let role_condition  = self.automation.0.create_property_condition(
-                            UIProperty::ControlType,
-                            Variant::from(roles as i32),
-                            None
-                        ).unwrap();
-                debug!("role conditions: {:#?} for finding element: {:#?}",
-                    role_condition, root_ele);
-                // find a element that satisfies the roles
-                let element = root_ele.find_first(TreeScope::Subtree, &role_condition)
-                    .map_err(|e| AutomationError::ElementNotFound(
-                            format!("element not found, Err: {}", e.to_string()
-                        )))?;
-                debug!("found element: {:#?}", element);
-
+                // use create matcher api
+                let matcher = self.automation.0.create_matcher()
+                    .from_ref(root_ele)
+                    .control_type(roles)
+                    .timeout(3000);
+                let element = matcher.find_first()
+                    .map_err(|e| AutomationError::ElementNotFound(e.to_string()))?;
                 let arc_ele = ThreadSafeWinUIElement(Arc::new(element));
-
                 Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
             },
             Selector::Id(id) => {
@@ -256,34 +267,42 @@ impl AccessibilityEngine for WindowsEngine {
                 Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
             },  
             Selector::Name(name) => {
-                // `name` and `window` can be same
-                let condition = self.automation.0.create_property_condition(
-                    UIProperty::ControlType,
-                    Variant::from(ControlType::Window as i32),
-                    None
-                ).unwrap();
+                // find use create matcher api 
 
-                let ele = root_ele.find_first(TreeScope::Subtree, &condition)
+                let matcher = self.automation.0.create_matcher()
+                    .from_ref(root_ele)
+                    .contains_name(name)
+                    .depth(10)
+                    .timeout(3000);
+
+                let element = matcher.find_first()
                     .map_err(|e| AutomationError::ElementNotFound(
                         format!("Name: '{}', Err: {}", name, e.to_string())))?;
-                let arc_ele = ThreadSafeWinUIElement(Arc::new(ele));
 
-                Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
+                let arc_ele = ThreadSafeWinUIElement(Arc::new(element));
+                return Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })));
             },
-            Selector::Text(text) => { 
-                let condition = self.automation.0.create_property_condition(
-                    UIProperty::ControlType,
-                    Variant::from(ControlType::Text as i32),
-                    None
-                ).unwrap();
+            Selector::Text(text) => {
 
-                let ele = root_ele.find_first(TreeScope::Subtree, &condition)
+                let filter = OrFilter {
+                    left: Box::new(NameFilter { value: String::from(text), casesensitive: false, partial: true }),
+                    right: Box::new(ControlTypeFilter { control_type: ControlType::Text }),
+                };
+                // Create a matcher that uses contains_name which is more reliable for text searching
+                let matcher = self.automation.0.create_matcher()
+                    .from_ref(root_ele)
+                    .filter(Box::new(filter))// This is the key improvement from the example
+                    .depth(10)            // Search deep enough to find most elements
+                    .timeout(3000);       // Allow enough time for search
+                
+                // Get the first matching element
+                let element = matcher.find_first()
                     .map_err(|e| AutomationError::ElementNotFound(
                         format!("Text: '{}', Err: {}", text, e.to_string())))?;
-                let arc_ele = ThreadSafeWinUIElement(Arc::new(ele));
-
-                Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })))
-            }
+                
+                let arc_ele = ThreadSafeWinUIElement(Arc::new(element));
+                return Ok(UIElement::new(Box::new(WindowsUIElement { element: arc_ele })));
+            },
             Selector::Path(_) => {
                 return Err(AutomationError::UnsupportedOperation("`Path` selector not supported".to_string()));
             },
@@ -438,17 +457,59 @@ impl UIElementImpl for WindowsUIElement {
 
     fn click(&self) -> Result<ClickResult, AutomationError> {
         self.element.0.try_focus();
-        let point = self.element.0.get_clickable_point()
-            .map_err(|e| AutomationError::PlatformError(e.to_string()))?
-            .ok_or_else(|| AutomationError::PlatformError("No clickable point found".to_string()))?;
-        let mouse = Mouse::default();
-        mouse.click(point).map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+        debug!("attempting to click element: {:?}", self.element.0);
+        
+        let click_result = self.element.0.click();
 
-        Ok(ClickResult {
-            method: "Single Click".to_string(),
-            coordinates: Some((point.get_x() as f64, point.get_y() as f64)),
-            details: "Clicked by Mouse".to_string(),
-        })
+        if click_result.is_ok() {
+            return Ok(ClickResult {
+                method: "Single Click".to_string(),
+                coordinates: None,
+                details: "Clicked by Mouse".to_string(),
+            });
+        }
+        // First try using the standard clickable point
+        let click_result = self.element.0.get_clickable_point()
+            .and_then(|maybe_point| {
+                if let Some(point) = maybe_point {
+                    debug!("using clickable point: {:?}", point);
+                    let mouse = Mouse::default();
+                    mouse.click(point).map(|_| ClickResult {
+                        method: "Single Click (Clickable Point)".to_string(),
+                        coordinates: Some((point.get_x() as f64, point.get_y() as f64)),
+                        details: "Clicked by Mouse using element's clickable point".to_string(),
+                    })
+                } else {
+                    Err(AutomationError::PlatformError("No clickable point found".to_string()).to_string().into())
+                }
+            });
+        
+        // If first method fails, try using the bounding rectangle
+        if let Err(_) = click_result {
+            debug!("clickable point unavailable, falling back to bounding rectangle");
+            if let Ok(rect) = self.element.0.get_bounding_rectangle() {
+                println!("bounding rectangle: {:?}", rect);
+                // Calculate center point of the element
+                let center_x = rect.get_left() + rect.get_width() / 2;
+                let center_y = rect.get_top() + rect.get_height() / 2;
+                
+                let point = Point::new(center_x, center_y);
+                let mouse = Mouse::default();
+                
+                debug!("clicking at center point: ({}, {})", center_x, center_y);
+                mouse.click(point)
+                    .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
+                
+                return Ok(ClickResult {
+                    method: "Single Click (Fallback)".to_string(),
+                    coordinates: Some((center_x as f64, center_y as f64)),
+                    details: "Clicked by Mouse using element's center coordinates".to_string(),
+                });
+            }
+        }
+        
+        // Return the result of the first attempt or propagate the error
+        click_result.map_err(|e| AutomationError::PlatformError(e.to_string()))
     }
 
     fn double_click(&self) -> Result<ClickResult, AutomationError> {
@@ -488,58 +549,73 @@ impl UIElementImpl for WindowsUIElement {
         let control_type = self.element.0.get_control_type()
             .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         // check if element accepts input
-        if control_type == ControlType::Edit {
+        println!("control_type: {:#?}", control_type);
+        // if control_type == ControlType::Edit {
             let keyboard = Keyboard::default();
             keyboard.send_text(text)
                 .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
             Ok(())
-        } else {
-            Err(AutomationError::PlatformError("Element is not editable".to_string()))
-        }
+        // } else {
+        //     Err(AutomationError::PlatformError("Element is not editable".to_string()))
+        // }
     }
 
     fn press_key(&self, key: &str) -> Result<(), AutomationError> {
         let control_type = self.element.0.get_control_type()
             .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
         // check if element accepts input, similar :D
-        if control_type == ControlType::Edit {
+        // if control_type == ControlType::Edit {
             let keyboard = Keyboard::default();
             keyboard.send_keys(key)
                 .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
             Ok(())
-        } else {
-            Err(AutomationError::PlatformError("Element is not editable".to_string()))
-        }
+        // } else {
+        //     Err(AutomationError::PlatformError("Element is not editable".to_string()))
+        // }
     }
 
     fn get_text(&self, max_depth: usize) -> Result<String, AutomationError> {
-        let automation = WindowsEngine::new(false, false)
-            .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
-        let mut all_texts = String::new();
-        // run the text matcher
-        let txt_matcher = automation.automation.0.create_matcher()
-            .control_type(ControlType::Text)
-            .from_ref(&self.element.0)
-            .depth(max_depth as u32)
-            .timeout(1000);
-
-        if let Ok(text_eles) = txt_matcher.find_all() {
-            for text_ele in text_eles {
-                // get name
-                if let Ok(name) = text_ele.get_property_value(UIProperty::Name) {
-                    if let Ok(name_text) = name.get_string() {
-                        all_texts.push_str(&name_text);
-                    }
-                }
-                // get value
-                if let Ok(value) = text_ele.get_property_value(UIProperty::ValueValue) {
-                    if let Ok(val_text) = value.get_string(){
-                        all_texts.push_str(&val_text);
+        let mut all_texts = Vec::new();
+        
+        // Create a function to extract text recursively
+        fn extract_text_from_element(element: &uiautomation::UIElement, texts: &mut Vec<String>, current_depth: usize, max_depth: usize) -> Result<(), AutomationError> {
+            if current_depth > max_depth {
+                return Ok(());
+            }
+            
+            // Check Name property
+            if let Ok(name) = element.get_property_value(UIProperty::Name) {
+                if let Ok(name_text) = name.get_string() {
+                    if !name_text.is_empty() {
+                        texts.push(name_text);
                     }
                 }
             }
+            
+            // Check Value property
+            if let Ok(value) = element.get_property_value(UIProperty::ValueValue) {
+                if let Ok(value_text) = value.get_string() {
+                    if !value_text.is_empty() {
+                        texts.push(value_text);
+                    }
+                }
+            }
+            
+            // Recursively process children
+            if let Ok(children) = element.get_cached_children() {
+                for child in children {
+                    let _ = extract_text_from_element(&child, texts, current_depth + 1, max_depth);
+                }
+            }
+            
+            Ok(())
         }
-        Ok(all_texts)
+        
+        // Extract text from the element and its descendants
+        extract_text_from_element(&self.element.0, &mut all_texts, 0, max_depth)?;
+        
+        // Join the texts with spaces
+        Ok(all_texts.join(" "))
     }
 
     fn set_value(&self, value: &str) -> Result<(), AutomationError> {
