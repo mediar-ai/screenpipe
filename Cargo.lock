@@ -5965,6 +5965,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uiautomation",
  "url",
  "which 6.0.3",
  "zip 0.6.6",
