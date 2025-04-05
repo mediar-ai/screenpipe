@@ -139,7 +139,7 @@ impl MacOSUrlDetector {
 }
 
 impl BrowserUrlDetector for MacOSUrlDetector {
-    fn get_active_url(&self, app_name: &str, process_id: i32) -> Result<Option<String>> {
+    fn get_active_url(&self, app_name: &str, process_id: i32, _window_title: &str) -> Result<Option<String>> {
         if app_name == "Arc" {
             let script = r#"tell application "Arc" to return URL of active tab of front window"#;
             self.get_url_via_applescript(script)
