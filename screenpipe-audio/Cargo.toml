@@ -88,8 +88,8 @@ ort = { version = "=2.0.0-rc.6", features = [
   "cuda",
 ] }
 esaxx-rs = "0.1.10"
-samplerate = { version = "0.2.4" }
-libsamplerate-sys = "0.1.10"
+samplerate = { git = "https://github.com/divanshu-go/rust-samplerate.git", rev = "bf8415d5ac33940bb5a52bd23b24ca9a56f96792" }
+libsamplerate-sys = { git = "https://github.com/divanshu-go/libsamplerate-sys.git", rev = "6545fdd165673fce30d4ed5e82b845adc7b2faac" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 once_cell = "1.17.1"
