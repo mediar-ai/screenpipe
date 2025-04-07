@@ -10,6 +10,7 @@ export interface PipeSettings extends PipeSettingsFromTypes {
 	exampleSetting: string;
 	aiLogPresetId: string;
 	aiPresetId: string;
+  deduplicationEnabled: boolean;
 }
 
 type AIPreset = ScreenpipeAppSettings["aiPresets"][number];
@@ -119,7 +120,7 @@ export class SettingsStore {
   }
 
   // load the pipe settings
-  async loadPipeSettings(pipeName: string) {
+  async loadPipeSettings(pipeName: string): Promise<PipeSettings | null> {
     try {
       const screenpipeSettings = await getScreenpipeAppSettings();
 

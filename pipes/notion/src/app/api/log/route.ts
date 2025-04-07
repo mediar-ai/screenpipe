@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { pipe } from "@screenpipe/js";
-import { generateWorkLog } from "@/lib/helpers";
+import { generateWorkLog, deduplicateScreenData } from "@/lib/helpers";
 import { NotionClient } from "@/lib/notion/client";
-import { getScreenpipeAppSettings } from "@/lib/actions/get-screenpipe-app-settings";
 import { settingsStore } from "@/lib/store/settings-store";
 
 const minute = (min: number) => min * 60 * 1000;
@@ -15,6 +14,7 @@ export async function GET() {
 
     const pageSize = settings?.pageSize || 50;
     const customPrompt = settings?.prompt;
+    const deduplicationEnabled = settings?.deduplicationEnabled ?? false;
 
     if (!aiPreset) {
       return NextResponse.json(
@@ -46,6 +46,18 @@ export async function GET() {
         { status: 404 },
       );
     }
+
+        // Only deduplicate if enabled in settings
+    if (deduplicationEnabled) {
+          try {
+            screenData.data = await deduplicateScreenData(screenData.data);
+          } catch (error) {
+            console.warn(
+              "deduplication failed, continuing with original data:",
+              error,
+            );
+          }
+        }
 
     const logEntry = await generateWorkLog(
       screenData.data,

@@ -15,7 +15,7 @@ import {
 import { validateCredentials } from "@/lib/notion/notion";
 import { toast } from "@/hooks/use-toast";
 import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
-import { ChevronDown, Loader2, ExternalLink, Info, Clock, Brain } from "lucide-react";
+import { ChevronDown, Loader2, ExternalLink, Info, Clock, Brain, LineChart } from "lucide-react";
 import { Settings } from "@/lib/types";
 import { updatePipeConfig } from "@/lib/actions/update-pipe-config";
 import { FileSuggestTextarea } from "./file-suggest-textarea";
@@ -50,6 +50,7 @@ import { AIPresetsSelector } from "./ai-presets-selector";
 import {
   Separator
 } from "./ui/separator";
+import { Switch } from "./ui/switch";
 
 export function NotionSettings() {
   const { settings, updateSettings, loading } = usePipeSettings("notion");
@@ -58,6 +59,9 @@ export function NotionSettings() {
   const [testingIntelligence, setTestingIntelligence] = useState(false);
   const [localSettings, setLocalSettings] = useState<Partial<PipeSettings> | null>({});
   const [isConnectedToNotion, setIsConnectedToNotion] = useState<boolean | null>(null);
+  const [deduplicationEnabled, setDeduplicationEnabled] =
+  useState<boolean>(false);
+  const [checkingModel, setCheckingModel] = useState<boolean>(false);
 
   useEffect(() => {
     setLocalSettings({
@@ -201,6 +205,7 @@ export function NotionSettings() {
         interval: localSettings?.interval || settings?.interval,
         pageSize: localSettings?.pageSize || settings?.pageSize,
         workspace: localSettings?.workspace || settings?.workspace,
+        deduplicationEnabled: localSettings?.deduplicationEnabled || settings?.deduplicationEnabled,
         notion: {
           accessToken:
             localSettings?.notion?.accessToken ||
@@ -314,6 +319,117 @@ export function NotionSettings() {
       );
     }
   };
+
+  const setupDeduplication = async () => {
+    setCheckingModel(true);
+    try {
+      // Direct request to Ollama API
+      const checkRes = await fetch("http://localhost:11434/api/tags");
+      const models = await checkRes.json();
+
+      const hasEmbeddingModel = models.models?.some(
+        (m: { name: string }) => m.name === "nomic-embed-text",
+      );
+
+      if (!hasEmbeddingModel) {
+        // Show loading toast
+        const loadingToast = toast({
+          title: "pulling embedding model...",
+          description: (
+            <div>
+              <p>downloading nomic-embed-text model</p>
+              <p>this may take a few minutes</p>
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </div>
+          ),
+        });
+
+        // Direct pull request to Ollama
+        const pullRes = await fetch("http://localhost:11434/api/pull", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "nomic-embed-text" }),
+        });
+
+        if (!pullRes.ok) {
+          throw new Error("failed to pull model");
+        }
+
+        // Handle streaming response
+        const reader = pullRes.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (!reader) {
+          throw new Error("no response body");
+        }
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n").filter((line) => line.trim());
+
+          for (const line of lines) {
+            const response = JSON.parse(line);
+            console.log("progress:", response);
+
+            // Update toast with progress if available
+            if (response.total && response.completed) {
+              const progress = Math.round(
+                (response.completed / response.total) * 100,
+              );
+              loadingToast.update({
+                id: loadingToast.id,
+                title: "pulling embedding model...",
+                description: (
+                  <div>
+                    <p>downloading nomic-embed-text model: {progress}%</p>
+                    <p>{response.status}</p>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                ),
+              });
+            }
+          }
+        }
+
+        loadingToast.update({
+          id: loadingToast.id,
+          title: "model ready",
+          description: "embedding model has been downloaded",
+        });
+      }
+
+      setDeduplicationEnabled(true);
+      await updateSettings({
+        ...settings!,
+        deduplicationEnabled: true,
+      });
+
+      toast({
+        title: "deduplication enabled",
+        description: "content will be deduplicated before processing",
+      });
+    } catch (error) {
+      console.error("error setting up deduplication:", error);
+      toast({
+        variant: "destructive",
+        title: "error",
+        description: "failed to setup deduplication",
+      });
+      setDeduplicationEnabled(false);
+    } finally {
+      setCheckingModel(false);
+    }
+  };
+
+    // Add this useEffect to initialize the state from settings
+    useEffect(() => {
+      if (settings) {
+        setDeduplicationEnabled(settings?.deduplicationEnabled || false);
+      }
+    }, [settings?.deduplicationEnabled]);
 
 
   return (
@@ -659,6 +775,41 @@ export function NotionSettings() {
                   }}
                 />
               </div>
+
+              <div className="flex items-center space-x-2">
+                      <Switch
+                        id="deduplication"
+                        checked={deduplicationEnabled}
+                        disabled={checkingModel || !Boolean(isConnectedToNotion)}
+                        onCheckedChange={async (checked) => {
+                          if (checked) {
+                            await setupDeduplication();
+                          } else {
+                            setDeduplicationEnabled(false);
+                            await updateSettings({
+                              ...settings!,
+                              deduplicationEnabled: false,
+                            });
+                          }
+                        }}
+                      />
+                      <Label htmlFor="deduplication" className="text-sm">
+                        {checkingModel ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            downloading model...
+                          </span>
+                        ) : (
+                          "deduplicate similar content before processing"
+                        )}
+                      </Label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      uses embeddings to remove duplicate content, it will
+                      download the <code>nomic-embed-text</code> model if it is
+                      not already downloaded
+                    </p>
+
             </div>
           </TabsContent>
         </Tabs>

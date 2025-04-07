@@ -1,6 +1,6 @@
 import { ContentItem } from "@screenpipe/js";
 import { WorkLog } from "./types";
-import { generateObject } from "ai";
+import { embed } from "ai";
 import { ollama } from "ollama-ai-provider";
 import { z } from "zod";
 import { Client } from "@notionhq/client";
@@ -120,4 +120,73 @@ export async function generateWorkLog(
     startTime: formatDate(startTime),
     endTime: formatDate(endTime),
   };
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+  const normA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+  const normB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+  return dotProduct / (normA * normB);
+}
+
+export async function deduplicateScreenData(
+  screenData: ContentItem[],
+): Promise<ContentItem[]> {
+  if (!screenData.length) return screenData;
+
+  try {
+    const provider = ollama.embedding("nomic-embed-text");
+    const embeddings: number[][] = [];
+    const uniqueData: ContentItem[] = [];
+    let duplicatesRemoved = 0;
+
+    for (const item of screenData) {
+      const textToEmbed =
+        "content" in item
+          ? typeof item.content === "string"
+            ? item.content
+            : "text" in item.content
+              ? item.content.text
+              : JSON.stringify(item.content)
+          : "";
+
+      if (!textToEmbed.trim()) {
+        uniqueData.push(item);
+        continue;
+      }
+
+      try {
+        const { embedding } = await embed({
+          model: provider,
+          value: textToEmbed,
+        });
+
+        let isDuplicate = false;
+        for (let i = 0; i < embeddings.length; i++) {
+          const similarity = cosineSimilarity(embedding, embeddings[i]);
+          if (similarity > 0.95) {
+            isDuplicate = true;
+            duplicatesRemoved++;
+            break;
+          }
+        }
+
+        if (!isDuplicate) {
+          embeddings.push(embedding);
+          uniqueData.push(item);
+        }
+      } catch (error) {
+        console.warn("embedding failed for item, keeping it:", error);
+        uniqueData.push(item);
+      }
+    }
+
+    console.log(
+      `deduplication: removed ${duplicatesRemoved} duplicates from ${screenData.length} items`,
+    );
+    return uniqueData;
+  } catch (error) {
+    console.warn("deduplication failed, using original data:", error);
+    return screenData;
+  }
 }
