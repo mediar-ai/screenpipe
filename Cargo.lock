@@ -3573,14 +3573,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libsamplerate-sys"
-version = "0.1.12"
-source = "git+https://github.com/divanshu-go/libsamplerate-sys.git?rev=6545fdd165673fce30d4ed5e82b845adc7b2faac#6545fdd165673fce30d4ed5e82b845adc7b2faac"
-dependencies = [
- "cmake",
-]
-
-[[package]]
 name = "libsqlite3-sys"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5856,15 +5848,7 @@ version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e032b2b24715c4f982f483ea3abdb3c9ba444d9f63e87b2843d6f998f5ba2698"
 dependencies = [
- "libsamplerate-sys 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "samplerate"
-version = "0.2.4"
-source = "git+https://github.com/divanshu-go/rust-samplerate.git?rev=bf8415d5ac33940bb5a52bd23b24ca9a56f96792#bf8415d5ac33940bb5a52bd23b24ca9a56f96792"
-dependencies = [
- "libsamplerate-sys 0.1.12 (git+https://github.com/divanshu-go/libsamplerate-sys.git?rev=6545fdd165673fce30d4ed5e82b845adc7b2faac)",
+ "libsamplerate-sys",
 ]
 
 [[package]]
@@ -5914,7 +5898,7 @@ dependencies = [
  "infer",
  "knf-rs",
  "lazy_static",
- "libsamplerate-sys 0.1.12 (git+https://github.com/divanshu-go/libsamplerate-sys.git?rev=6545fdd165673fce30d4ed5e82b845adc7b2faac)",
+ "libsamplerate-sys",
  "log",
  "ndarray 0.16.1",
  "oasgen",
@@ -5926,7 +5910,7 @@ dependencies = [
  "realfft",
  "reqwest 0.12.12",
  "rubato",
- "samplerate 0.2.4 (git+https://github.com/divanshu-go/rust-samplerate.git?rev=bf8415d5ac33940bb5a52bd23b24ca9a56f96792)",
+ "samplerate",
  "screenpipe-core",
  "screenpipe-db",
  "screenpipe-events",
@@ -8134,7 +8118,7 @@ dependencies = [
  "ndarray 0.16.1",
  "ort",
  "ringbuffer",
- "samplerate 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "samplerate",
 ]
 
 [[package]]
