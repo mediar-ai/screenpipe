@@ -203,6 +203,7 @@ export function NotionSettings() {
         aiModel: localSettings?.aiModel || settings?.aiModel,
         prompt: localSettings?.prompt || settings?.prompt,
         interval: localSettings?.interval || settings?.interval,
+        shortTasksInterval: localSettings?.shortTasksInterval || settings?.shortTasksInterval,
         pageSize: localSettings?.pageSize || settings?.pageSize,
         workspace: localSettings?.workspace || settings?.workspace,
         deduplicationEnabled: localSettings?.deduplicationEnabled || settings?.deduplicationEnabled,
@@ -222,12 +223,12 @@ export function NotionSettings() {
         },
       });
 
-      if (localSettings?.interval !== settings?.interval) {
-        await updatePipeConfig(localSettings?.interval || 5, "/api/log", "minute");
+      if (localSettings?.shortTasksInterval !== settings?.shortTasksInterval) {
+        await updatePipeConfig(localSettings?.shortTasksInterval || 5, "/api/log", "minute");
       }
 
-      if (localSettings?.shortTasksInterval !== settings?.shortTasksInterval) {
-        await updatePipeConfig(localSettings?.shortTasksInterval || 1, "/api/intelligence", "hour");
+      if (localSettings?.interval !== settings?.interval) {
+        await updatePipeConfig(localSettings?.interval || 1, "/api/intelligence", "hour");
       }
 
       toast({
@@ -718,19 +719,19 @@ export function NotionSettings() {
           <TabsContent value="sync" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="interval">Sync Interval (short-term) (minutes)</Label>
+                <Label htmlFor="interval">Sync Interval (long-term) (hours)</Label>
                 <Input
                   id="interval"
                   name="interval"
                   type="number"
                   min="1"
                   step="1"
-                  max="60"
+                  max="24"
                   defaultValue={settings?.interval ? settings?.interval : 5}
                   onChange={(e) => {
                     setLocalSettings({
                       ...localSettings!,
-                      interval: parseInt(e.target.value) || 5,
+                      interval: parseInt(e.target.value) || 1,
                     });
                   }}
                 />
@@ -761,12 +762,15 @@ export function NotionSettings() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="shortTasksInterval"> Sync Interval (long-term) (hours)</Label>
+                <Label htmlFor="shortTasksInterval"> Sync Interval (short-term) (minutes)</Label>
                 <Input
                   id="shortTasksInterval"
                   name="shortTasksInterval"
                   type="number"
-                  defaultValue={settings?.shortTasksInterval || 1}
+                  min="1"
+                  step="1"
+                  max="60"
+                  defaultValue={settings?.shortTasksInterval || 5}
                   onChange={(e) => {
                     setLocalSettings({
                       ...localSettings!,
@@ -776,7 +780,8 @@ export function NotionSettings() {
                 />
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-col space-x-2 space-y-2">
+                    <div className="flex items-center space-x-2 pt-5">
                       <Switch
                         id="deduplication"
                         checked={deduplicationEnabled}
@@ -803,12 +808,14 @@ export function NotionSettings() {
                           "deduplicate similar content before processing"
                         )}
                       </Label>
+
                     </div>
                     <p className="text-xs text-muted-foreground">
                       uses embeddings to remove duplicate content, it will
                       download the <code>nomic-embed-text</code> model if it is
                       not already downloaded
                     </p>
+                    </div>
 
             </div>
           </TabsContent>
