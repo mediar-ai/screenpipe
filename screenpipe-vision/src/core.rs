@@ -378,6 +378,7 @@ async fn process_window_ocr(
         &app_name,
         captured_window.is_focused,
         captured_window.process_id,
+        &captured_window.window_name,
     )
     .await;
 
@@ -409,16 +410,17 @@ async fn get_browser_url_if_needed(
     app_name: &str,
     is_focused: bool,
     process_id: i32,
+    window_title: &str,
 ) -> Option<String> {
-    if cfg!(not(target_os = "linux"))
-        && is_focused
+    if is_focused
         && BROWSER_NAMES
             .iter()
             .any(|&browser| app_name.to_lowercase().contains(browser))
     {
         let app_name = app_name.to_string(); // Clone to move into the closure
+        let window_title = window_title.to_string(); // Clone to move into the closure
         match tokio::task::spawn_blocking(move || {
-            get_active_browser_url_sync(&app_name, process_id)
+            get_active_browser_url_sync(&app_name, process_id, &window_title)
         })
         .await
         {
@@ -576,17 +578,17 @@ impl UIFrame {
     }
 }
 
-fn get_active_browser_url_sync(app_name: &str, process_id: i32) -> Result<String, std::io::Error> {
+fn get_active_browser_url_sync(app_name: &str, process_id: i32, window_title: &str) -> Result<String, std::io::Error> {
     let detector = create_url_detector();
-    match detector.get_active_url(app_name, process_id) {
+    match detector.get_active_url(app_name, process_id, window_title) {
         Ok(Some(url)) => Ok(url),
         Ok(None) => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to get browser URL",
+            std::io::ErrorKind::NotFound,
+            "No active URL found",
         )),
         Err(e) => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            format!("Error getting browser URL: {}", e),
+            format!("Failed to get active URL: {}", e),
         )),
     }
 }
