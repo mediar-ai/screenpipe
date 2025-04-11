@@ -702,7 +702,7 @@ impl UIElementImpl for WindowsUIElement {
         Box::new(WindowsUIElement { element: self.element.clone() })
     }
 
-    fn scroll(&self, direction: &str, amount: f64) -> Result<(), AutomationError> {
+    fn scroll(&self, direction: &str, amount: f64) -> Result<(), AutomationError> { // TODO does not work
         let scroll_pattern = self.element.0.get_pattern::<patterns::UIScrollPattern>()
             .map_err(|e| AutomationError::PlatformError(e.to_string()))?;
 
