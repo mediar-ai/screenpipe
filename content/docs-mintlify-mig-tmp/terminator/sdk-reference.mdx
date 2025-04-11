@@ -1,0 +1,262 @@
+---
+title: 'Desktop Use: SDK Reference (TypeScript)'
+---
+
+this page details the typescript sdk for interacting with the **terminator** server. it provides examples for common ui automation tasks, primarily focusing on windows applications.
+
+## setup
+
+first, ensure the terminator server is running (see [[terminator/getting-started|Getting Started]]). then, install the necessary dependencies if you haven't already:
+
+```bash
+bun install # or npm install / yarn install
+```
+
+import the client and locator:
+
+```typescript
+import { DesktopUseClient, Locator, ApiError } from 'desktop-use'; // Adjust the path as needed
+
+const client = new DesktopUseClient(); // Connects to default 127.0.0.1:3000
+// const client = new DesktopUseClient('127.0.0.1:3001'); // Or specify host:port
+```
+
+## basic operations
+
+### opening applications and urls
+
+you can open applications by their name or path, and open urls in the default (or specified) browser.
+
+```typescript
+async function launchApps() {
+  try {
+    // open windows calculator
+    console.log('opening calculator...');
+    await client.openApplication('calc');
+    console.log('calculator opened.');
+
+    // wait a bit for the app to load (optional)
+    await sleep(1000);
+
+    // open notepad
+    console.log('opening notepad...');
+    await client.openApplication('notepad');
+    console.log('notepad opened.');
+
+    // open a url
+    console.log('opening url...');
+    await client.openUrl('https://github.com/mediar-ai/terminator');
+    console.log('url opened.');
+
+  } catch (error) {
+    if (error instanceof ApiError) {
+      console.error(`api error (${error.status}): ${error.message}`);
+    } else {
+      console.error('an unexpected error occurred:', error);
+    }
+  }
+}
+
+launchApps();
+
+// Utility function for delays
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+```
+
+### locating elements
+
+the `locator` method starts a chain to find elements. you can chain multiple locators to narrow down the search.
+
+selectors use the format `Strategy:Value`, e.g., `name:Calc`, `role:button`, `id:myButtonId`.
+
+```typescript
+// --- basic locators ---
+
+// locate the calculator window (windows 11 example)
+const calcWindow = client.locator('name:Calc');
+
+// locate the 'seven' button within the calculator window
+const sevenButton = calcWindow.locator('name:Seven');
+
+// locate the main text area in notepad
+const notepadWindow = client.locator('window:Notepad'); // might differ
+const editor = notepadWindow.locator('name:RichEditD2DPT'); // use accessibility insights tool to find correct class/id
+
+// --- chaining locators ---
+
+// directly locate the 'eight' button
+const eightButton = client.locator('name:Calc').locator('name:Eight');
+
+// locate the file menu item within notepad
+const fileMenu = client.locator('window:Notepad').locator('name:File');
+```
+
+### interacting with elements
+
+once you have a `Locator`, you can perform actions like clicking, typing, or getting text.
+
+```typescript
+async function interactWithCalc() {
+  try {
+    console.log('opening calculator...');
+    await client.openApplication('calc');
+    await sleep(1500); // give calc time to open
+
+    // locate buttons by name (windows 11 calculator)
+    const seven = client.locator('name:Calc').locator('name:Seven');
+    const plus = client.locator('name:Calc').locator('name:Plus');
+    const eight = client.locator('name:Calc').locator('name:Eight');
+    const equals = client.locator('name:Calc').locator('name:Equals');
+    const display = client.locator('name:Calc').locator('name:CalculatorResults'); // find result display
+
+    console.log('clicking 7...');
+    await seven.click();
+    await sleep(200);
+
+    console.log('clicking +...');
+    await plus.click();
+    await sleep(200);
+
+    console.log('clicking 8...');
+    await eight.click();
+    await sleep(200);
+
+    console.log('clicking =...');
+    await equals.click();
+    await sleep(500);
+
+    // get the result
+    const result = await display.getText();
+    console.log(`calculation result: ${result.text}`); // should output something like "display is 15"
+
+  } catch (error) {
+    console.error('error interacting with calculator:', error);
+  }
+}
+
+interactWithCalc();
+
+async function interactWithNotepad() {
+  try {
+    console.log('opening notepad...');
+    await client.openApplication('notepad');
+    await sleep(1000);
+
+    const notepadWindow = client.locator('window:Notepad');
+    const editor = notepadWindow.locator('name:RichEditD2DPT'); // adjust if necessary
+
+    console.log('typing text...');
+    await editor.typeText('hello from terminator!\nthis is a test.');
+    await sleep(500);
+
+    // press enter
+    console.log('pressing enter...');
+    await editor.pressKey('{enter}');
+    await sleep(200);
+
+    await editor.typeText('done.');
+
+    const content = await editor.getText();
+    console.log('notepad content retrieved:', content.text);
+
+  } catch (error) {
+    console.error('error interacting with notepad:', error);
+  }
+}
+
+// interactWithNotepad(); // uncomment to run
+```
+
+*note: element selectors (like `name`, `id`, `role`) can vary between os versions and application updates. use tools like windows' accessibility insights to find the correct selectors for your target application or let AI figure it out.* 
+
+### getting element state and attributes
+
+you can check properties like visibility or retrieve detailed attributes.
+
+```typescript
+async function checkElementState() {
+  try {
+    await client.openApplication('calc');
+    await sleep(1000);
+    const equalsButton = client.locator('button:Calculator').locator('name:Equals');
+
+    const visible = await equalsButton.isVisible();
+    console.log(`is equals button visible? ${visible}`);
+
+    const attributes = await equalsButton.getAttributes();
+    console.log('equals button attributes:', JSON.stringify(attributes, null, 2));
+
+    const bounds = await equalsButton.getBounds();
+    console.log(`equals button bounds: x=${bounds.x}, y=${bounds.y}, width=${bounds.width}, height=${bounds.height}`);
+
+  } catch (error) {
+    console.error('error checking element state:', error);
+  }
+}
+
+// checkElementState(); // uncomment to run
+```
+
+## expectations
+
+**terminator** can wait for certain conditions to be met before proceeding or timing out.
+
+```typescript
+async function useExpectations() {
+  try {
+    console.log('opening notepad...');
+    await client.openApplication('notepad.exe');
+
+    const editorLocator = client.locator('window:Notepad').locator('name:RichEditD2DPT');
+
+    // wait for the editor element to be visible (default timeout)
+    console.log('waiting for editor to be visible...');
+    const editorElement = await editorLocator.expectVisible();
+    console.log(`editor is visible! id: ${editorElement.id}`);
+
+    // wait for it to be enabled (with a 5-second timeout)
+    console.log('waiting for editor to be enabled...');
+    await editorLocator.expectEnabled(5000);
+    console.log('editor is enabled!');
+
+    await editorLocator.typeText('initial text.');
+    await sleep(1000);
+
+    // wait for the text to exactly match 'initial text.'
+    console.log('waiting for text to match...');
+    await editorLocator.expectTextEquals('initial text.', { timeout: 3000 });
+    console.log('text matched!');
+
+    // this would likely fail and throw an error after the timeout
+    // console.log('waiting for incorrect text (will timeout)...');
+    // await editorLocator.expectTextEquals('wrong text', { timeout: 2000 }); 
+
+  } catch (error) {
+    console.error('expectation error:', error);
+  }
+}
+
+// useExpectations(); // uncomment to run
+```
+
+## error handling
+
+the sdk methods return promises that reject on failure. use `try...catch` blocks and check for `ApiError` instances.
+
+```typescript
+try {
+  // attempt to find a non-existent element
+  const nonExistent = client.locator('Name:DoesNotExist');
+  await nonExistent.click(); 
+} catch (error) {
+  if (error instanceof ApiError) {
+    // handle specific api errors (e.g., element not found, timeout)
+    console.error(`terminator api error (status: ${error.status}): ${error.message}`);
+  } else {
+    // handle other unexpected errors
+    console.error('an unexpected javascript error occurred:', error);
+  }
+}
+``` 

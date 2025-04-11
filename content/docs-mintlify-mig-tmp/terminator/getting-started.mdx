@@ -1,0 +1,55 @@
+---
+title: 'Terminator: Getting Started'
+---
+
+## installation
+
+first, you need the rust development environment installed.
+
+```bash
+# install rust if you don't have it
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $home/.cargo/env # or restart your terminal
+```
+
+then, clone the terminator repository:
+
+```bash
+git clone https://github.com/mediar-ai/terminator
+cd terminator
+```
+
+## running the server
+
+**terminator** works with a client-server architecture. you need to run the rust server first. this server listens for commands from the sdk (typescript, python coming soon) and interacts with the operating system's accessibility apis.
+
+```bash
+cargo run --example server -- --debug
+```
+
+the `--debug` flag enables verbose logging, which is helpful when starting out.
+
+## using the typescript sdk (quick start)
+
+once the server is running, you can use the typescript sdk to automate ui interactions.
+
+1.  **navigate to the examples directory:**
+    ```bash
+    cd examples
+    ```
+2.  **install dependencies:**
+    ```bash
+    bun install # or npm install / yarn install
+    ```
+3.  **run the example script:**
+    ```bash
+    npx tsx client_example.ts
+    ```
+
+this example script typically performs a simple automation task, like opening the calculator application (on windows/macos), clicking buttons, and retrieving the result. check the `client_example.ts` file to see the specific actions.
+
+## next steps
+
+*   explore the [[terminator/sdk-reference|TypeScript SDK Reference]] to understand all available commands.
+*   look at the `examples/` directory for more usage patterns.
+*   start building your own automation scripts! 

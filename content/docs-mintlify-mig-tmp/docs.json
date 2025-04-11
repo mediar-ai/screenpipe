@@ -13,10 +13,31 @@
   },
   "logo": "favicon.ico",
   "navigation": {
-    "tabs": [
+    "anchors": [
       {
-        "tab": "Documentation",
-        "icon": "book",
+        "anchor": "Terminator",
+        "icon": "robot",
+        "pages": [
+          {
+            "group": "Getting Started",
+            "icon": "rocket",
+            "pages": [
+              "terminator/introduction",
+              "terminator/getting-started"
+            ]
+          },
+          {
+            "group": "Reference",
+            "icon": "code",
+            "pages": [
+              "terminator/sdk-reference"
+            ]
+          }
+        ]
+      },
+      {
+        "anchor": "Screenpipe",
+        "icon": "monitor-recorder",
         "pages": [
           {
             "group": "Getting Started",
@@ -55,7 +76,7 @@
         ]
       },
       {
-        "tab": "API Reference",
+        "anchor": "API Reference",
         "icon": "terminal",
         "openapi": "openapi.yaml"
       }

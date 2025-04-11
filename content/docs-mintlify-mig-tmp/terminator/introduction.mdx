@@ -1,0 +1,81 @@
+---
+title: 'Terminator: Introduction'
+---
+
+import { Card, CardGroup } from '@mintlify/components';
+
+## overview
+
+**terminator** is an ai-first cross-platform ui automation library for rust, designed to interact with native gui applications on windows and macos using a playwright-like api.
+
+it provides a unified api to find and control ui elements like buttons, text fields, windows, and more, enabling the creation of automation scripts, testing tools, and assistive technologies.
+
+because it's using os level apis, it is **100x faster and more reliable** for ai computer use than vision-based approaches like openai operator or anthropic computer use. acting at a lower level than a browser, it can easily drop-in replace browser automation tools like playwright for native application tasks.
+
+> **Note:** while we support macos and windows, we are currently focusing development efforts on windows. macos support is functional but may require more investigation for complex scenarios.
+
+## features
+
+<CardGroup cols={2}>
+  <Card title="Cross-Platform">
+    Experimentally supports **Windows** and **macOS** with a consistent api.
+  </Card>
+  <Card title="Application Control">
+    Find running applications (by name, pid), open new applications, open URLs.
+  </Card>
+  <Card title="Element Discovery">
+    Locate UI elements using various strategies (`Selector` enum):
+    - Role (e.g., "button", "textfield", "AXButton")
+    - Name (accessibility label/title)
+    - Value
+    - Description
+    - AutomationId (Windows)
+    - Id (internal unique id)
+    - Text content (partial matches)
+  </Card>
+  <Card title="Element Interaction">
+    - Click, double-click, right-click
+    - Type text, set value, press keys (e.g., `{Enter}`, `{Cmd}`, `{Alt}`)
+    - Focus, hover
+    - Scroll (up, down, left, right)
+    - Retrieve text content, attributes (value, role, description, bounds, properties)
+    - Check state (enabled, visible, focused)
+  </Card>
+  <Card title="Element Hierarchy">
+    Traverse the accessibility tree (children, parent).
+  </Card>
+    <Card title="Debugging">
+    Optional verbose logging and accessibility inspector integration (like [Accessibility Insights](https://accessibilityinsights.io/downloads/)) for easier debugging.
+  </Card>
+</CardGroup>
+
+## platform support
+
+*   ✅ **windows** (using ui automation)
+*   ✅ **macos** (using accessibility api)
+*   🐧 **linux** (planned/experimental)
+
+## use cases & potential experiments
+
+*   **ai-driven automation loop:** an ai agent observes an application's state using terminator, generates sdk code to interact, executes it, and observes the result, enabling complex, adaptive automation (e.g., data entry, testing, user support).
+*   **pdf to legacy form filler:** extract data from pdfs and use terminator to fill it into legacy applications lacking modern apis.
+*   **javascript/typescript integration:** integrate terminator into web tools or electron apps. imagine browser extensions interacting with native desktop apps or node.js scripts automating cross-application workflows.
+*   **replacing vision models:** achieve significantly faster and more reliable ui automation compared to slower, error-prone vision-based models for tasks where accessibility apis are available.
+
+## demos
+
+high level demo:
+
+<video controls src="https://github.com/user-attachments/assets/024c06fa-19f2-4fc9-b52d-329768ee52d0"></video>
+
+dev demo 1:
+
+<video controls src="https://github.com/user-attachments/assets/890d6842-782c-4b2b-8920-224bd63c4545"></video>
+
+dev demo 2:
+
+<video controls src="https://github.com/user-attachments/assets/c9f472f7-79ed-49c6-a4d0-93608fa1ce55"></video>
+
+## next steps
+
+ready to start? head over to the [[terminator/getting-started|Getting Started]] guide. 
