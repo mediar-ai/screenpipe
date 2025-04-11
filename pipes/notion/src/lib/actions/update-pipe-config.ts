@@ -2,7 +2,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-export async function updatePipeConfig(intervalMinutes: number) {
+export async function updatePipeConfig(interval: number, apiPath: string, schedule: "minute" | "hour" | "day") {
   try {
     const screenpipeDir =
       process.env.SCREENPIPE_DIR ||
@@ -30,23 +30,17 @@ export async function updatePipeConfig(intervalMinutes: number) {
       config = { crons: [] };
     }
 
-    // Update cron config
-    config.crons = [
-      {
-        path: "/api/log",
-        schedule: `0 */${intervalMinutes} * * * *`,
-      },
-      {
-        path: "/api/intelligence",
-        schedule: "0 0 */1 * * *",
-      },
-    ];
+    // get schedule from schedule
+    const scheduleTimer = schedule === "minute" ? `0 */${interval} * * * *` : schedule === "hour" ? `0 0 */${interval} * * *` : `0 0 0 */${interval} * *`;
+
+    config.crons = config.crons.map((cron: any) => cron.path === apiPath ? { ...cron, schedule: scheduleTimer } : cron);
+
     config.enabled = config.enabled ?? true;
     config.is_nextjs = config.is_nextjs ?? true;
 
     await fs.writeFile(pipeConfigPath, JSON.stringify(config, null, 2));
     console.log(
-      `updated cron schedule to run every ${intervalMinutes} minutes`
+      `updated cron schedule to run every ${interval} ${schedule} for ${apiPath}`
     );
   } catch (err) {
     console.error("failed to update cron schedule:", err);

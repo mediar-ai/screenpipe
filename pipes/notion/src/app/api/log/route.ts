@@ -1,25 +1,24 @@
 import { NextResponse } from "next/server";
 import { pipe } from "@screenpipe/js";
-import { generateWorkLog } from "@/lib/helpers";
+import { generateWorkLog, deduplicateScreenData } from "@/lib/helpers";
 import { NotionClient } from "@/lib/notion/client";
-import { getScreenpipeAppSettings } from "@/lib/actions/get-screenpipe-app-settings";
+import { settingsStore } from "@/lib/store/settings-store";
 
 const minute = (min: number) => min * 60 * 1000;
 
 export async function GET() {
   try {
-    const settings = (await getScreenpipeAppSettings())["customSettings"]![
-      "notion"
-    ];
+    const settings = await settingsStore.loadPipeSettings("notion");
 
-    const model = settings?.aiModel;
+    const aiPreset = settingsStore.getPreset("notion", "aiLogPresetId");
+
     const pageSize = settings?.pageSize || 50;
     const customPrompt = settings?.prompt;
-    const interval = settings?.interval ? minute(settings.interval) : 3600000;
+    const deduplicationEnabled = settings?.deduplicationEnabled ?? false;
 
-    if (!model) {
+    if (!aiPreset) {
       return NextResponse.json(
-        { error: "model not selected" },
+        { error: "ai preset not selected" },
         { status: 401 },
       );
     }
@@ -32,7 +31,7 @@ export async function GET() {
     }
 
     const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - interval);
+    const oneHourAgo = new Date(now.getTime() - minute(1));
 
     const screenData = await pipe.queryScreenpipe({
       startTime: oneHourAgo.toISOString(),
@@ -48,9 +47,21 @@ export async function GET() {
       );
     }
 
+        // Only deduplicate if enabled in settings
+    if (deduplicationEnabled) {
+          try {
+            screenData.data = await deduplicateScreenData(screenData.data);
+          } catch (error) {
+            console.warn(
+              "deduplication failed, continuing with original data:",
+              error,
+            );
+          }
+        }
+
     const logEntry = await generateWorkLog(
       screenData.data,
-      model,
+      aiPreset,
       oneHourAgo,
       now,
       customPrompt,
