@@ -13,9 +13,9 @@
   },
   "logo": "favicon.ico",
   "navigation": {
-    "anchors": [
+    "dropdowns": [
       {
-        "anchor": "Terminator",
+        "dropdown": "Terminator",
         "icon": "robot",
         "pages": [
           {
@@ -36,7 +36,7 @@
         ]
       },
       {
-        "anchor": "Screenpipe",
+        "dropdown": "Screenpipe",
         "icon": "monitor-recorder",
         "pages": [
           {
@@ -76,7 +76,7 @@
         ]
       },
       {
-        "anchor": "API Reference",
+        "dropdown": "Screenpipe API Reference",
         "icon": "terminal",
         "openapi": "openapi.yaml"
       }
