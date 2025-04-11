@@ -1,0 +1,245 @@
+---
+title: 'Terminator: SDK Reference (Python)'
+---
+
+this page details the python sdk for interacting with the **terminator** server. it provides examples for common ui automation tasks, primarily focusing on windows applications.
+
+## setup
+
+first, ensure the terminator server is running (see [Getting Started](/terminator/getting-started)).
+
+### installation
+
+*   **recommended for development:** install in editable mode from the source directory.
+    ```bash
+    # from the root of the terminator repo
+    pip install -e ./python-sdk
+    ```
+*   **for usage (once published):** install from pypi.
+    ```bash
+    pip install desktop-use
+    ```
+    **important:** you install `desktop-use`, but you import `terminator_sdk`.
+
+### importing
+
+```python
+from terminator_sdk import TerminatorClient, Locator, ApiError, sleep, ElementResponse
+# import other response models or exceptions as needed
+
+client = TerminatorClient() # connects to default 127.0.0.1:3000
+# client = TerminatorClient(base_url='127.0.0.1:3001') # or specify host:port
+```
+
+## basic operations
+
+### opening applications and urls
+
+```python
+def launch_apps():
+    try:
+        # open windows calculator
+        print('opening calculator...')
+        client.open_application('calc.exe')
+        print('calculator opened.')
+
+        # wait a bit
+        sleep(1000)
+
+        # open notepad
+        print('opening notepad...')
+        client.open_application('notepad.exe')
+        print('notepad opened.')
+
+        # open a url
+        print('opening url...')
+        client.open_url('https://github.com/mediar-ai/terminator')
+        print('url opened.')
+
+    except ApiError as e:
+        print(f'api error (status: {e.status}): {e}')
+    except Exception as e:
+        print(f'an unexpected error occurred: {e}')
+
+# launch_apps()
+```
+
+### locating elements
+
+the `locator()` method starts a chain. selectors use the format `Strategy:Value`.
+
+```python
+# locate the calculator window (windows 11 example)
+calc_window = client.locator('Name:Calculator')
+
+# locate the 'seven' button within the calculator window
+seven_button = calc_window.locator('Name:Seven')
+
+# locate the main text area in notepad (use accessibility insights tool to find correct class/id)
+notepad_editor = client.locator('ClassName:Notepad').locator('ClassName:RichEditD2DPT')
+
+# directly locate the 'eight' button
+eight_button = client.locator('Name:Calculator').locator('Name:Eight')
+```
+
+### interacting with elements
+
+```python
+def interact_with_calc():
+    try:
+        print('opening calculator...')
+        client.open_application('calc.exe')
+        sleep(1500) # give calc time to open
+
+        # locate elements
+        calc_window = client.locator('Name:Calculator')
+        seven = calc_window.locator('Name:Seven')
+        plus = calc_window.locator('Name:Plus')
+        eight = calc_window.locator('Name:Eight')
+        equals = calc_window.locator('Name:Equals')
+        display = calc_window.locator('AutomationId:CalculatorResults')
+
+        print('clicking 7...')
+        seven.click()
+        sleep(200)
+
+        print('clicking +...')
+        plus.click()
+        sleep(200)
+
+        print('clicking 8...')
+        eight.click()
+        sleep(200)
+
+        print('clicking =...')
+        equals.click()
+        sleep(500)
+
+        # get the result
+        result = display.get_text()
+        print(f'calculation result: {result.text}') # e.g., "display is 15"
+
+    except ApiError as e:
+        print(f'api error interacting with calculator: {e}')
+    except Exception as e:
+        print(f'an unexpected error occurred: {e}')
+
+# interact_with_calc()
+
+def interact_with_notepad():
+    try:
+        print('opening notepad...')
+        client.open_application('notepad.exe')
+        sleep(1000)
+
+        editor = client.locator('ClassName:Notepad').locator('ClassName:RichEditD2DPT')
+
+        print('typing text...')
+        editor.type_text('hello from terminator!\nthis is a python test.')
+        sleep(500)
+
+        print('pressing enter...')
+        editor.press_key('{Enter}')
+        sleep(200)
+
+        editor.type_text('done.')
+
+        content = editor.get_text()
+        print(f'notepad content retrieved: {content.text}')
+
+    except ApiError as e:
+        print(f'api error interacting with notepad: {e}')
+    except Exception as e:
+        print(f'an unexpected error occurred: {e}')
+
+# interact_with_notepad()
+```
+
+*note: element selectors can vary. use tools like windows' accessibility insights to find correct selectors.* 
+
+### getting element state and attributes
+
+```python
+def check_element_state():
+    try:
+        client.open_application('calc.exe')
+        sleep(1000)
+        equals_button = client.locator('Name:Calculator').locator('Name:Equals')
+
+        visible = equals_button.is_visible()
+        print(f'is equals button visible? {visible}')
+
+        attributes = equals_button.get_attributes()
+        print(f'equals button attributes: {attributes}') # attributes is a dataclass
+
+        bounds = equals_button.get_bounds()
+        print(f'equals button bounds: x={bounds.x}, y={bounds.y}, width={bounds.width}, height={bounds.height}')
+
+    except ApiError as e:
+        print(f'api error checking element state: {e}')
+    except Exception as e:
+        print(f'an unexpected error occurred: {e}')
+
+# check_element_state()
+```
+
+## expectations
+
+use `expect_*` methods to wait for conditions.
+
+```python
+def use_expectations():
+    try:
+        print('opening notepad...')
+        client.open_application('notepad.exe')
+
+        editor_locator = client.locator('ClassName:Notepad').locator('ClassName:RichEditD2DPT')
+
+        # wait for the editor element to be visible (default timeout)
+        print('waiting for editor to be visible...')
+        editor_element: ElementResponse = editor_locator.expect_visible()
+        print(f'editor is visible! id: {editor_element.id}')
+
+        # wait for it to be enabled (with a 5-second timeout)
+        print('waiting for editor to be enabled...')
+        editor_locator.expect_enabled(timeout=5000)
+        print('editor is enabled!')
+
+        editor_locator.type_text('initial text.')
+        sleep(1000)
+
+        # wait for the text to exactly match 'initial text.'
+        print('waiting for text to match...')
+        editor_locator.expect_text_equals('initial text.', timeout=3000)
+        print('text matched!')
+
+        # this would likely fail and raise ApiError after the timeout
+        # print('waiting for incorrect text (will timeout)...')
+        # editor_locator.expect_text_equals('wrong text', timeout=2000)
+
+    except ApiError as e:
+        print(f'expectation error: {e}')
+    except Exception as e:
+        print(f'an unexpected error occurred: {e}')
+
+# use_expectations()
+```
+
+## error handling
+
+use `try...except` blocks, catching `ApiError` for server/automation issues and potentially `ConnectionError` for network problems.
+
+```python
+try:
+    # attempt to find a non-existent element
+    non_existent = client.locator('Name:DoesNotExist')
+    non_existent.click()
+except ApiError as e:
+    # handle specific api errors (e.g., element not found, timeout)
+    print(f'terminator api error (status: {e.status}): {e}')
+except ConnectionError as e:
+    print(f'connection error: {e}. is the server running?')
+except Exception as e:
+    # handle other unexpected errors
+    print(f'an unexpected python error occurred: {e}')
+``` 

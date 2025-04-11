@@ -30,7 +30,8 @@
             "group": "Reference",
             "icon": "code",
             "pages": [
-              "terminator/sdk-reference"
+              "terminator/sdk-reference",
+              "terminator/python-sdk-reference"
             ]
           }
         ]

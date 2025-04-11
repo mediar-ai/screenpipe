@@ -29,27 +29,56 @@ cargo run --example server -- --debug
 
 the `--debug` flag enables verbose logging, which is helpful when starting out.
 
-## using the typescript sdk (quick start)
+## using the sdks (quick start)
 
-once the server is running, you can use the typescript sdk to automate ui interactions.
+once the server is running, you can use either the typescript or python sdk to automate ui interactions.
+
+### typescript
 
 1.  **navigate to the examples directory:**
     ```bash
     cd examples
     ```
-2.  **install dependencies:**
+2.  **install dependencies (if needed):**
     ```bash
     bun install # or npm install / yarn install
+    # this might install the local ts-sdk if linked in package.json
     ```
-3.  **run the example script:**
+3.  **run the ts example script:**
     ```bash
     npx tsx client_example.ts
     ```
 
-this example script typically performs a simple automation task, like opening the calculator application (on windows/macos), clicking buttons, and retrieving the result. check the `client_example.ts` file to see the specific actions.
+*see the [TypeScript SDK Reference](/terminator/sdk-reference) for details.*
+
+### python
+
+1.  **install the python sdk:**
+    *   **option a (recommended for development): install editable from source**
+        ```bash
+        # from the root of the terminator repo
+        pip install -e ./python-sdk 
+        ```
+    *   **option b (once published): install from pypi**
+        ```bash
+        pip install desktop-use 
+        ```
+        *note: install `desktop-use`, but import `terminator_sdk`.*
+
+2.  **navigate to the examples directory:**
+    ```bash
+    cd examples
+    ```
+3.  **run the python example script:**
+    ```bash
+    python client_example.py
+    ```
+    *the example script might attempt to modify `sys.path` if the sdk isn't installed, but installing is preferred.*
+
+*see the [Python SDK Reference](/terminator/python-sdk-reference) for details.*
 
 ## next steps
 
-*   explore the [TypeScript SDK Reference](/terminator/sdk-reference) to understand all available commands.
+*   explore the sdk references ([TypeScript](/terminator/sdk-reference), [Python](/terminator/python-sdk-reference)) to understand all available commands.
 *   look at the `examples/` directory for more usage patterns.
 *   start building your own automation scripts! 

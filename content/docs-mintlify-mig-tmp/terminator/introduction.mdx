@@ -6,7 +6,7 @@ import { Card, CardGroup } from '@mintlify/components';
 
 ## overview
 
-**terminator** is an ai-first cross-platform ui automation library for rust, designed to interact with native gui applications on windows and macos using a playwright-like api.
+**terminator** is an ai-first cross-platform ui automation library for rust, designed to interact with native gui applications on windows and macos using a playwright-like api via **python** or **typescript** sdks.
 
 it provides a unified api to find and control ui elements like buttons, text fields, windows, and more, enabling the creation of automation scripts, testing tools, and assistive technologies.
 
@@ -59,7 +59,8 @@ because it's using os level apis, it is **100x faster and more reliable** for ai
 
 *   **ai-driven automation loop:** an ai agent observes an application's state using terminator, generates sdk code to interact, executes it, and observes the result, enabling complex, adaptive automation (e.g., data entry, testing, user support).
 *   **pdf to legacy form filler:** extract data from pdfs and use terminator to fill it into legacy applications lacking modern apis.
-*   **javascript/typescript integration:** integrate terminator into web tools or electron apps. imagine browser extensions interacting with native desktop apps or node.js scripts automating cross-application workflows.
+*   **javascript/typescript integration:** integrate terminator into web tools or electron apps using the [TypeScript SDK](/terminator/sdk-reference).
+*   **python scripting:** build powerful automation scripts and integrate with other python libraries using the [Python SDK](/terminator/python-sdk-reference).
 *   **replacing vision models:** achieve significantly faster and more reliable ui automation compared to slower, error-prone vision-based models for tasks where accessibility apis are available.
 
 ## demos
@@ -78,4 +79,7 @@ dev demo 2:
 
 ## next steps
 
-ready to start? head over to the [Getting Started](/terminator/getting-started) guide.
+ready to start? head over to the [Getting Started](/terminator/getting-started) guide, then dive into the sdk references:
+
+*   [Python SDK Reference](/terminator/python-sdk-reference)
+*   [TypeScript SDK Reference](/terminator/sdk-reference)
