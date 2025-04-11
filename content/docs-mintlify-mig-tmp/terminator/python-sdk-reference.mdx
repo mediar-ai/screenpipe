@@ -34,7 +34,7 @@ def launch_apps():
     try:
         # open windows calculator
         print('opening calculator...')
-        client.open_application('calc.exe')
+        client.open_application('calc')
         print('calculator opened.')
 
         # wait a bit
@@ -42,7 +42,7 @@ def launch_apps():
 
         # open notepad
         print('opening notepad...')
-        client.open_application('notepad.exe')
+        client.open_application('notepad')
         print('notepad opened.')
 
         # open a url
@@ -64,16 +64,16 @@ the `locator()` method starts a chain. selectors use the format `Strategy:Value`
 
 ```python
 # locate the calculator window (windows 11 example)
-calc_window = client.locator('Name:Calculator')
+calc_window = client.locator('window:Calculator')
 
 # locate the 'seven' button within the calculator window
-seven_button = calc_window.locator('Name:Seven')
+seven_button = calc_window.locator('role:button').locator('name:Seven')
 
 # locate the main text area in notepad (use accessibility insights tool to find correct class/id)
-notepad_editor = client.locator('ClassName:Notepad').locator('ClassName:RichEditD2DPT')
+notepad_editor = client.locator('window:Notepad').locator('role:richedit')
 
 # directly locate the 'eight' button
-eight_button = client.locator('Name:Calculator').locator('Name:Eight')
+eight_button = client.locator('window:Calculator').locator('role:button').locator('name:Eight')
 ```
 
 ### interacting with elements
@@ -82,16 +82,16 @@ eight_button = client.locator('Name:Calculator').locator('Name:Eight')
 def interact_with_calc():
     try:
         print('opening calculator...')
-        client.open_application('calc.exe')
+        client.open_application('calc')
         sleep(1500) # give calc time to open
 
         # locate elements
-        calc_window = client.locator('Name:Calculator')
-        seven = calc_window.locator('Name:Seven')
-        plus = calc_window.locator('Name:Plus')
-        eight = calc_window.locator('Name:Eight')
-        equals = calc_window.locator('Name:Equals')
-        display = calc_window.locator('AutomationId:CalculatorResults')
+        calc_window = client.locator('window:Calculator')
+        seven = calc_window.locator('role:Button').locator('name:Seven')
+        plus = calc_window.locator('role:Button').locator('name:Plus')
+        eight = calc_window.locator('role:Button').locator('name:Eight')
+        equals = calc_window.locator('role:Button').locator('name:Equals')
+        display = calc_window.locator('name:CalculatorResults')
 
         print('clicking 7...')
         seven.click()
@@ -123,10 +123,10 @@ def interact_with_calc():
 def interact_with_notepad():
     try:
         print('opening notepad...')
-        client.open_application('notepad.exe')
+        client.open_application('notepad')
         sleep(1000)
 
-        editor = client.locator('ClassName:Notepad').locator('ClassName:RichEditD2DPT')
+        editor = client.locator('window:Notepad').locator('role:RichEdit')
 
         print('typing text...')
         editor.type_text('hello from terminator!\nthis is a python test.')
@@ -156,9 +156,9 @@ def interact_with_notepad():
 ```python
 def check_element_state():
     try:
-        client.open_application('calc.exe')
+        client.open_application('calc')
         sleep(1000)
-        equals_button = client.locator('Name:Calculator').locator('Name:Equals')
+        equals_button = client.locator('window:Calculator').locator('role:Button').locator('Name:Equals')
 
         visible = equals_button.is_visible()
         print(f'is equals button visible? {visible}')
@@ -185,9 +185,9 @@ use `expect_*` methods to wait for conditions.
 def use_expectations():
     try:
         print('opening notepad...')
-        client.open_application('notepad.exe')
+        client.open_application('notepad')
 
-        editor_locator = client.locator('ClassName:Notepad').locator('ClassName:RichEditD2DPT')
+        editor_locator = client.locator('window:Notepad').locator('role:RichEdit')
 
         # wait for the editor element to be visible (default timeout)
         print('waiting for editor to be visible...')
@@ -226,7 +226,7 @@ use `try...except` blocks, catching `ApiError` for server/automation issues and 
 ```python
 try:
     # attempt to find a non-existent element
-    non_existent = client.locator('Name:DoesNotExist')
+    non_existent = client.locator('name:DoesNotExist')
     non_existent.click()
 except ApiError as e:
     # handle specific api errors (e.g., element not found, timeout)
