@@ -11,25 +11,18 @@ first, ensure the terminator server is running (see [Getting Started](/terminato
 
 ### installation
 
-*   **recommended for development:** install in editable mode from the source directory.
-    ```bash
-    # from the root of the terminator repo
-    pip install -e ./python-sdk
-    ```
-*   **for usage (once published):** install from pypi.
-    ```bash
-    pip install desktop-use
-    ```
-    **important:** you install `desktop-use`, but you import `terminator_sdk`.
+```bash
+pip install desktop-use
+```
 
 ### importing
 
 ```python
-from terminator_sdk import TerminatorClient, Locator, ApiError, sleep, ElementResponse
+from desktop_use import DesktopUseClient, Locator, ApiError, sleep, ElementResponse
 # import other response models or exceptions as needed
 
-client = TerminatorClient() # connects to default 127.0.0.1:3000
-# client = TerminatorClient(base_url='127.0.0.1:3001') # or specify host:port
+client = DesktopUseClient() # connects to default 127.0.0.1:3000
+# client = DesktopUseClient(base_url='127.0.0.1:3001') # or specify host:port
 ```
 
 ## basic operations
