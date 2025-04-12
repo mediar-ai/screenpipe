@@ -6317,6 +6317,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "screenpipe-cli-envs"
+version = "0.2.74"
+
+[[package]]
 name = "screenpipe-core"
 version = "0.2.74"
 dependencies = [

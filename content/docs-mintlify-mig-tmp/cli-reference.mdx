@@ -271,62 +271,7 @@ screenpipe migrate
 
 Environment variables can be used to modify the way the `screenpipe` CLI works:
 
-- **`SC_API_BASE_URL`** (optional, defaults to **`https://screenpi.pe`**)  
-  Sets the base URL for Screenpipe API requests.
-
-- **`SCREENPIPE_CUSTOM_OCR_CONFIG`** (optional, defaults to built-in config)  
-  Overrides the default configuration used by **`CliOcrEngine::Custom`** when set.
-
-- **`SCREENPIPE_LOG`** (optional, defaults to **`info`**)  
-  Controls CLI logging verbosity. Accepts a global level (`trace`, `debug`, `info`, `warn`, `error`, `off`) or module-specific rules (e.g., **`screenpipe=debug`**). Modules: `screenpipe`, `tokenizers`, `rusty_tesseract`, `symphonia`, `hf_hub`.
-
-- **`SAVE_RESOURCE_USAGE`** (optional, defaults to **`false`**)  
-  When set to **`true`**, logs resource usage to a timestamped JSON file in your home directory for performance monitoring.
-
-- **`HF_ENDPOINT`** (optional, defaults to **`https://hf-mirror.com`** if Chinese mirror is enabled)  
-  Overrides the Hugging Face API endpoint.
-
----
-
-#### Deepgram Settings
-
-- **`DEEPGRAM_API_KEY`** (required if Deepgram engine is selected)  
-  Authenticates requests to the Deepgram API.
-
-- **`DEEPGRAM_API_URL`** (optional, defaults to **`https://api.deepgram.com/v1/listen`**)  
-  Overrides the HTTP API endpoint for Deepgram services.
-
-- **`DEEPGRAM_WEBSOCKET_URL`** (optional)  
-  Overrides the WebSocket endpoint for Deepgram real-time audio transcription.
-
----
-
-#### AI Services Credentials
-
-- **`OPENAI_API_KEY`** (required if OpenAI engine is selected)  
-  Authenticates requests to the OpenAI API.
-
-- **`ANTHROPIC_API_KEY`** (required if Anthropic engine is selected)  
-  Authenticates requests to the Anthropic API.
-
-- **`GEMINI_API_KEY`** (required if Gemini engine is selected)  
-  Authenticates requests to the Gemini API.
-
-- **`CLERK_SECRET_KEY`** (required if Clerk engine is selected)  
-  Authenticates requests to the Clerk API.
-
-- **`LANGFUSE_PUBLIC_KEY`** (required if using Langfuse)  
-  Authenticates requests to the Langfuse API.
-
-- **`LANGFUSE_SECRET_KEY`** (optional)  
-  Authenticates requests to the Langfuse API.
-
----
-
-#### Other Settings
-
-- **`NODE_ENV`** (optioanl, defaults to **`development`**)  
-  Specifies the runtime environment for the CLI: `development` or `production`.
+[ENVIRONMENT VARIABLES WILL AUTOMATICALLY POPULATE HERE]
 
 ### Shell Completions
 
