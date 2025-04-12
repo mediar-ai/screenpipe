@@ -271,7 +271,39 @@ screenpipe migrate
 
 Environment variables can be used to modify the way the `screenpipe` CLI works:
 
-[ENVIRONMENT VARIABLES WILL AUTOMATICALLY POPULATE HERE]
+#### Screenpipe Settings
+
+- **`SCREENPIPE_CUSTOM_OCR_CONFIG`** (optional, defaults to built-in config)
+  Overrides the default configuration used by **`CliOcrEngine::Custom`** when set.
+
+- **`SCREENPIPE_LOG`** (optional, defaults to **`info`**)
+  Controls CLI logging verbosity. Accepts a global level (`trace`, `debug`, `info`, `warn`, `error`, `off`) or module-specific rules (e.g., **`screenpipe=debug`**). Modules: `screenpipe`, `tokenizers`, `rusty_tesseract`, `symphonia`, `hf_hub`.
+
+- **`SAVE_RESOURCE_USAGE`** (optional, defaults to **`false`**)
+  When set to **`true`**, resource usage will be logged to a timestamped JSON file in your home directory for performance monitoring.
+
+---
+
+#### Deepgram & Other Engines Settings
+
+- **`DEEPGRAM_API_KEY`** (required if Deepgram engine is selected)
+  Authenticates requests to the Deepgram API.
+
+- **`DEEPGRAM_API_URL`** (optional, defaults to **`https://api.deepgram.com/v1/listen`**)
+  Overrides the HTTP API endpoint for Deepgram services.
+
+- **`DEEPGRAM_WEBSOCKET_URL`** (optional)
+  Overrides the WebSocket endpoint for Deepgram real-time audio transcription.
+
+- **`UNSTRUCTURED_API_KEY`** (required if Unstructured engine is selected)
+  Authenticates requests to the Unstructured API.
+
+---
+
+#### Other Settings
+
+- **`TAURI_ENV_DEBUG`** (optional, defaults to **`false`**)
+  Enables debug mode for Tauri, which may affect performance and logging.
 
 ### Shell Completions
 
