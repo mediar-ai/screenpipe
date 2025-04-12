@@ -15,6 +15,7 @@ use sysinfo::{PidExt, ProcessExt, System, SystemExt};
 use tracing::debug;
 use tracing::trace;
 use tracing::{error, info, warn};
+use screenpipe_envs::env::SAVE_RESOURCE_USAGE;
 
 pub struct ResourceMonitor {
     start_time: Instant,
@@ -30,7 +31,7 @@ pub enum RestartSignal {
 
 impl ResourceMonitor {
     pub fn new(telemetry_enabled: bool) -> Arc<Self> {
-        let resource_log_file = if env::var("SAVE_RESOURCE_USAGE").is_ok() {
+        let resource_log_file = if env::var(SAVE_RESOURCE_USAGE).is_ok() {
             let now = Local::now();
             let filename = format!("resource_usage_{}.json", now.format("%Y%m%d_%H%M%S"));
             info!("Resource usage data will be saved to file: {}", filename);

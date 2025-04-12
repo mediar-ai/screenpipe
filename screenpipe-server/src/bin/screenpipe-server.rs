@@ -42,6 +42,7 @@ use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, Layer};
 use serde::Deserialize;
 use std::path::Path;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
+use screenpipe_envs::env::SCREENPIPE_LOG;
 
 const DISPLAY: &str = r"
                                             _          
@@ -105,7 +106,7 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
             .add_directive("xcap::platform::impl_monitor=off".parse().unwrap())
             .add_directive("xcap::platform::utils=off".parse().unwrap());
 
-        let filter = env::var("SCREENPIPE_LOG")
+        let filter = env::var(SCREENPIPE_LOG)
             .unwrap_or_default()
             .split(',')
             .filter(|s| !s.is_empty())

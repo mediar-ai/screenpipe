@@ -8,7 +8,7 @@ use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcr
 use clap::ValueEnum;
 use screenpipe_core::Language;
 use screenpipe_db::OcrEngine as DBOcrEngine;
-use screenpipe_db::CustomOcrConfig as DBCustomOcrConfig;
+use screenpipe_envs::env::SCREENPIPE_CUSTOM_OCR_CONFIG;
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
     #[clap(name = "deepgram")]
@@ -84,7 +84,7 @@ impl From<CliOcrEngine> for CoreOcrEngine {
             CliOcrEngine::AppleNative => CoreOcrEngine::AppleNative,
             CliOcrEngine::Custom => {
                 // Try to read config from environment variable
-                if let Ok(config_str) = std::env::var("SCREENPIPE_CUSTOM_OCR_CONFIG") {
+                if let Ok(config_str) = std::env::var(SCREENPIPE_CUSTOM_OCR_CONFIG) {
                     match serde_json::from_str(&config_str) {
                         Ok(config) => CoreOcrEngine::Custom(config),
                         Err(e) => {

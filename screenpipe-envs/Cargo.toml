@@ -1,5 +1,5 @@
 [package]
-name = "screenpipe-cli-envs"
+name = "screenpipe-envs"
 version.workspace = true
 authors.workspace = true
 description.workspace = true

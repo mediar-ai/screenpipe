@@ -8,6 +8,7 @@ use std::time::Duration;
 use sysinfo::{System, SystemExt};
 use tokio::sync::Mutex;
 use tokio::time::interval;
+use screenpipe_envs::env::TAURI_ENV_DEBUG;
 
 pub struct AnalyticsManager {
     client: Client,
@@ -210,7 +211,7 @@ pub fn start_analytics(
     screenpipe_dir_path: PathBuf,
     analytics_enabled: bool,
 ) -> Result<Arc<AnalyticsManager>, Box<dyn std::error::Error>> {
-    let is_debug = std::env::var("TAURI_ENV_DEBUG").unwrap_or("false".to_string()) == "true";
+    let is_debug = std::env::var(TAURI_ENV_DEBUG).unwrap_or("false".to_string()) == "true";
     
     // Skip analytics in debug mode or when debug assertions are enabled
     let should_enable_analytics = analytics_enabled && !is_debug && !cfg!(debug_assertions);
