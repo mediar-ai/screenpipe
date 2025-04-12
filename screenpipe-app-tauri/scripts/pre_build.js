@@ -201,21 +201,21 @@ if (platform == 'linux') {
 		}
 
 		if (aptPackagesNotInstalled.length > 0) {
-			console.log('The following required packages are missing:');
+			console.log('the following required packages are missing:');
 			aptPackagesNotInstalled.forEach(pkg => console.log(`  - ${pkg}`));
-			console.log('\nInstalling missing packages...');
+			console.log('\ninstalling missing packages...');
 
-			console.log('Updating package lists...');
+			console.log('updating package lists...');
 			await $`sudo apt-get -qq update`;
 			
-			console.log('Installing packages...');
+			console.log('installing packages...');
 			await $`sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y ${aptPackagesNotInstalled}`;
 			console.log('Package installation completed successfully ✅\n');
 		} else {
-			console.log('All required packages are already installed ✅\n');
+			console.log('all required packages are already installed ✅\n');
 		}
 	} catch (error) {
-		console.error("Error checking/installing apt packages: %s", error.message);
+		console.error("error checking/installing apt packages: %s", error.message);
 	}
 
 
