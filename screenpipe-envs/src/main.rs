@@ -2,15 +2,29 @@ mod env;
 
 use std::fs::{self, File};
 use std::io::Write;
+use std::path::Path;
 
 fn main() {
     let markdown_content = generate_env_markdown();
 
-    let mdx_file = std::path::Path::new("../content/docs-mintlify-mig-tmp/cli-reference.mdx");
-
+    let mdx_file = Path::new("../content/docs-mintlify-mig-tmp/cli-reference.mdx");
     let mdx_content = fs::read_to_string(mdx_file).expect("Failed to read MDX file");
 
-    let updated_content = mdx_content.replace("[ENVIRONMENT VARIABLES WILL AUTOMATICALLY POPULATE HERE]", &markdown_content);
+    let marker = "{/* ENVIRONMENT VARIABLES WILL AUTOMATICALLY POPULATE HERE */}";
+    let replacement_block = format!("\n{marker}\n\n{markdown_content}\n\n{marker}\n");
+
+    let updated_content = if mdx_content.contains(marker) {
+        let parts: Vec<&str> = mdx_content.split(marker).collect();
+        if parts.len() >= 3 {
+            let joined = parts[2..].join(marker);
+            let after = joined.trim_start_matches('\n');
+            format!("{}{}{}", parts[0], replacement_block, after)
+        } else {
+            mdx_content.replacen(marker, &replacement_block, 1)
+        }
+    } else {
+        panic!("Marker `{}` not found in file!", marker);
+    };
 
     let mut file = File::create(mdx_file).expect("Could not open MDX file for writing");
     file.write_all(updated_content.as_bytes())
