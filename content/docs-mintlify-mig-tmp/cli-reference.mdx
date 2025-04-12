@@ -226,7 +226,7 @@ cat > metadata.json << EOF
       }
     },
     {
-      "file_path": "$HOME/Downloads/tmpvideos/video2.mp4", 
+      "file_path": "$HOME/Downloads/tmpvideos/video2.mp4",
       "metadata": {
         "creation_time": "2024-03-21T15:30:00Z",
         "fps": 24.0,
@@ -267,6 +267,67 @@ note: if you don't provide a metadata override file, screenpipe will automatical
 screenpipe migrate
 ```
 
+### Environment Variables
+
+Environment variables can be used to modify the way the `screenpipe` CLI works:
+
+- **`SC_API_BASE_URL`** (optional, defaults to **`https://screenpi.pe`**)  
+  Sets the base URL for Screenpipe API requests.
+
+- **`SCREENPIPE_CUSTOM_OCR_CONFIG`** (optional, defaults to built-in config)  
+  Overrides the default configuration used by **`CliOcrEngine::Custom`** when set.
+
+- **`SCREENPIPE_LOG`** (optional, defaults to **`info`**)  
+  Controls CLI logging verbosity. Accepts a global level (`trace`, `debug`, `info`, `warn`, `error`, `off`) or module-specific rules (e.g., **`screenpipe=debug`**). Modules: `screenpipe`, `tokenizers`, `rusty_tesseract`, `symphonia`, `hf_hub`.
+
+- **`SAVE_RESOURCE_USAGE`** (optional, defaults to **`false`**)  
+  When set to **`true`**, logs resource usage to a timestamped JSON file in your home directory for performance monitoring.
+
+- **`HF_ENDPOINT`** (optional, defaults to **`https://hf-mirror.com`** if Chinese mirror is enabled)  
+  Overrides the Hugging Face API endpoint.
+
+---
+
+#### Deepgram Settings
+
+- **`DEEPGRAM_API_KEY`** (required if Deepgram engine is selected)  
+  Authenticates requests to the Deepgram API.
+
+- **`DEEPGRAM_API_URL`** (optional, defaults to **`https://api.deepgram.com/v1/listen`**)  
+  Overrides the HTTP API endpoint for Deepgram services.
+
+- **`DEEPGRAM_WEBSOCKET_URL`** (optional)  
+  Overrides the WebSocket endpoint for Deepgram real-time audio transcription.
+
+---
+
+#### AI Services Credentials
+
+- **`OPENAI_API_KEY`** (required if OpenAI engine is selected)  
+  Authenticates requests to the OpenAI API.
+
+- **`ANTHROPIC_API_KEY`** (required if Anthropic engine is selected)  
+  Authenticates requests to the Anthropic API.
+
+- **`GEMINI_API_KEY`** (required if Gemini engine is selected)  
+  Authenticates requests to the Gemini API.
+
+- **`CLERK_SECRET_KEY`** (required if Clerk engine is selected)  
+  Authenticates requests to the Clerk API.
+
+- **`LANGFUSE_PUBLIC_KEY`** (required if using Langfuse)  
+  Authenticates requests to the Langfuse API.
+
+- **`LANGFUSE_SECRET_KEY`** (optional)  
+  Authenticates requests to the Langfuse API.
+
+---
+
+#### Other Settings
+
+- **`NODE_ENV`** (optioanl, defaults to **`development`**)  
+  Specifies the runtime environment for the CLI: `development` or `production`.
+
 ### Shell Completions
 
 The `screenpipe` CLI supports generating shell completions for popular shells. Follow the steps below to enable autocompletion for your shell:
@@ -276,12 +337,13 @@ The `screenpipe` CLI supports generating shell completions for popular shells. F
 1. Add the following to your `.bashrc` profile:
 
 ```bash
-eval "$(screenpipe completions bash)" 
+eval "$(screenpipe completions bash)"
 ```
+
 2. Reload your profile:
 
 ```bash
-source ~/.bashrc  
+source ~/.bashrc
 ```
 
 #### Zsh
@@ -291,10 +353,11 @@ source ~/.bashrc
 ```bash
 eval "$(screenpipe completions zsh)"
 ```
+
 2. Reload your profile:
 
 ```bash
-source ~/.zshrc  
+source ~/.zshrc
 ```
 
 #### Fish
@@ -302,7 +365,7 @@ source ~/.zshrc
 1. Create `\~/.config/fish/conf.d/screenpipe.fish` and add this line to it:
 
 ```fish
-screenpipe completions fish | source  
+screenpipe completions fish | source
 ```
 
 #### PowerShell
@@ -310,7 +373,7 @@ screenpipe completions fish | source
 1. Add the following to the end of your profile file:
 
 ```powershell
-screenpipe completions powershell | Out-String | Invoke-Expression 
+screenpipe completions powershell | Out-String | Invoke-Expression
 ```
 
 - For macOS/Linux, the profile is located at `\~/.config/powershell/Microsoft.PowerShell_profile.ps1`
@@ -322,6 +385,7 @@ screenpipe completions powershell | Out-String | Invoke-Expression
 ```powershell
 if (-not (Test-Path $profile)) { New-Item $profile -Force }
 ```
+
 - To edit your profile run this in PowerShell:
 
 ```powershell
@@ -331,7 +395,7 @@ Invoke-Item $profile
 1. Reload your profile:
 
 ```powershell
-. $PROFILE  
+. $PROFILE
 ```
 
 ### LLM links
