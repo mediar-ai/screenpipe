@@ -53,6 +53,11 @@ pub fn get_env_vars() -> Vec<Category<'static>> {
                     description: "Authenticates requests to the Deepgram API.",
                 },
                 EnvVar {
+                    name: CUSTOM_DEEPGRAM_API_TOKEN,
+                    required: "required if Deepgram engine is selected for real-time audio transcription",
+                    description: "Authenticates requests to the Deepgram API for real-time audio transcription."
+                },
+                EnvVar {
                     name: DEEPGRAM_API_URL,
                     required: "optional, defaults to **`https://api.deepgram.com/v1/listen`**",
                     description: "Overrides the HTTP API endpoint for Deepgram services.",
