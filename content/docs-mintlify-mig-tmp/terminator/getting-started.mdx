@@ -16,8 +16,7 @@ cd terminator
 **terminator** works with a client-server architecture. you need to run the rust server first. this server listens for commands from the sdk (typescript, python coming soon) and interacts with the operating system's accessibility apis.
 
 ```bash
-Invoke-WebRequest -Uri https://github.com/mediar-ai/terminator/releases/latest/download/terminator-server-windows-x86_64.zip -OutFile terminator-server-windows-x86_64.zip
-Expand-Archive -Path terminator-server-windows-x86_64.zip -DestinationPath .\server_release
+.\setup_windows.ps1
 ./server_release/server.exe --debug
 ```
 
