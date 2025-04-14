@@ -187,15 +187,35 @@ async function copyFile(src, dest) {
 
 /* ########## Linux ########## */
 if (platform == 'linux') {
-	// Install APT packages
+	// Check and install APT packages
 	try {
-		await $`sudo apt-get update`;
+		const aptPackagesNotInstalled = [];
 
-		for (const name of config.linux.aptPackages) {
-			await $`sudo apt-get install -y ${name}`;
+		// Check each package installation status
+		for (const pkg of config.linux.aptPackages) {
+			try {
+				await $`dpkg -s ${pkg}`.quiet();
+			} catch {
+				aptPackagesNotInstalled.push(pkg);
+			}
+		}
+
+		if (aptPackagesNotInstalled.length > 0) {
+			console.log('the following required packages are missing:');
+			aptPackagesNotInstalled.forEach(pkg => console.log(`  - ${pkg}`));
+			console.log('\ninstalling missing packages...');
+
+			console.log('updating package lists...');
+			await $`sudo apt-get -qq update`;
+			
+			console.log('installing packages...');
+			await $`sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y ${aptPackagesNotInstalled}`;
+			console.log('Package installation completed successfully ✅\n');
+		} else {
+			console.log('all required packages are already installed ✅\n');
 		}
 	} catch (error) {
-		console.error("error installing apps via apt, %s", error.message);
+		console.error("error checking/installing apt packages: %s", error.message);
 	}
 
 
