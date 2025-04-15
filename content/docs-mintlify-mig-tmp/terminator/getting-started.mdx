@@ -22,40 +22,14 @@ cd terminator
 
 the `--debug` flag enables verbose logging, which is helpful when starting out.
 
-## using the sdks (quick start)
+**run an example client (in another terminal):**
 
-once the server is running, you can use either the typescript or python sdk to automate ui interactions.
-
-### typescript
-
-1.  **navigate to the examples directory:**
-    ```bash
-    cd examples
-    ```
-2.  **install dependencies (if needed):**
-    ```bash
-    npm i # or bun install / yarn install
-    # this might install the local ts-sdk if linked in package.json
-    ```
-3.  **run the ts example script:**
-    ```bash
-    npx tsx client_example.ts
-    ```
-
-*see the [TypeScript SDK Reference](/terminator/js-sdk-reference) for details.*
-
-### python
-
-1.  **navigate to the examples directory:**
-    ```bash
-    cd examples
-    ```
-2.  **run the python example script:**
-    ```bash
-    python client_example.py
-    ```
-
-*see the [Python SDK Reference](/terminator/python-sdk-reference) for details.*
+```bash
+cd examples/hello-world
+npm i
+npm run dev
+# open http://localhost:3000
+```
 
 ## next steps
 
