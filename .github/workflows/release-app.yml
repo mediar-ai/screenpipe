@@ -293,11 +293,13 @@ jobs:
         if: matrix.os_type == 'linux'
         shell: bash
         run: |
-          sudo apt update && sudo apt install -y \
+          sudo apt-get update
+          sudo apt-get install -y \
             g++ \
             ffmpeg \
             tesseract-ocr \
             cmake \
+            clang \
             libavformat-dev \
             libavfilter-dev \
             libavdevice-dev \
@@ -326,9 +328,24 @@ jobs:
             libsamplerate-dev \
             libwebrtc-audio-processing-dev \
             libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
             librsvg2-dev \
             patchelf
+          # download old versions because of EGL issues, see https://github.com/h3poteto/fedistar/issues/1717
+          mkdir -p /tmp/ubuntu-packages
+          cd /tmp/ubuntu-packages
+          wget https://launchpadlibrarian.net/723972773/libwebkit2gtk-4.1-0_2.44.0-0ubuntu0.22.04.1_amd64.deb
+          wget https://launchpadlibrarian.net/723972761/libwebkit2gtk-4.1-dev_2.44.0-0ubuntu0.22.04.1_amd64.deb
+          wget https://launchpadlibrarian.net/723972770/libjavascriptcoregtk-4.1-0_2.44.0-0ubuntu0.22.04.1_amd64.deb
+          wget https://launchpadlibrarian.net/723972746/libjavascriptcoregtk-4.1-dev_2.44.0-0ubuntu0.22.04.1_amd64.deb
+          wget https://launchpadlibrarian.net/723972735/gir1.2-javascriptcoregtk-4.1_2.44.0-0ubuntu0.22.04.1_amd64.deb
+          wget https://launchpadlibrarian.net/723972739/gir1.2-webkit2-4.1_2.44.0-0ubuntu0.22.04.1_amd64.deb
+          wget https://launchpadlibrarian.net/606433947/libicu70_70.1-2ubuntu1_amd64.deb
+          wget https://launchpadlibrarian.net/606433941/libicu-dev_70.1-2ubuntu1_amd64.deb
+          wget https://launchpadlibrarian.net/606433945/icu-devtools_70.1-2ubuntu1_amd64.deb
+          wget https://launchpadlibrarian.net/595623693/libjpeg8_8c-2ubuntu10_amd64.deb
+          wget https://launchpadlibrarian.net/587202140/libjpeg-turbo8_2.1.2-0ubuntu1_amd64.deb
+          wget https://launchpadlibrarian.net/592959859/xdg-desktop-portal-gtk_1.14.0-1build1_amd64.deb
+          sudo apt-get install -y /tmp/ubuntu-packages/*.deb
 
       - name: Install frontend dependencies
         working-directory: ./screenpipe-app-tauri
