@@ -1,0 +1,46 @@
+name: Build and Deploy to Vercel
+
+on:
+  push:
+    branches:
+      - main  
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Checkout code
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    # Step 2: Set up Node.js
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+
+    # Step 3: Install Node.js dependencies
+    - name: Install Node.js Dependencies
+      run: npm install
+
+    # Step 4: Build TypeScript project
+    - name: Build TypeScript Project
+      run: npm run build  
+
+    # Step 5: Set up Rust
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    # Step 6: Build Rust project
+    - name: Build Rust Project
+      run: cargo build --release
+
+    # Step 7: Deploy to Vercel
+    - name: Deploy to Vercel
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}  
+      run: npx vercel --prod
