@@ -1,5 +1,7 @@
+<h1>Screenpipe-MCP</h1>
+<a href="https://www.pulsemcp.com/servers/tadasant-stability-ai"><img src="https://www.pulsemcp.com/badge/top-pick/tadasant-stability-ai" width="400" alt="PulseMCP Badge"></a>
 
-
+<br/>
 
 https://github.com/user-attachments/assets/7466a689-7703-4f0b-b3e1-b1cb9ed70cff
 
