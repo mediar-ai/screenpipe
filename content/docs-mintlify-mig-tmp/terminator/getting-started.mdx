@@ -16,7 +16,7 @@ cd terminator
 **terminator** works with a client-server architecture. you need to run the rust server first. this server listens for commands from the sdk (typescript, python) and interacts with the operating system's accessibility apis.
 
 ```bash
-.\setup_windows.ps1
+powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1
 ./server_release/server.exe --debug
 ```
 
