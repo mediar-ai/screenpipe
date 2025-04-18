@@ -1,3 +1,6 @@
+use clap::Parser;
+use std::net::TcpListener;
+
 use std::{path::PathBuf, sync::Arc};
 
 use clap::{Parser, Subcommand, ValueHint};
@@ -9,6 +12,38 @@ use clap::ValueEnum;
 use screenpipe_core::Language;
 use screenpipe_db::OcrEngine as DBOcrEngine;
 use screenpipe_db::CustomOcrConfig as DBCustomOcrConfig;
+
+#[derive(Parser)]
+#[command(name = "Screenpipe Server",about = "Launch Screenpipe with optional custom port")]
+struct Args {
+    // Port to run the server on 
+    #[arg(short, long, default_value_t = 3030)]
+    port: u16,
+}
+fn
+find_available_port(start_port:u16) -> u16{
+    for port in 
+    start_port..start_port + 50 {
+        if
+        TcpListener::bind(("127.0.0.1",port)).is_ok(){
+            return port;
+        }
+    }
+    panic!("No available port found in range!");
+}
+fn main(){
+    let args = Args::parse();
+    let port = if 
+                TcpListener::bind(("127.0.0.1",args.port)).is_ok(){
+                    args.port
+                }else{
+                    find_available_port(3030)
+                };
+
+                println!("Starting Screenpipe on port {}",port);
+}
+
+
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
     #[clap(name = "deepgram")]
