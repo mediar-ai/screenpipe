@@ -88,8 +88,13 @@ async function copyBunBinary() {
 	let bunSrc, bunDest1, bunDest2;
 	if (platform === 'windows') {
 		// Get and log npm global prefix
-		const npmGlobalPrefix = (await $`npm config get prefix`.text()).trim();
-		console.log('npm global prefix:', npmGlobalPrefix);
+		let npmGlobalPrefix = null;
+		try {
+			npmGlobalPrefix = (await $`npm config get prefix`.text()).trim();
+			console.log('npm global prefix:', npmGlobalPrefix);
+		} catch (error) {
+			console.log('failed to get npm global prefix:', error.message);
+		}
 
 		// Try to find bun location using system commands
 		let bunPathFromSystem;
@@ -107,15 +112,12 @@ async function copyBunBinary() {
 			console.log('found bun using system command at:', bunPathFromSystem);
 		}
 
+		// Start with basic paths that don't depend on npmGlobalPrefix
 		const possibleBunPaths = [
 			// Add system-found path if it exists
 			bunPathFromSystem,
 			// Bun's default installer location
 			path.join(os.homedir(), '.bun', 'bin', 'bun.exe'),
-			// npm global paths
-			path.join(npmGlobalPrefix, 'node_modules', 'bun', 'bin', 'bun.exe'),
-			path.join(npmGlobalPrefix, 'bun.exe'),
-			path.join(npmGlobalPrefix, 'bin', 'bun.exe'),
 			// AppData paths
 			path.join(os.homedir(), 'AppData', 'Local', 'bun', 'bun.exe'),
 			// Direct paths
@@ -124,6 +126,15 @@ async function copyBunBinary() {
 			// System path
 			'bun.exe'
 		].filter(Boolean);
+
+		// Add npm paths only if npmGlobalPrefix was successfully retrieved
+		if (npmGlobalPrefix) {
+			possibleBunPaths.push(
+				path.join(npmGlobalPrefix, 'node_modules', 'bun', 'bin', 'bun.exe'),
+				path.join(npmGlobalPrefix, 'bun.exe'),
+				path.join(npmGlobalPrefix, 'bin', 'bun.exe')
+			);
+		}
 
 		console.log('searching bun in these locations:');
 		possibleBunPaths.forEach(p => console.log('- ' + p));
