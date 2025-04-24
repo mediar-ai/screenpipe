@@ -40,7 +40,7 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-xcap = { git = "https://github.com/nashaofu/xcap.git", rev = "09c11cc67a37434f6cdcf73f3305ee8608dac83c" }
+xcap = "0.4.1"
 
 once_cell = { workspace = true }
 base64 = "0.22.1"
@@ -95,3 +95,7 @@ url = "2.5.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "=0.2.164"
+atspi = { version = "0.25.0", features = ["tokio","proxies-tokio","zbus"] }
+zbus       = { version = "5.5", default-features = false }
+atspi-common     = { version = "0.9.0", default-features = false }
+atspi-proxies    = { version = "0.9.0", default-features = false }

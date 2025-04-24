@@ -50,7 +50,8 @@ pub async fn request_permission(permission: OSPermission) {
         use nokhwa_bindings_macos::AVMediaType;
         match permission {
             OSPermission::ScreenRecording => {
-                scap::request_permission();
+                use core_graphics_helmer_fork::access::ScreenCaptureAccess;
+                ScreenCaptureAccess.request();
             }
             OSPermission::Microphone => request_av_permission(AVMediaType::Audio),
             OSPermission::Accessibility => request_accessibility_permission(),
@@ -127,7 +128,8 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
 
         OSPermissionsCheck {
             screen_recording: {
-                let result = scap::has_permission();
+                use core_graphics_helmer_fork::access::ScreenCaptureAccess;
+                let result = ScreenCaptureAccess.preflight();
                 match (result, initial_check) {
                     (true, _) => OSPermissionStatus::Granted,
                     (false, true) => OSPermissionStatus::Empty,
