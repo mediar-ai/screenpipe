@@ -193,10 +193,27 @@ pub async fn get_cpal_device_and_config(
     }
     .ok_or_else(|| anyhow!("Audio device not found: {}", device_name))?;
 
+    // Get the highest quality configuration based on device type
     let config = if is_output_device && !is_display {
-        cpal_audio_device.default_output_config()?
+        let configs = cpal_audio_device.supported_output_configs()?;
+        let best_config = configs
+            .max_by(|a, b| {
+                a.max_sample_rate().0.cmp(&b.max_sample_rate().0)
+                    .then(a.channels().cmp(&b.channels()))
+            })
+            .ok_or_else(|| anyhow!("No supported output configurations found"))?;
+        
+        best_config.with_sample_rate(best_config.max_sample_rate())
     } else {
-        cpal_audio_device.default_input_config()?
+        let configs = cpal_audio_device.supported_input_configs()?;
+        let best_config = configs
+            .max_by(|a, b| {
+                a.max_sample_rate().0.cmp(&b.max_sample_rate().0)
+                    .then(a.channels().cmp(&b.channels()))
+            })
+            .ok_or_else(|| anyhow!("No supported input configurations found"))?;
+        
+        best_config.with_sample_rate(best_config.max_sample_rate())
     };
 
     Ok((cpal_audio_device, config))
