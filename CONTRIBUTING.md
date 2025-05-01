@@ -89,12 +89,17 @@ before you begin:
    [System.Environment]::SetEnvironmentVariable('LIBCLANG_PATH', 'C:\Program Files\LLVM\bin', 'User')
    [System.Environment]::SetEnvironmentVariable('PATH', "$([System.Environment]::GetEnvironmentVariable('PATH', 'User'));C:\Program Files (x86)\GnuWin32\bin", 'User')
    ```
-
-5. **setup Intel OpenMP DLLs**:
+5. **clone the project**:
+   ```powershell
+      git clone https://github.com/mediar-ai/screenpipe.git
+      cd screenpipe
+   ```
+6. **setup Intel OpenMP DLLs**:
    - make sure your in root of the project i.e screenpipe
    - Ensure Python and `pip` are installed before running the script.
    
    ```powershell
+   cd screenpipe
    # Define the target directory where Intel OpenMP DLLs will be copied 
    $mkl_dir = (pwd).Path + "\screenpipe-app-tauri\src-tauri\mkl"
    New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
@@ -114,10 +119,11 @@ before you begin:
    # Clean up the temporary directory
    Remove-Item -Path $temp_dir -Recurse -Force
    ```
-6. **make sure vcredist is present on system**:
+7. **make sure vcredist is present on system**:
    - make sure your in root of the project i.e screenpipe
 
    ```powershell
+   cd screenpipe
    $path = "C:\Windows\System32\vcruntime140.dll"
    
    if (-Not (Test-Path $path)) {
@@ -138,16 +144,15 @@ before you begin:
    }
    
    # Copy vcruntime140.dll to the specified directory
-   $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+   $vcredist_dir = (pwd).Path + "\screenpipe-app-tauri\src-tauri\vcredist"
    New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
    Copy-Item $path -Destination $vcredist_dir -Force
    
    Write-Host "vcruntime140.dll copied successfully!"
    ```
 
-7. **clone and build**:
+8. **build**:
    ```powershell
-   git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
    cargo build --release
    cd screenpipe-app-tauri
