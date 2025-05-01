@@ -30,7 +30,7 @@ use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use std::{
     env, fs, io::Write, net::SocketAddr, ops::Deref, path::PathBuf, sync::Arc, time::Duration,
-    net::{IpAddr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr},
 };
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
@@ -745,7 +745,7 @@ async fn main() -> anyhow::Result<()> {
 
     let server = SCServer::new(
         db_server,
-        SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), cli.port),
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), cli.port),
         local_data_dir_clone_2,
         pipe_manager.clone(),
         cli.disable_vision,
