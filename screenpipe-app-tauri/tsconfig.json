@@ -27,7 +27,7 @@
         "./*"
       ]
     },
-    "types": ["@tauri-apps/api"]
+    "types": ["@wdio/globals/types", "@wdio/mocha-framework","@tauri-apps/api"]
   },
   "include": [
     "next-env.d.ts",
