@@ -1,5 +1,5 @@
 #!/bin/bash
-Xvfb :99 -ac -screen 0 1280x1024x24 &
+Xvfb :99 -ac -screen 0 1920x1080x24 &
 echo "DISPLAY=:99" >> $GITHUB_ENV
 sleep 3
 export DISPLAY=:99

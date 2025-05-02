@@ -1,5 +1,5 @@
 const { TestRecorder } = require('./e2e/record.js');
-const { spawn } = require('node:child_process');
+const { spawn, execSync } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -11,7 +11,9 @@ let tauriDriver;
 const findExecutablePath = () => {
 	const paths = [
 		'./src-tauri/target/release/screenpipe-app.exe',
-		'./src-tauri/target/x86_64-pc-windows-msvc/release/screenpipe-app.exe'
+		'./src-tauri/target/x86_64-pc-windows-msvc/release/screenpipe-app.exe',
+		'./src-tauri/target/release/screenpipe-app',
+		'./src-tauri/target/x86_64-unknown-linux-gnu/release/screenpipe-app'
 	];
 	
 	for (const p of paths) {
@@ -75,13 +77,5 @@ exports.config = {
 		if (tauriDriver) {
 			tauriDriver.kill();
 		}
-	},
-
-	onComplete: async function(exitCode, config, capabilities, results) {
-		await videoRecorder.stop();
-	},
-	
-	onError: async function(error) {
-		await videoRecorder.stop();
 	},
 }; 
