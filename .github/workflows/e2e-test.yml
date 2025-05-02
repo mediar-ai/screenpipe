@@ -8,6 +8,7 @@ on:
 
 jobs:
   windows-e2e-test:
+    name: Windows E2E Tests
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
@@ -221,6 +222,160 @@ jobs:
       if: always()
       with:
         name: windows-screenpipe-data
+        include-hidden-files: true
+        path: |
+          ~/.screenpipe/*
+  linux-e2e-test:
+    name: Linux E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.1.43
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - name: Install Linux dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+            g++ \
+            ffmpeg \
+            tesseract-ocr \
+            cmake \
+            clang \
+            libavformat-dev \
+            libavfilter-dev \
+            libavdevice-dev \
+            libssl-dev \
+            libsoup-3.0-0 \
+            libtesseract-dev \
+            libxdo-dev \
+            libsdl2-dev \
+            libclang-dev \
+            libxtst-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            libasound2-dev \
+            libpulse-dev \
+            curl \
+            desktop-file-utils \
+            xdg-utils \
+            dbus-x11 \
+            xvfb \
+            x11-xserver-utils \
+            pkg-config \
+            libsqlite3-dev \
+            libbz2-dev \
+            zlib1g-dev \
+            libonig-dev \
+            libayatana-appindicator3-dev \
+            libsamplerate-dev \
+            libwebrtc-audio-processing-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            webkit2gtk-driver \
+            librsvg2-dev \
+            patchelf \
+            x11-utils \
+            x11-apps \
+            xdotool \
+            openbox \
+            xterm \
+            fonts-liberation \
+            imagemagick \
+            fonts-dejavu \
+            alsa-utils \
+            pulseaudio \
+            pulseaudio-utils
+
+    - name: Set up Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        cache: true
+        target: x86_64-unknown-linux-gnu
+        rustflags: ""
+
+    - name: Build CLI on Linux
+      run: cargo build --release -p screenpipe-server --target x86_64-unknown-linux-gnu
+
+    - name: Install frontend dependencies
+      working-directory: ./screenpipe-app-tauri
+      run: bun install
+
+    - name: Run pre_build.js
+      run: |
+        bun ./scripts/pre_build.js
+      working-directory: ./screenpipe-app-tauri
+
+    - name: Build
+      uses: tauri-apps/tauri-action@v0.5.17
+      env:
+        CI: true
+        CARGO_PROFILE_RELEASE_LTO: false
+        CARGO_PROFILE_RELEASE_OPT_LEVEL: 3
+        CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 16
+        CARGO_INCREMENTAL: false
+        CARGO_PROFILE_RELEASE_STRIP: none
+        CARGO_PROFILE_RELEASE_PANIC: unwind
+        CARGO_PROFILE_RELEASE_INCREMENTAL: true
+        VCPKG_STATIC_LINKAGE: "true"
+      with:
+        args: "--target x86_64-unknown-linux-gnu --no-bundle"
+        projectPath: "./screenpipe-app-tauri"
+        tauriScript: bunx tauri -v
+
+    - name: Install tauri-driver
+      run: |
+        if [ ! -f "$HOME/.cargo/bin/tauri-driver" ]; then
+          cargo install tauri-driver
+        fi
+    
+    - name: Set up virtual display with window manager
+      run: .github/scripts/setup_display.sh
+
+    - name: Setup audio
+      run: .github/scripts/setup_audio.sh
+
+    - name: Run E2E Tests
+      shell: bash
+      working-directory: ./screenpipe-app-tauri
+      run: |
+        export XDG_RUNTIME_DIR=/run/user/$(id -u)
+        export XDG_CONFIG_HOME="$HOME/.config"
+        export XDG_DATA_HOME="$HOME/.local/share"
+        export XDG_CACHE_HOME="$HOME/.cache"
+        export PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native
+        export DISPLAY=:99
+
+        bun run test:e2e > e2e_output.log
+
+    - name: Upload E2E Test Artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: linux-e2e-test-artifacts
+        path: |
+          ./screenpipe-app-tauri/e2e/videos/*
+          ./screenpipe-app-tauri/e2e_output.log
+
+    - name: Upload Screenpipe data
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: linux-screenpipe-data
         include-hidden-files: true
         path: |
           ~/.screenpipe/*

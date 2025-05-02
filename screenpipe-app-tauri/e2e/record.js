@@ -80,9 +80,8 @@ class TestRecorder {
 
 		console.log(`[ffmpeg] Starting recording: ${parsedPath}`);
 
-		// Windows-specific ffmpeg command using gdigrab
-		// Add -thread_queue_size 1024 to prevent buffer issues
-		this.ffmpeg = spawn('ffmpeg', [
+		const isWindows = process.platform === 'win32';
+		const ffmpegArgs = isWindows ? [
 			'-f',
 			'gdigrab',
 			'-framerate',
@@ -97,7 +96,24 @@ class TestRecorder {
 			'-thread_queue_size',
 			'1024',
 			parsedPath
-		]);
+		] : [
+			'-f',
+			'x11grab',
+			'-video_size',
+			'1920x1080',
+			'-i',
+			process.env.DISPLAY || ':0.0',
+			'-loglevel',
+			'error',
+			'-y',
+			'-pix_fmt',
+			'yuv420p',
+			'-thread_queue_size',
+			'1024',
+			parsedPath
+		];
+
+		this.ffmpeg = spawn('ffmpeg', ffmpegArgs);
 
 		this.isRecording = true;
 
