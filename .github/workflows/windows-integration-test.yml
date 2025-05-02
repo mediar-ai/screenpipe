@@ -108,12 +108,21 @@ jobs:
         Get-Content "screenpipe_output.log" -Tail 100
         Get-Content "screenpipe_error.log"
 
-    - name: Upload logs and data
+    - name: Upload logs
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: windows-logs-and-data
+        name: screenpipe-logs
+        include-hidden-files: true
         path: |
           screenpipe_output.log
           screenpipe_error.log
-          ${{ env.USERPROFILE }}\.screenpipe\data\
+
+    - name: Upload data
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: screenpipe-data
+        include-hidden-files: true
+        path: |
+          ~/.screenpipe/*

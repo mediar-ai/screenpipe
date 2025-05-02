@@ -753,23 +753,12 @@ async fn main() {
                 let _ = File::create(path.clone()).unwrap();
             }
 
-            // Set up update check
-            let update_manager = start_update_check(app_handle, 5)?;
-
-            // Tray setup
-            if let Some(_) = app.tray_by_id("screenpipe_main") {
-                let update_item = update_manager.update_now_menu_item_ref().clone();
-                if let Err(e) = tray::setup_tray(&app.handle(), &update_item) {
-                    error!("Failed to setup tray: {}", e);
-                }
-            }
-
-            // Store setup and analytics initialization
+            // Store setup and initialization - must be done first
             let store = StoreBuilder::new(app.handle(), path.clone())
                 .build()
                 .unwrap();
 
-            // TODO: proper lookup of keys rather than assuming they exist
+            // Initialize default store values if empty
             if store.is_empty() {
                 store.set("analyticsEnabled".to_string(), Value::Bool(true));
                 store.set(
@@ -779,12 +768,55 @@ async fn main() {
                 store.save()?;
             }
 
+            // Ensure store is saved and managed
             store.save()?;
+            app.manage(store.clone());
 
-            // Ensure state is managed before calling update_show_screenpipe_shortcut
+            // Get app handle once for all initializations
+            let app_handle = app.handle().clone();
+
+            // Initialize server first (core service)
+            let server_shutdown_tx = spawn_server(app_handle.clone(), 11435);
+            app.manage(server_shutdown_tx);
+
+            // Initialize sidecar manager and check dev mode
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             app.manage(sidecar_manager.clone());
 
+            // Dev mode check and sidecar initialization
+            let use_dev_mode = store
+                .get("devMode")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            info!("use_dev_mode: {}", use_dev_mode);
+
+            // Start sidecar in non-dev mode (production behavior)
+            if !use_dev_mode {
+                let sidecar_manager_clone = sidecar_manager.clone();
+                let app_handle_clone = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let mut manager = sidecar_manager_clone.lock().await;
+                    if let Err(e) = manager.spawn(&app_handle_clone, None).await {
+                        error!("Failed to spawn initial sidecar: {}", e);
+                    }
+                });
+            } else {
+                debug!("Skipping sidecar spawn: dev_mode enabled");
+            }
+
+            // Initialize update check
+            let update_manager = start_update_check(&app_handle, 5)?;
+
+            // Setup tray
+            if let Some(_) = app_handle.tray_by_id("screenpipe_main") {
+                let update_item = update_manager.update_now_menu_item_ref().clone();
+                if let Err(e) = tray::setup_tray(&app_handle, &update_item) {
+                    error!("Failed to setup tray: {}", e);
+                }
+            }
+
+            // Check analytics settings from store
             let is_analytics_enabled = store
                 .get("analyticsEnabled")
                 .unwrap_or(Value::Bool(true))
@@ -837,57 +869,10 @@ async fn main() {
                 }
             }
 
-            // Dev mode check and sidecar spawn
-
-            let use_dev_mode = store
-                .get("devMode")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            // double-check if they have any files in the data dir
-            let data_dir = app
-                .path()
-                .home_dir()
-                .expect("Failed to ensure local data directory");
-
-            info!("data_dir: {}", data_dir.display());
-            let has_files = fs::read_dir(data_dir.join(".screenpipe").join("data"))
-                .map(|mut entries| entries.next().is_some())
-                .unwrap_or(false);
-
-            info!("has_files: {}", has_files);
-
-            let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
-            let sidecar_manager_clone = sidecar_manager.clone();
-            app.manage(sidecar_manager.clone());
-
-            let app_handle = app.handle().clone();
-
-            info!("use_dev_mode: {}", use_dev_mode);
-
-            info!("will start sidecar: {}", !use_dev_mode && has_files);
-
-            // if non dev mode and previously started sidecar, start sidecar
-            if !use_dev_mode && has_files {
+            // Start health check service (macos only)
+            let app_handle_clone = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    let mut manager = sidecar_manager_clone.lock().await;
-                    if let Err(e) = manager.spawn(&app_handle, None).await {
-                        error!("Failed to spawn initial sidecar: {}", e);
-                    }
-                });
-            } else {
-                debug!("Dev mode enabled, skipping sidecar spawn and restart");
-            }
-
-            // Inside the main function, after the `app.manage(port);` line, add:
-            let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
-            app.manage(server_shutdown_tx);
-
-            // Start health check service
-            // macos only
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = start_health_check(app_handle).await {
+                if let Err(e) = start_health_check(app_handle_clone).await {
                     error!("Failed to start health check service: {}", e);
                 }
             });
@@ -896,9 +881,9 @@ async fn main() {
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
             // Initialize global shortcuts
-            let app_handle = app.handle().clone();
+            let app_handle_clone = app_handle.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = initialize_global_shortcuts(&app_handle).await {
+                if let Err(e) = initialize_global_shortcuts(&app_handle_clone).await {
                     warn!("Failed to initialize global shortcuts: {}", e);
                 }
             });

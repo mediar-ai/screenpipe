@@ -49,6 +49,11 @@ fi
 
 COMMITS=$(git log --oneline $COMMIT_LAST_RELEASE..$COMMIT_CURRENT_RELEASE --oneline | tr '\n' ', ' | sed 's/"/\\"/g')
 
+# Debug: Print the commits being sent
+echo "DEBUG: Commits being sent to OpenAI:"
+echo "$COMMITS"
+echo "---"
+
 CONTENT=$(
   curl https://api.openai.com/v1/chat/completions \
     -H "Content-Type: application/json" \
@@ -67,6 +72,11 @@ CONTENT=$(
       ]
     }"
 )
+
+# Debug: Print the raw response from OpenAI
+echo "DEBUG: Raw OpenAI response:"
+echo "$CONTENT"
+echo "---"
 
 CONTENT=$(jq '.choices[0].message.content' <<< $CONTENT)
 
