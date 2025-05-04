@@ -36,6 +36,67 @@ impl WindowsUrlDetector {
 
         match root_ele.find_first(TreeScope::Subtree, &condition) {
             Ok(ele) => {
+                let window_con = automation.create_property_condition(
+                    UIProperty::ControlType,
+                    Variant::from(ControlType::Window as i32),
+                    None,
+                ).unwrap();
+
+                // evaluate the window, whether its arc or not
+                if let Ok(win) = ele.find_first(TreeScope::Subtree, &window_con) {
+                    if win.get_name().unwrap().eq_ignore_ascii_case("Arc") {
+                        debug!("detected arc browser windows, using diff apporach");
+                        let pane_con = automation.create_property_condition(
+                            UIProperty::ControlType,
+                            Variant::from(ControlType::Pane as i32),
+                            None,
+                        ).unwrap();
+                        let panes = win.find_all(TreeScope::Children, &pane_con).ok().unwrap();
+                        debug!("arc panes: {:?}", panes.len());
+
+                        // need to get the second pane childrens
+                        if let Some(second_pane) = panes.get(1) {
+                            debug!("second pane: {:?}", second_pane);
+                            let edit_con = automation.create_property_condition(
+                                UIProperty::ControlType,
+                                Variant::from(ControlType::Edit as i32),
+                                None,
+                            ).unwrap();
+
+                            // it'll get the url as soon as the user opens the command bar
+                            if let Ok(edit_ele) = second_pane.find_first(TreeScope::Children, &edit_con) {
+                                if edit_ele.is_offscreen().unwrap() {
+                                    debug!("arc browser command bar edit elemenet is not visible, skiping getting url");
+                                }
+                                if let Ok(value) = edit_ele.get_property_value(UIProperty::ValueValue) {
+                                    if let Ok(url) = value.get_string() {
+                                        debug!("found url in arc browser: {}", url);
+                                        if !url.starts_with("http://") && !url.starts_with("https://") {
+                                            let full_url = format!("https://{}", url);
+                                            debug!("reconstructed url: {}", full_url);
+                                            if Self::validate_url(&full_url).unwrap_or(false) {
+                                                debug!("validated url: {}", full_url);
+                                                return Ok(Some(full_url));
+                                            } else {
+                                                debug!("invalid url, might be some search text: {}", url);
+                                            }
+                                        } else {
+                                            if Self::validate_url(&url).unwrap_or(false) {
+                                                debug!("validated url: {}", url);
+                                                return Ok(Some(url));
+                                            } else {
+                                                debug!("invalid url, might be some search text: {}", url);
+                                            }
+                                            return Ok(Some(url));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // for other browsers
                 let control_condition = automation.create_property_condition(
                     UIProperty::ControlType,
                     Variant::from(ControlType::Edit as i32),
