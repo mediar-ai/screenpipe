@@ -12,6 +12,7 @@ RUN sudo apt-get update && sudo apt-get install -y \
     g++ \
     ffmpeg \
     tesseract-ocr \
+    clang \
     cmake \
     libavformat-dev \
     libavfilter-dev \
@@ -28,10 +29,14 @@ RUN sudo apt-get update && sudo apt-get install -y \
     libxinerama-dev \
     libxcursor-dev \
     libxi-dev \
+    libsoup-3.0-0 \
     libgl1-mesa-dev \
     libasound2-dev \
     libpulse-dev \
     curl \
+    desktop-file-utils \
+    dbus-x11 \
+    xdg-utils \
     pkg-config \
     libsqlite3-dev \
     sqlite3 \
@@ -45,6 +50,7 @@ RUN sudo apt-get update && sudo apt-get install -y \
     libwebkit2gtk-4.1-dev \
     librsvg2-dev \
     patchelf \
+    webkit2gtk-driver \
     xvfb \
     x11-utils \
     x11-xserver-utils \
@@ -63,5 +69,8 @@ RUN sudo apt-get update && sudo apt-get install -y \
 
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash
+
+# Install Tauri Driver
+RUN cargo install tauri-driver
 
 EXPOSE 3000 3030
