@@ -4,7 +4,9 @@ import { generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
 import { Client } from "@notionhq/client";
 import { NotionClient } from "@/lib/notion/client";
-import { getScreenpipeAppSettings } from "@/lib/actions/get-screenpipe-app-settings";
+import { settingsStore } from "@/lib/store/settings-store";
+import { OpenAI } from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
 
 // rich schema for relationship intelligence
 const contactSchema = z.object({
@@ -26,57 +28,77 @@ const relationshipIntelligence = z.object({
 
 async function analyzeRelationships(
 	recentLogs: string,
-	model: string,
+	aiPreset: ReturnType<typeof settingsStore.getPreset>,
 ): Promise<z.infer<typeof relationshipIntelligence>> {
-	const prompt = `analyze these work logs and create a comprehensive relationship intelligence report.
-    focus on:
-    - identifying key people and their roles
-    - tracking interaction patterns and sentiment
-    - spotting business opportunities
-    - suggesting follow-ups and introductions
-    - finding patterns in topics discussed
 
-    recent logs: ${recentLogs}
+	if (!aiPreset) {
+		throw new Error("ai preset not found");
+	}
 
-    todays date: ${new Date().toISOString().split("T")[0]}
-    local time: ${new Date().toLocaleTimeString()}
-    timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
+	const prompt = `You are a professional relationship intelligence analyst. Your task is to analyze work logs and generate a comprehensive relationship intelligence report.
 
-    return a detailed json object following this structure for relationship intelligence.
+    ANALYSIS OBJECTIVES:
+    1. Extract all individuals mentioned, including their full names and organizations
+    2. Determine the nature and quality of each interaction (positive, neutral, negative)
+    3. Calculate sentiment scores (-1 to 1) based on interaction context
+    4. Identify recurring discussion topics and their importance
+    5. Recognize potential business opportunities and collaboration possibilities
+    6. Suggest specific, actionable follow-ups for each contact
 
-    example response from you:
+    CONTEXT:
+    Today's date: ${new Date().toISOString().split("T")[0]}
+    Current time: ${new Date().toLocaleTimeString()}
+    Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
 
+    WORK LOGS TO ANALYZE:
+    ${recentLogs}
+
+    RESPONSE FORMAT:
+    Return a JSON object with the following structure:
     {
       "contacts": [
         {
-          "name": "John Doe",
-          "company": "Acme Inc.",
-          "lastInteraction": "2024-01-01",
-          "sentiment": 0.8,
-          "topics": ["sales", "marketing"],
-          "nextSteps": ["schedule a call", "send a follow-up email"]
-        }
+          "name": "Full Name",
+          "company": "Organization Name",
+          "lastInteraction": "YYYY-MM-DD",
+          "sentiment": 0.X, // Range from -1.0 (negative) to 1.0 (positive)
+          "topics": ["topic1", "topic2", "topic3"],
+          "nextSteps": ["specific action 1", "specific action 2"]
+        },
+        // Additional contacts...
       ],
       "insights": {
-        "followUps": ["schedule a call", "send a follow-up email"],
-        "opportunities": ["schedule a call", "send a follow-up email"]
+        "followUps": ["priority follow-up 1", "priority follow-up 2"],
+        "opportunities": ["business opportunity 1", "business opportunity 2"]
       }
     }
 
-    of course adapt the example response to the actual data you have, do not use John Doe in your example response, use the names and companies of the people you see in the logs.
+    IMPORTANT:
+    - Use only real names and companies found in the logs
+    - Ensure sentiment scores accurately reflect interaction quality
+    - Provide specific, actionable next steps tailored to each contact
+    - Prioritize follow-ups based on urgency and potential value
+    - Identify concrete business opportunities with clear potential benefits
     `;
 
-	const provider = ollama(model);
-	console.log("prompt", prompt);
-	const response = await generateObject({
-		model: provider,
-		messages: [{ role: "user", content: prompt }],
-		schema: relationshipIntelligence,
-		maxRetries: 5,
+	const openai = new OpenAI({
+		apiKey: aiPreset.apiKey,
+		baseURL: aiPreset.url,
+		dangerouslyAllowBrowser: true,
 	});
 
-	console.log(response.object);
-	return response.object;
+	console.log("prompt", prompt);
+
+
+	const response = await openai.chat.completions.create({
+		model: aiPreset.model,
+		messages: [{ role: "user", content: prompt }],
+		// response_format: { type: "json_object" },
+		response_format: zodResponseFormat(relationshipIntelligence, "relationshipIntelligence"),
+	});
+
+	console.log("relationship intelligence response", response.choices[0].message.content);
+	return JSON.parse(response.choices[0].message.content || "{}");
 }
 
 async function readRecentLogs(
@@ -121,9 +143,11 @@ async function readRecentLogs(
 
 export async function GET() {
 	try {
-		const settings = (await getScreenpipeAppSettings())["customSettings"]![
-			"notion"
-		];
+		const settings = await settingsStore.loadPipeSettings("notion");
+
+		console.log("settings", settings);
+
+		const aiPreset = settingsStore.getPreset("notion", "aiLogPresetId");
 
 		if (
 			!settings?.notion?.accessToken ||
@@ -157,7 +181,7 @@ export async function GET() {
 
 		const intelligence = await analyzeRelationships(
 			recentLogs,
-			settings.aiModel || "mistral",
+			aiPreset
 		);
 
 		const notion = new NotionClient(settings.notion);

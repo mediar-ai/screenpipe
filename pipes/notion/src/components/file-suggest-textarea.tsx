@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Command } from "cmdk";
 import React from "react";
-import { useNotionSettings } from "@/lib/hooks/use-pipe-settings";
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 
 interface FileSuggestTextareaProps {
   value: string;
@@ -41,7 +41,7 @@ export function FileSuggestTextarea({
   placeholder,
   disabled = false,
 }: FileSuggestTextareaProps) {
-  const { settings } = useNotionSettings();
+  const { settings } = usePipeSettings("notion");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [cursorCoords, setCursorCoords] = useState({ x: 0, y: 0 });
