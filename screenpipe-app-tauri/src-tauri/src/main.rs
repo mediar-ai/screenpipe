@@ -134,15 +134,15 @@ impl ShortcutConfig {
             show: store
                 .get("showScreenpipeShortcut")
                 .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "Alt+Space".to_string()),
+                .unwrap_or_else(|| "Super+Alt+S".to_string()),
             start: store
                 .get("startRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "Alt+Shift+R".to_string()),
+                .unwrap_or_else(|| "Super+Alt+U".to_string()),
             stop: store
                 .get("stopRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "Alt+Shift+S".to_string()),
+                .unwrap_or_else(|| "Super+Alt+X".to_string()),
             start_audio: store
                 .get("startAudioShortcut")
                 .and_then(|v| v.as_str().map(String::from))

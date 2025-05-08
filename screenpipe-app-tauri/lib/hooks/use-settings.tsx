@@ -191,7 +191,7 @@ const DEFAULT_SETTINGS: Settings = {
 	disabledShortcuts: [],
 	user: {},
 	showScreenpipeShortcut: "Super+Alt+S",
-	startRecordingShortcut: "Super+Alt+R",
+	startRecordingShortcut: "Super+Alt+U", // Super+Alt+R is used on windows by Xbox Game Bar
 	stopRecordingShortcut: "Super+Alt+X",
 	startAudioShortcut: "",
 	stopAudioShortcut: "",
