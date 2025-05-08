@@ -45,5 +45,7 @@ export interface Settings {
   backend: "notion";
   notion: NotionCredentials;
   prompt: string;
+  logPrompt: string;
+  longTaskPrompt: string;
   screenpipeAppSettings: ScreenpipeAppSettings;
 }

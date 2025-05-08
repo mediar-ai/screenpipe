@@ -52,7 +52,7 @@ fn create_dynamic_menu(
     let show_shortcut = store
         .get("showScreenpipeShortcut")
         .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or_else(|| "Alt+Space".to_string());
+        .unwrap_or_else(|| "Super+Alt+S".to_string());
 
     // Show item with formatted shortcut in label
     menu_builder = menu_builder.item(

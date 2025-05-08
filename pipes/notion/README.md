@@ -5,6 +5,9 @@ analyse your screen/mic activity in real time and write logs, to build a CRM, ma
 
 local LLM first 
 
+https://github.com/user-attachments/assets/394a48ca-c7dc-4a69-b8bd-a55082c62698
+
+
 https://github.com/user-attachments/assets/e4c115d9-51cf-4870-aec4-4df4743d2d02
 
 
