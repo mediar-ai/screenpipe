@@ -12,7 +12,9 @@
         "externalBin": [
             "screenpipe",
             "bun",
-            "ui_monitor"
+            "ui_monitor",
+            "ffmpeg",
+            "ffprobe"
         ]
     }
 }

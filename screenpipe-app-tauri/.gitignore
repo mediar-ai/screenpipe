@@ -39,6 +39,7 @@ next-env.d.ts
 
 
 ffmpeg*
+ffprobe*
 *src-tauri/screenpipe* 
 *src-tauri/tesseract* 
 *src-tauri/deno* 
