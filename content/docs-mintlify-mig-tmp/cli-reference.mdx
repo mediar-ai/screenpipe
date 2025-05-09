@@ -226,7 +226,7 @@ cat > metadata.json << EOF
       }
     },
     {
-      "file_path": "$HOME/Downloads/tmpvideos/video2.mp4", 
+      "file_path": "$HOME/Downloads/tmpvideos/video2.mp4",
       "metadata": {
         "creation_time": "2024-03-21T15:30:00Z",
         "fps": 24.0,
@@ -267,6 +267,51 @@ note: if you don't provide a metadata override file, screenpipe will automatical
 screenpipe migrate
 ```
 
+### Environment Variables
+
+Environment variables can be used to modify the way the `screenpipe` CLI works:
+
+{/* ENVIRONMENT VARIABLES WILL AUTOMATICALLY POPULATE HERE */}
+
+#### Screenpipe Settings
+
+- **`SCREENPIPE_CUSTOM_OCR_CONFIG`** (optional, defaults to built-in config)
+  Overrides the default configuration used by **`CliOcrEngine::Custom`** when set.
+
+- **`SCREENPIPE_LOG`** (optional, defaults to **`info`**)
+  Controls CLI logging verbosity. Accepts a global level (`trace`, `debug`, `info`, `warn`, `error`, `off`) or module-specific rules (e.g., **`screenpipe=debug`**). Modules: `screenpipe`, `tokenizers`, `rusty_tesseract`, `symphonia`, `hf_hub`.
+
+- **`SAVE_RESOURCE_USAGE`** (optional, defaults to **`false`**)
+  When set to **`true`**, resource usage will be logged to a timestamped JSON file in your home directory for performance monitoring.
+
+---
+
+#### Deepgram & Other Engines Settings
+
+- **`DEEPGRAM_API_KEY`** (required if Deepgram engine is selected)
+  Authenticates requests to the Deepgram API.
+
+- **`CUSTOM_DEEPGRAM_API_TOKEN`** (required if Deepgram engine is selected for real-time audio transcription)
+  Authenticates requests to the Deepgram API for real-time audio transcription.
+
+- **`DEEPGRAM_API_URL`** (optional, defaults to **`https://api.deepgram.com/v1/listen`**)
+  Overrides the HTTP API endpoint for Deepgram services.
+
+- **`DEEPGRAM_WEBSOCKET_URL`** (optional)
+  Overrides the WebSocket endpoint for Deepgram real-time audio transcription.
+
+- **`UNSTRUCTURED_API_KEY`** (required if Unstructured engine is selected)
+  Authenticates requests to the Unstructured API.
+
+---
+
+#### Other Settings
+
+- **`TAURI_ENV_DEBUG`** (optional, defaults to **`false`**)
+  Enables debug mode for Tauri, which may affect performance and logging.
+
+{/* ENVIRONMENT VARIABLES WILL AUTOMATICALLY POPULATE HERE */}
+
 ### Shell Completions
 
 The `screenpipe` CLI supports generating shell completions for popular shells. Follow the steps below to enable autocompletion for your shell:
@@ -276,12 +321,13 @@ The `screenpipe` CLI supports generating shell completions for popular shells. F
 1. Add the following to your `.bashrc` profile:
 
 ```bash
-eval "$(screenpipe completions bash)" 
+eval "$(screenpipe completions bash)"
 ```
+
 2. Reload your profile:
 
 ```bash
-source ~/.bashrc  
+source ~/.bashrc
 ```
 
 #### Zsh
@@ -291,10 +337,11 @@ source ~/.bashrc
 ```bash
 eval "$(screenpipe completions zsh)"
 ```
+
 2. Reload your profile:
 
 ```bash
-source ~/.zshrc  
+source ~/.zshrc
 ```
 
 #### Fish
@@ -302,7 +349,7 @@ source ~/.zshrc
 1. Create `\~/.config/fish/conf.d/screenpipe.fish` and add this line to it:
 
 ```fish
-screenpipe completions fish | source  
+screenpipe completions fish | source
 ```
 
 #### PowerShell
@@ -310,7 +357,7 @@ screenpipe completions fish | source
 1. Add the following to the end of your profile file:
 
 ```powershell
-screenpipe completions powershell | Out-String | Invoke-Expression 
+screenpipe completions powershell | Out-String | Invoke-Expression
 ```
 
 - For macOS/Linux, the profile is located at `\~/.config/powershell/Microsoft.PowerShell_profile.ps1`
@@ -322,6 +369,7 @@ screenpipe completions powershell | Out-String | Invoke-Expression
 ```powershell
 if (-not (Test-Path $profile)) { New-Item $profile -Force }
 ```
+
 - To edit your profile run this in PowerShell:
 
 ```powershell
@@ -331,7 +379,7 @@ Invoke-Item $profile
 1. Reload your profile:
 
 ```powershell
-. $PROFILE  
+. $PROFILE
 ```
 
 ### LLM links

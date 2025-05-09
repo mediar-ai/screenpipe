@@ -13,6 +13,7 @@ use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio::time::interval;
+use screenpipe_envs::env::TAURI_ENV_DEBUG;
 
 pub struct UpdatesManager {
     interval: Duration,
@@ -39,7 +40,7 @@ impl UpdatesManager {
         &self,
         show_dialog: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        if let Ok(val) = std::env::var("TAURI_ENV_DEBUG") {
+        if let Ok(val) = std::env::var(TAURI_ENV_DEBUG) {
             if val == "true" {
                 info!("dev mode is enabled, skipping update check");
                 return Result::Ok(false);

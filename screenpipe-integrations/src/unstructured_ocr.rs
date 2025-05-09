@@ -14,12 +14,13 @@ use std::io::Write;
 use std::path::PathBuf;
 use tempfile::NamedTempFile;
 use tokio::time::{timeout, Duration};
+use screenpipe_envs::env::UNSTRUCTURED_API_KEY;
 
 pub async fn perform_ocr_cloud(
     image: &DynamicImage,
     languages: Vec<Language>,
 ) -> Result<(String, String, Option<f64>)> {
-    let api_key = match env::var("UNSTRUCTURED_API_KEY") {
+    let api_key = match env::var(UNSTRUCTURED_API_KEY) {
         Ok(key) => key,
         Err(_) => {
             error!("UNSTRUCTURED_API_KEY environment variable is not set. Please set it to use the OCR cloud service.");
@@ -119,7 +120,7 @@ fn calculate_overall_confidence(parsed_response: &[HashMap<String, serde_json::V
 
 pub async fn unstructured_chunking(text: &str) -> Result<Vec<String>> {
     let client = Client::new();
-    let api_key = match env::var("UNSTRUCTURED_API_KEY") {
+    let api_key = match env::var(UNSTRUCTURED_API_KEY) {
         Ok(key) => key,
         Err(_) => {
             error!("UNSTRUCTURED_API_KEY environment variable is not set. Please set it to use the OCR cloud service.");

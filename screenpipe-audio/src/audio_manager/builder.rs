@@ -3,7 +3,12 @@ use std::{collections::HashSet, env, path::PathBuf, sync::Arc, time::Duration};
 
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
+use screenpipe_envs::env::DEEPGRAM_API_KEY;
+use screenpipe_envs::env::DEEPGRAM_API_URL;
+use screenpipe_envs::env::DEEPGRAM_WEBSOCKET_URL;
 
+
+use crate::transcription::deepgram::DEEPGRAM_WEBSOCKET_URL;
 use crate::{
     core::{
         device::{default_input_device, default_output_device},
@@ -36,9 +41,9 @@ pub struct AudioManagerOptions {
 
 impl Default for AudioManagerOptions {
     fn default() -> Self {
-        let deepgram_api_key = env::var("DEEPGRAM_API_KEY").ok();
-        let deepgram_websocket_url = env::var("DEEPGRAM_WEBSOCKET_URL").ok();
-        let deepgram_url = env::var("DEEPGRAM_API_URL").ok();
+        let deepgram_api_key = env::var(DEEPGRAM_API_KEY).ok();
+        let deepgram_websocket_url = env::var(DEEPGRAM_WEBSOCKET_URL).ok();
+        let deepgram_url = env::var(DEEPGRAM_API_URL).ok();
         let enabled_devices = HashSet::new();
         Self {
             output_path: None,
