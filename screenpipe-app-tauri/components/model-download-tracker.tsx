@@ -77,6 +77,7 @@ export function ModelDownloadTracker() {
       { regex: /successfully downloaded ([^,]+)/, group: 1 },
       { regex: /model ([\w-]+) downloaded/, group: 1 },
       { regex: /model ([\w-]+) downloaded/, group: 1 },
+      { regex: /model.*downloaded.*?([\w-]+)/, group: 1 },
       { regex: /model downloaded/, group: 1 },
     ];
 
