@@ -7,4 +7,4 @@ module.exports = {
     "./e2e/terminator-e2e/mocha.global.js"
   ],
   reporter: "spec",
-}; 
+};
