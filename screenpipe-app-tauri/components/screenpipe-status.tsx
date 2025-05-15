@@ -158,7 +158,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
             </div>
           </DialogHeader>
           <div className="flex-grow overflow-auto">
-            <p className="text-sm mb-4 font-semibold">{statusMessage}</p>
+            <p className="text-sm mb-4 font-semibold" aria-label="status-message-text">{statusMessage}</p>
             <div className="space-y-2 text-sm">
               {/* Screen Recording Status */}
               <div className="flex items-center justify-between">
