@@ -62,7 +62,7 @@ const corePipes: string[] = [];
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, loadUser } = useSettings();
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -202,6 +202,11 @@ export const PipeStore: React.FC = () => {
       if (!checkLogin(settings.user)) return;
 
       setLoadingPurchases((prev) => new Set(prev).add(pipe.id));
+
+      // Force reload user data to get the latest credit balance
+      if (settings.user?.token) {
+        await loadUser(settings.user.token, true);
+      }
 
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.purchasePipe(pipe.id);
@@ -347,6 +352,11 @@ export const PipeStore: React.FC = () => {
         ),
         duration: 10000,
       });
+
+      // Force reload user data to get the latest credit balance
+      if (settings.user?.token) {
+        await loadUser(settings.user.token, true);
+      }
 
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.downloadPipe(pipe.id);
@@ -842,6 +852,11 @@ export const PipeStore: React.FC = () => {
         ),
       );
 
+      // Force reload user data to get the latest credit balance
+      if (settings.user?.token) {
+        await loadUser(settings.user.token, true);
+      }
+
       const currentVersion = pipe.installed_config?.version!;
       const storeApi = await PipeApi.create(settings.user!.token!);
       const update = await storeApi.checkUpdate(pipe.id, currentVersion);
@@ -1048,6 +1063,10 @@ export const PipeStore: React.FC = () => {
 		setIsUpdating(false)
         return;
       }
+      
+      // Force reload user data to get the latest credit balance
+      await loadUser(settings.user.token, true);
+      
       // Get last check time from local storage
       const lastCheckTime =
         await localforage.getItem<number>("lastUpdateCheck");
@@ -1235,6 +1254,11 @@ export const PipeStore: React.FC = () => {
             }
 
             await new Promise((resolve) => setTimeout(resolve, 1000));
+
+            // Force reload user data to get the latest credit balance
+            if (settings.user?.token) {
+              await loadUser(settings.user.token, true);
+            }
 
             // First update purchase history to reflect the new purchase
             await fetchPurchaseHistory();
