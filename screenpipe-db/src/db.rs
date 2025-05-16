@@ -341,7 +341,7 @@ impl DatabaseManager {
 
         // Insert the new frame with file_path as name and app/window metadata
         let id = sqlx::query(
-            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url, app_name, window_name, focused) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url, app_name, window_name, focused, device_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         )
         .bind(video_chunk_id)
         .bind(offset_index)
@@ -351,6 +351,7 @@ impl DatabaseManager {
         .bind(app_name)
         .bind(window_name)
         .bind(focused)
+        .bind(device_name)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -714,6 +715,7 @@ impl DatabaseManager {
             frames.app_name,
             ocr_text.ocr_engine,
             frames.window_name,
+            video_chunks.device_name,
             GROUP_CONCAT(tags.name, ',') as tags,
             frames.browser_url,
             frames.focused
@@ -792,6 +794,7 @@ impl DatabaseManager {
                 app_name: raw.app_name,
                 ocr_engine: raw.ocr_engine,
                 window_name: raw.window_name,
+                device_name: raw.device_name,
                 tags: raw
                     .tags
                     .map(|t| t.split(',').map(String::from).collect())
@@ -2092,6 +2095,7 @@ impl DatabaseManager {
                 ocr_engine: raw.ocr_engine,
                 window_name: raw.window_name,
                 frame_name: raw.frame_name,
+                device_name: raw.device_name,
                 tags: raw
                     .tags
                     .map(|t| t.split(',').map(String::from).collect())
