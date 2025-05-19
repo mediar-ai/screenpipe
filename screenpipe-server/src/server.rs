@@ -1140,6 +1140,7 @@ impl SCServer {
             .post("/pipes/update-version", update_pipe_version_handler)
             .post("/pipes/delete", delete_pipe_handler)
             .post("/pipes/purge", purge_pipe_handler)
+            .post("/pipes/stop-all", stop_all_pipes)
             .get("/frames/:frame_id", get_frame_data)
             .get("/health", health_check)
             .post("/raw_sql", execute_raw_sql)
@@ -4382,4 +4383,31 @@ async fn scroll_element_handler(
             JsonResponse(json!({"error": "No element found"})),
         )),
     }
+}
+
+
+#[oasgen]
+async fn stop_all_pipes(
+    State(state): State<Arc<AppState>>,
+    Json(_request): Json<PurgePipeRequest>,
+) -> Json<serde_json::Value> {
+    // Stop all pipes gracefully
+    let pipes = state.pipe_manager.list_pipes().await;
+    let mut stopped_pipes = Vec::new();
+
+    for pipe in pipes {
+        if pipe.enabled {
+            if let Err(e) = state.pipe_manager.stop_pipe(&pipe.id).await {
+                error!("Failed to stop pipe {}: {}", pipe.id, e);
+            } else {
+                stopped_pipes.push(pipe.id);
+            }
+        }
+    }
+
+    Json(json!({
+        "success": true,
+        "message": "Server and pipes are shutting down",
+        "stopped_pipes": stopped_pipes
+    }))
 }
