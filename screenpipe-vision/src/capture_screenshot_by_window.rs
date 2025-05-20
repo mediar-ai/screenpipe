@@ -219,6 +219,20 @@ pub async fn capture_all_visible_windows(
                 }
             };
 
+            match window.is_minimized() {
+                Ok(is_minimized) => {
+                    if is_minimized {
+                        debug!("Window {} ({}) is_minimized", app_name, title);
+                        return None;
+                    }
+                },
+                Err(e) => {
+                    // Log warning and skip this window
+                    // mostly noise
+                    error!("Failed to get is_minimized for window {}: {}", app_name, e);
+                }
+            };
+
             let is_focused = match window.is_focused() {
                 Ok(focused) => focused,
                 Err(e) => {
