@@ -37,6 +37,7 @@ async fn setup_test_app() -> (Router, Arc<DatabaseManager>) {
         false,
         false,
         audio_manager,
+        true,
     );
 
     let router = app.create_router(true).await;

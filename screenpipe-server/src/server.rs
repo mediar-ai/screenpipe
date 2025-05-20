@@ -92,6 +92,7 @@ pub struct AppState {
     pub vision_disabled: bool,
     pub audio_disabled: bool,
     pub ui_monitoring_enabled: bool,
+    pub enable_pipe_manager: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
     pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
     pub element_cache: Arc<Mutex<Option<(Vec<UIElement>, Instant, String)>>>,
@@ -828,6 +829,15 @@ async fn download_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<DownloadPipeRequest>,
 ) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
     debug!("Downloading pipe: {}", payload.url);
     match state.pipe_manager.download_pipe(&payload.url).await {
         Ok(pipe_dir) => Ok(JsonResponse(json!({
@@ -855,6 +865,15 @@ async fn download_pipe_private_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<DownloadPipePrivateRequest>,
 ) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
     match state
         .pipe_manager
         .download_pipe_private(&payload.url, &payload.pipe_name, &payload.pipe_id)
@@ -885,6 +904,15 @@ async fn run_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<RunPipeRequest>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
     debug!("starting pipe: {}", payload.pipe_id);
 
     match state
@@ -919,6 +947,15 @@ async fn stop_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<RunPipeRequest>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
     debug!("Stopping pipe: {}", payload.pipe_id);
     match state
         .pipe_manager
@@ -952,7 +989,16 @@ async fn update_pipe_config_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<UpdatePipeConfigRequest>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
-    debug!("Updating pipe config for: {}", payload.pipe_id);
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
+    debug!("Updating pipe config: {}", payload.pipe_id);
     match state
         .pipe_manager
         .update_config(&payload.pipe_id, payload.config)
@@ -980,7 +1026,16 @@ async fn update_pipe_version_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<UpdatePipeVersionRequest>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
-    debug!("Updating pipe version for: {}", payload.pipe_id);
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
+    debug!("Updating pipe version: {}", payload.pipe_id);
     match state
         .pipe_manager
         .update_pipe_version(&payload.pipe_id, &payload.source)
@@ -1008,6 +1063,15 @@ async fn get_pipe_info_handler(
     State(state): State<Arc<AppState>>,
     Path(pipe_id): Path<String>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
     debug!("Getting pipe info for: {}", pipe_id);
     match state.pipe_manager.get_pipe_info(&pipe_id).await {
         Some(info) => Ok(JsonResponse(json!({
@@ -1025,12 +1089,21 @@ async fn get_pipe_info_handler(
 }
 
 #[oasgen]
-async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<Value> {
+async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
     let pipes = state.pipe_manager.list_pipes().await;
-    JsonResponse(json!({
+    Ok(JsonResponse(json!({
         "data": pipes,
         "success": true
-    }))
+    })))
 }
 
 pub struct SCServer {
@@ -1042,6 +1115,7 @@ pub struct SCServer {
     vision_disabled: bool,
     audio_disabled: bool,
     ui_monitoring_enabled: bool,
+    enable_pipe: bool,
 }
 
 impl SCServer {
@@ -1055,6 +1129,7 @@ impl SCServer {
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
         audio_manager: Arc<AudioManager>,
+        enable_pipe: bool,
     ) -> Self {
         SCServer {
             db,
@@ -1065,6 +1140,7 @@ impl SCServer {
             audio_disabled,
             ui_monitoring_enabled,
             audio_manager,
+            enable_pipe,
         }
     }
 
@@ -1097,6 +1173,7 @@ impl SCServer {
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
             ui_monitoring_enabled: self.ui_monitoring_enabled,
+            enable_pipe_manager: self.enable_pipe,
             frame_cache: if enable_frame_cache {
                 Some(Arc::new(
                     FrameCache::new(self.screenpipe_dir.clone().join("data"), self.db.clone())
@@ -2538,46 +2615,20 @@ async fn get_pipe_build_status(
     Path(pipe_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
     let pipe_dir = state.screenpipe_dir.join("pipes").join(&pipe_id);
-    let update_temp_dir = std::env::temp_dir().join(format!("{}_update", pipe_id));
-    let temp_dir = pipe_dir.with_extension("_temp");
 
-    // 1. First check if the update temp directory exists
-    if update_temp_dir.exists() {
-        debug!("Update temp directory exists for pipe: {}", pipe_id);
-
-        // Check if there's a pipe.json in the update temp directory
-        let update_pipe_json_path = update_temp_dir.join("pipe.json");
-        if update_pipe_json_path.exists() {
-            let pipe_json = tokio::fs::read_to_string(&update_pipe_json_path)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        JsonResponse(json!({"error": format!("Failed to read update temp pipe config: {}", e)})),
-                    )
-                })?;
-
-            let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(
-                        json!({"error": format!("Failed to parse update temp pipe config: {}", e)}),
-                    ),
-                )
-            })?;
-
-            // Return the buildStatus if it exists
-            if let Some(build_status) = pipe_config.get("buildStatus") {
-                debug!(
-                    "Found build status in update temp directory for pipe: {}",
-                    pipe_id
-                );
-                return Ok(JsonResponse(build_status.clone()));
-            }
-        }
-
-        // If no buildStatus found in update temp directory, return a default in_progress status
+    // 1. First check if there's a lock file
+    let lock_file = pipe_dir.join(".download.lock");
+    if lock_file.exists() {
         return Ok(JsonResponse(json!({
             "status": "in_progress",
             "step": "downloading",
@@ -2628,8 +2679,8 @@ async fn get_pipe_build_status(
         }
     } else {
         // If pipe directory doesn't exist, check temp directory
-        if temp_dir.exists() {
-            let temp_pipe_json = temp_dir.join("pipe.json");
+        if pipe_dir.exists() {
+            let temp_pipe_json = pipe_dir.join("pipe.json");
             if temp_pipe_json.exists() {
                 let pipe_json = tokio::fs::read_to_string(&temp_pipe_json)
                     .await
@@ -3040,21 +3091,30 @@ pub async fn delete_pipe_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<DeletePipeRequest>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
     match state.pipe_manager.delete_pipe(&request.pipe_id).await {
         Ok(_) => Ok(JsonResponse(json!({
-            "success": true,
-            "message": "pipe deleted successfully"
+            "data": {
+                "pipe_id": request.pipe_id,
+                "message": "pipe deleted"
+            },
+            "success": true
         }))),
-        Err(e) => {
-            error!("failed to delete pipe: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({
-                    "success": false,
-                    "error": format!("failed to delete pipe: {}", e)
-                })),
-            ))
-        }
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("failed to delete pipe: {}", e),
+                "success": false
+            })),
+        )),
     }
 }
 
@@ -3063,21 +3123,29 @@ pub async fn purge_pipe_handler(
     State(state): State<Arc<AppState>>,
     Json(_request): Json<PurgePipeRequest>,
 ) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    if !state.enable_pipe_manager {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({
+                "error": "pipe functionality is disabled",
+                "success": false
+            })),
+        ));
+    }
     match state.pipe_manager.purge_pipes().await {
         Ok(_) => Ok(JsonResponse(json!({
-            "success": true,
-            "message": "pipes purged successfully"
+            "data": {
+                "message": "all pipes purged"
+            },
+            "success": true
         }))),
-        Err(e) => {
-            error!("failed to purge pipes: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({
-                    "success": false,
-                    "error": format!("failed to purge pipes: {}", e)
-                })),
-            ))
-        }
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("failed to purge pipes: {}", e),
+                "success": false
+            })),
+        )),
     }
 }
 
