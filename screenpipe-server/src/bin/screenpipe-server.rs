@@ -235,7 +235,12 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
+    let pipe_manager = if cli.enable_pipe_manager {
+        Arc::new(PipeManager::new(local_data_dir_clone.clone()))
+    } else {
+        Arc::new(PipeManager::new(PathBuf::from("")))
+    };
+
     if let Some(ref command) = cli.command {
         match command {
             Command::Audio { subcommand } => match subcommand {
@@ -302,7 +307,7 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
             Command::Pipe { subcommand } => {
-                handle_pipe_command(subcommand, &pipe_manager).await?;
+                handle_pipe_command(subcommand, &pipe_manager, cli.enable_pipe_manager).await?;
                 return Ok(());
             }
             Command::Migrate {
@@ -752,6 +757,7 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_audio,
         cli.enable_ui_monitoring,
         audio_manager.clone(),
+        cli.enable_pipe_manager,
     );
 
     // print screenpipe in gradient
@@ -1169,7 +1175,14 @@ async fn main() -> anyhow::Result<()> {
 async fn handle_pipe_command(
     command: &PipeCommand,
     pipe_manager: &Arc<PipeManager>,
+    enable_pipe_manager: bool,
 ) -> anyhow::Result<()> {
+
+    if !enable_pipe_manager {
+        println!("note: pipe functionality is disabled");
+        return Ok(());
+    }
+
     let client = reqwest::Client::new();
     let server_url = "http://localhost";
 

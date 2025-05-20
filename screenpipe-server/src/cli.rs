@@ -281,6 +281,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub capture_unfocused_windows: bool,
 
+    /// Enable pipe functionality (default: false)
+    #[arg(long, default_value_t = false)]
+    pub enable_pipe_manager: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 

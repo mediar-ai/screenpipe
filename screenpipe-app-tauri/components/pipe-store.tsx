@@ -56,6 +56,9 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
 import { getAllWindows } from "@tauri-apps/api/window";
+import * as Sentry from "@sentry/react";
+import { defaultOptions } from "tauri-plugin-sentry-api";
+import { ToastAction } from "./ui/toast";
 
 const corePipes: string[] = [];
 
@@ -109,6 +112,7 @@ export const PipeStore: React.FC = () => {
   }, [pipes, searchQuery, showInstalledOnly]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
+  const [isPipeFunctionEnabled, setIsPipeFunctionEnabled] = useState(true);
 
   // Add debounced search tracking
   useEffect(() => {
@@ -427,6 +431,18 @@ export const PipeStore: React.FC = () => {
         data: InstalledPipe[];
         success: boolean;
       };
+
+      // check if the pipe function is enabled
+      if (response.status === 403) {
+        console.log("pipe function is disabled", response.body)
+        setIsPipeFunctionEnabled(false);
+        toast({
+          title: "pipe function is disabled",
+          description: "please restart screenpipe to enable it",
+          variant: "destructive",
+        });
+        return;
+      }
 
       if (!data.success) throw new Error("Failed to fetch installed pipes");
 
@@ -1311,13 +1327,13 @@ export const PipeStore: React.FC = () => {
     };
   }, [pipes, settings.user, settings.autoUpdatePipes, fetchInstalledPipes]);
 
-  if (health?.status === "error") {
+  if (health?.status === "error" || !isPipeFunctionEnabled) {
     return (
       <div className="flex flex-col items-center justify-center h-screen p-4 space-y-4">
         <div className="text-center space-y-4 max-w-md mx-auto justify-center items-center">
-          <h3 className="text-lg font-medium">screenpipe is not recording</h3>
+          <h3 className="text-lg font-medium">{isPipeFunctionEnabled ? "screenpipe is not recording" : "pipes are disabled"}</h3>
           <p className="text-sm text-muted-foreground">
-            please start the screenpipe service to browse and manage pipes
+            {isPipeFunctionEnabled ? "please start the screenpipe service to browse and manage pipes" : "please restart screenpipe to enable the pipes"}
           </p>
           <div className="flex flex-col gap-2">
             <Button
@@ -1331,14 +1347,16 @@ export const PipeStore: React.FC = () => {
               />
               {isRestarting ? "restarting..." : "restart screenpipe"}
             </Button>
-            <Button
-              variant="outline"
-              onClick={openStatusDialog}
-              className="gap-2"
+            {isPipeFunctionEnabled && (
+              <Button
+                variant="outline"
+                onClick={openStatusDialog}
+                className="gap-2"
             >
-              <Power className="h-4 w-4" />
-              check service status
-            </Button>
+                <Power className="h-4 w-4" />
+                check service status
+              </Button>
+            )}
           </div>
 
           {isMacOS && (

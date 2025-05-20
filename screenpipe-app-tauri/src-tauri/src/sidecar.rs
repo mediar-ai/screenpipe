@@ -139,9 +139,7 @@ pub async fn stop_screenpipe(
     {
         // -15 from gnu man page
         // ref: https://www.gnu.org/software/coreutils/manual/html_node/kill-invocation.html
-        let command = format!(
-            "pgrep -x screenpipe | xargs -I {{}} kill -15 {{}}",
-        );
+        let command = format!("pgrep -x screenpipe | xargs -I {{}} kill -15 {{}}",);
         match tokio::process::Command::new("sh")
             .arg("-c")
             .arg(command)
@@ -178,7 +176,10 @@ pub async fn spawn_screenpipe(
     }
 }
 
-fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<CommandChild, String> {
+fn spawn_sidecar(
+    app: &tauri::AppHandle,
+    override_args: Option<Vec<String>>,
+) -> Result<CommandChild, String> {
     let store = get_store(app, None).unwrap();
 
     let audio_transcription_engine = store
@@ -301,7 +302,7 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
-    let mut args = vec!["--port", port_str.as_str()];
+    let mut args = vec!["--port", port_str.as_str(), "--enable-pipe-manager"];
     let fps_str = fps.to_string();
     if fps != 0.2 {
         args.push("--fps");
@@ -463,7 +464,9 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
         c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
         // only supports --enable-realtime-vision for now, avoid adding if already present
-        if !args.contains(&"--enable-realtime-vision") && override_args_as_vec.contains(&"--enable-realtime-vision".to_string()) {
+        if !args.contains(&"--enable-realtime-vision")
+            && override_args_as_vec.contains(&"--enable-realtime-vision".to_string())
+        {
             args.extend(override_args_as_vec.iter().map(|s| s.as_str()));
         }
         let c = c.args(&args);
@@ -507,7 +510,9 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
     c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
     // only supports --enable-realtime-vision for now, avoid adding if already present
-    if !args.contains(&"--enable-realtime-vision") && override_args_as_vec.contains(&"--enable-realtime-vision".to_string()) {
+    if !args.contains(&"--enable-realtime-vision")
+        && override_args_as_vec.contains(&"--enable-realtime-vision".to_string())
+    {
         args.extend(override_args_as_vec.iter().map(|s| s.as_str()));
     }
     let c = c.args(&args);
@@ -558,7 +563,11 @@ impl SidecarManager {
         }
     }
 
-    pub async fn spawn(&mut self, app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<(), String> {
+    pub async fn spawn(
+        &mut self,
+        app: &tauri::AppHandle,
+        override_args: Option<Vec<String>>,
+    ) -> Result<(), String> {
         info!("Spawning sidecar with override args: {:?}", override_args);
         // Update settings from store
         self.update_settings(app).await?;
