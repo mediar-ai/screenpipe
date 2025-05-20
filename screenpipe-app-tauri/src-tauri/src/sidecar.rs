@@ -302,7 +302,7 @@ fn spawn_sidecar(
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
-    let mut args = vec!["--port", port_str.as_str(), "--enable-pipe"];
+    let mut args = vec!["--port", port_str.as_str(), "--enable-pipe-manager"];
     let fps_str = fps.to_string();
     if fps != 0.2 {
         args.push("--fps");
