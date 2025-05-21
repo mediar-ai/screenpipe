@@ -34,10 +34,35 @@ pub async fn run_record_and_transcribe(
     let audio_samples_len = sample_rate * duration.as_secs() as usize;
     let overlap_samples = OVERLAP_SECONDS * sample_rate;
     let max_samples = audio_samples_len + overlap_samples;
+    let mut reconnect_attempts = 0;
+    const MAX_RECONNECT_ATTEMPTS: u32 = 10;
+    const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
-    while is_running.load(Ordering::Relaxed)
-        && !audio_stream.is_disconnected.load(Ordering::Relaxed)
-    {
+    while is_running.load(Ordering::Relaxed) {
+        if audio_stream.is_disconnected.load(Ordering::Relaxed) {
+            if reconnect_attempts >= MAX_RECONNECT_ATTEMPTS {
+                error!("max reconnection attempts reached for device {}", device_name);
+                return Err(anyhow!("Max reconnection attempts reached"));
+            }
+
+            warn!(
+                "attempting to reconnect to device {} (attempt {}/{})",
+                device_name,
+                reconnect_attempts + 1,
+                MAX_RECONNECT_ATTEMPTS
+            );
+
+            tokio::time::sleep(RECONNECT_DELAY).await;
+            reconnect_attempts += 1;
+
+            // Try to resubscribe to the stream
+            let new_receiver = audio_stream.subscribe().await;
+            receiver = new_receiver;
+            audio_stream.is_disconnected.store(false, Ordering::Relaxed);
+            reconnect_attempts = 0;
+            info!("successfully reconnected to device {}", device_name);
+        }
+
         while collected_audio.len() < max_samples && is_running.load(Ordering::Relaxed) {
             match receiver.recv().await {
                 Ok(chunk) => {
@@ -46,7 +71,8 @@ pub async fn run_record_and_transcribe(
                 }
                 Err(e) => {
                     error!("error receiving audio data: {}", e);
-                    return Err(anyhow!("Audio stream error: {}", e));
+                    audio_stream.is_disconnected.store(true, Ordering::Relaxed);
+                    break;
                 }
             }
         }
