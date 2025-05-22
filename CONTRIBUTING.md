@@ -17,7 +17,7 @@ before you begin:
 1. **install dependencies**:
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   brew install pkg-config ffmpeg jq cmake wget
+   brew install pkg-config ffmpeg jq cmake wget git-ls
    ```
    Install Xcode via App Store (or elsewhere) and initialize. Xcode command line tools only installation is insufficent. 
    ```
