@@ -25,6 +25,8 @@ import { PipeConfigForm } from "../pipe-config-form";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Badge } from "../ui/badge";
 import { getBuildStatus } from "./pipe-card";
+import { useTabs } from "@/lib/hooks/use-tabs";
+import { useToast } from "@/components/ui/use-toast";
 
 interface PipeDetailsProps {
   pipe: PipeWithStatus;
@@ -73,8 +75,12 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
   isLoadingInstall,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+  const { addTab } = useTabs();
+
   return (
-    <div className="fixed inset-0 bg-background transform transition-transform duration-200 ease-in-out flex flex-col">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div className="bg-background rounded-lg shadow-lg border w-full max-w-6xl max-h-[90vh] flex flex-col">
       <div className="flex items-center justify-between p-4 border-b bg-muted/30 flex-shrink-0">
         <div className="flex items-center gap-3">
           <Button
@@ -292,23 +298,24 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                         variant="default"
                         onClick={async () => {
                           try {
-                            await invoke("open_pipe_window", {
-                              port: pipe.installed_config!.port,
-                              title: pipe.name,
-                            });
+                            const port = pipe.installed_config!.port;
+                            if (port) {
+                              addTab({
+                                id: pipe.name,
+                                title: pipe.name,
+                                port: port,
+                                url: `http://localhost:${port}`
+                              });
+                              onClose();
+                            }
                           } catch (err) {
-                            console.error("failed to open pipe window:", err);
-                            toast({
-                              title: "error opening pipe window",
-                              description: "please try again or check the logs",
-                              variant: "destructive",
-                            });
+                            console.error("failed to open pipe tab:", err);
                           }
                         }}
                         disabled={!pipe.installed_config.enabled}
                       >
                         <Puzzle className="mr-2 h-3.5 w-3.5" />
-                        open as app
+                        open in tab
                       </Button>
                     </div>
                   </div>
@@ -325,6 +332,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
             )}
           </div>
         </main>
+        </div>
       </div>
     </div>
   );

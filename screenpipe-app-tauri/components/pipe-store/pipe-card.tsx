@@ -22,6 +22,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTabs } from "@/lib/hooks/use-tabs";
 
 interface PipeCardProps {
   pipe: PipeWithStatus;
@@ -90,25 +91,28 @@ export const PipeCard: React.FC<PipeCardProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const { settings } = useSettings();
+  const { addTab } = useTabs();
 
-  const handleOpenWindow = async (e: React.MouseEvent) => {
+  const handleOpenWindow = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       if (pipe.installed_config?.port) {
-        await invoke("open_pipe_window", {
-          port: pipe.installed_config.port,
+        addTab({
+          id: pipe.name,
           title: pipe.name,
+          port: pipe.installed_config.port,
+          url: `http://localhost:${pipe.installed_config.port}`
         });
       }
     } catch (err) {
-      console.error("failed to open pipe window:", err);
+      console.error("failed to open pipe:", err);
       toast({
-        title: "error opening pipe window",
+        title: "error opening pipe",
         description: "please try again or check the logs",
         variant: "destructive",
       });
     }
-  };
+  }, [addTab, pipe.installed_config?.port, pipe.name]);
 
   useEffect(() => {
     const pollBuildStatus = async () => {
@@ -184,7 +188,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
         clearInterval(buildStatusInterval);
       }
     };
-  }, [pipe.installed_config?.buildStatus]);
+  }, [pipe.installed_config?.buildStatus, pipe, setPipe]);
 
   const renderInstallationStatus = useCallback(() => {
     const buildStatus = pipe.installed_config?.buildStatus;
@@ -196,7 +200,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
           size="sm"
           variant="outline"
           disabled
-          className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
+          className="font-medium relative hover:!bg-muted no-card-hover"
         >
           <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
           <div className="flex flex-col items-start">
@@ -212,7 +216,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
           size="sm"
           variant="outline"
           disabled
-          className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
+          className="font-medium relative hover:!bg-muted no-card-hover"
         >
           <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
           <div className="flex flex-col items-start">
@@ -262,7 +266,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
             setIsLoading(true);
             onToggle(pipe, () => setIsLoading(false));
           }}
-          className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
+          className="font-medium relative hover:!bg-muted no-card-hover"
           disabled={isLoading}
         >
           <Power className="h-3.5 w-3.5 mr-2" />
@@ -282,7 +286,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
         open
       </Button>
     );
-  }, [pipe.installed_config?.buildStatus]);
+  }, [handleOpenWindow, isLoading, onToggle, pipe]);
 
   return (
     <motion.div

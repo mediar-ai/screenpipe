@@ -1,17 +1,17 @@
 // app/providers.tsx
 "use client";
+
+import { ThemeProvider } from "next-themes";
+import { store as SettingsStore } from "@/lib/hooks/use-settings";
+import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
+import { profilesStore as ProfilesStore } from "@/lib/hooks/use-profiles";
+import { TabsProvider } from "@/lib/hooks/use-tabs";
+import React from "react";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useEffect } from "react";
-import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
-import { forwardRef } from "react";
-import { store as SettingsStore, useSettings } from "@/lib/hooks/use-settings";
-import { profilesStore as ProfilesStore } from "@/lib/hooks/use-profiles";
 
-export const Providers = forwardRef<
-  HTMLDivElement,
-  { children: React.ReactNode }
->(({ children }, ref) => {
+export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const isDebug = process.env.TAURI_ENV_DEBUG === "true";
@@ -25,14 +25,18 @@ export const Providers = forwardRef<
   }, []);
 
   return (
-    <SettingsStore.Provider>
-      <ProfilesStore.Provider>
-        <ChangelogDialogProvider>
-          <PostHogProvider client={posthog}>{children}</PostHogProvider>
-        </ChangelogDialogProvider>
-      </ProfilesStore.Provider>
-    </SettingsStore.Provider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <SettingsStore.Provider>
+        <ProfilesStore.Provider>
+          <ChangelogDialogProvider>
+            <TabsProvider>
+              <PostHogProvider client={posthog}>
+                {children}
+              </PostHogProvider>
+            </TabsProvider>
+          </ChangelogDialogProvider>
+        </ProfilesStore.Provider>
+      </SettingsStore.Provider>
+    </ThemeProvider>
   );
-});
-
-Providers.displayName = "Providers";
+}

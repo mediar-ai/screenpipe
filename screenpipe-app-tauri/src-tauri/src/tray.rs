@@ -1,4 +1,4 @@
-use crate::commands::{open_pipe_window, show_main_window};
+use crate::commands::{show_main_window};
 use crate::get_pipe_port;
 use crate::store::get_store;
 use anyhow::Result;
@@ -332,8 +332,23 @@ fn handle_pipe_click(app: &AppHandle, menu_id: &str) {
     tauri::async_runtime::spawn(async move {
         match get_pipe_port(&pipe_id).await {
             Ok(port) => {
-                if let Err(e) = open_pipe_window(app_handle, port, pipe_id).await {
-                    error!("Failed to open pipe window: {}", e);
+                // Instead of opening a separate window, emit an event to open in a tab
+                if let Err(e) = app_handle.emit("open-pipe-in-tab", serde_json::json!({
+                    "id": pipe_id.clone(),
+                    "title": pipe_id.clone(),
+                    "port": port
+                })) {
+                    error!("Failed to emit open-pipe-in-tab event: {}", e);
+                }
+
+                // Also show the main window if it's not visible
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    if let Ok(false) = window.is_visible() {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                } else {
+                    show_main_window(&app_handle, false);
                 }
             }
             Err(e) => {

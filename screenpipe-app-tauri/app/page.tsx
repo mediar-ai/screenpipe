@@ -14,7 +14,7 @@ import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
 
-import { PipeStore } from "@/components/pipe-store";
+import { PipeTabs } from "@/components/pipe-tabs";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useProfiles } from "@/lib/hooks/use-profiles";
@@ -24,6 +24,7 @@ import localforage from "localforage";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { LoginDialog } from "../components/login-dialog";
 import { ModelDownloadTracker } from "../components/model-download-tracker";
+import { useTabs } from "@/lib/hooks/use-tabs";
 
 export default function Home() {
   const { settings, updateSettings, loadUser, reloadStore } = useSettings();
@@ -34,12 +35,13 @@ export default function Home() {
   const { open: openStatusDialog } = useStatusDialog();
   const { setIsOpen: setSettingsOpen } = useSettingsDialog();
   const isProcessingRef = React.useRef(false);
+  const { addTab } = useTabs();
 
   useEffect(() => {
     if (settings.user?.token) {
       loadUser(settings.user.token);
     }
-  }, [settings.user.token]);
+  }, [settings.user.token, loadUser]);
 
   useEffect(() => {
     const getAudioDevices = async () => {
@@ -136,12 +138,27 @@ export default function Home() {
         const pipeApi = new PipeApi();
         const pipeList = await pipeApi.listPipes();
         const pipe = pipeList.find((p) => p.id === pipeId);
-        if (pipe) {
-          await invoke("open_pipe_window", {
-            port: pipe.port,
+        if (pipe && typeof pipe.port === 'number') {
+          addTab({
+            id: pipe.id,
             title: pipe.id,
+            port: pipe.port,
+            url: `http://localhost:${pipe.port}`
           });
         }
+      }),
+
+      // Listen for the open-pipe-in-tab event
+      listen<{ id: string; title: string; port: number }>("open-pipe-in-tab", async (event) => {
+        const { id, title, port } = event.payload;
+        
+        // Add a new tab for the pipe
+        addTab({
+          id,
+          title,
+          port,
+          url: `http://localhost:${port}`
+        });
       }),
 
       listen("shortcut-start-audio", async () => {
@@ -200,7 +217,7 @@ export default function Home() {
       });
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
-  }, [setSettingsOpen]);
+  }, [setSettingsOpen, addTab, openStatusDialog, setActiveProfile, setShowChangelogDialog, setShowOnboarding, toast, updateSettings]);
 
   useEffect(() => {
     const checkScreenPermissionRestart = async () => {
@@ -224,7 +241,7 @@ export default function Home() {
     return () => {
       unlisten.then((unlistenFn) => unlistenFn());
     };
-  }, []);
+  }, [reloadStore]);
 
   return (
     <div className="flex flex-col items-center flex-1 max-w-screen-2xl mx-auto relative">
@@ -238,8 +255,8 @@ export default function Home() {
           <ChangelogDialog />
           {/* <BreakingChangesInstructionsDialog /> */}
           <Header />
-          <div className=" w-full">
-            <PipeStore />
+          <div className="w-full h-[calc(100vh-4rem)]">
+            <PipeTabs />
           </div>
         </>
       )}

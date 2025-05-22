@@ -73,13 +73,19 @@ impl AudioStream {
         is_disconnected: Arc<AtomicBool>,
         stream_control_tx: mpsc::Sender<StreamControl>,
     ) -> Result<tokio::task::JoinHandle<()>> {
-        let device_name = device.name()?;
+        let device_name = match device.name() {
+            Ok(name) => name,
+            Err(e) => {
+                error!("Failed to get device name: {}", e);
+                "unknown_device".to_string()
+            }
+        };
 
         Ok(tokio::task::spawn_blocking(move || {
             let error_callback = create_error_callback(
                 device_name.clone(),
                 is_running_weak,
-                is_disconnected,
+                is_disconnected.clone(),
                 stream_control_tx,
             );
 
@@ -89,17 +95,21 @@ impl AudioStream {
                 Ok(stream) => {
                     if let Err(e) = stream.play() {
                         error!("failed to play stream for {}: {}", device_name, e);
+                        is_disconnected.store(true, Ordering::Relaxed);
                         return;
                     }
 
                     if let Ok(StreamControl::Stop(response)) = stream_control_rx.recv() {
-                        stream.pause().ok();
+                        if let Err(e) = stream.pause() {
+                            warn!("Failed to pause stream: {}", e);
+                        }
                         drop(stream);
                         response.send(()).ok();
                     }
                 }
                 Err(e) => {
                     error!("Failed to build input stream: {}", e);
+                    is_disconnected.store(true, Ordering::Relaxed);
                 }
             }
         }))
@@ -173,55 +183,101 @@ fn build_input_stream(
     tx: broadcast::Sender<Vec<f32>>,
     error_callback: impl FnMut(StreamError) + Send + 'static,
 ) -> Result<cpal::Stream> {
+    let device_name = device.name().unwrap_or_else(|_| "unknown device".to_string());
+
     match config.sample_format() {
-        cpal::SampleFormat::F32 => device
-            .build_input_stream(
+        cpal::SampleFormat::F32 => {
+            match device.build_input_stream(
                 &config.config(),
                 move |data: &[f32], _: &_| {
+                    if data.is_empty() {
+                        warn!("Received empty audio data");
+                        return;
+                    }
+                    
                     let mono = audio_to_mono(data, channels);
                     let _ = tx.send(mono);
                 },
                 error_callback,
                 None,
-            )
-            .map_err(|e| anyhow!(e)),
-        cpal::SampleFormat::I16 => device
-            .build_input_stream(
+            ) {
+                Ok(stream) => Ok(stream),
+                Err(e) => {
+                    error!("Failed to build F32 input stream for {}: {}", device_name, e);
+                    Err(anyhow!(e))
+                }
+            }
+        },
+        cpal::SampleFormat::I16 => {
+            match device.build_input_stream(
                 &config.config(),
                 move |data: &[i16], _: &_| {
+                    if data.is_empty() {
+                        warn!("Received empty audio data");
+                        return;
+                    }
+                    
                     let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
                     let _ = tx.send(mono);
                 },
                 error_callback,
                 None,
-            )
-            .map_err(|e| anyhow!(e)),
-        cpal::SampleFormat::I32 => device
-            .build_input_stream(
+            ) {
+                Ok(stream) => Ok(stream),
+                Err(e) => {
+                    error!("Failed to build I16 input stream for {}: {}", device_name, e);
+                    Err(anyhow!(e))
+                }
+            }
+        },
+        cpal::SampleFormat::I32 => {
+            match device.build_input_stream(
                 &config.config(),
                 move |data: &[i32], _: &_| {
+                    if data.is_empty() {
+                        warn!("Received empty audio data");
+                        return;
+                    }
+                    
                     let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
                     let _ = tx.send(mono);
                 },
                 error_callback,
                 None,
-            )
-            .map_err(|e| anyhow!(e)),
-        cpal::SampleFormat::I8 => device
-            .build_input_stream(
+            ) {
+                Ok(stream) => Ok(stream),
+                Err(e) => {
+                    error!("Failed to build I32 input stream for {}: {}", device_name, e);
+                    Err(anyhow!(e))
+                }
+            }
+        },
+        cpal::SampleFormat::I8 => {
+            match device.build_input_stream(
                 &config.config(),
                 move |data: &[i8], _: &_| {
+                    if data.is_empty() {
+                        warn!("Received empty audio data");
+                        return;
+                    }
+                    
                     let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
                     let _ = tx.send(mono);
                 },
                 error_callback,
                 None,
-            )
-            .map_err(|e| anyhow!(e)),
-        _ => Err(anyhow!(
-            "unsupported sample format: {}",
-            config.sample_format()
-        )),
+            ) {
+                Ok(stream) => Ok(stream),
+                Err(e) => {
+                    error!("Failed to build I8 input stream for {}: {}", device_name, e);
+                    Err(anyhow!(e))
+                }
+            }
+        },
+        unsupported => {
+            error!("Unsupported sample format: {}", unsupported);
+            Err(anyhow!("unsupported sample format: {}", unsupported))
+        }
     }
 }
 

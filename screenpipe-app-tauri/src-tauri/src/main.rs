@@ -8,7 +8,6 @@ use commands::show_main_window;
 use serde_json::json;
 use serde_json::Value;
 use std::env;
-use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -632,13 +631,21 @@ async fn main() {
         .plugin(tauri_plugin_http::init())
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
+                // Ensure we clean up properly
                 let _ = window.set_always_on_top(false);
                 let _ = window.set_visible_on_all_workspaces(false);
-                #[cfg(target_os = "macos")]
-                let _ = window
-                    .app_handle()
-                    .set_activation_policy(tauri::ActivationPolicy::Regular);
-                window.hide().unwrap();
+                
+                // Try to focus the window before hiding it to ensure it receives future events properly
+                if let Err(e) = window.set_focus() {
+                    tracing::warn!("Failed to focus window before hiding: {}", e);
+                }
+                
+                // Hide the window rather than closing it entirely
+                if let Err(e) = window.hide() {
+                    tracing::error!("Failed to hide window: {}", e);
+                }
+                
+                // Prevent the default close behavior
                 api.prevent_close();
             }
             _ => {}

@@ -150,8 +150,13 @@ async fn get_screen_capture_host() -> Result<cpal::Host> {
     // necessary hack because this is unreliable
     with_retry(
         || async {
-            cpal::host_from_id(cpal::HostId::ScreenCaptureKit)
-                .map_err(|e| anyhow!("Failed to get ScreenCaptureKit host: {}", e))
+            match cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+                Ok(host) => Ok(host),
+                Err(e) => {
+                    tracing::error!("Failed to get ScreenCaptureKit host: {}", e);
+                    Err(anyhow!("Failed to get ScreenCaptureKit host: {}", e))
+                }
+            }
         },
         3,
     )
@@ -183,19 +188,45 @@ pub async fn get_cpal_device_and_config(
         };
 
         #[cfg(target_os = "macos")]
+        let mut screen_capture_devices = None;
+        
+        #[cfg(target_os = "macos")]
         if is_output_device {
-            if let Ok(screen_capture_host) = get_screen_capture_host().await {
-                devices = screen_capture_host.input_devices()?;
+            match get_screen_capture_host().await {
+                Ok(screen_capture_host) => {
+                    match screen_capture_host.input_devices() {
+                        Ok(sc_devices) => {
+                            screen_capture_devices = Some(sc_devices);
+                        },
+                        Err(e) => {
+                            tracing::warn!("Failed to get ScreenCaptureKit input devices: {}, falling back to default devices", e);
+                        }
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to get ScreenCaptureKit host: {}, falling back to default devices", e);
+                }
+            }
+            
+            if let Some(sc_devices) = screen_capture_devices {
+                devices = sc_devices;
             }
         }
 
-        devices.find(|x| x.name().map(|y| y == device_name).unwrap_or(false))
+        devices.find(|x| match x.name() {
+            Ok(name) => name == device_name,
+            Err(_) => false,
+        })
     }
     .ok_or_else(|| anyhow!("Audio device not found: {}", device_name))?;
 
     // Get the highest quality configuration based on device type
     let config = if is_output_device && !is_display {
-        let configs = cpal_audio_device.supported_output_configs()?;
+        let configs = match cpal_audio_device.supported_output_configs() {
+            Ok(configs) => configs,
+            Err(e) => return Err(anyhow!("Failed to get supported output configs: {}", e)),
+        };
+        
         let best_config = configs
             .max_by(|a, b| {
                 a.max_sample_rate().0.cmp(&b.max_sample_rate().0)
@@ -205,7 +236,11 @@ pub async fn get_cpal_device_and_config(
         
         best_config.with_sample_rate(best_config.max_sample_rate())
     } else {
-        let configs = cpal_audio_device.supported_input_configs()?;
+        let configs = match cpal_audio_device.supported_input_configs() {
+            Ok(configs) => configs,
+            Err(e) => return Err(anyhow!("Failed to get supported input configs: {}", e)),
+        };
+        
         let best_config = configs
             .max_by(|a, b| {
                 a.max_sample_rate().0.cmp(&b.max_sample_rate().0)

@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { PipeApi } from "@/lib/api/store";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useTabs } from "@/lib/hooks/use-tabs";
 
 interface OnboardingPipeStoreProps {
   className?: string;
@@ -22,6 +23,8 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
   const [isLoading, setIsLoading] = React.useState(false);
   const [status, setStatus] = React.useState<string>("");
   const { settings } = useSettings();
+  const { addTab } = useTabs();
+  
   const handleOpenSearchPipe = async () => {
     setIsLoading(true);
     try {
@@ -111,10 +114,12 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
         throw new Error("search pipe failed to start");
       }
 
-      // Open the pipe window
-      await invoke("open_pipe_window", {
-        port: updatedSearchPipe.config.port,
+      // Open the pipe in a tab instead of a separate window
+      addTab({
+        id: "search",
         title: "search",
+        port: updatedSearchPipe.config.port,
+        url: `http://localhost:${updatedSearchPipe.config.port}`
       });
 
       t.update({

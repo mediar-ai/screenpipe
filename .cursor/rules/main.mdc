@@ -1,9 +1,13 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
 Rules:
 - screenpipe is the context layer for AGI. that is a bridge between dull context-free AI and context aware super intelligence, this bridge is a lib, and CLI, that record screens & mics 24/7, extract OCR & STT, save to local db, connect to AI, do magic, it's written in Rust + Tauri and we write plugins (pipes) in TS + Bun. the Rust CLI is embedded as a sidecar in Tauri. it works on macos, windows, linux
-- always keep my style black and white, with some nerdy style and fonts pixelated / scientific style
+- always keep my style white and green, focus on Neumorphic design with a focus on shadows and depth blend it with glassmorphism
 - do not remove @ts-ignore except if i explicitly ask you
 - always use lower case for logging stuff or UI
-- loading and error UX: avoid using toast error things - its ugly af bro, instead use empty states, spinner in buttons and correct disabled states, use skeletons when no data is available yet, use error messages in the UI, etc.
 - Rust: always use anyhow error, tokio instead of std stuff, avoid mutex if you can, prefer channels, write code easy to read for humans, fast for machines
 - when i ask to give me the full code it means FULL, no fucking // rest of the code comments GIVE ME THE FULL CODE
 - if it seems like you lack some context about a niche lib just ask me to provide the source code and i will (instead of providing a bad answer)

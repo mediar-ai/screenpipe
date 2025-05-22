@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { IconCode } from "./ui/icons";
 import { Settings } from "@/lib/hooks/use-settings";
 import { getCliPath } from "@/lib/utils";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/shadcn-tabs";
 import { platform } from "@tauri-apps/plugin-os";
 
 interface CliCommandDialogProps {

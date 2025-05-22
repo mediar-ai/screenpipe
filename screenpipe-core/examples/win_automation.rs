@@ -2,12 +2,11 @@ use std::thread;
 use std::time::Duration;
 
 use screenpipe_core::operator::platforms;
-use screenpipe_core::operator::Selector;
 use screenpipe_core::operator::AutomationError;
 
 // like a playground, just uncomment
 fn main() -> Result<(), AutomationError> {
-    let engine = platforms::create_engine(true, true)?;
+    let _engine = platforms::create_engine(true, true)?;
 
     // get the root element
     // let root_element = engine.get_root_element();
@@ -125,7 +124,7 @@ fn main() -> Result<(), AutomationError> {
         // println!("edit: {:?}", edit);
         thread::sleep(Duration::from_millis(200));
         // notepad_edit_area.set_value(&legacy_data)?; // Might work
-        let formatted_text = r"CUSTOMER RECORD
+        let _formatted_text = r"CUSTOMER RECORD
 ID 10039485        Created 2023 04 17
 Acme Industries Ltd
 Status ACTIVE    Contact John Smith    Phone 555 123 4567

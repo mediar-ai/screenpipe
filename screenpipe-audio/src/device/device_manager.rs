@@ -8,7 +8,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tracing::info;
+use tracing::{info, error};
 
 pub struct DeviceManager {
     streams: Arc<DashMap<AudioDevice, Arc<AudioStream>>>,
@@ -28,22 +28,24 @@ impl DeviceManager {
     }
 
     pub async fn start_device(&self, device: &AudioDevice) -> Result<()> {
-        if !self.devices().await.contains(device) {
-            return Err(anyhow!("device {device} not found"));
+        let available_devices = self.devices().await;
+        if !available_devices.contains(device) {
+            return Err(anyhow!("Device {} not found", device));
         }
 
         if self.is_running(device) {
-            return Err(anyhow!("Device {} already running.", device));
+            return Err(anyhow!("Device {} already running", device));
         }
 
         let is_running = Arc::new(AtomicBool::new(false));
-        let stream =
-            match AudioStream::from_device(Arc::new(device.clone()), is_running.clone()).await {
-                Ok(stream) => stream,
-                Err(e) => {
-                    return Err(e);
-                }
-            };
+        
+        let stream = match AudioStream::from_device(Arc::new(device.clone()), is_running.clone()).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                error!("Failed to create audio stream for device {}: {}", device, e);
+                return Err(anyhow!("Failed to create audio stream: {}", e));
+            }
+        };
 
         info!("starting recording for device: {}", device);
 
