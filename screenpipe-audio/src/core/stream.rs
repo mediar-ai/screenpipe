@@ -147,19 +147,20 @@ fn create_error_callback(
             .contains("The requested device is no longer available")
         {
             warn!(
-                "audio device {} disconnected. stopping recording.",
+                "audio device {} disconnected. attempting to reconnect...",
                 device_name
             );
-            stream_control_tx
-                .send(StreamControl::Stop(oneshot::channel().0))
-                .unwrap();
             is_disconnected.store(true, Ordering::Relaxed);
+            
+            if let Some(arc) = is_running_weak.upgrade() {
+                arc.store(true, Ordering::Relaxed);
+            }
         } else {
             error!("an error occurred on the audio stream: {}", err);
             if err.to_string().contains("device is no longer valid") {
-                warn!("audio device disconnected. stopping recording.");
+                warn!("audio device disconnected. attempting to reconnect...");
                 if let Some(arc) = is_running_weak.upgrade() {
-                    arc.store(false, Ordering::Relaxed);
+                    arc.store(true, Ordering::Relaxed);
                 }
             }
         }
