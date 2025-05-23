@@ -319,34 +319,231 @@ async fn get_exe_by_appx(app_name: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "linux")]
+mod linux_icon_cache {
+    use crate::AppIcon;
+    use freedesktop_desktop_entry::DesktopEntry;
+    use gtk::glib::{clone, MainContext};
+    use gtk::prelude::{DeviceExt, IconThemeExt};
+    use image::codecs::png::PngEncoder;
+    use image::{
+        ColorType, DynamicImage, ExtendedColorType, ImageEncoder, ImageFormat, ImageReader,
+    };
+    use ini::configparser::ini::Ini;
+    use lazy_static::lazy_static;
+    use log::{error, info};
+    use resvg::tiny_skia::PixmapMut;
+    use resvg::{tiny_skia, usvg};
+    use std::collections::HashMap;
+    use std::io::Cursor;
+    use std::path::{Path, PathBuf};
+    use std::{env, fs};
+    use xdg::BaseDirectories;
+
+    pub struct IconCache {
+        map: HashMap<String, String>,
+    }
+
+    lazy_static! {
+        static ref ICON_CACHE: IconCache = IconCache::new();
+    }
+
+    impl IconCache {
+        pub fn new() -> Self {
+            let map = Self::load_icons();
+            Self { map }
+        }
+
+        fn load_icons() -> HashMap<String, String> {
+            let mut map = HashMap::new();
+
+            let xdg_data_dirs =
+                env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/share".to_string());
+            let app_directories: Vec<PathBuf> = xdg_data_dirs
+                .split(':')
+                .map(|dir| Path::new(dir).join("applications"))
+                .collect();
+
+            let mut search_paths = vec![
+                Path::new("/usr/share/applications").to_path_buf(),
+                Path::new("/usr/local/share/applications").to_path_buf(),
+            ];
+
+            if let Ok(base_dirs) = BaseDirectories::new() {
+                if let Some(config_directory) = base_dirs.find_config_file("") {
+                    search_paths.push(config_directory);
+                }
+            }
+
+            search_paths.extend(app_directories);
+
+            let local = env::var("LANG").unwrap_or_else(|_| "".to_string());
+            let fallback_locale = "en_US"; // Fallback locale
+            let locales = if local.is_empty() {
+                vec![fallback_locale]
+            } else {
+                vec![local.as_str(), fallback_locale]
+            };
+
+            for search_path in &search_paths {
+                if let Ok(entries) = fs::read_dir(search_path) {
+                    for entry in entries.flatten() {
+                        if let Some(file_name) = entry.file_name().to_str() {
+                            if file_name.ends_with(".desktop") {
+                                if let Ok(desktop_entry) =
+                                    DesktopEntry::from_path::<&str>(&entry.path(), None)
+                                {
+                                    if let Some(icon) = desktop_entry.icon() {
+                                        let desktop_entry_name =
+                                            file_name.trim_end_matches(".desktop");
+                                        if let Some(app_name) = desktop_entry.name(&locales) {
+                                            map.insert(app_name.to_lowercase(), icon.to_string());
+                                        }
+                                        map.insert(
+                                            desktop_entry_name.to_string(),
+                                            icon.to_string(),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            map
+        }
+
+        pub async fn get_app_icon(&self, app_name: &str) -> Result<Option<AppIcon>, String> {
+            if let Some(icon) = self.map.get(app_name) {
+                let icon_path = if Path::new(&icon).exists() {
+                    icon.to_string()
+                } else {
+                    self.get_icon_path_from_name(&icon)
+                        .await
+                        .unwrap_or_default()
+                };
+                return self.load_icon_from_path(icon_path.as_str());
+            }
+
+            // If icon isn't in the map, try loading the icon path
+            if let icon_path = self.get_icon_path_from_name(app_name).await? {
+                return self.load_icon_from_path(&icon_path);
+            }
+
+            Err(format!("Icon for App '{}' not found", app_name))
+        }
+
+        async fn get_icon_path_from_name(&self, icon_name: &str) -> Result<String, String> {
+            let main_context = MainContext::default();
+            let (sender, receiver) = futures_channel::oneshot::channel();
+            {
+                let icon_name = icon_name.to_string();
+
+                MainContext::default().invoke(clone!(@strong icon_name => move || {
+                    let result = gtk::IconTheme::default()
+                        .and_then(|icon_theme| {
+                            icon_theme
+                                .lookup_icon(&icon_name, 64, gtk::IconLookupFlags::empty())
+                                .and_then(|info| info.filename())
+                                .map(|p| p.to_string_lossy().into_owned())
+                        });
+
+                    if result.is_some() {
+                        info!("Icon path found for '{}'", icon_name);
+                    } else {
+                        error!("No icon found for '{}'", icon_name);
+                    }
+
+                    let _ = sender.send(result);
+                }));
+            }
+
+            match receiver.await {
+                Ok(Some(path)) => Ok(path),
+                Ok(None) => {
+                    error!("Could not find icon path for '{}'", icon_name);
+                    Err(format!("Could not find icon path for '{}'", icon_name))
+                }
+                Err(e) => {
+                    error!("Failed to receive icon path: {}", e);
+                    Err("Failed to receive icon path from main context".to_string())
+                }
+            }
+        }
+
+        fn load_icon_from_path(&self, path: &str) -> Result<Option<AppIcon>, String> {
+            let path = Path::new(path);
+            if path.extension().map(|e| e == "svg").unwrap_or(false) {
+                return self.convert_svg_to_jpeg(path);
+            }
+            // Load PNG/JPEG or other formats directly
+            self.load_image(path)
+        }
+
+        fn load_image(&self, path: &Path) -> Result<Option<AppIcon>, String> {
+            let data = fs::read(path).map_err(|e| format!("Failed to read icon file: {}", e))?;
+            Ok(Some(AppIcon {
+                data,
+                path: Some(path.to_string_lossy().into_owned()),
+            }))
+        }
+
+        fn convert_svg_to_jpeg(&self, svg_path: &Path) -> Result<Option<AppIcon>, String> {
+            // Load SVG file
+            let svg_data = std::fs::read(svg_path).map_err(|e| e.to_string())?;
+
+            // Parse the SVG using usvg
+            let options = usvg::Options::default();
+            let svg_tree = resvg::usvg::Tree::from_data(&svg_data, &options)
+                .map_err(|e| format!("Failed to parse SVG: {}", e))?;
+
+            let svg_size = svg_tree.size();
+            let width = svg_size.width() as u32;
+            let height = svg_size.height() as u32;
+
+            // Create a rendering context with the intrinsic dimensions
+            let mut pixmap =
+                tiny_skia::Pixmap::new(width, height).ok_or("Failed to create pixmap")?;
+
+            // Apply the rendering and transformation
+            resvg::render(
+                &svg_tree,
+                tiny_skia::Transform::default(),
+                &mut pixmap.as_mut(),
+            );
+
+            // Convert image to JPEG format
+            let mut cursor = Cursor::new(Vec::new());
+            let encoder = PngEncoder::new(&mut cursor);
+            encoder
+                .write_image(
+                    &pixmap.data(),
+                    pixmap.width(),
+                    pixmap.height(),
+                    ExtendedColorType::Rgba8,
+                )
+                .map_err(|e| e.to_string())?;
+
+            // Return the icon as a vector of bytes
+            Ok(Some(AppIcon {
+                data: cursor.into_inner(),
+                path: svg_path.to_str().map(|s| s.to_string()),
+            }))
+        }
+    }
+
+    pub async fn get_app_icon(
+        app_name: &str,
+        app_path: Option<String>,
+    ) -> Result<Option<AppIcon>, String> {
+        ICON_CACHE.get_app_icon(app_name).await
+    }
+}
+
+#[cfg(target_os = "linux")]
 pub async fn get_app_icon(
     app_name: &str,
     app_path: Option<String>,
 ) -> Result<Option<AppIcon>, String> {
-    use gtk::prelude::IconThemeExt;
-    use std::fs;
-
-    if gtk::init().is_err() {
-        return Err("failed to initialize GTK".to_string());
-    }
-
-    fn find_icon_path(app_name: &str) -> Option<String> {
-        let icon_theme = gtk::IconTheme::default().unwrap();
-        let icon_info = icon_theme.lookup_icon(app_name, 64, gtk::IconLookupFlags::empty())?;
-        icon_info
-            .filename()
-            .map(|s| s.to_string_lossy().into_owned())
-    }
-
-    let path = match app_path {
-        Some(p) => p,
-        None => find_icon_path(app_name).ok_or_else(|| "could not find icon path".to_string())?,
-    };
-
-    let data = fs::read(&path).map_err(|e| e.to_string())?;
-
-    Ok(Some(AppIcon {
-        data,
-        path: Some(path),
-    }))
+    linux_icon_cache::get_app_icon(app_name.to_lowercase().as_str(), app_path).await
 }
