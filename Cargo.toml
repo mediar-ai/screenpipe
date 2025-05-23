@@ -8,7 +8,7 @@ members = [
     "screenpipe-events",
     "screenpipe-db",
 ]
-exclude = ["screenpipe-app-tauri/src-tauri"]
+exclude = ["screenpipe-app-tauri/src-tauri","openrewind/src-tauri"]
 resolver = "2"
 
 [workspace.package]
