@@ -209,6 +209,7 @@ pub struct OCRContent {
     pub frame_name: Option<String>,
     pub browser_url: Option<String>,
     pub focused: Option<bool>,
+    pub device_name: String,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Debug)]
@@ -386,6 +387,7 @@ pub(crate) async fn search(
                 frame_name: Some(ocr.frame_name.clone()),
                 browser_url: ocr.browser_url.clone(),
                 focused: ocr.focused,
+                device_name: ocr.device_name.clone(),
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
                 chunk_id: audio.audio_chunk_id,
