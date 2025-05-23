@@ -43,6 +43,10 @@ const config = {
 			'libasound2-dev', // cpal
 			'libxdo-dev'
 		],
+		tesseractUrl: 'https://github.com/DanielMYT/tesseract-static/releases/download/tesseract-5.5.0/tesseract',
+		tesseractName: 'tesseract',
+		ffmpegName: 'ffmpeg-7.0.2-amd64-static',
+		ffmpegUrl: 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz',
 	},
 	macos: {
 		ffmpegUrlArm: 'https://www.osxexperts.net/ffmpeg7arm.zip',
@@ -237,7 +241,7 @@ if (platform == 'linux') {
 	const potentialPaths = [
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
-                path.join(__dirname, '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
+		path.join(__dirname, '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', 'target', 'release', 'screenpipe'),
@@ -265,6 +269,24 @@ if (platform == 'linux') {
 		console.error("failed to copy screenpipe binary from any potential path.");
 		// uncomment the following line if you want the script to exit on failure
 		// process.exit(1);
+	}
+
+	
+	// Setup FFMPEG
+	if (!(await fs.exists(config.ffmpegRealname))) {
+		await $`wget --no-config -nc ${config.linux.ffmpegUrl} -O ${config.linux.ffmpegName}.tar.xz`
+		await $`tar xf ${config.linux.ffmpegName}.tar.xz`
+		await $`mv ${config.linux.ffmpegName} ${config.ffmpegRealname}`
+		await $`rm ${config.linux.ffmpegName}.tar.xz`
+	} else {
+		console.log('FFMPEG already exists');
+	}
+		// Setup TESSERACT
+	if (!(await fs.exists(config.linux.tesseractName))) {
+		await $`wget --no-config -nc ${config.linux.tesseractUrl} -O ${config.linux.tesseractName}`
+		await $`chmod +x ${config.linux.tesseractName}` // Make the Tesseract binary executable
+	} else {
+		console.log('TESSERACT already exists');
 	}
 }
 
