@@ -166,7 +166,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center flex-1 mx-auto relative">
+    <div className="flex flex-col items-center flex-1 mx-auto relative scrollbar-hide">
       <LoginDialog />
       <ModelDownloadTracker />
       <NotificationHandler />
@@ -176,8 +176,7 @@ export default function Home() {
         <>
           <ChangelogDialog />
           {/* <BreakingChangesInstructionsDialog /> */}
-          <Header />
-          <div className="w-full">
+          <div className="w-full scrollbar-hide">
             <Timeline />
           </div>
         </>

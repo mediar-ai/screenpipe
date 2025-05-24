@@ -331,24 +331,19 @@ export default function Timeline() {
 					msUserSelect: "none",
 				}}
 			>
-				<div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+				<div className="absolute z-50 top-4 w-full">
 					<div className="flex items-center gap-4">
 						<TimelineControls
 							currentDate={currentDate}
 							startAndEndDates={startAndEndDates}
 							onDateChange={handleDateChange}
 							onJumpToday={handleJumpToday}
-							className="shadow-lg"
 						/>
 						{/* <TimelineSearch2
               frames={frames}
               onResultSelect={animateToIndex}
               onSearchResults={setSearchResults}
             /> */}
-						<div>
-							<CommandShortcut>⌘K</CommandShortcut>{" "}
-							<span className="text-xs text-muted-foreground">to search</span>
-						</div>
 					</div>
 				</div>
 

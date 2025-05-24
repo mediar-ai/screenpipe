@@ -212,7 +212,7 @@ export const TimelineSlider = ({
 				}}
 			>
 				<motion.div
-					className="whitespace-nowrap flex flex-nowrap w-max justify-center px-[50vw] h-40 sticky right-0"
+					className="whitespace-nowrap flex flex-nowrap w-max justify-center px-[50vw] h-40 sticky right-0 scrollbar-hide"
 					onMouseUp={handleDragEnd}
 					onMouseLeave={handleDragEnd}
 				>

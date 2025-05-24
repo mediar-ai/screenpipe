@@ -107,7 +107,7 @@ impl ShortcutConfig {
 
         Ok(Self {
             show: store
-                .get("showScreenpipeShortcut")
+                .get("showOpenRewindShortcut")
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Super+Alt+S".to_string()),
             start: store
@@ -359,7 +359,7 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 
     let store = get_store(app, None)?;
 
-    let default_path = app.path().home_dir().unwrap().join(".screenpipe");
+    let default_path = app.path().home_dir().unwrap().join(".openrewind");
 
     let data_dir = store
         .get("dataDir")
@@ -630,12 +630,12 @@ async fn main() {
             // Set up rolling file appender
             let file_appender = RollingFileAppender::builder()
                 .rotation(Rotation::DAILY)
-                .filename_prefix("screenpipe-app")
+                .filename_prefix("openrewind-app")
                 .filename_suffix("log")
                 .max_log_files(5)
                 .build(
                     get_data_dir(app.handle())
-                        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")),
+                        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".openrewind")),
                 )?;
 
             // Create a custom layer for file logging
@@ -736,7 +736,7 @@ async fn main() {
             let update_manager = start_update_check(&app_handle, 5)?;
 
             // Setup tray
-            if let Some(_) = app_handle.tray_by_id("screenpipe_main") {
+            if let Some(_) = app_handle.tray_by_id("openrewind_main") {
                 let update_item = update_manager.update_now_menu_item_ref().clone();
                 if let Err(e) = tray::setup_tray(&app_handle, &update_item) {
                     error!("Failed to setup tray: {}", e);

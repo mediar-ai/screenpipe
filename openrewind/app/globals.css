@@ -108,7 +108,6 @@
 @layer base {
   * {
     @apply border-border;
-    scrollbar-width: thin !important;
   }
   body {
     @apply bg-background text-foreground !pointer-events-auto !overscroll-none;
@@ -129,6 +128,17 @@
     user-select: none;
     /* cursor: default; */
   }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+
+
 }
 
 .pf-v6-c-text-input-group__text-input {
@@ -155,3 +165,4 @@
   line-height: 21px !important;
   position: absolute !important;
 }
+
