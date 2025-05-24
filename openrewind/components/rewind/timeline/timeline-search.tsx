@@ -12,7 +12,7 @@ import {
 	DialogOverlay,
 } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
-import { StreamTimeSeriesResponse } from "@/app/page";
+import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import OpenAI from "openai";
 import { useSettings } from "@/lib/hooks/use-settings";
 import {

@@ -29,3 +29,5 @@ export const CustomDialogContent = React.forwardRef<
 		</DialogPrimitive.Content>
 	</DialogPortal>
 ));
+
+CustomDialogContent.displayName = "CustomDialogContent";

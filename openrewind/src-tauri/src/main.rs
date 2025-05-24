@@ -68,6 +68,7 @@ use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 use tauri_plugin_sentry::sentry;
 mod health;
 use health::start_health_check;
+use base64::Engine;
 
 // New struct to hold shortcut configuration
 #[derive(Debug, Default)]
@@ -376,6 +377,55 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 use tokio::time::{sleep, Duration};
 
 #[tauri::command]
+async fn get_media_file(file_path: &str) -> Result<serde_json::Value, String> {
+    use std::path::Path;
+    
+    debug!("Reading media file: {}", file_path);
+    
+    let path = Path::new(file_path);
+    if !path.exists() {
+        return Err(format!("File does not exist: {}", file_path));
+    }
+    
+    // Read file contents
+    let file_contents = match tokio::fs::read(path).await {
+        Ok(contents) => {
+            debug!("Successfully read file of size: {} bytes", contents.len());
+            contents
+        }
+        Err(e) => {
+            error!("Failed to read file: {}", e);
+            return Err(format!("Failed to read file: {}", e));
+        }
+    };
+    
+    // Convert to base64
+    let data = base64::prelude::BASE64_STANDARD.encode(&file_contents);
+    
+    // Determine MIME type
+    let mime_type = get_mime_type(file_path);
+    
+    Ok(serde_json::json!({
+        "data": data,
+        "mimeType": mime_type
+    }))
+}
+
+fn get_mime_type(path: &str) -> String {
+    let ext = path.split('.').last().unwrap_or("").to_lowercase();
+    let is_audio = path.to_lowercase().contains("input") || path.to_lowercase().contains("output");
+    
+    match ext.as_str() {
+        "mp4" => "video/mp4".to_string(),
+        "webm" => "video/webm".to_string(),
+        "ogg" => "video/ogg".to_string(),
+        "mp3" => "audio/mpeg".to_string(),
+        "wav" => "audio/wav".to_string(),
+        _ => if is_audio { "audio/mpeg".to_string() } else { "video/mp4".to_string() }
+    }
+}
+
+#[tauri::command]
 async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, String> {
     debug!("Starting upload for file: {}", file_path);
 
@@ -610,6 +660,7 @@ async fn main() {
             commands::get_disk_usage,
             commands::open_pipe_window,
             get_log_files,
+            get_media_file,
             upload_file_to_s3,
             update_global_shortcuts,
             get_env,

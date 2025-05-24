@@ -1,5 +1,3 @@
-"use server";
-
 export async function hasFramesForDate(date: Date) {
 	try {
 		// Set up start and end of the day

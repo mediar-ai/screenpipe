@@ -1,5 +1,3 @@
-"use server";
-
 import { isAfter } from "date-fns";
 
 export async function getStartDate() {
