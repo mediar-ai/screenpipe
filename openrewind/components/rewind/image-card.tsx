@@ -110,7 +110,16 @@ export const ImageGrid = ({
 
 	useEffect(() => {
 		const preventScroll = (e: WheelEvent) => {
-			e.preventDefault();
+			const isWithinSettingsDialog = document
+				.querySelector('[data-settings-dialog]')
+				?.contains(e.target as Node);
+			const isWithinDialog = document
+				.querySelector('[role="dialog"]')
+				?.contains(e.target as Node);
+
+			if (!isWithinSettingsDialog && !isWithinDialog) {
+				e.preventDefault();
+			}
 		};
 
 		document.addEventListener("wheel", preventScroll, { passive: false });

@@ -692,8 +692,15 @@ export function RecordingSettings() {
   };
 
   return (
-    <div className="w-full space-y-6 py-4">
-      <h1 className="text-2xl font-bold mb-4">recording</h1>
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          Recording Settings
+        </h1>
+        <p className="text-slate-600 dark:text-slate-400 text-lg">
+          Configure screen and audio recording preferences
+        </p>
+      </div>
       {settings.devMode || (!isUpdating && isDisabled) ? (
         <Alert>
           <Terminal className="h-4 w-4" />

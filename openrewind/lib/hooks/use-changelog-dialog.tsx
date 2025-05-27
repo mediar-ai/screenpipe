@@ -20,7 +20,7 @@ const ChangelogDialogContext = createContext<
 export const ChangelogDialogProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  const [showChangelogDialog, setShowChangelogDialog] = useState(false);
+  const [showChangelogDialog, setShowChangelogDialog] = useState(true);
   const version = useAppVersion();
 
   useEffect(() => {
@@ -30,6 +30,8 @@ export const ChangelogDialogProvider: React.FC<{ children: ReactNode }> = ({
       if (version && (!versionSeen || versionSeen !== version)) {
         setShowChangelogDialog(true);
         await localforage.setItem("versionSeen", version);
+      } else {
+        setShowChangelogDialog(false);
       }
     };
 

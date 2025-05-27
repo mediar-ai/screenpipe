@@ -36,7 +36,7 @@ export function stringToColor(str: string): string {
 }
 
 export const TimelineSlider = ({
-	frames,
+	frames = [],
 	currentIndex,
 	onFrameChange,
 	fetchNextDayData,
@@ -61,18 +61,21 @@ export const TimelineSlider = ({
 	const { setSelectionRange, selectionRange } = useTimelineSelection();
 
 	const visibleFrames = useMemo(() => {
+		if (!frames || frames.length === 0) return [];
 		const start = Math.max(0, currentIndex - 100);
 		const end = Math.min(frames.length, currentIndex + 100);
 		return frames.slice(start, end);
 	}, [frames, currentIndex]);
 
 	const appGroups = useMemo(() => {
+		if (!visibleFrames || visibleFrames.length === 0) return [];
+		
 		const groups: AppGroup[] = [];
 		let currentApp = "";
 		let currentGroup: StreamTimeSeriesResponse[] = [];
 
 		visibleFrames.forEach((frame) => {
-			const appName = frame.devices[0].metadata.app_name;
+			const appName = frame?.devices?.[0]?.metadata?.app_name || 'Unknown';
 			if (appName !== currentApp) {
 				if (currentGroup.length > 0) {
 					groups.push({
@@ -163,7 +166,7 @@ export const TimelineSlider = ({
 	};
 
 	const handleDragOver = (index: number) => {
-		if (isDragging && dragStartIndex !== null) {
+		if (isDragging && dragStartIndex !== null && frames && frames.length > 0) {
 			const start = Math.min(dragStartIndex, index);
 			const end = Math.max(dragStartIndex, index);
 			const newSelection = new Set<number>();
@@ -174,20 +177,20 @@ export const TimelineSlider = ({
 
 			setSelectedIndices(newSelection);
 
-			// Get frame IDs for the selection
+			// Get frame IDs for the selection - add safety check
 			const selectedFrameIds = Array.from(newSelection).map(
-				(i) => frames[i].devices[0].frame_id,
-			);
+				(i) => frames[i]?.devices?.[0]?.frame_id || '',
+			).filter(Boolean);
 
 			// Update selection range with frame IDs
 			setSelectionRange({
-				end: new Date(frames[start].timestamp),
-				start: new Date(frames[end].timestamp),
+				end: new Date(frames[start]?.timestamp || Date.now()),
+				start: new Date(frames[end]?.timestamp || Date.now()),
 				frameIds: selectedFrameIds,
 			});
 
 			if (onSelectionChange) {
-				const selectedFrames = Array.from(newSelection).map((i) => frames[i]);
+				const selectedFrames = Array.from(newSelection).map((i) => frames[i]).filter(Boolean);
 				onSelectionChange(selectedFrames);
 			}
 		}
@@ -240,7 +243,7 @@ export const TimelineSlider = ({
 									frameDate >= selectionRange.start &&
 									frameDate <= selectionRange.end;
 
-								const hasAudio = Boolean(frame.devices[0].audio.length);
+								const hasAudio = Boolean(frame?.devices?.[0]?.audio?.length);
 
 								return (
 									<motion.div
@@ -277,10 +280,10 @@ export const TimelineSlider = ({
 											</div>
 										)}
 										{(hoveredTimestamp === frame.timestamp ||
-											frames[currentIndex].timestamp === frame.timestamp) && (
+											frames[currentIndex]?.timestamp === frame.timestamp) && (
 											<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-6 w-max bg-background border rounded-md px-2 py-1 text-xs shadow-lg">
 												<p className="font-medium">
-													{frame.devices[0].metadata.app_name}
+													{frame?.devices?.[0]?.metadata?.app_name || 'Unknown'}
 												</p>
 												<p className="text-muted-foreground">
 													{new Date(frame.timestamp).toLocaleString()}

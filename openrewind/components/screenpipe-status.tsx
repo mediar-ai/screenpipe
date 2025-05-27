@@ -12,8 +12,9 @@ import { toast } from "./ui/use-toast";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Folder, Activity, Mic } from "lucide-react";
+import { Folder, Activity, Mic, RefreshCw, AlertTriangle } from "lucide-react";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { invoke } from "@tauri-apps/api/core";
 
 import { LogFileButton } from "./log-file-button";
 import { DevModeSettings } from "./dev-mode-settings";
@@ -21,12 +22,15 @@ import { cn } from "@/lib/utils";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import { PermissionButtons } from "./status/permission-buttons";
+import { usePlatform } from "@/lib/hooks/use-platform";
 
 const HealthStatus = ({ className }: { className?: string }) => {
-  const { health } = useHealthCheck();
+  const { health, isServerDown } = useHealthCheck();
   const { isOpen, open, close } = useStatusDialog();
   const { settings, getDataDir } = useSettings();
   const [localDataDir, setLocalDataDir] = useState("");
+  const [isRestarting, setIsRestarting] = useState(false);
+  const { isMac } = usePlatform();
 
   const handleOpenDataDir = async () => {
     try {
@@ -40,6 +44,48 @@ const HealthStatus = ({ className }: { className?: string }) => {
         variant: "destructive",
         duration: 3000,
       });
+    }
+  };
+
+  const handleRestartServer = async () => {
+    setIsRestarting(true);
+    try {
+      toast({
+        title: "restarting server",
+        description: "stopping screenpipe server...",
+        duration: 3000,
+      });
+
+      // Stop the server first
+      await invoke("stop_screenpipe");
+      
+      // Wait a moment for cleanup
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      toast({
+        title: "restarting server",
+        description: "starting screenpipe server...",
+        duration: 3000,
+      });
+
+      // Start the server
+      await invoke("spawn_screenpipe");
+      
+      toast({
+        title: "server restarted",
+        description: "screenpipe server has been restarted successfully.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error("failed to restart server:", error);
+      toast({
+        title: "restart failed",
+        description: "failed to restart screenpipe server. please check the logs.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsRestarting(false);
     }
   };
 
@@ -158,149 +204,209 @@ const HealthStatus = ({ className }: { className?: string }) => {
             </div>
           </DialogHeader>
           <div className="flex-grow overflow-auto">
-            <p className="text-sm mb-4 font-semibold" aria-label="status-message-text">{statusMessage}</p>
-            <div className="space-y-2 text-sm">
-              {/* Screen Recording Status */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      health?.frame_status === "ok"
-                        ? "bg-green-500"
-                        : "bg-red-500"
-                    }`}
-                  />
-                  <span className="text-sm">screen recording</span>
-                  <span className="text-sm text-muted-foreground">
-                    status: {health ? health.frame_status : "error"}, last
-                    update:{" "}
-                    {formatTimestamp(health?.last_frame_timestamp ?? null)}
-                  </span>
+            {isServerDown ? (
+              // Server Down UI
+              <div className="space-y-6">
+                <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  <div>
+                    <p className="text-sm font-semibold text-destructive">
+                      screenpipe server is not running
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      the server appears to be down or not responding
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-shrink-0">
-                  <PermissionButtons type="screen" />
-                </div>
-              </div>
 
-              {/* Audio Recording Status */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      settings.disableAudio
-                        ? "bg-gray-400"
-                        : health?.audio_status === "ok"
-                        ? "bg-green-500"
-                        : "bg-red-500"
-                    }`}
-                  />
-                  <span className="text-sm">audio recording</span>
-                  <span className="text-sm text-muted-foreground">
-                    status:{" "}
-                    {settings.disableAudio
-                      ? "turned off"
-                      : health
-                      ? health.audio_status
-                      : "error"}
-                    , last update:{" "}
-                    {settings.disableAudio
-                      ? "n/a"
-                      : formatTimestamp(health?.last_audio_timestamp ?? null)}
-                  </span>
-                </div>
-                <div className="flex-shrink-0">
-                  <PermissionButtons type="audio" />
-                </div>
-              </div>
-
-              {/* Audio Devices Status */}
-              {!settings.disableAudio && health?.device_status_details && (
-                <div className="mt-1 mb-2 relative">
-                  <div className="flex items-center">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium">server control</h3>
                     <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 p-2"
-                      onClick={() => {
-                        const audioDevicesEl = document.getElementById(
-                          "audio-devices-container"
-                        );
-                        if (audioDevicesEl) {
-                          audioDevicesEl.classList.toggle("hidden");
-                        }
-                      }}
+                      onClick={handleRestartServer}
+                      disabled={isRestarting}
+                      className="flex items-center gap-2"
                     >
-                      <Mic className="h-4 w-4 mr-2" />
-                      <span className="text-xs font-medium">audio devices</span>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="ml-1 h-4 w-4"
-                      >
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
+                      <RefreshCw className={`h-4 w-4 ${isRestarting ? 'animate-spin' : ''}`} />
+                      {isRestarting ? "restarting..." : "restart server"}
                     </Button>
                   </div>
 
-                  <div
-                    id="audio-devices-container"
-                    className="mt-1 max-h-32 bg-background z-10 overflow-y-auto absolute rounded border border-border p-2 hidden"
-                  >
-                    {health.device_status_details
-                      .split(", ")
-                      .map((deviceStatus: string, index: number) => {
-                        const isActive = deviceStatus.includes("active");
-
-                        return (
-                          <div
-                            key={index}
-                            className="flex items-center mb-1 last:mb-0"
-                          >
-                            <div
-                              className={`w-2 h-2 rounded-full mr-2 ${
-                                isActive ? "bg-green-500" : "bg-red-500"
-                              }`}
-                            ></div>
-                            <span className="text-xs">{deviceStatus}</span>
+                  {isMac && (
+                    <div className="space-y-4">
+                      <Separator />
+                      <div>
+                        <h3 className="text-sm font-medium mb-3">check permissions</h3>
+                        <p className="text-xs text-muted-foreground mb-4">
+                          ensure screenpipe has the necessary permissions to function properly
+                        </p>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">screen recording</span>
+                            <PermissionButtons type="screen" />
                           </div>
-                        );
-                      })}
-                  </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">audio recording</span>
+                            <PermissionButtons type="audio" />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">accessibility</span>
+                            <PermissionButtons type="accessibility" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+            ) : (
+              // Normal Status UI
+              <>
+                <p className="text-sm mb-4 font-semibold" aria-label="status-message-text">{statusMessage}</p>
+                <div className="space-y-2 text-sm">
+                  {/* Screen Recording Status */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          health?.frame_status === "ok"
+                            ? "bg-green-500"
+                            : "bg-red-500"
+                        }`}
+                      />
+                      <span className="text-sm">screen recording</span>
+                      <span className="text-sm text-muted-foreground">
+                        status: {health ? health.frame_status : "error"}, last
+                        update:{" "}
+                        {formatTimestamp(health?.last_frame_timestamp ?? null)}
+                      </span>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <PermissionButtons type="screen" />
+                    </div>
+                  </div>
 
-              {/* UI Monitoring Status */}
-              {settings.enableUiMonitoring && (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        health?.ui_status === "ok"
-                          ? "bg-green-500"
-                          : "bg-red-500"
-                      }`}
-                    />
-                    <span className="text-sm">ui monitoring</span>
-                    <span className="text-sm text-muted-foreground">
-                      status: {health?.ui_status}, last update:{" "}
-                      {formatTimestamp(
-                        health ? health.last_ui_timestamp : "error"
-                      )}
-                    </span>
+                  {/* Audio Recording Status */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          settings.disableAudio
+                            ? "bg-gray-400"
+                            : health?.audio_status === "ok"
+                            ? "bg-green-500"
+                            : "bg-red-500"
+                        }`}
+                      />
+                      <span className="text-sm">audio recording</span>
+                      <span className="text-sm text-muted-foreground">
+                        status:{" "}
+                        {settings.disableAudio
+                          ? "turned off"
+                          : health
+                          ? health.audio_status
+                          : "error"}
+                        , last update:{" "}
+                        {settings.disableAudio
+                          ? "n/a"
+                          : formatTimestamp(health?.last_audio_timestamp ?? null)}
+                      </span>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <PermissionButtons type="audio" />
+                    </div>
                   </div>
-                  <div className="flex-shrink-0">
-                    <PermissionButtons type="accessibility" />
-                  </div>
+
+                  {/* Audio Devices Status */}
+                  {!settings.disableAudio && health?.device_status_details && (
+                    <div className="mt-1 mb-2 relative">
+                      <div className="flex items-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 p-2"
+                          onClick={() => {
+                            const audioDevicesEl = document.getElementById(
+                              "audio-devices-container"
+                            );
+                            if (audioDevicesEl) {
+                              audioDevicesEl.classList.toggle("hidden");
+                            }
+                          }}
+                        >
+                          <Mic className="h-4 w-4 mr-2" />
+                          <span className="text-xs font-medium">audio devices</span>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="ml-1 h-4 w-4"
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+                        </Button>
+                      </div>
+
+                      <div
+                        id="audio-devices-container"
+                        className="mt-1 max-h-32 bg-background z-10 overflow-y-auto absolute rounded border border-border p-2 hidden"
+                      >
+                        {health.device_status_details
+                          .split(", ")
+                          .map((deviceStatus: string, index: number) => {
+                            const isActive = deviceStatus.includes("active");
+
+                            return (
+                              <div
+                                key={index}
+                                className="flex items-center mb-1 last:mb-0"
+                              >
+                                <div
+                                  className={`w-2 h-2 rounded-full mr-2 ${
+                                    isActive ? "bg-green-500" : "bg-red-500"
+                                  }`}
+                                ></div>
+                                <span className="text-xs">{deviceStatus}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* UI Monitoring Status */}
+                  {settings.enableUiMonitoring && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            health?.ui_status === "ok"
+                              ? "bg-green-500"
+                              : "bg-red-500"
+                          }`}
+                        />
+                        <span className="text-sm">ui monitoring</span>
+                        <span className="text-sm text-muted-foreground">
+                          status: {health?.ui_status}, last update:{" "}
+                          {formatTimestamp(
+                            health ? health.last_ui_timestamp : "error"
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <PermissionButtons type="accessibility" />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
             <Separator className="my-12" />
             <DevModeSettings localDataDir={localDataDir} />

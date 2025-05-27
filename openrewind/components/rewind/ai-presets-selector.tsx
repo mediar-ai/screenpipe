@@ -716,6 +716,7 @@ interface AIPresetDialogProps {
 interface AIPresetsSelectorProps {
   recommendedPresets?: RecommendedPreset[];
   shortcutKey?: string;
+  onPresetChange?: (preset: AIPreset) => void;
 }
 
 export const AIPresetDialog = ({
@@ -781,6 +782,7 @@ export const AIPresetDialog = ({
 export const AIPresetsSelector = ({
   recommendedPresets,
   shortcutKey = "/",
+  onPresetChange,
 }: AIPresetsSelectorProps) => {
   const { settings, updateSettings } = useSettings();
   const [open, setOpen] = useState(false);
@@ -793,9 +795,17 @@ export const AIPresetsSelector = ({
 
   const selectedPreset = useMemo(() => {
     // Use the first preset or default preset
-    const defaultPreset = settings?.aiPresets?.find(preset => preset.defaultPreset);
-    return defaultPreset?.id || settings?.aiPresets?.[0]?.id;
+    const defaultPreset = settings?.aiPresets?.find(
+      (preset) => preset.defaultPreset,
+    );
+    return defaultPreset?.id || settings?.aiPresets?.[0]?.id || undefined;
   }, [settings?.aiPresets]);
+
+  useEffect(() => {
+    if (onPresetChange) {
+      onPresetChange(aiPresets.find((p) => p.id === selectedPreset) as AIPreset);
+    }
+  }, [selectedPreset, onPresetChange]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

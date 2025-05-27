@@ -839,38 +839,58 @@ export const AIPresets = () => {
 
   if (!settings.aiPresets?.length) {
     return (
-      <div className="w-full h-[400px] flex flex-col items-center justify-center space-y-4">
-        <Settings2 className="w-12 h-12 text-muted-foreground" />
-        <h2 className="text-xl font-medium text-muted-foreground">
-          no presets yet
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          create your first ai preset to get started
-        </p>
-        <Button onClick={() => setCreatePresentDialog(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          create preset
-        </Button>
+      <div className="space-y-8">
+        <div className="space-y-3">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            AI Settings
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400 text-lg">
+            Configure AI models, prompts, and processing preferences
+          </p>
+        </div>
+        
+        <div className="w-full h-[400px] flex flex-col items-center justify-center space-y-4">
+          <Settings2 className="w-12 h-12 text-muted-foreground" />
+          <h2 className="text-xl font-medium text-muted-foreground">
+            No AI presets yet
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Create your first AI preset to get started with intelligent features
+          </p>
+          <Button onClick={() => setCreatePresentDialog(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create Preset
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full space-y-6 py-4">
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          AI Settings
+        </h1>
+        <p className="text-slate-600 dark:text-slate-400 text-lg">
+          Configure AI models, prompts, and processing preferences
+        </p>
+      </div>
+      
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">ai settings</h1>
+        <div></div>
         <Button onClick={() => setCreatePresentDialog(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          create preset
+          Create Preset
         </Button>
       </div>
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6">
         {settings.aiPresets.map((preset) => {
           const isDefault = preset.defaultPreset;
           return (
             <Card
               key={preset.id}
-              className="p-4 relative group transition-all hover:shadow-md"
+              className="p-6 relative group transition-all hover:shadow-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
             >
               <div
                 className="flex justify-between items-start cursor-pointer"

@@ -72,7 +72,7 @@ export function AIPanel({
 	const { selectionRange, setSelectionRange } = useTimelineSelection();
 	const isAvailable = settings.aiPresets && settings.aiPresets.length > 0;
 	const error = !isAvailable ? "No AI presets configured" : "";
-	const [activePreset, setActivePreset] = useState<AIPreset | null>(null);
+	const [activePreset, setActivePreset] = useState<AIPreset | undefined>(undefined);
 
 	// Add abort controller ref
 	const abortControllerRef = useRef<AbortController | null>(null);
@@ -93,7 +93,7 @@ export function AIPanel({
 		};
 
 		const activePreset = settings.aiPresets.find((p) => p.defaultPreset);
-		setActivePreset(activePreset || null);
+		setActivePreset(activePreset || undefined);
 
 		setOsType(detectOS());
 	}, []);
@@ -281,13 +281,17 @@ export function AIPanel({
 					new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
 			);
 
+			if (!activePreset) return;
+
+			const apiKey =
+			activePreset?.provider === "screenpipe-cloud"
+				? settings.user?.token || ""
+				: "apiKey" in activePreset
+					? (activePreset?.apiKey as string) || ""
+					: "";
+
 			const openai = new OpenAI({
-				apiKey:
-					activePreset?.provider === "openai"
-						? activePreset.apiKey
-						: activePreset?.provider === "custom"
-						? activePreset.apiKey
-						: "",
+				apiKey: apiKey,
 				baseURL: activePreset?.url,
 				dangerouslyAllowBrowser: true,
 			});
@@ -433,7 +437,9 @@ export function AIPanel({
 					>
 						<div className="flex flex-col gap-2">
 							<div>
-								<AIPresetsSelector />
+								<AIPresetsSelector
+									onPresetChange={setActivePreset}
+								/>
 							</div>
 							<div className="flex items-center gap-2">
 								<TooltipProvider>

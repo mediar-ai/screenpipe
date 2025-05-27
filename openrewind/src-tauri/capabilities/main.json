@@ -112,7 +112,11 @@
           "requireLiteralLeadingDot": false
         },
         {
-          "path": "$HOME/.screenpipe/pipes/**",
+          "path": "$HOME/.openrewind/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$RESOURCE/.openrewind/**",
           "requireLiteralLeadingDot": false
         }
       ]

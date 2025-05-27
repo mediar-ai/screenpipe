@@ -194,8 +194,11 @@ export default function Timeline() {
 			const isWithinTimelineDialog = document
 				.querySelector('[role="dialog"]')
 				?.contains(e.target as Node);
+			const isWithinSettingsDialog = document
+				.querySelector('[data-settings-dialog]')
+				?.contains(e.target as Node);
 
-			if (!isWithinAiPanel && !isWithinAudioPanel && !isWithinTimelineDialog) {
+			if (!isWithinAiPanel && !isWithinAudioPanel && !isWithinTimelineDialog && !isWithinSettingsDialog) {
 				e.preventDefault();
 			}
 		};

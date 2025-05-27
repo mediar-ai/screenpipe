@@ -31,8 +31,15 @@ const ShortcutSection = () => {
   }, []);
 
   return (
-    <div className="w-full space-y-6 py-4">
-      <h1 className="text-2xl font-bold">shortcuts</h1>
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          Shortcuts
+        </h1>
+        <p className="text-slate-600 dark:text-slate-400 text-lg">
+          Configure keyboard shortcuts for quick access to features
+        </p>
+      </div>
 
       <div className="space-y-6">
         <ShortcutRow

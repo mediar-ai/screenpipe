@@ -12,7 +12,7 @@ import {
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import posthog from "posthog-js";
 import localforage from "localforage";
 
@@ -132,7 +132,6 @@ export type Settings = {
 	useAllMonitors: boolean;
 	aiPresets: AIPreset[];
 	enableRealtimeVision: boolean;
-	autoUpdatePipes: boolean;
 };
 
 export const DEFAULT_PROMPT = `Rules:
@@ -146,7 +145,7 @@ const DEFAULT_SETTINGS: Settings = {
 	aiPresets: [],
 	openaiApiKey: "",
 	deepgramApiKey: "", // for now we hardcode our key (dw about using it, we have bunch of credits)
-	isLoading: true,
+	isLoading: false,
 	aiModel: "gpt-4o",
 	installedPipes: [],
 	userId: "",
@@ -201,7 +200,6 @@ const DEFAULT_SETTINGS: Settings = {
 	disableVision: false,
 	useAllMonitors: false,
 	enableRealtimeVision: true,
-	autoUpdatePipes: false, // Default to false for auto-updating pipes
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -245,6 +243,49 @@ export interface StoreModel {
 	resetSetting: Action<StoreModel, keyof Settings>;
 }
 
+// Validate and sanitize settings to prevent corruption
+function validateSettings(settings: any): Settings {
+	const defaultSettings = createDefaultSettingsObject();
+	
+	// Ensure all required fields exist with proper types
+	const validatedSettings: Settings = {
+		...defaultSettings,
+		...settings,
+	};
+
+	// Validate specific fields that are critical
+	if (!Array.isArray(validatedSettings.monitorIds)) {
+		validatedSettings.monitorIds = defaultSettings.monitorIds;
+	}
+	
+	if (!Array.isArray(validatedSettings.audioDevices)) {
+		validatedSettings.audioDevices = defaultSettings.audioDevices;
+	}
+	
+	if (!Array.isArray(validatedSettings.ignoredWindows)) {
+		validatedSettings.ignoredWindows = defaultSettings.ignoredWindows;
+	}
+	
+	if (!Array.isArray(validatedSettings.includedWindows)) {
+		validatedSettings.includedWindows = defaultSettings.includedWindows;
+	}
+	
+	if (!Array.isArray(validatedSettings.aiPresets)) {
+		validatedSettings.aiPresets = defaultSettings.aiPresets;
+	}
+
+	// Validate numeric fields
+	if (typeof validatedSettings.fps !== 'number' || validatedSettings.fps < 0) {
+		validatedSettings.fps = defaultSettings.fps;
+	}
+	
+	if (typeof validatedSettings.port !== 'number' || validatedSettings.port < 1000) {
+		validatedSettings.port = defaultSettings.port;
+	}
+
+	return validatedSettings;
+}
+
 export function createDefaultSettingsObject(): Settings {
 	let defaultSettings = { ...DEFAULT_SETTINGS };
 	try {
@@ -275,6 +316,16 @@ export function createDefaultSettingsObject(): Settings {
 // Create a singleton store instance
 let storePromise: Promise<LazyStore> | null = null;
 
+// Debounce mechanism for saving settings
+let saveTimeout: NodeJS.Timeout | null = null;
+const SAVE_DEBOUNCE_MS = 500;
+
+// Track if settings have been loaded from storage at least once
+let hasLoadedFromStorage = false;
+
+// Helper function to check if settings are ready to use
+export const areSettingsReady = () => hasLoadedFromStorage;
+
 /**
  * @warning Do not change autoSave to true, it causes race conditions
  */
@@ -282,7 +333,7 @@ export const getStore = async () => {
 	if (!storePromise) {
 		storePromise = (async () => {
 			const dir = await localDataDir();
-			const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`, {
+			const profilesStore = new TauriStore(`${dir}/openrewind/profiles.bin`, {
 				autoSave: false,
 			});
 			const activeProfile =
@@ -292,7 +343,7 @@ export const getStore = async () => {
 					? `store.bin`
 					: `store-${activeProfile}.bin`;
 			console.log("activeProfile", activeProfile, file);
-			return new TauriStore(`${dir}/screenpipe/${file}`, {
+			return new TauriStore(`${dir}/openrewind/${file}`, {
 				autoSave: false,
 			});
 		})();
@@ -302,36 +353,80 @@ export const getStore = async () => {
 
 const tauriStorage: PersistStorage = {
 	getItem: async (_key: string) => {
-		const tauriStore = await getStore();
-		const allKeys = await tauriStore.keys();
-		const values: Record<string, any> = {};
+		try {
+			const tauriStore = await getStore();
+			const allKeys = await tauriStore.keys();
+			const values: Record<string, any> = {};
 
-		for (const k of allKeys) {
-			values[k] = await tauriStore.get(k);
+			for (const k of allKeys) {
+				try {
+					values[k] = await tauriStore.get(k);
+				} catch (error) {
+					console.warn(`Failed to get key ${k}:`, error);
+					// Continue with other keys if one fails
+				}
+			}
+
+			const settings = unflattenObject(values);
+			
+			// Validate and sanitize the loaded settings
+			const validatedSettings = validateSettings(settings);
+			
+			// Mark that we've successfully loaded from storage
+			hasLoadedFromStorage = true;
+
+			return { settings: validatedSettings };
+		} catch (error) {
+			console.error("Failed to load settings, using defaults:", error);
+			// Return default settings if loading fails completely
+			return { settings: createDefaultSettingsObject() };
 		}
-
-		return { settings: unflattenObject(values) };
 	},
 	setItem: async (_key: string, value: any) => {
 		const tauriStore = await getStore();
 
-		delete value.settings.customSettings;
-		const flattenedValue = flattenObject(value.settings);
+		try {
+			delete value.settings.customSettings;
+			
+			// Validate settings before saving
+			const validatedSettings = validateSettings(value.settings);
+			const flattenedValue = flattenObject(validatedSettings);
 
-		// Only delete keys that are present in the new settings
-		for (const key of Object.keys(flattenedValue)) {
-			await tauriStore.delete(key);
+			// Get existing keys to know what to clean up
+			const existingKeys = await tauriStore.keys();
+			
+			// Set new flattened values first
+			for (const [key, val] of Object.entries(flattenedValue)) {
+				if (!key || !key.length) continue;
+				const defaultValue =
+					key in DEFAULT_SETTINGS ? DEFAULT_SETTINGS[key as keyof Settings] : "";
+				await tauriStore.set(key, val === undefined ? defaultValue : val);
+			}
+
+			// Only delete keys that are no longer in the new settings
+			const newKeys = Object.keys(flattenedValue);
+			for (const existingKey of existingKeys) {
+				if (!newKeys.includes(existingKey)) {
+					await tauriStore.delete(existingKey);
+				}
+			}
+
+			// Debounce the save operation to prevent race conditions
+			if (saveTimeout) {
+				clearTimeout(saveTimeout);
+			}
+			
+			saveTimeout = setTimeout(async () => {
+				try {
+					await tauriStore.save();
+				} catch (error) {
+					console.error("Failed to save store:", error);
+				}
+			}, SAVE_DEBOUNCE_MS);
+		} catch (error) {
+			console.error("Failed to save settings:", error);
+			// Don't throw to prevent breaking the app, but log the error
 		}
-
-		// Set new flattened values
-		for (const [key, val] of Object.entries(flattenedValue)) {
-			if (!key || !key.length) continue;
-			const defaultValue =
-				key in DEFAULT_SETTINGS ? DEFAULT_SETTINGS[key as keyof Settings] : "";
-			await tauriStore.set(key, val === undefined ? defaultValue : val);
-		}
-
-		await tauriStore.save();
 	},
 	removeItem: async (_key: string) => {
 		const tauriStore = await getStore();
@@ -376,6 +471,64 @@ export function useSettings() {
 		(actions) => actions.resetSettings,
 	);
 	const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
+
+	// Track if settings have been loaded from storage
+	const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
+	const [loadingError, setLoadingError] = useState<string | null>(null);
+
+	// Initialize settings loading on mount
+	useEffect(() => {
+		const initializeSettings = async () => {
+			try {
+				// Add timeout to prevent hanging
+				const timeoutPromise = new Promise((_, reject) => {
+					setTimeout(() => reject(new Error("Settings loading timeout")), 5000);
+				});
+
+				const loadPromise = (async () => {
+					// Force a reload from storage to ensure we have the latest settings
+					const store = await getStore();
+					const allKeys = await store.keys();
+					
+					if (allKeys.length > 0) {
+						// Settings exist in storage, load them
+						const values: Record<string, any> = {};
+						for (const k of allKeys) {
+							try {
+								values[k] = await store.get(k);
+							} catch (error) {
+								console.warn(`Failed to get key ${k}:`, error);
+							}
+						}
+						
+						const loadedSettings = unflattenObject(values);
+						const validatedSettings = validateSettings(loadedSettings);
+						
+						// Only update if the loaded settings are different from current
+						if (JSON.stringify(validatedSettings) !== JSON.stringify(settings)) {
+							setSettings(validatedSettings);
+						}
+					} else {
+						console.log("No existing settings found, using defaults");
+					}
+				})();
+
+				await Promise.race([loadPromise, timeoutPromise]);
+				
+				setIsSettingsLoaded(true);
+				setLoadingError(null);
+			} catch (error) {
+				console.error("Failed to initialize settings:", error);
+				setLoadingError(error instanceof Error ? error.message : "Unknown error");
+				setIsSettingsLoaded(true); // Still mark as loaded to prevent infinite loading
+			}
+		};
+
+		// Only initialize if not already loaded
+		if (!isSettingsLoaded) {
+			initializeSettings();
+		}
+	}, [isSettingsLoaded, setSettings]);
 
 	useEffect(() => {
 		if (settings.user?.id) {
@@ -489,5 +642,7 @@ export function useSettings() {
 		loadUser,
 		resetSetting,
 		getDataDir,
+		isSettingsLoaded,
+		loadingError,
 	};
 }

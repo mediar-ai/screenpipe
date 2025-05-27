@@ -739,11 +739,6 @@ async fn main() {
             // Initialize default store values if empty
             if store.is_empty() {
                 store.set("analyticsEnabled".to_string(), Value::Bool(true));
-                store.set(
-                    "config".to_string(),
-                    serde_json::to_value(Config::default())?,
-                );
-                store.save()?;
             }
 
             // Ensure store is saved and managed

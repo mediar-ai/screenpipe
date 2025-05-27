@@ -1,127 +1,159 @@
 import React from "react";
-import { HelpCircle, Info } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
+import { Button } from "@/components/ui/button";
+import { RainbowButton } from "../ui/rainbow-button";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  CheckCircle,
+  Play,
+  Search,
+  MessageSquare,
+  ArrowRight,
+  Sparkles,
+} from "lucide-react";
+import OnboardingNavigation from "@/components/onboarding/navigation";
+import { motion } from "framer-motion";
 
 interface OnboardingInstructionsProps {
   className?: string;
-  handlePrevSlide: () => void;
   handleNextSlide: () => void;
+  handlePrevSlide: () => void;
 }
 
 const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
-  className = "",
-  handlePrevSlide,
+  className,
   handleNextSlide,
+  handlePrevSlide,
 }) => {
+  const features = [
+    {
+      icon: Play,
+      title: "Recording Started",
+      description: "OpenRewind is now capturing your screen and audio",
+      status: "active"
+    },
+    {
+      icon: Search,
+      title: "Timeline Ready",
+      description: "View and navigate through your recorded activities",
+      status: "ready"
+    },
+    {
+      icon: MessageSquare,
+      title: "AI Assistant",
+      description: "Ask questions about your recorded data",
+      status: "ready"
+    }
+  ];
+
+  const quickTips = [
+    "Use the timeline at the bottom to navigate through your day",
+    "Scroll through your screen recordings with your mouse wheel",
+    "Click the AI panel to ask questions about what you've recorded",
+    "Audio transcriptions will appear automatically for meetings and calls"
+  ];
+
   return (
-    <div className={`${className} w-full flex justify-center flex-col overflow-y-auto`}>
-      <DialogHeader className="flex flex-col px-2 justify-center items-center">
-        <img
-          className="w-24 h-24 justify-center"
-          src="/128x128.png"
-          alt="screenpipe-logo"
-        />
-        <DialogTitle className="text-center text-2xl">
-          screenpipe tips
+    <div className={`${className} flex flex-col h-full`}>
+      <DialogHeader className="flex flex-col px-2 justify-center items-center mb-6">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          className="relative"
+        >
+          <img
+            className="w-20 h-20 justify-center mb-4"
+            src="/128x128.png"
+            alt="openrewind-logo"
+          />
+          <div className="absolute -top-2 -right-2">
+            <CheckCircle className="w-8 h-8 text-green-500 bg-white rounded-full" />
+          </div>
+        </motion.div>
+        
+        <DialogTitle className="text-center text-2xl font-bold">
+          You&apos;re all set! 🎉
         </DialogTitle>
+        <p className="text-center text-muted-foreground mt-2 max-w-md">
+          OpenRewind is ready to help you remember, find, and understand everything you do on your computer.
+        </p>
       </DialogHeader>
-      <div className="flex justify-center">
-        <div className="h-[1px] w-40 rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
-        <div className="h-[1px] w-40 rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
-      </div>
-      <div className="mt-2 w-full flex justify-around flex-col ">
-        <div className="mx-4 mb-2">
-          <h2 className="font-semibold text-md">search functionality:</h2>
-          <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
-              on screenpipe&apos;s main menu,
-            </span>
-            you&apos;ll find an advanced search interface to query your 24/7 screen & mic recordings. it
-            lets you select specific results for ai summarization and chatting,
-            providing valuable insights.
-            <br />
-            use cases:
-            <ul>
-              <li>- meeting or general conversation summaries</li>
-              <li>- activity summaries (youtube, browsing, etc.)</li>
-              <li>- education (lecture, tutorial, etc.)</li>
-              <li>- etc.</li>
-            </ul>
+
+      <div className="flex-1 flex flex-col items-center justify-center space-y-6">
+        {/* Status Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl">
+          {features.map((feature, index) => (
+            <motion.div
+              key={index}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+              className="bg-card border rounded-xl p-4 text-center"
+            >
+              <div className="flex items-center justify-center mb-3">
+                <feature.icon className="w-8 h-8 text-primary" />
+                {feature.status === "active" && (
+                  <div className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                )}
+              </div>
+              <h3 className="font-semibold text-sm mb-1">{feature.title}</h3>
+              <p className="text-xs text-muted-foreground">{feature.description}</p>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Quick Tips */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-xl p-6 max-w-2xl"
+        >
+          <div className="flex items-center justify-center mb-4">
+            <Sparkles className="w-5 h-5 text-orange-500 mr-2" />
+            <h3 className="text-lg font-semibold">Quick Tips</h3>
+          </div>
+          <ul className="space-y-2 text-sm">
+            {quickTips.map((tip, index) => (
+              <li key={index} className="flex items-start">
+                <div className="w-2 h-2 bg-primary rounded-full mt-2 mr-3 flex-shrink-0" />
+                <span className="text-muted-foreground">{tip}</span>
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+
+        {/* Next Steps */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="text-center"
+        >
+          <p className="text-sm text-muted-foreground mb-4">
+            Start using your computer normally. OpenRewind will build your timeline in the background.
           </p>
-        </div>
-        <div className="flex justify-center">
-          <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
-          <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
-        </div>
-        <div className="mx-4 mb-2">
-          <h2 className="font-medium text-md">status menu:</h2>
-          <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
-              screenpipe status menu serves
-            </span>
-            as a health and process monitor and allows you to adjust advanced
-            preferences for the recording processes
-          </p>
-        </div>
-        <div className="flex justify-center">
-          <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
-          <div className="h-[1px] w-[80%] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
-        </div>
-        <div className="mx-4 mb-2">
-          <h2 className="font-medium text-md">settings menu:</h2>
-          <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
-              the settings menu,
-            </span>
-            is where you can configure various options like recording
-            settings and ai preferences
-          </p>
-        </div>
-        <div className="flex justify-center">
-          <div className="h-[1px] w-40 rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
-          <div className="h-[1px] w-40 rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
-        </div>
-        <div className="mx-4">
-          <h2 className="font-medium text-md">
-            meetings tracking (experimental):
-          </h2>
-          <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
-              this features of screenpipe
-            </span>
-            tracks your meetings and generates
-            summaries for you using ai
-          </p>
-        </div>
-        <div className="mx-4">
-          <h2 className="font-medium text-md">pipe store (experimental):</h2>
-          <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium text-nowrap text-[14px] prose mr-1">
-              this features of screenpipe
-            </span>
-            extend your 24/7 data through plugins you can install in seconds,
-            create, share and sell your own
-          </p>
-        </div>
+          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              💡 <strong>Pro tip:</strong> Come back in a few minutes to see your first recorded activities!
+            </p>
+          </div>
+        </motion.div>
       </div>
 
-      <div className="h-[100px] my-16" />
-
-      <OnboardingNavigation
-        className="mt-8"
-        handlePrevSlide={handlePrevSlide}
-        handleNextSlide={handleNextSlide}
-        prevBtnText="previous"
-        nextBtnText="next"
-      />
+      <div className="flex justify-center gap-4 mt-6">
+        <Button
+          variant="ghost"
+          onClick={handlePrevSlide}
+          className="text-muted-foreground"
+        >
+          Back
+        </Button>
+        <RainbowButton onClick={handleNextSlide}>
+          Start Using OpenRewind
+          <ArrowRight className="w-4 h-4 ml-2" />
+        </RainbowButton>
+      </div>
     </div>
   );
 };
