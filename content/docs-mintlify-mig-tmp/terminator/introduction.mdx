@@ -6,80 +6,52 @@ import { Card, CardGroup } from '@mintlify/components';
 
 ## overview
 
-**terminator** is an ai-first cross-platform ui automation library for rust, designed to interact with native gui applications on windows and macos using a playwright-like api via **python** or **typescript** sdks.
+**terminator** is an ai-native gui automation sdk that lets ai agents see and control native desktop apps like they were web pages. automate desktop apps like a browser with fast, reliable, agent-ready automation for windows.
 
-it provides a unified api to find and control ui elements like buttons, text fields, windows, and more, enabling the creation of automation scripts, testing tools, and assistive technologies.
+because it uses accessibility apis, it is **100x faster and more reliable** for ai computer use than vision-based approaches like openai operator or anthropic computer use.
 
-because it's using os level apis, it is **100x faster and more reliable** for ai computer use than vision-based approaches like openai operator or anthropic computer use. acting at a lower level than a browser, it can easily drop-in replace browser automation tools like playwright for native application tasks.
+> **Note:** built for windows with partial macos support.
 
-> **Note:** while we support macos and windows, we are currently focusing development efforts on windows. macos support is functional but may require more investigation for complex scenarios.
+## benchmarks
+
+the [benchmark test](https://github.com/mediar-ai/terminator/blob/main/terminator/src/tests/e2e_tests.rs) illustrates how fast terminator can query the ui. it finds all edit elements in about **80 ms**, showcasing a big speed advantage over vision-based tools.
+
+this [form-filling app](https://www.mediar.ai/) can read & fill forms as soon as you see them in <1s end-to-end using gemini.
 
 ## features
 
 <CardGroup cols={2}>
-  <Card title="Cross-Platform">
-    Experimentally supports **Windows** and **macOS** with a consistent api.
+  <Card title="AI-Native">
+    Built for **Windows** with playwright-style api for python, typescript, and rust.
   </Card>
-  <Card title="Application Control">
-    Find running applications (by name, pid), open new applications, open URLs.
+  <Card title="Fast & Reliable">
+    Uses accessibility apis for 100x faster automation vs vision-based tools.
   </Card>
   <Card title="Element Discovery">
-    Locate UI elements using various strategies (`Selector` enum):
-    - Role (e.g., "button", "textfield", "AXButton")
-    - Name (accessibility label/title)
-    - Value
-    - Description
-    - AutomationId (Windows)
-    - Id (internal unique id)
-    - Text content (partial matches)
+    Find ui elements by role, name, value, description, automationid, or text content.
   </Card>
-  <Card title="Element Interaction">
-    - Click, double-click, right-click
-    - Type text, set value, press keys (e.g., `{Enter}`, `{Cmd}`, `{Alt}`)
-    - Focus, hover
-    - Scroll (up, down, left, right)
-    - Retrieve text content, attributes (value, role, description, bounds, properties)
-    - Check state (enabled, visible, focused)
-  </Card>
-  <Card title="Element Hierarchy">
-    Traverse the accessibility tree (children, parent).
-  </Card>
-    <Card title="Debugging">
-    Optional verbose logging and accessibility inspector integration (like [Accessibility Insights](https://accessibilityinsights.io/downloads/)) for easier debugging.
+  <Card title="Full Interaction">
+    Click, type, scroll, press keys, get text, check state - everything you need.
   </Card>
 </CardGroup>
 
-## platform support
-
-*   ✅ **windows** (using ui automation)
-*   ✅ **macos** (using accessibility api)
-*   🐧 **linux** (planned/experimental)
-
-## use cases & potential experiments
-
-*   **ai-driven automation loop:** an ai agent observes an application's state using terminator, generates sdk code to interact, executes it, and observes the result, enabling complex, adaptive automation (e.g., data entry, testing, user support).
-*   **pdf to legacy form filler:** extract data from pdfs and use terminator to fill it into legacy applications lacking modern apis.
-*   **javascript/typescript integration:** integrate terminator into web tools or electron apps using the [TypeScript SDK](/terminator/sdk-reference).
-*   **python scripting:** build powerful automation scripts and integrate with other python libraries using the [Python SDK](/terminator/python-sdk-reference).
-*   **replacing vision models:** achieve significantly faster and more reliable ui automation compared to slower, error-prone vision-based models for tasks where accessibility apis are available.
-
 ## demos
 
-high level demo:
+check out terminator in action:
 
-<video controls src="https://github.com/user-attachments/assets/024c06fa-19f2-4fc9-b52d-329768ee52d0"></video>
-
-dev demo 1:
-
-<video controls src="https://github.com/user-attachments/assets/890d6842-782c-4b2b-8920-224bd63c4545"></video>
-
-dev demo 2:
-
-<video controls src="https://github.com/user-attachments/assets/c9f472f7-79ed-49c6-a4d0-93608fa1ce55"></video>
+- [📹 desktop copilot that autocompletes your work in real time](https://www.youtube.com/watch?v=FGywvWJY7wc)
+- [📹 ai agent that process 100 insurance claims in 5 minutes](https://www.youtube.com/watch?v=6wMNNQFj_dw)
+- [📹 technical overview video](https://youtu.be/ycS9G_jpl04)
+- [📹 technical overview: pdf to windows legacy app form](https://www.youtube.com/watch?v=CMw3iexyCMI)
 
 ## next steps
 
 ready to start? head over to the [Getting Started](/terminator/getting-started) guide, then dive into the sdk references:
 
 *   [Python SDK Reference](/terminator/python-sdk-reference)
-*   [TypeScript SDK Reference](/terminator/sdk-reference)
+*   [TypeScript SDK Reference](/terminator/js-sdk-reference)
+
+## explore further
+
+*   **vercel ai sdk example:** learn how to use terminator with ai in the [pdf-to-form example](https://github.com/mediar-ai/terminator/tree/main/examples/pdf-to-form).
+*   **mcp:** discover [how to vibe work using mcp](https://github.com/mediar-ai/terminator/tree/main/mcp).

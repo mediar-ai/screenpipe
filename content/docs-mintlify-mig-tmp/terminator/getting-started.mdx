@@ -2,7 +2,9 @@
 title: 'Terminator: Getting Started'
 ---
 
-## installation
+## ⚡ hello world — quick start
+
+> skip the boilerplate. this is the fastest way to feel the magic.
 
 first, clone the terminator repository:
 
@@ -11,28 +13,36 @@ git clone https://github.com/mediar-ai/terminator
 cd terminator
 ```
 
-## running the server
-
-**terminator** works with a client-server architecture. you need to run the rust server first. this server listens for commands from the sdk (typescript, python) and interacts with the operating system's accessibility apis.
+### 🐍 python
 
 ```bash
-powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1
-./server_release/server.exe --debug
+pip install maturin
+cd bindings/python
+maturin develop
 ```
 
-the `--debug` flag enables verbose logging, which is helpful when starting out.
+```python
+import terminator
+desktop = terminator.Desktop()
+print(desktop.hello())  # → "Hello from Terminator"
+```
 
-**run an example client (in another terminal):**
+### 🟦 typescript / node.js
 
 ```bash
-cd examples/hello-world
-npm i
-npm run dev
-# open http://localhost:3000
+cd bindings/nodejs
+npm install
+npm run build
+```
+
+```typescript
+const { Desktop } = require('./bindings/nodejs/index.js');
+const desktop = new Desktop();
+console.log(desktop.hello()); // → "Hello from Terminator"
 ```
 
 ## next steps
 
 *   explore the sdk references ([TypeScript](/terminator/js-sdk-reference), [Python](/terminator/python-sdk-reference)) to understand all available commands.
-*   look at the `examples/` directory for more usage patterns.
+*   check out the [pdf-to-form example](https://github.com/mediar-ai/terminator/tree/main/examples/pdf-to-form) to see terminator with ai.
 *   start building your own automation scripts! 
