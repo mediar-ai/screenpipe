@@ -1455,7 +1455,13 @@ async function extractTarball(buffer, tempDir, targetSubdir) {
         extractedDirName = parts[0];
       }
       if (header.name.includes(`/${targetSubdir}/`) || header.name.endsWith(`/${targetSubdir}`)) {
-        const filePath = path3.join(tempDir, header.name);
+        const resolvedPath = path3.resolve(tempDir, header.name);
+        if (!resolvedPath.startsWith(tempDir)) {
+          console.warn(`Skipping potentially unsafe path: ${header.name}`);
+          stream.resume();
+          return next();
+        }
+        const filePath = resolvedPath;
         if (header.type === "directory") {
           await fs4.ensureDir(filePath);
           stream.resume();
