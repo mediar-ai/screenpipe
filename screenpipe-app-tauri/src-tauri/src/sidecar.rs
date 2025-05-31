@@ -1,6 +1,6 @@
 use crate::get_store;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::Arc;
 use tauri::Emitter;
 use tauri::{Manager, State};
@@ -80,6 +80,27 @@ pub async fn stop_screenpipe(
     state: State<'_, SidecarState>,
     _app: tauri::AppHandle,
 ) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let server_url = "http://localhost:3030/pipes/stop-all"; // or /shutdown if you want full shutdown
+    //
+    match client.post(server_url)
+        .header("Content-Type", "application/json")
+        .json(&json!({})) // Empty JSON object
+        .send().await {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                debug!("Successfully sent stop request to screenpipe");
+                info!("Server responded with status: {}", resp.status());
+                info!("Server response: {:?}", resp.text().await);
+            } else {
+                error!("Server responded with error: {}", resp.status());
+            }
+        }
+        Err(e) => {
+            error!("Failed to send request: {}", e);
+        }
+    }
+
     debug!("Killing screenpipe");
 
     #[cfg(target_os = "macos")]
