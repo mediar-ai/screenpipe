@@ -51,6 +51,7 @@ import {
 } from "./ui/select";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
+import { AIPreset } from "@/lib/utils/tauri";
 
 export const Icons = {
   openai: (props: any) => (
@@ -69,32 +70,6 @@ export const Icons = {
   spinner: Loader2,
 };
 
-interface BaseAIPreset {
-  id: string;
-  maxContextChars: number;
-  url: string;
-  model: string;
-  defaultPreset: boolean;
-  prompt: string;
-}
-
-type AIPreset = BaseAIPreset &
-  (
-    | {
-        provider: "openai";
-        apiKey: string;
-      }
-    | {
-        provider: "native-ollama";
-      }
-    | {
-        provider: "screenpipe-cloud";
-      }
-    | {
-        provider: "custom";
-        apiKey?: string;
-      }
-  );
 
 interface BaseRecommendedPreset {
   id: string;
@@ -117,28 +92,9 @@ type RecommendedPreset = BaseRecommendedPreset &
   );
 
 interface AIProviderConfigProps {
-  onSubmit: (data: AIProviderData) => void;
-  defaultPreset?: {
-    provider: "openai" | "native-ollama" | "custom" | "screenpipe-cloud";
-    apiKey?: string;
-    baseUrl?: string;
-    modelName?: string;
-    maxContextChars?: number;
-    prompt?: string;
-    id?: string;
-  };
+  onSubmit: (data: AIPreset) => void;
+  defaultPreset?: AIPreset;
 }
-
-interface AIProviderData {
-  provider: "openai" | "native-ollama" | "custom" | "screenpipe-cloud";
-  apiKey?: string;
-  baseUrl?: string;
-  modelName?: string;
-  maxContextChars?: number;
-  prompt?: string;
-  id?: string;
-}
-
 interface OpenAIModel {
   id: string;
   created?: number;
@@ -157,7 +113,7 @@ export function AIProviderConfig({
   defaultPreset,
 }: AIProviderConfigProps) {
   const [selectedProvider, setSelectedProvider] = useState<
-    AIProviderData["provider"]
+    AIPreset["provider"]
   >(defaultPreset?.provider || "openai");
   const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
@@ -165,14 +121,15 @@ export function AIProviderConfig({
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [idError, setIdError] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [formData, setFormData] = useState<AIProviderData>({
+  const [formData, setFormData] = useState<AIPreset>({
     provider: defaultPreset?.provider || "openai",
     apiKey: defaultPreset?.apiKey || "",
-    baseUrl: defaultPreset?.baseUrl || "",
-    modelName: defaultPreset?.modelName || "",
+    url: defaultPreset?.url || "",
+    model: defaultPreset?.model || "",
     maxContextChars: defaultPreset?.maxContextChars || 512000,
     prompt: defaultPreset?.prompt || DEFAULT_PROMPT,
     id: defaultPreset?.id || "",
+    defaultPreset: defaultPreset?.defaultPreset || false,
   });
 
   const validateId = (id: string | undefined): boolean => {
@@ -272,12 +229,12 @@ export function AIProviderConfig({
       );
     } else if (
       selectedProvider === "custom" &&
-      formData.baseUrl &&
+      formData.url &&
       formData.apiKey
     ) {
-      fetchOpenAIModels(formData.baseUrl, formData.apiKey);
+      fetchOpenAIModels(formData.url, formData.apiKey);
     }
-  }, [selectedProvider, formData.apiKey, formData.baseUrl]);
+  }, [selectedProvider, formData.apiKey, formData.url]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -365,7 +322,7 @@ export function AIProviderConfig({
               setFormData({
                 ...formData,
                 provider: "native-ollama",
-                baseUrl: "http://localhost:11434/v1",
+                url: "http://localhost:11434/v1",
               });
             }}
           >
@@ -385,7 +342,7 @@ export function AIProviderConfig({
               setFormData({
                 ...formData,
                 provider: "screenpipe-cloud",
-                baseUrl: "https://ai-proxy.i-f9f.workers.dev/v1",
+                url: "https://ai-proxy.i-f9f.workers.dev/v1",
               });
             }}
           >
@@ -407,7 +364,7 @@ export function AIProviderConfig({
               setFormData({
                 ...formData,
                 provider: "custom",
-                baseUrl: "http://localhost:11434/v1",
+                url: "http://localhost:11434/v1",
               });
             }}
           >
@@ -449,9 +406,9 @@ export function AIProviderConfig({
             <div className="space-y-2">
               <Label htmlFor="model">model</Label>
               <Select
-                value={formData.modelName}
+                value={formData.model}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, modelName: value })
+                  setFormData({ ...formData, model: value })
                 }
               >
                 <SelectTrigger>
@@ -487,18 +444,18 @@ export function AIProviderConfig({
                 id="baseUrl"
                 type="text"
                 placeholder="http://localhost:11434"
-                value={formData.baseUrl || ""}
+                value={formData.url || ""}
                 onChange={(e) =>
-                  setFormData({ ...formData, baseUrl: e.target.value })
+                  setFormData({ ...formData, url: e.target.value })
                 }
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="model">model</Label>
               <Select
-                value={formData.modelName}
+                value={formData.model}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, modelName: value })
+                  setFormData({ ...formData, model: value })
                 }
               >
                 <SelectTrigger>
@@ -531,9 +488,9 @@ export function AIProviderConfig({
             <div className="space-y-2">
               <Label htmlFor="model">model</Label>
               <Select
-                value={formData.modelName}
+                value={formData.model}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, modelName: value })
+                  setFormData({ ...formData, model: value })
                 }
               >
                 <SelectTrigger>
@@ -569,9 +526,9 @@ export function AIProviderConfig({
                 id="baseUrl"
                 type="text"
                 placeholder="https://api.example.com/v1"
-                value={formData.baseUrl || ""}
+                value={formData.url || ""}
                 onChange={(e) =>
-                  setFormData({ ...formData, baseUrl: e.target.value })
+                  setFormData({ ...formData, url: e.target.value })
                 }
               />
             </div>
@@ -606,9 +563,9 @@ export function AIProviderConfig({
             <div className="space-y-2">
               <Label htmlFor="model">model</Label>
               <Select
-                value={formData.modelName}
+                value={formData.model}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, modelName: value })
+                  setFormData({ ...formData, model: value })
                 }
               >
                 <SelectTrigger>
@@ -693,7 +650,7 @@ export function AIProviderConfig({
           className="w-full"
           disabled={
             isLoading ||
-            Boolean(!formData.id?.length && !formData.modelName?.length)
+            Boolean(!formData.id?.length && !formData.model?.length)
           }
         >
           {isLoading ? (
@@ -751,9 +708,12 @@ export const AIPresetDialog = ({
     ? {
         id: preset.id,
         provider: preset.provider,
-        baseUrl: preset.url,
-        modelName: preset.model,
-        ...("apiKey" in preset ? { apiKey: preset.apiKey } : {}),
+        url: preset.url,
+        model: preset.model,
+        maxContextChars: preset.maxContextChars,
+        prompt: preset.prompt,
+        defaultPreset: preset.defaultPreset,
+        apiKey: preset.apiKey || null,
       }
     : undefined;
 
@@ -828,14 +788,6 @@ export const AIPresetsSelector = ({
 
         updateSettings({
           aiPresets: updatedPresets,
-          aiModel: nextPreset.model,
-          aiProviderType: nextPreset.provider,
-          customPrompt: nextPreset.prompt,
-          aiMaxContextChars: nextPreset.maxContextChars,
-          aiUrl: nextPreset.url,
-          ...("apiKey" in nextPreset && {
-            openaiApiKey: nextPreset.apiKey,
-          }),
         });
 
         toast.success("Preset changed", {
@@ -909,14 +861,6 @@ export const AIPresetsSelector = ({
         if (isEditingDefaultPreset) {
           updateSettings({
             aiPresets: updatedPresets,
-            aiModel: preset.model,
-            aiProviderType: preset.provider,
-            customPrompt: preset.prompt,
-            aiMaxContextChars: preset.maxContextChars,
-            aiUrl: preset.url,
-            ...("apiKey" in preset && {
-              openaiApiKey: preset.apiKey,
-            }),
           });
         } else {
           updateSettings({
@@ -950,14 +894,7 @@ export const AIPresetsSelector = ({
 
         updateSettings({
           aiPresets: [newPreset],
-          aiModel: newPreset.model,
-          aiProviderType: newPreset.provider,
-          customPrompt: newPreset.prompt,
-          aiMaxContextChars: newPreset.maxContextChars,
-          aiUrl: newPreset.url,
-          ...("apiKey" in newPreset && {
-            openaiApiKey: newPreset.apiKey,
-          }),
+         
         });
       } else {
         // Adding a new preset
@@ -1006,14 +943,6 @@ export const AIPresetsSelector = ({
 
     updateSettings({
       aiPresets: updatedPresets,
-      aiModel: preset.model,
-      aiProviderType: preset.provider,
-      customPrompt: preset.prompt,
-      aiMaxContextChars: preset.maxContextChars,
-      aiUrl: preset.url,
-      ...("apiKey" in preset && {
-        openaiApiKey: preset.apiKey,
-      }),
     });
 
     toast.success("Default preset updated", {
@@ -1196,14 +1125,6 @@ export const AIPresetsSelector = ({
 
                           updateSettings({
                             aiPresets: updatedPresets,
-                            aiModel: selectedPresetObj.model,
-                            aiProviderType: selectedPresetObj.provider,
-                            customPrompt: selectedPresetObj.prompt,
-                            aiMaxContextChars: selectedPresetObj.maxContextChars,
-                            aiUrl: selectedPresetObj.url,
-                            ...("apiKey" in selectedPresetObj && {
-                              openaiApiKey: selectedPresetObj.apiKey,
-                            }),
                           });
 
                           toast.success("Preset selected", {

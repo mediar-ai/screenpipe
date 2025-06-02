@@ -5,7 +5,7 @@ import { ChatMessage } from "@/components/rewind/chat-message";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, Square, X, GripHorizontal, Bot, Terminal } from "lucide-react";
+import { Loader2, Send, Square, X, GripHorizontal, Bot } from "lucide-react";
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { Agent } from "./agents";
@@ -15,11 +15,11 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AIPreset, useSettings } from "@/lib/hooks/use-settings";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { ExportButton } from "../export-button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import Image from "next/image";
 import { AIPresetsSelector } from "../ai-presets-selector";
+import { AIPreset } from "@/lib/utils/tauri";
 
 const providerIcons = {
 	openai: <Image src="/images/openai.png" alt="OpenAI" width={16} height={16} />,

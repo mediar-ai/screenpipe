@@ -26,7 +26,7 @@ export function BreakingChangesInstructionsDialog() {
       try {
         const response = await fetch("http://localhost:3030/pipes/list");
         const data = await response.json();
-        setHasPipes(data.data.length > 0);
+        setHasPipes(data?.data?.length > 0);
       } catch (error) {
         console.error("failed to check pipes:", error);
       }

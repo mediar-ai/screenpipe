@@ -1,6 +1,5 @@
 "use client";
 import { Button } from "@/components/ui/button";
-import { Settings } from "@/components/settings";
 import HealthStatus from "@/components/screenpipe-status";
 
 import React from "react";
@@ -32,13 +31,13 @@ import {
   Message,
 } from "@/components/inbox-messages";
 import { useState, useEffect } from "react";
-import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { listen } from "@tauri-apps/api/event";
 import localforage from "localforage";
 import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
-import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { ShareLogsButton } from "./share-logs-button";
+import { openSettingsWindow } from "@/lib/utils/window";
+import { commands } from "@/lib/utils/tauri";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -104,10 +103,16 @@ export default function Header() {
     await localforage.setItem("inboxMessages", []);
   };
 
-  const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
-  const { setIsOpen: setSettingsOpen } = useSettingsDialog();
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+
+  const handleShowOnboarding = async () => {
+    try {
+      await commands.showWindow("Onboarding");
+    } catch (error) {
+      console.error("Failed to show onboarding window:", error);
+    }
+  };
 
   return (
     <div>
@@ -129,7 +134,6 @@ export default function Header() {
           </PopoverContent>
         </Popover>
         <HealthStatus className="mt-3 cursor-pointer" />
-        <Settings />
 
         {/* <Button
           variant="ghost"
@@ -156,9 +160,9 @@ export default function Header() {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
-                onSelect={(e) => {
+                onSelect={async (e) => {
                   e.preventDefault();
-                  setSettingsOpen(true);
+                  await openSettingsWindow();
                 }}
                 className="cursor-pointer p-1.5"
               >
@@ -191,7 +195,7 @@ export default function Header() {
             <DropdownMenuGroup>
               <DropdownMenuItem
                 className="cursor-pointer"
-                onClick={() => setShowOnboarding(true)}
+                onClick={() => handleShowOnboarding()}
               >
                 <Play className="mr-2 h-4 w-4" />
                 <span>show onboarding</span>

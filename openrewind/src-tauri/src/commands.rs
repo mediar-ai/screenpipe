@@ -1,10 +1,13 @@
-use crate::get_data_dir;
+use crate::{get_data_dir, window_api::{RewindWindowId, ShowRewindWindow}, store::{OnboardingStore, SettingsStore}};
 use serde::Serialize;
+use specta::Type;
 use tauri::Manager;
 use tracing::{error, info};
+use std::{fs, path::Path};
 
 #[tauri::command]
-pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
+#[specta::specta]
+pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle) {
     if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
         let _ = main_tray.set_icon(Some(
             tauri::image::Image::from_path("icons/screenpipe-logo-tray-failed.png").unwrap(),
@@ -13,7 +16,8 @@ pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
 }
 
 #[tauri::command]
-pub fn set_tray_health_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
+#[specta::specta]
+pub fn set_tray_health_icon(app_handle: tauri::AppHandle) {
     if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
         let _ = main_tray.set_icon(Some(
             tauri::image::Image::from_path("icons/screenpipe-logo-tray-black.png").unwrap(),
@@ -22,7 +26,8 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
 }
 
 #[tauri::command]
-pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool) {
+#[specta::specta]
+pub fn show_main_window(app_handle: &tauri::AppHandle, overlay: bool) {
     if let Some(window) = app_handle.get_webview_window("main") {
         #[cfg(target_os = "macos")]
         if overlay {
@@ -61,7 +66,8 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
 }
 
 #[tauri::command]
-pub fn hide_main_window(app_handle: &tauri::AppHandle<tauri::Wry>) {
+#[specta::specta]
+pub fn hide_main_window(app_handle: &tauri::AppHandle) {
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.close();
     }
@@ -70,8 +76,9 @@ pub fn hide_main_window(app_handle: &tauri::AppHandle<tauri::Wry>) {
 const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 
 #[tauri::command(rename_all = "snake_case")]
+#[specta::specta]
 pub fn update_show_screenpipe_shortcut(
-    app_handle: tauri::AppHandle<tauri::Wry>,
+    app_handle: tauri::AppHandle,
     new_shortcut: String,
     enabled: bool,
 ) -> Result<(), String> {
@@ -137,15 +144,16 @@ pub fn update_show_screenpipe_shortcut(
 }
 
 // Add these new structs
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 pub struct AuthStatus {
     authenticated: bool,
     message: Option<String>,
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn open_pipe_window(
-    app_handle: tauri::AppHandle<tauri::Wry>,
+    app_handle: tauri::AppHandle,
     port: u16,
     title: String,
 ) -> Result<(), String> {
@@ -215,11 +223,12 @@ pub async fn open_pipe_window(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn get_disk_usage(
-    app_handle: tauri::AppHandle<tauri::Wry>,
+    app_handle: tauri::AppHandle,
 ) -> Result<serde_json::Value, String> {
-    let screenpipe_dir_path =
-        get_data_dir(&app_handle).unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe"));
+    let screenpipe_dir_path = get_data_dir(&app_handle)
+        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".openrewind"));
     match crate::disk_usage::disk_usage(&screenpipe_dir_path).await {
         Ok(Some(disk_usage)) => match serde_json::to_value(&disk_usage) {
             Ok(json_value) => Ok(json_value),
@@ -234,4 +243,76 @@ pub async fn get_disk_usage(
             Err(format!("Failed to get disk usage: {}", e))
         }
     }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn show_window(
+    app_handle: tauri::AppHandle,
+    window: ShowRewindWindow,
+) -> Result<(), String> {
+    window.show(&app_handle).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn close_window(
+    app_handle: tauri::AppHandle,
+    window: ShowRewindWindow,
+) -> Result<(), String> {
+    let window_id = match window {
+        ShowRewindWindow::Main => RewindWindowId::Main,
+        ShowRewindWindow::Settings { .. } => RewindWindowId::Settings,
+        ShowRewindWindow::Onboarding => RewindWindowId::Onboarding,
+        ShowRewindWindow::Search => RewindWindowId::Search,
+    };
+    
+    if let Some(window) = window_id.get(&app_handle) {
+        window.close().map_err(|e| e.to_string())
+    } else {
+        Err(format!("Window {} not found", window_id.label()))
+    }
+}
+
+// Onboarding commands
+#[tauri::command]
+#[specta::specta]
+pub async fn get_onboarding_status(app_handle: tauri::AppHandle) -> Result<OnboardingStore, String> {
+    OnboardingStore::get(&app_handle).map(|o| o.unwrap_or_default())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn complete_onboarding(app_handle: tauri::AppHandle) -> Result<(), String> {
+    // wait until onboarding is updated
+    OnboardingStore::update(&app_handle, |onboarding| {
+        onboarding.complete();
+    }).map_err(|e| e.to_string())?;
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    show_window(app_handle.clone(), ShowRewindWindow::Main).await?;
+    close_window(app_handle.clone(), ShowRewindWindow::Onboarding).await?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn reset_onboarding(app_handle: tauri::AppHandle) -> Result<(), String> {
+    OnboardingStore::update(&app_handle, |onboarding| {
+        onboarding.reset();
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn show_onboarding_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    ShowRewindWindow::Onboarding.show(&app_handle).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_window_size(app_handle: tauri::AppHandle, window: ShowRewindWindow, width: f64, height: f64) -> Result<(), String> {
+    window.set_size(&app_handle, width, height).map_err(|e| e.to_string())?;
+    Ok(())
 }

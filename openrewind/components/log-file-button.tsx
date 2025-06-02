@@ -20,7 +20,7 @@ import {
 } from "./ui/dialog";
 import { useState, useEffect } from "react";
 import { ScrollArea } from "./ui/scroll-area";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, LogFile } from "@/lib/utils/tauri";
 import React from "react";
 import { LogViewer, LogViewerSearch } from "@patternfly/react-log-viewer";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
@@ -105,15 +105,15 @@ export const LogFileButton = ({
   const [logContent, setLogContent] = useState("");
   const [logFiles, setLogFiles] = useState<LogFile[]>([]);
 
-  interface LogFile {
-    name: string;
-    path: string;
-    modified_at: number;
-  }
   const getLogFiles = async () => {
     try {
-      const logFiles = await invoke("get_log_files");
-      return logFiles as LogFile[];
+      const result = await commands.getLogFiles();
+      if (result.status === "ok") {
+        return result.data;
+      } else {
+        console.error("failed to get log files:", result.error);
+        return [];
+      }
     } catch (error) {
       console.error("failed to get log files:", error);
       return [];
@@ -144,7 +144,7 @@ export const LogFileButton = ({
     // Find most recent non-app log or fall back to first file
     const appLog = files
       .filter((f) => !f.name.toLowerCase().includes("app"))
-      .sort((a, b) => b.modified_at - a.modified_at)[0];
+      .sort((a, b) => Number(b.modified_at - a.modified_at))[0];
 
     if (files.length > 0) {
       await loadLogContent(appLog?.path || files[0].path);

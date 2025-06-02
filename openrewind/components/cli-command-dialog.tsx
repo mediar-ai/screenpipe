@@ -12,13 +12,13 @@ import { CodeBlock } from "./ui/codeblock";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { useToast } from "@/components/ui/use-toast";
 import { IconCode } from "./ui/icons";
-import { Settings } from "@/lib/hooks/use-settings";
 import { getCliPath } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { platform } from "@tauri-apps/plugin-os";
+import { SettingsStore } from "@/lib/utils/tauri";
 
 interface CliCommandDialogProps {
-  settings: Settings;
+  settings: SettingsStore;
 }
 
 export function CliCommandDialog({ settings }: CliCommandDialogProps) {

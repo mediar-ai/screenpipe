@@ -1,6 +1,8 @@
+use std::{path::PathBuf, str::FromStr};
+
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{AppHandle, LogicalSize, Manager, Size, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
 use tracing::{error, info};
 
 use crate::ServerState;
@@ -127,5 +129,191 @@ pub async fn close_window(
             StatusCode::NOT_FOUND,
             format!("window with title '{}' not found", payload.title),
         ))
+    }
+}
+
+pub enum RewindWindowId {
+    Main,
+    Settings,
+    Search,
+    Onboarding,
+}
+
+impl FromStr for RewindWindowId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "main" => Ok(RewindWindowId::Main),
+            "settings" => Ok(RewindWindowId::Settings),
+            "search" => Ok(RewindWindowId::Search),
+            "onboarding" => Ok(RewindWindowId::Onboarding),
+            _ => Ok(RewindWindowId::Main),
+        }
+    }
+}
+
+impl std::fmt::Display for RewindWindowId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RewindWindowId::Main => write!(f, "main"),
+            RewindWindowId::Settings => write!(f, "settings"),
+            RewindWindowId::Search => write!(f, "search"),
+            RewindWindowId::Onboarding => write!(f, "onboarding"),
+        }
+    }
+}
+
+impl RewindWindowId {
+    pub fn label(&self) -> &str {
+        match self {
+            RewindWindowId::Main => "main",
+            RewindWindowId::Settings => "settings",
+            RewindWindowId::Search => "search",
+            RewindWindowId::Onboarding => "onboarding",
+        }
+    }
+
+    pub fn title(&self) -> &str {
+        match self {
+            RewindWindowId::Main => "openrewind",
+            RewindWindowId::Settings => "settings",
+            RewindWindowId::Search => "search",
+            RewindWindowId::Onboarding => "onboarding",
+        }
+    }
+
+    pub fn url(&self) -> &str {
+        match self {
+            RewindWindowId::Main => "/",
+            RewindWindowId::Settings => "/settings",
+            RewindWindowId::Search => "/search",
+            RewindWindowId::Onboarding => "/onboarding",
+        }
+    }
+
+    pub fn min_size(&self) -> Option<(f64, f64)> {
+        Some(match self {
+            RewindWindowId::Main => (1200.0, 850.0),
+            RewindWindowId::Settings => (1200.0, 850.0),
+            RewindWindowId::Search => (1200.0, 850.0),
+            RewindWindowId::Onboarding => (1000.0, 640.0),
+        })
+    }
+
+    pub fn get(&self, app: &AppHandle<Wry>) -> Option<WebviewWindow> {
+        let label = self.label();
+        app.get_webview_window(&label)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone,specta::Type)]
+pub enum ShowRewindWindow {
+    Main,
+    Settings { page: Option<String> },
+    Search,
+    Onboarding,
+}
+
+impl ShowRewindWindow {
+    fn window_builder<'a>(
+        &'a self,
+        app: &'a AppHandle<Wry>,
+        url: impl Into<PathBuf>,
+    ) -> WebviewWindowBuilder<'a, Wry, AppHandle<Wry>> {
+        let id = self.id();
+
+        let mut builder = WebviewWindow::builder(app, id.label(), WebviewUrl::App(url.into()))
+            .title(id.title())
+            .visible(true)
+            .accept_first_mouse(true)
+            .shadow(true);
+
+        // This is for windows to have minimum size
+        // if let Some(min) = id.min_size() {
+        //     builder = builder
+        //         .inner_size(min.0, min.1)
+        //         .min_inner_size(min.0, min.1);
+        // }
+
+        #[cfg(target_os = "macos")]
+        {
+            builder = builder
+                .hidden_title(true)
+                .title_bar_style(tauri::TitleBarStyle::Overlay);
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // builder = builder.decorations(false);
+            builder = builder
+        }
+
+        builder
+    }
+
+    pub fn id(&self) -> RewindWindowId {
+        match self {
+            ShowRewindWindow::Main => RewindWindowId::Main,
+            ShowRewindWindow::Settings { page: _ } => RewindWindowId::Settings,
+            ShowRewindWindow::Search => RewindWindowId::Search,
+            ShowRewindWindow::Onboarding => RewindWindowId::Onboarding,
+        }
+    }
+
+    pub fn show(&self, app: &AppHandle) -> tauri::Result<WebviewWindow> {
+        let id = self.id();
+
+        if let Some(window) = id.get(app) {
+            info!("showing window: {:?}", id.label());
+            window.show().ok();
+            return Ok(window);
+        }
+
+        info!("showing window: {:?} (not found)", id.label());
+
+
+        let window = match self {
+            ShowRewindWindow::Main => {
+                let builder = self.window_builder(app, "/").hidden_title(true).focused(true);
+                let window = builder.build()?;
+
+                window
+            }
+            ShowRewindWindow::Settings {  page: _  } => {
+                let builder = self.window_builder(app, "/settings").hidden_title(true).focused(true);
+                let window = builder.build()?;
+                window
+            }
+            ShowRewindWindow::Search => {
+                let builder = self.window_builder(app, "/search");
+                let window = builder.build()?;
+                window
+            }
+            ShowRewindWindow::Onboarding => {
+                let builder = self.window_builder(app, "/onboarding").visible_on_all_workspaces(true).always_on_top(true).inner_size(1000.0, 750.0);
+                let window = builder.build()?;
+                window
+            }
+        };
+
+        Ok(window)
+    }
+
+    pub fn close(&self, app: &AppHandle) -> tauri::Result<()> {
+        let id = self.id();
+        if let Some(window) = id.get(app) {
+            window.close().ok();
+        }
+        Ok(())
+    }
+
+    pub fn set_size(&self, app: &AppHandle, width: f64, height: f64) -> tauri::Result<()> {
+        let size = Size::Logical(LogicalSize::new(width, height));
+        let id = self.id();
+        if let Some(window) = id.get(app) {
+            window.set_size(size).ok();
+        }
+        Ok(())
     }
 }

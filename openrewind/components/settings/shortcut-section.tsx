@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { useProfiles } from "@/lib/hooks/use-profiles";
 import { PipeApi } from "@/lib/api";
 import ShortcutRow from "./shortcut-row";
 
@@ -9,7 +8,6 @@ const ShortcutSection = () => {
     { id: string; source: string; enabled: boolean }[]
   >([]);
   const { settings } = useSettings();
-  const { profiles, profileShortcuts } = useProfiles();
 
   useEffect(() => {
     const loadPipes = async () => {
@@ -33,11 +31,11 @@ const ShortcutSection = () => {
   return (
     <div className="space-y-8">
       <div className="space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Shortcuts
         </h1>
-        <p className="text-slate-600 dark:text-slate-400 text-lg">
-          Configure keyboard shortcuts for quick access to features
+        <p className="text-muted-foreground text-lg">
+          Keyboard shortcuts and hotkeys
         </p>
       </div>
 
@@ -81,28 +79,6 @@ const ShortcutSection = () => {
           description="global shortcut to stop audio recording"
           value={settings.stopAudioShortcut}
         />
-
-        {profiles.length > 1 && (
-          <>
-            <div className="mt-8 mb-4">
-              <h2 className="text-lg font-semibold">profile shortcuts</h2>
-              <p className="text-sm text-muted-foreground">
-                assign shortcuts to quickly switch between profiles
-              </p>
-            </div>
-
-            {profiles.map((profile) => (
-              <ShortcutRow
-                key={profile}
-                type="profile"
-                shortcut={`profile_${profile}`}
-                title={`switch to ${profile}`}
-                description={`activate ${profile} profile`}
-                value={profileShortcuts[profile]}
-              />
-            ))}
-          </>
-        )}
 
         {pipes.filter((p) => p.enabled).length > 0 && (
           <>

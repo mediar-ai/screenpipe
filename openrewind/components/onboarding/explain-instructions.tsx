@@ -1,17 +1,19 @@
 import React from "react";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RainbowButton } from "../ui/rainbow-button";
-import {
-  CheckCircle,
-  Play,
-  Search,
-  MessageSquare,
-  ArrowRight,
-  Sparkles,
+import { 
+  ArrowLeft, 
+  ArrowRight, 
+  Video, 
+  Mic, 
+  Search, 
+  Clock, 
+  Settings,
+  Bot,
+  MonitorSpeaker
 } from "lucide-react";
-import OnboardingNavigation from "@/components/onboarding/navigation";
 import { motion } from "framer-motion";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface OnboardingInstructionsProps {
   className?: string;
@@ -20,69 +22,66 @@ interface OnboardingInstructionsProps {
 }
 
 const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
-  className,
+  className = "",
   handleNextSlide,
   handlePrevSlide,
 }) => {
-  const features = [
+  const steps = [
     {
-      icon: Play,
-      title: "Recording Started",
-      description: "OpenRewind is now capturing your screen and audio",
-      status: "active"
+      icon: MonitorSpeaker,
+      title: "Background Recording",
+      description: "OpenRewind runs quietly in the background, capturing your screen and audio activities without interruption.",
+      color: "text-blue-500"
+    },
+    {
+      icon: Clock,
+      title: "Timeline View",
+      description: "Access your timeline to see a visual representation of your day's activities, organized chronologically.",
+      color: "text-green-500"
     },
     {
       icon: Search,
-      title: "Timeline Ready",
-      description: "View and navigate through your recorded activities",
-      status: "ready"
+      title: "AI Search",
+      description: "Use natural language to search through your recorded data. Ask questions like 'What did I work on yesterday?'",
+      color: "text-purple-500"
     },
     {
-      icon: MessageSquare,
-      title: "AI Assistant",
-      description: "Ask questions about your recorded data",
-      status: "ready"
+      icon: Settings,
+      title: "Customize Settings",
+      description: "Adjust recording preferences, privacy settings, and AI configurations to match your workflow.",
+      color: "text-orange-500"
     }
   ];
 
-  const quickTips = [
-    "Use the timeline at the bottom to navigate through your day",
-    "Scroll through your screen recordings with your mouse wheel",
-    "Click the AI panel to ask questions about what you've recorded",
-    "Audio transcriptions will appear automatically for meetings and calls"
+  const shortcuts = [
+    { key: "⌘ + ⌥ + S", description: "Show/Hide OpenRewind" },
+    { key: "⌘ + ⌥ + U", description: "Start Recording" },
+    { key: "⌘ + ⌥ + X", description: "Stop Recording" },
   ];
 
   return (
-    <div className={`${className} flex flex-col h-full`}>
-      <DialogHeader className="flex flex-col px-2 justify-center items-center mb-6">
+    <div className={`flex justify-center items-center flex-col space-y-6 p-8 ${className}`}>
+      <div className="flex flex-col px-2 justify-center items-center mb-6">
         <motion.div
+          className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4"
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5 }}
-          className="relative"
         >
-          <img
-            className="w-20 h-20 justify-center mb-4"
-            src="/128x128.png"
-            alt="openrewind-logo"
-          />
-          <div className="absolute -top-2 -right-2">
-            <CheckCircle className="w-8 h-8 text-green-500 bg-white rounded-full" />
-          </div>
+          <Bot className="w-8 h-8 text-white" />
         </motion.div>
-        
-        <DialogTitle className="text-center text-2xl font-bold">
-          You&apos;re all set! 🎉
-        </DialogTitle>
-        <p className="text-center text-muted-foreground mt-2 max-w-md">
-          OpenRewind is ready to help you remember, find, and understand everything you do on your computer.
+        <h1 className="text-center text-2xl font-bold mb-2">
+          You&apos;re All Set! 🎉
+        </h1>
+        <p className="text-center text-muted-foreground max-w-md">
+          OpenRewind is now configured and ready to help you remember everything. Here&apos;s how to get the most out of it.
         </p>
-      </DialogHeader>
+      </div>
 
       <div className="flex-1 flex flex-col items-center justify-center space-y-6">
         {/* Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl">
-          {features.map((feature, index) => (
+          {steps.map((step, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, y: 20 }}
@@ -91,13 +90,10 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
               className="bg-card border rounded-xl p-4 text-center"
             >
               <div className="flex items-center justify-center mb-3">
-                <feature.icon className="w-8 h-8 text-primary" />
-                {feature.status === "active" && (
-                  <div className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                )}
+                <step.icon className={`w-8 h-8 ${step.color}`} />
               </div>
-              <h3 className="font-semibold text-sm mb-1">{feature.title}</h3>
-              <p className="text-xs text-muted-foreground">{feature.description}</p>
+              <h3 className="font-semibold text-sm mb-1">{step.title}</h3>
+              <p className="text-xs text-muted-foreground">{step.description}</p>
             </motion.div>
           ))}
         </div>
@@ -110,14 +106,14 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
           className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-xl p-6 max-w-2xl"
         >
           <div className="flex items-center justify-center mb-4">
-            <Sparkles className="w-5 h-5 text-orange-500 mr-2" />
+            <Settings className="w-5 h-5 text-orange-500 mr-2" />
             <h3 className="text-lg font-semibold">Quick Tips</h3>
           </div>
           <ul className="space-y-2 text-sm">
-            {quickTips.map((tip, index) => (
+            {shortcuts.map((shortcut, index) => (
               <li key={index} className="flex items-start">
                 <div className="w-2 h-2 bg-primary rounded-full mt-2 mr-3 flex-shrink-0" />
-                <span className="text-muted-foreground">{tip}</span>
+                <span className="text-muted-foreground">{shortcut.key} - {shortcut.description}</span>
               </li>
             ))}
           </ul>

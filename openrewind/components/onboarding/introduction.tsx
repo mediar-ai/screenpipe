@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RainbowButton } from "../ui/rainbow-button";
 import { ArrowRight, Video, Mic, Brain, Clock, Play } from "lucide-react";
@@ -7,6 +6,7 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import posthog from "posthog-js";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { motion } from "framer-motion";
+import { commands } from "@/lib/utils/tauri";
 
 interface OnboardingIntroProps {
   className?: string;
@@ -17,13 +17,25 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
   className = "",
   handleNextSlide,
 }) => {
-  const { setShowOnboarding } = useOnboarding();
+  const { completeOnboarding } = useOnboarding();
   const [currentStep, setCurrentStep] = useState(0);
   const [showDemo, setShowDemo] = useState(false);
 
-  const handleSkip = () => {
-    setShowOnboarding(false);
-    posthog.capture("onboarding_skipped");
+  const handleSkip = async () => {
+    try {
+      await completeOnboarding();
+      posthog.capture("onboarding_skipped");
+      
+      // Show main window and close onboarding window
+      await commands.showWindow("Main");
+      
+      // Close the onboarding window
+      if (typeof window !== 'undefined' && 'close' in window) {
+        window.close();
+      }
+    } catch (error) {
+      console.error("Error skipping onboarding:", error);
+    }
   };
 
   const features = [
@@ -62,7 +74,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
 
   return (
     <div className={`flex justify-center items-center flex-col space-y-6 ${className}`}>
-      <DialogHeader className="flex flex-col px-2 justify-center items-center">
+      <div className="flex flex-col px-2 justify-center items-center">
         <motion.img
           className="w-24 h-24 justify-center"
           src="/128x128.png"
@@ -71,13 +83,13 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5 }}
         />
-        <DialogTitle className="text-center text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+        <h1 className="text-center text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
           Welcome to OpenRewind
-        </DialogTitle>
+        </h1>
         <p className="text-center text-lg text-muted-foreground mt-2">
           Your AI-powered digital memory assistant
         </p>
-      </DialogHeader>
+      </div>
 
       {!showDemo ? (
         <>

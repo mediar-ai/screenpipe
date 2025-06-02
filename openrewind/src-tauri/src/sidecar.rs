@@ -1,4 +1,5 @@
 use crate::get_store;
+use crate::store::{Credits, SettingsStore};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -41,41 +42,25 @@ pub struct User {
 }
 
 impl User {
-    pub fn from_store<R: tauri::Runtime>(store: &Store<R>) -> Self {
+    pub fn from_store(store: &SettingsStore) -> Self {
         Self {
-            id: store
-                .get("user.id")
-                .and_then(|v| v.as_str().map(String::from)),
-            email: store
-                .get("user.email")
-                .and_then(|v| v.as_str().map(String::from)),
-            name: store
-                .get("user.name")
-                .and_then(|v| v.as_str().map(String::from)),
-            image: store
-                .get("user.image")
-                .and_then(|v| v.as_str().map(String::from)),
-            token: store
-                .get("user.token")
-                .and_then(|v| v.as_str().map(String::from)),
-            clerk_id: store
-                .get("user.clerk_id")
-                .and_then(|v| v.as_str().map(String::from)),
-            credits: Some(UserCredits {
-                amount: store
-                    .get("user.credits.amount")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0),
-                created_at: store
-                    .get("user.credits.created_at")
-                    .and_then(|v| v.as_str().map(String::from)),
+            id: store.user.id.clone(),
+            email: store.user.email.clone(),
+            name: store.user.name.clone(),
+            image: store.user.image.clone(),
+            token: store.user.token.clone(),
+            clerk_id: store.user.clerk_id.clone(),
+            credits: store.user.credits.clone().map(|c| UserCredits {
+                amount: c.amount as i64,
+                created_at: None,
             }),
-            cloud_subscribed: store.get("user.cloud_subscribed").and_then(|v| v.as_bool()),
+            cloud_subscribed: store.user.cloud_subscribed.clone(),
         }
     }
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn stop_screenpipe(
     state: State<'_, SidecarState>,
     _app: tauri::AppHandle,
@@ -161,6 +146,7 @@ pub async fn stop_screenpipe(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spawn_screenpipe(
     state: tauri::State<'_, SidecarState>,
     app: tauri::AppHandle,
@@ -179,121 +165,64 @@ pub async fn spawn_screenpipe(
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<CommandChild, String> {
-    let store = get_store(app, None).unwrap();
+    let store = app.state::<SettingsStore>();
 
-    let audio_transcription_engine = store
-        .get("audioTranscriptionEngine")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
+    let audio_transcription_engine = store.audio_transcription_engine.clone();
 
-    let ocr_engine = store
-        .get("ocrEngine")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
+    let ocr_engine = store.ocr_engine.clone();
 
-    let monitor_ids = store
-        .get("monitorIds")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+    let monitor_ids = store.monitor_ids.clone();
 
-    let audio_devices = store
-        .get("audioDevices")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+    let audio_devices = store.audio_devices.clone();
 
-    let use_pii_removal = store
-        .get("usePiiRemoval")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let use_pii_removal = store.use_pii_removal;
 
-    let port = store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030);
+    let port = store.port;
 
-    let disable_audio = store
-        .get("disableAudio")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let disable_audio = store.disable_audio;
 
-    let ignored_windows = store
-        .get("ignoredWindows")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+    let ignored_windows = store.ignored_windows.clone();
 
-    let included_windows = store
-        .get("includedWindows")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+    let included_windows = store.included_windows.clone();
 
-    let deepgram_api_key = store
-        .get("deepgramApiKey")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
+    let deepgram_api_key = store.deepgram_api_key.clone();
 
-    let fps = store.get("fps").and_then(|v| v.as_f64()).unwrap_or(0.2);
+    let fps = store.fps;
 
     let dev_mode = store
-        .get("devMode")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .dev_mode;
 
-    let vad_sensitivity = store
-        .get("vadSensitivity")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("high"));
+    let vad_sensitivity = store.vad_sensitivity.clone();
 
-    let audio_chunk_duration = store
-        .get("audioChunkDuration")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(30);
+    let audio_chunk_duration = store.audio_chunk_duration;
 
     let telemetry_enabled = store
-        .get("analyticsEnabled")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+        .analytics_enabled;
 
     let use_chinese_mirror = store
-        .get("useChineseMirror")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .use_chinese_mirror;
 
-    let languages = store
-        .get("languages")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+    let languages = store.languages.clone();
 
     let enable_beta = store
-        .get("enableBeta")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .enable_beta;
 
     let enable_frame_cache = store
-        .get("enableFrameCache")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .enable_frame_cache;
 
     let enable_ui_monitoring = store
-        .get("enableUiMonitoring")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .enable_ui_monitoring;
 
-    let data_dir = store
-        .get("dataDir")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
+    let data_dir = store.data_dir.clone();
 
     let enable_realtime_audio_transcription = store
-        .get("enableRealtimeAudioTranscription")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .enable_realtime_audio_transcription;
 
     let enable_realtime_vision = store
-        .get("enableRealtimeVision")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .enable_realtime_vision;
 
     let _use_all_monitors = store
-        .get("useAllMonitors")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .use_all_monitors;
 
     let user = User::from_store(&store);
 
@@ -327,14 +256,14 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
     if !monitor_ids.is_empty() && monitor_ids[0] != Value::String("default".to_string()) {
         for monitor in &monitor_ids {
             args.push("--monitor-id");
-            args.push(monitor.as_str().unwrap());
+            args.push(monitor.as_str());
         }
     }
 
     if !languages.is_empty() && languages[0] != Value::String("default".to_string()) {
         for language in &languages {
             args.push("--language");
-            args.push(language.as_str().unwrap());
+            args.push(language.as_str());
         }
     }
 
@@ -347,7 +276,7 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
     if !audio_devices.is_empty() && audio_devices[0] != Value::String("default".to_string()) {
         for device in &audio_devices {
             args.push("--audio-device");
-            args.push(device.as_str().unwrap());
+            args.push(device.as_str());
         }
     }
 
@@ -362,14 +291,14 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
     if !ignored_windows.is_empty() {
         for window in &ignored_windows {
             args.push("--ignored-windows");
-            args.push(window.as_str().unwrap());
+            args.push(window.as_str());
         }
     }
 
     if !included_windows.is_empty() {
         for window in &included_windows {
             args.push("--included-windows");
-            args.push(window.as_str().unwrap());
+            args.push(window.as_str());
         }
     }
     let current_pid = std::process::id();
@@ -425,9 +354,7 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
     // }
 
     let disable_vision = store
-        .get("disableVision")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .disable_vision;
 
     if disable_vision {
         args.push("--disable-vision");

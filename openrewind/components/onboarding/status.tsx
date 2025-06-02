@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Check, HelpCircle, Video, ChevronDown } from "lucide-react";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
@@ -250,9 +249,9 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         <div className="w-32 h-32 flex items-center justify-center">
             <img className="w-32 h-32" src="/128x128.png" alt="screenpipe-logo" />
           </div> 
-        <DialogTitle className="text-center text-2xl">
+        <h1 className="text-center text-2xl">
           setting up screenpipe
-        </DialogTitle>
+        </h1>
         <p className="text-sm text-muted-foreground pt-2">
           100% local-first • your data never leaves your device
         </p>

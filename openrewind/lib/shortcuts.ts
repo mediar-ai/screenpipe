@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "./utils/tauri";
 import { Shortcut } from "./hooks/use-settings";
 
 export async function registerShortcuts({
@@ -8,8 +8,8 @@ export async function registerShortcuts({
   showScreenpipeShortcut: string;
   disabledShortcuts: Shortcut[];
 }) {
-  invoke("update_show_screenpipe_shortcut", {
-    new_shortcut: showScreenpipeShortcut,
-    enabled: !disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE),
-  });
+  commands.updateShowScreenpipeShortcut(
+    showScreenpipeShortcut,
+    !disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)
+  );
 }

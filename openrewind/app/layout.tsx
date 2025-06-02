@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "@/components/ui/toaster";
 import { useEffect } from "react";
+import { DeeplinkHandler } from "@/components/deeplink-handler";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -64,6 +65,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <Providers>
         <body className={`${inter.className} scrollbar-hide`}>
+          <DeeplinkHandler />
           {children}
           <Toaster />
         </body>

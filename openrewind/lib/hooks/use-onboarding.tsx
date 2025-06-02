@@ -1,116 +1,109 @@
-import { useSettings } from "./use-settings";
-import localforage from "localforage";
 import { create } from "zustand";
+import { commands, OnboardingStore } from "@/lib/utils/tauri";
 import { useEffect } from "react";
 
-// Define the store state type
 interface OnboardingState {
-  showOnboarding: boolean;
-  setShowOnboarding: (show: boolean) => void;
-  initialized: boolean;
-  setInitialized: (initialized: boolean) => void;
+  onboardingData: OnboardingStore;
+  isLoading: boolean;
+  error: string | null;
+  
+  // Actions
+  loadOnboardingStatus: () => Promise<void>;
+  completeOnboarding: () => Promise<void>;
+  resetOnboarding: () => Promise<void>;
 }
 
-// Create the Zustand store
-export const useOnboardingStore = create<OnboardingState>((set) => ({
-  showOnboarding: false,
-  initialized: false,
-  setShowOnboarding: (show: boolean) => {
-    set({ showOnboarding: show });
-    // Only persist when explicitly setting to false (completed)
-    if (!show) {
-      localforage.setItem("onboarding_completed", true);
+export const useOnboarding = create<OnboardingState>((set, get) => ({
+  onboardingData: {
+    isCompleted: false,
+    completedAt: null,
+  },
+  isLoading: false,
+  error: null,
+
+  loadOnboardingStatus: async () => {
+    try {
+      set({ isLoading: true, error: null });
+      const result = await commands.getOnboardingStatus();
+      
+      if (result.status === "ok") {
+        set({ onboardingData: result.data, isLoading: false });
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      console.error("Error loading onboarding status:", error);
+      set({ 
+        error: error instanceof Error ? error.message : "Failed to load onboarding status",
+        isLoading: false 
+      });
     }
   },
-  setInitialized: (initialized: boolean) => set({ initialized }),
+
+  completeOnboarding: async () => {
+    try {
+      set({ isLoading: true, error: null });
+      const result = await commands.completeOnboarding();
+      
+      if (result.status === "ok") {
+        // Update local state
+        set(state => ({
+          onboardingData: {
+            ...state.onboardingData,
+            isCompleted: true,
+            completedAt: new Date().toISOString(),
+          },
+          isLoading: false
+        }));
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      console.error("Error completing onboarding:", error);
+      set({ 
+        error: error instanceof Error ? error.message : "Failed to complete onboarding",
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  resetOnboarding: async () => {
+    try {
+      set({ isLoading: true, error: null });
+      const result = await commands.resetOnboarding();
+      
+      if (result.status === "ok") {
+        // Update local state
+        set(state => ({
+          onboardingData: {
+            ...state.onboardingData,
+            isCompleted: false,
+            completedAt: null,
+          },
+          isLoading: false
+        }));
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      console.error("Error resetting onboarding:", error);
+      set({ 
+        error: error instanceof Error ? error.message : "Failed to reset onboarding",
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
 }));
 
-// Initialize the store with persisted data
-const initializeOnboarding = async () => {
-  const state = useOnboardingStore.getState();
+// Hook to automatically load onboarding status on mount
+export const useOnboardingWithLoader = () => {
+  const store = useOnboarding();
   
-  // Only initialize once
-  if (state.initialized) {
-    return;
-  }
-
-  try {
-    // Add timeout to prevent hanging on localforage operations
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error("Initialization timeout")), 1000);
-    });
-
-    const initPromise = (async () => {
-      // Check if onboarding was completed before
-      const onboardingCompleted = await localforage.getItem("onboarding_completed");
-      
-      // Check if this is a first-time user (no user preferences stored)
-      const userPreferences = await localforage.getItem("user_preferences");
-      
-      // Show onboarding if:
-      // 1. Onboarding was never completed AND
-      // 2. No user preferences exist (first-time user)
-      const shouldShowOnboarding = !onboardingCompleted && !userPreferences;
-
-      return { onboardingCompleted, userPreferences, shouldShowOnboarding };
-    })();
-
-    const result = await Promise.race([
-      initPromise,
-      timeoutPromise
-    ]) as { onboardingCompleted: any, userPreferences: any, shouldShowOnboarding: boolean };
-    
-    const { onboardingCompleted, userPreferences, shouldShowOnboarding } = result;
-
-    useOnboardingStore.setState({
-      showOnboarding: shouldShowOnboarding,
-      initialized: true,
-    });
-
-    console.log("Onboarding initialized:", { 
-      onboardingCompleted, 
-      userPreferences: !!userPreferences, 
-      shouldShowOnboarding 
-    });
-  } catch (error) {
-    console.error("Failed to initialize onboarding:", error);
-    // Default to not showing onboarding on error to prevent getting stuck
-    useOnboardingStore.setState({
-      showOnboarding: false,
-      initialized: true,
-    });
-  }
-};
-
-// Custom hook that combines store with initialization logic
-export const useOnboarding = () => {
-  const { showOnboarding, setShowOnboarding, initialized } = useOnboardingStore();
-  const { settings } = useSettings();
-
   useEffect(() => {
-    // Initialize immediately when hook is first called, don't wait for settings
-    if (!initialized) {
-      // Start initialization immediately
-      initializeOnboarding();
-      
-      // Also set a shorter fallback timeout for better UX
-      const fallbackTimeout = setTimeout(() => {
-        console.warn("Fallback initialization triggered after 2 seconds");
-        useOnboardingStore.setState({
-          showOnboarding: false,
-          initialized: true,
-        });
-      }, 2000);
-
-      return () => clearTimeout(fallbackTimeout);
-    }
-  }, [initialized]);
-
-  return { 
-    showOnboarding, 
-    setShowOnboarding,
-    initialized 
-  };
+    store.loadOnboardingStatus();
+  }, []);
+  
+  return store;
 };
-
-// No longer need the OnboardingProvider component

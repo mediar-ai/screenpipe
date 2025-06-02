@@ -215,11 +215,11 @@ export function AccountSection() {
   return (
     <div className="space-y-8">
       <div className="space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Account Settings
         </h1>
-        <p className="text-slate-600 dark:text-slate-400 text-lg">
-          Manage your account, subscription, and profile information
+        <p className="text-muted-foreground text-lg">
+          Manage your account and authentication settings
         </p>
       </div>
       
@@ -252,7 +252,7 @@ export function AccountSection() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  updateSettings({ user: { token: undefined } });
+                  updateSettings({ user: undefined });
                   toast({
                     title: "logged out",
                     description: "you have been logged out",

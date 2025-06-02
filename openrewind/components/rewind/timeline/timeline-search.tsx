@@ -547,7 +547,8 @@ prioritize precision over recall - better to return no match than a wrong match.
 	}, [appStats]);
 
 	const loadSuggestionsIfNeeded = useCallback(() => {
-		if (!settings?.aiModel) {
+		const defaultPreset = settings?.aiPresets?.find(p => p.defaultPreset) || settings?.aiPresets?.[0];
+		if (!defaultPreset?.model) {
 			setSuggestions([]);
 			return;
 		}
@@ -561,16 +562,16 @@ prioritize precision over recall - better to return no match than a wrong match.
 
 			const openai = new OpenAI({
 				apiKey:
-					settings?.aiProviderType === "screenpipe-cloud"
+					(defaultPreset.provider === "screenpipe-cloud"
 						? settings?.user?.token
-						: settings?.openaiApiKey,
-				baseURL: settings?.aiUrl,
+						: defaultPreset.apiKey) || undefined,
+				baseURL: defaultPreset.url,
 				dangerouslyAllowBrowser: true,
 			});
 
 			getCachedOrGenerateSuggestions(
 				openai,
-				settings?.aiModel,
+				defaultPreset.model,
 				getSystemPrompt(),
 				appStats,
 			)
@@ -609,12 +610,14 @@ prioritize precision over recall - better to return no match than a wrong match.
 		setIsSearching(true);
 		setSearchStatus("");
 
+		const defaultPreset = settings?.aiPresets?.find(p => p.defaultPreset) || settings?.aiPresets?.[0];
+		
 		const openai = new OpenAI({
 			apiKey:
-				settings?.aiProviderType === "screenpipe-cloud"
+				(defaultPreset?.provider === "screenpipe-cloud"
 					? settings?.user?.token
-					: settings?.openaiApiKey,
-			baseURL: settings?.aiUrl,
+					: defaultPreset?.apiKey) || undefined,
+			baseURL: defaultPreset?.url,
 			dangerouslyAllowBrowser: true,
 		});
 
@@ -625,7 +628,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 				query,
 				frames,
 				openai,
-				settings?.aiModel || "mistral",
+				defaultPreset?.model || "mistral",
 				(status) => setSearchStatus(status),
 				systemPrompt,
 				0,
@@ -656,12 +659,14 @@ prioritize precision over recall - better to return no match than a wrong match.
 
 	const regenerateSuggestions = useCallback(async () => {
 		setIsLoadingSuggestions(true);
+		const defaultPreset = settings?.aiPresets?.find(p => p.defaultPreset) || settings?.aiPresets?.[0];
+		
 		const openai = new OpenAI({
 			apiKey:
-				settings?.aiProviderType === "screenpipe-cloud"
+				(defaultPreset?.provider === "screenpipe-cloud"
 					? settings?.user?.token
-					: settings?.openaiApiKey,
-			baseURL: settings?.aiUrl,
+					: defaultPreset?.apiKey) || undefined,
+			baseURL: defaultPreset?.url,
 			dangerouslyAllowBrowser: true,
 		});
 
@@ -671,7 +676,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 
 			const newSuggestions = await generateSuggestions(
 				openai,
-				settings?.aiModel || "mistral",
+				defaultPreset?.model || "mistral",
 				getSystemPrompt(),
 				appStats,
 			);

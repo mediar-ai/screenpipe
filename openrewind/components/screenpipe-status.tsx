@@ -14,7 +14,7 @@ import { Separator } from "./ui/separator";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Folder, Activity, Mic, RefreshCw, AlertTriangle } from "lucide-react";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/lib/utils/tauri";
 
 import { LogFileButton } from "./log-file-button";
 import { DevModeSettings } from "./dev-mode-settings";
@@ -57,7 +57,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
       });
 
       // Stop the server first
-      await invoke("stop_screenpipe");
+      await commands.stopScreenpipe();
       
       // Wait a moment for cleanup
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -69,7 +69,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
       });
 
       // Start the server
-      await invoke("spawn_screenpipe");
+      await commands.spawnScreenpipe(null);
       
       toast({
         title: "server restarted",
@@ -168,21 +168,23 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
   return (
     <>
-      <Badge
+      <Button
         variant="default"
         className={cn(
-          "cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
+          "cursor-pointer bg-transparent text-foreground hover:bg-transparent hover:text-foreground group"
         )}
         onClick={handleOpenStatusDialog}
       >
         {/* <Power className="mr-2 h-4 w-4" /> */}
-        <Activity className="mr-2 h-4 w-4" />
+        <Badge variant={"secondary"} className="group-hover:bg-transparent group-hover:text-foreground">
+          status
+        </Badge>
         <span
           className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${
             statusColor === "bg-red-500" ? "animate-pulse" : ""
           }`}
         />
-      </Badge>
+      </Button>
       <Dialog open={isOpen} onOpenChange={close}>
         <DialogContent
           className="max-w-4xl max-h-[90vh] flex flex-col p-8"

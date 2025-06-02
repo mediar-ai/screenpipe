@@ -28,11 +28,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { open } from "@tauri-apps/plugin-shell";
 import HealthStatus from "@/components/screenpipe-status";
-import { Settings } from "@/components/settings";
 import { ShareLogsButton } from "@/components/share-logs-button";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
-import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
+import { openSettingsWindow } from "@/lib/utils/window";
+import { commands } from "@/lib/utils/tauri";
 
 import { CommandShortcut } from "@/components/ui/command";
 
@@ -63,8 +63,6 @@ interface TimelineControlsProps {
 	className?: string;
 }
 
-
-
 export function TimelineControls({
 	startAndEndDates,
 	currentDate,
@@ -74,9 +72,15 @@ export function TimelineControls({
 }: TimelineControlsProps) {
 	const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
-	const { setShowOnboarding } = useOnboarding();
 	const { setShowChangelogDialog } = useChangelogDialog();
-	const { setIsOpen: setSettingsOpen } = useSettingsDialog();
+
+	const handleShowOnboarding = async () => {
+		try {
+			await commands.showWindow("Onboarding");
+		} catch (error) {
+			console.error("Failed to show onboarding window:", error);
+		}
+	};
 
 	const jumpDay = async (days: number) => {
 		const today = new Date();
@@ -194,9 +198,6 @@ export function TimelineControls({
 					</PopoverContent>
 				</Popover>
 
-				<HealthStatus className="cursor-pointer" />
-				<Settings />
-
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
 						<Button
@@ -213,9 +214,9 @@ export function TimelineControls({
 						<DropdownMenuSeparator />
 						<DropdownMenuGroup>
 							<DropdownMenuItem
-								onSelect={(e) => {
+								onSelect={async (e) => {
 									e.preventDefault();
-									setSettingsOpen(true);
+									await openSettingsWindow();
 								}}
 								className="cursor-pointer p-1.5"
 							>
@@ -248,7 +249,7 @@ export function TimelineControls({
 						<DropdownMenuGroup>
 							<DropdownMenuItem
 								className="cursor-pointer"
-								onClick={() => setShowOnboarding(true)}
+								onClick={() => handleShowOnboarding()}
 							>
 								<Play className="mr-2 h-4 w-4" />
 								<span>show onboarding</span>

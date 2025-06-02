@@ -326,7 +326,7 @@ export default function Timeline() {
 				ref={containerRef}
 				className="inset-0 flex flex-col bg-background text-foreground relative"
 				style={{
-					height: "100vh",
+					height: "calc(100vh - 2rem)",
 					overscrollBehavior: "none",
 					WebkitUserSelect: "none",
 					userSelect: "none",
@@ -350,9 +350,9 @@ export default function Timeline() {
 					</div>
 				</div>
 
-				<div className="flex-1 relative min-h-0">
+				<div className="flex-1 relative min-h-0 pt-4">
 					{isLoading && (
-						<div className="absolute inset-0 flex items-center justify-center backdrop-blur-sm">
+						<div className="absolute inset-0 top-4 flex items-center justify-center backdrop-blur-sm">
 							<div className="bg-background/95 p-6 border rounded-xl shadow-lg text-center space-y-3 max-w-md mx-4">
 								<h3 className="font-medium">Loading Timeline</h3>
 								<p className="text-sm text-muted-foreground">

@@ -1,21 +1,14 @@
 import { homeDir } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
-import { Pipe } from "./use-pipes";
-import { Language } from "@/lib/language";
-import {
-	action,
-	Action,
-	persist,
-	PersistStorage,
-	createContextStore,
-} from "easy-peasy";
-import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
+import { Store } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
-import { flattenObject, unflattenObject } from "../utils";
-import { useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import posthog from "posthog-js";
 import localforage from "localforage";
-
+import { User } from "../utils/tauri";
+import { Pipe } from "./use-pipes";
+import { Language } from "@/lib/language";
+import { SettingsStore } from "../utils/tauri";
 export type VadSensitivity = "low" | "medium" | "high";
 
 export type AIProviderType =
@@ -37,26 +30,6 @@ export enum Shortcut {
 	STOP_RECORDING = "stop_recording",
 }
 
-export type User = {
-	id?: string;
-	email?: string;
-	name?: string;
-	image?: string;
-	token?: string;
-	clerk_id?: string;
-	api_key?: string;
-	credits?: {
-		amount: number;
-	};
-	stripe_connected?: boolean;
-	stripe_account_status?: "active" | "pending";
-	github_username?: string;
-	bio?: string;
-	website?: string;
-	contact?: string;
-	cloud_subscribed?: boolean;
-};
-
 export type AIPreset = {
 	id: string;
 	maxContextChars: number;
@@ -64,7 +37,6 @@ export type AIPreset = {
 	model: string;
 	defaultPreset: boolean;
 	prompt: string;
-	//provider: AIProviderType;
 } & (
 	| {
 			provider: "openai";
@@ -82,57 +54,7 @@ export type AIPreset = {
 	  }
 );
 
-export type Settings = {
-	openaiApiKey: string;
-	deepgramApiKey: string;
-	isLoading: boolean;
-	aiModel: string;
-	installedPipes: Pipe[];
-	userId: string;
-	customPrompt: string;
-	devMode: boolean;
-	audioTranscriptionEngine: string;
-	ocrEngine: string;
-	monitorIds: string[];
-	audioDevices: string[];
-	usePiiRemoval: boolean;
-	restartInterval: number;
-	port: number;
-	dataDir: string;
-	disableAudio: boolean;
-	ignoredWindows: string[];
-	includedWindows: string[];
-	aiProviderType: AIProviderType;
-	aiUrl: string;
-	aiMaxContextChars: number;
-	fps: number;
-	vadSensitivity: VadSensitivity;
-	analyticsEnabled: boolean;
-	audioChunkDuration: number; // new field
-	useChineseMirror: boolean; // Add this line
-	embeddedLLM: EmbeddedLLMConfig;
-	languages: Language[];
-	enableBeta: boolean;
-	isFirstTimeUser: boolean;
-	autoStartEnabled: boolean;
-	enableFrameCache: boolean; // Add this line
-	enableUiMonitoring: boolean; // Add this line
-	platform: string; // Add this line
-	disabledShortcuts: Shortcut[];
-	user: User;
-	showScreenpipeShortcut: string;
-	startRecordingShortcut: string;
-	stopRecordingShortcut: string;
-	startAudioShortcut: string;
-	stopAudioShortcut: string;
-	pipeShortcuts: Record<string, string>;
-	enableRealtimeAudioTranscription: boolean;
-	realtimeAudioTranscriptionEngine: string;
-	disableVision: boolean;
-	useAllMonitors: boolean;
-	aiPresets: AIPreset[];
-	enableRealtimeVision: boolean;
-};
+export type Settings = SettingsStore
 
 export const DEFAULT_PROMPT = `Rules:
 - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
@@ -140,67 +62,6 @@ export const DEFAULT_PROMPT = `Rules:
 - Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
 - Always answer my question/intent, do not make up things
 `;
-
-const DEFAULT_SETTINGS: Settings = {
-	aiPresets: [],
-	openaiApiKey: "",
-	deepgramApiKey: "", // for now we hardcode our key (dw about using it, we have bunch of credits)
-	isLoading: false,
-	aiModel: "gpt-4o",
-	installedPipes: [],
-	userId: "",
-	customPrompt: `Rules:
-- You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
-- Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
-- Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
-- Always answer my question/intent, do not make up things
-`,
-	devMode: false,
-	audioTranscriptionEngine: "whisper-large-v3-turbo",
-	ocrEngine: "default",
-	monitorIds: ["default"],
-	audioDevices: ["default"],
-	usePiiRemoval: false,
-	restartInterval: 0,
-	port: 3030,
-	dataDir: "default",
-	disableAudio: false,
-	ignoredWindows: [],
-	includedWindows: [],
-	aiProviderType: "openai",
-	aiUrl: "https://api.openai.com/v1",
-	aiMaxContextChars: 512000,
-	fps: 0.5,
-	vadSensitivity: "high",
-	analyticsEnabled: true,
-	audioChunkDuration: 30, // default to 10 seconds
-	useChineseMirror: false, // Add this line
-	languages: [],
-	embeddedLLM: {
-		enabled: false,
-		model: "llama3.2:1b-instruct-q4_K_M",
-		port: 11434,
-	},
-	enableBeta: false,
-	isFirstTimeUser: true,
-	autoStartEnabled: true,
-	enableFrameCache: true, // Add this line
-	enableUiMonitoring: false, // Change from true to false
-	platform: "unknown", // Add this line
-	disabledShortcuts: [],
-	user: {},
-	showScreenpipeShortcut: "Super+Alt+S",
-	startRecordingShortcut: "Super+Alt+U", // Super+Alt+R is used on windows by Xbox Game Bar
-	stopRecordingShortcut: "Super+Alt+X",
-	startAudioShortcut: "",
-	stopAudioShortcut: "",
-	pipeShortcuts: {},
-	enableRealtimeAudioTranscription: false,
-	realtimeAudioTranscriptionEngine: "deepgram",
-	disableVision: false,
-	useAllMonitors: false,
-	enableRealtimeVision: true,
-};
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
 	"bit",
@@ -235,312 +96,229 @@ const DEFAULT_IGNORED_WINDOWS_PER_OS: Record<string, string[]> = {
 	linux: ["Info center", "Discover", "Parted"],
 };
 
-// Model definition
-export interface StoreModel {
-	settings: Settings;
-	setSettings: Action<StoreModel, Partial<Settings>>;
-	resetSettings: Action<StoreModel>;
-	resetSetting: Action<StoreModel, keyof Settings>;
-}
-
-// Validate and sanitize settings to prevent corruption
-function validateSettings(settings: any): Settings {
-	const defaultSettings = createDefaultSettingsObject();
-	
-	// Ensure all required fields exist with proper types
-	const validatedSettings: Settings = {
-		...defaultSettings,
-		...settings,
-	};
-
-	// Validate specific fields that are critical
-	if (!Array.isArray(validatedSettings.monitorIds)) {
-		validatedSettings.monitorIds = defaultSettings.monitorIds;
-	}
-	
-	if (!Array.isArray(validatedSettings.audioDevices)) {
-		validatedSettings.audioDevices = defaultSettings.audioDevices;
-	}
-	
-	if (!Array.isArray(validatedSettings.ignoredWindows)) {
-		validatedSettings.ignoredWindows = defaultSettings.ignoredWindows;
-	}
-	
-	if (!Array.isArray(validatedSettings.includedWindows)) {
-		validatedSettings.includedWindows = defaultSettings.includedWindows;
-	}
-	
-	if (!Array.isArray(validatedSettings.aiPresets)) {
-		validatedSettings.aiPresets = defaultSettings.aiPresets;
-	}
-
-	// Validate numeric fields
-	if (typeof validatedSettings.fps !== 'number' || validatedSettings.fps < 0) {
-		validatedSettings.fps = defaultSettings.fps;
-	}
-	
-	if (typeof validatedSettings.port !== 'number' || validatedSettings.port < 1000) {
-		validatedSettings.port = defaultSettings.port;
-	}
-
-	return validatedSettings;
-}
+let DEFAULT_SETTINGS: Settings = {
+			aiPresets: [],
+			deepgramApiKey: "",
+			isLoading: false,
+			installedPipes: [],
+			userId: "",
+			devMode: false,
+			audioTranscriptionEngine: "whisper-large-v3-turbo",
+			ocrEngine: "default",
+			monitorIds: ["default"],
+			audioDevices: ["default"],
+			usePiiRemoval: false,
+			restartInterval: 0,
+			port: 3030,
+			dataDir: "default",
+			disableAudio: false,
+			ignoredWindows: [
+			],
+			includedWindows: [],
+		
+			fps: 0.5,
+			vadSensitivity: "high",
+			analyticsEnabled: true,
+			audioChunkDuration: 30,
+			useChineseMirror: false,
+			languages: [],
+			embeddedLLM: {
+				enabled: false,
+				model: "llama3.2:1b-instruct-q4_K_M",
+				port: 11434,
+			},
+			enableBeta: false,
+			isFirstTimeUser: true,
+			autoStartEnabled: true,
+			enableFrameCache: true,
+			enableUiMonitoring: false,
+			platform: "unknown",
+			disabledShortcuts: [],
+			user: {
+				id: null,
+				name: null,
+				email: null,
+				image: null,
+				token: null,
+				clerk_id: null,
+				api_key: null,
+				credits: null,
+				stripe_connected: null,
+				stripe_account_status: null,
+				github_username: null,
+				bio: null,
+				website: null,
+				contact: null,
+				cloud_subscribed: null
+			},
+			showScreenpipeShortcut: "Super+Alt+S",
+			startRecordingShortcut: "Super+Alt+U",
+			stopRecordingShortcut: "Super+Alt+X",
+			startAudioShortcut: "",
+			stopAudioShortcut: "",
+			pipeShortcuts: {},
+			enableRealtimeAudioTranscription: false,
+			realtimeAudioTranscriptionEngine: "deepgram",
+			disableVision: false,
+			useAllMonitors: false,
+			enableRealtimeVision: true,
+		};;
 
 export function createDefaultSettingsObject(): Settings {
-	let defaultSettings = { ...DEFAULT_SETTINGS };
 	try {
-		const currentPlatform = platform();
+		const p = platform();
+		DEFAULT_SETTINGS.platform = p;
+		DEFAULT_SETTINGS.disabledShortcuts = DEFAULT_IGNORED_WINDOWS_IN_ALL_OS;
+		DEFAULT_SETTINGS.disabledShortcuts.push(...(DEFAULT_IGNORED_WINDOWS_PER_OS[p] ?? []));
+		DEFAULT_SETTINGS.ocrEngine = p === "macos" ? "apple-native" : p === "windows" ? "windows-native" : "tesseract";
+		DEFAULT_SETTINGS.fps = p === "macos" ? 0.5 : 1;
 
-		const ocrModel =
-			currentPlatform === "macos"
-				? "apple-native"
-				: currentPlatform === "windows"
-					? "windows-native"
-					: "tesseract";
-
-		defaultSettings.ocrEngine = ocrModel;
-		defaultSettings.fps = currentPlatform === "macos" ? 0.5 : 1;
-		defaultSettings.platform = currentPlatform;
-
-		defaultSettings.ignoredWindows = [
-			...DEFAULT_IGNORED_WINDOWS_IN_ALL_OS,
-			...(DEFAULT_IGNORED_WINDOWS_PER_OS[currentPlatform] ?? []),
-		];
-
-		return defaultSettings;
+		return DEFAULT_SETTINGS;
 	} catch (e) {
+		// Fallback if platform detection fails
 		return DEFAULT_SETTINGS;
 	}
 }
 
-// Create a singleton store instance
-let storePromise: Promise<LazyStore> | null = null;
+// Store singleton
+let _store: Promise<Store> | undefined;
 
-// Debounce mechanism for saving settings
-let saveTimeout: NodeJS.Timeout | null = null;
-const SAVE_DEBOUNCE_MS = 500;
-
-// Track if settings have been loaded from storage at least once
-let hasLoadedFromStorage = false;
-
-// Helper function to check if settings are ready to use
-export const areSettingsReady = () => hasLoadedFromStorage;
-
-/**
- * @warning Do not change autoSave to true, it causes race conditions
- */
 export const getStore = async () => {
-	if (!storePromise) {
-		storePromise = (async () => {
-			const dir = await localDataDir();
-			const profilesStore = new TauriStore(`${dir}/openrewind/profiles.bin`, {
-				autoSave: false,
-			});
-			const activeProfile =
-				(await profilesStore.get("activeProfile")) || "default";
-			const file =
-				activeProfile === "default"
-					? `store.bin`
-					: `store-${activeProfile}.bin`;
-			console.log("activeProfile", activeProfile, file);
-			return new TauriStore(`${dir}/openrewind/${file}`, {
-				autoSave: false,
-			});
-		})();
+	if (!_store) {
+		const dir = await localDataDir();
+		_store = Store.load(`${dir}/openrewind/store.bin`, {
+			autoSave: false,
+		});
 	}
-	return storePromise;
+	return _store;
 };
 
-const tauriStorage: PersistStorage = {
-	getItem: async (_key: string) => {
-		try {
-			const tauriStore = await getStore();
-			const allKeys = await tauriStore.keys();
-			const values: Record<string, any> = {};
+// Store utilities similar to Cap's implementation
+function createSettingsStore() {
+	const get = async (): Promise<Settings> => {
+		const store = await getStore();
+		const settings = await store.get<Settings>("settings");
+		return settings || createDefaultSettingsObject();
+	};
 
-			for (const k of allKeys) {
-				try {
-					values[k] = await tauriStore.get(k);
-				} catch (error) {
-					console.warn(`Failed to get key ${k}:`, error);
-					// Continue with other keys if one fails
-				}
-			}
+	const set = async (value: Partial<Settings>) => {
+		const store = await getStore();
+		const current = await get();
+		const newSettings = { ...current, ...value };
+		await store.set("settings", newSettings);
+		await store.save();
+	};
 
-			const settings = unflattenObject(values);
-			
-			// Validate and sanitize the loaded settings
-			const validatedSettings = validateSettings(settings);
-			
-			// Mark that we've successfully loaded from storage
-			hasLoadedFromStorage = true;
+	const reset = async () => {
+		const store = await getStore();
+		await store.set("settings", createDefaultSettingsObject());
+		await store.save();
+	};
 
-			return { settings: validatedSettings };
-		} catch (error) {
-			console.error("Failed to load settings, using defaults:", error);
-			// Return default settings if loading fails completely
-			return { settings: createDefaultSettingsObject() };
-		}
-	},
-	setItem: async (_key: string, value: any) => {
-		const tauriStore = await getStore();
+	const resetSetting = async <K extends keyof Settings>(key: K) => {
+		const current = await get();
+		const defaultValue = createDefaultSettingsObject()[key];
+		await set({ [key]: defaultValue } as Partial<Settings>);
+	};
 
-		try {
-			delete value.settings.customSettings;
-			
-			// Validate settings before saving
-			const validatedSettings = validateSettings(value.settings);
-			const flattenedValue = flattenObject(validatedSettings);
+	const listen = (callback: (settings: Settings) => void) => {
+		return getStore().then((store) => {
+			return store.onKeyChange("settings", (newValue: Settings | null | undefined) => {
+				callback(newValue || createDefaultSettingsObject());
+			});
+		});
+	};
 
-			// Get existing keys to know what to clean up
-			const existingKeys = await tauriStore.keys();
-			
-			// Set new flattened values first
-			for (const [key, val] of Object.entries(flattenedValue)) {
-				if (!key || !key.length) continue;
-				const defaultValue =
-					key in DEFAULT_SETTINGS ? DEFAULT_SETTINGS[key as keyof Settings] : "";
-				await tauriStore.set(key, val === undefined ? defaultValue : val);
-			}
+	return {
+		get,
+		set,
+		reset,
+		resetSetting,
+		listen,
+	};
+}
 
-			// Only delete keys that are no longer in the new settings
-			const newKeys = Object.keys(flattenedValue);
-			for (const existingKey of existingKeys) {
-				if (!newKeys.includes(existingKey)) {
-					await tauriStore.delete(existingKey);
-				}
-			}
+const settingsStore = createSettingsStore();
 
-			// Debounce the save operation to prevent race conditions
-			if (saveTimeout) {
-				clearTimeout(saveTimeout);
-			}
-			
-			saveTimeout = setTimeout(async () => {
-				try {
-					await tauriStore.save();
-				} catch (error) {
-					console.error("Failed to save store:", error);
-				}
-			}, SAVE_DEBOUNCE_MS);
-		} catch (error) {
-			console.error("Failed to save settings:", error);
-			// Don't throw to prevent breaking the app, but log the error
-		}
-	},
-	removeItem: async (_key: string) => {
-		const tauriStore = await getStore();
-		const keys = await tauriStore.keys();
-		for (const key of keys) {
-			await tauriStore.delete(key);
-		}
-		await tauriStore.save();
-	},
-};
+// Context for React
+interface SettingsContextType {
+	settings: Settings;
+	updateSettings: (updates: Partial<Settings>) => Promise<void>;
+	resetSettings: () => Promise<void>;
+	resetSetting: <K extends keyof Settings>(key: K) => Promise<void>;
+	reloadStore: () => Promise<void>;
+	loadUser: (token: string, forceReload?: boolean) => Promise<void>;
+	getDataDir: () => Promise<string>;
+	isSettingsLoaded: boolean;
+	loadingError: string | null;
+}
 
-export const store = createContextStore<StoreModel>(
-	persist(
-		{
-			settings: createDefaultSettingsObject(),
-			setSettings: action((state, payload) => {
-				console.log(state, payload);
-				state.settings = {
-					...state.settings,
-					...payload,
-				};
-			}),
-			resetSettings: action((state) => {
-				state.settings = createDefaultSettingsObject();
-			}),
-			resetSetting: action((state, key) => {
-				const defaultValue = createDefaultSettingsObject()[key];
-				(state.settings as any)[key] = defaultValue;
-			}),
-		},
-		{
-			storage: tauriStorage,
-			mergeStrategy: "mergeDeep",
-		},
-	),
-);
+const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
-export function useSettings() {
-	const settings = store.useStoreState((state) => state.settings);
-	const setSettings = store.useStoreActions((actions) => actions.setSettings);
-	const resetSettings = store.useStoreActions(
-		(actions) => actions.resetSettings,
-	);
-	const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
-
-	// Track if settings have been loaded from storage
+export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+	const [settings, setSettings] = useState<Settings>(createDefaultSettingsObject());
 	const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
 	const [loadingError, setLoadingError] = useState<string | null>(null);
 
-	// Initialize settings loading on mount
+	// Load settings on mount
 	useEffect(() => {
-		const initializeSettings = async () => {
+		const loadSettings = async () => {
 			try {
-				// Add timeout to prevent hanging
-				const timeoutPromise = new Promise((_, reject) => {
-					setTimeout(() => reject(new Error("Settings loading timeout")), 5000);
-				});
-
-				const loadPromise = (async () => {
-					// Force a reload from storage to ensure we have the latest settings
-					const store = await getStore();
-					const allKeys = await store.keys();
-					
-					if (allKeys.length > 0) {
-						// Settings exist in storage, load them
-						const values: Record<string, any> = {};
-						for (const k of allKeys) {
-							try {
-								values[k] = await store.get(k);
-							} catch (error) {
-								console.warn(`Failed to get key ${k}:`, error);
-							}
-						}
-						
-						const loadedSettings = unflattenObject(values);
-						const validatedSettings = validateSettings(loadedSettings);
-						
-						// Only update if the loaded settings are different from current
-						if (JSON.stringify(validatedSettings) !== JSON.stringify(settings)) {
-							setSettings(validatedSettings);
-						}
-					} else {
-						console.log("No existing settings found, using defaults");
-					}
-				})();
-
-				await Promise.race([loadPromise, timeoutPromise]);
-				
+				const loadedSettings = await settingsStore.get();
+				setSettings(loadedSettings);
 				setIsSettingsLoaded(true);
 				setLoadingError(null);
 			} catch (error) {
-				console.error("Failed to initialize settings:", error);
+				console.error("Failed to load settings:", error);
 				setLoadingError(error instanceof Error ? error.message : "Unknown error");
-				setIsSettingsLoaded(true); // Still mark as loaded to prevent infinite loading
+				setIsSettingsLoaded(true);
 			}
 		};
 
-		// Only initialize if not already loaded
-		if (!isSettingsLoaded) {
-			initializeSettings();
-		}
-	}, [isSettingsLoaded, setSettings]);
+		loadSettings();
 
+		// Listen for changes
+		const unsubscribe = settingsStore.listen((newSettings) => {
+			setSettings(newSettings);
+		});
+
+		return () => {
+			unsubscribe.then((unsub) => unsub());
+		};
+	}, []);
+
+	// Track user changes for posthog
 	useEffect(() => {
-		if (settings.user?.id) {
-			posthog.identify(settings.user?.id, {
-				email: settings.user?.email,
-				name: settings.user?.name,
-				github_username: settings.user?.github_username,
-				website: settings.user?.website,
-				contact: settings.user?.contact,
+		if (settings.user && settings.user.id) {
+			posthog.identify(settings.user.id, {
+				email: settings.user.email,
+				name: settings.user.name,
+				github_username: settings.user.github_username,
+				website: settings.user.website,
+				contact: settings.user.contact,
 			});
 		}
 	}, [settings.user?.id]);
+
+	const updateSettings = async (updates: Partial<Settings>) => {
+		await settingsStore.set(updates);
+		// Settings will be updated via the listener
+	};
+
+	const resetSettings = async () => {
+		await settingsStore.reset();
+		// Settings will be updated via the listener
+	};
+
+	const resetSetting = async <K extends keyof Settings>(key: K) => {
+		await settingsStore.resetSetting(key);
+		// Settings will be updated via the listener
+	};
+
+	const reloadStore = async () => {
+		const freshSettings = await settingsStore.get();
+		setSettings(freshSettings);
+	};
 
 	const getDataDir = async () => {
 		const homeDirPath = await homeDir();
@@ -552,14 +330,7 @@ export function useSettings() {
 		)
 			return settings.dataDir;
 
-		let p = "macos";
-		try {
-			p = platform();
-		} catch (e) {}
-
-		return p === "macos" || p === "linux"
-			? `${homeDirPath}/.screenpipe`
-			: `${homeDirPath}\\.screenpipe`;
+		return `${homeDirPath}/.openrewind`;
 	};
 
 	const loadUser = async (token: string, forceReload = false) => {
@@ -574,9 +345,7 @@ export function useSettings() {
 
 				// use cache if less than 30s old
 				if (cached && Date.now() - cached.timestamp < 30000) {
-					setSettings({
-						user: cached.data,
-					});
+					await updateSettings({ user: cached.data });
 					return;
 				}
 			}
@@ -596,6 +365,7 @@ export function useSettings() {
 			const data = await response.json();
 			const userData = {
 				...data.user,
+				token
 			} as User;
 
 			// if user was not logged in, send posthog event app_login with email
@@ -611,38 +381,36 @@ export function useSettings() {
 				timestamp: Date.now(),
 			});
 
-			setSettings({
-				user: userData,
-			});
+			await updateSettings({ user: userData });
 		} catch (err) {
 			console.error("failed to load user:", err);
 			throw err;
 		}
 	};
 
-	const reloadStore = async () => {
-		const store = await getStore();
-		await store.reload();
-
-		const allKeys = await store.keys();
-		const values: Record<string, any> = {};
-
-		for (const k of allKeys) {
-			values[k] = await store.get(k);
-		}
-
-		setSettings(unflattenObject(values));
-	};
-
-	return {
+	const value: SettingsContextType = {
 		settings,
-		updateSettings: setSettings,
+		updateSettings,
 		resetSettings,
+		resetSetting,
 		reloadStore,
 		loadUser,
-		resetSetting,
 		getDataDir,
 		isSettingsLoaded,
 		loadingError,
 	};
+
+	return (
+		<SettingsContext.Provider value={value}>
+			{children}
+		</SettingsContext.Provider>
+	);
+};
+
+export function useSettings(): SettingsContextType {
+	const context = useContext(SettingsContext);
+	if (context === undefined) {
+		throw new Error("useSettings must be used within a SettingsProvider");
+	}
+	return context;
 }

@@ -4,52 +4,47 @@ import { getStore, useSettings } from "@/lib/hooks/use-settings";
 
 import React, { useEffect, useState, useRef } from "react";
 import NotificationHandler from "@/components/notification-handler";
-import Header from "@/components/header";
 import { useToast } from "@/components/ui/use-toast";
-import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { ChangelogDialog } from "@/components/changelog-dialog";
 import { BreakingChangesInstructionsDialog } from "@/components/breaking-changes-instructions-dialog";
-import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
-import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
-import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { useProfiles } from "@/lib/hooks/use-profiles";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { PipeApi } from "@/lib/api";
+import { commands } from "@/lib/utils/tauri";
 import localforage from "localforage";
-import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { LoginDialog } from "../components/login-dialog";
 import { ModelDownloadTracker } from "../components/model-download-tracker";
 import Timeline from "@/components/rewind/timeline";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { RefreshCw, AlertTriangle, Settings } from "lucide-react";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import { RefreshCw, AlertTriangle, Settings, Mail } from "lucide-react";
 import { PermissionButtons } from "@/components/status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import SplashScreen from "@/components/splash-screen";
+import { openSettingsWindow } from "@/lib/utils/window";
+import HealthStatus from "@/components/screenpipe-status";
+import { ShareLogsButton } from "@/components/share-logs-button";
 
 export default function Home() {
   const { settings, updateSettings, loadUser, reloadStore, isSettingsLoaded, loadingError } = useSettings();
-  const { setActiveProfile } = useProfiles();
   const { toast } = useToast();
-  const { showOnboarding, setShowOnboarding, initialized } = useOnboarding();
-  const { setShowChangelogDialog } = useChangelogDialog();
-  const { open: openStatusDialog } = useStatusDialog();
-  const { setIsOpen: setSettingsOpen } = useSettingsDialog();
+  const { onboardingData } = useOnboarding();
   const { isServerDown } = useHealthCheck();
   const { isMac } = usePlatform();
   const [isRestarting, setIsRestarting] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const isProcessingRef = useRef(false);
 
+  // Load onboarding status on mount
   useEffect(() => {
-    if (settings.user?.token) {
-      loadUser(settings.user.token);
-    }
-  }, [settings.user.token]);
+    const { loadOnboardingStatus } = useOnboarding.getState();
+    loadOnboardingStatus();
+  }, []);
 
   useEffect(() => {
     const getAudioDevices = async () => {
@@ -58,96 +53,9 @@ export default function Home() {
       return devices;
     };
 
-    const setupDeepLink = async () => {
-      const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
-        console.log("received deep link urls:", urls);
-        for (const url of urls) {
-          const parsedUrl = new URL(url);
-
-          // Handle API key auth
-          if (url.includes("api_key=")) {
-            const apiKey = parsedUrl.searchParams.get("api_key");
-            if (apiKey) {
-              updateSettings({ user: { token: apiKey } });
-              toast({
-                title: "logged in!",
-                description: "you have been logged in",
-              });
-            }
-          }
-
-          if (url.includes("settings")) {
-            setSettingsOpen(true);
-          }
-
-          if (url.includes("changelog")) {
-            setShowChangelogDialog(true);
-          }
-
-          if (url.includes("onboarding")) {
-            setShowOnboarding(true);
-          }
-
-          if (url.includes("status")) {
-            openStatusDialog();
-          }
-        }
-      });
-      return unsubscribeDeepLink;
-    };
-
-    let deepLinkUnsubscribe: (() => void) | undefined;
-
-    setupDeepLink().then((unsubscribe) => {
-      deepLinkUnsubscribe = unsubscribe;
-    });
-
-    const unlisten = Promise.all([
-      listen("shortcut-start-recording", async () => {
-        await invoke("spawn_screenpipe");
-
-        toast({
-          title: "recording started",
-          description: "screen recording has been initiated",
-        });
-      }),
-
-      listen("shortcut-stop-recording", async () => {
-        await invoke("stop_screenpipe");
-
-        toast({
-          title: "recording stopped",
-          description: "screen recording has been stopped",
-        });
-      }),
-
-      listen<string>("switch-profile", async (event) => {
-        const profile = event.payload;
-        setActiveProfile(profile);
-
-        toast({
-          title: "profile switched",
-          description: `switched to ${profile} profile, restarting screenpipe now`,
-        });
-
-        await invoke("stop_screenpipe");
-
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        await invoke("spawn_screenpipe");
-
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        relaunch();
-      })
-    ]);
-
+    // Cleanup function placeholder if needed
     return () => {
-      if (deepLinkUnsubscribe) {
-        deepLinkUnsubscribe();
-      }
-      unlisten.then((unsubscribes) => {
-        unsubscribes.forEach((unsubscribe) => unsubscribe());
-      });
+      // Any cleanup logic can go here
     };
   }, []);
 
@@ -159,26 +67,19 @@ export default function Home() {
       if (restartPending) {
         // Clear the restart pending flag
         await localforage.removeItem("screenPermissionRestartPending");
-        setShowOnboarding(true);
+        try {
+          await commands.showWindow("Onboarding");
+        } catch (error) {
+          console.error("Failed to show onboarding window:", error);
+        }
       }
     };
 
-    // Only check after onboarding is initialized
-    if (initialized) {
+    // Always call this effect, but only execute logic when onboarding data is loaded
+    if (onboardingData.isCompleted !== undefined) {
       checkScreenPermissionRestart();
     }
-  }, [setShowOnboarding, initialized]);
-
-  useEffect(() => {
-    const unlisten = listen("cli-login", async (event) => {
-      console.log("received cli-login event:", event);
-      await reloadStore();
-    });
-
-    return () => {
-      unlisten.then((unlistenFn) => unlistenFn());
-    };
-  }, []);
+  }, [onboardingData.isCompleted]);
 
   const handleRestartServer = async () => {
     setIsRestarting(true);
@@ -190,7 +91,7 @@ export default function Home() {
       });
 
       // Stop the server first
-      await invoke("stop_screenpipe");
+      await commands.stopScreenpipe();
       
       // Wait for proper cleanup
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -202,7 +103,7 @@ export default function Home() {
       });
 
       // Start the server
-      await invoke("spawn_screenpipe");
+      await commands.spawnScreenpipe(null);
       
       toast({
         title: "server restarted",
@@ -224,95 +125,116 @@ export default function Home() {
 
   return (
     <div className="flex flex-col items-center flex-1 mx-auto relative scrollbar-hide">
-      <LoginDialog />
-      <ModelDownloadTracker />
+      {/* Transparent titlebar area */}
+      <div className="h-8 bg-transparent w-full" data-tauri-drag-region>
+          <div className="flex items-center justify-between gap-2">
+            <div/>
+            <h1 className="text-xs font-bold">OpenRewind</h1>
+            <div className="flex items-center gap-2">
+              <HealthStatus className="cursor-pointer" />
+              <Popover open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <Mail className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-100 rounded-2xl">
+                  <ShareLogsButton 
+                    showShareLink={false} 
+                    onComplete={() => setIsFeedbackOpen(false)} 
+                  />
+                </PopoverContent>
+              </Popover>
+              <Button variant="ghost" size="icon" onClick={() => openSettingsWindow()}>
+                <Settings className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+      </div>
+      
       <NotificationHandler />
-      {/* Only render content after both onboarding and settings are initialized */}
-      {initialized && isSettingsLoaded ? (
+      {/* Only render content after settings are loaded */}
+      {isSettingsLoaded ? (
         <>
-          {showOnboarding ? (
-            <Onboarding />
+          <ChangelogDialog />
+          <BreakingChangesInstructionsDialog />
+          <LoginDialog />
+          <ModelDownloadTracker />
+          {!isServerDown ? (
+            <div className="w-full scrollbar-hide">
+              <Timeline />
+            </div>
           ) : (
-            <>
-              <ChangelogDialog />
-              {/* <BreakingChangesInstructionsDialog /> */}
-              {!isServerDown ? (
-                <div className="w-full scrollbar-hide">
-                  <Timeline />
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-screen p-4">
-                  <div className="max-w-lg w-full space-y-6">
-                    {/* Header */}
-                    <div className="text-center space-y-4">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
-                          <AlertTriangle className="w-8 h-8 text-destructive" />
-                        </div>
-                        <div>
-                          <h2 className="text-2xl font-bold">Server Not Active</h2>
-                          <p className="text-muted-foreground mt-2">
-                            The screenpipe server is not running. Start the server or check permissions to continue.
-                          </p>
-                        </div>
-                      </div>
+            <div className="flex items-center justify-center h-screen p-4">
+              <div className="max-w-lg w-full space-y-6">
+                {/* Header */}
+                <div className="text-center space-y-4">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+                      <AlertTriangle className="w-8 h-8 text-destructive" />
                     </div>
-
-                    {/* Actions Card */}
-                    <div className="bg-card border rounded-lg p-6 space-y-6">
-                      {/* Server Control */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-semibold">Server Control</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Start or restart the screenpipe server
-                            </p>
-                          </div>
-                          <Button
-                            onClick={handleRestartServer}
-                            disabled={isRestarting}
-                            className="flex items-center gap-2"
-                          >
-                            <RefreshCw className={`h-4 w-4 ${isRestarting ? 'animate-spin' : ''}`} />
-                            {isRestarting ? "Starting..." : "Start Server"}
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Permissions Section - Only show on Mac */}
-                      {isMac && (
-                        <>
-                          <Separator />
-                          <div className="space-y-4">
-                            <div>
-                              <h3 className="font-semibold">System Permissions</h3>
-                              <p className="text-sm text-muted-foreground">
-                                Ensure screenpipe has the necessary permissions to function properly
-                              </p>
-                            </div>
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium">Screen Recording</span>
-                                <PermissionButtons type="screen" />
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium">Audio Recording</span>
-                                <PermissionButtons type="audio" />
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium">Accessibility</span>
-                                <PermissionButtons type="accessibility" />
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
+                    <div>
+                      <h2 className="text-2xl font-bold">Server Not Active</h2>
+                      <p className="text-muted-foreground mt-2">
+                        The screenpipe server is not running. Start the server or check permissions to continue.
+                      </p>
                     </div>
                   </div>
                 </div>
-              )}
-            </>
+
+                {/* Actions Card */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  {/* Server Control */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold">Server Control</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Start or restart the screenpipe server
+                        </p>
+                      </div>
+                      <Button
+                        onClick={handleRestartServer}
+                        disabled={isRestarting}
+                        className="flex items-center gap-2"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${isRestarting ? 'animate-spin' : ''}`} />
+                        {isRestarting ? "Starting..." : "Start Server"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Permissions Section - Only show on Mac */}
+                  {isMac && (
+                    <>
+                      <Separator />
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="font-semibold">System Permissions</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Ensure screenpipe has the necessary permissions to function properly
+                          </p>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">Screen Recording</span>
+                            <PermissionButtons type="screen" />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">Audio Recording</span>
+                            <PermissionButtons type="audio" />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">Accessibility</span>
+                            <PermissionButtons type="accessibility" />
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </>
       ) : (

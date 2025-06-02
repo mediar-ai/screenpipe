@@ -2,24 +2,10 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, Lock, Settings, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, OSPermissionsCheck, OSPermissionStatus } from "@/lib/utils/tauri";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useSettings } from "@/lib/hooks/use-settings";
 import localforage from "localforage";
-
-// You can add this to a types.ts file in your lib directory
-export enum OSPermissionStatus {
-  NotNeeded = "notNeeded",
-  Empty = "empty",
-  Granted = "granted",
-  Denied = "denied",
-}
-
-export interface OSPermissionsCheck {
-  screenRecording: OSPermissionStatus;
-  microphone: OSPermissionStatus;
-  accessibility: OSPermissionStatus;
-}
 
 interface PermissionButtonsProps {
   type: "screen" | "audio" | "accessibility";
@@ -38,12 +24,7 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
     const checkPermissions = async () => {
       if (isMacOS) {
         try {
-          const perms = await invoke<OSPermissionsCheck>(
-            "do_permissions_check",
-            {
-              initialCheck: true,
-            }
-          );
+          const perms = await commands.doPermissionsCheck(true);
           setPermissions(perms);
         } catch (error) {
           console.error("Failed to check permissions:", error);
@@ -72,14 +53,10 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
           ? "microphone"
           : "accessibility";
 
-      await invoke("request_permission", {
-        permission: permissionType,
-      });
+      await commands.requestPermission(permissionType);
 
       // Refresh permissions after request
-      const perms = await invoke<OSPermissionsCheck>("do_permissions_check", {
-        initialCheck: false,
-      });
+      const perms = await commands.doPermissionsCheck(false);
       setPermissions(perms);
 
       // If screen recording permission was requested, set flag and prompt for restart
@@ -113,9 +90,7 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
           ? "microphone"
           : "accessibility";
 
-      await invoke("open_permission_settings", {
-        permission: permissionType,
-      });
+      await commands.openPermissionSettings(permissionType);
     } catch (error) {
       console.error(`failed to open ${type} permission settings:`, error);
       toast({
@@ -130,8 +105,7 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
   if (!isMacOS) return null;
 
   const isPermitted = (status: OSPermissionStatus) =>
-    status === OSPermissionStatus.Granted ||
-    status === OSPermissionStatus.NotNeeded;
+    status === "granted" || status === "notNeeded";
 
   const permissionStatus =
     type === "screen"
@@ -146,7 +120,7 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
     <div className="flex items-center gap-2">
       {permissions && (
         <span>
-          {isPermitted(permissionStatus ?? OSPermissionStatus.Empty) ? (
+          {isPermitted(permissionStatus ?? "empty") ? (
             <Check className="h-4 w-4 text-green-500" />
           ) : (
             <X className="h-4 w-4 text-red-500" />
