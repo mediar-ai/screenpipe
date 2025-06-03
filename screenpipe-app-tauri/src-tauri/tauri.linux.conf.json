@@ -11,6 +11,15 @@
                     "libtesseract-dev",
                     "ffmpeg"
                 ]
+            },
+            "appimage": {
+                "files": {
+                    "/usr/bin/tesseract": "./tesseract",
+                    "/usr/bin/ffmpeg": "./ffmpeg/ffmpeg",
+                    "/usr/bin/ffprobe": "./ffmpeg/ffprobe",
+                    "/usr/bin/qt-faststart": "./ffmpeg/qt-faststart",
+                    "/usr/bin/model": "./ffmpeg/model/"
+                }
             }
         }
     }

@@ -1,12 +1,14 @@
 ### **New Features:**
-- **Improved Notion pipe:** Enhanced functionality for the Notion pipe to improve user experience.
+- **Add device_name in frame table:** Implemented retrieval of device name in the frame table and search query return.
+- **Make pipe manager optional:** Users can now choose whether to use the pipe manager, allowing for more flexible configurations.
+- **Added e2e test for Windows and Linux:** Introduced end-to-end tests to enhance testing coverage and reliability on both platforms.
 
 ### **Improvements:**
-- **Fixed model download UX:** Improved the user experience for model downloads.
-- **Fixed keyboard shortcuts on Windows:** Resolved issues with keyboard shortcuts to provide a smoother experience.
+- **Bundle Tesseract and FFmpeg for Linux:** Improved installation experience by bundling Tesseract and FFmpeg, enabling users to utilize these tools seamlessly.
 
 ### **Fixes:**
-- *No specific fixes listed in commits that meet the guidelines.*
+- **Fix getting app icons on Linux:** Resolved an issue with retrieving application icons on Linux.
+- **Ignore minimized windows during capture:** Fixed the capture function to ignore minimized windows, improving the quality of recordings.
 
-#### **Full Changelog:** [bcef3..bb5b8](https://github.com/mediar-ai/screenpipe/compare/bcef3..bb5b8)
+#### **Full Changelog:** [9478a..22fd2](https://github.com/mediar-ai/screenpipe/compare/9478a..22fd2)
 
