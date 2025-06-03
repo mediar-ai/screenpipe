@@ -24,7 +24,9 @@ maturin develop
 ```python
 import terminator
 desktop = terminator.Desktop()
-print(desktop.hello())  # → "Hello from Terminator"
+desktop.open_application('calc')
+seven = desktop.locator('name:Seven')
+seven.click()
 ```
 
 ### 🟦 typescript / node.js
@@ -36,13 +38,63 @@ npm run build
 ```
 
 ```typescript
-const { Desktop } = require('./bindings/nodejs/index.js');
+const { Desktop } = require('../bindings/nodejs');
 const desktop = new Desktop();
-console.log(desktop.hello()); // → "Hello from Terminator"
+await desktop.openApplication('notepad')
+await desktop.locator('name:Edit').typeText('hello world')
+```
+
+## more examples
+
+### calculator automation (python)
+
+```python
+import terminator
+
+# create desktop instance
+desktop = terminator.Desktop()
+
+# open calculator
+desktop.open_application('calc')
+
+# interact with calculator buttons
+seven = desktop.locator('name:Seven')
+plus = desktop.locator('name:Plus')
+equals = desktop.locator('name:Equals')
+
+# perform calculation: 7 + 7 = 14
+seven.click()
+plus.click()
+seven.click()
+equals.click()
+```
+
+### notepad automation (typescript)
+
+```typescript
+const { Desktop } = require('../bindings/nodejs');
+
+async function automateNotepad() {
+  const desktop = new Desktop();
+  
+  // open notepad
+  await desktop.openApplication('notepad');
+  
+  // find text editor and type
+  const editor = desktop.locator('name:Edit');
+  await editor.typeText('hello from terminator!\nthis is automated text input.');
+  
+  // get the text back
+  const content = await editor.getText();
+  console.log('editor content:', content);
+}
+
+automateNotepad();
 ```
 
 ## next steps
 
-*   explore the sdk references ([TypeScript](/terminator/js-sdk-reference), [Python](/terminator/python-sdk-reference)) to understand all available commands.
+*   explore the sdk references ([typescript](/terminator/js-sdk-reference), [python](/terminator/python-sdk-reference)) to understand all available commands.
 *   check out the [pdf-to-form example](https://github.com/mediar-ai/terminator/tree/main/examples/pdf-to-form) to see terminator with ai.
+*   join our [discord](https://discord.gg/dU9EBuw7Uq) for help and discussions.
 *   start building your own automation scripts! 

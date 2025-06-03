@@ -1,5 +1,5 @@
 ---
-title: "Typescript SDK Reference"
+title: "typescript sdk reference"
 icon: "js"
 ---
 
@@ -14,10 +14,9 @@ npm run build
 ```
 
 ```typescript
-const { Desktop } = require('./bindings/nodejs/index.js');
+const { Desktop } = require('../bindings/nodejs');
 const desktop = new Desktop();
 ```
-
 
 ## basic usage
 
@@ -25,20 +24,20 @@ const desktop = new Desktop();
 
 ```typescript
 // open calculator
-await client.openApplication('calc');
+await desktop.openApplication('calc');
 
 // open notepad
-await client.openApplication('notepad');
+await desktop.openApplication('notepad');
 
 // open url
-await client.openUrl('https://github.com/mediar-ai/terminator');
+await desktop.openUrl('https://github.com/mediar-ai/terminator');
 ```
 
 ### locating and interacting with elements
 
 ```typescript
 // locate calculator window and buttons
-const calcWindow = client.locator('name:Calc');
+const calcWindow = desktop.locator('name:Calculator');
 const sevenButton = calcWindow.locator('name:Seven');
 const plusButton = calcWindow.locator('name:Plus');
 
@@ -47,12 +46,33 @@ await sevenButton.click();
 await plusButton.click();
 
 // type text in notepad
-const notepadEditor = client.locator('window:Notepad').locator('name:RichEditD2DPT');
+const notepadEditor = desktop.locator('window:Notepad').locator('name:Edit');
 await notepadEditor.typeText('hello from terminator!');
 
 // get text content
 const result = await notepadEditor.getText();
 console.log(result.text);
+```
+
+### selector patterns
+
+terminator supports various selector patterns for finding elements:
+
+```typescript
+// by name
+desktop.locator('name:Seven')
+
+// by role
+desktop.locator('role:Button')
+
+// by automation id
+desktop.locator('automationid:CalculatorResults')
+
+// by window title
+desktop.locator('window:Calculator')
+
+// chaining selectors
+desktop.locator('window:Calculator').locator('role:Button').locator('name:Seven')
 ```
 
 ### element state and attributes
@@ -63,9 +83,11 @@ const isVisible = await sevenButton.isVisible();
 
 // get element bounds
 const bounds = await sevenButton.getBounds();
+console.log(`element at: ${bounds.x}, ${bounds.y}, size: ${bounds.width}x${bounds.height}`);
 
 // get all attributes
 const attributes = await sevenButton.getAttributes();
+console.log('element attributes:', attributes);
 ```
 
 ### expectations (waiting for conditions)
@@ -79,13 +101,50 @@ await editorLocator.expectEnabled(5000);
 
 // wait for specific text
 await editorLocator.expectTextEquals('expected text', { timeout: 3000 });
+
+// wait for element to contain text
+await editorLocator.expectTextContains('partial text');
+```
+
+### complete example
+
+```typescript
+const { Desktop } = require('../bindings/nodejs');
+
+async function automateCalculator() {
+  try {
+    const desktop = new Desktop();
+    
+    // open calculator
+    await desktop.openApplication('calc');
+    
+    // wait for calculator to be ready
+    const calcWindow = desktop.locator('window:Calculator');
+    await calcWindow.expectVisible();
+    
+    // perform calculation: 7 + 7 = 14
+    await desktop.locator('name:Seven').click();
+    await desktop.locator('name:Plus').click();
+    await desktop.locator('name:Seven').click();
+    await desktop.locator('name:Equals').click();
+    
+    // get result
+    const result = await desktop.locator('automationid:CalculatorResults').getText();
+    console.log('calculation result:', result.text);
+    
+  } catch (error) {
+    console.error('automation failed:', error);
+  }
+}
+
+automateCalculator();
 ```
 
 ### error handling
 
 ```typescript
 try {
-  await client.locator('name:DoesNotExist').click();
+  await desktop.locator('name:DoesNotExist').click();
 } catch (error) {
   if (error instanceof ApiError) {
     console.error(`api error (${error.status}): ${error.message}`);

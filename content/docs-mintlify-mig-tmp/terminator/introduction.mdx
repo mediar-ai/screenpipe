@@ -6,32 +6,42 @@ import { Card, CardGroup } from '@mintlify/components';
 
 ## overview
 
-**terminator** is an ai-native gui automation sdk that lets ai agents see and control native desktop apps like they were web pages. automate desktop apps like a browser with fast, reliable, agent-ready automation for windows.
+**terminator** is the playwright-style sdk for automating windows gui apps. ai-native gui automation for windows, macos, linux. fast, reliable, agent-ready.
 
-because it uses accessibility apis, it is **100x faster and more reliable** for ai computer use than vision-based approaches like openai operator or anthropic computer use.
+automate desktop apps like a browser with **80ms ui scans** and **10000x speedup** via compiled workflows. because it uses os-level accessibility apis, it is **100x faster and more reliable** for ai computer use than vision-based approaches like openai operator or anthropic computer use.
 
-> **Note:** built for windows with partial macos support.
+> **note:** built for windows, works on macos (partial support), linux support coming soon.
+
+## 🧠 what is terminator?
+
+terminator is designed for ai agents, not humans. it provides:
+
+- 🪟 native support for windows, partial macos compatibility
+- 🧠 built specifically for ai agents
+- ⚡ uses os-level accessibility (not vision) for speed
+- 🧩 typescript, python, and rust support
+- 📈 80ms ui scans with massive performance advantages
 
 ## benchmarks
 
 the [benchmark test](https://github.com/mediar-ai/terminator/blob/main/terminator/src/tests/e2e_tests.rs) illustrates how fast terminator can query the ui. it finds all edit elements in about **80 ms**, showcasing a big speed advantage over vision-based tools.
 
-this [form-filling app](https://www.mediar.ai/) can read & fill forms as soon as you see them in <1s end-to-end using gemini.
+this [form-filling app](https://www.mediar.ai/) can read & fill 1000 input forms as soon as you see them in <1s end-to-end using gemini.
 
 ## features
 
 <CardGroup cols={2}>
   <Card title="AI-Native">
-    Built for **Windows** with playwright-style api for python, typescript, and rust.
+    built for **windows** with playwright-style api for python, typescript, and rust.
   </Card>
   <Card title="Fast & Reliable">
-    Uses accessibility apis for 100x faster automation vs vision-based tools.
+    uses accessibility apis for 100x faster automation vs vision-based tools.
   </Card>
   <Card title="Element Discovery">
-    Find ui elements by role, name, value, description, automationid, or text content.
+    find ui elements by role, name, value, description, automationid, or text content.
   </Card>
   <Card title="Full Interaction">
-    Click, type, scroll, press keys, get text, check state - everything you need.
+    click, type, scroll, press keys, get text, check state - everything you need.
   </Card>
 </CardGroup>
 
@@ -44,14 +54,36 @@ check out terminator in action:
 - [📹 technical overview video](https://youtu.be/ycS9G_jpl04)
 - [📹 technical overview: pdf to windows legacy app form](https://www.youtube.com/watch?v=CMw3iexyCMI)
 
+## technical details & debugging
+
+### key dependencies
+- **windows:** [uiautomation-rs](https://github.com/leexgone/uiautomation-rs)
+- **macos:** native macos accessibility api (exploring [cidre](https://github.com/yury/cidre) as an alternative)
+
+### debugging tools
+
+**windows:**
+- [accessibility insights for windows](https://accessibilityinsights.io/downloads/)
+- **flauinspect:** a recommended alternative for inspecting ui automation properties on windows.
+  - install: `choco install flauinspect` or download from [flaui/flauinspect releases](https://github.com/flaui/flauinspect/releases).
+  - usage: launch `flauinspect.exe`, hover or click on elements to see properties like `automationid`, `name`, and `controltype`. this is great for debugging selectors.
+
 ## next steps
 
-ready to start? head over to the [Getting Started](/terminator/getting-started) guide, then dive into the sdk references:
+ready to start? head over to the [getting started](/terminator/getting-started) guide, then dive into the sdk references:
 
-*   [Python SDK Reference](/terminator/python-sdk-reference)
-*   [TypeScript SDK Reference](/terminator/js-sdk-reference)
+*   [python sdk reference](/terminator/python-sdk-reference)
+*   [typescript sdk reference](/terminator/js-sdk-reference)
 
 ## explore further
 
 *   **vercel ai sdk example:** learn how to use terminator with ai in the [pdf-to-form example](https://github.com/mediar-ai/terminator/tree/main/examples/pdf-to-form).
 *   **mcp:** discover [how to vibe work using mcp](https://github.com/mediar-ai/terminator/tree/main/mcp).
+
+## contributing
+
+contributions are welcome! please feel free to submit issues and pull requests. many parts are experimental, and help is appreciated. join our [discord](https://discord.gg/dU9EBuw7Uq) to discuss.
+
+## businesses 
+
+if you want desktop automation at scale for your business, [let's talk](https://mediar.ai)
