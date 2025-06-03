@@ -758,6 +758,7 @@ async fn main() -> anyhow::Result<()> {
         cli.enable_ui_monitoring,
         audio_manager.clone(),
         cli.enable_pipe_manager,
+        cli.hide_window_texts.clone(),
     );
 
     // print screenpipe in gradient

@@ -24,7 +24,7 @@ use tokio_util::io::ReaderStream;
 use tokio::fs::File;
 
 use futures::{
-    future::{try_join, try_join_all},
+    future::try_join_all,
     SinkExt, StreamExt,
 };
 use image::ImageFormat::{self};
@@ -66,7 +66,6 @@ use lru::LruCache;
 use tokio::{
     net::TcpListener,
     sync::{mpsc, Mutex},
-    time::timeout,
 };
 
 use tower_http::{cors::Any, trace::TraceLayer};
@@ -96,6 +95,62 @@ pub struct AppState {
     pub frame_cache: Option<Arc<FrameCache>>,
     pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
     pub element_cache: Arc<Mutex<Option<(Vec<UIElement>, Instant, String)>>>,
+    pub hide_window_keywords: Vec<String>,
+    pub censored_image: Option<Vec<u8>>,
+}
+
+pub fn should_hide_content(text: &str, hide_keywords: &[String]) -> bool {
+    if hide_keywords.is_empty() {
+        return false;
+    }
+    
+    let text_lower = text.to_lowercase();
+    hide_keywords.iter().any(|keyword| {
+        if keyword.is_empty() {
+            return false;
+        }
+        text_lower.contains(&keyword.to_lowercase())
+    })
+}
+
+pub fn create_censored_image() -> Option<Vec<u8>> {
+    use std::fs;
+    
+    // Try to load the custom censored image from assets
+    let asset_path = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .map(|mut p| {
+            p.push("assets");
+            p.push("censored-content.png");
+            p
+        });
+    
+    if let Some(path) = asset_path {
+        if let Ok(data) = fs::read(&path) {
+            return Some(data);
+        }
+    }
+    
+    // Fallback: try relative path from project root
+    if let Ok(data) = fs::read("screenpipe-server/assets/censored-content.png") {
+        return Some(data);
+    }
+    
+    // Final fallback: generate a simple censored image (fast)
+    use image::{ImageBuffer, Rgb, RgbImage};
+    use std::io::Cursor;
+    
+    // Create a simple solid color image
+    let img: RgbImage = ImageBuffer::from_pixel(800, 600, Rgb([74u8, 74u8, 74u8]));
+    
+    let mut buffer = Vec::new();
+    let mut cursor = Cursor::new(&mut buffer);
+    if img.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
+        Some(buffer)
+    } else {
+        None
+    }
 }
 
 // Update the SearchQuery struct
@@ -307,113 +362,94 @@ pub(crate) async fn search(
     Query(query): Query<SearchQuery>,
     State(state): State<Arc<AppState>>,
 ) -> Result<JsonResponse<SearchResponse>, (StatusCode, JsonResponse<serde_json::Value>)> {
-    info!(
-        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}, browser_url={:?}, focused={:?}",
-        query.q.as_deref().unwrap_or(""),
-        query.content_type,
-        query.pagination.limit,
-        query.pagination.offset,
-        query.start_time,
-        query.end_time,
-        query.app_name,
-        query.window_name,
-        query.min_length,
-        query.max_length,
-        query.speaker_ids,
-        query.frame_name,
-        query.browser_url,
-        query.focused,
-    );
+    let limit = query.pagination.limit;
+    let offset = query.pagination.offset;
 
-    let query_str = query.q.as_deref().unwrap_or("");
-
-    let content_type = query.content_type.clone();
-
-    let (results, total) = try_join(
-        state.db.search(
-            query_str,
-            content_type.clone(),
-            query.pagination.limit,
-            query.pagination.offset,
+    let results = match state
+        .db
+        .search(
+            query.q.as_deref().unwrap_or(""),
+            query.content_type,
+            limit as u32,
+            offset as u32,
             query.start_time,
             query.end_time,
             query.app_name.as_deref(),
             query.window_name.as_deref(),
             query.min_length,
             query.max_length,
-            query.speaker_ids.clone(),
+            query.speaker_ids,
             query.frame_name.as_deref(),
             query.browser_url.as_deref(),
             query.focused,
-        ),
-        state.db.count_search_results(
-            query_str,
-            content_type,
-            query.start_time,
-            query.end_time,
-            query.app_name.as_deref(),
-            query.window_name.as_deref(),
-            query.min_length,
-            query.max_length,
-            query.speaker_ids.clone(),
-            query.frame_name.as_deref(),
-            query.browser_url.as_deref(),
-            query.focused,
-        ),
-    )
-    .await
-    .map_err(|e| {
-        error!("failed to perform search operations: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": format!("failed to perform search operations: {}", e)})),
         )
-    })?;
+        .await
+    {
+        Ok(res) => res,
+        Err(e) => {
+            error!("failed to search: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({ "error": e.to_string() })),
+            ));
+        }
+    };
 
-    let mut content_items: Vec<ContentItem> = results
-        .iter()
-        .map(|result| match result {
-            SearchResult::OCR(ocr) => ContentItem::OCR(OCRContent {
-                frame_id: ocr.frame_id,
-                text: ocr.ocr_text.clone(),
-                timestamp: ocr.timestamp,
-                file_path: ocr.file_path.clone(),
-                offset_index: ocr.offset_index,
-                app_name: ocr.app_name.clone(),
-                window_name: ocr.window_name.clone(),
-                tags: ocr.tags.clone(),
-                frame: None,
-                frame_name: Some(ocr.frame_name.clone()),
-                browser_url: ocr.browser_url.clone(),
-                focused: ocr.focused,
-            }),
-            SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
-                chunk_id: audio.audio_chunk_id,
-                transcription: audio.transcription.clone(),
-                timestamp: audio.timestamp,
-                file_path: audio.file_path.clone(),
-                offset_index: audio.offset_index,
-                tags: audio.tags.clone(),
-                device_name: audio.device_name.clone(),
-                device_type: audio.device_type.clone().into(),
-                speaker: audio.speaker.clone(),
-                start_time: audio.start_time,
-                end_time: audio.end_time,
-            }),
-            SearchResult::UI(ui) => ContentItem::UI(UiContent {
-                id: ui.id,
-                text: ui.text.clone(),
-                timestamp: ui.timestamp,
-                app_name: ui.app_name.clone(),
-                window_name: ui.window_name.clone(),
-                initial_traversal_at: ui.initial_traversal_at,
-                file_path: ui.file_path.clone(),
-                offset_index: ui.offset_index,
-                frame_name: ui.frame_name.clone(),
-                browser_url: ui.browser_url.clone(),
-            }),
-        })
-        .collect();
+    let mut content_items = Vec::new();
+    let results_count = results.len();
+
+    for result in results {
+        match result {
+            SearchResult::OCR(ocr) => {
+                // Skip OCR results that contain hidden keywords
+                if !should_hide_content(&ocr.ocr_text, &state.hide_window_keywords) {
+                    content_items.push(ContentItem::OCR(OCRContent {
+                        frame_id: ocr.frame_id,
+                        text: ocr.ocr_text.clone(),
+                        timestamp: ocr.timestamp,
+                        file_path: ocr.file_path.clone(),
+                        offset_index: ocr.offset_index,
+                        app_name: ocr.app_name.clone(),
+                        window_name: ocr.window_name.clone(),
+                        tags: ocr.tags.clone(),
+                        frame: None,
+                        frame_name: Some(ocr.frame_name.clone()),
+                        browser_url: ocr.browser_url.clone(),
+                        focused: ocr.focused,
+                    }));
+                }
+            }
+            SearchResult::Audio(audio) => {
+                content_items.push(ContentItem::Audio(AudioContent {
+                    chunk_id: audio.audio_chunk_id,
+                    transcription: audio.transcription.clone(),
+                    timestamp: audio.timestamp,
+                    file_path: audio.file_path.clone(),
+                    offset_index: audio.offset_index,
+                    tags: audio.tags.clone(),
+                    device_name: audio.device_name.clone(),
+                    device_type: audio.device_type.clone().into(),
+                    speaker: audio.speaker.clone(),
+                    start_time: audio.start_time,
+                    end_time: audio.end_time,
+                }));
+            }
+            SearchResult::UI(ui) => {
+                content_items.push(ContentItem::UI(UiContent {
+                    id: ui.id,
+                    text: ui.text.clone(),
+                    timestamp: ui.timestamp,
+                    app_name: ui.app_name.clone(),
+                    window_name: ui.window_name.clone(),
+                    initial_traversal_at: ui.initial_traversal_at,
+                    file_path: ui.file_path.clone(),
+                    offset_index: ui.offset_index,
+                    frame_name: ui.frame_name.clone(),
+                    browser_url: ui.browser_url.clone(),
+                }));
+            }
+        }
+    }
 
     if query.include_frames {
         debug!("extracting frames for ocr content");
@@ -440,13 +476,13 @@ pub(crate) async fn search(
         }
     }
 
-    info!("search completed: found {} results", total);
+    info!("search completed: found {} results", results_count);
     Ok(JsonResponse(SearchResponse {
         data: content_items,
         pagination: PaginationInfo {
             limit: query.pagination.limit,
             offset: query.pagination.offset,
-            total: total as i64,
+            total: results_count as i64,
         },
     }))
 }
@@ -1116,6 +1152,7 @@ pub struct SCServer {
     audio_disabled: bool,
     ui_monitoring_enabled: bool,
     enable_pipe: bool,
+    hide_window_texts: Vec<String>,
 }
 
 impl SCServer {
@@ -1130,6 +1167,7 @@ impl SCServer {
         ui_monitoring_enabled: bool,
         audio_manager: Arc<AudioManager>,
         enable_pipe: bool,
+        hide_window_texts: Vec<String>,
     ) -> Self {
         SCServer {
             db,
@@ -1141,6 +1179,7 @@ impl SCServer {
             ui_monitoring_enabled,
             audio_manager,
             enable_pipe,
+            hide_window_texts,
         }
     }
 
@@ -1164,6 +1203,7 @@ impl SCServer {
     }
 
     pub async fn create_router(&self, enable_frame_cache: bool) -> Router {
+        info!("Starting server with hide keywords: {:?}", self.hide_window_texts);
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
             audio_manager: self.audio_manager.clone(),
@@ -1191,6 +1231,8 @@ impl SCServer {
                 None
             },
             element_cache: Arc::new(Mutex::new(None)),
+            hide_window_keywords: self.hide_window_texts.clone(),
+            censored_image: create_censored_image(),
         });
 
         let cors = CorsLayer::new()
@@ -2789,88 +2831,75 @@ pub async fn get_frame_data(
     Path(frame_id): Path<i64>,
 ) -> Result<Response<Body>, (StatusCode, JsonResponse<Value>)> {
     let start_time = Instant::now();
+    let should_censor = match state.db.get_frame_ocr_text(frame_id).await {
+        Ok(Some(ocr_text)) => {
+            debug!("Frame {} OCR text: {}", frame_id, ocr_text);
+            debug!("Hide keywords: {:?}", state.hide_window_keywords);
+            let should_hide = should_hide_content(&ocr_text, &state.hide_window_keywords);
+            debug!("Should hide frame {}: {}", frame_id, should_hide);
+            should_hide
+        },
+        Ok(None) => {
+            debug!("Frame {} has no OCR text", frame_id);
+            false
+        },
+        Err(e) => {
+            debug!("Error getting OCR text for frame {}: {}", frame_id, e);
+            false
+        },
+    };
 
-    match timeout(Duration::from_secs(5), async {
-        // Try to get frame from cache if enabled
-        if let Some(cache) = &state.frame_image_cache {
-            let cache_result = cache.try_lock();
-            match cache_result {
-                Ok(mut cache) => {
-                    if let Some((file_path, timestamp)) = cache.get(&frame_id) {
-                        if timestamp.elapsed() < Duration::from_secs(300) {
-                            debug!(
-                                "Cache hit for frame_id: {}. Retrieved in {:?}",
-                                frame_id,
-                                start_time.elapsed()
-                            );
-                            return serve_file(file_path).await;
+    if should_censor {
+        if let Some(censored) = &state.censored_image {
+            return Ok(Response::builder()
+                .header("Content-Type", "image/png")
+                .header("X-Censored", "true")
+                .body(Body::from(censored.clone()))
+                .unwrap());
+        }
+    }
+
+    match state.db.get_frame(frame_id).await {
+        Ok(Some((file_path, offset_index))) => {
+            match extract_frame_from_video(&file_path, offset_index).await {
+                Ok(frame_path) => {
+                    // Store in cache if enabled and we can get the lock
+                    if let Some(cache) = &state.frame_image_cache {
+                        if let Ok(mut cache) = cache.try_lock() {
+                            cache.put(frame_id, (frame_path.clone(), Instant::now()));
                         }
-                        cache.pop(&frame_id);
                     }
+
+                    debug!("Frame {} extracted in {:?}", frame_id, start_time.elapsed());
+                    serve_file(&frame_path).await
                 }
-                Err(_) => {
-                    debug!("Cache lock contention for frame_id: {}", frame_id);
+                Err(e) => {
+                    error!("Failed to extract frame {}: {}", frame_id, e);
+                    Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({
+                            "error": format!("Failed to extract frame: {}", e),
+                            "frame_id": frame_id,
+                            "file_path": file_path
+                        })),
+                    ))
                 }
             }
         }
-
-        // If not in cache or cache disabled, get from database
-        match state.db.get_frame(frame_id).await {
-            Ok(Some((file_path, offset_index))) => {
-                match extract_frame_from_video(&file_path, offset_index).await {
-                    Ok(frame_path) => {
-                        // Store in cache if enabled and we can get the lock
-                        if let Some(cache) = &state.frame_image_cache {
-                            if let Ok(mut cache) = cache.try_lock() {
-                                cache.put(frame_id, (frame_path.clone(), Instant::now()));
-                            }
-                        }
-
-                        debug!("Frame {} extracted in {:?}", frame_id, start_time.elapsed());
-                        serve_file(&frame_path).await
-                    }
-                    Err(e) => {
-                        error!("Failed to extract frame {}: {}", frame_id, e);
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            JsonResponse(json!({
-                                "error": format!("Failed to extract frame: {}", e),
-                                "frame_id": frame_id,
-                                "file_path": file_path
-                            })),
-                        ))
-                    }
-                }
-            }
-            Ok(None) => Err((
-                StatusCode::NOT_FOUND,
-                JsonResponse(json!({
-                    "error": "Frame not found",
-                    "frame_id": frame_id
-                })),
-            )),
-            Err(e) => Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({
-                    "error": format!("Database error: {}", e),
-                    "frame_id": frame_id
-                })),
-            )),
-        }
-    })
-    .await
-    {
-        Ok(result) => result,
-        Err(_) => {
-            error!("Request timeout for frame_id: {}", frame_id);
-            Err((
-                StatusCode::REQUEST_TIMEOUT,
-                JsonResponse(json!({
-                    "error": "Request timed out",
-                    "frame_id": frame_id
-                })),
-            ))
-        }
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "Frame not found",
+                "frame_id": frame_id
+            })),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "error": format!("Database error: {}", e),
+                "frame_id": frame_id
+            })),
+        )),
     }
 }
 
@@ -4451,3 +4480,4 @@ async fn scroll_element_handler(
         )),
     }
 }
+

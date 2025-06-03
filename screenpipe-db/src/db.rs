@@ -965,6 +965,16 @@ impl DatabaseManager {
         .await
     }
 
+    pub async fn get_frame_ocr_text(&self, frame_id: i64) -> Result<Option<String>, sqlx::Error> {
+        let result = sqlx::query_as::<_, (String,)>(
+            "SELECT text FROM ocr_text WHERE frame_id = ?"
+        )
+        .bind(frame_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(result.map(|r| r.0))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn count_search_results(
         &self,

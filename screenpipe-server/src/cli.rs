@@ -285,6 +285,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_pipe_manager: bool,
 
+    /// Keywords to hide in OCR text and frame responses (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    pub hide_window_texts: Vec<String>,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 
