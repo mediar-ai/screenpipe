@@ -1,5 +1,5 @@
 ---
-title: 'Terminator: Introduction'
+title: "Terminator: Introduction"
 ---
 
 import { Card, CardGroup } from '@mintlify/components';
@@ -26,13 +26,13 @@ terminator is designed for ai agents, not humans. it provides:
 
 the [benchmark test](https://github.com/mediar-ai/terminator/blob/main/terminator/src/tests/e2e_tests.rs) illustrates how fast terminator can query the ui. it finds all edit elements in about **80 ms**, showcasing a big speed advantage over vision-based tools.
 
-this [form-filling app](https://www.mediar.ai/) can read &amp; fill 1000 input forms as soon as you see them in &lt;1s end-to-end using gemini.
+this [form-filling app](https://www.mediar.ai/) can read & fill 1000 input forms as soon as you see them in \<1s end-to-end using gemini.
 
 ## features
 
 <CardGroup cols={2}>
   <Card title="AI-Native">
-    built for **windows** with playwright-style api for python, typescript, and rust.
+    built for **windows** with playwright-style api and MCP for python, typescript, and rust.
   </Card>
   <Card title="Fast & Reliable">
     uses accessibility apis for 100x faster automation vs vision-based tools.
@@ -57,12 +57,14 @@ check out terminator in action:
 ## technical details & debugging
 
 ### key dependencies
+
 - **windows:** [uiautomation-rs](https://github.com/leexgone/uiautomation-rs)
 - **macos:** native macos accessibility api (exploring [cidre](https://github.com/yury/cidre) as an alternative)
 
 ### debugging tools
 
 **windows:**
+
 - [accessibility insights for windows](https://accessibilityinsights.io/downloads/)
 - **flauinspect:** a recommended alternative for inspecting ui automation properties on windows.
   - install: `choco install flauinspect` or download from [flaui/flauinspect releases](https://github.com/flaui/flauinspect/releases).
@@ -72,18 +74,18 @@ check out terminator in action:
 
 ready to start? head over to the [getting started](/terminator/getting-started) guide, then dive into the sdk references:
 
-*   [python sdk reference](/terminator/python-sdk-reference)
-*   [typescript sdk reference](/terminator/js-sdk-reference)
+- [python sdk reference](/terminator/python-sdk-reference)
+- [typescript sdk reference](/terminator/js-sdk-reference)
 
 ## explore further
 
-*   **vercel ai sdk example:** learn how to use terminator with ai in the [pdf-to-form example](https://github.com/mediar-ai/terminator/tree/main/examples/pdf-to-form).
-*   **mcp:** discover [how to vibe work using mcp](https://github.com/mediar-ai/terminator/tree/main/mcp).
+- **vercel ai sdk example:** learn how to use terminator with ai in the [pdf-to-form example](https://github.com/mediar-ai/terminator/tree/main/examples/pdf-to-form).
+- **mcp:** discover [how to vibe work using mcp](https://github.com/mediar-ai/terminator/tree/main/mcp).
 
 ## contributing
 
-contributions are welcome! please feel free to submit issues and pull requests. many parts are experimental, and help is appreciated. join our [discord](https://discord.gg/dU9EBuw7Uq) to discuss.
+contributions are welcome\! please feel free to submit issues and pull requests. many parts are experimental, and help is appreciated. join our [discord](https://discord.gg/dU9EBuw7Uq) to discuss.
 
-## businesses 
+## businesses
 
 if you want desktop automation at scale for your business, [let's talk](https://mediar.ai)
