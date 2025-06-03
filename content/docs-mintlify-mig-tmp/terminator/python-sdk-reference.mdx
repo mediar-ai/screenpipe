@@ -1,5 +1,5 @@
 ---
-title: "Python SDK Reference"
+title: "python sdk reference"
 icon: "python"
 ---
 
@@ -24,34 +24,55 @@ desktop = terminator.Desktop()
 
 ```python
 # open calculator
-client.open_application('calc')
+desktop.open_application('calc')
 
 # open notepad
-client.open_application('notepad')
+desktop.open_application('notepad')
 
 # open url
-client.open_url('https://github.com/mediar-ai/terminator')
+desktop.open_url('https://github.com/mediar-ai/terminator')
 ```
 
 ### locating and interacting with elements
 
 ```python
 # locate calculator window and buttons
-calc_window = client.locator('window:Calculator')
-seven = calc_window.locator('role:Button').locator('name:Seven')
-plus = calc_window.locator('role:Button').locator('name:Plus')
+calc_window = desktop.locator('window:Calculator')
+seven = calc_window.locator('name:Seven')
+plus = calc_window.locator('name:Plus')
 
 # click buttons
 seven.click()
 plus.click()
 
 # type text in notepad
-editor = client.locator('window:Notepad').locator('role:RichEdit')
+editor = desktop.locator('window:Notepad').locator('name:Edit')
 editor.type_text('hello from terminator!')
 
 # get text content
 result = editor.get_text()
 print(result.text)
+```
+
+### selector patterns
+
+terminator supports various selector patterns for finding elements:
+
+```python
+# by name
+desktop.locator('name:Seven')
+
+# by role
+desktop.locator('role:Button')
+
+# by automation id
+desktop.locator('automationid:CalculatorResults')
+
+# by window title
+desktop.locator('window:Calculator')
+
+# chaining selectors
+desktop.locator('window:Calculator').locator('role:Button').locator('name:Seven')
 ```
 
 ### element state and attributes
@@ -62,9 +83,11 @@ is_visible = seven.is_visible()
 
 # get element bounds
 bounds = seven.get_bounds()
+print(f'element at: {bounds.x}, {bounds.y}, size: {bounds.width}x{bounds.height}')
 
 # get all attributes
 attributes = seven.get_attributes()
+print('element attributes:', attributes)
 ```
 
 ### expectations (waiting for conditions)
@@ -78,13 +101,79 @@ editor_locator.expect_enabled(timeout=5000)
 
 # wait for specific text
 editor_locator.expect_text_equals('expected text', timeout=3000)
+
+# wait for element to contain text
+editor_locator.expect_text_contains('partial text')
+```
+
+### complete example
+
+```python
+import terminator
+
+def automate_calculator():
+    try:
+        # create desktop instance
+        desktop = terminator.Desktop()
+        
+        # open calculator
+        desktop.open_application('calc')
+        
+        # wait for calculator to be ready
+        calc_window = desktop.locator('window:Calculator')
+        calc_window.expect_visible()
+        
+        # perform calculation: 7 + 7 = 14
+        desktop.locator('name:Seven').click()
+        desktop.locator('name:Plus').click()
+        desktop.locator('name:Seven').click()
+        desktop.locator('name:Equals').click()
+        
+        # get result
+        result = desktop.locator('automationid:CalculatorResults').get_text()
+        print(f'calculation result: {result.text}')
+        
+    except Exception as e:
+        print(f'automation failed: {e}')
+
+automate_calculator()
+```
+
+### form automation example
+
+```python
+import terminator
+
+def automate_form():
+    desktop = terminator.Desktop()
+    
+    # open application with form
+    desktop.open_application('notepad')
+    
+    # find form fields and fill them
+    editor = desktop.locator('name:Edit')
+    
+    # type structured data
+    form_data = """
+    name: john doe
+    email: john@example.com
+    phone: 555-0123
+    """
+    
+    editor.type_text(form_data)
+    
+    # verify content was entered
+    content = editor.get_text()
+    print('form content:', content.text)
+
+automate_form()
 ```
 
 ### error handling
 
 ```python
 try:
-    client.locator('name:DoesNotExist').click()
+    desktop.locator('name:DoesNotExist').click()
 except ApiError as e:
     print(f'api error (status: {e.status}): {e}')
 except Exception as e:
