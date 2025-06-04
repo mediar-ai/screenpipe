@@ -271,38 +271,6 @@ mod tests {
             }
 
             return;
-
-            let app = desktop.application("Arc").unwrap();
-
-            let children = app.children().unwrap();
-
-            println!("App children: {:?}", children.len());
-
-            for (i, child) in children.iter().enumerate() {
-                println!("App child #{}: {:?}", i, child.role());
-            }
-
-            let buttons = app.locator("AXButton").unwrap().all().unwrap_or_default();
-            for b in buttons {
-                println!("b: {:?}", b.role());
-                println!("b: {:?}", b.attributes().label);
-                let text = b.text(4).unwrap_or_default();
-                println!("b: {:?}", text);
-                if text.contains("Click") {
-                    println!("clicking");
-                    let _ = b.type_text("foo");
-                    b.focus().unwrap();
-                    if let Err(e) = b.click() {
-                        println!("failed to click: {:?}", e);
-                    }
-                }
-            }
-            // input.focus().err().unwrap();
-            // let text = input.text(10).unwrap();
-            // println!("text: {:?}", text);
-
-            // let children = input.children().unwrap();
-            // println!("children: {:?}", children.len());
         }
     }
 }
