@@ -8,13 +8,11 @@ icon: "js"
 ### hello world
 
 ```bash
-cd bindings/nodejs
-npm install
-npm run build 
+bun i terminator.js # or npm, pnpm, yarn
 ```
 
 ```typescript
-const { Desktop } = require('../bindings/nodejs');
+const { Desktop } = require('terminator.js');
 const desktop = new Desktop();
 ```
 
