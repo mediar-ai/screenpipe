@@ -16,7 +16,7 @@ cd terminator
 ### 🐍 python
 
 ```bash
-pip install terminator
+pip install terminator-py
 ```
 
 ```python
@@ -30,13 +30,11 @@ seven.click()
 ### 🟦 typescript / node.js
 
 ```bash
-cd bindings/nodejs
-npm install
-npm run build
+bun i terminator.js # or npm, pnpm, yarn
 ```
 
 ```typescript
-const { Desktop } = require('../bindings/nodejs');
+const { Desktop } = require('terminator.js');
 const desktop = new Desktop();
 await desktop.openApplication('notepad')
 await desktop.locator('name:Edit').typeText('hello world')
@@ -70,7 +68,7 @@ equals.click()
 ### notepad automation (typescript)
 
 ```typescript
-const { Desktop } = require('../bindings/nodejs');
+const { Desktop } = require('terminator.js');
 
 async function automateNotepad() {
   const desktop = new Desktop();
