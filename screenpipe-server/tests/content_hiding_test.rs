@@ -128,6 +128,45 @@ mod search_tests {
 }
 
 #[cfg(test)]
+mod streaming_tests {
+    use super::*;
+    
+    #[tokio::test]
+    async fn test_streaming_frames_content_filtering() {
+        // Test that streaming frames apply content filtering to OCR text
+        let keywords = vec!["password".to_string(), "api key".to_string()];
+        
+        // Simulate OCR text that should be filtered
+        let sensitive_texts = vec![
+            "Enter password: secretPass123",
+            "API key configuration: sk-abc123", 
+            "Password field detected",
+            "Your api key is xyz789"
+        ];
+        
+        // Simulate normal OCR text that should not be filtered
+        let normal_texts = vec![
+            "Welcome to the application",
+            "Click the submit button",
+            "User interface element",
+            "Normal screen content"
+        ];
+        
+        // Verify sensitive content is detected for filtering
+        for text in &sensitive_texts {
+            assert!(should_hide_content(text, &keywords),
+                "Sensitive text '{}' should be filtered in streaming frames", text);
+        }
+        
+        // Verify normal content is not filtered
+        for text in &normal_texts {
+            assert!(!should_hide_content(text, &keywords),
+                "Normal text '{}' should not be filtered in streaming frames", text);
+        }
+    }
+}
+
+#[cfg(test)]
 mod performance_tests {
     use super::*;
     use std::time::Instant;

@@ -2936,6 +2936,7 @@ async fn fetch_and_process_frames(
     end_time: DateTime<Utc>,
     frame_tx: mpsc::Sender<TimeSeriesFrame>,
     is_descending: bool,
+    hide_keywords: &[String],
 ) -> Result<(), anyhow::Error> {
     let mut chunks = db.find_video_chunks(start_time, end_time).await?;
 
@@ -2949,14 +2950,14 @@ async fn fetch_and_process_frames(
     }
 
     for chunk in chunks.frames {
-        let frame = create_time_series_frame(chunk);
+        let frame = create_time_series_frame(chunk, hide_keywords);
         frame_tx.send(frame).await?;
     }
 
     Ok(())
 }
 
-fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
+fn create_time_series_frame(chunk: FrameData, hide_keywords: &[String]) -> TimeSeriesFrame {
     TimeSeriesFrame {
         timestamp: chunk.timestamp,
         frame_data: chunk
@@ -2976,7 +2977,11 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
                         .map(|a| a.transcription.clone())
                         .collect::<Vec<_>>()
                         .join(" "),
-                    ocr_text: device_data.text,
+                    ocr_text: if should_hide_content(&device_data.text, hide_keywords) {
+                        "[REDACTED]".to_string()
+                    } else {
+                        device_data.text
+                    },
                 },
                 audio_entries: chunk
                     .audio_entries
@@ -3017,6 +3022,7 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
 
                         let frame_tx = frame_tx.clone();
                         let db = db.clone();
+                        let hide_keywords = state.hide_window_keywords.clone();
 
                         tokio::spawn(async move {
                             if let Err(e) = fetch_and_process_frames(
@@ -3025,6 +3031,7 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
                                 request.end_time,
                                 frame_tx,
                                 request.order == Order::Descending,
+                                &hide_keywords,
                             )
                             .await
                             {
