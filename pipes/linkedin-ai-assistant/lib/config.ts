@@ -1,1 +1,0 @@
-export const REFRESH_INTERVAL = 1 * 60 * 1000; // 5 minutes in milliseconds 
