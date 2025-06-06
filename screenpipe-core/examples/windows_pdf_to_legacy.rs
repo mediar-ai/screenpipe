@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::{Result}; // Use anyhow for better error handling
 
 use screenpipe_core::operator::platforms;
-use screenpipe_core::operator::{AutomationError, Selector}; // Import Element
+use screenpipe_core::operator::Selector; // Import Element
 
 // like a playground, just uncomment
 fn main() -> Result<()> { // Use anyhow::Result

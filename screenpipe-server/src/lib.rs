@@ -26,5 +26,6 @@ pub use server::HealthCheckResponse;
 pub use server::PaginatedResponse;
 pub use server::SCServer;
 pub use server::{api_list_monitors, MonitorInfo};
+pub use server::{should_hide_content, create_censored_image};
 pub use video::VideoCapture;
 pub mod embedding;
