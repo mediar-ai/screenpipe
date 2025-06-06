@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "prebuild": "node scripts/pre_build.js",
+    "build": "npm run prebuild && tauri build"
+  },
+  "dependencies": {
+    "undici": "^6.6.2"
+  },
+  "type": "module"
+}
