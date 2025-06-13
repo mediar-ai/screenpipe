@@ -86,7 +86,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
         <h1 className="text-center text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
           Welcome to OpenRewind
         </h1>
-        <p className="text-center text-lg text-muted-foreground mt-2">
+        <p className="text-center text-lg text-text-secondary mt-2">
           Your AI-powered digital memory assistant
         </p>
       </div>
@@ -97,34 +97,34 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
             {features.map((feature, index) => (
               <motion.div
                 key={index}
-                className="bg-card border rounded-xl p-4 hover:shadow-lg transition-all duration-300"
+                className="bg-card border border-border rounded-xl p-4 hover:shadow-lg transition-all duration-300"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
               >
                 <feature.icon className={`w-8 h-8 ${feature.color} mb-3`} />
-                <h3 className="font-semibold text-sm mb-1">{feature.title}</h3>
-                <p className="text-xs text-muted-foreground">{feature.description}</p>
+                <h3 className="font-semibold text-sm mb-1 text-text-primary">{feature.title}</h3>
+                <p className="text-xs text-text-secondary">{feature.description}</p>
               </motion.div>
             ))}
           </div>
 
           <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-xl p-6 max-w-2xl">
-            <h3 className="text-lg font-semibold text-center mb-3">How it works</h3>
+            <h3 className="text-lg font-semibold text-center mb-3 text-text-primary">How it works</h3>
             <div className="flex items-center justify-center space-x-3 text-sm">
               <div className="flex items-center space-x-1">
                 <Video className="w-4 h-4 text-blue-500" />
-                <span>Record</span>
+                <span className="text-text-primary">Record</span>
               </div>
-              <ArrowRight className="w-4 h-4 text-muted-foreground" />
+              <ArrowRight className="w-4 h-4 text-text-secondary" />
               <div className="flex items-center space-x-1">
                 <Clock className="w-4 h-4 text-purple-500" />
-                <span>Timeline</span>
+                <span className="text-text-primary">Timeline</span>
               </div>
-              <ArrowRight className="w-4 h-4 text-muted-foreground" />
+              <ArrowRight className="w-4 h-4 text-text-secondary" />
               <div className="flex items-center space-x-1">
                 <Brain className="w-4 h-4 text-orange-500" />
-                <span>AI Search</span>
+                <span className="text-text-primary">AI Search</span>
               </div>
             </div>
           </div>
@@ -133,7 +133,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
             <Button
               variant="ghost"
               onClick={() => setShowDemo(true)}
-              className="text-muted-foreground"
+              className="text-text-secondary hover:text-text-primary"
             >
               <Play className="w-4 h-4 mr-2" />
               See Demo
@@ -141,33 +141,33 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
             <Button
               variant="ghost"
               onClick={handleSkip}
-              className="text-muted-foreground"
+              className="text-text-secondary hover:text-text-primary"
             >
               Skip Setup
             </Button>
             <RainbowButton onClick={handleNextSlide}>
               Get Started
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <ArrowRight className="w-4 w-4 ml-2" />
             </RainbowButton>
           </div>
         </>
       ) : (
         <div className="max-w-2xl">
-          <div className="bg-black rounded-xl overflow-hidden shadow-2xl">
-            <div className="bg-gray-800 px-4 py-2 flex items-center space-x-2">
+          <div className="bg-surface rounded-xl overflow-hidden shadow-2xl border border-border">
+            <div className="bg-surface-secondary px-4 py-2 flex items-center space-x-2">
               <div className="w-3 h-3 bg-red-500 rounded-full"></div>
               <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-gray-300 text-sm ml-2">OpenRewind Demo</span>
+              <span className="text-text-secondary text-sm ml-2">OpenRewind Demo</span>
             </div>
-            <div className="p-6 h-64 bg-gradient-to-br from-gray-900 to-gray-800 relative overflow-hidden">
+            <div className="p-6 h-64 bg-gradient-to-br from-surface to-surface-tertiary relative overflow-hidden">
               <motion.div
                 className="absolute inset-0 flex items-center justify-center"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.5 }}
               >
-                <div className="text-center text-white space-y-4">
+                <div className="text-center text-text-primary space-y-4">
                   {demoSteps.map((step, index) => (
                     <motion.p
                       key={index}
@@ -188,14 +188,14 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
             <Button
               variant="ghost"
               onClick={() => setShowDemo(false)}
-              className="text-muted-foreground"
+              className="text-text-secondary hover:text-text-primary"
             >
               Back
             </Button>
             <Button
               variant="ghost"
               onClick={handleSkip}
-              className="text-muted-foreground"
+              className="text-text-secondary hover:text-text-primary"
             >
               Skip Setup
             </Button>

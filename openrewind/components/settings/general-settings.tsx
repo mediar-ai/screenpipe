@@ -2,19 +2,43 @@
 
 import React from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useTheme } from "@/components/theme-provider";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Rocket } from "lucide-react";
+import { Rocket, Moon, Sun, Monitor } from "lucide-react";
 import { SettingsStore } from "@/lib/utils/tauri";
 
 export default function GeneralSettings() {
   const { settings, updateSettings } = useSettings();
+  const { theme, setTheme } = useTheme();
+  
   const handleSettingsChange = (newSettings: Partial<SettingsStore>) => {
     if (settings) {
       updateSettings(newSettings);
     }
   };
+
+  const themeOptions = [
+    {
+      value: "system" as const,
+      label: "System",
+      description: "Use system preference",
+      icon: Monitor,
+    },
+    {
+      value: "light" as const,
+      label: "Light",
+      description: "Light theme",
+      icon: Sun,
+    },
+    {
+      value: "dark" as const,
+      label: "Dark",
+      description: "Dark theme",
+      icon: Moon,
+    },
+  ];
 
   return (
     <div className="space-y-8">
@@ -57,7 +81,66 @@ export default function GeneralSettings() {
           </CardContent>
         </Card>
 
-
+        <Card className="border-border bg-card shadow-sm">
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <div className="flex items-start space-x-4">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Monitor className="h-5 w-5 text-primary" />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Theme
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Choose your preferred theme. System follows your device settings automatically.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-3 ml-16">
+                {themeOptions.map((option) => {
+                  const IconComponent = option.icon;
+                  return (
+                    <label
+                      key={option.value}
+                      className="flex items-center space-x-3 cursor-pointer group"
+                    >
+                      <input
+                        type="radio"
+                        name="theme"
+                        value={option.value}
+                        checked={theme === option.value}
+                        onChange={() => setTheme(option.value)}
+                        className="sr-only"
+                      />
+                      <div className={`
+                        flex items-center justify-center w-4 h-4 rounded-full border-2 transition-colors
+                        ${theme === option.value 
+                          ? 'border-primary bg-primary' 
+                          : 'border-muted-foreground group-hover:border-primary'
+                        }
+                      `}>
+                        {theme === option.value && (
+                          <div className="w-2 h-2 rounded-full bg-primary-foreground" />
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <IconComponent className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium text-foreground">
+                          {option.label}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {option.description}
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="pt-4">

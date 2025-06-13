@@ -5,6 +5,7 @@ use analytics::AnalyticsManager;
 use commands::show_main_window;
 use serde_json::json;
 use serde_json::Value;
+use tauri_nspanel::ManagerExt;
 use std::env;
 use std::fs::File;
 use std::path::PathBuf;
@@ -14,11 +15,10 @@ use tauri::Config;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_global_shortcut::ShortcutState;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_store::StoreBuilder;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
@@ -37,6 +37,7 @@ use tauri_specta::{collect_commands, Builder};
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
+use crate::store::SettingsStore;
 
 mod commands;
 mod disk_usage;
@@ -92,33 +93,21 @@ struct ShortcutConfig {
 
 impl ShortcutConfig {
     async fn from_store(app: &AppHandle) -> Result<Self, String> {
-        let store = get_store(app, None).map_err(|e| e.to_string())?;
+        let store = SettingsStore::get(app).unwrap_or_default().unwrap_or_default();
 
         Ok(Self {
             show: store
-                .get("showOpenRewindShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "Super+Alt+S".to_string()),
+                .show_screenpipe_shortcut,
             start: store
-                .get("startRecordingShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "Super+Alt+U".to_string()),
+                .start_recording_shortcut,
             stop: store
-                .get("stopRecordingShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "Super+Alt+X".to_string()),
+                .stop_recording_shortcut,
             start_audio: store
-                .get("startAudioShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_default(),
+                .start_audio_shortcut,
             stop_audio: store
-                .get("stopAudioShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_default(),
+                .stop_audio_shortcut,
             disabled: store
-                .get("disabledShortcuts")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_default(),
+                .disabled_shortcuts,
         })
     }
 
@@ -186,13 +175,13 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     // Register show shortcut
     register_shortcut(app, &config.show, config.is_disabled("show"), |app| {
         info!("show shortcut triggered");
-        if let Some(window) = app.get_webview_window("main") {
+        if let Ok(window) = app.get_webview_panel("main") {
             match window.is_visible() {
-                Ok(true) => {
+                true => {
                     info!("window is visible, hiding main window");
                     hide_main_window(app)
                 }
-                Ok(false) | Err(_) => {
+                false => {
                     info!(
                         "window is not visible or error checking visibility, showing main window"
                     );
@@ -202,6 +191,12 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         } else {
             debug!("main window not found");
         }
+    })
+    .await?;
+
+    // register esc button to hide main window
+    register_shortcut(app, "Escape", false, |app| {
+        hide_main_window(app);
     })
     .await?;
 
@@ -678,6 +673,7 @@ async fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_sentry::init(&sentry_guard))
+        .plugin(tauri_nspanel::init())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -932,33 +928,17 @@ async fn main() {
                 drop(server_shutdown_tx.send(()));
             }
         }
-        tauri::RunEvent::WindowEvent {
-            label,
-            event: tauri::WindowEvent::Focused(focused),
-            ..
-        } => {
-            if label == "main" && focused {
-                let window = app_handle.get_webview_window("main").unwrap();
-                window.show().unwrap();
-                window.set_focus().unwrap();
-            }
-        }
+
         tauri::RunEvent::WindowEvent {
             label,
             event: tauri::WindowEvent::Destroyed,
             ..
         } => {
-            if label == "main" {
-                let window = app_handle.get_webview_window("main").unwrap();
-                window.show().unwrap();
-                window.set_focus().unwrap();
-            }
-
             if let Ok(window_id) = RewindWindowId::from_str(label.as_str()) {
                 match window_id {
                     RewindWindowId::Settings => {
                         if let Some(window) = RewindWindowId::Main.get(&app_handle) {
-                            let _ = window.show();
+                            let _ = window.destroy();
                         }
 
                         return;
@@ -971,24 +951,11 @@ async fn main() {
 
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen {
-            has_visible_windows,
             ..
         } => {
-            let has_window = app_handle
-                .webview_windows()
-                .iter()
-                .any(|(label, _)| label.as_str() == "settings");
 
-            if has_window {
-                if let Some(window) = app_handle.get_webview_window("settings") {
-                    let _ = window.show();
-                }
-                return;
-            }
 
-            if !has_visible_windows {
-                show_main_window(app_handle, false);
-            }
+            let _ = ShowRewindWindow::Main.show(&app_handle);
         }
         _ => {}
     });

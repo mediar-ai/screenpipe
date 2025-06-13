@@ -1550,6 +1550,7 @@ export function RecordingSettings() {
           </Label>
           <MultiSelect
             options={createWindowOptions(windowItems || [], settings.ignoredWindows)}
+            defaultValue={settings.ignoredWindows}
             value={settings.ignoredWindows}
             onValueChange={handleIgnoredWindowsChange}
             placeholder="Select windows to ignore..."
@@ -1574,6 +1575,7 @@ export function RecordingSettings() {
           </Label>
           <MultiSelect
             options={createWindowOptions(windowItems || [], settings.includedWindows)}
+            defaultValue={settings.includedWindows}
             value={settings.includedWindows}
             onValueChange={handleIncludedWindowsChange}
             placeholder="Select windows to include (optional)..."

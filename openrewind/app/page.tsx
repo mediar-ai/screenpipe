@@ -126,26 +126,26 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center flex-1 mx-auto relative scrollbar-hide">
       {/* Transparent titlebar area */}
-      <div className="h-8 bg-transparent w-full" data-tauri-drag-region>
+      <div className="h-8 bg-gradient-to-b from-black/15 to-transparent w-full fixed top-0 left-0 z-50" data-tauri-drag-region>
           <div className="flex items-center justify-between gap-2">
             <div/>
-            <h1 className="text-xs font-bold">OpenRewind</h1>
+            <h1 className="text-xs font-bold"></h1>
             <div className="flex items-center gap-2">
               <HealthStatus className="cursor-pointer" />
               <Popover open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="link" size="icon">
                     <Mail className="h-4 w-4" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-100 rounded-2xl">
+                <PopoverContent className="w-100 rounded-2xl bg-background border border-border">
                   <ShareLogsButton 
                     showShareLink={false} 
                     onComplete={() => setIsFeedbackOpen(false)} 
                   />
                 </PopoverContent>
               </Popover>
-              <Button variant="ghost" size="icon" onClick={() => openSettingsWindow()}>
+              <Button variant="link" size="icon" onClick={() => openSettingsWindow()}>
                 <Settings className="h-4 w-4" />
               </Button>
             </div>
@@ -161,16 +161,16 @@ export default function Home() {
           <LoginDialog />
           <ModelDownloadTracker />
           {!isServerDown ? (
-            <div className="w-full scrollbar-hide">
+            <div className="w-full scrollbar-hide bg-background">
               <Timeline />
             </div>
           ) : (
-            <div className="flex items-center justify-center h-screen p-4">
+            <div className="flex items-center justify-center h-screen p-4 bg-background w-full">
               <div className="max-w-lg w-full space-y-6">
                 {/* Header */}
                 <div className="text-center space-y-4">
                   <div className="flex flex-col items-center gap-3">
-                    <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-full bg-destructive/20 flex items-center justify-center border border-destructive/15">
                       <AlertTriangle className="w-8 h-8 text-destructive" />
                     </div>
                     <div>
@@ -183,7 +183,7 @@ export default function Home() {
                 </div>
 
                 {/* Actions Card */}
-                <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="bg-card border border-border rounded-lg p-6 space-y-6">
                   {/* Server Control */}
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -196,7 +196,7 @@ export default function Home() {
                       <Button
                         onClick={handleRestartServer}
                         disabled={isRestarting}
-                        className="flex items-center gap-2"
+                        className="flex items-center gap-2 bg-muted"
                       >
                         <RefreshCw className={`h-4 w-4 ${isRestarting ? 'animate-spin' : ''}`} />
                         {isRestarting ? "Starting..." : "Start Server"}

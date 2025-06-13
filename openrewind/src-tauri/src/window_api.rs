@@ -2,10 +2,14 @@ use std::{path::PathBuf, str::FromStr};
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, LogicalSize, Manager, Size, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
+use tauri_nspanel::ManagerExt;
 use tracing::{error, info};
+#[cfg(target_os = "macos")]
+use tauri_nspanel::WebviewWindowExt;
 
-use crate::ServerState;
+
+use crate::{store::OnboardingStore, ServerState};
 
 #[derive(Deserialize, Debug)]
 pub struct OpenLocalPathPayload {
@@ -263,9 +267,33 @@ impl ShowRewindWindow {
 
     pub fn show(&self, app: &AppHandle) -> tauri::Result<WebviewWindow> {
         let id = self.id();
+        let onboarding_store = OnboardingStore::get(app)
+            .unwrap_or_else(|_| None)
+            .unwrap_or_default();
 
         if let Some(window) = id.get(app) {
+
+
+            if id.label() == RewindWindowId::Main.label() {
+                    info!("showing panel");
+                    let app_clone = app.clone();
+                    app.run_on_main_thread(move || {
+                        if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
+                            panel.show();
+                        }
+                    }).ok();
+                    return Ok(window);
+            }
+
+            if id.label() == RewindWindowId::Onboarding.label() {
+                if onboarding_store.is_completed {
+                    return ShowRewindWindow::Main.show(app);
+                }
+            }
+
+                 
             info!("showing window: {:?}", id.label());
+
             window.show().ok();
             return Ok(window);
         }
@@ -275,8 +303,86 @@ impl ShowRewindWindow {
 
         let window = match self {
             ShowRewindWindow::Main => {
-                let builder = self.window_builder(app, "/").hidden_title(true).focused(true);
+
+                if !onboarding_store.is_completed {
+                    return ShowRewindWindow::Onboarding.show(app);
+                }
+                
+                let monitor = app.primary_monitor().unwrap().unwrap();
+                let size = monitor.size();
+                let builder = self.window_builder(app, "/").hidden_title(true).visible_on_all_workspaces(true).always_on_top(true).decorations(false).skip_taskbar(true).focused(true).transparent(true).inner_size(size.width as f64, size.height as f64);
                 let window = builder.build()?;
+
+                #[cfg(target_os = "macos")]
+                {
+                    // Convert to panel on macOS to prevent animations - do this after window creation
+                    if let Ok(_panel) = window.to_panel() {
+                        info!("Successfully converted main window to panel");
+                        
+                        // Set panel behaviors on main thread to avoid crashes
+                        let window_clone = window.clone();
+                        app.run_on_main_thread(move || {
+                            use tauri_nspanel::cocoa::appkit::{NSWindowCollectionBehavior};
+                            
+                            if let Ok(panel) = window_clone.to_panel() {
+                                panel.set_level(26);
+
+                                panel.released_when_closed(true);
+
+                                panel.set_style_mask(0);
+
+                                panel.set_collection_behaviour(
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                );
+                            }
+                        }).ok();
+                    } else {
+                        error!("Failed to convert main window to panel");
+                    }
+                }
+
+                // Add event listener to hide window when it loses focus
+                let app_clone = app.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Focused(is_focused) = event {
+                        if !is_focused {
+                            info!("Main window lost focus, hiding window");
+                            
+                            // #[cfg(target_os = "macos")]
+                            // {
+                            //     let value = app_clone.clone();
+                            //     app_clone.run_on_main_thread(move || {
+                            //         if let Ok(panel) = value.get_webview_panel(RewindWindowId::Main.label()) {
+                            //             panel.order_out(None);
+                            //         }
+
+
+                            //     }).ok();   
+                            // }
+
+                            // #[cfg(not(target_os = "macos"))]
+                            // {
+                            //     let _ = window.hide();
+                            // }
+
+                            let _ = app_clone.emit("window-focused", false).ok();
+                        }else{
+                            let _ = app_clone.emit("window-focused", true).ok();
+                        }
+                    }
+                });
+
+    //    #[cfg(target_os = "macos")]
+    //     {
+    //         use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+    //         apply_vibrancy(&window, NSVisualEffectMaterial::ContentBackground, None, None).ok();
+    //     }
+
+    //     #[cfg(target_os = "windows")]
+    //     {
+    //         use window_vibrancy::apply_blur;
+    //         apply_blur(&window, Some((18, 18, 18, 125))).ok();
+    //     }
 
                 window
             }
@@ -291,17 +397,50 @@ impl ShowRewindWindow {
                 window
             }
             ShowRewindWindow::Onboarding => {
+                if onboarding_store.is_completed {
+                    return ShowRewindWindow::Main.show(app);
+                }
+
                 let builder = self.window_builder(app, "/onboarding").visible_on_all_workspaces(true).always_on_top(true).inner_size(1000.0, 750.0);
                 let window = builder.build()?;
                 window
             }
         };
 
+     
         Ok(window)
     }
 
     pub fn close(&self, app: &AppHandle) -> tauri::Result<()> {
         let id = self.id();
+        if id.label() == RewindWindowId::Main.label() {
+            #[cfg(target_os = "macos")]
+            {
+                let app_clone = app.clone();
+                app.run_on_main_thread(move || {
+                    if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
+                        panel.order_out(None);
+                    }
+                }).ok();
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+        if let Some(window) = id.get(app) {
+            window.close().ok();
+        }
+            }
+            
+            return Ok(());
+        }
+
+        // if id.label() == RewindWindowId::Onboarding.label() {
+        //     if let Some(window) = id.get(app) {
+        //         window.destroy().ok();
+        //     }
+        //     return Ok(());
+        // }
+
         if let Some(window) = id.get(app) {
             window.close().ok();
         }

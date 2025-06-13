@@ -62,8 +62,8 @@ export const TimelineSlider = ({
 
 	const visibleFrames = useMemo(() => {
 		if (!frames || frames.length === 0) return [];
-		const start = Math.max(0, currentIndex - 100);
-		const end = Math.min(frames.length, currentIndex + 100);
+		const start = Math.max(0, currentIndex - 200);
+		const end = Math.min(frames.length, currentIndex + 200);
 		return frames.slice(start, end);
 	}, [frames, currentIndex]);
 
@@ -204,31 +204,33 @@ export const TimelineSlider = ({
 	return (
 		<div className="relative w-full" dir="rtl">
 			<motion.div
-				className="absolute top-0 h-1 bg-blue-500/0"
+				className="absolute top-0 h-1 bg-blue-500/50"
 				style={{ width: lineWidth }}
 			/>
 			<div
 				ref={containerRef}
-				className="w-full overflow-x-auto scroll-smooth scrollbar-hide"
+				className="w-full overflow-x-auto overflow-y-visible scroll-smooth scrollbar-hide bg-gradient-to-t from-black/50 to-black/0"
 				style={{
 					scrollBehavior: "auto",
+					paddingTop: "80px", // Space for tooltips above
+					paddingBottom: "0px",
 				}}
 			>
 				<motion.div
-					className="whitespace-nowrap flex flex-nowrap w-max justify-center px-[50vw] h-40 sticky right-0 scrollbar-hide"
+					className="whitespace-nowrap flex flex-nowrap w-max justify-center px-[50vw] h-24 sticky right-0 scrollbar-hide"
 					onMouseUp={handleDragEnd}
 					onMouseLeave={handleDragEnd}
 				>
 					{appGroups.map((group, groupIndex) => (
 						<div
 							key={`${group.appName}-${groupIndex}`}
-							className="flex flex-nowrap items-end h-full group pt-20 relative"
+							className="flex flex-nowrap items-end h-full group pt-6 relative"
 							dir="rtl"
 						>
-							<div className="absolute top-0 left-1/2 w-5 h-5 rounded-full -translate-x-1/2 bg-background/50 backdrop-blur p-0.5">
+							<div className="absolute top-1 left-1/2 w-5 h-5 rounded-full -translate-x-1/2 bg-card border border-border p-0.5 z-10">
 								<img
 									src={`http://localhost:11435/app-icon?name=${group.appName}`}
-									className="w-full h-full opacity-70"
+									className="w-full h-full opacity-70 rounded-sm"
 									alt={group.appName}
 									loading="lazy"
 									decoding="async"
@@ -244,29 +246,36 @@ export const TimelineSlider = ({
 									frameDate <= selectionRange.end;
 
 								const hasAudio = Boolean(frame?.devices?.[0]?.audio?.length);
+								const isCurrent = frameIndex === currentIndex;
 
 								return (
 									<motion.div
 										key={frame.timestamp}
 										data-timestamp={frame.timestamp}
-										className={`flex-shrink-0 cursor-pointer w-2 mx-0.5 rounded-t relative group hover:z-50 ${
+										className={`flex-shrink-0 cursor-pointer w-1.5 mx-0.5 rounded-t relative group hover:z-50 transition-all duration-200 ${
 											isSelected || isInRange
-												? "ring-2 ring-blue-500 ring-offset-1"
+												? "ring-2 ring-blue-400 ring-offset-1 ring-offset-black/20"
 												: ""
 										}`}
 										style={{
-											backgroundColor: group.color,
-											height:
-												frameIndex === currentIndex || isSelected || isInRange
-													? "60%"
-													: "40%",
-											opacity:
-												frameIndex === currentIndex || isSelected || isInRange
-													? 1
-													: 0.7,
+											backgroundColor: isCurrent ? '#3b82f6' : group.color,
+											height: isCurrent || isSelected || isInRange ? "80%" : "50%",
+											opacity: isCurrent || isSelected || isInRange ? 1 : 0.8,
 											direction: "ltr",
+											boxShadow: isCurrent ? '0 0 15px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.3)' : 'none',
+											transform: isCurrent ? 'scale(1.1)' : 'scale(1)',
+											transition: 'all 0.2s ease-out',
 										}}
-										whileHover={{ height: "60%", opacity: 1 }}
+										whileHover={{ 
+											height: "80%", 
+											opacity: 1,
+											scale: 1.05,
+											transition: { duration: 0.15 }
+										}}
+										whileTap={{ 
+											scale: 0.95,
+											transition: { duration: 0.1 }
+										}}
 										onMouseDown={() => handleDragStart(frameIndex)}
 										onMouseEnter={() => {
 											setHoveredTimestamp(frame.timestamp);
@@ -275,14 +284,14 @@ export const TimelineSlider = ({
 										onMouseLeave={() => setHoveredTimestamp(null)}
 									>
 										{hasAudio && (
-											<div className="absolute -top-5 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full ">
-												<AudioLinesIcon className="w-full h-full" />
+											<div className="absolute -top-4 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-green-400/80">
+												<AudioLinesIcon className="w-full h-full p-0.5" />
 											</div>
 										)}
 										{(hoveredTimestamp === frame.timestamp ||
 											frames[currentIndex]?.timestamp === frame.timestamp) && (
-											<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-6 w-max bg-background border rounded-md px-2 py-1 text-xs shadow-lg">
-												<p className="font-medium">
+											<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-12 w-max bg-popover border border-border rounded-xl px-3 py-2 text-xs shadow-2xl">
+												<p className="font-medium text-popover-foreground">
 													{frame?.devices?.[0]?.metadata?.app_name || 'Unknown'}
 												</p>
 												<p className="text-muted-foreground">

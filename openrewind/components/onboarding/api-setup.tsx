@@ -153,7 +153,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
             src="/128x128.png"
             alt="screenpipe-logo"
           />
-          <h1 className="text-center text-2xl">
+          <h1 className="text-center text-2xl text-text-primary">
             setup your ai settings
           </h1>
         </div>
@@ -165,7 +165,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
                 open("https://github.com/ollama/ollama?tab=readme-ov-file#ollama")
               }
               href="#"
-              className="text-muted-foreground text-sm !text-center hover:underline"
+              className="text-text-secondary text-sm !text-center hover:underline hover:text-text-primary transition-colors"
             >
               don&apos;t have api key ? set up ollama locally
               <ArrowUpRight className="inline w-4 h-4 ml-1" />

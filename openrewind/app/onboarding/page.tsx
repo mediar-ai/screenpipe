@@ -7,6 +7,7 @@ import OnboardingIntro from "@/components/onboarding/introduction";
 import OnboardingAPISetup from "@/components/onboarding/api-setup";
 import OnboardingInstructions from "@/components/onboarding/explain-instructions";
 import OnboardingLogin from "@/components/onboarding/login";
+import OnboardingShortcuts from "@/components/onboarding/shortcuts";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import posthog from "posthog-js";
 import { commands } from "@/lib/utils/tauri";
@@ -16,6 +17,7 @@ type SlideKey =
   | "status" 
   | "login"
   | "apiSetup"
+  | "shortcuts"
   | "instructions";
 
 // Window size configurations for each slide
@@ -24,6 +26,7 @@ const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = 
   status: { width: 1100, height: 850 }, // Good for status checks
   login: { width: 1100, height: 680 }, // Compact for login form
   apiSetup: { width: 1100, height: 1000 }, // Taller for AI presets configuration
+  shortcuts: { width: 1100, height: 850 }, // Good size for shortcuts display
   instructions: { width: 1100, height: 1050 }, // Largest for the final comprehensive instructions
 };
 
@@ -37,6 +40,8 @@ const getNextSlide = (currentSlide: SlideKey): SlideKey | null => {
     case "login":
       return "apiSetup";
     case "apiSetup":
+      return "shortcuts";
+    case "shortcuts":
       return "instructions";
     case "instructions":
       return null;
@@ -55,8 +60,10 @@ const getPrevSlide = (currentSlide: SlideKey): SlideKey | null => {
       return "status";
     case "apiSetup":
       return "login";
-    case "instructions":
+    case "shortcuts":
       return "apiSetup";
+    case "instructions":
+      return "shortcuts";
     default:
       return null;
   }
@@ -273,18 +280,18 @@ export default function OnboardingPage() {
   return (
     <div className="flex flex-col w-full h-screen overflow-hidden bg-background">
       {/* Progress indicator with drag region */}
-      <div className="w-full bg-secondary p-4" data-tauri-drag-region>
+      <div className="w-full bg-secondary p-4 border-b border-border" data-tauri-drag-region>
         <div className="flex items-center justify-between max-w-4xl mx-auto">
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium">Progress:</span>
-            <div className="text-sm text-muted-foreground">
-              Step {["intro", "status", "login", "apiSetup", "instructions"].indexOf(currentSlide) + 1} of 5
+            <span className="text-sm font-medium text-text-primary">Progress:</span>
+            <div className="text-sm text-text-secondary">
+              Step {["intro", "status", "login", "apiSetup", "shortcuts", "instructions"].indexOf(currentSlide) + 1} of 6
             </div>
           </div>
           <button
             onClick={handleSkip}
             disabled={isTransitioning}
-            className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+            className="text-sm text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors"
           >
             Skip onboarding
           </button>
@@ -319,6 +326,14 @@ export default function OnboardingPage() {
           )}
           {currentSlide === "apiSetup" && (
             <OnboardingAPISetup
+              className={`transition-opacity duration-300 ease-in-out w-full
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
+              handleNextSlide={handleNextSlide}
+              handlePrevSlide={handlePrevSlide}
+            />
+          )}
+          {currentSlide === "shortcuts" && (
+            <OnboardingShortcuts
               className={`transition-opacity duration-300 ease-in-out w-full
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleNextSlide={handleNextSlide}

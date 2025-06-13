@@ -4,103 +4,199 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* Base colors */
+    --background: 0 0% 100%; /* white */
+    --foreground: 0 0% 0%; /* black */
 
+    /* Surface colors */
+    --surface: 0 0% 98%;
+    --surface-secondary: 210 40% 98%;
+    --surface-tertiary: 220 14.3% 95.9%;
+    
+    /* Card colors */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 222.2 84% 4.9%;
+    --card-hover: 210 40% 98%;
 
+    /* Popover colors */
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
+    /* Primary brand colors */
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --primary-hover: 221.2 83.2% 48%;
+    --primary-muted: 221.2 83.2% 93%;
 
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    /* Secondary colors */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --secondary-hover: 210 40% 92%;
 
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    /* Success colors */
+    --success: 142.1 76.2% 36.3%;
+    --success-foreground: 355.7 100% 97.3%;
+    --success-muted: 142.1 76.2% 90%;
 
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    /* Warning colors */
+    --warning: 32.4 95.4% 58%;
+    --warning-foreground: 26 83.3% 14.1%;
+    --warning-muted: 32.4 95.4% 90%;
 
+    /* Error/Destructive colors */
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 210 40% 98%;
+    --destructive-hover: 0 84.2% 55%;
+    --destructive-muted: 0 84.2% 95%;
 
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    /* Info colors */
+    --info: 199.4 89.2% 48.4%;
+    --info-foreground: 210 40% 98%;
+    --info-muted: 199.4 89.2% 90%;
 
-    --radius: 0.5rem;
+    /* Muted colors */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
+    /* Accent colors */
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --accent-hover: 210 40% 92%;
+
+    /* Border and input colors */
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --input-focus: 221.2 83.2% 53.3%;
+    --ring: 221.2 83.2% 53.3%;
+
+    /* Text colors */
+    --text-primary: 222.2 84% 4.9%;
+    --text-secondary: 215.4 16.3% 46.9%;
+    --text-tertiary: 215.4 16.3% 65%;
+    --text-disabled: 215.4 16.3% 75%;
+
+    /* Brand accent colors */
+    --brand-1: 0 100% 63%;
+    --brand-2: 270 100% 63%;
+    --brand-3: 210 100% 63%;
+    --brand-4: 195 100% 63%;
+    --brand-5: 90 100% 63%;
+
+    /* Rainbow button color mappings */
     --color-1: 0 100% 63%;
-
     --color-2: 270 100% 63%;
-
     --color-3: 210 100% 63%;
-
     --color-4: 195 100% 63%;
-
     --color-5: 90 100% 63%;
 
+    /* Sidebar colors */
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 221.2 83.2% 53.3%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222.2 84% 4.9%;
+    --sidebar-border: 214.3 31.8% 91.4%;
+    --sidebar-ring: 221.2 83.2% 53.3%;
 
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Utility */
+    --radius: 0.5rem;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
+    /* Base colors */
+    --background: 0 0% 0%;
+    --foreground: 210 40% 98%;
 
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
+    /* Surface colors */
+    --surface: 0 0% 5%;
+    --surface-secondary: 0 0% 8%;
+    --surface-tertiary: 0 0% 12%;
 
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    /* Card colors */
+    --card: 0 0% 3%;
+    --card-foreground: 210 40% 98%;
+    --card-hover: 0 0% 6%;
 
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
+    /* Popover colors */
+    --popover: 0 0% 3%;
+    --popover-foreground: 210 40% 98%;
 
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
+    /* Primary brand colors */
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 0 0% 0%;
+    --primary-hover: 217.2 91.2% 65%;
+    --primary-muted: 217.2 91.2% 15%;
 
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
+    /* Secondary colors */
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 210 40% 98%;
+    --secondary-hover: 0 0% 15%;
 
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    /* Success colors */
+    --success: 142.1 70.6% 45.3%;
+    --success-foreground: 144.9 80.4% 10%;
+    --success-muted: 142.1 70.6% 15%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    /* Warning colors */
+    --warning: 32.4 95.4% 58%;
+    --warning-foreground: 26 83.3% 14.1%;
+    --warning-muted: 32.4 95.4% 15%;
 
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    /* Error/Destructive colors */
+    --destructive: 0 75.7% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --destructive-hover: 0 75.7% 65%;
+    --destructive-muted: 0 75.7% 15%;
+
+    /* Info colors */
+    --info: 199.4 89.2% 58.4%;
+    --info-foreground: 0 0% 0%;
+    --info-muted: 199.4 89.2% 15%;
+
+    /* Muted colors */
+    --muted: 0 0% 8%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    /* Accent colors */
+    --accent: 0 0% 8%;
+    --accent-foreground: 210 40% 98%;
+    --accent-hover: 0 0% 12%;
+
+    /* Border and input colors */
+    --border: 0 0% 15%;
+    --input: 0 0% 10%;
+    --input-focus: 217.2 91.2% 59.8%;
+    --ring: 217.2 91.2% 59.8%;
+
+    /* Text colors */
+    --text-primary: 210 40% 98%;
+    --text-secondary: 215 20.2% 65.1%;
+    --text-tertiary: 215.4 16.3% 50%;
+    --text-disabled: 215.4 16.3% 35%;
+
+    /* Brand accent colors (same as light) */
+    --brand-1: 0 100% 63%;
+    --brand-2: 270 100% 63%;
+    --brand-3: 210 100% 63%;
+    --brand-4: 195 100% 63%;
+    --brand-5: 90 100% 63%;
+
+    /* Rainbow button color mappings */
     --color-1: 0 100% 63%;
     --color-2: 270 100% 63%;
     --color-3: 210 100% 63%;
     --color-4: 195 100% 63%;
     --color-5: 90 100% 63%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
+
+    /* Sidebar colors */
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217.2 91.2% 59.8%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 8%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 0 0% 15%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
@@ -109,6 +205,13 @@
   * {
     @apply border-border;
   }
+  
+  /* Prevent flash during theme initialization and support transparency */
+  html {
+    background-color: hsl(var(--background));
+    transition: background-color 0ms; /* Instant transition to prevent flash */
+  }
+  
   body {
     @apply bg-background text-foreground !pointer-events-auto !overscroll-none;
   }
@@ -138,6 +241,19 @@
     display: none;  /* Chrome, Safari and Opera */
   }
 
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 1.5s infinite linear;
+  }
+
 
 }
 
@@ -164,5 +280,48 @@
   inset-inline-start: 16px !important;
   line-height: 21px !important;
   position: absolute !important;
+}
+
+/* PatternFly LogViewer dark theme overrides */
+.dark .pf-v5-c-log-viewer {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .pf-v5-c-log-viewer__main {
+  background-color: hsl(var(--background)) !important;
+}
+
+.dark .pf-v5-c-log-viewer__list {
+  background-color: hsl(var(--background)) !important;
+}
+
+.dark .pf-v5-c-log-viewer__list-item {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pf-v5-c-toolbar {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pf-v5-c-toolbar__content {
+  background-color: hsl(var(--background)) !important;
+}
+
+.dark .pf-v5-c-text-input-group {
+  background-color: hsl(var(--input)) !important;
+}
+
+.dark .pf-v5-c-text-input-group__text-input {
+  background-color: hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pf-v5-c-text-input-group__text-input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
 }
 

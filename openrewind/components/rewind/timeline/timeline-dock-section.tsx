@@ -348,12 +348,7 @@ export function TimelineIconsSection({
             }}
           >
             <div
-              className="w-4 h-4 flex items-center justify-center rounded-full bg-muted/50 backdrop-blur"
-              style={{
-                border: `1px solid ${
-                  audio.isInput ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.4)"
-                }`,
-              }}
+              className="w-4 h-4 flex items-center justify-center rounded-full bg-muted border border-border"
             >
               <Volume2
                 className="w-2 h-2"

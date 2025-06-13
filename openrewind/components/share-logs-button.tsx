@@ -367,7 +367,7 @@ export const ShareLogsButton = ({
                 </TooltipTrigger>
                 <TooltipContent
                   side="bottom"
-                  className="text-xs bg-secondary/80 backdrop-blur-sm border-secondary/30"
+                  className="text-xs bg-secondary border border-secondary/30"
                 >
                   attach last 5 minutes of screen recording
                 </TooltipContent>
@@ -385,7 +385,7 @@ export const ShareLogsButton = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute top-2 right-2 h-7 w-7 rounded-full bg-background/80 hover:bg-background/95 backdrop-blur-sm"
+                  className="absolute top-2 right-2 h-7 w-7 rounded-full bg-background/80 hover:bg-background/95 border border-border"
                   onClick={() => setScreenshot(null)}
                 >
                   <X className="h-3.5 w-3.5" />

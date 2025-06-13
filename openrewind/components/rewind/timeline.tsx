@@ -107,7 +107,7 @@ export default function Timeline() {
 
 		const endTime = new Date(currentDate);
 		if (endTime.getDate() === new Date().getDate()) {
-			endTime.setMinutes(endTime.getMinutes() - 5);
+			endTime.setMinutes(endTime.getMinutes() + 5);
 		} else {
 			endTime.setHours(23, 59, 59, 999);
 		}
@@ -324,9 +324,9 @@ export default function Timeline() {
 		<TimelineProvider>
 			<div
 				ref={containerRef}
-				className="inset-0 flex flex-col bg-background text-foreground relative"
+				className="inset-0 flex flex-col text-foreground relative"
 				style={{
-					height: "calc(100vh - 2rem)",
+					height: "100vh",
 					overscrollBehavior: "none",
 					WebkitUserSelect: "none",
 					userSelect: "none",
@@ -334,91 +334,134 @@ export default function Timeline() {
 					msUserSelect: "none",
 				}}
 			>
-				<div className="absolute z-50 top-4 w-full">
-					<div className="flex items-center gap-4">
-						<TimelineControls
-							currentDate={currentDate}
-							startAndEndDates={startAndEndDates}
-							onDateChange={handleDateChange}
-							onJumpToday={handleJumpToday}
-						/>
-						{/* <TimelineSearch2
-              frames={frames}
-              onResultSelect={animateToIndex}
-              onSearchResults={setSearchResults}
-            /> */}
-					</div>
+				{/* Main Image - Full Screen - Should fill entire viewport */}
+				<div className="absolute inset-0 z-10">
+					{currentFrame ? (
+						<CurrentFrameTimeline currentFrame={currentFrame} />
+					) : (
+					!isLoading && !error && frames.length === 0 && (
+						<div className="absolute inset-0 flex items-center justify-center bg-background/90">
+							<div className="text-center text-foreground p-8">
+								<h3 className="text-lg font-medium mb-2">No Frame Available</h3>
+								<p className="text-sm text-muted-foreground">
+									{isLoading ? 'Loading timeline data...' : 
+									 error ? 'Failed to load timeline data' : 
+									 frames.length === 0 ? 'No frames found for this date' :
+									 'Select a frame from the timeline below'}
+								</p>
+							</div>
+						</div>
+					)
+					)}
 				</div>
 
-				<div className="flex-1 relative min-h-0 pt-4">
-					{isLoading && (
-						<div className="absolute inset-0 top-4 flex items-center justify-center backdrop-blur-sm">
-							<div className="bg-background/95 p-6 border rounded-xl shadow-lg text-center space-y-3 max-w-md mx-4">
-								<h3 className="font-medium">Loading Timeline</h3>
-								<p className="text-sm text-muted-foreground">
-									Fetching your recorded frames...
-								</p>
-								<Loader2 className="h-5 w-5 animate-spin mx-auto mt-2" />
-							</div>
-						</div>
-					)}
+				{/* Top Gradient Overlay - Very subtle */}
+				<div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-black/20 via-black/5 to-transparent z-30 pointer-events-none" />
 
-					{!error && message && (
-						<div className="absolute inset-0 flex items-center justify-center backdrop-blur-sm">
-							<div className="bg-background/95 p-6 border rounded-xl shadow-lg text-center space-y-3 max-w-md mx-4">
-								<h3 className="font-medium">Processing</h3>
-								<p className="text-sm text-muted-foreground">{message}</p>
-								<Loader2 className="h-5 w-5 animate-spin mx-auto mt-2" />
-							</div>
-						</div>
-					)}
+				{/* Bottom Gradient Overlay - Very subtle, only where timeline is */}
+				<div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/10 via-black/2 to-transparent z-30 pointer-events-none" />
 
-					{error && (
-						<div className="absolute inset-0 flex items-center justify-center backdrop-blur-sm">
-							<div className="bg-destructive/5 p-6 border-destructive/20 border rounded-xl text-center space-y-4 max-w-md mx-4">
-								<div className="flex flex-col items-center gap-2">
-									<AlertCircle className="h-6 w-6 text-destructive" />
-									<h3 className="font-medium text-destructive">
-										Connection Error
-									</h3>
-								</div>
-								<p className="text-sm text-muted-foreground">
-									Unable to reach your screenpipe data. Please verify that the
-									screenpipe turned on.
-								</p>
-								<button
-									onClick={handleRefresh}
-									className="flex items-center gap-2 px-4 py-2 bg-background hover:bg-muted transition-colors rounded-lg border border-input mx-auto"
-								>
-									<RotateCcw className="h-4 w-4" />
-									<span>Reload Timeline</span>
-								</button>
-							</div>
+				{/* Top Controls */}
+				<div className="absolute top-0 left-0 right-0 z-40 p-4">
+					<TimelineControls
+						currentDate={currentDate}
+						startAndEndDates={startAndEndDates}
+						onDateChange={handleDateChange}
+						onJumpToday={handleJumpToday}
+					/>
+				</div>
+
+				{/* Loading/Error States */}
+				{isLoading && (
+					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
+						<div className="bg-card text-foreground p-6 rounded-2xl text-center space-y-3 max-w-md mx-4">
+							<h3 className="font-medium">Loading Timeline</h3>
+							<p className="text-sm text-foreground">
+								Fetching your recorded frames...
+							</p>
+							<Loader2 className="h-5 w-5 animate-spin mx-auto mt-2" />
 						</div>
-					)}
-					{currentFrame && <CurrentFrameTimeline currentFrame={currentFrame} />}
-					{currentFrame && (
+					</div>
+				)}
+
+				{!error && message && (
+					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
+						<div className="bg-card text-foreground p-6 border border-border rounded-2xl shadow-2xl text-center space-y-3 max-w-md mx-4">
+							<h3 className="font-medium">Processing</h3>
+							<p className="text-sm text-foreground">
+								{message}
+							</p>
+							<Loader2 className="h-5 w-5 animate-spin mx-auto mt-2" />
+						</div>
+					</div>
+				)}
+
+				{error && (
+					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
+						<div className="bg-destructive/20 border border-destructive/30 text-foreground p-6 rounded-2xl text-center space-y-4 max-w-md mx-4">
+							<div className="flex flex-col items-center gap-2">
+								<AlertCircle className="h-6 w-6 text-destructive" />
+								<h3 className="font-medium text-destructive">Connection Error</h3>
+							</div>
+							<p className="text-sm text-foreground">
+								Unable to reach your screenpipe data. Please verify that the
+								screenpipe turned on.
+							</p>
+							<button
+								onClick={handleRefresh}
+								className="flex items-center gap-2 px-4 py-2 bg-card rounded-lg border border-border mx-auto bg-muted"
+							>
+								<RotateCcw className="h-4 w-4" />
+								<span>Reload Timeline</span>
+							</button>
+						</div>
+					</div>
+				)}
+
+				{/* Audio Transcript Panel - Re-enabled and properly positioned */}
+				{currentFrame && (
+					<div className="absolute bottom-28 left-4 right-4 z-35">
 						<AudioTranscript
 							frames={frames}
 							currentIndex={currentIndex}
 							groupingWindowMs={30000} // 30 seconds window
 						/>
+					</div>
+				)}
+
+				{/* Bottom Timeline - Overlay that doesn't cut off image */}
+				<div className="absolute bottom-0 left-0 right-0 z-40 pointer-events-auto">
+					{frames.length > 0 ? (
+						<TimelineSlider
+							frames={frames}
+							currentIndex={currentIndex}
+							onFrameChange={(index) => {
+								setCurrentIndex(index);
+								if (frames[index]) {
+									setCurrentFrame(frames[index]);
+								}
+							}}
+							fetchNextDayData={fetchNextDayData}
+							currentDate={currentDate}
+							startAndEndDates={startAndEndDates}
+						/>
+					) : (
+						<div className="bg-card p-4 text-center border-t border-border">
+							<div className="text-foreground text-sm">
+								{isLoading ? (
+									<div className="flex items-center justify-center gap-2">
+										<div className="w-4 h-4 border-2 border-border border-t-foreground rounded-full animate-spin"></div>
+										Loading timeline...
+									</div>
+								) : error ? (
+									<div className="text-destructive">Failed to load timeline data</div>
+								) : (
+									<div>No timeline data available for this date</div>
+								)}
+							</div>
+						</div>
 					)}
 				</div>
-
-				<TimelineSlider
-					frames={frames}
-					currentIndex={currentIndex}
-					onFrameChange={(index) => {
-						setCurrentIndex(index);
-						if (frames[index]) {
-							setCurrentFrame(frames[index]);
-						}
-					}}
-					fetchNextDayData={fetchNextDayData}
-					currentDate={currentDate}
-					startAndEndDates={startAndEndDates}
-				/>
 
 				<AIPanel
 					position={aiPanelPosition}
@@ -432,10 +475,11 @@ export default function Timeline() {
 					onExpandedChange={setIsAiPanelExpanded}
 				/>
 
-				<div className="fixed left-12 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-					<div className="flex flex-col items-center gap-1">
+				{/* Scroll Indicator */}
+				<div className="fixed left-6 top-1/2 -translate-y-1/2 text-xs text-foreground z-40">
+					<div className="flex flex-col items-center gap-1 bg-card rounded-full p-2 border border-border">
 						<span>▲</span>
-						<span>scroll</span>
+						<span className="text-[10px]">scroll</span>
 						<span>▼</span>
 					</div>
 				</div>

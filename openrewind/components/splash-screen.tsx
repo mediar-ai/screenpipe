@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 const SplashScreen: React.FC = () => {
   return (
     <div className="flex items-center justify-center h-screen bg-background">
-      <div className="flex flex-col items-center space-y-6">
+      <div className="flex flex-col items-center space-y-6 rounded-3xl p-12 ">
         {/* Logo with subtle animation */}
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
@@ -31,7 +31,7 @@ const SplashScreen: React.FC = () => {
           
           {/* Subtle glow effect */}
           <motion.div
-            className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 blur-xl"
+            className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20"
             animate={{
               opacity: [0.3, 0.6, 0.3],
             }}

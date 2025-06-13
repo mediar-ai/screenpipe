@@ -249,16 +249,16 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         <div className="w-32 h-32 flex items-center justify-center">
             <img className="w-32 h-32" src="/128x128.png" alt="screenpipe-logo" />
           </div> 
-        <h1 className="text-center text-2xl">
+        <h1 className="text-center text-2xl text-text-primary">
           setting up screenpipe
         </h1>
-        <p className="text-sm text-muted-foreground pt-2">
+        <p className="text-sm text-text-secondary pt-2">
           100% local-first • your data never leaves your device
         </p>
 
       {isMacOS && (
-        <div className="mt-6 pt-4 border-t w-full flex flex-col items-center">
-          <h4 className="text-sm font-medium mb-3">check permissions</h4>
+        <div className="mt-6 pt-4 border-t border-border w-full flex flex-col items-center">
+          <h4 className="text-sm font-medium mb-3 text-text-primary">check permissions</h4>
           <div className="space-y-2">
             <PermissionButtons type="screen" />
             <PermissionButtons type="audio" />
@@ -267,7 +267,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         </div>
       )}
 
-      <Separator className="w-full my-2" />
+      <Separator className="w-full my-2 bg-border" />
 
       <div className="flex items-center space-x-2 mt-4">
         <Switch
@@ -314,7 +314,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 xmlns="http://www.w3.org/2000/svg"
-                className="size-5 animate-spin stroke-zinc-400 mr-2"
+                className="size-5 animate-spin text-text-secondary mr-2"
               >
                 <path d="M12 3v3m6.366-.366-2.12 2.12M21 12h-3m.366 6.366-2.12-2.12M12 21v-3m-6.366.366 2.12-2.12M3 12h3m-.366-6.366 2.12 2.12"></path>
               </svg>
@@ -325,14 +325,14 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           </Button>
         ) : status === "ok" ? (
           <div className="flex flex-col items-center mt-4">
-            <Check className="size-5 stroke-zinc-400" />
-            <p className="text-sm text-zinc-600 mt-2 text-center">
+            <Check className="size-5 text-success" />
+            <p className="text-sm text-text-secondary mt-2 text-center">
               screenpipe setup complete. <br />
               AI models downloaded.
             </p>
           </div>
         ) : (
-          <p className="text-center mt-4">{status}</p>
+          <p className="text-center mt-4 text-text-primary">{status}</p>
         )}
 
         <LogFileButton />
@@ -345,8 +345,8 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           id="screenshot-preview"
         >
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium">live preview</h3>
-            <span className="text-xs text-muted-foreground">
+            <h3 className="text-sm font-medium text-text-primary">live preview</h3>
+            <span className="text-xs text-text-secondary">
               {visionEvent ? "streaming..." : "waiting for stream..."}
             </span>
           </div>
@@ -363,7 +363,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                   priority
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <div className="grid grid-cols-2 gap-2 text-xs text-text-secondary">
                 <div>
                   <span className="font-medium">app:</span>{" "}
                   {visionEvent.app_name || "unknown"}
@@ -385,7 +385,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
               </div>
             </div>
           ) : (
-            <div className="animate-pulse bg-gray-200 rounded-md w-full h-[250px]" />
+            <div className="animate-pulse bg-muted rounded-md w-full h-[250px]" />
           )}
         </div>
       )}

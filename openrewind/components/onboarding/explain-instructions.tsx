@@ -70,10 +70,10 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
         >
           <Bot className="w-8 h-8 text-white" />
         </motion.div>
-        <h1 className="text-center text-2xl font-bold mb-2">
+        <h1 className="text-center text-2xl font-bold mb-2 text-text-primary">
           You&apos;re All Set! 🎉
         </h1>
-        <p className="text-center text-muted-foreground max-w-md">
+        <p className="text-center text-text-secondary max-w-md">
           OpenRewind is now configured and ready to help you remember everything. Here&apos;s how to get the most out of it.
         </p>
       </div>
@@ -87,13 +87,13 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className="bg-card border rounded-xl p-4 text-center"
+              className="bg-card border border-border rounded-xl p-4 text-center"
             >
               <div className="flex items-center justify-center mb-3">
                 <step.icon className={`w-8 h-8 ${step.color}`} />
               </div>
-              <h3 className="font-semibold text-sm mb-1">{step.title}</h3>
-              <p className="text-xs text-muted-foreground">{step.description}</p>
+              <h3 className="font-semibold text-sm mb-1 text-text-primary">{step.title}</h3>
+              <p className="text-xs text-text-secondary">{step.description}</p>
             </motion.div>
           ))}
         </div>
@@ -103,17 +103,17 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-xl p-6 max-w-2xl"
+          className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-xl p-6 max-w-2xl border border-border"
         >
           <div className="flex items-center justify-center mb-4">
             <Settings className="w-5 h-5 text-orange-500 mr-2" />
-            <h3 className="text-lg font-semibold">Quick Tips</h3>
+            <h3 className="text-lg font-semibold text-text-primary">Quick Tips</h3>
           </div>
           <ul className="space-y-2 text-sm">
             {shortcuts.map((shortcut, index) => (
               <li key={index} className="flex items-start">
                 <div className="w-2 h-2 bg-primary rounded-full mt-2 mr-3 flex-shrink-0" />
-                <span className="text-muted-foreground">{shortcut.key} - {shortcut.description}</span>
+                <span className="text-text-secondary">{shortcut.key} - {shortcut.description}</span>
               </li>
             ))}
           </ul>
@@ -126,11 +126,11 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
           transition={{ delay: 0.6 }}
           className="text-center"
         >
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-sm text-text-secondary mb-4">
             Start using your computer normally. OpenRewind will build your timeline in the background.
           </p>
-          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-            <p className="text-xs text-amber-800 dark:text-amber-200">
+          <div className="bg-warning-muted border border-warning rounded-lg p-3">
+            <p className="text-xs text-text-primary">
               💡 <strong>Pro tip:</strong> Come back in a few minutes to see your first recorded activities!
             </p>
           </div>
@@ -141,7 +141,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
         <Button
           variant="ghost"
           onClick={handlePrevSlide}
-          className="text-muted-foreground"
+          className="text-text-secondary hover:text-text-primary"
         >
           Back
         </Button>

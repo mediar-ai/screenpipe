@@ -286,7 +286,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
 
   return (
     <motion.div
-      className="group border rounded-xl p-5 hover:bg-muted/40 has-[.no-card-hover:hover]:hover:bg-transparent transition-all duration-200 cursor-pointer backdrop-blur-sm relative"
+      className="group border rounded-xl p-5 hover:bg-muted/40 has-[.no-card-hover:hover]:hover:bg-transparent transition-all duration-200 cursor-pointer bg-card relative"
       onClick={() => onClick(pipe)}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}

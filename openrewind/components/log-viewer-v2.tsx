@@ -66,7 +66,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ className }) => {
       <div
         ref={logContainerRef}
         className={cn(
-          "h-64 overflow-y-auto bg-black p-2 font-mono text-sm text-white",
+          "h-64 overflow-y-auto bg-background p-2 font-mono text-sm text-foreground border border-border",
           "whitespace-pre-wrap break-words",
           className
         )}

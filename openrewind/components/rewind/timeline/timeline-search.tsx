@@ -717,7 +717,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 			>
 				<DialogPortal>
 					<DialogOverlay
-						className="backdrop-blur-sm"
+						className="bg-background/50"
 						style={{
 							opacity: isSearching ? 0 : 0.8,
 						}}

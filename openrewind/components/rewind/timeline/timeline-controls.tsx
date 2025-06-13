@@ -115,156 +115,73 @@ export function TimelineControls({
 	return (
 		<div
 			className={cn(
-				"flex items-center justify-between w-full p-2 rounded-md",
+				"flex items-center justify-center w-full",
 				className,
 			)}
 		>
-			{/* Empty left section for balance */}
-			<div className="flex-1" />
+			
 			
 			{/* Center section - Timeline controls */}
-			<div className="flex items-center gap-2">	
-			<div className="flex items-center gap-2 bg-muted/50 rounded-md p-2 shadow-lg">
-				<Button
-					variant="ghost"
-					size="icon"
-					onClick={() => jumpDay(-1)}
-					className="h-8 w-8"
-					disabled={canGoBack}
-				>
-					<ChevronLeft className="h-4 w-4" />
-				</Button>
-
-				<AnimatePresence mode="wait">
-					<motion.div
-						key={currentDate.toISOString()}
-						initial={{ y: -20, opacity: 0 }}
-						animate={{ y: 0, opacity: 1 }}
-						exit={{ y: 20, opacity: 0 }}
-						transition={{
-							type: "spring",
-							stiffness: 500,
-							damping: 30,
-							duration: 0.2,
-						}}
-						className="bg-background border rounded px-3 py-1 text-sm font-mono"
+			<div className="flex items-center gap-4">	
+				<div className="flex items-center gap-1 bg-card border border-border rounded-2xl p-1 shadow-2xl">
+					<Button
+						variant="ghost"
+						size="icon"
+						onClick={() => jumpDay(-1)}
+						className="h-9 w-9 text-foreground hover:bg-accent hover:text-accent-foreground border-0 rounded-xl"
+						disabled={canGoBack}
 					>
-						{format(currentDate, "d MMM yyyy")}
-					</motion.div>
-				</AnimatePresence>
+						<ChevronLeft className="h-5 w-5" />
+					</Button>
 
-				<Button
-					variant="ghost"
-					size="icon"
-					onClick={() => jumpDay(1)}
-					className="h-8 w-8"
-					disabled={isAtToday}
-				>
-					<ChevronRight className="h-4 w-4" />
-				</Button>
+					<AnimatePresence mode="wait">
+						<motion.div
+							key={currentDate.toISOString()}
+							initial={{ y: -20, opacity: 0 }}
+							animate={{ y: 0, opacity: 1 }}
+							exit={{ y: 20, opacity: 0 }}
+							transition={{
+								type: "spring",
+								stiffness: 500,
+								damping: 30,
+								duration: 0.2,
+							}}
+							className="bg-card border border-border rounded-xl px-4 py-2 text-sm font-medium text-foreground min-w-[120px] text-center"
+						>
+							{format(currentDate, "d MMM yyyy")}
+						</motion.div>
+					</AnimatePresence>
 
-				<div className="h-4 w-px bg-border mx-2" />
+					<Button
+						variant="ghost"
+						size="icon"
+						onClick={() => jumpDay(1)}
+						className="h-9 w-9 text-foreground hover:bg-accent hover:text-accent-foreground border-0 rounded-xl"
+						disabled={isAtToday}
+					>
+						<ChevronRight className="h-5 w-5" />
+					</Button>
 
-				<Button
-					variant="ghost"
-					size="icon"
-					onClick={onJumpToday}
-					className="h-8 w-8"
-					disabled={isAtToday}
-				>
-					<RefreshCw className="h-4 w-4" />
+					<div className="h-5 w-px bg-white/20 mx-1" />
+
+					<Button
+						variant="ghost"
+						size="icon"
+						onClick={onJumpToday}
+						className="h-9 w-9 text-foreground hover:bg-accent hover:text-accent-foreground border-0 rounded-xl"
+						disabled={isAtToday}
+					>
+						<RefreshCw className="h-5 w-5" />
 					</Button>
 				</div>
-						<div>
-							<CommandShortcut>⌘K</CommandShortcut>{" "}
-							<span className="text-xs text-muted-foreground">to search</span>
-						</div>
+				
+				<div className="flex items-center gap-2 bg-card border border-border rounded-2xl px-3 py-2">
+					<CommandShortcut className="text-muted-foreground">⌘K</CommandShortcut>
+					<span className="text-xs text-muted-foreground">to search</span>
+				</div>
 			</div>
 
-			{/* Right section - Header elements */}
-			<div className="flex items-center gap-2 flex-1 justify-end">
-				<Popover open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
-					<PopoverTrigger asChild>
-						<Button variant="outline" size="sm">
-							<Mail className="h-3.5 w-3.5 mr-2" />
-							feedback
-						</Button>
-					</PopoverTrigger>
-					<PopoverContent className="w-100 rounded-2xl">
-						<ShareLogsButton 
-							showShareLink={false} 
-							onComplete={() => setIsFeedbackOpen(false)} 
-						/>
-					</PopoverContent>
-				</Popover>
-
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="cursor-pointer h-8 w-8 p-0"
-						>
-							<User className="h-4 w-4" />
-							<span className="sr-only">user menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end">
-						<DropdownMenuLabel>account</DropdownMenuLabel>
-						<DropdownMenuSeparator />
-						<DropdownMenuGroup>
-							<DropdownMenuItem
-								onSelect={async (e) => {
-									e.preventDefault();
-									await openSettingsWindow();
-								}}
-								className="cursor-pointer p-1.5"
-							>
-								<Settings2 className="mr-2 h-4 w-4" />
-								<span>settings</span>
-							</DropdownMenuItem>
-						</DropdownMenuGroup>
-						<DropdownMenuSeparator />
-						<DropdownMenuGroup>
-							<DropdownMenuItem
-								className="cursor-pointer"
-								onClick={() => open("https://docs.screenpi.pe")}
-							>
-								<Book className="mr-2 h-4 w-4" />
-								<span>check docs</span>
-							</DropdownMenuItem>
-							<DropdownMenuItem
-								className="cursor-pointer"
-								onClick={() =>
-									open(
-										"https://twitter.com/intent/tweet?text=here's%20how%20i%20use%20@screen_pipe%20...%20%5Bscreenshot%5D%20an%20awesome%20tool%20for%20..."
-									)
-								}
-							>
-								<Heart className="mr-2 h-4 w-4" />
-								<span>support us</span>
-							</DropdownMenuItem>
-						</DropdownMenuGroup>
-						<DropdownMenuSeparator />
-						<DropdownMenuGroup>
-							<DropdownMenuItem
-								className="cursor-pointer"
-								onClick={() => handleShowOnboarding()}
-							>
-								<Play className="mr-2 h-4 w-4" />
-								<span>show onboarding</span>
-							</DropdownMenuItem>
-							<DropdownMenuItem
-								className="cursor-pointer"
-								onClick={() => setShowChangelogDialog(true)}
-							>
-								<Folder className="mr-2 h-4 w-4" />
-								<span>show changelog</span>
-							</DropdownMenuItem>
-						</DropdownMenuGroup>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			</div>
+			
 		</div>
 	);
 }

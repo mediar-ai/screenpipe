@@ -15,7 +15,7 @@ export const SearchBar = ({
 			<Input
 				type="input"
 				placeholder="Search..."
-				className="pl-10 h-full bg-white/80 backdrop-blur-sm border border-neutral-200 rounded-lg shadow-sm transition-all duration-200 focus:shadow-md"
+				className="pl-10 h-full bg-card border border-border rounded-lg shadow-sm transition-all duration-200 focus:shadow-md"
 				value={search || ""}
 				onChange={(e) => {
 					onSearchChange(e.target.value);

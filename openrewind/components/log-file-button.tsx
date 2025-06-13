@@ -54,35 +54,39 @@ const LogContent = ({
   };
 
   return (
-    <div className="relative">
-      <LogViewer
-        theme="dark"
-        isTextWrapped={false}
-        hasLineNumbers={true}
-        data={content}
-        height="58vh"
-        toolbar={
-          <Toolbar>
-            <ToolbarContent className="p-2 relative w-full">
-              <ToolbarItem>
-                <LogViewerSearch
-                  placeholder="Search value"
-                  minSearchChars={3}
-                />
-              </ToolbarItem>
-              <ToolbarItem className="p-2 absolute right-0 top-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenInDefaultApp}
-                >
-                  open in default app
-                </Button>
-              </ToolbarItem>
-            </ToolbarContent>
-          </Toolbar>
-        }
-      />
+    <div className="relative bg-background">
+      <div className="bg-background text-foreground rounded-md overflow-hidden">
+        <LogViewer
+          theme="dark"
+          isTextWrapped={false}
+          hasLineNumbers={true}
+          data={content}
+          height="58vh"
+          toolbar={
+            <Toolbar className="bg-background border-b border-border">
+              <ToolbarContent className="p-2 relative w-full bg-background">
+                <ToolbarItem>
+                  <div className="bg-background">
+                    <LogViewerSearch
+                      placeholder="Search value"
+                      minSearchChars={3}
+                    />
+                  </div>
+                </ToolbarItem>
+                <ToolbarItem className="p-2 absolute right-0 top-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenInDefaultApp}
+                  >
+                    open in default app
+                  </Button>
+                </ToolbarItem>
+              </ToolbarContent>
+            </Toolbar>
+          }
+        />
+      </div>
     </div>
   );
 };

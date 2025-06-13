@@ -8,7 +8,7 @@ import { Loader2 } from "lucide-react";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 
 export const SkeletonCard = () => (
-	<div className="flex flex-col shrink-0 w-56 h-full relative overflow-hidden rounded-lg bg-white shadow-sm">
+	<div className="flex flex-col shrink-0 w-56 h-full relative overflow-hidden rounded-lg bg-card border border-border shadow-sm">
 		<div className="aspect-video bg-neutral-200 animate-pulse" />
 		<div className="p-3 space-y-2" style={{ direction: "ltr" }}>
 			<div className="h-4 bg-neutral-200 rounded animate-pulse" />
@@ -183,7 +183,7 @@ export const ImageGrid = ({
 								key={result.frame_id}
 								data-timestamp={result.timestamp}
 								className={cn(
-									"group flex flex-col shrink-0 w-56 h-full relative overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 hover:shadow-md snap-center cursor-pointer",
+									"group flex flex-col shrink-0 w-56 h-full relative overflow-hidden rounded-lg bg-card border border-border shadow-sm transition-all duration-300 hover:shadow-md snap-center cursor-pointer",
 									currentResultIndex === index && "ring-2 ring-blue-500",
 								)}
 								onClick={() => setCurrentResultIndex(index)}
@@ -191,7 +191,7 @@ export const ImageGrid = ({
 							>
 								<div className="aspect-video overflow-hidden flex-1 relative">
 									<div className="absolute inset-0 flex items-center justify-center bg-neutral-100">
-										<Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+										<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
 									</div>
 									<img
 										src={`http://localhost:3030/frames/${result.frame_id}`}
@@ -282,7 +282,7 @@ export const MainImage = () => {
 			className="relative aspect-auto w-full h-full overflow-hidden rounded-lg bg-neutral-100"
 		>
 			<div className="absolute inset-0 flex items-center justify-center">
-				<Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
 			</div>
 			<div className="relative">
 				<img

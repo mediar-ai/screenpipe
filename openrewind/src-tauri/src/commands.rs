@@ -1,9 +1,10 @@
-use crate::{get_data_dir, window_api::{RewindWindowId, ShowRewindWindow}, store::{OnboardingStore, SettingsStore}};
+use crate::{get_data_dir, window_api::{RewindWindowId, ShowRewindWindow}, store::OnboardingStore};
 use serde::Serialize;
 use specta::Type;
 use tauri::Manager;
 use tracing::{error, info};
-use std::{fs, path::Path};
+
+
 
 #[tauri::command]
 #[specta::specta]
@@ -27,50 +28,15 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle) {
 
 #[tauri::command]
 #[specta::specta]
-pub fn show_main_window(app_handle: &tauri::AppHandle, overlay: bool) {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        #[cfg(target_os = "macos")]
-        if overlay {
-            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-        }
-
-        let _ = window.set_visible_on_all_workspaces(overlay);
-        let _ = window.set_always_on_top(overlay);
-        let _ = window.show();
-
-        if !overlay {
-            let _ = window.set_focus();
-        }
-
-        // event listener for the window close event
-        let window_clone = window.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window_clone.is_fullscreen().unwrap_or(false) {
-                    let _ = window_clone.destroy().unwrap();
-                } else {
-                    let _ = window_clone.hide().unwrap();
-                    api.prevent_close();
-                }
-            }
-        });
-    } else {
-        let _ = tauri::WebviewWindowBuilder::new(
-            app_handle,
-            "main",
-            tauri::WebviewUrl::App("index.html".into()),
-        )
-        .title("Screenpipe")
-        .build();
-    }
+pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
+   let window =  ShowRewindWindow::Main.show(app_handle).unwrap();
+   window.set_focus().unwrap();
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn hide_main_window(app_handle: &tauri::AppHandle) {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.close();
-    }
+    ShowRewindWindow::Main.close(app_handle).unwrap();
 }
 
 const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
@@ -251,6 +217,11 @@ pub async fn show_window(
     app_handle: tauri::AppHandle,
     window: ShowRewindWindow,
 ) -> Result<(), String> {
+
+    if window.id().label() != ShowRewindWindow::Main.id().label() {
+      ShowRewindWindow::Main.close(&app_handle).map_err(|e| e.to_string())?;
+    }
+
     window.show(&app_handle).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -261,18 +232,8 @@ pub async fn close_window(
     app_handle: tauri::AppHandle,
     window: ShowRewindWindow,
 ) -> Result<(), String> {
-    let window_id = match window {
-        ShowRewindWindow::Main => RewindWindowId::Main,
-        ShowRewindWindow::Settings { .. } => RewindWindowId::Settings,
-        ShowRewindWindow::Onboarding => RewindWindowId::Onboarding,
-        ShowRewindWindow::Search => RewindWindowId::Search,
-    };
-    
-    if let Some(window) = window_id.get(&app_handle) {
-        window.close().map_err(|e| e.to_string())
-    } else {
-        Err(format!("Window {} not found", window_id.label()))
-    }
+    window.close(&app_handle).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // Onboarding commands
@@ -285,22 +246,45 @@ pub async fn get_onboarding_status(app_handle: tauri::AppHandle) -> Result<Onboa
 #[tauri::command]
 #[specta::specta]
 pub async fn complete_onboarding(app_handle: tauri::AppHandle) -> Result<(), String> {
-    // wait until onboarding is updated
+    // Update the persistent store
     OnboardingStore::update(&app_handle, |onboarding| {
         onboarding.complete();
     }).map_err(|e| e.to_string())?;
+    
+    // Update the managed state in memory
+    if let Some(managed_store) = app_handle.try_state::<OnboardingStore>() {
+        // Get the current state and create an updated version
+        let mut updated_store = managed_store.inner().clone();
+        updated_store.complete();
+        // Replace the managed state with the updated version
+        app_handle.manage(updated_store);
+    }
+    
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    show_window(app_handle.clone(), ShowRewindWindow::Main).await?;
     close_window(app_handle.clone(), ShowRewindWindow::Onboarding).await?;
+    show_window(app_handle.clone(), ShowRewindWindow::Main).await?;
+
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn reset_onboarding(app_handle: tauri::AppHandle) -> Result<(), String> {
+    // Update the persistent store
     OnboardingStore::update(&app_handle, |onboarding| {
         onboarding.reset();
-    })
+    })?;
+    
+    // Update the managed state in memory
+    if let Some(managed_store) = app_handle.try_state::<OnboardingStore>() {
+        // Get the current state and create an updated version
+        let mut updated_store = managed_store.inner().clone();
+        updated_store.reset();
+        // Replace the managed state with the updated version
+        app_handle.manage(updated_store);
+    }
+    
+    Ok(())
 }
 
 #[tauri::command]

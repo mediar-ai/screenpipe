@@ -255,7 +255,7 @@ export function TimelineSearch2({
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogPortal>
-          <DialogOverlay className="backdrop-blur-sm" />
+          <DialogOverlay className="bg-background/50" />
           <DialogContent className="sm:max-w-[500px]">
             <DialogTitle>search your timeline</DialogTitle>
             <div className="p-6">

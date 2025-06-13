@@ -126,9 +126,7 @@ function SettingsPageContent() {
           <div className="w-80 border-r bg-background flex flex-col min-h-0 rounded-tl-lg">
             <div className="p-6 border-b">
               <div className="space-y-3">
-                <h1 className="text-2xl font-bold text-foreground">
-                  Settings
-                </h1>
+                <h1 className="text-2xl font-bold text-foreground">Settings</h1>
               </div>
             </div>
 
@@ -137,9 +135,7 @@ function SettingsPageContent() {
               {settingsSections.map((section) => (
                 <button
                   key={section.id}
-                  onClick={() =>
-                    setActiveSection(section.id as SettingsSection)
-                  }
+                  onClick={() => setActiveSection(section.id as SettingsSection)}
                   className={cn(
                     "w-full flex items-start space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left group",
                     activeSection === section.id

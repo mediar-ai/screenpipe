@@ -340,7 +340,7 @@ export function AIPanel({
 	return (
 		<div
 			ref={aiPanelRef}
-			className="ai-panel bg-background border border-muted-foreground rounded-lg shadow-lg transition-all duration-300 ease-in-out z-10"
+			className="ai-panel bg-card border border-border rounded-lg shadow-lg transition-all duration-300 ease-in-out z-10"
 			style={{
 				position: "fixed",
 				left: position.x,

@@ -198,11 +198,12 @@ export function AudioTranscript({
 				width: windowSize.width,
 				height: windowSize.height,
 				cursor: isDragging ? "grabbing" : "default",
+				pointerEvents: "auto",
 			}}
-			className="audio-transcript-panel bg-background/80 backdrop-blur border border-muted-foreground rounded-lg shadow-lg z-[100] overflow-hidden"
+			className="audio-transcript-panel bg-popover border border-border rounded-2xl shadow-2xl z-[100] overflow-hidden"
 		>
 			<div
-				className="select-none cursor-grab active:cursor-grabbing p-2 border-b border-muted-foreground"
+				className="select-none cursor-grab active:cursor-grabbing p-3 border-b border-border"
 				onMouseDown={handlePanelMouseDown}
 				onMouseMove={handlePanelMouseMove}
 				onMouseUp={handlePanelMouseUp}
@@ -216,7 +217,7 @@ export function AudioTranscript({
 					<Button
 						variant="ghost"
 						size="sm"
-						className="h-6 w-6 p-0"
+						className="h-6 w-6 p-0 text-foreground hover:text-accent-foreground hover:bg-accent"
 						onClick={handleClose}
 					>
 						<X className="h-3 w-3" />
@@ -225,18 +226,18 @@ export function AudioTranscript({
 			</div>
 
 			<div
-				className="space-y-2 p-2 overflow-y-auto"
+				className="space-y-2 p-3 overflow-y-auto"
 				style={{
-					height: "calc(100% - 37px)",
+					height: "calc(100% - 45px)",
 					overscrollBehavior: "contain", // Prevent scroll chaining
 					WebkitOverflowScrolling: "touch", // Smooth scrolling on iOS
 				}}
 			>
 				{audioGroups.map((group, groupIndex) => (
-					<Card key={groupIndex} className="p-4 bg-background/80 backdrop-blur">
+					<Card key={groupIndex} className="p-4 bg-card border border-border rounded-xl">
 						<div className="text-xs text-muted-foreground mb-2">
 							{group.deviceName} ({group.isInput ? "input" : "output"})
-							<div className="text-[10px]">
+							<div className="text-[10px] text-muted-foreground">
 								{formatTimeRange(
 									calculateTimeRange(
 										group.startTime,
@@ -255,7 +256,7 @@ export function AudioTranscript({
 									<Button
 										variant="ghost"
 										size="sm"
-										className="h-6 w-6 p-0"
+										className="h-6 w-6 p-0 text-foreground hover:text-accent-foreground hover:bg-accent"
 										onClick={() => handlePlay(audio.audio_file_path)}
 									>
 										{playing === audio.audio_file_path ? (
@@ -264,7 +265,7 @@ export function AudioTranscript({
 											<Play className="h-3 w-3" />
 										)}
 									</Button>
-									<div className="flex items-center gap-1 text-xs">
+									<div className="flex items-center gap-1 text-xs text-muted-foreground">
 										<Volume2 className="h-3 w-3" />
 										<span>
 											{formatDurationHuman(Math.round(audio.duration_secs))}
@@ -292,10 +293,10 @@ export function AudioTranscript({
 			<div
 				ref={resizerRef}
 				onMouseDown={handleResizeMouseDown}
-				className="absolute right-0 bottom-0 w-4 h-4 cursor-se-resize bg-transparent"
+				className="absolute right-0 bottom-0 w-4 h-4 cursor-se-resize bg-white/10 hover:bg-white/20 transition-colors"
 				style={{
 					borderTopLeftRadius: "4px",
-					borderBottomRightRadius: "4px",
+					borderBottomRightRadius: "12px",
 					cursor: "se-resize",
 				}}
 			/>
