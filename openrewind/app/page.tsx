@@ -29,6 +29,7 @@ import SplashScreen from "@/components/splash-screen";
 import { openSettingsWindow } from "@/lib/utils/window";
 import HealthStatus from "@/components/screenpipe-status";
 import { ShareLogsButton } from "@/components/share-logs-button";
+import { SearchCommand } from "@/components/rewind/search-command";
 
 export default function Home() {
   const { settings, updateSettings, loadUser, reloadStore, isSettingsLoaded, loadingError } = useSettings();
@@ -57,6 +58,18 @@ export default function Home() {
     return () => {
       // Any cleanup logic can go here
     };
+  }, []);
+
+  useEffect(() => {
+    // add a shortcut to hide main window when pressed esc
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        commands.closeWindow("Main");
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
   }, []);
 
   useEffect(() => {
@@ -126,7 +139,7 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center flex-1 mx-auto relative scrollbar-hide">
       {/* Transparent titlebar area */}
-      <div className="h-8 bg-gradient-to-b from-black/15 to-transparent w-full fixed top-0 left-0 z-50" data-tauri-drag-region>
+      <div className="h-8 bg-gradient-to-b from-black/15 to-transparent w-full fixed top-0 left-0 z-[1000]" data-tauri-drag-region>
           <div className="flex items-center justify-between gap-2">
             <div/>
             <h1 className="text-xs font-bold"></h1>
@@ -161,8 +174,9 @@ export default function Home() {
           <LoginDialog />
           <ModelDownloadTracker />
           {!isServerDown ? (
-            <div className="w-full scrollbar-hide bg-background">
+            <div className="w-full scrollbar-hide bg-background relative">
               <Timeline />
+              <SearchCommand />
             </div>
           ) : (
             <div className="flex items-center justify-center h-screen p-4 bg-background w-full">

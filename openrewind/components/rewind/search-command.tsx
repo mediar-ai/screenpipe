@@ -19,6 +19,7 @@ import { CustomDialogContent } from "./custom-dialog-content";
 import { ArrowRight, XIcon } from "lucide-react";
 import { useQueryStates } from "nuqs";
 import { CommandShortcut } from "./ui/command";
+import { commands } from "@/lib/utils/tauri";
 
 export function SearchCommand() {
 	const [open, setOpen] = React.useState(false);
@@ -49,7 +50,8 @@ export function SearchCommand() {
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter") {
 			e.preventDefault();
-			window.location.href = `/search${querySerializer(options)}`;
+			//window.location.href = `/search${querySerializer(options)}`;
+			commands.openSearchWindow(querySerializer(options));
 		}
 	};
 

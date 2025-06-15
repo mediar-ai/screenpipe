@@ -1371,6 +1371,43 @@ export function RecordingSettings() {
             </TooltipProvider>
           </Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {/* Default Monitor Option */}
+            <div
+              className={cn(
+                "flex items-center space-x-3 rounded-lg border p-3 cursor-pointer transition-colors",
+                settings.monitorIds.includes("default")
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:bg-accent"
+              )}
+              onClick={() => {
+                const isDefaultSelected = settings.monitorIds.includes("default");
+                if (isDefaultSelected) {
+                  // Remove default selection
+                  handleSettingsChange({ 
+                    monitorIds: settings.monitorIds.filter(id => id !== "default") 
+                  }, true);
+                } else {
+                  // Select default (clear other selections and add default)
+                  handleSettingsChange({ monitorIds: ["default"] }, true);
+                }
+              }}
+            >
+              <div className="flex-1">
+                <p className="font-medium">Default Monitor</p>
+                <p className="text-sm text-muted-foreground">
+                  Automatically use the system&apos;s default monitor
+                </p>
+              </div>
+              <Check
+                className={cn(
+                  "h-4 w-4",
+                  settings.monitorIds.includes("default")
+                    ? "opacity-100"
+                    : "opacity-0"
+                )}
+              />
+            </div>
+
             {availableMonitors.map((monitor) => (
               <div
                 key={monitor.id}
@@ -1381,7 +1418,7 @@ export function RecordingSettings() {
                     : "border-border hover:bg-accent"
                 )}
                 onClick={() => {
-                  const currentIds = settings.monitorIds;
+                  const currentIds = settings.monitorIds.filter(id => id !== "default"); // Remove default when selecting specific monitors
                   const monitorId = monitor.id.toString();
                   const updatedIds = currentIds.includes(monitorId)
                     ? currentIds.filter(id => id !== monitorId)

@@ -145,6 +145,14 @@ async showOnboardingWindow() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async openSearchWindow(query: string | null) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_search_window", { query }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async setTrayUnhealthIcon() : Promise<void> {
     await TAURI_INVOKE("set_tray_unhealth_icon");
 },
@@ -175,7 +183,7 @@ export type OSPermissionsCheck = { screenRecording: OSPermissionStatus; micropho
 export type OnboardingStore = { isCompleted: boolean; completedAt: string | null }
 export type Pipe = { id: string; name: string; description: string; version: string; author: string; authorLink: string; repository: string; lastUpdate: string; fullDescription: string; downloads: number; mainFile: string; config: { [key in string]: string } }
 export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; installedPipes: Pipe[]; userId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngine: string; monitorIds: string[]; audioDevices: string[]; usePiiRemoval: boolean; restartInterval: number; port: number; dataDir: string; disableAudio: boolean; ignoredWindows: string[]; includedWindows: string[]; fps: number; vadSensitivity: string; analyticsEnabled: boolean; audioChunkDuration: number; useChineseMirror: boolean; languages: string[]; embeddedLLM: EmbeddedLLM; enableBeta: boolean; isFirstTimeUser: boolean; autoStartEnabled: boolean; enableFrameCache: boolean; enableUiMonitoring: boolean; platform: string; disabledShortcuts: string[]; user: User; showScreenpipeShortcut: string; startRecordingShortcut: string; stopRecordingShortcut: string; startAudioShortcut: string; stopAudioShortcut: string; pipeShortcuts: { [key in string]: string }; enableRealtimeAudioTranscription: boolean; realtimeAudioTranscriptionEngine: string; disableVision: boolean; useAllMonitors: boolean; enableRealtimeVision: boolean }
-export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | "Search" | "Onboarding"
+export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding"
 export type User = { id: string | null; name: string | null; email: string | null; image: string | null; token: string | null; clerk_id: string | null; api_key: string | null; credits: Credits | null; stripe_connected: boolean | null; stripe_account_status: string | null; github_username: string | null; bio: string | null; website: string | null; contact: string | null; cloud_subscribed: boolean | null }
 
 /** tauri-specta globals **/

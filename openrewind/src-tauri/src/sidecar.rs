@@ -41,6 +41,15 @@ pub struct User {
     pub cloud_subscribed: Option<bool>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MonitorDevice {
+    pub id: u32,
+    pub name: String,
+    pub is_default: bool,
+    pub width: u32,
+    pub height: u32,
+}
+
 impl User {
     pub fn from_store(store: &SettingsStore) -> Self {
         Self {
@@ -57,6 +66,62 @@ impl User {
             cloud_subscribed: store.user.cloud_subscribed.clone(),
         }
     }
+}
+
+/// Get all available monitors connected to the device
+pub async fn get_available_monitors(app: &tauri::AppHandle) -> Result<Vec<MonitorDevice>, String> {
+    debug!("Getting available monitors");
+    
+    let sidecar = app.shell().sidecar("screenpipe")
+        .map_err(|e| format!("Failed to create sidecar command: {}", e))?;
+    
+    let output = sidecar
+        .args(&["vision", "list", "-o", "json"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute monitor listing command: {}", e))?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!("Failed to get monitors: {}", stderr);
+        return Err(format!("Failed to get monitors: {}", stderr));
+    }
+    
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|e| format!("Failed to parse monitor output as UTF-8: {}", e))?;
+    
+    debug!("Monitor command output: {}", stdout);
+    
+    // Parse the JSON response which might be in {data: [...], success: true} format
+    let json_value: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse monitor JSON: {}", e))?;
+    
+    let monitors_array = if let Some(data) = json_value.get("data") {
+        data.as_array()
+    } else {
+        json_value.as_array()
+    }.ok_or("Monitor response is not an array")?;
+
+    
+    let monitors: Vec<MonitorDevice> = monitors_array
+        .iter()
+        .filter_map(|monitor| {
+            serde_json::from_value(monitor.clone()).ok()
+        })
+        .collect();
+    
+    if monitors.is_empty() {
+        return Err("No monitors found".to_string());
+    }
+    
+    debug!("Found {} monitors", monitors.len());
+    Ok(monitors)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_monitors(app: tauri::AppHandle) -> Result<Vec<MonitorDevice>, String> {
+    get_available_monitors(&app).await
 }
 
 #[tauri::command]
@@ -164,7 +229,7 @@ pub async fn spawn_screenpipe(
     }
 }
 
-fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<CommandChild, String> {
+async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<CommandChild, String> {
     let store = app.state::<SettingsStore>();
 
     let audio_transcription_engine = store.audio_transcription_engine.clone();
@@ -172,6 +237,8 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
     let ocr_engine = store.ocr_engine.clone();
 
     let monitor_ids = store.monitor_ids.clone();
+
+
 
     let audio_devices = store.audio_devices.clone();
 
@@ -232,6 +299,7 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
     let fps_str = fps.to_string();
+    let mut monitor_id_str = String::new(); // Store monitor ID string
     if fps != 0.2 {
         args.push("--fps");
         args.push(fps_str.as_str());
@@ -252,11 +320,33 @@ fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> 
         let model = ocr_engine.as_str();
         args.push(model);
     }
-
-    if !monitor_ids.is_empty() && monitor_ids[0] != Value::String("default".to_string()) {
-        for monitor in &monitor_ids {
-            args.push("--monitor-id");
-            args.push(monitor.as_str());
+    if !monitor_ids.is_empty() {
+        if monitor_ids.contains(&"default".to_string()) {
+            // Get the default monitor and use its ID
+            match get_available_monitors(app).await {
+                Ok(monitors) => {
+                    if let Some(default_monitor) = monitors.iter().find(|m| m.is_default) {
+                        monitor_id_str = default_monitor.id.to_string();
+                        args.push("--monitor-id");
+                        args.push(&monitor_id_str);
+                    } else if let Some(first_monitor) = monitors.first() {
+                        // Fallback to first monitor if no default is found
+                        monitor_id_str = first_monitor.id.to_string();
+                        args.push("--monitor-id");
+                        args.push(&monitor_id_str);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to get default monitor: {}", e);
+                    // Continue without monitor specification
+                }
+            }
+        } else {
+            // Use specific monitor IDs
+            for monitor in &monitor_ids {
+                args.push("--monitor-id");
+                args.push(monitor.as_str());
+            }
         }
     }
 
@@ -491,7 +581,7 @@ impl SidecarManager {
         self.update_settings(app).await?;
 
         // Spawn the sidecar
-        let child = spawn_sidecar(app, override_args)?;
+        let child = spawn_sidecar(app, override_args).await?;
         self.child = Some(child);
 
         Ok(())

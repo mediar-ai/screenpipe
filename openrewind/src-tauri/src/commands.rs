@@ -300,3 +300,11 @@ pub async fn set_window_size(app_handle: tauri::AppHandle, window: ShowRewindWin
     window.set_size(&app_handle, width, height).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[tauri::command]
+#[specta::specta]
+pub async fn open_search_window(app_handle: tauri::AppHandle, query: Option<String>) -> Result<(), String> {
+    ShowRewindWindow::Main.close(&app_handle).map_err(|e| e.to_string())?;
+    ShowRewindWindow::Search { query }.show(&app_handle).map_err(|e| e.to_string())?;
+    Ok(())
+}

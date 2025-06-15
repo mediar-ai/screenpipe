@@ -194,12 +194,7 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     })
     .await?;
 
-    // register esc button to hide main window
-    register_shortcut(app, "Escape", false, |app| {
-        hide_main_window(app);
-    })
-    .await?;
-
+  
     // Register start shortcut
     register_shortcut(
         app,
@@ -615,6 +610,7 @@ async fn main() {
                 commands::complete_onboarding,
                 commands::reset_onboarding,
                 commands::show_onboarding_window,
+                commands::open_search_window,
                 // Commands from tray.rs
                 set_tray_unhealth_icon,
                 set_tray_health_icon,
@@ -694,6 +690,7 @@ async fn main() {
             commands::complete_onboarding,
             commands::reset_onboarding,
             commands::show_onboarding_window,
+            commands::open_search_window,
             get_log_files,
             get_media_file,
             upload_file_to_s3,

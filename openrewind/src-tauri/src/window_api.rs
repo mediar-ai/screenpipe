@@ -215,7 +215,7 @@ impl RewindWindowId {
 pub enum ShowRewindWindow {
     Main,
     Settings { page: Option<String> },
-    Search,
+    Search { query: Option<String> },
     Onboarding,
 }
 
@@ -260,8 +260,17 @@ impl ShowRewindWindow {
         match self {
             ShowRewindWindow::Main => RewindWindowId::Main,
             ShowRewindWindow::Settings { page: _ } => RewindWindowId::Settings,
-            ShowRewindWindow::Search => RewindWindowId::Search,
+            ShowRewindWindow::Search { query: _ } => RewindWindowId::Search,
             ShowRewindWindow::Onboarding => RewindWindowId::Onboarding,
+        }
+    }
+
+    pub fn metadata(&self) -> Option<String> {
+        match self {
+            ShowRewindWindow::Main => None,
+            ShowRewindWindow::Settings { page: _ } => None,
+            ShowRewindWindow::Search { query } => Some(query.clone().unwrap_or_default().to_string()),
+            ShowRewindWindow::Onboarding => None,
         }
     }
 
@@ -291,6 +300,14 @@ impl ShowRewindWindow {
                 }
             }
 
+            if id.label() == RewindWindowId::Search.label() {
+                if let Some(query) = self.metadata() {
+                    let _ = window.eval(&format!("window.location.replace(`/search/{}`);", query)).ok();
+                }
+                window.show().ok();
+                return Ok(window);
+            }
+
                  
             info!("showing window: {:?}", id.label());
 
@@ -310,7 +327,7 @@ impl ShowRewindWindow {
                 
                 let monitor = app.primary_monitor().unwrap().unwrap();
                 let size = monitor.size();
-                let builder = self.window_builder(app, "/").hidden_title(true).visible_on_all_workspaces(true).always_on_top(true).decorations(false).skip_taskbar(true).focused(true).transparent(true).inner_size(size.width as f64, size.height as f64);
+                let builder = self.window_builder(app, "/").hidden_title(true).visible_on_all_workspaces(true).always_on_top(true).decorations(false).skip_taskbar(true).focused(false).transparent(true).inner_size(size.width as f64, size.height as f64);
                 let window = builder.build()?;
 
                 #[cfg(target_os = "macos")]
@@ -372,18 +389,6 @@ impl ShowRewindWindow {
                     }
                 });
 
-    //    #[cfg(target_os = "macos")]
-    //     {
-    //         use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
-    //         apply_vibrancy(&window, NSVisualEffectMaterial::ContentBackground, None, None).ok();
-    //     }
-
-    //     #[cfg(target_os = "windows")]
-    //     {
-    //         use window_vibrancy::apply_blur;
-    //         apply_blur(&window, Some((18, 18, 18, 125))).ok();
-    //     }
-
                 window
             }
             ShowRewindWindow::Settings {  page: _  } => {
@@ -391,8 +396,16 @@ impl ShowRewindWindow {
                 let window = builder.build()?;
                 window
             }
-            ShowRewindWindow::Search => {
-                let builder = self.window_builder(app, "/search");
+            ShowRewindWindow::Search { query } => {
+                let mut url = "/search".to_string();
+                info!("query: {:?}", query);
+                if let Some(q) = query {
+                    // Simple URL encoding for the query parameter
+                    // let encoded_query = q.replace(' ', "%20").replace('#', "%23").replace('&', "%26");
+                    url.push_str(&format!("{}", q));
+                }
+                let builder = self.window_builder(app, url).hidden_title(true).focused(true);
+
                 let window = builder.build()?;
                 window
             }
