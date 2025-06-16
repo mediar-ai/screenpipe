@@ -414,8 +414,9 @@ impl ShowRewindWindow {
                     return ShowRewindWindow::Main.show(app);
                 }
 
-                let builder = self.window_builder(app, "/onboarding").visible_on_all_workspaces(true).always_on_top(true).inner_size(1000.0, 750.0);
+                let builder = self.window_builder(app, "/onboarding").visible_on_all_workspaces(true).inner_size(1000.0, 850.0).minimizable(false).maximizable(false).focused(true);
                 let window = builder.build()?;
+
                 window
             }
         };

@@ -1,4 +1,4 @@
-use crate::{get_data_dir, window_api::{RewindWindowId, ShowRewindWindow}, store::OnboardingStore};
+use crate::{get_data_dir, window_api::ShowRewindWindow, store::OnboardingStore};
 use serde::Serialize;
 use specta::Type;
 use tauri::Manager;
