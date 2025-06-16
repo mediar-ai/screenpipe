@@ -545,6 +545,17 @@ fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
     Ok(Shortcut::new(Some(modifiers), code))
 }
 
+// check if the server is running
+#[tauri::command]
+#[specta::specta]
+async fn is_server_running(app: AppHandle) -> Result<bool, String> {
+    let store = app.state::<store::SettingsStore>();
+    let port = store.port;
+    let client = reqwest::Client::new();
+    let response = client.get(format!("http://localhost:{}", port)).send().await;
+    Ok(response.is_ok())
+}
+
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
@@ -780,6 +791,7 @@ async fn main() {
 
             // Get app handle once for all initializations
             let app_handle = app.handle().clone();
+            let server_running = is_server_running(app_handle.clone());
 
             // Initialize server first (core service)
             let server_shutdown_tx = spawn_server(app_handle.clone(), 11435);
@@ -796,11 +808,14 @@ async fn main() {
             info!("use_dev_mode: {}", use_dev_mode);
 
             // Start sidecar in non-dev mode (production behavior)
-            if !use_dev_mode {
+            if !use_dev_mode  {
                 let sidecar_manager_clone = sidecar_manager.clone();
                 let app_handle_clone = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
                     let mut manager = sidecar_manager_clone.lock().await;
+                    if server_running.await.unwrap_or(false) {
+                        return;
+                    }
                     if let Err(e) = manager.spawn(&app_handle_clone, None).await {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }
