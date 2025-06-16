@@ -277,8 +277,6 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
     let enable_frame_cache = store
         .enable_frame_cache;
 
-    let enable_ui_monitoring = store
-        .enable_ui_monitoring;
 
     let data_dir = store.data_dir.clone();
 
@@ -420,10 +418,6 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
 
     if enable_frame_cache {
         args.push("--enable-frame-cache");
-    }
-
-    if enable_ui_monitoring {
-        args.push("--enable-ui-monitoring");
     }
 
     if data_dir != "default" && !data_dir.is_empty() {

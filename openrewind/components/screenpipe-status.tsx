@@ -249,12 +249,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-sm">audio recording</span>
-                            <PermissionButtons type="audio" />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">accessibility</span>
-                            <PermissionButtons type="accessibility" />
-                          </div>
+                                        <PermissionButtons type="audio" />
+          </div>
                         </div>
                       </div>
                     </div>
@@ -401,9 +397,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                           )}
                         </span>
                       </div>
-                      <div className="flex-shrink-0">
-                        <PermissionButtons type="accessibility" />
-                      </div>
+
                     </div>
                   )}
                 </div>

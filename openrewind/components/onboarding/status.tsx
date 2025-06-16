@@ -262,7 +262,6 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           <div className="space-y-2">
             <PermissionButtons type="screen" />
             <PermissionButtons type="audio" />
-            <PermissionButtons type="accessibility" />
           </div>
         </div>
       )}

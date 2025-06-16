@@ -87,7 +87,6 @@ import {
 type PermissionsStatus = {
   screenRecording: string;
   microphone: string;
-  accessibility: string;
 };
 
 interface AudioDevice {
@@ -638,41 +637,7 @@ export function RecordingSettings() {
     );
   };
 
-  const handleUiMonitoringToggle = async (checked: boolean) => {
-    try {
-      if (checked) {
-        // Check accessibility permissions first
-        const perms = await commands.doPermissionsCheck(false);
-        if (!perms.accessibility) {
-          toast({
-            title: "accessibility permission required",
-            description:
-              "please grant accessibility permission in system preferences",
-            action: (
-              <ToastAction
-                altText="open preferences"
-                onClick={() => commands.openPermissionSettings("accessibility")}
-              >
-                open preferences
-              </ToastAction>
-            ),
-            variant: "destructive",
-          });
-          return;
-        }
-      }
 
-      // Just update the local setting - the update button will handle the restart
-      handleSettingsChange({ enableUiMonitoring: checked }, true);
-    } catch (error) {
-      console.error("failed to toggle ui monitoring:", error);
-      toast({
-        title: "error checking accessibility permissions",
-        description: "please try again or check the logs",
-        variant: "destructive",
-      });
-    }
-  };
   const handleIgnoredWindowsChange = (values: string[]) => {
     // Convert all values to lowercase for comparison
     const lowerCaseValues = values.map((v) => v.toLowerCase());
@@ -1544,19 +1509,7 @@ export function RecordingSettings() {
             />
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="enableUiMonitoring">Enable UI monitoring</Label>
-              <p className="text-sm text-muted-foreground">
-                Monitor UI elements and interactions (requires accessibility permission)
-              </p>
-            </div>
-            <Switch
-              id="enableUiMonitoring"
-              checked={settings.enableUiMonitoring}
-              onCheckedChange={handleUiMonitoringToggle}
-            />
-          </div>
+       
         </div>
       </div>
 

@@ -238,10 +238,7 @@ export default function Home() {
                             <span className="text-sm font-medium">Audio Recording</span>
                             <PermissionButtons type="audio" />
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">Accessibility</span>
-                            <PermissionButtons type="accessibility" />
-                          </div>
+
                         </div>
                       </div>
                     </>

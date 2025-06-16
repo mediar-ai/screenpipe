@@ -8,7 +8,7 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import localforage from "localforage";
 
 interface PermissionButtonsProps {
-  type: "screen" | "audio" | "accessibility";
+  type: "screen" | "audio";
 }
 
 export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
@@ -49,9 +49,7 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
       const permissionType =
         type === "screen"
           ? "screenRecording"
-          : type === "audio"
-          ? "microphone"
-          : "accessibility";
+          : "microphone";
 
       await commands.requestPermission(permissionType);
 
@@ -86,9 +84,7 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
       const permissionType =
         type === "screen"
           ? "screenRecording"
-          : type === "audio"
-          ? "microphone"
-          : "accessibility";
+          : "microphone";
 
       await commands.openPermissionSettings(permissionType);
     } catch (error) {
@@ -110,9 +106,7 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
   const permissionStatus =
     type === "screen"
       ? permissions?.screenRecording
-      : type === "audio"
-      ? permissions?.microphone
-      : permissions?.accessibility;
+      : permissions?.microphone;
 
   const isDisabled = type === "audio" && settings.disableAudio;
 
@@ -136,9 +130,7 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
         allow{" "}
         {type === "screen"
           ? "screen"
-          : type === "audio"
-          ? "audio"
-          : "accessibility"}{" "}
+          : "audio"}{" "}
         access
       </Button>
       <Button
