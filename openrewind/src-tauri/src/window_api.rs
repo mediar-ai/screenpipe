@@ -327,7 +327,7 @@ impl ShowRewindWindow {
                 
                 let monitor = app.primary_monitor().unwrap().unwrap();
                 let size = monitor.size();
-                let builder = self.window_builder(app, "/").hidden_title(true).visible_on_all_workspaces(true).always_on_top(true).decorations(false).skip_taskbar(true).focused(false).transparent(true).inner_size(size.width as f64, size.height as f64);
+                let builder = self.window_builder(app, "/").hidden_title(true).visible_on_all_workspaces(true).always_on_top(true).decorations(false).skip_taskbar(true).focused(false).transparent(true).visible(false).inner_size(size.width as f64, size.height as f64);
                 let window = builder.build()?;
 
                 #[cfg(target_os = "macos")]

@@ -1,11 +1,17 @@
+import { isSameDay } from "date-fns";
+
 export async function hasFramesForDate(date: Date) {
 	try {
 		// Set up start and end of the day
 		const startOfDay = new Date(date);
 		startOfDay.setHours(0, 0, 0, 0);
 
-		const endOfDay = new Date(date);
-		endOfDay.setHours(23, 59, 59, 999);
+		let endOfDay = new Date(date);
+		if (isSameDay(startOfDay, new Date())) {
+			endOfDay.setMinutes(endOfDay.getMinutes() - 5);
+		} else {
+			endOfDay.setHours(23, 59, 59, 999);
+		}
 
 		const query = `
             SELECT COUNT(*) as frame_count
@@ -31,6 +37,7 @@ export async function hasFramesForDate(date: Date) {
 		}
 
 		const result = await response.json();
+		console.log("result", result);
 		return result[0]?.frame_count > 0;
 	} catch (e) {
 		return {

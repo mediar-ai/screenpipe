@@ -102,16 +102,26 @@ export default function Timeline() {
 	}, []);
 
 	useEffect(() => {
-		const startTime = new Date(currentDate);
-		startTime.setHours(0, 0, 0, 0);
+		let currentDateEffect = new Date(currentDate);
+		const checkIfThereAreFrames = async () => {
+			const checkFramesForDate = await hasFramesForDate(currentDateEffect);
+			console.log("checkFramesForDate", currentDateEffect, checkFramesForDate);
+			if (!checkFramesForDate) {
+				setCurrentDate(subDays(currentDateEffect, 1));
+			}
 
-		const endTime = new Date(currentDate);
-		if (endTime.getDate() === new Date().getDate()) {
-			endTime.setMinutes(endTime.getMinutes() + 5);
-		} else {
-			endTime.setHours(23, 59, 59, 999);
+			const startTime = new Date(currentDateEffect);
+			startTime.setHours(0, 0, 0, 0);
+
+			const endTime = new Date(currentDateEffect);
+			if (endTime.getDate() === new Date().getDate()) {
+			endTime.setMinutes(endTime.getMinutes() - 5);
+			} else {
+				endTime.setHours(23, 59, 59, 999);
+			}
+			fetchTimeRange(startTime, endTime);
 		}
-		fetchTimeRange(startTime, endTime);
+		checkIfThereAreFrames();
 	}, [currentDate]);
 
 	useEffect(() => {

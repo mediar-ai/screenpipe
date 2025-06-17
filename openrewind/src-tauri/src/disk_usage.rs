@@ -54,16 +54,16 @@ pub fn readable(size: u64) -> String {
     if size == 0 {
         return "0 KB".to_string();
     }
-    
+
     let units = ["B", "KB", "MB", "GB", "TB"];
     let mut size = size as f64;
     let mut unit = 0;
-    
+
     while size >= 1024.0 && unit < units.len() - 1 {
         size /= 1024.0;
         unit += 1;
     }
-    
+
     if unit == 0 {
         format!("{:.0} {}", size, units[unit])
     } else if units[unit] == "GB" || units[unit] == "TB" {
@@ -74,9 +74,12 @@ pub fn readable(size: u64) -> String {
 }
 
 pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, String> {
-    info!("Calculating disk usage for directory: {}", screenpipe_dir.display());
+    info!(
+        "Calculating disk usage for directory: {}",
+        screenpipe_dir.display()
+    );
     let data_dir = screenpipe_dir.join("data");
-    
+
     let cache_dir = match get_cache_dir()? {
         Some(dir) => dir,
         None => return Err("Cache directory not found".to_string()),
@@ -105,16 +108,19 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
     let mut total_audio_size: u64 = 0;
 
     // Calculate total data size
-    info!("Calculating total data size for: {}", screenpipe_dir.display());
+    info!(
+        "Calculating total data size for: {}",
+        screenpipe_dir.display()
+    );
     let total_data_size = match directory_size(screenpipe_dir).map_err(|e| e.to_string())? {
         Some(size) => {
             info!("Total data size: {} bytes", size);
             readable(size)
-        },
+        }
         None => {
             warn!("Could not calculate total data size");
             "---".to_string()
-        },
+        }
     };
 
     // Calculate cache size
@@ -123,17 +129,21 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
         Some(size) => {
             info!("Total cache size: {} bytes", size);
             readable(size)
-        },
+        }
         None => {
             warn!("Could not calculate cache size");
             "---".to_string()
-        },
+        }
     };
 
     // Calculate individual media file sizes recursively
     if data_dir.exists() {
         info!("Scanning data directory recursively for media files");
-        fn scan_media_files(dir: &Path, video_size: &mut u64, audio_size: &mut u64) -> io::Result<()> {
+        fn scan_media_files(
+            dir: &Path,
+            video_size: &mut u64,
+            audio_size: &mut u64,
+        ) -> io::Result<()> {
             for entry in fs::read_dir(dir)? {
                 let entry = entry?;
                 let path = entry.path();
@@ -143,25 +153,29 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
                 } else if path.is_file() {
                     let size = entry.metadata()?.len();
                     let file_name = path.file_name().unwrap().to_string_lossy().to_string();
-                    
+
                     // Classify files based on extension and name patterns
-                    let extension = path.extension()
+                    let extension = path
+                        .extension()
                         .and_then(|ext| ext.to_str())
                         .unwrap_or("")
                         .to_lowercase();
-                    
+
                     match extension.as_str() {
                         // Audio file extensions
                         "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" | "wma" => {
                             *audio_size += size;
-                        },
+                        }
                         // Video file extensions
-                        "mp4" | "avi" | "mkv" | "mov" | "wmv" | "flv" | "webm" | "m4v" => {
+                        "avi" | "mkv" | "mov" | "wmv" | "flv" | "webm" | "m4v" => {
                             *video_size += size;
-                        },
+                        }
                         // Fallback to filename patterns for files without clear extensions
                         _ => {
-                            if file_name.contains("input") || file_name.contains("output") || file_name.contains("audio") {
+                            if file_name.contains("input")
+                                || file_name.contains("output")
+                                || file_name.contains("audio")
+                            {
                                 *audio_size += size;
                             } else if file_name.contains("video") || file_name.contains("screen") {
                                 *video_size += size;
@@ -175,12 +189,15 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
             }
             Ok(())
         }
-        
+
         if let Err(e) = scan_media_files(&data_dir, &mut total_video_size, &mut total_audio_size) {
             warn!("Error scanning media files: {}", e);
         }
-        
-        info!("Video files total: {} bytes, Audio files total: {} bytes", total_video_size, total_audio_size);
+
+        info!(
+            "Video files total: {} bytes, Audio files total: {} bytes",
+            total_video_size, total_audio_size
+        );
     } else {
         warn!("Data directory does not exist: {}", data_dir.display());
     }
@@ -196,7 +213,8 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
         let mut sys = System::new();
         sys.refresh_disks_list();
         let path_obj = Path::new(&screenpipe_dir);
-        let available = sys.disks()
+        let available = sys
+            .disks()
             .iter()
             .find(|disk| path_obj.starts_with(disk.mount_point()))
             .map(|disk| disk.available_space())
@@ -224,7 +242,10 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
         usage: disk_usage.clone(),
     };
 
-    info!("Writing disk usage cache file: {}", cache_file.to_string_lossy());
+    info!(
+        "Writing disk usage cache file: {}",
+        cache_file.to_string_lossy()
+    );
 
     if let Err(e) = fs::write(&cache_file, serde_json::to_string_pretty(&cached).unwrap()) {
         warn!("Failed to write cache file: {}", e);

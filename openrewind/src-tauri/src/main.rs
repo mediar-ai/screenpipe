@@ -266,7 +266,8 @@ pub struct LogFile {
 #[tauri::command]
 #[specta::specta]
 async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
-    let data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
+    let data_dir = get_openrewind_data_dir(&app).map_err(|e| e.to_string())?;
+    let openrewind_data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
     let mut log_files = Vec::new();
 
     // Collect all entries first
@@ -274,7 +275,18 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
     let mut dir = tokio::fs::read_dir(&data_dir)
         .await
         .map_err(|e| e.to_string())?;
+    let mut openrewind_dir = tokio::fs::read_dir(&openrewind_data_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
     while let Some(entry) = dir.next_entry().await.map_err(|e| e.to_string())? {
+        // Get metadata immediately for each entry
+        if let Ok(metadata) = entry.metadata().await {
+            entries.push((entry, metadata));
+        }
+    }
+
+    while let Some(entry) = openrewind_dir.next_entry().await.map_err(|e| e.to_string())? {
         // Get metadata immediately for each entry
         if let Ok(metadata) = entry.metadata().await {
             entries.push((entry, metadata));
@@ -326,7 +338,7 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 
     let store = get_store(app, None)?;
 
-    let default_path = app.path().home_dir().unwrap().join(".openrewind");
+    let default_path = app.path().home_dir().unwrap().join(".screenpipe");
 
     let data_dir = store
         .get("dataDir")
@@ -338,6 +350,11 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     } else {
         get_base_dir(app, Some(data_dir))
     }
+}
+
+fn get_openrewind_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    let default_path = app.path().home_dir().unwrap().join(".openrewind");
+    Ok(default_path)
 }
 
 use tokio::time::{sleep, Duration};
@@ -728,7 +745,7 @@ async fn main() {
                 .filename_suffix("log")
                 .max_log_files(5)
                 .build(
-                    get_data_dir(app.handle())
+                    get_openrewind_data_dir(app.handle())
                         .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".openrewind")),
                 )?;
 
