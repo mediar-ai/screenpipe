@@ -210,7 +210,7 @@ export default function Home() {
                       <Button
                         onClick={handleRestartServer}
                         disabled={isRestarting}
-                        className="flex items-center gap-2 bg-muted"
+                        className="flex items-center gap-2"
                       >
                         <RefreshCw className={`h-4 w-4 ${isRestarting ? 'animate-spin' : ''}`} />
                         {isRestarting ? "Starting..." : "Start Server"}

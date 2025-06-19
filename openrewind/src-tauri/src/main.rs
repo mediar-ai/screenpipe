@@ -833,6 +833,26 @@ async fn main() {
                     if server_running.await.unwrap_or(false) {
                         return;
                     }
+                    
+                    // Check permissions before spawning sidecar
+                    let permissions_check = permissions::do_permissions_check(false);
+                    let disable_audio = store.disable_audio;
+                    
+                    // Always check screen recording permission - this is required and needs restart
+                    if !permissions_check.screen_recording.permitted() {
+                        warn!("Screen recording permission not granted: {:?}. Sidecar will not start until permission is granted.", permissions_check.screen_recording);
+                        // Don't start the sidecar if screen recording permission isn't granted
+                        // User will need to grant permission through the onboarding/settings UI and restart
+                        return;
+                    }
+                    
+                    // Check microphone permission if audio recording is enabled - but don't block startup
+                    if !disable_audio && !permissions_check.microphone.permitted() {
+                        warn!("Microphone permission not granted and audio recording is enabled: {:?}. Audio recording will not work until permission is granted, but sidecar will still start.", permissions_check.microphone);
+                        // Continue with sidecar startup - microphone permission can be granted at runtime
+                    }
+                    
+                    info!("Screen recording permission granted, spawning screenpipe sidecar. Audio disabled: {}, microphone permission: {:?}", disable_audio, permissions_check.microphone);
                     if let Err(e) = manager.spawn(&app_handle_clone, None).await {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }

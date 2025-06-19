@@ -1,5 +1,6 @@
 use crate::get_store;
-use crate::store::{Credits, SettingsStore};
+use crate::store::SettingsStore;
+use crate::permissions::do_permissions_check;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -7,9 +8,8 @@ use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 pub struct SidecarState(pub Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -217,6 +217,25 @@ pub async fn spawn_screenpipe(
     app: tauri::AppHandle,
     override_args: Option<Vec<String>>,
 ) -> Result<(), String> {
+    // Check permissions before spawning
+    let permissions_check = do_permissions_check(false);
+    let store = app.state::<SettingsStore>();
+    let disable_audio = store.disable_audio;
+    
+    // Always check screen recording permission - this is required and needs restart
+    if !permissions_check.screen_recording.permitted() {
+        warn!("Screen recording permission not granted: {:?}. Cannot spawn screenpipe.", permissions_check.screen_recording);
+        return Err("Screen recording permission required. Please grant permission through settings and restart the app.".to_string());
+    }
+    
+    // Check microphone permission if audio recording is enabled - but don't block startup
+    if !disable_audio && !permissions_check.microphone.permitted() {
+        warn!("Microphone permission not granted and audio recording is enabled: {:?}. Audio recording will not work until permission is granted.", permissions_check.microphone);
+        // Continue with spawn - microphone permission can be granted at runtime
+    }
+    
+    info!("Screen recording permission granted for manual spawn. Audio disabled: {}, microphone permission: {:?}", disable_audio, permissions_check.microphone);
+    
     let mut manager = state.0.lock().await;
     if manager.is_none() {
         *manager = Some(SidecarManager::new());
@@ -571,8 +590,28 @@ impl SidecarManager {
 
     pub async fn spawn(&mut self, app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<(), String> {
         info!("Spawning sidecar with override args: {:?}", override_args);
-        // Update settings from store
+        
+        // Update settings from store first to get audio settings
         self.update_settings(app).await?;
+        
+        // Check permissions before spawning
+        let permissions_check = do_permissions_check(false);
+        let store = app.state::<SettingsStore>();
+        let disable_audio = store.disable_audio;
+        
+        // Always check screen recording permission - this is required and needs restart
+        if !permissions_check.screen_recording.permitted() {
+            warn!("Screen recording permission not granted: {:?}. Cannot spawn sidecar.", permissions_check.screen_recording);
+            return Err("Screen recording permission required. Please grant permission through settings and restart the app.".to_string());
+        }
+        
+        // Check microphone permission if audio recording is enabled - but don't block startup
+        if !disable_audio && !permissions_check.microphone.permitted() {
+            warn!("Microphone permission not granted and audio recording is enabled: {:?}. Audio recording will not work until permission is granted.", permissions_check.microphone);
+            // Continue with spawn - microphone permission can be granted at runtime
+        }
+        
+        info!("Screen recording permission granted, proceeding with sidecar spawn. Audio disabled: {}, microphone permission: {:?}", disable_audio, permissions_check.microphone);
 
         // Spawn the sidecar
         let child = spawn_sidecar(app, override_args).await?;

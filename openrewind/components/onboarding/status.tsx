@@ -21,6 +21,7 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { pipe } from "@screenpipe/browser";
 import { VisionEvent } from "@screenpipe/browser";
 import Image from "next/image";
+import { commands, OSPermissionsCheck } from "@/lib/utils/tauri";
 
 interface OnboardingStatusProps {
   className?: string;
@@ -36,7 +37,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
-  const { updateSettings } = useSettings();
+  const { updateSettings, settings } = useSettings();
   const { isMac: isMacOS } = usePlatform();
   const [stats, setStats] = useState<{
     screenshots: number;
@@ -45,6 +46,32 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [visionEvent, setVisionEvent] = useState<VisionEvent | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(null);
+
+  // Check permissions on macOS
+  useEffect(() => {
+    const checkPermissions = async () => {
+      if (isMacOS) {
+        try {
+          const perms = await commands.doPermissionsCheck(true);
+          setPermissions(perms);
+        } catch (error) {
+          console.error("Failed to check permissions:", error);
+        }
+      }
+    };
+
+    // Poll permissions every 2 seconds
+    const intervalId = setInterval(() => {
+      checkPermissions();
+    }, 2000);
+
+    // Initial check
+    checkPermissions();
+
+    // Cleanup interval on unmount
+    return () => clearInterval(intervalId);
+  }, [isMacOS]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -240,6 +267,36 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     updateSettings({ useChineseMirror: checked });
   };
 
+  // Helper function to check if screen recording permission is granted
+  const isScreenRecordingPermissionGranted = () => {
+    if (!isMacOS) {
+      // On non-macOS platforms, assume permission is granted
+      return true;
+    }
+    
+    const screenPermission = permissions?.screenRecording;
+    return screenPermission === "granted" || screenPermission === "notNeeded";
+  };
+
+  // Helper function to check if audio permission is granted (when audio is enabled)
+  const isAudioPermissionGranted = () => {
+    if (!isMacOS || settings.disableAudio) {
+      // On non-macOS platforms or when audio is disabled, assume permission is granted
+      return true;
+    }
+    
+    const audioPermission = permissions?.microphone;
+    return audioPermission === "granted" || audioPermission === "notNeeded";
+  };
+
+  // Helper function to check if all required permissions are granted
+  const areRequiredPermissionsGranted = () => {
+    return isScreenRecordingPermissionGranted() && isAudioPermissionGranted();
+  };
+
+  // Check if next button should be disabled
+  const isNextDisabled = isLoading || (isMacOS && !areRequiredPermissionsGranted());
+
   return (
     <div
       ref={containerRef}
@@ -263,6 +320,15 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             <PermissionButtons type="screen" />
             <PermissionButtons type="audio" />
           </div>
+          {!areRequiredPermissionsGranted() && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 text-center">
+              {!isScreenRecordingPermissionGranted() && !isAudioPermissionGranted() 
+                ? "screen recording and audio permissions are required to continue"
+                : !isScreenRecordingPermissionGranted() 
+                ? "screen recording permission is required to continue"
+                : "audio permission is required to continue"}
+            </p>
+          )}
         </div>
       )}
 
@@ -429,6 +495,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           handleNextSlide={handleNext}
           prevBtnText="previous"
           nextBtnText="next"
+          isLoading={isNextDisabled}
         />
     </div>
   );
