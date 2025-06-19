@@ -151,7 +151,12 @@ before you begin:
    Write-Host "vcruntime140.dll copied successfully!"
    ```
 
-8. **build**:
+8. **setup tauri before build**
+   ```bunx tauri signer generate -w /Users/{CHANGE_TO_YOUR_USERNAME}/.tauri/myapp.key
+   $env:TAURI_SIGNING_PRIVATE_KEY="$HOME\.tauri\myapp.key"
+   $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD="{ADD_YOUR_PASSWORD_DURING_SETUP_TAURI}"
+
+9. **build**:
    ```powershell
    cd screenpipe
    cargo build --release

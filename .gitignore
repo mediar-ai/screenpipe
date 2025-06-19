@@ -58,3 +58,4 @@ app.py
 *.py3z
 __pycache__/
 
+screenpipe-audio/onnxruntime-win-x64-gpu-1.19.2.zip
