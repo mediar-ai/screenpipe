@@ -211,7 +211,7 @@ impl RewindWindowId {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone,specta::Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, specta::Type)]
 pub enum ShowRewindWindow {
     Main,
     Settings { page: Option<String> },
@@ -286,6 +286,7 @@ impl ShowRewindWindow {
             if id.label() == RewindWindowId::Main.label() {
                     info!("showing panel");
                     let app_clone = app.clone();
+                     
                     app.run_on_main_thread(move || {
                         if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
                             panel.show();
@@ -326,8 +327,22 @@ impl ShowRewindWindow {
                 }
                 
                 let monitor = app.primary_monitor().unwrap().unwrap();
-                let size = monitor.size();
-                let builder = self.window_builder(app, "/").hidden_title(true).visible_on_all_workspaces(true).always_on_top(true).decorations(false).skip_taskbar(true).focused(false).transparent(true).visible(false).inner_size(size.width as f64, size.height as f64);
+                let logical_size = monitor.size().to_logical(monitor.scale_factor());
+                let builder = self.window_builder(app, "/")
+                    .hidden_title(true)
+                    .visible_on_all_workspaces(true)
+                    .always_on_top(true)
+                    .decorations(false)
+                    .skip_taskbar(true)
+                    .focused(false)
+                    .transparent(true)
+                    .visible(false)
+                    .inner_size(logical_size.width, logical_size.height)
+                    .max_inner_size(logical_size.width, logical_size.height)
+                    .position(0.0, 0.0);
+                    
+                    
+                
                 let window = builder.build()?;
 
                 #[cfg(target_os = "macos")]
@@ -358,34 +373,46 @@ impl ShowRewindWindow {
                     }
                 }
 
-                // Add event listener to hide window when it loses focus
+                // Add event listener to hide window when it loses focus and handle display changes
                 let app_clone = app.clone();
+                let window_clone = window.clone();
                 window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(is_focused) = event {
-                        if !is_focused {
-                            info!("Main window lost focus, hiding window");
-                            
-                            // #[cfg(target_os = "macos")]
-                            // {
-                            //     let value = app_clone.clone();
-                            //     app_clone.run_on_main_thread(move || {
-                            //         if let Ok(panel) = value.get_webview_panel(RewindWindowId::Main.label()) {
-                            //             panel.order_out(None);
-                            //         }
+                    match event {
+                        tauri::WindowEvent::Focused(is_focused) => {
+                            if !is_focused {
+                                info!("Main window lost focus, hiding window");
+                                
+                                // #[cfg(target_os = "macos")]
+                                // {
+                                //     let value = app_clone.clone();
+                                //     app_clone.run_on_main_thread(move || {
+                                //         if let Ok(panel) = value.get_webview_panel(RewindWindowId::Main.label()) {
+                                //             panel.order_out(None);
+                                //         }
 
 
-                            //     }).ok();   
-                            // }
+                                //     }).ok();   
+                                // }
 
-                            // #[cfg(not(target_os = "macos"))]
-                            // {
-                            //     let _ = window.hide();
-                            // }
+                                // #[cfg(not(target_os = "macos"))]
+                                // {
+                                //     let _ = window.hide();
+                                // }
 
-                            let _ = app_clone.emit("window-focused", false).ok();
-                        }else{
-                            let _ = app_clone.emit("window-focused", true).ok();
+                                let _ = app_clone.emit("window-focused", false).ok();
+                            } else {
+                                let _ = app_clone.emit("window-focused", true).ok();
+                            }
                         }
+                        tauri::WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size: _,.. } => {
+                            // Handle display resolution/scale changes
+                            let monitor = window_clone.app_handle().primary_monitor().unwrap().unwrap();
+                            let scale_factor = monitor.scale_factor();
+                            let size = monitor.size().to_logical::<f64>(scale_factor);
+                            info!("Display scale factor changed, updating window size {:?}", size.clone());
+                            let _ = window_clone.set_size(tauri::Size::Logical(size.clone())); 
+                        }
+                        _ => {}
                     }
                 });
 
