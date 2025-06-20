@@ -84,7 +84,7 @@ const ShortcutRow = ({
   }, [isRecording]);
 
   const syncShortcuts = async (updatedShortcuts: {
-    showScreenpipeShortcut: string;
+    showOpenrewindShortcut: string;
     startRecordingShortcut: string;
     stopRecordingShortcut: string;
     startAudioShortcut: string;
@@ -92,7 +92,7 @@ const ShortcutRow = ({
     pipeShortcuts: Record<string, string>;
   }) => {
     console.log("syncing shortcuts:", {
-      showShortcut: updatedShortcuts.showScreenpipeShortcut,
+      showShortcut: updatedShortcuts.showOpenrewindShortcut,
       startShortcut: updatedShortcuts.startRecordingShortcut,
       stopShortcut: updatedShortcuts.stopRecordingShortcut,
       startAudioShortcut: updatedShortcuts.startAudioShortcut,
@@ -102,7 +102,7 @@ const ShortcutRow = ({
     // wait 1 second
     await new Promise((resolve) => setTimeout(resolve, 1000));
     await commands.updateGlobalShortcuts(
-      updatedShortcuts.showScreenpipeShortcut,
+      updatedShortcuts.showOpenrewindShortcut,
       updatedShortcuts.startRecordingShortcut,
       updatedShortcuts.stopRecordingShortcut,
       updatedShortcuts.startAudioShortcut,
@@ -131,7 +131,7 @@ const ShortcutRow = ({
         case "global":
           updateSettings({ [shortcut]: keys });
           await syncShortcuts({
-            showScreenpipeShortcut: settings.showScreenpipeShortcut,
+            showOpenrewindShortcut: settings.showOpenrewindShortcut,
             startRecordingShortcut: settings.startRecordingShortcut,
             stopRecordingShortcut: settings.stopRecordingShortcut,
             startAudioShortcut: settings.startAudioShortcut,
@@ -149,7 +149,7 @@ const ShortcutRow = ({
             },
           });
           await syncShortcuts({
-            showScreenpipeShortcut: settings.showScreenpipeShortcut,
+            showOpenrewindShortcut: settings.showOpenrewindShortcut,
             startRecordingShortcut: settings.startRecordingShortcut,
             stopRecordingShortcut: settings.stopRecordingShortcut,
             startAudioShortcut: settings.startAudioShortcut,
@@ -184,7 +184,7 @@ const ShortcutRow = ({
     });
 
     await syncShortcuts({
-      showScreenpipeShortcut: settings.showScreenpipeShortcut,
+      showOpenrewindShortcut: settings.showOpenrewindShortcut,
       startRecordingShortcut: settings.startRecordingShortcut,
       stopRecordingShortcut: settings.stopRecordingShortcut,
       startAudioShortcut: settings.startAudioShortcut,

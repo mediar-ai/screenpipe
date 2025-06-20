@@ -1,5 +1,5 @@
 use super::get_base_dir;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use specta::Type;
@@ -89,6 +89,7 @@ impl OnboardingStore {
 }
 
 #[derive(Serialize, Deserialize,Type,Clone)]
+#[serde(default)]
 pub struct SettingsStore {
     #[serde(rename = "aiPresets")]
     pub ai_presets: Vec<AIPreset>,
@@ -98,8 +99,6 @@ pub struct SettingsStore {
     #[serde(rename = "isLoading")]
     pub is_loading: bool,
    
-    #[serde(rename = "installedPipes")]
-    pub installed_pipes: Vec<Pipe>,
     #[serde(rename = "userId")]
     pub user_id: String,
   
@@ -158,8 +157,8 @@ pub struct SettingsStore {
     pub disabled_shortcuts: Vec<String>,
     #[serde(rename = "user")]
     pub user: User,
-    #[serde(rename = "showScreenpipeShortcut")]
-    pub show_screenpipe_shortcut: String,
+    #[serde(rename = "showOpenrewindShortcut")]
+    pub show_openrewind_shortcut: String,
     #[serde(rename = "startRecordingShortcut")]
     pub start_recording_shortcut: String,
     #[serde(rename = "stopRecordingShortcut")]
@@ -168,8 +167,6 @@ pub struct SettingsStore {
     pub start_audio_shortcut: String,
     #[serde(rename = "stopAudioShortcut")]
     pub stop_audio_shortcut: String,
-    #[serde(rename = "pipeShortcuts")]
-    pub pipe_shortcuts: HashMap<String, String>,
     #[serde(rename = "enableRealtimeAudioTranscription")]
     pub enable_realtime_audio_transcription: bool,
     #[serde(rename = "realtimeAudioTranscriptionEngine")]
@@ -182,8 +179,9 @@ pub struct SettingsStore {
     pub enable_realtime_vision: bool,
 }
 
-#[derive(Serialize, Deserialize, Type,Clone)]
+#[derive(Serialize, Deserialize, Type,Clone,Default)]
 pub enum AIProviderType {
+    #[default]
     #[serde(rename = "openai")]
     OpenAI,
     #[serde(rename = "native-ollama")]
@@ -210,6 +208,7 @@ pub struct AIPreset {
 }
 
 #[derive(Serialize, Deserialize,Type,Clone)]
+#[serde(default)]
 pub struct User {
     pub id: Option<String>,
     pub name: Option<String>,
@@ -228,38 +227,58 @@ pub struct User {
     pub cloud_subscribed: Option<bool>,
 }
 
+impl Default for User {
+    fn default() -> Self {
+        Self {
+            id: None,
+            name: None,
+            email: None,
+            image: None,
+            token: None,
+            clerk_id: None,
+            api_key: None,
+            credits: None,
+            stripe_connected: None,
+            stripe_account_status: None,
+            github_username: None,
+            bio: None,
+            website: None,
+            contact: None,
+            cloud_subscribed: None,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize,Type,Clone)]
+#[serde(default)]
 pub struct Credits {
     pub amount: u32,
 }
 
-#[derive(Serialize, Deserialize,Type,Clone)]
-pub struct Pipe {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub version: String,
-    pub author: String,
-    #[serde(rename = "authorLink")]
-    pub author_link: String,
-    #[serde(rename = "repository")]
-    pub repository: String,
-    #[serde(rename = "lastUpdate")]
-    pub last_update: String,
-    #[serde(rename = "fullDescription")]
-    pub full_description: String,
-    #[serde(rename = "downloads")]
-    pub downloads: u32,
-    #[serde(rename = "mainFile")]
-    pub main_file: String,
-    pub config: HashMap<String, String>,
+impl Default for Credits {
+    fn default() -> Self {
+        Self {
+            amount: 0,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize,Type,Clone)]
+#[serde(default)]
 pub struct EmbeddedLLM {
     pub enabled: bool,
     pub model: String,
     pub port: u16,
+}
+
+impl Default for EmbeddedLLM {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            model: "llama3.2:1b-instruct-q4_K_M".to_string(),
+            port: 11434,
+        }
+    }
 }
 
 impl Default for SettingsStore {
@@ -316,7 +335,6 @@ impl Default for SettingsStore {
             ai_presets: vec![],
             deepgram_api_key: "".to_string(),
             is_loading: false,
-            installed_pipes: vec![],
             user_id: "".to_string(),
          
             dev_mode: false,
@@ -343,11 +361,7 @@ impl Default for SettingsStore {
             audio_chunk_duration: 30,
             use_chinese_mirror: false,
             languages: vec![],
-            embedded_llm: EmbeddedLLM { 
-                enabled: false, 
-                model: "llama3.2:1b-instruct-q4_K_M".to_string(), 
-                port: 11434 
-            },
+            embedded_llm: EmbeddedLLM::default(),
             enable_beta: false,
             is_first_time_user: true,
             auto_start_enabled: true,
@@ -372,12 +386,11 @@ impl Default for SettingsStore {
                 contact: None,
                 cloud_subscribed: None,
             },
-            show_screenpipe_shortcut: "Super+Ctrl+S".to_string(),
+            show_openrewind_shortcut: "Super+Ctrl+S".to_string(),
             start_recording_shortcut: "Super+Ctrl+U".to_string(),
             stop_recording_shortcut: "Super+Ctrl+X".to_string(),
             start_audio_shortcut: "".to_string(),
             stop_audio_shortcut: "".to_string(),
-            pipe_shortcuts: HashMap::new(),
             enable_realtime_audio_transcription: false,
             realtime_audio_transcription_engine: "deepgram".to_string(),
             disable_vision: false,

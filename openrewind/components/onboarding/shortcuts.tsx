@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { cn, parseKeyboardShortcut } from "@/lib/utils";
 import { CommandShortcut } from "@/components/ui/command";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { usePlatform } from "@/lib/hooks/use-platform";
 import { commands } from "@/lib/utils/tauri";
 import { Switch } from "@/components/ui/switch";
 import { Pencil } from "lucide-react";
@@ -20,15 +21,26 @@ export default function OnboardingShortcuts({
   handlePrevSlide,
 }: OnboardingShortcutsProps) {
   const { settings, updateSettings } = useSettings();
+  const { isMac, isWindows } = usePlatform();
   const [recordingShortcut, setRecordingShortcut] = useState<string | null>(null);
+
+  // Function to convert internal key names to platform-specific display names
+  const getDisplayKey = (key: string): string => {
+    if (key === "Super" || key === "SUPER") {
+      if (isMac) return "Cmd";
+      if (isWindows) return "Win";
+      return "Super"; // fallback for Linux or unknown platforms
+    }
+    return key;
+  };
 
   const shortcuts = [
     {
-      id: "showScreenpipeShortcut",
-      title: "Show/Hide Screenpipe",
+      id: "showOpenrewindShortcut",
+      title: "Show/Hide Openrewind",
       defaultShortcut: "Super+Alt+S",
-      description: "Quickly toggle the Screenpipe interface",
-      value: settings.showScreenpipeShortcut,
+      description: "Quickly toggle the Openrewind interface",
+      value: settings.showOpenrewindShortcut,
     },
     {
       id: "startRecordingShortcut",
@@ -107,9 +119,11 @@ export default function OnboardingShortcuts({
 
   const handleEnableShortcut = async (shortcutId: string, keys: string) => {
     try {
+      // Convert keys to display format for toast
+      const displayKeys = keys.split("+").map(getDisplayKey).join("+");
       toast({
         title: "Shortcut updated",
-        description: `${shortcutId.replace(/_/g, " ")} set to ${keys}`,
+        description: `${shortcutId.replace(/_/g, " ")} set to ${displayKeys}`,
       });
 
       // Update settings
@@ -117,7 +131,7 @@ export default function OnboardingShortcuts({
 
       // Sync with backend
       await commands.updateGlobalShortcuts(
-        settings.showScreenpipeShortcut,
+        settings.showOpenrewindShortcut,
         settings.startRecordingShortcut,
         settings.stopRecordingShortcut,
         settings.startAudioShortcut,
@@ -148,7 +162,7 @@ export default function OnboardingShortcuts({
       });
 
       await commands.updateGlobalShortcuts(
-        settings.showScreenpipeShortcut,
+        settings.showOpenrewindShortcut,
         settings.startRecordingShortcut,
         settings.stopRecordingShortcut,
         settings.startAudioShortcut,
@@ -217,17 +231,14 @@ export default function OnboardingShortcuts({
                     <span className="animate-pulse">recording...</span>
                   ) : (
                     <span className="flex items-center justify-between gap-2">
-                      {currentKeys.map((key, i) => (
                         <kbd
-                          key={i}
                           className={cn(
                             "px-1 rounded",
                             shortcut.value ? "bg-background/50" : "bg-transparent"
                           )}
                         >
-                          {key}
+                        {parseKeyboardShortcut(shortcut.value || "")} 
                         </kbd>
-                      ))}
                       <Pencil className="h-3 w-3 opacity-50" />
                     </span>
                   )}

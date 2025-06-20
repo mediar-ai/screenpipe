@@ -97,7 +97,7 @@ impl ShortcutConfig {
 
         Ok(Self {
             show: store
-                .show_screenpipe_shortcut,
+                .show_openrewind_shortcut,
             start: store
                 .start_recording_shortcut,
             stop: store

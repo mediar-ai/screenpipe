@@ -151,7 +151,7 @@ let DEFAULT_SETTINGS: Settings = {
 				contact: null,
 				cloud_subscribed: null
 			},
-			showScreenpipeShortcut: "Super+Alt+S",
+			showOpenrewindShortcut: "Super+Alt+S",
 			startRecordingShortcut: "Super+Alt+U",
 			stopRecordingShortcut: "Super+Alt+X",
 			startAudioShortcut: "",
@@ -162,7 +162,7 @@ let DEFAULT_SETTINGS: Settings = {
 			disableVision: false,
 			useAllMonitors: false,
 			enableRealtimeVision: true,
-		};;
+		};
 
 export function createDefaultSettingsObject(): Settings {
 	try {

@@ -94,7 +94,7 @@ export const settingsStoreSchema = z.object({
   
   // Shortcuts
   disabledShortcuts: z.array(z.string()),
-  showScreenpipeShortcut: z.string(),
+  showOpenrewindShortcut: z.string(),
   startRecordingShortcut: z.string(),
   stopRecordingShortcut: z.string(),
   startAudioShortcut: z.string(),
