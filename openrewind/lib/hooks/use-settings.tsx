@@ -6,8 +6,6 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import posthog from "posthog-js";
 import localforage from "localforage";
 import { User } from "../utils/tauri";
-import { Pipe } from "./use-pipes";
-import { Language } from "@/lib/language";
 import { SettingsStore } from "../utils/tauri";
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -100,7 +98,6 @@ let DEFAULT_SETTINGS: Settings = {
 			aiPresets: [],
 			deepgramApiKey: "",
 			isLoading: false,
-			installedPipes: [],
 			userId: "",
 			devMode: false,
 			audioTranscriptionEngine: "whisper-large-v3-turbo",
@@ -156,7 +153,6 @@ let DEFAULT_SETTINGS: Settings = {
 			stopRecordingShortcut: "Super+Alt+X",
 			startAudioShortcut: "",
 			stopAudioShortcut: "",
-			pipeShortcuts: {},
 			enableRealtimeAudioTranscription: false,
 			realtimeAudioTranscriptionEngine: "deepgram",
 			disableVision: false,

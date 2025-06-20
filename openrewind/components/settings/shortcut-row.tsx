@@ -12,7 +12,7 @@ interface ShortcutRowProps {
   shortcut: string;
   title: string;
   description: string;
-  type: "global" | "pipe";
+  type: "global";
   value?: string;
 }
 
@@ -89,7 +89,6 @@ const ShortcutRow = ({
     stopRecordingShortcut: string;
     startAudioShortcut: string;
     stopAudioShortcut: string;
-    pipeShortcuts: Record<string, string>;
   }) => {
     console.log("syncing shortcuts:", {
       showShortcut: updatedShortcuts.showOpenrewindShortcut,
@@ -97,7 +96,6 @@ const ShortcutRow = ({
       stopShortcut: updatedShortcuts.stopRecordingShortcut,
       startAudioShortcut: updatedShortcuts.startAudioShortcut,
       stopAudioShortcut: updatedShortcuts.stopAudioShortcut,
-      pipeShortcuts: updatedShortcuts.pipeShortcuts,
     });
     // wait 1 second
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -107,7 +105,7 @@ const ShortcutRow = ({
       updatedShortcuts.stopRecordingShortcut,
       updatedShortcuts.startAudioShortcut,
       updatedShortcuts.stopAudioShortcut,
-      updatedShortcuts.pipeShortcuts
+    {}
     );
 
     return true;
@@ -136,30 +134,10 @@ const ShortcutRow = ({
             stopRecordingShortcut: settings.stopRecordingShortcut,
             startAudioShortcut: settings.startAudioShortcut,
             stopAudioShortcut: settings.stopAudioShortcut,
-            [shortcut]: keys,
-            pipeShortcuts: settings.pipeShortcuts,
           } as any);
           break;
-        case "pipe":
-          const pipeId = shortcut.replace("pipe_", "");
-          updateSettings({
-            pipeShortcuts: {
-              ...settings.pipeShortcuts,
-              [pipeId]: keys,
-            },
-          });
-          await syncShortcuts({
-            showOpenrewindShortcut: settings.showOpenrewindShortcut,
-            startRecordingShortcut: settings.startRecordingShortcut,
-            stopRecordingShortcut: settings.stopRecordingShortcut,
-            startAudioShortcut: settings.startAudioShortcut,
-            stopAudioShortcut: settings.stopAudioShortcut,
-            pipeShortcuts: {
-              ...settings.pipeShortcuts,
-              [pipeId]: keys,
-            },
-          });
-          break;
+        default:
+          throw new Error(`Invalid shortcut type: ${type}`);
       }
     } catch (error) {
       console.error("error updating shortcut", error);
@@ -189,7 +167,6 @@ const ShortcutRow = ({
       stopRecordingShortcut: settings.stopRecordingShortcut,
       startAudioShortcut: settings.startAudioShortcut,
       stopAudioShortcut: settings.stopAudioShortcut,
-      pipeShortcuts: settings.pipeShortcuts,
     });
   };
 

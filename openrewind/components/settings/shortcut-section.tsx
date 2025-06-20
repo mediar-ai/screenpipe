@@ -1,32 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { PipeApi } from "@/lib/api";
 import ShortcutRow from "./shortcut-row";
 
 const ShortcutSection = () => {
-  const [pipes, setPipes] = useState<
-    { id: string; source: string; enabled: boolean }[]
-  >([]);
   const { settings } = useSettings();
 
-  useEffect(() => {
-    const loadPipes = async () => {
-      try {
-        const pipeApi = new PipeApi();
-        const pipeList = await pipeApi.listPipes();
-        setPipes(
-          pipeList.map((p) => ({
-            id: p.id,
-            source: p.source,
-            enabled: p.enabled,
-          }))
-        );
-      } catch (error) {
-        console.error("failed to load pipes:", error);
-      }
-    };
-    loadPipes();
-  }, []);
 
   return (
     <div className="space-y-8">
@@ -80,29 +58,7 @@ const ShortcutSection = () => {
           value={settings.stopAudioShortcut}
         />
 
-        {pipes.filter((p) => p.enabled).length > 0 && (
-          <>
-            <div className="mt-8 mb-4">
-              <h2 className="text-lg font-semibold">pipe shortcuts</h2>
-              <p className="text-sm text-muted-foreground">
-                assign shortcuts to quickly trigger installed pipes
-              </p>
-            </div>
-
-            {pipes
-              .filter((p) => p.enabled)
-              .map((pipe) => (
-                <ShortcutRow
-                  key={pipe.id}
-                  type="pipe"
-                  shortcut={`pipe_${pipe.id}`}
-                  title={`trigger ${pipe.id} pipe`}
-                  description={`run pipe ${pipe.id}`}
-                  value={settings.pipeShortcuts[pipe.id]}
-                />
-              ))}
-          </>
-        )}
+       
       </div>
     </div>
   );

@@ -288,18 +288,14 @@ export function RecordingSettings() {
           monitor.id.toString()
         );
         let updatedMonitorIds = settings.monitorIds.filter((id) =>
+          id === "default" ||
           availableMonitorIds.includes(id)
         );
 
-        if (
-          updatedMonitorIds.length === 0 ||
-          (settings.monitorIds.length === 1 &&
-            settings.monitorIds[0] === "default" &&
-            monitors.length > 0)
-        ) {
+        if (updatedMonitorIds.length === 0) {
           updatedMonitorIds = [
             monitors.find((monitor) => monitor.is_default)!.id!.toString(),
-          ];
+          ]
         }
 
         // Update audio devices

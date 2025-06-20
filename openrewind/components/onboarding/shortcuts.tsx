@@ -136,7 +136,7 @@ export default function OnboardingShortcuts({
         settings.stopRecordingShortcut,
         settings.startAudioShortcut,
         settings.stopAudioShortcut,
-        settings.pipeShortcuts
+        {}
       );
     } catch (error) {
       console.error("Error updating shortcut:", error);
@@ -167,7 +167,7 @@ export default function OnboardingShortcuts({
         settings.stopRecordingShortcut,
         settings.startAudioShortcut,
         settings.stopAudioShortcut,
-        settings.pipeShortcuts
+        {}
       );
     } catch (error) {
       console.error("Error disabling shortcut:", error);
