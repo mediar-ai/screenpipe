@@ -1,0 +1,327 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Base colors */
+    --background: 0 0% 100%; /* white */
+    --foreground: 0 0% 0%; /* black */
+
+    /* Surface colors */
+    --surface: 0 0% 98%;
+    --surface-secondary: 210 40% 98%;
+    --surface-tertiary: 220 14.3% 95.9%;
+    
+    /* Card colors */
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --card-hover: 210 40% 98%;
+
+    /* Popover colors */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    /* Primary brand colors */
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --primary-hover: 221.2 83.2% 48%;
+    --primary-muted: 221.2 83.2% 93%;
+
+    /* Secondary colors */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --secondary-hover: 210 40% 92%;
+
+    /* Success colors */
+    --success: 142.1 76.2% 36.3%;
+    --success-foreground: 355.7 100% 97.3%;
+    --success-muted: 142.1 76.2% 90%;
+
+    /* Warning colors */
+    --warning: 32.4 95.4% 58%;
+    --warning-foreground: 26 83.3% 14.1%;
+    --warning-muted: 32.4 95.4% 90%;
+
+    /* Error/Destructive colors */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --destructive-hover: 0 84.2% 55%;
+    --destructive-muted: 0 84.2% 95%;
+
+    /* Info colors */
+    --info: 199.4 89.2% 48.4%;
+    --info-foreground: 210 40% 98%;
+    --info-muted: 199.4 89.2% 90%;
+
+    /* Muted colors */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    /* Accent colors */
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --accent-hover: 210 40% 92%;
+
+    /* Border and input colors */
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --input-focus: 221.2 83.2% 53.3%;
+    --ring: 221.2 83.2% 53.3%;
+
+    /* Text colors */
+    --text-primary: 222.2 84% 4.9%;
+    --text-secondary: 215.4 16.3% 46.9%;
+    --text-tertiary: 215.4 16.3% 65%;
+    --text-disabled: 215.4 16.3% 75%;
+
+    /* Brand accent colors */
+    --brand-1: 0 100% 63%;
+    --brand-2: 270 100% 63%;
+    --brand-3: 210 100% 63%;
+    --brand-4: 195 100% 63%;
+    --brand-5: 90 100% 63%;
+
+    /* Rainbow button color mappings */
+    --color-1: 0 100% 63%;
+    --color-2: 270 100% 63%;
+    --color-3: 210 100% 63%;
+    --color-4: 195 100% 63%;
+    --color-5: 90 100% 63%;
+
+    /* Sidebar colors */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 221.2 83.2% 53.3%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222.2 84% 4.9%;
+    --sidebar-border: 214.3 31.8% 91.4%;
+    --sidebar-ring: 221.2 83.2% 53.3%;
+
+    /* Utility */
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Base colors */
+    --background: 0 0% 0%;
+    --foreground: 210 40% 98%;
+
+    /* Surface colors */
+    --surface: 0 0% 5%;
+    --surface-secondary: 0 0% 8%;
+    --surface-tertiary: 0 0% 12%;
+
+    /* Card colors */
+    --card: 0 0% 3%;
+    --card-foreground: 210 40% 98%;
+    --card-hover: 0 0% 6%;
+
+    /* Popover colors */
+    --popover: 0 0% 3%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Primary brand colors */
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 0 0% 0%;
+    --primary-hover: 217.2 91.2% 65%;
+    --primary-muted: 217.2 91.2% 15%;
+
+    /* Secondary colors */
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 210 40% 98%;
+    --secondary-hover: 0 0% 15%;
+
+    /* Success colors */
+    --success: 142.1 70.6% 45.3%;
+    --success-foreground: 144.9 80.4% 10%;
+    --success-muted: 142.1 70.6% 15%;
+
+    /* Warning colors */
+    --warning: 32.4 95.4% 58%;
+    --warning-foreground: 26 83.3% 14.1%;
+    --warning-muted: 32.4 95.4% 15%;
+
+    /* Error/Destructive colors */
+    --destructive: 0 75.7% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --destructive-hover: 0 75.7% 65%;
+    --destructive-muted: 0 75.7% 15%;
+
+    /* Info colors */
+    --info: 199.4 89.2% 58.4%;
+    --info-foreground: 0 0% 0%;
+    --info-muted: 199.4 89.2% 15%;
+
+    /* Muted colors */
+    --muted: 0 0% 8%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    /* Accent colors */
+    --accent: 0 0% 8%;
+    --accent-foreground: 210 40% 98%;
+    --accent-hover: 0 0% 12%;
+
+    /* Border and input colors */
+    --border: 0 0% 15%;
+    --input: 0 0% 10%;
+    --input-focus: 217.2 91.2% 59.8%;
+    --ring: 217.2 91.2% 59.8%;
+
+    /* Text colors */
+    --text-primary: 210 40% 98%;
+    --text-secondary: 215 20.2% 65.1%;
+    --text-tertiary: 215.4 16.3% 50%;
+    --text-disabled: 215.4 16.3% 35%;
+
+    /* Brand accent colors (same as light) */
+    --brand-1: 0 100% 63%;
+    --brand-2: 270 100% 63%;
+    --brand-3: 210 100% 63%;
+    --brand-4: 195 100% 63%;
+    --brand-5: 90 100% 63%;
+
+    /* Rainbow button color mappings */
+    --color-1: 0 100% 63%;
+    --color-2: 270 100% 63%;
+    --color-3: 210 100% 63%;
+    --color-4: 195 100% 63%;
+    --color-5: 90 100% 63%;
+
+    /* Sidebar colors */
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217.2 91.2% 59.8%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 8%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  /* Prevent flash during theme initialization and support transparency */
+  html {
+    background-color: hsl(var(--background));
+    transition: background-color 0ms; /* Instant transition to prevent flash */
+  }
+  
+  body {
+    @apply bg-background text-foreground !pointer-events-auto !overscroll-none;
+  }
+
+  *,
+  a,
+  button {
+    /* cursor: default; */
+    user-select: none;
+  }
+  :not(input):not(textarea),
+  :not(input):not(textarea)::after,
+  :not(input):not(textarea)::before {
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none;    /* Firefox */
+   -ms-user-select: none;     /* Internet Explorer/Edge */
+    user-select: none;
+    /* cursor: default; */
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 1.5s infinite linear;
+  }
+
+
+}
+
+.pf-v6-c-text-input-group__text-input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+  width: 100%;
+  padding-block-end: 8px !important;
+  padding-block-start: 8px !important;
+  padding-bottom: 8px !important;
+  padding-inline-end: 16px !important;
+  padding-inline-start: 38px !important;
+  padding-left: 38px !important;
+  padding-right: 16px !important;
+  padding-top: 8px !important;
+}
+.pf-v6-c-text-input-group__text-input::placeholder {
+  padding-left: 20px !important;
+}
+.pf-v6-c-text-input-group__icon {
+  inset-block-start: 18.5px !important;
+  inset-inline-start: 16px !important;
+  line-height: 21px !important;
+  position: absolute !important;
+}
+
+/* PatternFly LogViewer dark theme overrides */
+.dark .pf-v5-c-log-viewer {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .pf-v5-c-log-viewer__main {
+  background-color: hsl(var(--background)) !important;
+}
+
+.dark .pf-v5-c-log-viewer__list {
+  background-color: hsl(var(--background)) !important;
+}
+
+.dark .pf-v5-c-log-viewer__list-item {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pf-v5-c-toolbar {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pf-v5-c-toolbar__content {
+  background-color: hsl(var(--background)) !important;
+}
+
+.dark .pf-v5-c-text-input-group {
+  background-color: hsl(var(--input)) !important;
+}
+
+.dark .pf-v5-c-text-input-group__text-input {
+  background-color: hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pf-v5-c-text-input-group__text-input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
