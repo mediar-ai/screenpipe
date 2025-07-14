@@ -7,6 +7,8 @@ USER vscode
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
+ENV PATH="/home/vscode/.cargo/bin:${PATH}"
+
 # Update package lists and install dependencies
 RUN sudo apt-get update && sudo apt-get install -y \
     g++ \
