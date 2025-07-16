@@ -1,0 +1,24 @@
+{
+  "name": "screenpipe-mcp",
+  "version": "0.1.0",
+  "description": "mcp server for screenpipe that queries sqlite directly",
+  "bin": {
+    "screenpipe-mcp": "./dist/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --out-dir dist",
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "start": "node ./dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.15.1",
+    "better-sqlite3": "^9.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "ts-node-dev": "^2.0.0",
+    "tsup": "^7.3.0",
+    "typescript": "^5.2.0"
+  }
+}
