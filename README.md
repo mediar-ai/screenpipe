@@ -76,6 +76,7 @@ https://github.com/user-attachments/assets/973ee8e5-5240-4d36-83fe-d38c53efe6a9
 ---
 
 *news* 🔥
+- [2025/07] [we raised $2.8m to give AI hands to every desktop](https://x.com/louis030195/status/1948745185178914929)
 - [2025/03] introducing [screenpipe terminator](https://github.com/mediar-ai/terminator): playwright but for your desktop. the fastest and most reliable computer use SDK on the internet (100x faster, based on OS APIs instead of vision)
 - [2025/02] we're throwing an [hackathon](https://www.nosu.io/hackathons/screenpipe), $12k in cash prizes, 28 Feb
 - [2025/01] we're partnering with Different AI to bring you [financial automations based on your screen](https://github.com/different-ai/hypr-v0) and [drop-in replacement for granola within obsidian](https://github.com/different-ai/file-organizer-2000)
