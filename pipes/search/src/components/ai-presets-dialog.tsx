@@ -52,6 +52,29 @@ import {
 import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
 
+
+// Allow-list of trusted hostnames for AI providers
+const ALLOWED_HOSTNAMES = [
+  "api.openai.com",
+  // Add other trusted hostnames here as needed
+];
+
+// Helper to check if a URL is allowed
+function isAllowedBaseUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    // Only allow https
+    if (url.protocol !== "https:") return false;
+    // Only allow hostnames in the allow-list
+    if (ALLOWED_HOSTNAMES.includes(url.hostname)) return true;
+    // Optionally, allow custom providers by further validation here
+    // For now, disallow all others
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export const Icons = {
 	openai: (props: any) => (
 		<svg
@@ -209,6 +232,9 @@ export function AIProviderConfig({
 	const fetchOpenAIModels = async (baseUrl: string, apiKey: string) => {
 		setIsLoadingModels(true);
 		try {
+			if (!isAllowedBaseUrl(baseUrl)) {
+				throw new Error("Invalid or untrusted base URL for model provider.");
+			}
 			const response = await fetch(`${baseUrl}/models`, {
 				headers: {
 					Authorization: `Bearer ${apiKey}`,
