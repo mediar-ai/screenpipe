@@ -111,6 +111,7 @@ import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 import type { Settings as AppSettings } from "@screenpipe/js";
 import { DEFAULT_PROMPT } from "./ai-presets-dialog";
 import { AIPresetsSelector } from "./ai-presets-selector";
+import { SearchHistorySidebar } from "@/components/search-history-sidebar";
 
 interface Agent {
   id: string;
@@ -231,10 +232,15 @@ export function SearchChat() {
     currentSearchId,
     setCurrentSearchId,
     addSearch,
+    addAIResponse,
     deleteSearch,
+    isLoading: historyLoading,
     isCollapsed,
     toggleCollapse,
   } = useSearchHistory();
+
+  // Add sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   // Search state
   const { health, isServerDown } = useHealthCheck();
   const [query, setQuery] = useState("");
@@ -674,118 +680,86 @@ export function SearchChat() {
     }, 0);
   };
 
+  // Add function to handle AI responses
   const handleFloatingInputSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!floatingInput.trim() && !isStreaming) return;
+    if (!floatingInput.trim() || isStreaming || isAiDisabled) return;
 
-    if (isStreaming) {
-      handleStopStreaming();
-      return;
-    }
-
-    scrollToBottom();
-
-    const selectedContentLength = calculateSelectedContentLength();
-    if (selectedContentLength > MAX_CONTENT_LENGTH) {
-      toast({
-        title: "Content too large",
-        description: `The selected content length (${selectedContentLength} characters) exceeds the maximum allowed (${MAX_CONTENT_LENGTH} characters). Please unselect some items to reduce the amount of content.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const userMessage = {
-      id: generateId(),
-      role: "user" as const,
-      content: floatingInput,
-    };
-    setChatMessages((prevMessages) => [
-      ...prevMessages,
-      userMessage,
-      { id: generateId(), role: "assistant", content: "" },
-    ]);
+    const aiInput = floatingInput.trim();
     setFloatingInput("");
-    setIsAiLoading(true);
 
-    const preset = getPreset();
-
-    if (!preset) {
+    if (
+      calculateSelectedContentLength() > MAX_CONTENT_LENGTH ||
+      selectedResults.size === 0
+    ) {
       toast({
-        title: "there is no ai settings selected",
-        description: "please create new or select existing ones",
+        title: "error",
+        description:
+          selectedResults.size === 0
+            ? "please select at least one result to analyze"
+            : "selected content exceeds maximum allowed. unselect some items to use ai.",
         variant: "destructive",
       });
       return;
     }
 
-    let apiKey = "";
-    if (preset.provider === "openai" || preset.provider === "custom") {
-      preset.apiKey;
-      if ("apiKey" in preset) {
-        apiKey = preset.apiKey;
-      } else {
-        toast({
-          title: "please provide api key",
-          description: "api key is required",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
+    setIsAiLoading(true);
+    setIsStreaming(true);
+
+    // Add user message
+    const userMessage: Message = {
+      id: generateId(),
+      role: "user",
+      content: aiInput,
+      createdAt: new Date(),
+    };
+
+    setChatMessages((prev) => [...prev, userMessage]);
 
     try {
-      console.log("settings", preset);
-      const openai = new OpenAI({
-        apiKey:
-          preset.provider === "screenpipe-cloud"
-            ? settings?.user?.token
-            : apiKey,
-        baseURL: preset.url,
-        dangerouslyAllowBrowser: true,
-      });
+      const selectedContent = Array.from(selectedResults)
+        .map((index) => results[index])
+        .map((item) => {
+          if (item.type === "OCR") {
+            return `[OCR] ${item.content.text}`;
+          } else if (item.type === "Audio") {
+            return `[Audio] ${item.content.transcription}`;
+          } else if (item.type === "UI") {
+            return `[UI] ${item.content.text}`;
+          }
+          return "";
+        })
+        .join("\n\n");
 
-      const model = preset.model;
-      const customPrompt = preset.prompt || "";
+      const selectedData = selectedAgent.dataSelector(
+        Array.from(selectedResults).map((index) => results[index])
+      );
 
-      const messages = [
-        {
-          role: "user" as const, // claude does not support system messages?
-          content: `You are a helpful assistant specialized as a "${
-            selectedAgent.name
-          }". ${selectedAgent.systemPrompt}
-            Rules:
-            - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
-            - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
-            - User timezone offset: ${new Date().getTimezoneOffset()}
-            - ${customPrompt ? `Custom prompt: ${customPrompt}` : ""}
-            `,
-        },
-        ...chatMessages.map((msg) => ({
-          role: msg.role as "user" | "assistant" | "system",
-          content: msg.content,
-        })),
-        {
-          role: "user" as const,
-          content: `Context data: ${JSON.stringify(
-            selectedAgent.dataSelector(
-              results.filter((_, index) => selectedResults.has(index))
-            )
-          )}
+      const enhancedPrompt = `${selectedAgent.systemPrompt}
 
-          User query: ${floatingInput}`,
-        },
-      ];
+Context: ${selectedContent}
 
-      console.log("messages", messages);
+Data: ${JSON.stringify(selectedData, null, 2)}
+
+User question: ${aiInput}`;
+
+      const { customSettings } = await getPreset();
+
+      const { openai, model } = useAiProvider(customSettings);
+
+      console.log("using ai model:", model);
 
       abortControllerRef.current = new AbortController();
-      setIsStreaming(true);
 
-      const stream = await openai.chat.completions.create(
+      const completion = await openai.chat.completions.create(
         {
           model: model,
-          messages: messages,
+          messages: [
+            {
+              role: "system",
+              content: enhancedPrompt,
+            },
+          ],
           stream: true,
         },
         {
@@ -793,51 +767,51 @@ export function SearchChat() {
         }
       );
 
-      let fullResponse = "";
-      // @ts-ignore
-      setChatMessages((prevMessages) => [
-        ...prevMessages.slice(0, -1),
-        { id: generateId(), role: "assistant", content: fullResponse },
-      ]);
+      let aiResponse = "";
+      const aiMessage: Message = {
+        id: generateId(),
+        role: "assistant",
+        content: "",
+        createdAt: new Date(),
+      };
 
-      setIsUserScrolling(false);
-      lastScrollPosition.current = window.scrollY;
-      scrollToBottom();
+      setChatMessages((prev) => [...prev, aiMessage]);
 
-      for await (const chunk of stream) {
-        console.log("chunk", chunk);
-        const content = chunk.choices[0]?.delta?.content || "";
-        fullResponse += content;
-        // @ts-ignore
-        setChatMessages((prevMessages) => [
-          ...prevMessages.slice(0, -1),
-          { id: generateId(), role: "assistant", content: fullResponse },
-        ]);
-        scrollToBottom();
+      for await (const chunk of completion) {
+        if (chunk.choices[0]?.delta?.content) {
+          const content = chunk.choices[0].delta.content;
+          aiResponse += content;
+
+          setChatMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessage.id ? { ...msg, content: aiResponse } : msg
+            )
+          );
+        }
+      }
+
+      // Save AI response to history if we have a current search
+      if (currentSearchId && aiResponse) {
+        await addAIResponse(currentSearchId, aiResponse);
       }
     } catch (error: any) {
-      if (error.toString().includes("unauthorized")) {
-        toast({
-          title: "Error",
-          description: "Please sign in to use AI features",
-          variant: "destructive",
-        });
-      } else if (error.toString().includes("aborted")) {
-        console.log("Streaming was aborted");
+      if (error.name === "AbortError") {
+        console.log("ai request aborted");
       } else {
-        console.error("Error generating AI response:", error);
+        console.error("ai error:", error);
         toast({
-          title: "Error",
-          description: "Failed to generate AI response. Please try again.",
+          title: "ai error",
+          description: "failed to get ai response. please try again.",
           variant: "destructive",
         });
+
+        // Remove the pending AI message on error
+        setChatMessages((prev) => prev.slice(0, -1));
       }
     } finally {
       setIsAiLoading(false);
       setIsStreaming(false);
-      if (!isUserScrolling) {
-        scrollToBottom();
-      }
+      abortControllerRef.current = null;
     }
   };
 
@@ -914,8 +888,11 @@ export function SearchChat() {
       setResults(response.data);
       setTotalResults(response.pagination.total);
 
-      // Save search to history
-      // await onAddSearch(searchParams, response.data);
+      // Save search to history - only for new searches, not pagination
+      if (newOffset === 0 && query) {
+        const searchId = await addSearch(searchParams, response.data);
+        setCurrentSearchId(searchId);
+      }
     } catch (error) {
       console.error("search error:", error);
       toast({
@@ -1279,10 +1256,51 @@ export function SearchChat() {
     // }
   }, [currentSearchId, searches]);
 
+  // Add handlers for sidebar
+  const handleSearchSelect = (search: SearchHistory) => {
+    setQuery(search.searchParams.q || "");
+    setStartDate(new Date(search.searchParams.start_time));
+    setEndDate(new Date(search.searchParams.end_time));
+    setContentType(search.searchParams.content_type);
+    setAppName(search.searchParams.app_name || "");
+    setWindowName(search.searchParams.window_name || "");
+    setLimit(search.searchParams.limit);
+    setMinLength(search.searchParams.min_length);
+    setMaxLength(search.searchParams.max_length);
+    setIncludeFrames(search.searchParams.include_frames);
+
+    // Restore results and messages
+    setResults(search.results);
+    setTotalResults(search.results.length);
+    setCurrentSearchId(search.id);
+
+    // Restore chat messages
+    const chatMsgs = search.messages
+      .filter((m) => m.type === "ai")
+      .map((m) => ({
+        id: m.id,
+        role: "assistant" as const,
+        content: m.content,
+        createdAt: new Date(m.timestamp),
+      }));
+    setChatMessages(chatMsgs);
+
+    setHasSearched(true);
+    setShowExamples(false);
+    setIsSidebarOpen(false);
+  };
+
   const handleNewSearch = () => {
-    // setCurrentSearchId(null);
-    location.reload();
-    // Add any other reset logic you need
+    setQuery("");
+    setResults([]);
+    setChatMessages([]);
+    setCurrentSearchId(null);
+    setHasSearched(false);
+    setShowExamples(true);
+    setTotalResults(0);
+    setOffset(0);
+    setSelectedResults(new Set());
+    setIsSidebarOpen(false);
   };
 
   // Add this effect near other useEffect hooks
@@ -1308,860 +1326,897 @@ export function SearchChat() {
   }, [currentPlatform, results.length, floatingInput, isStreaming]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-4 mt-12">
-      <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
-        {/* <SidebarTrigger className="h-8 w-8" /> */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleNewSearch}
-          className="h-8 w-8"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-      </div>
+    <div className="flex h-screen">
+      {/* Sidebar */}
+      <SearchHistorySidebar
+        searches={searches}
+        currentSearchId={currentSearchId}
+        onSearchSelect={handleSearchSelect}
+        onSearchDelete={deleteSearch}
+        onNewSearch={handleNewSearch}
+        isOpen={isSidebarOpen}
+        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+      />
 
-      <div className="flex items-center justify-center mb-16">
-        {/* Add the new SearchFilterGenerator component */}
-        <SearchFilterGenerator
-          onApplyFilters={(filters) => {
-            // Always use empty string instead of undefined for text inputs
-            setQuery(filters.query ?? "");
-            setAppName(filters.appName ?? "");
-            setWindowName(filters.windowName ?? "");
-
-            // Use default values for other types
-            handleContentTypeFromFilter(filters.contentType ?? "all");
-            setStartDate(
-              filters.startDate ?? new Date(Date.now() - 24 * 3600000)
-            );
-            setEndDate(filters.endDate ?? new Date());
-            setLimit(filters.limit ?? 300);
-
-            // Automatically perform search with new filters
-            handleSearch(0);
-          }}
-        />
-      </div>
-      {/* Content Type Checkboxes and Code Button */}
-      <div className="flex items-center justify-center mb-4 gap-4">
-        {/* Remove MultiSelectCombobox from here */}
-
-        {/* Add browser URL input */}
-        <SqlAutocompleteInput
-          id="browser-url"
-          type="url"
-          value={browserUrl}
-          onChange={setBrowserUrl}
-          placeholder="filter by browser URL"
-          className="w-[350px]"
-          icon={<Search className="h-4 w-4" />}
-        />
-
-        {/* Window name filter - increased width */}
-        <SqlAutocompleteInput
-          id="window-name"
-          type="window"
-          value={windowName}
-          onChange={setWindowName}
-          placeholder="filter by window"
-          className="w-[350px]"
-          icon={<Layout className="h-4 w-4" />}
-        />
-
-        {/* Advanced button */}
-        <Button
-          variant="outline"
-          onClick={() => setIsQueryParamsDialogOpen(true)}
-        >
-          <Settings className="h-4 w-4" />
-        </Button>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  onClick={() => handleSearch(0)}
-                  disabled={
-                    isLoading ||
-                    isAiDisabled ||
-                    !health ||
-                    health?.status === "error"
-                  }
-                  className="disabled:cursor-not-allowed"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      searching...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="mr-2 h-4 w-4" />
-                      {currentPlatform === "macos" ? "⌘" : "ctrl"} + ↵
-                    </>
-                  )}
-                </Button>
-              </span>
-            </TooltipTrigger>
-            {(!health || health?.status === "error" || isAiDisabled) && (
-              <TooltipContent>
-                <p>
-                  {isAiDisabled && isServerDown ? (
-                    <>
-                      <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
-                      you don't have access to screenpipe-cloud <br /> and
-                      screenpipe server is down!
-                    </>
-                  ) : isServerDown ? (
-                    <>
-                      <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
-                      screenpipe is not running...
-                    </>
-                  ) : isAiDisabled ? (
-                    <>
-                      <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
-                      you don't have access to screenpipe-cloud :( <br /> please
-                      consider login!
-                    </>
-                  ) : (
-                    ""
-                  )}
-                </p>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      {/* Quick time filter badges */}
-      <div className="flex mt-2 mb-4 space-x-2 justify-center">
-        <Badge
-          variant="outline"
-          className="cursor-pointer hover:bg-secondary"
-          onClick={() => handleQuickTimeFilter(30)}
-        >
-          <Clock className="mr-2 h-4 w-4" />
-          last 30m
-        </Badge>
-        <Badge
-          variant="outline"
-          className="cursor-pointer hover:bg-secondary"
-          onClick={() => handleQuickTimeFilter(60)}
-        >
-          <Clock className="mr-2 h-4 w-4" />
-          last 60m
-        </Badge>
-        <Badge
-          variant="outline"
-          className="cursor-pointer hover:bg-secondary"
-          onClick={() => handleQuickTimeFilter(24 * 60)}
-        >
-          <Clock className="mr-2 h-4 w-4" />
-          last 24h
-        </Badge>
-        <Badge
-          variant="outline"
-          className="cursor-pointer hover:bg-secondary"
-          onClick={() => handleQuickTimeFilter(7 * 24 * 60)}
-        >
-          <Clock className="mr-2 h-4 w-4" />
-          last 7d
-        </Badge>
-        <Badge
-          variant="outline"
-          className="cursor-pointer hover:bg-secondary"
-          onClick={() => handleQuickTimeFilter(30 * 24 * 60)}
-        >
-          <Clock className="mr-2 h-4 w-4" />
-          last 30d
-        </Badge>
-      </div>
-
-      <Dialog
-        open={isQueryParamsDialogOpen}
-        onOpenChange={setIsQueryParamsDialogOpen}
+      {/* Main content */}
+      <div
+        className={cn(
+          "flex-1 flex flex-col transition-all duration-200",
+          isSidebarOpen ? "md:ml-80" : "ml-0"
+        )}
       >
-        <DialogContent className="sm:max-w-[705px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>advanced search parameters</DialogTitle>
-            <DialogDescription>
-              adjust additional search parameters here.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            {/* Add the curl command button at the top */}
-            <div className="flex justify-end">
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="text-sm">
-                    <IconCode className="h-4 w-4 mx-2" />
-                    curl command
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>curl command</DialogTitle>
-                    <DialogDescription>
-                      you can use this curl command to make the same search
-                      request from the command line.
-                      <br />
-                      <br />
-                      <span className="text-xs text-gray-500">
-                        note: you need to have `jq` installed to use the
-                        command.
-                      </span>{" "}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="overflow-x-auto">
-                    <CodeBlock language="bash" value={generateCurlCommand()} />
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-
-            {/* Move content type selection here */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="content-type" className="text-right">
-                content type
-              </Label>
-              <div className="col-span-3">
-                <MultiSelectCombobox
-                  label="content type"
-                  options={contentTypeOptions}
-                  value={selectedContentTypes}
-                  onChange={handleContentTypeChange}
-                  placeholder="Filter by content type..."
-                  renderItem={(option) => (
-                    <div className="flex items-center justify-between w-full">
-                      <span>{option.label}</span>
-                      <span className="text-xs text-muted-foreground items-end">
-                        {contentTypeDescriptions[option.value]}
-                      </span>
-                    </div>
-                  )}
-                  renderSelectedItem={(values) => (
-                    <div className="flex gap-1 items-center">
-                      {values.length === 0 ? (
-                        <span>All content types</span>
-                      ) : (
-                        <>
-                          {values.map((value) => {
-                            const option = contentTypeOptions.find(
-                              (opt) => opt.value === value
-                            );
-                            return option ? (
-                              <Badge
-                                key={value}
-                                variant="secondary"
-                                className="gap-1 px-1.5"
-                              >
-                                {option.label}
-                              </Badge>
-                            ) : null;
-                          })}
-                        </>
-                      )}
-                    </div>
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Add keyword search field */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="keyword-search" className="text-right">
-                keyword search
-              </Label>
-              <div className="col-span-3 flex items-center">
-                <Input
-                  id="keyword-search"
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="search for specific keywords"
-                  className="flex-grow"
-                  autoCorrect="off"
-                  autoComplete="off"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>search for specific keywords in all content</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
-
-            {/* Add browser URL field in advanced settings too */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="browser-url" className="text-right">
-                browser URL
-              </Label>
-              <div className="col-span-3 flex items-center">
-                <Input
-                  id="browser-url"
-                  type="text"
-                  value={browserUrl}
-                  onChange={(e) => setBrowserUrl(e.target.value)}
-                  placeholder="filter by browser URL"
-                  className="flex-grow"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>filter results by specific browser URLs</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="speakers" className="text-right">
-                speakers
-              </Label>
-              <div className="col-span-3 w-full">
-                <MultiSelectCombobox
-                  label="speakers"
-                  options={speakers.map((speaker) => ({
-                    label: speaker.name || `Speaker ${speaker.id}`,
-                    value: speaker.id.toString(),
-                  }))}
-                  value={Object.values(selectedSpeakers).map((speaker) =>
-                    speaker.id.toString()
-                  )}
-                  onChange={(selectedIds) => {
-                    // Convert from array of IDs to object with speaker objects
-                    const newSelectedSpeakers: { [key: number]: Speaker } = {};
-                    selectedIds.forEach((id) => {
-                      const speakerId = parseInt(id);
-                      const speaker = speakers.find((s) => s.id === speakerId);
-                      if (speaker) {
-                        newSelectedSpeakers[speakerId] = speaker;
-                      }
-                    });
-                    setSelectedSpeakers(newSelectedSpeakers);
-                  }}
-                  placeholder="Search speakers..."
-                  renderItem={(option) => (
-                    <div className="flex items-center justify-between w-full">
-                      <span>{option.label}</span>
-                    </div>
-                  )}
-                  renderSelectedItem={(values) => (
-                    <div className="flex gap-1 items-center w-full">
-                      {values.length === 0 ? (
-                        <span>Select speakers</span>
-                      ) : (
-                        <>
-                          {values.map((value) => {
-                            const speaker = speakers.find(
-                              (s) => s.id.toString() === value
-                            );
-                            return speaker ? (
-                              <Badge
-                                key={value}
-                                variant="secondary"
-                                className="gap-1 px-1.5"
-                              >
-                                {speaker.name || `Speaker ${speaker.id}`}
-                              </Badge>
-                            ) : null;
-                          })}
-                        </>
-                      )}
-                    </div>
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Add date pickers here */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="start-date" className="text-right">
-                start date
-              </Label>
-              <div className="col-span-3">
-                <DateTimePicker
-                  date={startDate}
-                  setDate={setStartDate}
-                  className="w-full"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="end-date" className="text-right">
-                end date
-              </Label>
-              <div className="col-span-3">
-                <DateTimePicker
-                  date={endDate}
-                  setDate={setEndDate}
-                  className="w-full"
-                />
-              </div>
-            </div>
-
-            {/* Rest of the advanced settings content */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="app-name" className="text-right">
-                app name
-              </Label>
-              <div className="col-span-3 flex items-center">
-                <SqlAutocompleteInput
-                  id="app-name"
-                  type="app"
-                  icon={<Laptop className="h-4 w-4" />}
-                  value={appName}
-                  onChange={setAppName}
-                  placeholder="filter by app name"
-                  className="flex-grow"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>filter results by specific application names</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="min-length" className="text-right">
-                min length
-              </Label>
-              <div className="col-span-3 flex items-center">
-                <Input
-                  id="min-length"
-                  type="number"
-                  value={minLength}
-                  onChange={(e) => setMinLength(Number(e.target.value))}
-                  className="flex-grow"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        enter the minimum length of the content to search for
-                        <br />
-                        usually transcriptions are short while text extracted
-                        from images can be long.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="max-length" className="text-right">
-                max length
-              </Label>
-              <div className="col-span-3 flex items-center">
-                <Input
-                  id="max-length"
-                  type="number"
-                  value={maxLength}
-                  onChange={(e) => setMaxLength(Number(e.target.value))}
-                  className="flex-grow"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        enter the maximum length of the content to search for
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="limit-slider" className="text-right">
-                page size: {limit}
-              </Label>
-              <div className="col-span-3 flex items-center">
-                <Slider
-                  id="limit-slider"
-                  value={[limit]}
-                  onValueChange={(value: number[]) => setLimit(value[0])}
-                  min={10}
-                  max={15000}
-                  step={10}
-                  className="flex-grow"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        select the number of results to display. usually ai
-                        cannot ingest more than 30 OCR results at a time and
-                        1000 audio results at a time.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
+        <div className="w-full max-w-4xl mx-auto p-4 mt-12">
+          <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
+            {/* <SidebarTrigger className="h-8 w-8" /> */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleNewSearch}
+              className="h-8 w-8"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
 
-          {/* Add frame name input after app name */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="frame-name" className="text-right">
-              frame name
-            </Label>
-            <div className="col-span-3 flex items-center">
-              <Input
-                id="frame-name"
-                type="text"
-                value={frameName}
-                onChange={(e) => setFrameName(e.target.value)}
-                placeholder="filter by frame name"
-                className="flex-grow"
-              />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>
-                      filter results by specific frame names (by default frame
-                      name is mp4 video file path)
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <div className="flex items-center justify-center space-x-2">
-            <Switch
-              id="include-frames"
-              checked={includeFrames}
-              onCheckedChange={setIncludeFrames}
+          <div className="flex items-center justify-center mb-16">
+            {/* Add the new SearchFilterGenerator component */}
+            <SearchFilterGenerator
+              onApplyFilters={(filters) => {
+                // Always use empty string instead of undefined for text inputs
+                setQuery(filters.query ?? "");
+                setAppName(filters.appName ?? "");
+                setWindowName(filters.windowName ?? "");
+
+                // Use default values for other types
+                handleContentTypeFromFilter(filters.contentType ?? "all");
+                setStartDate(
+                  filters.startDate ?? new Date(Date.now() - 24 * 3600000)
+                );
+                setEndDate(filters.endDate ?? new Date());
+                setLimit(filters.limit ?? 300);
+
+                // Automatically perform search with new filters
+                handleSearch(0);
+              }}
             />
-            <Label htmlFor="include-frames">include frames</Label>
+          </div>
+          {/* Content Type Checkboxes and Code Button */}
+          <div className="flex items-center justify-center mb-4 gap-4">
+            {/* Remove MultiSelectCombobox from here */}
+
+            {/* Add browser URL input */}
+            <SqlAutocompleteInput
+              id="browser-url"
+              type="url"
+              value={browserUrl}
+              onChange={setBrowserUrl}
+              placeholder="filter by browser URL"
+              className="w-[350px]"
+              icon={<Search className="h-4 w-4" />}
+            />
+
+            {/* Window name filter - increased width */}
+            <SqlAutocompleteInput
+              id="window-name"
+              type="window"
+              value={windowName}
+              onChange={setWindowName}
+              placeholder="filter by window"
+              className="w-[350px]"
+              icon={<Layout className="h-4 w-4" />}
+            />
+
+            {/* Advanced button */}
+            <Button
+              variant="outline"
+              onClick={() => setIsQueryParamsDialogOpen(true)}
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                  <span>
+                    <Button
+                      onClick={() => handleSearch(0)}
+                      disabled={
+                        isLoading ||
+                        isAiDisabled ||
+                        !health ||
+                        health?.status === "error"
+                      }
+                      className="disabled:cursor-not-allowed"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          searching...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="mr-2 h-4 w-4" />
+                          {currentPlatform === "macos" ? "⌘" : "ctrl"} + ↵
+                        </>
+                      )}
+                    </Button>
+                  </span>
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    include frames in the search results. this shows the frame
-                    where the text appeared. only works for ocr. this may slow
-                    down the search.
-                  </p>
-                </TooltipContent>
+                {(!health || health?.status === "error" || isAiDisabled) && (
+                  <TooltipContent>
+                    <p>
+                      {isAiDisabled && isServerDown ? (
+                        <>
+                          <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
+                          you don't have access to screenpipe-cloud <br /> and
+                          screenpipe server is down!
+                        </>
+                      ) : isServerDown ? (
+                        <>
+                          <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
+                          screenpipe is not running...
+                        </>
+                      ) : isAiDisabled ? (
+                        <>
+                          <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
+                          you don't have access to screenpipe-cloud :( <br />{" "}
+                          please consider login!
+                        </>
+                      ) : (
+                        ""
+                      )}
+                    </p>
+                  </TooltipContent>
+                )}
               </Tooltip>
             </TooltipProvider>
           </div>
-          <DialogFooter>
-            <Button onClick={() => setIsQueryParamsDialogOpen(false)}>
-              done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {isLoading ? (
-        <div className="my-8 flex justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      ) : (
-        showExamples &&
-        results.length === 0 && (
-          <div className="my-8 flex justify-center">
-            <ExampleSearchCards onSelect={handleExampleSelect} />
-          </div>
-        )
-      )}
-      {isLoading && (
-        <div className="my-2">
-          <Progress value={progress} className="w-full" />
-        </div>
-      )}
-      {results.length > 0 && (
-        <div className="flex flex-col space-y-4 mb-4 my-8">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="select-all"
-                  checked={selectAll}
-                  onCheckedChange={handleSelectAll}
-                />
-                <Label htmlFor="select-all">select all results</Label>
-              </div>
-
-              <Separator orientation="vertical" className="h-4" />
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="hide-deselected"
-                  checked={hideDeselected}
-                  onCheckedChange={setHideDeselected}
-                />
-                <Label htmlFor="hide-deselected">hide unselected</Label>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {}}
-                disabled={isFiltering}
-                className="flex items-center gap-2 disabled:opacity-100"
-              >
-                {isFiltering ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : similarityThreshold === 0.5 ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Layers className="h-4 w-4" />
-                )}
-                {similarityThreshold === 0.5
-                  ? "duplicates removed"
-                  : "remove duplicates"}
-              </Button>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>automatically unselect similar or duplicate results</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="space-y-4">
-        {renderSearchResults()}
-        {totalResults > 0 && (
-          <div className="flex justify-between items-center mt-4">
-            <Button
-              onClick={handlePrevPage}
-              disabled={offset === 0}
+          {/* Quick time filter badges */}
+          <div className="flex mt-2 mb-4 space-x-2 justify-center">
+            <Badge
               variant="outline"
-              size="sm"
+              className="cursor-pointer hover:bg-secondary"
+              onClick={() => handleQuickTimeFilter(30)}
             >
-              <ChevronLeft className="mr-2 h-4 w-4" /> Previous
-            </Button>
-            <span className="text-sm text-gray-500">
-              Showing {offset + 1} - {Math.min(offset + limit, totalResults)} of{" "}
-              {totalResults}
-            </span>
-            <Button
-              onClick={handleNextPage}
-              disabled={offset + limit >= totalResults}
+              <Clock className="mr-2 h-4 w-4" />
+              last 30m
+            </Badge>
+            <Badge
               variant="outline"
-              size="sm"
+              className="cursor-pointer hover:bg-secondary"
+              onClick={() => handleQuickTimeFilter(60)}
             >
-              Next <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
+              <Clock className="mr-2 h-4 w-4" />
+              last 60m
+            </Badge>
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-secondary"
+              onClick={() => handleQuickTimeFilter(24 * 60)}
+            >
+              <Clock className="mr-2 h-4 w-4" />
+              last 24h
+            </Badge>
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-secondary"
+              onClick={() => handleQuickTimeFilter(7 * 24 * 60)}
+            >
+              <Clock className="mr-2 h-4 w-4" />
+              last 7d
+            </Badge>
+            <Badge
+              variant="outline"
+              className="cursor-pointer hover:bg-secondary"
+              onClick={() => handleQuickTimeFilter(30 * 24 * 60)}
+            >
+              <Clock className="mr-2 h-4 w-4" />
+              last 30d
+            </Badge>
           </div>
-        )}
-      </div>
 
-      <AnimatePresence>
-        {results.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-4 left-0 right-0 mx-auto w-full max-w-2xl z-50"
+          <Dialog
+            open={isQueryParamsDialogOpen}
+            onOpenChange={setIsQueryParamsDialogOpen}
           >
-            <form
-              onSubmit={handleFloatingInputSubmit}
-              className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
-            >
-              <div className="relative flex-grow flex items-center space-x-2">
-                <AIPresetsDialog
-                  pipeName={"search"}
-                  recommendedPresets={[
-                    {
-                      id: "search-chat",
-                      model: "gemma:2b",
-                      provider: "native-ollama",
-                      prompt: DEFAULT_PROMPT,
-                      maxContextChars: 512000,
-                    },
-                  ]}
-                >
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className=" p-2"
-                  >
-                    <SparklesIcon className="h-4 w-4" />
-                  </Button>
-                </AIPresetsDialog>
-                <TooltipProvider>
-                  <Tooltip open={!isAvailable}>
-                    <TooltipTrigger asChild>
-                      <div className="flex-1">
-                        <Input
-                          ref={floatingInputRef}
-                          type="text"
-                          placeholder="ask a question about the results..."
-                          value={floatingInput}
-                          disabled={
-                            calculateSelectedContentLength() >
-                              MAX_CONTENT_LENGTH ||
-                            isAiDisabled ||
-                            !isAvailable
-                          }
-                          onChange={(e) => setFloatingInput(e.target.value)}
-                          className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
+            <DialogContent className="sm:max-w-[705px] max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>advanced search parameters</DialogTitle>
+                <DialogDescription>
+                  adjust additional search parameters here.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                {/* Add the curl command button at the top */}
+                <div className="flex justify-end">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="text-sm">
+                        <IconCode className="h-4 w-4 mx-2" />
+                        curl command
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>curl command</DialogTitle>
+                        <DialogDescription>
+                          you can use this curl command to make the same search
+                          request from the command line.
+                          <br />
+                          <br />
+                          <span className="text-xs text-gray-500">
+                            note: you need to have `jq` installed to use the
+                            command.
+                          </span>{" "}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="overflow-x-auto">
+                        <CodeBlock
+                          language="bash"
+                          value={generateCurlCommand()}
                         />
                       </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      <p className="text-sm text-destructive">{error}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <Select
-                  value={selectedAgent.id}
-                  onValueChange={(value) =>
-                    setSelectedAgent(
-                      AGENTS.find((a) => a.id === value) || AGENTS[0]
-                    )
-                  }
-                >
-                  <SelectTrigger
-                    className="w-[170px] h-12"
-                    title={selectedAgent.description}
-                  >
-                    <SelectValue placeholder="select agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AGENTS.map((agent) => (
-                      <SelectItem
-                        key={agent.id}
-                        value={agent.id}
-                        title={
-                          AGENTS.find((a) => a.id === agent.id)?.description
-                        }
-                      >
-                        <span className="font-mono text-sm">{agent.name}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    </DialogContent>
+                  </Dialog>
+                </div>
 
-                <Button
-                  type="submit"
-                  className="w-12"
-                  disabled={
-                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH ||
-                    isAiDisabled
-                  }
-                  title={
-                    isAiDisabled
-                      ? "Please sign in to use AI features"
-                      : `${currentPlatform === "macos" ? "⌘" : "ctrl"}+shift`
-                  }
-                >
-                  {isStreaming ? (
-                    <Square className="h-4 w-4" />
-                  ) : (
-                    <div className="flex items-center">
-                      <Send className="h-4 w-4" />
-                      <span className="sr-only">
-                        {currentPlatform === "macos" ? "⌘" : "ctrl"}+shift
-                      </span>
-                    </div>
-                  )}
-                </Button>
+                {/* Move content type selection here */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="content-type" className="text-right">
+                    content type
+                  </Label>
+                  <div className="col-span-3">
+                    <MultiSelectCombobox
+                      label="content type"
+                      options={contentTypeOptions}
+                      value={selectedContentTypes}
+                      onChange={handleContentTypeChange}
+                      placeholder="Filter by content type..."
+                      renderItem={(option) => (
+                        <div className="flex items-center justify-between w-full">
+                          <span>{option.label}</span>
+                          <span className="text-xs text-muted-foreground items-end">
+                            {contentTypeDescriptions[option.value]}
+                          </span>
+                        </div>
+                      )}
+                      renderSelectedItem={(values) => (
+                        <div className="flex gap-1 items-center">
+                          {values.length === 0 ? (
+                            <span>All content types</span>
+                          ) : (
+                            <>
+                              {values.map((value) => {
+                                const option = contentTypeOptions.find(
+                                  (opt) => opt.value === value
+                                );
+                                return option ? (
+                                  <Badge
+                                    key={value}
+                                    variant="secondary"
+                                    className="gap-1 px-1.5"
+                                  >
+                                    {option.label}
+                                  </Badge>
+                                ) : null;
+                              })}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    />
+                  </div>
+                </div>
 
+                {/* Add keyword search field */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="keyword-search" className="text-right">
+                    keyword search
+                  </Label>
+                  <div className="col-span-3 flex items-center">
+                    <Input
+                      id="keyword-search"
+                      type="text"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="search for specific keywords"
+                      className="flex-grow"
+                      autoCorrect="off"
+                      autoComplete="off"
+                    />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>search for specific keywords in all content</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+
+                {/* Add browser URL field in advanced settings too */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="browser-url" className="text-right">
+                    browser URL
+                  </Label>
+                  <div className="col-span-3 flex items-center">
+                    <Input
+                      id="browser-url"
+                      type="text"
+                      value={browserUrl}
+                      onChange={(e) => setBrowserUrl(e.target.value)}
+                      placeholder="filter by browser URL"
+                      className="flex-grow"
+                    />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>filter results by specific browser URLs</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="speakers" className="text-right">
+                    speakers
+                  </Label>
+                  <div className="col-span-3 w-full">
+                    <MultiSelectCombobox
+                      label="speakers"
+                      options={speakers.map((speaker) => ({
+                        label: speaker.name || `Speaker ${speaker.id}`,
+                        value: speaker.id.toString(),
+                      }))}
+                      value={Object.values(selectedSpeakers).map((speaker) =>
+                        speaker.id.toString()
+                      )}
+                      onChange={(selectedIds) => {
+                        // Convert from array of IDs to object with speaker objects
+                        const newSelectedSpeakers: { [key: number]: Speaker } =
+                          {};
+                        selectedIds.forEach((id) => {
+                          const speakerId = parseInt(id);
+                          const speaker = speakers.find(
+                            (s) => s.id === speakerId
+                          );
+                          if (speaker) {
+                            newSelectedSpeakers[speakerId] = speaker;
+                          }
+                        });
+                        setSelectedSpeakers(newSelectedSpeakers);
+                      }}
+                      placeholder="Search speakers..."
+                      renderItem={(option) => (
+                        <div className="flex items-center justify-between w-full">
+                          <span>{option.label}</span>
+                        </div>
+                      )}
+                      renderSelectedItem={(values) => (
+                        <div className="flex gap-1 items-center w-full">
+                          {values.length === 0 ? (
+                            <span>Select speakers</span>
+                          ) : (
+                            <>
+                              {values.map((value) => {
+                                const speaker = speakers.find(
+                                  (s) => s.id.toString() === value
+                                );
+                                return speaker ? (
+                                  <Badge
+                                    key={value}
+                                    variant="secondary"
+                                    className="gap-1 px-1.5"
+                                  >
+                                    {speaker.name || `Speaker ${speaker.id}`}
+                                  </Badge>
+                                ) : null;
+                              })}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Add date pickers here */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="start-date" className="text-right">
+                    start date
+                  </Label>
+                  <div className="col-span-3">
+                    <DateTimePicker
+                      date={startDate}
+                      setDate={setStartDate}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="end-date" className="text-right">
+                    end date
+                  </Label>
+                  <div className="col-span-3">
+                    <DateTimePicker
+                      date={endDate}
+                      setDate={setEndDate}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Rest of the advanced settings content */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="app-name" className="text-right">
+                    app name
+                  </Label>
+                  <div className="col-span-3 flex items-center">
+                    <SqlAutocompleteInput
+                      id="app-name"
+                      type="app"
+                      icon={<Laptop className="h-4 w-4" />}
+                      value={appName}
+                      onChange={setAppName}
+                      placeholder="filter by app name"
+                      className="flex-grow"
+                    />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>filter results by specific application names</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="min-length" className="text-right">
+                    min length
+                  </Label>
+                  <div className="col-span-3 flex items-center">
+                    <Input
+                      id="min-length"
+                      type="number"
+                      value={minLength}
+                      onChange={(e) => setMinLength(Number(e.target.value))}
+                      className="flex-grow"
+                    />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            enter the minimum length of the content to search
+                            for
+                            <br />
+                            usually transcriptions are short while text
+                            extracted from images can be long.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="max-length" className="text-right">
+                    max length
+                  </Label>
+                  <div className="col-span-3 flex items-center">
+                    <Input
+                      id="max-length"
+                      type="number"
+                      value={maxLength}
+                      onChange={(e) => setMaxLength(Number(e.target.value))}
+                      className="flex-grow"
+                    />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            enter the maximum length of the content to search
+                            for
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="limit-slider" className="text-right">
+                    page size: {limit}
+                  </Label>
+                  <div className="col-span-3 flex items-center">
+                    <Slider
+                      id="limit-slider"
+                      value={[limit]}
+                      onValueChange={(value: number[]) => setLimit(value[0])}
+                      min={10}
+                      max={15000}
+                      step={10}
+                      className="flex-grow"
+                    />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            select the number of results to display. usually ai
+                            cannot ingest more than 30 OCR results at a time and
+                            1000 audio results at a time.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </div>
+              </div>
+
+              {/* Add frame name input after app name */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="frame-name" className="text-right">
+                  frame name
+                </Label>
+                <div className="col-span-3 flex items-center">
+                  <Input
+                    id="frame-name"
+                    type="text"
+                    value={frameName}
+                    onChange={(e) => setFrameName(e.target.value)}
+                    placeholder="filter by frame name"
+                    className="flex-grow"
+                  />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          filter results by specific frame names (by default
+                          frame name is mp4 video file path)
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+              <div className="flex items-center justify-center space-x-2">
+                <Switch
+                  id="include-frames"
+                  checked={includeFrames}
+                  onCheckedChange={setIncludeFrames}
+                />
+                <Label htmlFor="include-frames">include frames</Label>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span>
-                        <ContextUsageIndicator
-                          currentSize={calculateSelectedContentLength()}
-                          maxSize={MAX_CONTENT_LENGTH}
-                        />
-                      </span>
+                      <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="text-sm">
-                        {calculateSelectedContentLength() > MAX_CONTENT_LENGTH
-                          ? `selected content exceeds maximum allowed: ${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters. unselect some items to use AI.`
-                          : `${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters used for AI message`}
-                        <br />
-                        <span className="text-muted-foreground mt-1 block">
-                          ai models can only process a limited amount of text at
-                          once. the circle indicates your current usage.
-                        </span>
+                      <p>
+                        include frames in the search results. this shows the
+                        frame where the text appeared. only works for ocr. this
+                        may slow down the search.
                       </p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <DialogFooter>
+                <Button onClick={() => setIsQueryParamsDialogOpen(false)}>
+                  done
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-      {results.length > 0 && <Separator className="my-8" />}
+          {isLoading ? (
+            <div className="my-8 flex justify-center">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : (
+            showExamples &&
+            results.length === 0 && (
+              <div className="my-8 flex justify-center">
+                <ExampleSearchCards onSelect={handleExampleSelect} />
+              </div>
+            )
+          )}
+          {isLoading && (
+            <div className="my-2">
+              <Progress value={progress} className="w-full" />
+            </div>
+          )}
+          {results.length > 0 && (
+            <div className="flex flex-col space-y-4 mb-4 my-8">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="select-all"
+                      checked={selectAll}
+                      onCheckedChange={handleSelectAll}
+                    />
+                    <Label htmlFor="select-all">select all results</Label>
+                  </div>
 
-      {/* Display chat messages - Update this section */}
-      {(chatMessages.length > 0 || isAiLoading) && (
-        <>
-          <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto">
-            {chatMessages.map((msg, index) => (
-              <ChatMessage key={index} message={msg} />
-            ))}
-            {isAiLoading && spinner}
+                  <Separator orientation="vertical" className="h-4" />
+
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="hide-deselected"
+                      checked={hideDeselected}
+                      onCheckedChange={setHideDeselected}
+                    />
+                    <Label htmlFor="hide-deselected">hide unselected</Label>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {}}
+                    disabled={isFiltering}
+                    className="flex items-center gap-2 disabled:opacity-100"
+                  >
+                    {isFiltering ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : similarityThreshold === 0.5 ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Layers className="h-4 w-4" />
+                    )}
+                    {similarityThreshold === 0.5
+                      ? "duplicates removed"
+                      : "remove duplicates"}
+                  </Button>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          automatically unselect similar or duplicate results
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="space-y-4">
+            {renderSearchResults()}
+            {totalResults > 0 && (
+              <div className="flex justify-between items-center mt-4">
+                <Button
+                  onClick={handlePrevPage}
+                  disabled={offset === 0}
+                  variant="outline"
+                  size="sm"
+                >
+                  <ChevronLeft className="mr-2 h-4 w-4" /> Previous
+                </Button>
+                <span className="text-sm text-gray-500">
+                  Showing {offset + 1} -{" "}
+                  {Math.min(offset + limit, totalResults)} of {totalResults}
+                </span>
+                <Button
+                  onClick={handleNextPage}
+                  disabled={offset + limit >= totalResults}
+                  variant="outline"
+                  size="sm"
+                >
+                  Next <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
-        </>
-      )}
 
-      <div className="w-1/3 mx-auto">
-        <AIPresetsSelector pipeName={"search"} />
+          <AnimatePresence>
+            {results.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 50 }}
+                className="fixed bottom-4 left-0 right-0 mx-auto w-full max-w-2xl z-50"
+              >
+                <form
+                  onSubmit={handleFloatingInputSubmit}
+                  className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
+                >
+                  <div className="relative flex-grow flex items-center space-x-2">
+                    <AIPresetsDialog
+                      pipeName={"search"}
+                      recommendedPresets={[
+                        {
+                          id: "search-chat",
+                          model: "gemma:2b",
+                          provider: "native-ollama",
+                          prompt: DEFAULT_PROMPT,
+                          maxContextChars: 512000,
+                        },
+                      ]}
+                    >
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className=" p-2"
+                      >
+                        <SparklesIcon className="h-4 w-4" />
+                      </Button>
+                    </AIPresetsDialog>
+                    <TooltipProvider>
+                      <Tooltip open={!isAvailable}>
+                        <TooltipTrigger asChild>
+                          <div className="flex-1">
+                            <Input
+                              ref={floatingInputRef}
+                              type="text"
+                              placeholder="ask a question about the results..."
+                              value={floatingInput}
+                              disabled={
+                                calculateSelectedContentLength() >
+                                  MAX_CONTENT_LENGTH ||
+                                isAiDisabled ||
+                                !isAvailable
+                              }
+                              onChange={(e) => setFloatingInput(e.target.value)}
+                              className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <p className="text-sm text-destructive">{error}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <Select
+                      value={selectedAgent.id}
+                      onValueChange={(value) =>
+                        setSelectedAgent(
+                          AGENTS.find((a) => a.id === value) || AGENTS[0]
+                        )
+                      }
+                    >
+                      <SelectTrigger
+                        className="w-[170px] h-12"
+                        title={selectedAgent.description}
+                      >
+                        <SelectValue placeholder="select agent" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AGENTS.map((agent) => (
+                          <SelectItem
+                            key={agent.id}
+                            value={agent.id}
+                            title={
+                              AGENTS.find((a) => a.id === agent.id)?.description
+                            }
+                          >
+                            <span className="font-mono text-sm">
+                              {agent.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      type="submit"
+                      className="w-12"
+                      disabled={
+                        calculateSelectedContentLength() > MAX_CONTENT_LENGTH ||
+                        isAiDisabled
+                      }
+                      title={
+                        isAiDisabled
+                          ? "Please sign in to use AI features"
+                          : `${
+                              currentPlatform === "macos" ? "⌘" : "ctrl"
+                            }+shift`
+                      }
+                    >
+                      {isStreaming ? (
+                        <Square className="h-4 w-4" />
+                      ) : (
+                        <div className="flex items-center">
+                          <Send className="h-4 w-4" />
+                          <span className="sr-only">
+                            {currentPlatform === "macos" ? "⌘" : "ctrl"}+shift
+                          </span>
+                        </div>
+                      )}
+                    </Button>
+
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <ContextUsageIndicator
+                              currentSize={calculateSelectedContentLength()}
+                              maxSize={MAX_CONTENT_LENGTH}
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-sm">
+                            {calculateSelectedContentLength() >
+                            MAX_CONTENT_LENGTH
+                              ? `selected content exceeds maximum allowed: ${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters. unselect some items to use AI.`
+                              : `${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters used for AI message`}
+                            <br />
+                            <span className="text-muted-foreground mt-1 block">
+                              ai models can only process a limited amount of
+                              text at once. the circle indicates your current
+                              usage.
+                            </span>
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </form>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {results.length > 0 && <Separator className="my-8" />}
+
+          {/* Display chat messages - Update this section */}
+          {(chatMessages.length > 0 || isAiLoading) && (
+            <>
+              <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto">
+                {chatMessages.map((msg, index) => (
+                  <ChatMessage key={index} message={msg} />
+                ))}
+                {isAiLoading && spinner}
+              </div>
+            </>
+          )}
+
+          <div className="w-1/3 mx-auto">
+            <AIPresetsSelector pipeName={"search"} />
+          </div>
+
+          {/* Scroll to Bottom Button */}
+          {showScrollButton && (
+            <Button
+              className="fixed bottom-4 right-4 rounded-full p-2"
+              onClick={scrollToBottom}
+            >
+              <ChevronDown className="h-6 w-6" />
+            </Button>
+          )}
+          {results.length > 0 && <div className="h-32" />}
+        </div>
       </div>
-
-      {/* Scroll to Bottom Button */}
-      {showScrollButton && (
-        <Button
-          className="fixed bottom-4 right-4 rounded-full p-2"
-          onClick={scrollToBottom}
-        >
-          <ChevronDown className="h-6 w-6" />
-        </Button>
-      )}
-      {results.length > 0 && <div className="h-32" />}
     </div>
   );
 }
