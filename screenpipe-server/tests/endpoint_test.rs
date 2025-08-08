@@ -48,7 +48,8 @@ mod tests {
             false,
             false,
             audio_manager,
-            true
+            true,
+            vec![], // hide_window_texts
         );
 
         let router = app.create_router(true).await;
