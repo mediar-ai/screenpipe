@@ -1,0 +1,17 @@
+{
+    "bundle": {
+        "externalBin": [
+            "screenpipe",
+            "bun"
+        ],
+        "linux": {
+            "deb": {
+                "depends": [
+                    "tesseract-ocr",
+                    "libtesseract-dev",
+                    "ffmpeg"
+                ]
+            }
+        }
+    }
+}
