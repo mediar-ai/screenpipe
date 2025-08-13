@@ -12,6 +12,7 @@ use tokio::{
 };
 use tracing::{error, info, warn};
 use whisper_rs::WhisperContext;
+use std::time::Duration;
 
 use screenpipe_db::DatabaseManager;
 
@@ -97,7 +98,13 @@ impl AudioManager {
 
         Ok(manager)
     }
+    pub async fn contains_device(&self, device: &AudioDevice) -> bool {
+        self.device_manager.devices().await.contains(device)
+    }
 
+    pub fn is_device_running(&self, device: &AudioDevice) -> bool {
+        self.device_manager.is_running(device)
+    }
     pub async fn start(&self) -> Result<()> {
         if self.status().await == AudioManagerStatus::Running {
             return Ok(());
@@ -105,6 +112,49 @@ impl AudioManager {
 
         *self.status.write().await = AudioManagerStatus::Running;
         self.start_internal().await
+    }
+    pub async fn hard_reset_device(&self, device_name: &str) -> Result<()> {
+        self.stop_device(device_name).await?;
+        
+        // macOS-specific cleanup
+        #[cfg(target_os = "macos")]
+        macos_audio::release_device_resources(device_name).await?;
+        
+        let device = parse_audio_device(device_name)?;
+        self.start_device(&device).await?;
+        
+        info!("Hard reset completed for {}", device_name);
+        Ok(())
+    }
+
+    async fn start_maintenance_task(&self) {
+        let manager = self.clone();
+        let interval = self.options.read().await.macos_refresh_interval
+            .unwrap_or(Duration::from_secs(43200)); // Default 12 hours
+        
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(interval).await;
+                
+                if manager.status().await == AudioManagerStatus::Running {
+                    info!("Performing audio maintenance");
+                    
+                    // macOS session refresh
+                    #[cfg(target_os = "macos")]
+                    if let Err(e) = macos_audio::refresh_audio_session().await {
+                        error!("Audio refresh failed: {}", e);
+                    }
+                    
+                    // Device verification
+                    for device in manager.current_devices() {
+                        if !manager.device_manager.is_running(&device) {
+                            warn!("Reinitializing device {}", device);
+                            let _ = manager.hard_reset_device(&device.to_string()).await;
+                        }
+                    }
+                }
+            }
+        });
     }
 
     async fn start_internal(&self) -> Result<()> {
@@ -119,7 +169,8 @@ impl AudioManager {
         start_device_monitor(self_arc.clone(), self.device_manager.clone()).await?;
 
         info!("audio manager started");
-
+        self.start_maintenance_task().await;
+        info!("audio maintenance task started");
         Ok(())
     }
 
