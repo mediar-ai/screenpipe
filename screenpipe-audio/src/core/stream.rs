@@ -137,31 +137,30 @@ impl AudioStream {
 
 fn create_error_callback(
     device_name: String,
-    is_running_weak: std::sync::Weak<AtomicBool>,
+    _is_running_weak: std::sync::Weak<AtomicBool>,
     is_disconnected: Arc<AtomicBool>,
     stream_control_tx: mpsc::Sender<StreamControl>,
 ) -> impl FnMut(StreamError) + Send + 'static {
     move |err: StreamError| {
-        if err
-            .to_string()
-            .contains("The requested device is no longer available")
-        {
-            warn!(
-                "audio device {} disconnected. stopping recording.",
-                device_name
-            );
+        let error_msg = err.to_string();
+        
+        // Log the error but don't immediately give up
+        warn!("Audio stream error for device {}: {}", device_name, error_msg);
+        
+        // Only mark as disconnected for truly terminal errors
+        if error_msg.contains("The requested device is no longer available") 
+            || error_msg.contains("device is no longer valid")
+            || error_msg.contains("device not found")
+            || error_msg.contains("No such device") {
+            warn!("Device {} permanently unavailable, marking as disconnected", device_name);
+            is_disconnected.store(true, Ordering::Relaxed);
             stream_control_tx
                 .send(StreamControl::Stop(oneshot::channel().0))
-                .unwrap();
-            is_disconnected.store(true, Ordering::Relaxed);
+                .ok(); // Don't panic if channel is closed
         } else {
-            error!("an error occurred on the audio stream: {}", err);
-            if err.to_string().contains("device is no longer valid") {
-                warn!("audio device disconnected. stopping recording.");
-                if let Some(arc) = is_running_weak.upgrade() {
-                    arc.store(false, Ordering::Relaxed);
-                }
-            }
+            // For temporary errors (audio glitches, driver hiccups), just log and continue
+            // The stream should recover automatically in most cases
+            warn!("Temporary audio error for device {}, continuing: {}", device_name, error_msg);
         }
     }
 }

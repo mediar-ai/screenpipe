@@ -1052,6 +1052,29 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(Duration::from_secs(10)).await;
             audio_manager_clone.start().await.unwrap();
         });
+
+        // Continuous connection maintenance for macOS stability
+        // Instead of restarting everything, just reconnect individual failed devices
+        #[cfg(target_os = "macos")]
+        {
+            let audio_manager_monitor = audio_manager.clone();
+            tokio::spawn(async move {
+                // Wait for initial startup
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                
+                let mut maintenance_interval = tokio::time::interval(Duration::from_secs(30)); // Check every 30 seconds
+                maintenance_interval.tick().await; // Skip the first tick
+                
+                loop {
+                    maintenance_interval.tick().await;
+                    
+                    // Maintain connection health by reconnecting failed devices
+                    if !audio_manager_monitor.maintain_recording_health().await {
+                        warn!("Some audio devices required reconnection");
+                    }
+                }
+            });
+        }
     }
 
     // Start pipes

@@ -386,6 +386,52 @@ impl AudioManager {
     pub async fn enabled_devices(&self) -> HashSet<String> {
         self.options.read().await.enabled_devices.clone()
     }
+
+    /// Check and maintain audio recording health by reconnecting disconnected devices
+    /// Returns true if all devices are healthy, false if issues persist after reconnection attempts
+    pub async fn maintain_recording_health(&self) -> bool {
+        if self.status().await != AudioManagerStatus::Running {
+            return false;
+        }
+
+        let enabled_devices = self.enabled_devices().await;
+        let current_devices = self.current_devices();
+        
+        // Check if we have the expected number of recording handles
+        if current_devices.len() != enabled_devices.len() {
+            warn!("Audio health check: expected {} devices, found {} recording handles", 
+                  enabled_devices.len(), current_devices.len());
+        }
+
+        let mut all_healthy = true;
+
+        // Check each device and attempt reconnection if needed
+        for device in &current_devices {
+            // Check if recording handle is still alive
+            if let Some(handle_mutex) = self.recording_handles.get(device) {
+                let handle = handle_mutex.lock().await;
+                if handle.is_finished() {
+                    warn!("Recording handle for device {} has finished, attempting reconnection", device);
+                    drop(handle); // Release the lock before reconnection
+                    
+                    // Attempt to reconnect the device
+                    if let Err(e) = self.device_manager.check_and_reconnect_device(device).await {
+                        error!("Failed to reconnect device {}: {}", device, e);
+                        all_healthy = false;
+                    }
+                }
+            } else {
+                // Try to restart this specific device
+                warn!("No recording handle found for device {}, attempting to restart", device);
+                if let Err(e) = self.start_device(device).await {
+                    error!("Failed to restart device {}: {}", device, e);
+                    all_healthy = false;
+                }
+            }
+        }
+
+        all_healthy
+    }
 }
 
 impl Drop for AudioManager {
