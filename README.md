@@ -50,6 +50,8 @@
    <a href="https://console.algora.io/org/mediar-ai/bounties?status=open">
        <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dopen" alt="Open Bounties">
    </a>
+
+[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/mediar-ai/screenpipe)](https://archestra.ai/mcp-catalog/mediar-ai__screenpipe)
 </p>
 
 <p align="center">
