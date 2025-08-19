@@ -52,6 +52,9 @@ http-cache-reqwest = "0.15.0"
 reqwest = { version = "=0.12.12", features = ["blocking", "multipart", "json"] }
 reqwest-middleware = "0.4.1"
 
+clap = {version = "4.0",features = ["derive"]}
+rocket = "0.5.0-rc.2"
+
 
 [patch.crates-io]
 # enables chinese mirror (hf is banned in china) and native-tls
