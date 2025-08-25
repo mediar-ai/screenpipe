@@ -9,7 +9,8 @@ use std::sync::Mutex;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon};
 use tauri::Emitter;
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
+    image::Image,
+    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder, IconMenuItemBuilder},
     AppHandle, Manager, Wry,
 };
 use tauri_plugin_opener::OpenerExt;
@@ -80,21 +81,56 @@ fn create_dynamic_menu(
         .unwrap_or(false);
     if !dev_mode {
         menu_builder = menu_builder
-            .item(&PredefinedMenuItem::separator(app)?)
-            .item(&MenuItemBuilder::with_id("start_recording", "start recording").build(app)?)
-            .item(&MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?);
+            .item(&PredefinedMenuItem::separator(app)?);
+        
+        // Create recording submenu with icon
+        let recording_icon = Image::from_bytes(include_bytes!("../icons/app/recording.png"))
+            .unwrap_or_else(|_| Image::from_bytes(include_bytes!("../icons/icon.png")).unwrap());
+            
+        let start_recording_icon = Image::from_bytes(include_bytes!("../icons/app/start_recording.png"))
+            .unwrap_or_else(|_| Image::from_bytes(include_bytes!("../icons/icon.png")).unwrap());
+        
+        let stop_recording_icon = Image::from_bytes(include_bytes!("../icons/app/stop_recording.png"))
+            .unwrap_or_else(|_| Image::from_bytes(include_bytes!("../icons/icon.png")).unwrap());
+        
+        let start_recording_item = IconMenuItemBuilder::new("start recording")
+            .id("start_recording")
+            .icon(start_recording_icon)
+            .build(app)?;
+            
+        let stop_recording_item = IconMenuItemBuilder::new("stop recording")
+            .id("stop_recording")
+            .icon(stop_recording_icon)
+            .build(app)?;
+            
+        let recording_submenu = SubmenuBuilder::new(app, "recording")
+            .submenu_icon(recording_icon)
+            .item(&start_recording_item)
+            .item(&stop_recording_item)
+            .build()?;
+            
+        menu_builder = menu_builder.item(&recording_submenu);
     }
 
     // Add pipe submenu if there are active pipes
     if !state.pipes.is_empty() {
         menu_builder = menu_builder.item(&PredefinedMenuItem::separator(app)?);
 
-        // Add pipe menu items
+        // Create pipes submenu
+        let pipes_icon = Image::from_bytes(include_bytes!("../icons/icon.png"))?;
+            
+        let mut pipes_submenu_builder = SubmenuBuilder::new(app, "pipes")
+            .submenu_icon(pipes_icon);
+        
+        // Add pipe menu items to submenu
         for pipe_id in &state.pipes {
             let shortcut = state.shortcuts.get(pipe_id).cloned();
             let pipe_item = create_pipe_menu_item(app, pipe_id, shortcut)?;
-            menu_builder = menu_builder.item(&pipe_item);
+            pipes_submenu_builder = pipes_submenu_builder.item(&pipe_item);
         }
+        
+        let pipes_submenu = pipes_submenu_builder.build()?;
+        menu_builder = menu_builder.item(&pipes_submenu);
     }
 
     // Settings and quit
