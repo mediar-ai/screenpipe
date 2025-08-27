@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
-import { Settings, Shortcut, useSettings } from "@/lib/hooks/use-settings";
-import { useProfiles } from "@/lib/hooks/use-profiles";
+import React, { useCallback, useEffect, useState } from "react";
+import { Settings, Shortcut } from "@/lib/types/settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
+import { useProfilesZustand } from "@/lib/hooks/use-profiles-zustand";
 import { parseKeyboardShortcut } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/use-toast";
@@ -31,8 +32,10 @@ const ShortcutRow = ({
   value,
 }: ShortcutRowProps) => {
   const [isRecording, setIsRecording] = useState(false);
-  const { settings, updateSettings } = useSettings();
-  const { profileShortcuts, updateProfileShortcut } = useProfiles();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
+  const profileShortcuts = useProfilesZustand((state) => state.shortcuts);
+  const updateProfileShortcut = useProfilesZustand((state) => state.updateShortcut);
 
   useEffect(() => {
     if (!isRecording) return;
@@ -85,7 +88,7 @@ const ShortcutRow = ({
     };
   }, [isRecording]);
 
-  const syncShortcuts = async (updatedShortcuts: {
+  const syncShortcuts = useCallback(async (updatedShortcuts: {
     showScreenpipeShortcut: string;
     startRecordingShortcut: string;
     stopRecordingShortcut: string;
@@ -116,9 +119,9 @@ const ShortcutRow = ({
     });
 
     return true;
-  };
+  }, []);
 
-  const handleEnableShortcut = async (keys: string) => {
+  const handleEnableShortcut = useCallback(async (keys: string) => {
     try {
       toast({
         title: "shortcut enabled",
@@ -161,7 +164,6 @@ const ShortcutRow = ({
           const pipeId = shortcut.replace("pipe_", "");
           updateSettings({
             pipeShortcuts: {
-              ...settings.pipeShortcuts,
               [pipeId]: keys,
             },
           });
@@ -184,7 +186,7 @@ const ShortcutRow = ({
         variant: "destructive",
       });
     }
-  };
+  }, [shortcut, updateSettings, settings, profileShortcuts, updateProfileShortcut, syncShortcuts, type]);
 
   const handleDisableShortcut = async () => {
     toast({

@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
@@ -78,7 +78,9 @@ function PlanCard({
 }
 
 export function AccountSection() {
-  const { settings, updateSettings, loadUser } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
+  const loadUser = useSettingsZustand((state) => state.loadUser);
   const [isConnectingStripe, setIsConnectingStripe] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isAnnual, setIsAnnual] = useState(true);
@@ -107,7 +109,6 @@ export function AccountSection() {
               if (settings.user) {
                 updateSettings({
                   user: {
-                    ...settings.user,
                     stripe_connected: true,
                   },
                 });
@@ -137,7 +138,7 @@ export function AccountSection() {
     return () => {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
-  }, [settings.user?.token, updateSettings]);
+  }, [settings.user?.token, updateSettings, loadUser, settings.user]);
 
   const clientRefId = `${settings.user?.id}&customer_email=${encodeURIComponent(
     settings.user?.email ?? ""
@@ -269,7 +270,7 @@ export function AccountSection() {
         contact: settings.user.contact || "",
       });
     }
-  }, [settings.user]); // Only run when settings.user changes
+  }, [settings.user, profileForm.bio, profileForm.contact, profileForm.github_username, profileForm.website]); // Only run when settings.user changes
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -458,8 +459,7 @@ export function AccountSection() {
 
                         const { api_key } = await response.json();
                         if (settings.user) {
-                          const updatedUser = { ...settings.user, api_key };
-                          updateSettings({ user: updatedUser });
+                          updateSettings({ user: { api_key } });
                           toast({
                             title: "api key generated",
                             description: "you can now start building pipes",
@@ -566,11 +566,9 @@ export function AccountSection() {
                       className="h-9 w-9"
                       onClick={() => {
                         if (settings.user) {
-                          const updatedUser = {
-                            ...settings.user,
-                            stripe_connected: false,
-                          };
-                          updateSettings({ user: updatedUser });
+                          updateSettings({
+                            user: { stripe_connected: false },
+                          });
                           toast({
                             title: "stripe disconnected",
                             description:
@@ -708,11 +706,7 @@ export function AccountSection() {
 
                       // Update the main settings after successful profile update
                       if (settings.user) {
-                        const updatedUser = {
-                          ...settings.user,
-                          ...profileForm,
-                        };
-                        updateSettings({ user: updatedUser });
+                        updateSettings({ user: profileForm });
                       }
 
                       toast({

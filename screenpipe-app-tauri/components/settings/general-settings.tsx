@@ -1,11 +1,12 @@
 "use client";
 
 import React from "react";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { Switch } from "@/components/ui/switch";
 
 export default function GeneralSettings() {
-  const { settings, updateSettings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
 
   const handleSettingsChange = (newSettings: Partial<typeof settings>) => {
     updateSettings(newSettings);

@@ -5,7 +5,7 @@ import { readTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useEffect } from "react";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { getVersion } from "@tauri-apps/api/app";
 import {
   version as osVersion,
@@ -80,7 +80,7 @@ export const ShareLogsButton = ({
 }) => {
   const { toast } = useToast();
   const { copyToClipboard } = useCopyToClipboard({ timeout: 3000 });
-  const { settings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
   const [isSending, setIsSending] = useState(false);
   const [shareLink, setShareLink] = useState("");
   const [machineId, setMachineId] = useState("");

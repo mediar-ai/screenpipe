@@ -4,7 +4,7 @@ import { Check, Lock, Settings, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 import { usePlatform } from "@/lib/hooks/use-platform";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import localforage from "localforage";
 
 // You can add this to a types.ts file in your lib directory
@@ -28,7 +28,7 @@ interface PermissionButtonsProps {
 export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
   type,
 }) => {
-  const { settings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
   const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(
     null
   );

@@ -299,3 +299,68 @@ pub async fn get_disk_usage(
         }
     }
 }
+
+#[tauri::command]
+pub async fn delete_profile_file(app_handle: tauri::AppHandle, profile_name: String) -> Result<(), String> {
+    info!("Attempting to delete profile: {}", profile_name);
+    
+    // Enhanced input validation
+    if profile_name == "default" {
+        return Err("Cannot delete default profile".to_string());
+    }
+    
+    // Validate profile name length
+    if profile_name.is_empty() {
+        return Err("Profile name cannot be empty".to_string());
+    }
+    
+    if profile_name.len() > 255 {
+        return Err("Profile name too long".to_string());
+    }
+    
+    // Check for path traversal attempts and dangerous characters
+    if profile_name.contains("..") || 
+       profile_name.contains('/') || 
+       profile_name.contains('\\') ||
+       profile_name.contains(':') ||
+       profile_name.contains('*') ||
+       profile_name.contains('?') ||
+       profile_name.contains('"') ||
+       profile_name.contains('<') ||
+       profile_name.contains('>') ||
+       profile_name.contains('|') ||
+       profile_name.chars().any(|c| c.is_control() || c == '\0') {
+        return Err("Invalid profile name format".to_string());
+    }
+    
+    // Whitelist approach: only allow alphanumeric, dash, underscore, and space
+    if !profile_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == ' ') {
+        return Err("Profile name contains invalid characters".to_string());
+    }
+    
+    // Use the same path resolution as the frontend
+    let local_data_path = app_handle.path().local_data_dir()
+        .map_err(|_| "Failed to access application data directory".to_string())?;
+    
+    let file_path = local_data_path
+        .join("screenpipe")
+        .join(format!("store-{}.bin", profile_name));
+    
+    info!("Attempting to delete file: {}", file_path.display());
+    
+    if !file_path.exists() {
+        info!("Profile file does not exist, considering deletion successful");
+        return Ok(()); // File doesn't exist, consider it success
+    }
+    
+    match tokio::fs::remove_file(&file_path).await {
+        Ok(_) => {
+            info!("Successfully deleted profile file for profile: {}", profile_name);
+            Ok(())
+        }
+        Err(e) => {
+            error!("Failed to delete profile file for {}: {}", profile_name, e);
+            Err("Failed to delete profile file".to_string())
+        }
+    }
+}

@@ -6,7 +6,7 @@ import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { PipeApi } from "@/lib/api/store";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 
 interface OnboardingPipeStoreProps {
   className?: string;
@@ -21,7 +21,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [status, setStatus] = React.useState<string>("");
-  const { settings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
   const handleOpenSearchPipe = async () => {
     setIsLoading(true);
     try {

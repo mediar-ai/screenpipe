@@ -2,7 +2,7 @@ import React from "react";
 import { ExternalLinkIcon, UserCog } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { Button } from "@/components/ui/button";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { toast } from "@/components/ui/use-toast";
 import OnboardingNavigation from "./navigation";
 
@@ -17,7 +17,8 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
   handlePrevSlide,
   handleNextSlide,
 }) => {
-  const { settings, updateSettings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center space-y-6 py-4">

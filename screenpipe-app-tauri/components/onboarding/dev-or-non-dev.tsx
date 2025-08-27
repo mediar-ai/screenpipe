@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Info } from "lucide-react";
 import { Wrench, UserRound } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { Card, CardContent } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
@@ -68,7 +68,8 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
   handlePrevSlide,
 }) => {
   const { toast } = useToast();
-  const { settings, updateSettings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
   const [localSettings, setLocalSettings] = useState(settings);
 
   const handleNextWithPreference = async (option: string) => {

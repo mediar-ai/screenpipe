@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Loader2 } from "lucide-react";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 
 interface CreditPurchaseDialogProps {
   open: boolean;
@@ -26,7 +26,8 @@ export function CreditPurchaseDialog({
   currentCredits,
   onCreditsUpdated,
 }: CreditPurchaseDialogProps) {
-  const { settings, loadUser } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const loadUser = useSettingsZustand((state) => state.loadUser);
   const [showRefreshHint, setShowRefreshHint] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 

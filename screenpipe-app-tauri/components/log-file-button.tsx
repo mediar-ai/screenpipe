@@ -10,7 +10,7 @@ import { FileText, Copy, AppWindow, Loader, X, Upload } from "lucide-react";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import {
   Dialog,
   DialogHeader,

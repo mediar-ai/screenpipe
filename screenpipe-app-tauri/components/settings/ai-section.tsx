@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
-import { AIProviderType, useSettings } from "@/lib/hooks/use-settings";
+import { AIProviderType } from "@/lib/types/settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
@@ -19,7 +20,7 @@ import {
   ChevronsUpDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
@@ -109,7 +110,9 @@ export const AIProviderCard = ({
 };
 
 const AISection = () => {
-  const { settings, updateSettings, resetSetting } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
+  const resetSetting = useSettingsZustand((state) => state.resetSetting);
 
   const [showApiKey, setShowApiKey] = React.useState(false);
 
@@ -169,7 +172,7 @@ const AISection = () => {
   const [models, setModels] = useState<AIModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
 
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     setIsLoadingModels(true);
     console.log(settings.aiProviderType, settings.openaiApiKey, settings.aiUrl);
     try {
@@ -250,11 +253,11 @@ const AISection = () => {
     } finally {
       setIsLoadingModels(false);
     }
-  };
+  }, [settings.aiProviderType, settings.openaiApiKey, settings.aiUrl, settings.user?.id]);
 
   useEffect(() => {
     fetchModels();
-  }, [settings.aiProviderType, settings.openaiApiKey, settings.aiUrl]);
+  }, [settings.aiProviderType, settings.openaiApiKey, settings.aiUrl, fetchModels]);
 
   return (
     <div className="w-full space-y-6 py-4">

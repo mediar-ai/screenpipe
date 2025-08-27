@@ -5,7 +5,7 @@ import { CodeBlock } from "@/components/ui/codeblock";
 import { platform } from "@tauri-apps/plugin-os";
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { useToast } from "./ui/use-toast";
 import {
@@ -96,7 +96,8 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
 };
 
 export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
-  const { settings, updateSettings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
   const handleDevModeToggle = async (checked: boolean) => {
     try {
       updateSettings({ devMode: checked });

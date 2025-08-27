@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { CardContent } from "@/components/ui/card";
 import { ArrowUpRight } from "lucide-react";
 import { DialogTitle } from "@/components/ui/dialog";
@@ -21,7 +21,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
   handlePrevSlide,
 }) => {
   const { toast } = useToast();
-  const { settings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
   const [isValidating, setIsValidating] = React.useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 

@@ -8,12 +8,12 @@ use commands::show_main_window;
 use serde_json::json;
 use serde_json::Value;
 use std::env;
-use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Config;
 use tauri::Emitter;
+use dirs;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
@@ -591,18 +591,32 @@ fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
     Ok(Shortcut::new(Some(modifiers), code))
 }
 
+fn load_analytics_enabled(_config: &Config) -> bool {
+    // Temporarily default to false to avoid permission issues during startup
+    // Analytics will be properly initialized later via the frontend after
+    // the Tauri app has proper filesystem permissions
+    false
+}
+
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
 
-    // Initialize Sentry early
-    let sentry_guard = sentry::init((
-        "https://8770b0b106954e199df089bf4ffa89cf@o4507617161314304.ingest.us.sentry.io/4508716587876352", // Replace with your actual Sentry DSN
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            ..Default::default()
-        },
-    ));
+    let context = tauri::generate_context!();
+
+    let analytics_enabled = load_analytics_enabled(context.config());
+
+    let sentry_guard = if analytics_enabled {
+        Some(sentry::init((
+            "https://8770b0b106954e199df089bf4ffa89cf@o4507617161314304.ingest.us.sentry.io/4508716587876352", // Replace with your actual Sentry DSN
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                ..Default::default()
+            },
+        )))
+    } else {
+        None
+    };
 
     // Set permanent OLLAMA_ORIGINS env var on Windows if not present
     #[cfg(target_os = "windows")]
@@ -626,7 +640,7 @@ async fn main() {
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_http::init())
@@ -638,7 +652,9 @@ async fn main() {
                 let _ = window
                     .app_handle()
                     .set_activation_policy(tauri::ActivationPolicy::Regular);
-                window.hide().unwrap();
+                if let Err(e) = window.hide() {
+                    eprintln!("Failed to hide window: {}", e);
+                }
                 api.prevent_close();
             }
             _ => {}
@@ -665,8 +681,13 @@ async fn main() {
                 .expect("Can't focus window!");
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_sentry::init(&sentry_guard))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+
+    if let Some(ref guard) = sentry_guard {
+        builder = builder.plugin(tauri_plugin_sentry::init(guard));
+    }
+
+    let app = builder
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -682,6 +703,7 @@ async fn main() {
             commands::update_show_screenpipe_shortcut,
             commands::get_disk_usage,
             commands::open_pipe_window,
+            commands::delete_profile_file,
             get_log_files,
             upload_file_to_s3,
             update_global_shortcuts,
@@ -889,7 +911,7 @@ async fn main() {
             });
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application");
 
     // set_tray_unhealth_icon(app.app_handle().clone());

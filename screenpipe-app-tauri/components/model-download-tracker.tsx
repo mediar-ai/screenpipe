@@ -219,7 +219,7 @@ export function ModelDownloadTracker() {
     return () => {
       unlisten.then((unsubscribe) => unsubscribe());
     };
-  }, [toast, dismiss, activeDownloads, toastRefs]);
+  }, [toast, dismiss, activeDownloads, toastRefs, ffmpegInstalling, ffmpegToastRef]);
 
   return null; // This component doesn't render anything
 }
