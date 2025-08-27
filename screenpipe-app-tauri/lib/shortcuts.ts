@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Shortcut } from "./hooks/use-settings";
+import { Shortcut } from "./types/settings";
 
 export async function registerShortcuts({
   showScreenpipeShortcut,

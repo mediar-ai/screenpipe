@@ -1,4 +1,3 @@
-import localforage from "localforage";
 import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import OnboardingPipes from "@/components/onboarding/pipes";
@@ -12,7 +11,6 @@ import OnboardingDevConfig from "@/components/onboarding/dev-configuration";
 import OnboardingSelection from "@/components/onboarding/usecases-selection";
 import OnboardingInstructions from "@/components/onboarding/explain-instructions";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
-import { useSettings } from "@/lib/hooks/use-settings";
 import OnboardingLogin from "./onboarding/login";
 import OnboardingPipeStore from "./onboarding/pipe-store";
 import posthog from "posthog-js";

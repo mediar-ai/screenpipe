@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { Command, Trash2, Plus } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -49,7 +49,7 @@ export function DataImportSection() {
   const [ollamaAvailable, setOllamaAvailable] = useState<boolean | null>(null);
 
   // Scan for videos in the selected path
-  const scanForVideos = async () => {
+  const scanForVideos = useCallback(async () => {
     if (!path.trim()) return;
 
     try {
@@ -109,7 +109,7 @@ export function DataImportSection() {
     } finally {
       setIsScanning(false);
     }
-  };
+  }, [path]);
 
   const handleMetadataChange = (
     index: number,
@@ -135,7 +135,7 @@ export function DataImportSection() {
     if (path.trim()) {
       scanForVideos();
     }
-  }, [path]);
+  }, [path, scanForVideos]);
 
   const handleIndex = async () => {
     if (!path.trim()) return;
@@ -232,7 +232,7 @@ export function DataImportSection() {
   };
 
   // Check Ollama availability
-  const checkOllama = async () => {
+  const checkOllama = useCallback(async () => {
     try {
       const response = await fetch("http://localhost:11434/api/version");
       setOllamaAvailable(response.ok);
@@ -256,14 +256,14 @@ export function DataImportSection() {
         setUseEmbeddings(false);
       }
     }
-  };
+  }, [useEmbeddings]);
 
   // Check Ollama status periodically
   useEffect(() => {
     checkOllama();
     const interval = setInterval(checkOllama, 10000); // Check every 10s
     return () => clearInterval(interval);
-  }, []);
+  }, [checkOllama]);
 
   return (
     <div className="w-full space-y-6 py-4">

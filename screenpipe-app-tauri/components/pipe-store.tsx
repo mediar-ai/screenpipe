@@ -25,7 +25,7 @@ import { InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { PipeDetails } from "./pipe-store/pipe-details";
 import { PipeCard } from "./pipe-store/pipe-card";
 import { AddPipeForm } from "./pipe-store/add-pipe-form";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand, awaitZustandHydration } from "@/lib/hooks/use-settings-zustand";
 import posthog from "posthog-js";
 import { Progress } from "./ui/progress";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -65,11 +65,11 @@ const corePipes: string[] = [];
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
-  const { settings, updateSettings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>(
     [],
   );
@@ -93,7 +93,7 @@ export const PipeStore: React.FC = () => {
       .filter(
         (pipe) =>
           pipe.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-          (!showInstalledOnly || pipe.is_installed) &&
+          (!settings.showInstalledPipesOnly || pipe.is_installed) &&
           !pipe.is_installing,
       )
       .sort((a, b) => {
@@ -109,7 +109,7 @@ export const PipeStore: React.FC = () => {
           new Date(a.created_at as string).getTime()
         );
       });
-  }, [pipes, searchQuery, showInstalledOnly]);
+  }, [pipes, searchQuery, settings.showInstalledPipesOnly]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
   const [isPipeFunctionEnabled, setIsPipeFunctionEnabled] = useState(true);
@@ -128,9 +128,11 @@ export const PipeStore: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filteredPipes.length]);
 
-  const fetchStorePlugins = async () => {
+  const fetchStorePlugins = useCallback(async () => {
+    const token = settings.user?.token;
+    if (!token) return;
     try {
-      const pipeApi = await PipeApi.create(settings.user?.token!);
+      const pipeApi = await PipeApi.create(token);
       const plugins = await pipeApi.listStorePlugins();
 
       // Create PipeWithStatus objects for store plugins
@@ -189,14 +191,14 @@ export const PipeStore: React.FC = () => {
     } catch (error) {
       console.warn("Failed to fetch store plugins:", error);
     }
-  };
+  }, [settings.user?.token, installedPipes, purchaseHistory]);
 
-  const fetchPurchaseHistory = async () => {
+  const fetchPurchaseHistory = useCallback(async () => {
     if (!settings.user?.token) return;
     const pipeApi = await PipeApi.create(settings.user!.token!);
     const purchaseHistory = await pipeApi.getUserPurchaseHistory();
     setPurchaseHistory(purchaseHistory);
-  };
+  }, [settings.user]);
 
   const handlePurchasePipe = async (
     pipe: PipeWithStatus,
@@ -325,7 +327,7 @@ export const PipeStore: React.FC = () => {
     }
   };
 
-  const handleInstallPipe = async (
+  const handleInstallPipe = useCallback(async (
     pipe: PipeWithStatus,
     onComplete?: () => void,
   ) => {
@@ -421,9 +423,9 @@ export const PipeStore: React.FC = () => {
         return next;
       });
     }
-  };
+  }, [checkLogin, settings.user, setPipes, setLoadingInstalls]);
 
-  const fetchInstalledPipes = async () => {
+  const fetchInstalledPipes = useCallback(async () => {
     if (!health || health?.status === "error") return;
     try {
       const response = await fetch("http://localhost:3030/pipes/list");
@@ -456,7 +458,7 @@ export const PipeStore: React.FC = () => {
         variant: "destructive",
       });
     }
-  };
+  }, [health]);
 
   const handleResetAllPipes = async () => {
     setIsPurging(true);
@@ -839,7 +841,7 @@ export const PipeStore: React.FC = () => {
     }
   };
 
-  const handleUpdatePipe = async (pipe: PipeWithStatus) => {
+  const handleUpdatePipe = useCallback(async (pipe: PipeWithStatus) => {
     try {
       if (!checkLogin(settings.user)) return;
 
@@ -1003,7 +1005,7 @@ export const PipeStore: React.FC = () => {
         variant: "destructive",
       });
     }
-  };
+  }, [checkLogin, settings.user, setPipes]);
 
   const handleRestartScreenpipe = async () => {
     setIsRestarting(true);
@@ -1175,7 +1177,7 @@ export const PipeStore: React.FC = () => {
       pipes,
       setPipes,
       settings.autoUpdatePipes,
-      handleUpdateAllPipes,
+      handleUpdatePipe,
     ],
   );
 
@@ -1188,23 +1190,34 @@ export const PipeStore: React.FC = () => {
   }, [checkForUpdates]);
 
   useEffect(() => {
-    fetchStorePlugins();
-  }, [installedPipes, purchaseHistory]);
+    let cancelled = false;
+    (async () => {
+      try {
+        await awaitZustandHydration();
+        if (!cancelled && settings.user?.token) {
+          fetchStorePlugins();
+        }
+      } catch (error) {
+        console.error('Failed to wait for settings hydration in pipe store:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fetchStorePlugins, settings.user?.token]);
 
   useEffect(() => {
     fetchPurchaseHistory();
-  }, [settings.user.token]);
+  }, [fetchPurchaseHistory]);
 
   useEffect(() => {
     fetchInstalledPipes();
-  }, [health]);
+  }, [fetchInstalledPipes]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       fetchInstalledPipes();
     }, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchInstalledPipes]);
 
   // Add periodic update check
   useEffect(() => {
@@ -1282,7 +1295,7 @@ export const PipeStore: React.FC = () => {
     return () => {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
-  }, [pipes]);
+  }, [pipes, fetchPurchaseHistory, handleInstallPipe]);
 
   // Update the event listener effect to use the memoized functions
   useEffect(() => {
@@ -1325,7 +1338,7 @@ export const PipeStore: React.FC = () => {
     return () => {
       unsubscribePromise.then((unsubscribe) => unsubscribe());
     };
-  }, [pipes, settings.user, settings.autoUpdatePipes, fetchInstalledPipes]);
+  }, [pipes, settings.user, settings.autoUpdatePipes, fetchInstalledPipes, checkLogin, handleUpdatePipe]);
 
   if (health?.status === "error" || !isPipeFunctionEnabled) {
     return (
@@ -1459,19 +1472,19 @@ export const PipeStore: React.FC = () => {
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => setShowInstalledOnly(!showInstalledOnly)}
+                    onClick={() => updateSettings({ showInstalledPipesOnly: !settings.showInstalledPipesOnly })}
                   >
                     <HardDriveDownload
                       className={cn(
                         "h-4 w-4",
-                        showInstalledOnly && "text-green-500",
+                        settings.showInstalledPipesOnly && "text-green-500",
                       )}
                     />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>
-                    {showInstalledOnly
+                    {settings.showInstalledPipesOnly
                       ? "showing installed pipes only"
                       : "showing all pipes"}
                   </p>

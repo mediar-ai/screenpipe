@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -43,9 +43,9 @@ import { Command as TauriCommand } from "@tauri-apps/plugin-shell";
 
 import {
   Settings,
-  useSettings,
   VadSensitivity,
-} from "@/lib/hooks/use-settings";
+} from "@/lib/types/settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { invoke } from "@tauri-apps/api/core";
@@ -118,7 +118,12 @@ const createWindowOptions = (
 };
 
 export function RecordingSettings() {
-  const { settings, updateSettings, getDataDir } = useSettings();
+  // Zustand selective subscriptions for better performance
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
+  
+  // Note: getDataDir functionality implemented using settings
+  const getDataDir = () => settings.dataDir || '';
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
   const [dataDirInputVisible, setDataDirInputVisible] = React.useState(false);
@@ -147,15 +152,16 @@ export function RecordingSettings() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Modify setLocalSettings to track changes
-  const handleSettingsChange = (
+  const handleSettingsChange = useCallback((
     newSettings: Partial<Settings>,
     restart: boolean = true
   ) => {
     updateSettings(newSettings);
+    
     if (restart) {
       setHasUnsavedChanges(true);
     }
-  };
+  }, [updateSettings]);
 
   // Show toast when settings change
   useEffect(() => {
@@ -190,7 +196,7 @@ export function RecordingSettings() {
         duration: 50000,
       });
     }
-  }, [hasUnsavedChanges]);
+  }, [hasUnsavedChanges, toast]);
 
   useEffect(() => {
     const checkPlatform = async () => {
@@ -297,9 +303,9 @@ export function RecordingSettings() {
     };
 
     loadDevices();
-  }, []);
+  }, [handleSettingsChange, settings]);
 
-  const handleUpdate = async () => {
+  const handleUpdate = useCallback(async () => {
     setIsUpdating(true);
     toast({
       title: "updating screenpipe recording settings",
@@ -361,7 +367,7 @@ export function RecordingSettings() {
     } finally {
       setIsUpdating(false);
     }
-  };
+  }, [settings, toast]);
 
   const handleAudioTranscriptionModelChange = (
     value: string,

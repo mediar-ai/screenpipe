@@ -54,7 +54,6 @@
     "clsx": "^2.1.1",
     "cmdk": "0.2.1",
     "date-fns": "^3.6.0",
-    "easy-peasy": "^6.0.5",
     "framer-motion": "^11.5.4",
     "hotkeys-js": "^3.13.9",
     "localforage": "^1.10.0",

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/button";
 import {
   AIPreset,
   DEFAULT_PROMPT,
-  useSettings,
-} from "@/lib/hooks/use-settings";
+  Settings,
+} from "@/lib/types/settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { AIModel, AIProviderCard, OllamaModel } from "./ai-section";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
@@ -64,7 +65,8 @@ const AISection = ({
   setDialog: (value: boolean) => void;
   isDuplicating?: boolean;
 }) => {
-  const { settings, updateSettings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
   const [settingsPreset, setSettingsPreset] = useState<
     Partial<AIPreset> | undefined
   >(preset);
@@ -275,7 +277,7 @@ const AISection = ({
   const [models, setModels] = useState<AIModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
 
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     setIsLoadingModels(true);
     console.log(settingsPreset);
     try {
@@ -378,7 +380,7 @@ const AISection = ({
     } finally {
       setIsLoadingModels(false);
     }
-  };
+  }, [settingsPreset, settings.user?.id]);
 
   const apiKey = useMemo(() => {
     if (settingsPreset && "apiKey" in settingsPreset) {
@@ -392,11 +394,11 @@ const AISection = ({
     if (
       (settingsPreset?.provider === "openai" ||
         settingsPreset?.provider === "custom") &&
-      !settingsPreset?.apiKey
+      !apiKey
     )
       return;
     fetchModels();
-  }, [settingsPreset?.provider, settingsPreset?.url, apiKey]);
+  }, [settingsPreset?.provider, settingsPreset?.url, apiKey, fetchModels]);
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -701,7 +703,8 @@ const providerImageSrc: Record<AIPreset["provider"], string> = {
 };
 
 export const AIPresets = () => {
-  const { settings, updateSettings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
   const [createPresetsDialog, setCreatePresentDialog] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<AIPreset | undefined>();
   const [isLoading, setIsLoading] = useState(false);

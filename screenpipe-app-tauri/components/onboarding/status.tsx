@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "../ui/tooltip";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import { Label } from "../ui/label";
 import { LogFileButton } from "../log-file-button";
 import { Separator } from "../ui/separator";
@@ -37,7 +37,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
-  const { updateSettings } = useSettings();
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
   const { isMac: isMacOS } = usePlatform();
   const [stats, setStats] = useState<{
     screenshots: number;

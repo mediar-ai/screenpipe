@@ -3,7 +3,6 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RainbowButton } from "../ui/rainbow-button";
 import { ArrowRight } from "lucide-react";
-import { useSettings } from "@/lib/hooks/use-settings";
 import posthog from "posthog-js";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettingsZustand } from "@/lib/hooks/use-settings-zustand";
 import {
   Brain,
   Video,
@@ -33,7 +33,7 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
-import { useProfiles } from "@/lib/hooks/use-profiles";
+import { useProfilesZustand } from "@/lib/hooks/use-profiles-zustand";
 import { toast } from "./ui/use-toast";
 import { DataImportSection } from "./settings/data-import-section";
 import { Dialog, DialogContent } from "./ui/dialog";
@@ -52,18 +52,22 @@ type SettingsSection =
 
 export function Settings() {
   const { isOpen, setIsOpen: setSettingsOpen } = useSettingsDialog();
-  const {
-    profiles,
-    activeProfile,
-    createProfile,
-    deleteProfile,
-    setActiveProfile,
-  } = useProfiles();
+  const profiles = useProfilesZustand((state) => state.profiles);
+  const activeProfile = useProfilesZustand((state) => state.activeProfile);
+  const createProfile = useProfilesZustand((state) => state.createProfile);
+  const deleteProfile = useProfilesZustand((state) => state.deleteProfile);
+  const setActiveProfile = useProfilesZustand((state) => state.setActiveProfile);
   const [activeSection, setActiveSection] =
     useState<SettingsSection>("account");
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
-  const { settings } = useSettings();
+  const settings = useSettingsZustand((state) => state.settings);
+  // Reset to account section when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      setActiveSection("account");
+    }
+  }, [isOpen]);
 
   const handleProfileChange = async () => {
     toast({
@@ -89,7 +93,6 @@ export function Settings() {
       return;
     }
     if (newProfileName.trim()) {
-      console.log("creating profile", newProfileName.trim());
       createProfile({
         profileName: newProfileName.trim(),
         currentSettings: settings,
@@ -125,9 +128,6 @@ export function Settings() {
     }
   };
 
-  useEffect(() => {
-    console.log(profiles, "profiles");
-  }, [profiles]);
 
   return (
     <Dialog modal={true} open={isOpen} onOpenChange={setSettingsOpen}>
@@ -168,9 +168,13 @@ export function Settings() {
                       {profile !== "default" && (
                         <Trash2
                           className="h-4 w-4 opacity-50 hover:opacity-100"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            deleteProfile(profile);
+                            try {
+                              await deleteProfile(profile);
+                            } catch (error) {
+                              console.error('Failed to delete profile:', error);
+                            }
                           }}
                         />
                       )}

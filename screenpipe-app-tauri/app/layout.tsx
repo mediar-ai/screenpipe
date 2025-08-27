@@ -62,12 +62,12 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <Providers>
-        <body className={inter.className}>
+      <body className={inter.className}>
+        <Providers>
           {children}
           <Toaster />
-        </body>
-      </Providers>
+        </Providers>
+      </body>
     </html>
   );
 }

@@ -37,7 +37,43 @@
     "fs:allow-read-text-file",
     "fs:allow-create",
     "fs:allow-mkdir",
-    "fs:allow-remove",
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [
+        {
+          "path": "$APPLOCALDATA/screenpipe/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$APPLOCALDATA/screenpipe/store-*.bin",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$LOCALAPPDATA/screenpipe/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$LOCALAPPDATA/screenpipe/store-*.bin",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$XDG_DATA_HOME/screenpipe/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$XDG_DATA_HOME/screenpipe/store-*.bin",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$APPDATA/screenpipe/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$APPDATA/screenpipe/store-*.bin",
+          "requireLiteralLeadingDot": false
+        }
+      ]
+    },
     "global-shortcut:allow-is-registered",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
@@ -312,15 +348,45 @@
       ]
     },
     "deep-link:default",
-    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        {
+          "path": "$APPLOCALDATA/screenpipe/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$LOCALAPPDATA/screenpipe/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$XDG_DATA_HOME/screenpipe/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$APPDATA/screenpipe/**",
+          "requireLiteralLeadingDot": false
+        }
+      ]
+    },
     {
       "identifier": "fs:scope",
       "allow": [
         {
-          "path": "$APPLOCALDATA"
+          "path": "$APPLOCALDATA",
+          "requireLiteralLeadingDot": false
         },
         {
-          "path": "$APPLOCALDATA/**"
+          "path": "$APPLOCALDATA/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$APPLOCALDATA/screenpipe",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$APPLOCALDATA/screenpipe/**",
+          "requireLiteralLeadingDot": false
         }
       ]
     },

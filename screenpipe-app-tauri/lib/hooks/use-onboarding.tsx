@@ -1,59 +1,35 @@
-import { useSettings } from "./use-settings";
-import localforage from "localforage";
-import { create } from "zustand";
-import { useEffect } from "react";
+import { useSettingsZustand, awaitZustandHydration } from "./use-settings-zustand";
+import React, { useContext } from "react";
 
-// Define the store state type
-interface OnboardingState {
+const OnboardingContext = React.createContext<{
   showOnboarding: boolean;
-  setShowOnboarding: (show: boolean) => void;
-  initialized: boolean;
-}
+  setShowOnboarding: (show: boolean) => Promise<void>;
+} | null>(null);
 
-// Create the Zustand store
-export const useOnboardingStore = create<OnboardingState>((set) => ({
-  showOnboarding: false,
-  initialized: false,
-  setShowOnboarding: (show: boolean) => {
-    set({ showOnboarding: show });
-    localforage.setItem("showOnboarding", show);
-  },
-}));
+export const OnboardingProvider = OnboardingContext.Provider;
 
-// Initialize the store with persisted data
-const initializeOnboarding = async () => {
-  // Only initialize once
-  if (useOnboardingStore.getState().initialized) {
-    return;
-  }
-
-  const persistedValue = await localforage.getItem("showOnboarding");
-
-  if (persistedValue === null || persistedValue === undefined) {
-    // First time user, show onboarding
-    useOnboardingStore.setState({
-      showOnboarding: true,
-      initialized: true,
-    });
-  } else {
-    // Returning user, respect the stored value
-    useOnboardingStore.setState({
-      showOnboarding: persistedValue === true,
-      initialized: true,
-    });
-  }
-};
-
-// Custom hook that combines store with initialization logic
 export const useOnboarding = () => {
-  const { showOnboarding, setShowOnboarding } = useOnboardingStore();
-  const { settings } = useSettings();
+  const context = useContext(OnboardingContext);
+  const settings = useSettingsZustand((state) => state.settings);
+  const updateSettings = useSettingsZustand((state) => state.updateSettings);
+  
+  if (context) {
+    // Use context if available (main app provides it)
+    return context;
+  }
+  
+  // Fallback for components that use this hook outside the provider
+  const showOnboarding = settings.isFirstTimeUser;
 
-  useEffect(() => {
-    initializeOnboarding();
-  }, [settings]);
+  const setShowOnboarding = async (show: boolean) => {
+    try {
+      await awaitZustandHydration();
+      await updateSettings({ isFirstTimeUser: show });
+    } catch (error) {
+      console.error('Failed to update onboarding settings:', error);
+    }
+  };
 
   return { showOnboarding, setShowOnboarding };
 };
 
-// No longer need the OnboardingProvider component

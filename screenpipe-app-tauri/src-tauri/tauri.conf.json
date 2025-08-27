@@ -114,12 +114,6 @@
       }
     ],
     "security": {
-      "assetProtocol": {
-        "enable": true,
-        "scope": [
-          "$APPDATA/**"
-        ]
-      },
       "csp": null
     },
     "macOSPrivateApi": true

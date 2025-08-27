@@ -291,8 +291,8 @@ export const usePipes = (initialRepoUrls: string[]) => {
         (res) => res.json()
       );
       // console.log("localPipes", localPipes);
-      setPipes([
-        ...pipes,
+      setPipes(prevPipes => [
+        ...prevPipes,
         ...localPipes.map((pipe: any) => ({
           ...pipe,
           name: pipe.id,
@@ -305,7 +305,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
     return () => {
       isMounted = false;
     };
-  }, [repoUrls]);
+  }, [repoUrls, loading]);
 
   const addCustomPipe = async (newRepoUrl: string) => {
     setError(null);
