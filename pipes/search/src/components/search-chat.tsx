@@ -111,6 +111,10 @@ import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 import type { Settings as AppSettings } from "@screenpipe/js";
 import { DEFAULT_PROMPT } from "./ai-presets-dialog";
 import { AIPresetsSelector } from "./ai-presets-selector";
+import { SearchHistorySidebar } from "./search-history-sidebar";
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Terminal } from "lucide-react";
 
 interface Agent {
   id: string;
@@ -225,7 +229,11 @@ const getContextAroundKeyword = (
   return result;
 };
 
-export function SearchChat() {
+interface SearchChatProps {
+  aiDisabled?: boolean;
+}
+
+export function SearchChat({ aiDisabled }: SearchChatProps) {
   const {
     searches,
     currentSearchId,
@@ -296,6 +304,57 @@ export function SearchChat() {
   const debouncedThreshold = useDebounce(similarityThreshold, 300);
 
   const [isQueryParamsDialogOpen, setIsQueryParamsDialogOpen] = useState(false);
+
+  // Search restoration function
+  const restoreSearch = React.useCallback(async (search: SearchHistory) => {
+    try {
+      // Restore search parameters
+      setQuery(search.query);
+      setStartDate(new Date(search.searchParams.start_time));
+      setEndDate(new Date(search.searchParams.end_time));
+      setContentType(search.searchParams.content_type);
+      setLimit(search.searchParams.limit);
+      setOffset(search.searchParams.offset);
+      setAppName(search.searchParams.app_name || "");
+      setWindowName(search.searchParams.window_name || "");
+      setIncludeFrames(search.searchParams.include_frames);
+      setMinLength(search.searchParams.min_length);
+      setMaxLength(search.searchParams.max_length);
+
+      // Restore results
+      setResults(search.results);
+      setTotalResults(search.results.length);
+
+      // Restore chat messages
+      const aiMessages = search.messages
+        .filter(msg => msg.type === 'ai')
+        .map(msg => ({
+          id: msg.id,
+          role: 'assistant' as const,
+          content: msg.content,
+          createdAt: new Date(msg.timestamp),
+        }));
+
+      setChatMessages(aiMessages);
+      setCurrentSearchId(search.id);
+
+      // Update UI state
+      setHasSearched(true);
+      setShowExamples(false);
+
+      toast({
+        title: "Search restored",
+        description: `Restored search: "${search.query}"`,
+      });
+    } catch (error) {
+      console.error("Failed to restore search:", error);
+      toast({
+        title: "Error",
+        description: "Failed to restore search",
+        variant: "destructive",
+      });
+    }
+  }, [setCurrentSearchId, toast]);
 
   // Add state for individual content types
   const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>(
@@ -915,7 +974,9 @@ export function SearchChat() {
       setTotalResults(response.pagination.total);
 
       // Save search to history
-      // await onAddSearch(searchParams, response.data);
+      if (query.trim()) {
+        await addSearch(searchParams, response.data);
+      }
     } catch (error) {
       console.error("search error:", error);
       toast({
@@ -1308,18 +1369,56 @@ export function SearchChat() {
   }, [currentPlatform, results.length, floatingInput, isStreaming]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-4 mt-12">
-      <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
-        {/* <SidebarTrigger className="h-8 w-8" /> */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleNewSearch}
-          className="h-8 w-8"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-      </div>
+    <>
+      {/* Search History Sidebar */}
+      <SearchHistorySidebar
+        searches={searches}
+        currentSearchId={currentSearchId}
+        onSelectSearch={restoreSearch}
+        onDeleteSearch={deleteSearch}
+        isLoading={false}
+      />
+
+      {/* Main Content */}
+      <SidebarInset>
+        <div className="flex flex-col h-full">
+          {/* Header with sidebar trigger and controls */}
+          <div className="flex items-center justify-between p-4 border-b">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="h-8 w-8" />
+              <h1 className="text-xl font-semibold">Search History</h1>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleNewSearch}
+              className="h-8 w-8"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* AI Disabled Alert */}
+          {aiDisabled && (
+            <div className="p-4">
+              <Alert className="shadow-sm">
+                <Terminal className="h-4 w-4" />
+                <AlertTitle>heads up!</AlertTitle>
+                <AlertDescription className="text-muted-foreground">
+                  your ai provider is set to &apos;screenpipe-cloud&apos; and you
+                  don&apos;t have logged in <br />
+                  please login to use this pipe, go to app &gt; settings &gt; login
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          {/* Main search content */}
+          <div className="flex-1 overflow-auto">
+            <div className="w-full max-w-4xl mx-auto p-4">
+              <div className="text-center mb-8">
+                <p className="text-2xl font-bold">search your screen history</p>
+              </div>
 
       <div className="flex items-center justify-center mb-16">
         {/* Add the new SearchFilterGenerator component */}
@@ -2148,20 +2247,24 @@ export function SearchChat() {
         </>
       )}
 
-      <div className="w-1/3 mx-auto">
-        <AIPresetsSelector pipeName={"search"} />
-      </div>
+              <div className="w-1/3 mx-auto">
+                <AIPresetsSelector pipeName={"search"} />
+              </div>
 
-      {/* Scroll to Bottom Button */}
-      {showScrollButton && (
-        <Button
-          className="fixed bottom-4 right-4 rounded-full p-2"
-          onClick={scrollToBottom}
-        >
-          <ChevronDown className="h-6 w-6" />
-        </Button>
-      )}
-      {results.length > 0 && <div className="h-32" />}
-    </div>
+              {/* Scroll to Bottom Button */}
+              {showScrollButton && (
+                <Button
+                  className="fixed bottom-4 right-4 rounded-full p-2"
+                  onClick={scrollToBottom}
+                >
+                  <ChevronDown className="h-6 w-6" />
+                </Button>
+              )}
+              {results.length > 0 && <div className="h-32" />}
+            </div>
+          </div>
+        </div>
+      </SidebarInset>
+    </>
   );
 }
