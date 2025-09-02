@@ -32,6 +32,7 @@ pub struct AudioManagerOptions {
     pub deepgram_url: Option<String>,
     pub deepgram_websocket_url: Option<String>,
     pub output_path: Option<PathBuf>,
+    pub macos_refresh_interval: Option<Duration>, //New One
 }
 
 impl Default for AudioManagerOptions {
@@ -40,7 +41,8 @@ impl Default for AudioManagerOptions {
         let deepgram_websocket_url = env::var("DEEPGRAM_WEBSOCKET_URL").ok();
         let deepgram_url = env::var("DEEPGRAM_API_URL").ok();
         let enabled_devices = HashSet::new();
-        Self {
+        
+        let options = Self {
             output_path: None,
             transcription_engine: Arc::new(AudioTranscriptionEngine::default()),
             vad_engine: VadEngineEnum::Silero,
@@ -56,7 +58,16 @@ impl Default for AudioManagerOptions {
             db_path: None,
             deepgram_url,
             deepgram_websocket_url,
+            macos_refresh_interval: None,
+        };
+        
+        // Set default for macOS
+        #[cfg(target_os = "macos")]
+        {
+            options.macos_refresh_interval = Some(Duration::from_secs(43200)); // 12 hours
         }
+        
+        options
     }
 }
 
@@ -134,6 +145,11 @@ impl AudioManagerBuilder {
 
     pub fn deepgram_websocket_url(mut self, deepgram_websocket_url: Option<String>) -> Self {
         self.options.deepgram_websocket_url = deepgram_websocket_url;
+        self
+    }
+    // adding for macOS refresh intervals
+     pub fn macos_refresh_interval(mut self, interval: Option<Duration>) -> Self {
+        self.options.macos_refresh_interval = interval;
         self
     }
 
