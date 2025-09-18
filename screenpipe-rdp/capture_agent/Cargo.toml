@@ -1,0 +1,39 @@
+[package]
+name = "capture_agent"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1.15", features = ["full", "tracing"] }
+image = "0.25"
+byteorder = "1.5"
+windows = { version = "0.62.0", features = [
+    "Win32_System_WindowsProgramming",
+    "Win32_System_SystemInformation",
+    "Win32_System_ProcessStatus",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics",
+    "Win32_System_Memory",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Storage",
+    "Storage_Streams",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Diagnostics",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_Security",
+    "Win32_System_IO",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_Registry",
+    "Win32_System_StationsAndDesktops",
+    "Win32_System_EventLog",
+    "Win32_System_Environment",
+] }
+windows-sys = { version = "0.61", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_StationsAndDesktops",
+] }

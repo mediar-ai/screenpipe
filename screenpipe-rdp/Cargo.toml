@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+    "session_service",
+    "capture_agent",
+]
+
+[workspace.dependencies]
+tokio = "1.15"
+image = "0.25"
+byteorder = "1.5"
+windows-service = "0.8"
+windows = "0.62.0"
+windows-sys = "0.61"
