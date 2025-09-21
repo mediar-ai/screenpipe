@@ -34,9 +34,7 @@ import {
   Square,
   Clock,
   Check,
-  Plus,
   AlertCircle,
-  Bot,
   Settings,
   Copy,
   SparklesIcon,
@@ -75,31 +73,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "@/components/ui/codeblock";
 import { SqlAutocompleteInput } from "@/components/sql-autocomplete-input";
-import { cn, removeDuplicateSelections } from "@/lib/utils";
+import { removeDuplicateSelections } from "@/lib/utils";
 import {
   ExampleSearch,
   ExampleSearchCards,
 } from "@/components/example-search-cards";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import {
-  SearchHistory,
-  useSearchHistory,
-} from "@/lib/hooks/use-search-history";
-import {
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-  Command,
-} from "./ui/command";
-import { type Speaker } from "@screenpipe/browser";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { useSearchHistory } from "@/lib/hooks/use-search-history";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { SearchFilterGenerator } from "./search-filter-generator";
 import {
@@ -109,6 +90,7 @@ import {
 import { AIPresetsDialog } from "./ai-presets-dialog";
 import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 import type { Settings as AppSettings } from "@screenpipe/js";
+import { type Speaker } from "@screenpipe/browser";
 import { DEFAULT_PROMPT } from "./ai-presets-dialog";
 import { AIPresetsSelector } from "./ai-presets-selector";
 
@@ -229,12 +211,12 @@ export function SearchChat() {
   const {
     searches,
     currentSearchId,
-    setCurrentSearchId,
     addSearch,
-    deleteSearch,
-    isCollapsed,
-    toggleCollapse,
+    addAIResponse,
+    addUserMessage,
+    setCurrentSearchId,
   } = useSearchHistory();
+
   // Search state
   const { health, isServerDown } = useHealthCheck();
   const [query, setQuery] = useState("");
@@ -262,6 +244,7 @@ export function SearchChat() {
     [key: number]: Speaker;
   }>({});
   const [openSpeakers, setOpenSpeakers] = useState(false);
+
   // Chat state
   const [chatMessages, setChatMessages] = useState<Array<Message>>([]);
 
@@ -705,8 +688,14 @@ export function SearchChat() {
       userMessage,
       { id: generateId(), role: "assistant", content: "" },
     ]);
+
+    const currentInput = floatingInput;
     setFloatingInput("");
     setIsAiLoading(true);
+
+    if (currentSearchId && currentInput) {
+      addUserMessage(currentSearchId, currentInput);
+    }
 
     const preset = getPreset();
 
@@ -773,7 +762,7 @@ export function SearchChat() {
             )
           )}
 
-          User query: ${floatingInput}`,
+          User query: ${currentInput}`,
         },
       ];
 
@@ -814,6 +803,10 @@ export function SearchChat() {
           { id: generateId(), role: "assistant", content: fullResponse },
         ]);
         scrollToBottom();
+      }
+
+      if (currentSearchId && fullResponse) {
+        addAIResponse(currentSearchId, fullResponse);
       }
     } catch (error: any) {
       if (error.toString().includes("unauthorized")) {
@@ -874,7 +867,7 @@ export function SearchChat() {
     setChatMessages([]);
     scrollToBottom();
     setResults([]);
-    setSimilarityThreshold(1); // Reset similarity threshold to 1
+    setSimilarityThreshold(1);
 
     try {
       // if browserUrl contains special characters like :, /, etc, wrap in double quotes
@@ -914,8 +907,10 @@ export function SearchChat() {
       setResults(response.data);
       setTotalResults(response.pagination.total);
 
-      // Save search to history
-      // await onAddSearch(searchParams, response.data);
+      if (newOffset === 0) {
+        const searchId = addSearch(searchParams, response.data);
+        setCurrentSearchId(searchId);
+      }
     } catch (error) {
       console.error("search error:", error);
       toast({
@@ -1242,12 +1237,36 @@ export function SearchChat() {
     ));
   };
 
-  // Add effect to restore search when currentSearchId changes
   useEffect(() => {
-    // if (currentSearchId) {
+    console.log(`currentSearchId changed: ${currentSearchId}`);
+
+    if (currentSearchId === null) {
+      // reset to defaults
+      setQuery("");
+      setContentType("all");
+      setLimit(500);
+      setStartDate(new Date(Date.now() - 24 * 3600000));
+      setEndDate(new Date());
+      setAppName("");
+      setWindowName("");
+      setBrowserUrl("");
+      setIncludeFrames(false);
+      setMinLength(50);
+      setMaxLength(10000);
+      setSelectedSpeakers({});
+      setFrameName("");
+
+      setResults([]);
+      setTotalResults(0);
+      setHasSearched(false);
+      setShowExamples(true);
+      setChatMessages([]);
+
+      return;
+    }
+
     const selectedSearch = searches.find((s) => s.id === currentSearchId);
     if (selectedSearch) {
-      // Restore search parameters
       setQuery(selectedSearch.searchParams.q || "");
       setContentType(selectedSearch.searchParams.content_type);
       setLimit(selectedSearch.searchParams.limit);
@@ -1259,13 +1278,11 @@ export function SearchChat() {
       setMinLength(selectedSearch.searchParams.min_length);
       setMaxLength(selectedSearch.searchParams.max_length);
 
-      // Restore results
       setResults(selectedSearch.results);
       setTotalResults(selectedSearch.results.length);
       setHasSearched(true);
       setShowExamples(false);
 
-      // Restore messages if any
       if (selectedSearch.messages) {
         setChatMessages(
           selectedSearch.messages.map((msg) => ({
@@ -1275,20 +1292,13 @@ export function SearchChat() {
           }))
         );
       }
+    } else {
+      console.log("no search found with id:", currentSearchId);
     }
-    // }
   }, [currentSearchId, searches]);
 
-  const handleNewSearch = () => {
-    // setCurrentSearchId(null);
-    location.reload();
-    // Add any other reset logic you need
-  };
-
-  // Add this effect near other useEffect hooks
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check for Cmd+Shift (macOS) or Ctrl+Shift (Windows/Linux)
       if (
         e.shiftKey &&
         ((currentPlatform === "macos" && e.metaKey) ||
@@ -1309,18 +1319,6 @@ export function SearchChat() {
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
-      <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
-        {/* <SidebarTrigger className="h-8 w-8" /> */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleNewSearch}
-          className="h-8 w-8"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-      </div>
-
       <div className="flex items-center justify-center mb-16">
         {/* Add the new SearchFilterGenerator component */}
         <SearchFilterGenerator
@@ -1345,8 +1343,6 @@ export function SearchChat() {
       </div>
       {/* Content Type Checkboxes and Code Button */}
       <div className="flex items-center justify-center mb-4 gap-4">
-        {/* Remove MultiSelectCombobox from here */}
-
         {/* Add browser URL input */}
         <SqlAutocompleteInput
           id="browser-url"

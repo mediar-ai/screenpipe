@@ -1,127 +1,251 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import localforage from 'localforage';
+import { useEffect, useSyncExternalStore } from "react";
+import localforage from "localforage";
 
 export interface SearchHistory {
+  id: string;
+  title?: string;
+  query: string;
+  timestamp: string;
+  searchParams: {
+    q?: string;
+    content_type: string;
+    limit: number;
+    offset: number;
+    start_time: string;
+    end_time: string;
+    app_name?: string;
+    window_name?: string;
+    include_frames: boolean;
+    min_length: number;
+    max_length: number;
+  };
+  results: any[];
+  messages: {
     id: string;
-    query: string;
+    type: "search" | "ai";
+    content: string;
     timestamp: string;
-    searchParams: {
-      q?: string;
-      content_type: string;
-      limit: number;
-      offset: number;
-      start_time: string;
-      end_time: string;
-      app_name?: string;
-      window_name?: string;
-      include_frames: boolean;
-      min_length: number;
-      max_length: number;
-    };
-    results: any[];
-    messages: {
-      id: string;
-      type: 'search' | 'ai';
-      content: string;
-      timestamp: string;
-    }[];
-  } 
+  }[];
+}
 
-const HISTORY_KEY = 'screenpipe-search-history';
+const STORAGE_KEY = "screenpipe-search-history";
+
+type StoreState = {
+  searches: SearchHistory[];
+  currentSearchId: string | null;
+  isCollapsed: boolean;
+  loaded: boolean;
+};
+
+const store = {
+  state: {
+    searches: [] as SearchHistory[],
+    currentSearchId: null as string | null,
+    isCollapsed: true,
+    loaded: false,
+  } as StoreState,
+  listeners: new Set<() => void>(),
+  set(partial: Partial<StoreState>) {
+    store.state = { ...store.state, ...partial };
+    store.listeners.forEach((l) => l());
+  },
+  subscribe(listener: () => void) {
+    store.listeners.add(listener);
+    return () => store.listeners.delete(listener);
+  },
+  getSnapshot() {
+    return store.state;
+  },
+};
+
+// helper: normalize/migrate any legacy or corrupt shapes to an array
+function normalizeSearches(raw: any): SearchHistory[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter((s) => s && typeof s === "object");
+  if (typeof raw === "object") {
+    // legacy map/object-of-id -> value
+    return Object.values(raw).filter(
+      (s) => s && typeof s === "object"
+    ) as SearchHistory[];
+  }
+  return [];
+}
+
+// persist helpers
+async function persist() {
+  try {
+    await localforage.setItem(STORAGE_KEY, store.state.searches);
+  } catch (e) {
+    console.error("persist history failed", e);
+  }
+}
+
+async function loadOnce() {
+  if (store.state.loaded) return;
+  try {
+    const data = await localforage.getItem<any>(STORAGE_KEY);
+    const normalized = normalizeSearches(data);
+    store.set({ searches: normalized, loaded: true });
+  } catch (e) {
+    console.error("load history failed", e);
+    store.set({ loaded: true, searches: [] });
+  }
+}
 
 export function useSearchHistory() {
-  const [searches, setSearches] = useState<SearchHistory[]>([]);
-  const [currentSearchId, setCurrentSearchId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const snapshot = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot
+  );
 
   useEffect(() => {
-    loadSearches();
+    loadOnce();
   }, []);
 
-  const loadSearches = async () => {
-    try {
-      const stored = await localforage.getItem<SearchHistory[]>(HISTORY_KEY);
-      setSearches(stored || []);
-    } catch (error) {
-      console.error('failed to load search history:', error);
-    }
-    setIsLoading(false);
+  const safeSearches = Array.isArray(snapshot.searches)
+    ? snapshot.searches
+    : normalizeSearches(snapshot.searches);
+
+  const setCurrentSearchId = (id: string | null) => {
+    store.set({ currentSearchId: id });
   };
 
-  const saveSearches = async (updated: SearchHistory[]) => {
-    try {
-      await localforage.setItem(HISTORY_KEY, updated);
-      setSearches(updated);
-    } catch (error) {
-      console.error('failed to save search history:', error);
-    }
-  };
-
-  const addSearch = async (searchParams: any, results: any[]) => {
-    const timestamp = new Date().toISOString();
+  const addSearch = (searchParams: any, results: any[]) => {
+    const ts = new Date().toISOString();
+    const derivedTitle =
+      searchParams.q ||
+      searchParams.app_name ||
+      searchParams.window_name ||
+      "Untitled";
     const newSearch: SearchHistory = {
       id: crypto.randomUUID(),
-      query: searchParams.q || '',
-      timestamp,
-      searchParams,
-      results,
-      messages: [{
-        id: crypto.randomUUID(),
-        type: 'search' as const,
-        content: searchParams.q || '',
-        timestamp
-      }]
+      title: derivedTitle,
+      query: searchParams.q || "",
+      timestamp: ts,
+      searchParams: {
+        q: searchParams.q,
+        content_type: searchParams.contentType,
+        limit: searchParams.limit,
+        offset: searchParams.offset,
+        start_time: searchParams.startTime,
+        end_time: searchParams.endTime,
+        app_name: searchParams.appName,
+        window_name: searchParams.windowName,
+        include_frames: searchParams.includeFrames,
+        min_length: searchParams.minLength,
+        max_length: searchParams.maxLength,
+      },
+      results: Array.isArray(results) ? results : [],
+      messages: [
+        {
+          id: crypto.randomUUID(),
+          type: "search",
+          content: searchParams.q || "",
+          timestamp: ts,
+        },
+      ],
     };
-    
-    const updated = [newSearch, ...searches];
-    await saveSearches(updated);
-    setCurrentSearchId(newSearch.id);
+    const current = Array.isArray(store.state.searches)
+      ? store.state.searches
+      : normalizeSearches(store.state.searches);
+    store.set({
+      searches: [newSearch, ...current],
+      currentSearchId: newSearch.id,
+    });
+    persist();
     return newSearch.id;
   };
 
-  const addAIResponse = async (searchId: string, response: string) => {
-    const timestamp = new Date().toISOString();
-    const updated = searches.map(search => {
-      if (search.id === searchId) {
-        return {
-          ...search,
-          messages: [...search.messages, {
-            id: crypto.randomUUID(),
-            type: 'ai' as const,
-            content: response,
-            timestamp
-          }]
-        };
-      }
-      return search;
+  const addAIResponse = (searchId: string, response: string) => {
+    const ts = new Date().toISOString();
+    const updated = store.state.searches.map((s) =>
+      s.id === searchId
+        ? {
+            ...s,
+            messages: [
+              ...s.messages,
+              {
+                id: crypto.randomUUID(),
+                type: "ai" as const,
+                content: response,
+                timestamp: ts,
+              },
+            ],
+          }
+        : s
+    );
+    store.set({ searches: updated });
+    persist();
+  };
+
+  const addUserMessage = (searchId: string, message: string) => {
+    const ts = new Date().toISOString();
+    const updated = store.state.searches.map((s) =>
+      s.id === searchId
+        ? {
+            ...s,
+            messages: [
+              ...s.messages,
+              {
+                id: crypto.randomUUID(),
+                type: "search" as const,
+                content: message,
+                timestamp: ts,
+              },
+            ],
+          }
+        : s
+    );
+    store.set({ searches: updated });
+    persist();
+  };
+
+  const deleteSearch = (id: string) => {
+    const updated = store.state.searches.filter((s) => s.id !== id);
+    store.set({
+      searches: updated,
+      currentSearchId:
+        store.state.currentSearchId === id ? null : store.state.currentSearchId,
     });
-    await saveSearches(updated);
+    persist();
   };
 
-  const deleteSearch = async (id: string) => {
-    const updated = searches.filter(s => s.id !== id);
-    await saveSearches(updated);
-    if (currentSearchId === id) {
-      setCurrentSearchId(null);
-    }
+  const clearHistory = () => {
+    store.set({ searches: [], currentSearchId: null });
+    persist();
   };
 
-  const toggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
+  const resetHistoryState = () => {
+    store.set({ currentSearchId: null });
+  };
+
+  const toggleCollapse = () =>
+    store.set({ isCollapsed: !store.state.isCollapsed });
+
+  const renameSearch = (id: string, title: string) => {
+    const updated = store.state.searches.map((s) =>
+      s.id === id ? { ...s, title } : s
+    );
+    store.set({ searches: updated });
+    persist();
   };
 
   return {
-    searches,
-    currentSearchId,
+    searches: safeSearches,
+    currentSearchId: snapshot.currentSearchId,
+    isCollapsed: snapshot.isCollapsed,
     setCurrentSearchId,
     addSearch,
     addAIResponse,
+    addUserMessage,
     deleteSearch,
-    isLoading,
-    isCollapsed,
-    toggleCollapse
+    clearHistory,
+    resetHistoryState,
+    toggleCollapse,
+    renameSearch,
+    isLoading: !snapshot.loaded,
   };
-} 
+}
