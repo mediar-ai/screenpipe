@@ -93,7 +93,7 @@ https://github.com/user-attachments/assets/973ee8e5-5240-4d36-83fe-d38c53efe6a9
 
 # how it works?
 
-- we record everything 24/7, 100% locally, uses 10% CPU, 4 GB ram, 15 gb/m
+- we record everything 24/7, 100% locally, uses 10% CPU, 4 GB ram, 15 GB/month
 - we index it into an api
 - dev build ai apps w user's full context, desktop native, nextjs, publish, monetize
 
