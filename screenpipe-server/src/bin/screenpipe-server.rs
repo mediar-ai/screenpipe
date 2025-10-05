@@ -494,6 +494,50 @@ async fn main() -> anyhow::Result<()> {
 
                 return Ok(());
             }
+            Command::Cleanup {
+                older_than_days,
+                data_dir,
+                dry_run,
+                delete_files,
+            } => {
+                use screenpipe_server::cleanup::{cleanup_old_data, format_cleanup_result, CleanupConfig};
+
+                let local_data_dir = get_base_dir(data_dir)?;
+                let db_path = local_data_dir.join("db.sqlite");
+                let db = Arc::new(DatabaseManager::new(&db_path.to_string_lossy()).await?);
+
+                let retention_days = older_than_days.unwrap_or(cli.data_retention_days);
+
+                if retention_days == 0 {
+                    println!("Error: Please specify retention period with --older-than-days or --data-retention-days");
+                    return Ok(());
+                }
+
+                let config = CleanupConfig {
+                    retention_days,
+                    delete_files: *delete_files,
+                    dry_run: *dry_run,
+                };
+
+                info!("Starting cleanup with retention: {} days", retention_days);
+
+                match cleanup_old_data(db, config.clone()).await {
+                    Ok(result) => {
+                        println!("{}", format_cleanup_result(&result, config.dry_run));
+                        if result.is_empty() {
+                            println!("No data found older than {} days", retention_days);
+                        } else if config.dry_run {
+                            println!("Run without --dry-run to execute cleanup");
+                        }
+                    }
+                    Err(e) => {
+                        error!("Cleanup failed: {}", e);
+                        return Err(e);
+                    }
+                }
+
+                return Ok(());
+            }
             Command::Add {
                 path,
                 output,
@@ -634,6 +678,14 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let db_server = db.clone();
+
+    // Start background cleanup task if retention is configured
+    if cli.data_retention_days > 0 {
+        use screenpipe_server::cleanup::start_background_cleanup;
+        if let Err(e) = start_background_cleanup(db.clone(), cli.data_retention_days).await {
+            error!("Failed to start background cleanup: {}", e);
+        }
+    }
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();

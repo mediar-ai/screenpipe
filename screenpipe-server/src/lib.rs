@@ -1,6 +1,7 @@
 mod add;
 mod auto_destruct;
 pub mod chunking;
+pub mod cleanup;
 pub mod cli;
 pub mod core;
 pub mod filtering;

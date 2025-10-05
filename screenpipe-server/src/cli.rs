@@ -285,6 +285,12 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_pipe_manager: bool,
 
+    /// Data retention in days. Set to 0 to keep all data forever (default: 0)
+    /// Automatically deletes data older than this many days
+    /// Example: --data-retention-days 30 will delete data older than 30 days
+    #[arg(long, default_value_t = 0)]
+    pub data_retention_days: u64,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 
@@ -389,6 +395,21 @@ pub enum Command {
         /// The shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
+    },
+    /// Clean up old data based on retention settings
+    Cleanup {
+        /// Delete data older than this many days (overrides --data-retention-days)
+        #[arg(long)]
+        older_than_days: Option<u64>,
+        /// Data directory. Default to $HOME/.screenpipe
+        #[arg(long, value_hint = ValueHint::DirPath)]
+        data_dir: Option<String>,
+        /// Dry run mode - show what would be deleted without actually deleting
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        /// Delete files from disk (default: true)
+        #[arg(long, default_value_t = true)]
+        delete_files: bool,
     },
 }
 

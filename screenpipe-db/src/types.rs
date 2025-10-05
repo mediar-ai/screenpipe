@@ -325,3 +325,11 @@ impl Default for CustomOcrConfig {
         }
     }
 }
+
+#[derive(OaSchema, Debug, Clone, Serialize, Deserialize)]
+pub struct CleanupStats {
+    pub video_chunks: u64,
+    pub frames: u64,
+    pub audio_chunks: u64,
+    pub audio_transcriptions: u64,
+}

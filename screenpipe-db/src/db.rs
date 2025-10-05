@@ -20,10 +20,10 @@ use zerocopy::AsBytes;
 use futures::future::try_join_all;
 
 use crate::{
-    AudioChunksResponse, AudioDevice, AudioEntry, AudioResult, AudioResultRaw, ContentType,
-    DeviceType, FrameData, FrameRow, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock,
-    Order, SearchMatch, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
-    TimeSeriesChunk, UiContent, VideoMetadata,
+    AudioChunksResponse, AudioDevice, AudioEntry, AudioResult, AudioResultRaw, CleanupStats,
+    ContentType, DeviceType, FrameData, FrameRow, OCREntry, OCRResult, OCRResultRaw, OcrEngine,
+    OcrTextBlock, Order, SearchMatch, SearchResult, Speaker, TagContentType, TextBounds,
+    TextPosition, TimeSeriesChunk, UiContent, VideoMetadata,
 };
 
 pub struct DatabaseManager {
@@ -2347,6 +2347,186 @@ LIMIT ? OFFSET ?
                 }
             })
             .collect())
+    }
+
+    // Data retention and cleanup methods
+
+    /// Get video chunks older than the specified timestamp
+    pub async fn get_video_chunks_before(
+        &self,
+        before_timestamp: DateTime<Utc>,
+    ) -> Result<Vec<(i64, String)>, sqlx::Error> {
+        sqlx::query_as::<_, (i64, String)>(
+            r#"
+            SELECT DISTINCT vc.id, vc.file_path
+            FROM video_chunks vc
+            JOIN frames f ON f.video_chunk_id = vc.id
+            WHERE f.timestamp < ?1
+            "#,
+        )
+        .bind(before_timestamp)
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// Get audio chunks older than the specified timestamp
+    pub async fn get_audio_chunks_before(
+        &self,
+        before_timestamp: DateTime<Utc>,
+    ) -> Result<Vec<(i64, String)>, sqlx::Error> {
+        sqlx::query_as::<_, (i64, String)>(
+            r#"
+            SELECT DISTINCT ac.id, ac.file_path
+            FROM audio_chunks ac
+            JOIN audio_transcriptions at ON at.audio_chunk_id = ac.id
+            WHERE at.timestamp < ?1
+            "#,
+        )
+        .bind(before_timestamp)
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// Delete video chunks and all related data older than the specified timestamp
+    /// This cascades to delete frames, ocr_text, and related entries
+    pub async fn delete_video_chunks_before(
+        &self,
+        before_timestamp: DateTime<Utc>,
+    ) -> Result<u64, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Delete ocr_text first (references frames)
+        sqlx::query(
+            r#"
+            DELETE FROM ocr_text
+            WHERE frame_id IN (
+                SELECT f.id FROM frames f
+                WHERE f.timestamp < ?1
+            )
+            "#,
+        )
+        .bind(before_timestamp)
+        .execute(&mut *tx)
+        .await?;
+
+        // Delete frames
+        sqlx::query(
+            r#"
+            DELETE FROM frames
+            WHERE timestamp < ?1
+            "#,
+        )
+        .bind(before_timestamp)
+        .execute(&mut *tx)
+        .await?;
+
+        // Delete video chunks that no longer have frames
+        let result = sqlx::query(
+            r#"
+            DELETE FROM video_chunks
+            WHERE id NOT IN (SELECT DISTINCT video_chunk_id FROM frames)
+            "#,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(result.rows_affected())
+    }
+
+    /// Delete audio chunks and all related data older than the specified timestamp
+    pub async fn delete_audio_chunks_before(
+        &self,
+        before_timestamp: DateTime<Utc>,
+    ) -> Result<u64, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Delete audio transcriptions
+        sqlx::query(
+            r#"
+            DELETE FROM audio_transcriptions
+            WHERE timestamp < ?1
+            "#,
+        )
+        .bind(before_timestamp)
+        .execute(&mut *tx)
+        .await?;
+
+        // Delete audio chunks that no longer have transcriptions
+        let result = sqlx::query(
+            r#"
+            DELETE FROM audio_chunks
+            WHERE id NOT IN (SELECT DISTINCT audio_chunk_id FROM audio_transcriptions)
+            "#,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(result.rows_affected())
+    }
+
+    /// Get cleanup statistics for data older than the specified timestamp
+    pub async fn get_cleanup_stats(
+        &self,
+        before_timestamp: DateTime<Utc>,
+    ) -> Result<CleanupStats, sqlx::Error> {
+        // Count video chunks
+        let video_chunks: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(DISTINCT vc.id)
+            FROM video_chunks vc
+            JOIN frames f ON f.video_chunk_id = vc.id
+            WHERE f.timestamp < ?1
+            "#,
+        )
+        .bind(before_timestamp)
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Count frames
+        let frames: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM frames
+            WHERE timestamp < ?1
+            "#,
+        )
+        .bind(before_timestamp)
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Count audio chunks
+        let audio_chunks: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(DISTINCT ac.id)
+            FROM audio_chunks ac
+            JOIN audio_transcriptions at ON at.audio_chunk_id = ac.id
+            WHERE at.timestamp < ?1
+            "#,
+        )
+        .bind(before_timestamp)
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Count audio transcriptions
+        let audio_transcriptions: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM audio_transcriptions
+            WHERE timestamp < ?1
+            "#,
+        )
+        .bind(before_timestamp)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(CleanupStats {
+            video_chunks: video_chunks as u64,
+            frames: frames as u64,
+            audio_chunks: audio_chunks as u64,
+            audio_transcriptions: audio_transcriptions as u64,
+        })
     }
 }
 
