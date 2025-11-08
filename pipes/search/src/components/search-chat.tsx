@@ -244,7 +244,6 @@ export function SearchChat() {
     [key: number]: Speaker;
   }>({});
   const [openSpeakers, setOpenSpeakers] = useState(false);
-
   // Chat state
   const [chatMessages, setChatMessages] = useState<Array<Message>>([]);
 
@@ -1278,11 +1277,13 @@ export function SearchChat() {
       setMinLength(selectedSearch.searchParams.min_length);
       setMaxLength(selectedSearch.searchParams.max_length);
 
+      // Restore results
       setResults(selectedSearch.results);
       setTotalResults(selectedSearch.results.length);
       setHasSearched(true);
       setShowExamples(false);
 
+      // Restore messages if any
       if (selectedSearch.messages) {
         setChatMessages(
           selectedSearch.messages.map((msg) => ({
