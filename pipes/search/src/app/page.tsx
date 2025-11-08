@@ -32,10 +32,10 @@ export default function SearchPage() {
               <Terminal className="h-4 w-4" />
               <AlertTitle>heads up!</AlertTitle>
               <AlertDescription className="text-muted-foreground">
-                your ai provider is set to &apos;screenpipe-cloud&apos; and you
-                don&apos;t have logged in <br />
-                please login to use this pipe, go to app &gt; settings &gt;
-                login
+                your AI provider is set to &apos;screenpipe-cloud&apos;, and you
+                aren&apos;t logged in. <br />
+                please log in to use this pipe. go to app &gt; settings &gt;
+                log in.
               </AlertDescription>
             </Alert>
           )}
