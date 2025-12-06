@@ -35,6 +35,7 @@ const getProfilesStore = async () => {
       console.log(dir, "dir");
       return new LazyStore(`${dir}/screenpipe/profiles.bin`, {
         autoSave: false,
+        defaults: {},
       });
     })();
   }
@@ -92,6 +93,7 @@ const copyProfileSettings = async (
 
     const store = new LazyStore(`${dir}/screenpipe/${fileName}`, {
       autoSave: false,
+      defaults: {},
     });
 
     // Start with default settings
