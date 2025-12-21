@@ -4,6 +4,7 @@ import nest_asyncio
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 import mcp.types as types
+from mcp.types import ToolAnnotations
 import mcp.server.stdio
 import argparse
 import json
@@ -92,6 +93,10 @@ async def handle_list_tools() -> list[types.Tool]:
                     }
                 }
             },
+            annotations=ToolAnnotations(
+                title="Search Content",
+                readOnlyHint=True,
+            ),
         ),
         types.Tool(
             name="pixel-control",
@@ -132,6 +137,10 @@ async def handle_list_tools() -> list[types.Tool]:
                 },
                 "required": ["action_type", "data"]
             },
+            annotations=ToolAnnotations(
+                title="Pixel Control",
+                destructiveHint=True,
+            ),
         ),
     ]
     
@@ -187,7 +196,11 @@ async def handle_list_tools() -> list[types.Tool]:
                         }
                     },
                     "required": ["app", "role"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    title="Find UI Elements",
+                    readOnlyHint=True,
+                ),
             ),
             types.Tool(
                 name="click-element",
@@ -219,7 +232,11 @@ async def handle_list_tools() -> list[types.Tool]:
                         }
                     },
                     "required": ["app", "id"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    title="Click Element",
+                    destructiveHint=True,
+                ),
             ),
             types.Tool(
                 name="fill-element",
@@ -255,7 +272,11 @@ async def handle_list_tools() -> list[types.Tool]:
                         }
                     },
                     "required": ["app", "id", "text"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    title="Fill Element",
+                    destructiveHint=True,
+                ),
             ),
             types.Tool(
                 name="scroll-element",
@@ -296,7 +317,11 @@ async def handle_list_tools() -> list[types.Tool]:
                         }
                     },
                     "required": ["app", "id", "direction", "amount"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    title="Scroll Element",
+                    destructiveHint=True,
+                ),
             ),
             types.Tool(
                 name="open-application",
@@ -310,7 +335,11 @@ async def handle_list_tools() -> list[types.Tool]:
                         }
                     },
                     "required": ["app_name"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    title="Open Application",
+                    destructiveHint=True,
+                ),
             ),
             types.Tool(
                 name="open-url",
@@ -328,7 +357,11 @@ async def handle_list_tools() -> list[types.Tool]:
                         }
                     },
                     "required": ["url"]
-                }
+                },
+                annotations=ToolAnnotations(
+                    title="Open URL",
+                    destructiveHint=True,
+                ),
             ),
         ]
         tools.extend(macos_tools)
