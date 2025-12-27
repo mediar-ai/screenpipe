@@ -3,6 +3,8 @@
 import React from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function GeneralSettings() {
   const { settings, updateSettings } = useSettings();
@@ -46,6 +48,41 @@ export default function GeneralSettings() {
               handleSettingsChange({ autoUpdatePipes: checked })
             }
           />
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h4 className="font-medium">screenpipe server</h4>
+            <p className="text-sm text-muted-foreground">
+              configure the host and port for connecting to a screenpipe instance
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="screenpipe-host">host</Label>
+              <Input
+                id="screenpipe-host"
+                type="text"
+                value={settings.screenpipeHost}
+                onChange={(e) =>
+                  handleSettingsChange({ screenpipeHost: e.target.value })
+                }
+                placeholder="localhost"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="screenpipe-port">port</Label>
+              <Input
+                id="screenpipe-port"
+                type="number"
+                value={settings.port}
+                onChange={(e) =>
+                  handleSettingsChange({ port: parseInt(e.target.value) || 3030 })
+                }
+                placeholder="3030"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>

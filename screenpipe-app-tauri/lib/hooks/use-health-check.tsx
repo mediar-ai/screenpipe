@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { debounce } from "lodash";
+import { useApiUrl } from "./use-api-url";
 
 interface HealthCheckResponse {
   status: string;
@@ -42,6 +43,7 @@ interface HealthCheckHook {
 }
 
 export function useHealthCheck() {
+  const { wsUrl } = useApiUrl();
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isServerDown, setIsServerDown] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,7 +58,7 @@ export function useHealthCheck() {
       wsRef.current.close();
     }
 
-    const ws = new WebSocket("ws://127.0.0.1:3030/ws/health");
+    const ws = new WebSocket(`${wsUrl}/ws/health`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -123,7 +125,7 @@ export function useHealthCheck() {
         retryIntervalRef.current = setInterval(fetchHealth, 2000);
       }
     };
-  }, []);
+  }, [wsUrl]);
 
   const debouncedFetchHealth = useCallback(() => {
     return new Promise<void>((resolve) => {

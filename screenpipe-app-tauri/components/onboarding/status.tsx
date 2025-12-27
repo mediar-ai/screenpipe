@@ -11,6 +11,7 @@ import {
   TooltipContent,
 } from "../ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useApiUrl } from "@/lib/hooks/use-api-url";
 import { Label } from "../ui/label";
 import { LogFileButton } from "../log-file-button";
 import { Separator } from "../ui/separator";
@@ -38,6 +39,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
   const { updateSettings } = useSettings();
+  const { baseUrl } = useApiUrl();
   const { isMac: isMacOS } = usePlatform();
   const [stats, setStats] = useState<{
     screenshots: number;
@@ -51,7 +53,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     const fetchStats = async () => {
       try {
         const screenshotsResponse = await fetch(
-          "http://localhost:3030/raw_sql",
+          `${baseUrl}/raw_sql`,
           {
             method: "POST",
             headers: {
@@ -64,7 +66,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         );
         const screenshotsResult = await screenshotsResponse.json();
 
-        const audioResponse = await fetch("http://localhost:3030/raw_sql", {
+        const audioResponse = await fetch(`${baseUrl}/raw_sql`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -98,7 +100,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
     // cleanup interval on unmount
     return () => clearInterval(interval);
-  }, []);
+  }, [baseUrl]);
 
   // Add effect for streaming screenshots when recording starts
   useEffect(() => {

@@ -11,9 +11,11 @@ import { Trash2, Loader2 } from "lucide-react";
 import localforage from "localforage";
 import { useToast } from "@/components/ui/use-toast";
 import { Command } from "@tauri-apps/plugin-shell";
+import { useApiUrl } from "@/lib/hooks/use-api-url";
 
 export function BreakingChangesInstructionsDialog() {
   const { toast } = useToast();
+  const { baseUrl } = useApiUrl();
   const [open, setOpen] = useState(false);
   const [hasShownDialog, setHasShownDialog] = useState(false);
   const [hasPipes, setHasPipes] = useState(false);
@@ -25,7 +27,7 @@ export function BreakingChangesInstructionsDialog() {
       setHasShownDialog(!!shown);
 
       try {
-        const response = await fetch("http://localhost:3030/pipes/list");
+        const response = await fetch(`${baseUrl}/pipes/list`);
         const data = await response.json();
         setHasPipes(data.data.length > 0);
       } catch (error) {
@@ -33,7 +35,7 @@ export function BreakingChangesInstructionsDialog() {
       }
     };
     init();
-  }, []);
+  }, [baseUrl]);
 
   useEffect(() => {
     if (!hasShownDialog && hasPipes) {
@@ -45,7 +47,7 @@ export function BreakingChangesInstructionsDialog() {
   const handleResetAllPipes = async () => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`http://localhost:3030/pipes/purge`, {
+      const response = await fetch(`${baseUrl}/pipes/purge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

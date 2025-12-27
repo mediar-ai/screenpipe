@@ -26,6 +26,7 @@ import { PipeDetails } from "./pipe-store/pipe-details";
 import { PipeCard } from "./pipe-store/pipe-card";
 import { AddPipeForm } from "./pipe-store/add-pipe-form";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useApiUrl } from "@/lib/hooks/use-api-url";
 import posthog from "posthog-js";
 import { Progress } from "./ui/progress";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -64,6 +65,7 @@ const corePipes: string[] = [];
 
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
+  const { baseUrl } = useApiUrl();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
   const { settings, updateSettings } = useSettings();
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
@@ -284,7 +286,7 @@ export const PipeStore: React.FC = () => {
         });
       }, 500);
 
-      const response = await fetch("http://localhost:3030/pipes/download", {
+      const response = await fetch(`${baseUrl}/pipes/download`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -356,7 +358,7 @@ export const PipeStore: React.FC = () => {
       const response = await pipeApi.downloadPipe(pipe.id);
 
       const downloadResponse = await fetch(
-        "http://localhost:3030/pipes/download-private",
+        `${baseUrl}/pipes/download-private`,
         {
           method: "POST",
           headers: {
@@ -426,7 +428,7 @@ export const PipeStore: React.FC = () => {
   const fetchInstalledPipes = async () => {
     if (!health || health?.status === "error") return;
     try {
-      const response = await fetch("http://localhost:3030/pipes/list");
+      const response = await fetch(`${baseUrl}/pipes/list`);
       const data = (await response.json()) as {
         data: InstalledPipe[];
         success: boolean;
@@ -472,7 +474,7 @@ export const PipeStore: React.FC = () => {
         duration: 100000,
       });
 
-      const response = await fetch(`http://localhost:3030/pipes/purge`, {
+      const response = await fetch(`${baseUrl}/pipes/purge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
@@ -647,7 +649,7 @@ export const PipeStore: React.FC = () => {
       console.log("toggel", pipe, endpoint);
 
       const id = pipe.is_local ? pipe.id : pipe.name;
-      const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
+      const response = await fetch(`${baseUrl}/pipes/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -724,7 +726,7 @@ export const PipeStore: React.FC = () => {
     if (selectedPipe) {
       try {
         const id = selectedPipe.is_local ? selectedPipe.id : selectedPipe.name;
-        const response = await fetch("http://localhost:3030/pipes/update", {
+        const response = await fetch(`${baseUrl}/pipes/update`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -772,7 +774,7 @@ export const PipeStore: React.FC = () => {
       setSelectedPipe(null);
 
       const id = pipe.is_local ? pipe.id : pipe.name;
-      const response = await fetch("http://localhost:3030/pipes/delete", {
+      const response = await fetch(`${baseUrl}/pipes/delete`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -811,7 +813,7 @@ export const PipeStore: React.FC = () => {
         description: "please wait...",
       });
 
-      const response = await fetch(`http://localhost:3030/pipes/download`, {
+      const response = await fetch(`${baseUrl}/pipes/download`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -928,7 +930,7 @@ export const PipeStore: React.FC = () => {
       }
 
       const response = await fetch(
-        `http://localhost:3030/pipes/update-version`,
+        `${baseUrl}/pipes/update-version`,
         {
           method: "POST",
           headers: {

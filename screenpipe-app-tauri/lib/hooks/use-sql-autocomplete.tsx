@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useApiUrl } from "./use-api-url";
 
 interface AutocompleteItem {
   name: string;
@@ -11,6 +12,7 @@ const cache: Record<string, { data: AutocompleteItem[]; timestamp: number }> =
   {};
 
 export function useSqlAutocomplete(type: "app" | "window") {
+  const { baseUrl } = useApiUrl();
   const [items, setItems] = useState<AutocompleteItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -32,7 +34,7 @@ export function useSqlAutocomplete(type: "app" | "window") {
           ORDER BY count DESC
           LIMIT 100
         `;
-        const response = await fetch("http://localhost:3030/raw_sql", {
+        const response = await fetch(`${baseUrl}/raw_sql`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -51,7 +53,7 @@ export function useSqlAutocomplete(type: "app" | "window") {
     } finally {
       setIsLoading(false);
     }
-  }, [type]);
+  }, [type, baseUrl]);
 
   useEffect(() => {
     fetchItems();

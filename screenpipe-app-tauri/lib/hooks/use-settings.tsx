@@ -98,6 +98,7 @@ export type Settings = {
 	usePiiRemoval: boolean;
 	restartInterval: number;
 	port: number;
+	screenpipeHost: string;
 	dataDir: string;
 	disableAudio: boolean;
 	ignoredWindows: string[];
@@ -164,6 +165,7 @@ const DEFAULT_SETTINGS: Settings = {
 	usePiiRemoval: false,
 	restartInterval: 0,
 	port: 3030,
+	screenpipeHost: "localhost",
 	dataDir: "default",
 	disableAudio: false,
 	ignoredWindows: [],

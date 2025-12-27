@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useApiUrl } from "./use-api-url";
 
 export type Pipe = {
   enabled: boolean;
@@ -138,6 +139,7 @@ const fetchPipeConfig = async (
 };
 
 export const usePipes = (initialRepoUrls: string[]) => {
+  const { baseUrl } = useApiUrl();
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -287,7 +289,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
       }
 
       // get pipes from local api /pipes/list and add them to the list
-      const localPipes = await fetch(`http://localhost:3030/pipes/list`).then(
+      const localPipes = await fetch(`${baseUrl}/pipes/list`).then(
         (res) => res.json()
       );
       // console.log("localPipes", localPipes);
@@ -305,7 +307,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
     return () => {
       isMounted = false;
     };
-  }, [repoUrls]);
+  }, [repoUrls, baseUrl]);
 
   const addCustomPipe = async (newRepoUrl: string) => {
     setError(null);

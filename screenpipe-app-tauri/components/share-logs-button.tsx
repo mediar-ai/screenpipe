@@ -19,6 +19,7 @@ import {
   TooltipProvider,
 } from "./ui/tooltip";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { useApiUrl } from "@/lib/hooks/use-api-url";
 
 interface LogFile {
   name: string;
@@ -89,6 +90,7 @@ export const ShareLogsButton = ({
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [mergedVideoPath, setMergedVideoPath] = useState<string | null>(null);
   const { health } = useHealthCheck();
+  const { baseUrl } = useApiUrl();
 
   useEffect(() => {
     const loadMachineId = async () => {
@@ -116,7 +118,7 @@ export const ShareLogsButton = ({
     setIsLoadingVideo(true);
     try {
       // Fetch last video chunks
-      const response = await fetch("http://localhost:3030/raw_sql", {
+      const response = await fetch(`${baseUrl}/raw_sql`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -133,7 +135,7 @@ export const ShareLogsButton = ({
 
       // Merge frames
       const mergeResponse = await fetch(
-        "http://localhost:3030/experimental/frames/merge",
+        `${baseUrl}/experimental/frames/merge`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

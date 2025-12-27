@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { PipeApi } from "@/lib/api/store";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useApiUrl } from "@/lib/hooks/use-api-url";
 
 interface OnboardingPipeStoreProps {
   className?: string;
@@ -22,6 +23,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
   const [isLoading, setIsLoading] = React.useState(false);
   const [status, setStatus] = React.useState<string>("");
   const { settings } = useSettings();
+  const { baseUrl } = useApiUrl();
   const handleOpenSearchPipe = async () => {
     setIsLoading(true);
     try {
@@ -36,7 +38,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
 
       // Check if screenpipe is running, if not spawn it
       try {
-        await fetch("http://localhost:3030/health");
+        await fetch(`${baseUrl}/health`);
       } catch (error) {
         // Screenpipe not running, try to spawn it
         await invoke("stop_screenpipe");
@@ -46,7 +48,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
       }
 
       // First check if pipe is installed by listing pipes
-      const listResponse = await fetch("http://localhost:3030/pipes/list");
+      const listResponse = await fetch(`${baseUrl}/pipes/list`);
       const listData = await listResponse.json();
       const searchPipe = listData.data.find(
         (p: any) => p.config?.id === "search"
@@ -61,7 +63,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
           storePlugins.find((p) => p.name === "search")?.id!
         );
 
-        await fetch("http://localhost:3030/pipes/download-private", {
+        await fetch(`${baseUrl}/pipes/download-private`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -79,7 +81,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
 
       // Enable the search pipe
       setStatus("enabling search pipe... (~10s)");
-      await fetch("http://localhost:3030/pipes/enable", {
+      await fetch(`${baseUrl}/pipes/enable`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -92,7 +94,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Get updated pipe info to find the port
-      const response = await fetch("http://localhost:3030/pipes/list");
+      const response = await fetch(`${baseUrl}/pipes/list`);
       const data = await response.json();
       const updatedSearchPipe = data.data.find(
         (p: any) => p.config?.id === "search"
