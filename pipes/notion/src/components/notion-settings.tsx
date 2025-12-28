@@ -471,7 +471,7 @@ export function NotionSettings() {
                 id="workspace"
                 type="text"
                 placeholder="Required"
-                value={settings?.workspace || ""}
+                value={localSettings?.workspace ?? settings?.workspace ?? ""}
                 onChange={(e) =>
                   setLocalSettings({
                     ...localSettings!,
