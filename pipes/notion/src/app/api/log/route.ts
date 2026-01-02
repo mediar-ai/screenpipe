@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { pipe } from "@screenpipe/js";
-import { generateWorkLog, deduplicateScreenData } from "@/lib/helpers";
+import { generateDailyReport, deduplicateScreenData } from "@/lib/helpers";
 import { NotionClient } from "@/lib/notion/client";
 import { settingsStore } from "@/lib/store/settings-store";
 
-const minute = (min: number) => min * 60 * 1000;
+const hour = (h: number) => h * 60 * 60 * 1000;
 
 export async function GET() {
   try {
@@ -12,7 +12,7 @@ export async function GET() {
 
     const aiPreset = settingsStore.getPreset("notion", "aiLogPresetId");
 
-    const pageSize = settings?.pageSize || 50;
+    const pageSize = settings?.pageSize || 500;
     const customPrompt = settings?.prompt;
     const deduplicationEnabled = settings?.deduplicationEnabled ?? false;
 
@@ -31,10 +31,18 @@ export async function GET() {
     }
 
     const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - minute(1));
+    // Get data from the start of today (or last 12 hours for testing)
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    // Use start of day or 12 hours ago, whichever is more recent
+    const twelveHoursAgo = new Date(now.getTime() - hour(12));
+    const startTime = startOfDay > twelveHoursAgo ? startOfDay : twelveHoursAgo;
+
+    console.log(`fetching screen data from ${startTime.toISOString()} to ${now.toISOString()}`);
 
     const screenData = await pipe.queryScreenpipe({
-      startTime: oneHourAgo.toISOString(),
+      startTime: startTime.toISOString(),
       endTime: now.toISOString(),
       limit: pageSize,
       contentType: "all",
@@ -47,40 +55,43 @@ export async function GET() {
       );
     }
 
-        // Only deduplicate if enabled in settings
-    if (deduplicationEnabled) {
-          try {
-            screenData.data = await deduplicateScreenData(screenData.data);
-          } catch (error) {
-            console.warn(
-              "deduplication failed, continuing with original data:",
-              error,
-            );
-          }
-        }
+    console.log(`found ${screenData.data.length} screen data items`);
 
-    const logEntry = await generateWorkLog(
+    // Only deduplicate if enabled in settings
+    if (deduplicationEnabled) {
+      try {
+        screenData.data = await deduplicateScreenData(screenData.data);
+        console.log(`after deduplication: ${screenData.data.length} items`);
+      } catch (error) {
+        console.warn(
+          "deduplication failed, continuing with original data:",
+          error,
+        );
+      }
+    }
+
+    const dailyReport = await generateDailyReport(
       screenData.data,
       aiPreset,
-      oneHourAgo,
+      startTime,
       now,
       customPrompt,
     );
 
-    console.log(logEntry);
+    console.log("daily report generated:", dailyReport);
 
     const notionClient = new NotionClient(settings.notion);
-    const deepLink = await notionClient.createLog(logEntry);
+    const deepLink = await notionClient.createDailyReport(dailyReport);
 
     return NextResponse.json({
-      message: "work log synced successfully",
-      logEntry,
+      message: "daily report synced successfully",
+      report: dailyReport,
       deepLink: deepLink,
     });
   } catch (error) {
-    console.error("error in work log api:", error);
+    console.error("error in daily report api:", error);
     return NextResponse.json(
-      { error: `failed to process work log: ${error}` },
+      { error: `failed to process daily report: ${error}` },
       { status: 500 },
     );
   }
