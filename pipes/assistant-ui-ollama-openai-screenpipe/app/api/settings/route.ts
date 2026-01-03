@@ -36,6 +36,8 @@ export async function GET() {
 
       // Merge with current settings
       const rawSettings = await settingsManager.getAll();
+const customSettings = { ...rawSettings.customSettings, [pipeName]: persistedSettings };
+return NextResponse.json({ ...rawSettings, customSettings });
       return NextResponse.json({
         ...rawSettings,
         customSettings: {
