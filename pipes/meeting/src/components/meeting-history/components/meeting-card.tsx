@@ -15,11 +15,12 @@ import type { MeetingPrep } from "../types"
 import { useRouter } from "next/navigation"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
+import { MeetingVoiceChat } from "./meeting-voice-chat"
 
 interface MeetingCardProps {
   meeting: LiveMeetingData
-  onUpdate: (id: string, update: { 
-    aiName?: string; 
+  onUpdate: (id: string, update: {
+    aiName?: string;
     aiSummary?: string;
     analysis?: MeetingAnalysis | null;
     title?: string;
@@ -47,9 +48,9 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
   const [dontAskAgain, setDontAskAgain] = useState(false)
 
   const formatTime = (dateStr: string): string => {
-    return new Date(dateStr).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return new Date(dateStr).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
     })
   }
 
@@ -58,11 +59,11 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
     const startTime = new Date(start).getTime()
     const endTime = new Date(end).getTime()
     const durationMs = endTime - startTime
-    
+
     const minutes = Math.floor(durationMs / (1000 * 60))
     const hours = Math.floor(minutes / 60)
     const remainingMinutes = minutes % 60
-    
+
     if (hours > 0) {
       return `${hours}h ${remainingMinutes}m`
     }
@@ -71,26 +72,26 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
 
   const handleGenerateName = async () => {
     if (isGenerating) return
-    
+
     setIsGenerating(true)
     try {
       if (!settings) {
         throw new Error("no settings found")
       }
-      
+
       console.log("generating name for meeting:", {
         id: meeting.id,
         currentTitle: meeting.title
       })
-      
+
       const newTitle = await generateMeetingName(meeting, settings)
-      
-      onUpdate(meeting.id, { 
+
+      onUpdate(meeting.id, {
         title: newTitle,
         aiName: newTitle, // Adding this for backwards compatibility
         analysis: meeting.analysis // Preserve existing analysis
       })
-      
+
       toast({
         title: "name generated",
         description: "ai name has been generated and saved",
@@ -109,22 +110,22 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
 
   const handleGenerateSummary = async () => {
     if (isGeneratingSummary) return
-    
+
     setIsGeneratingSummary(true)
     try {
       if (!settings) {
         throw new Error("no settings found")
       }
-      
+
       console.log("generating summary for meeting:", {
         id: meeting.id,
         title: meeting.title
       })
-      
+
       const aiSummary = await generateMeetingSummary(meeting, settings)
-      
+
       // Update only the analysis field while preserving other fields
-      onUpdate(meeting.id, { 
+      onUpdate(meeting.id, {
         analysis: {
           facts: meeting.analysis?.facts || [],
           events: meeting.analysis?.events || [],
@@ -133,7 +134,7 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
           summary: [aiSummary]
         }
       })
-      
+
       toast({
         title: "summary generated",
         description: "ai summary has been generated and saved",
@@ -141,7 +142,7 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
     } catch (error) {
       console.error("failed to generate summary:", error)
       toast({
-        title: "generation failed", 
+        title: "generation failed",
         description: "failed to generate ai summary. please try again",
         variant: "destructive",
       })
@@ -163,22 +164,22 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
 
   const handleCardClick = () => {
     if (isLive) {
-        // Instead of router.push, use window.location for a full page load
-        window.location.href = '/meetings/live'
+      // Instead of router.push, use window.location for a full page load
+      window.location.href = '/meetings/live'
     } else if (onLoadArchived) {
-        console.log('loading archived meeting:', {
-            id: meeting.id,
-            title: meeting.title,
-            startTime: meeting.startTime
-        })
-        onLoadArchived()
+      console.log('loading archived meeting:', {
+        id: meeting.id,
+        title: meeting.title,
+        startTime: meeting.startTime
+      })
+      onLoadArchived()
     }
   }
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     const skipConfirm = localStorage.getItem('skipDeleteConfirm') === 'true'
-    
+
     if (skipConfirm) {
       onDelete?.()
     } else {
@@ -195,7 +196,7 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
   }
 
   return (
-    <Card 
+    <Card
       className="w-full mb-1 border-0 -mx-2 cursor-pointer hover:bg-accent/50"
       onClick={handleCardClick}
     >
@@ -217,10 +218,10 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
           </div>
         )}
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-muted-foreground/10 origin-bottom transition-transform duration-500"
-          style={{ 
+          style={{
             transform: `scaleY(${0.5 + Math.min(durationMinutes / 60, 1) * 0.5})`,
             opacity: 0.2
-          }} 
+          }}
         />
         <div className="flex gap-4">
           <div className="flex-none w-[30%]">
@@ -238,7 +239,6 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
                 )}
               </div>
               <div className="flex">
-                {/* Temporarily disabled title generation
                 <HoverCard openDelay={0} closeDelay={0}>
                   <HoverCardTrigger asChild>
                     <Button
@@ -257,8 +257,6 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
                     </span>
                   </HoverCardContent>
                 </HoverCard>
-                */}
-                {/* Temporarily disabled summary generation
                 <HoverCard openDelay={0} closeDelay={0}>
                   <HoverCardTrigger asChild>
                     <Button
@@ -277,7 +275,7 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
                     </span>
                   </HoverCardContent>
                 </HoverCard>
-                */}
+                <MeetingVoiceChat meeting={meeting} />
                 {meeting.analysis && !meeting.endTime && 'previousContext' in meeting.analysis && (
                   <HoverCard openDelay={0} closeDelay={0}>
                     <HoverCardTrigger asChild>
@@ -342,13 +340,13 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
             are you sure you want to delete this meeting?
           </DialogDescription>
           <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
-            <Checkbox 
-              id="dontAskAgain" 
-              checked={dontAskAgain} 
-              onCheckedChange={(checked) => setDontAskAgain(checked as boolean)} 
+            <Checkbox
+              id="dontAskAgain"
+              checked={dontAskAgain}
+              onCheckedChange={(checked) => setDontAskAgain(checked as boolean)}
             />
-            <label 
-              htmlFor="dontAskAgain" 
+            <label
+              htmlFor="dontAskAgain"
               className="text-sm text-muted-foreground"
               onClick={(e) => e.stopPropagation()}
             >
@@ -356,8 +354,8 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
             </label>
           </div>
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={(e) => {
                 e.stopPropagation()
                 setShowDeleteDialog(false)
@@ -365,8 +363,8 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
             >
               cancel
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={(e) => {
                 e.stopPropagation()
                 handleConfirmDelete()
