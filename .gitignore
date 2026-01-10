@@ -51,6 +51,8 @@ app.py
 *.pyo
 *.pyd
 *.py
+!screenpipe-integrations/whatsapp-scraper/*.py
+!screenpipe-integrations/whatsapp-scraper/test_scraper.py
 *.pyw
 *.pyz
 *.py3
