@@ -1,5 +1,4 @@
 import { useRef, useCallback } from 'react'
-import { pipe } from "@screenpipe/browser"
 import { useToast } from "@/hooks/use-toast"
 import { TranscriptionChunk } from '../../meeting-history/types'
 
@@ -14,6 +13,7 @@ export function useTranscriptionStream(
 ) {
   const streamingRef = useRef(false)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const lastProcessedRef = useRef<number>(Date.now()) // Clean state: Only show NEW speech
   const { toast } = useToast()
 
   const stopTranscriptionScreenpipe = useCallback(() => {
@@ -21,14 +21,17 @@ export function useTranscriptionStream(
       isStreaming: streamingRef.current,
       hasAbortController: !!abortControllerRef.current
     })
-    
+
+    if (window._eventSource) {
+      window._eventSource.close()
+      window._eventSource = undefined
+    }
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
-    
-    // Force disconnect the pipe stream
-    pipe.disconnect()
+
     streamingRef.current = false
   }, [])
 
@@ -39,67 +42,69 @@ export function useTranscriptionStream(
     }
 
     try {
-      console.log('starting transcription stream...')
+      console.log('starting transcription polling (fallback for missing SSE)...')
       streamingRef.current = true
+      // Reset last processed time to NOW. 
+      // This means "hi" will NOT appear. Only NEW words you speak from now on.
+      lastProcessedRef.current = Date.now()
+
       abortControllerRef.current = new AbortController()
       const signal = abortControllerRef.current.signal
 
-      // Create a separate async function to handle the stream
-      const handleStream = async () => {
-        const stream = pipe.streamTranscriptions()
+      // Use polling since SSE endpoint is 404
+      const pollFunction = async () => {
+        if (!streamingRef.current || signal.aborted) return
+
         try {
-          for await (const chunk of stream) {
-            // Check if aborted before processing each chunk
-            if (signal.aborted) {
-              console.log('stream aborted, breaking loop')
-              break
-            }
-            
-            console.log('new transcription chunk:', {
-              text: chunk.choices[0]?.text,
-              speaker: chunk.metadata?.speaker,
-              model: chunk.model,
-              device: chunk.metadata?.device
-            })
-            const transcriptionData = chunk.choices[0]?.text
-            if (!transcriptionData) continue
+          // Fetch latest 5 audio items
+          const response = await fetch('http://localhost:3030/search?limit=5&content_type=audio&order=desc')
+          if (!response.ok) {
+            console.error('polling failed:', response.statusText)
+          } else {
+            const data = await response.json()
+            if (data.data) {
+              // Process items in reverse (oldest first) so they appear in order
+              const items = data.data.reverse()
 
-            const isInput = chunk.metadata?.device?.toLowerCase().includes('input') ?? false
-            const speaker = chunk.metadata?.speaker?.startsWith('speaker_') 
-              ? chunk.metadata.speaker 
-              : `speaker_${chunk.metadata?.speaker || '0'}`
+              for (const item of items) {
+                if (item.type !== 'Audio' || !item.content) continue
 
-            const newChunk: TranscriptionChunk = {
-              id: Date.now(),
-              timestamp: chunk.metadata?.timestamp || new Date().toISOString(),
-              text: transcriptionData,
-              isInput,
-              device: chunk.metadata?.device || 'unknown',
-              speaker
+                const { transcription, timestamp, device_name, speaker } = item.content
+                const itemTime = new Date(timestamp).getTime()
+
+                // Deduplicate by timestamp
+                if (itemTime <= lastProcessedRef.current) continue
+
+                lastProcessedRef.current = itemTime
+
+                if (!transcription) continue
+
+                const newChunk: TranscriptionChunk = {
+                  id: itemTime,
+                  timestamp: timestamp,
+                  text: transcription,
+                  isInput: device_name?.toLowerCase().includes('input') || false,
+                  device: device_name || 'unknown',
+                  speaker: speaker || 'speaker_0'
+                }
+
+                console.log('emitting chunk:', newChunk)
+                onNewChunk(newChunk)
+              }
             }
-            
-            onNewChunk(newChunk)
           }
-        } finally {
-          // Ensure we clean up if the loop breaks
-          console.log('stream loop ended')
-          streamingRef.current = false
-          pipe.disconnect() // Explicitly disconnect the stream
+        } catch (err) {
+          console.error('polling error:', err)
+        }
+
+        // Schedule next poll - FAST 500ms
+        if (streamingRef.current && !signal.aborted) {
+          setTimeout(pollFunction, 500)
         }
       }
 
-      // Start the stream handling
-      handleStream().catch(error => {
-        console.error('stream handler error:', error)
-        streamingRef.current = false
-        toast({
-          title: "transcription error",
-          description: "failed to stream audio. retrying...",
-          variant: "destructive"
-        })
-        console.log('scheduling retry...')
-        setTimeout(startTranscriptionScreenpipe, 1000)
-      })
+      // Start polling loop
+      pollFunction()
 
     } catch (error) {
       console.error("failed to start transcription:", error)
@@ -109,14 +114,13 @@ export function useTranscriptionStream(
         description: "failed to stream audio. retrying...",
         variant: "destructive"
       })
-      console.log('scheduling retry...')
       setTimeout(startTranscriptionScreenpipe, 1000)
     }
   }, [onNewChunk, toast])
 
-  return { 
-    startTranscriptionScreenpipe, 
-    stopTranscriptionScreenpipe, 
-    isStreaming: streamingRef.current 
+  return {
+    startTranscriptionScreenpipe,
+    stopTranscriptionScreenpipe,
+    isStreaming: streamingRef.current
   }
-} 
+}

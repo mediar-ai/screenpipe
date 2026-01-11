@@ -9,9 +9,9 @@ type TranscriptionMode = 'browser' | 'screenpipe'
 
 // Update GLOBAL_STATE to include health check result
 const GLOBAL_STATE = {
-    isInitialized: false,
-    healthChecked: false,
-    isHealthy: false
+  isInitialized: false,
+  healthChecked: false,
+  isHealthy: false
 }
 
 export function useTranscriptionService(mode?: TranscriptionMode) {
@@ -34,7 +34,7 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
     try {
       const response = await fetch('http://localhost:3030/health')
       const health = await response.json()
-      
+
       if (health.status === 'healthy') {
         console.log('transcription-service: health check passed, using screenpipe')
         return 'screenpipe'
@@ -43,8 +43,8 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
         return 'browser'
       }
     } catch (error) {
-      console.log('transcription-service: health check error, using browser:', error)
-      return 'browser'
+      console.log('transcription-service: health check error, defaulting to screenpipe anyway (FORCE):', error)
+      return 'screenpipe'
     }
   }
 
@@ -54,7 +54,7 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
       if (modeRef.current !== null) return // Already initialized
 
       setIsHealthChecking(true)
-      
+
       // Only check health once
       let healthMode: TranscriptionMode
       if (!GLOBAL_STATE.healthChecked) {
@@ -68,7 +68,7 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
 
       const finalMode = mode || healthMode
       console.log('transcription-service: initializing with mode:', finalMode)
-      
+
       modeRef.current = finalMode
       posthog.capture('meeting_web_app_transcription_mode_initialized', {
         mode: finalMode,
@@ -87,11 +87,11 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
   // Handle transcription mode initialization and changes
   useEffect(() => {
     if (isHealthChecking || !mode) return
-    
+
     // First mount or mode change
     if (modeRef.current !== mode) {
       console.log('transcription-service: mode', modeRef.current ? 'changed from ' + modeRef.current + ' to: ' + mode : 'initialized to: ' + mode)
-      
+
       // Track mode change in PostHog
       posthog.capture('meeting_web_app_transcription_mode_changed', {
         from: modeRef.current || 'initial',
@@ -106,10 +106,10 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
           stopTranscriptionScreenpipe()
         }
       }
-      
+
       // Update mode ref before starting new transcription
       modeRef.current = mode
-      
+
       // Start new transcription based on mode
       if (mode === 'screenpipe') {
         console.log('transcription-service: starting screenpipe transcription')
@@ -141,8 +141,8 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
   // Add toggle functionality
   const toggleRecording = useCallback(async (newState?: boolean) => {
     const nextState = newState ?? !isRecording
-    console.log('toggling recording:', { 
-      current: isRecording, 
+    console.log('toggling recording:', {
+      current: isRecording,
       next: nextState,
       mode: modeRef.current
     })
@@ -157,7 +157,7 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
           console.error('transcription-service: no mode available')
           return
         }
-        
+
         modeRef.current = currentMode
         if (currentMode === 'browser') {
           startTranscriptionBrowser()
@@ -178,8 +178,8 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
       }
     }
     setIsRecording(nextState)
-  }, [isRecording, mode, startTranscriptionBrowser, startTranscriptionScreenpipe, 
-      stopTranscriptionBrowser, stopTranscriptionScreenpipe])
+  }, [isRecording, mode, startTranscriptionBrowser, startTranscriptionScreenpipe,
+    stopTranscriptionBrowser, stopTranscriptionScreenpipe])
 
   // Better cleanup on unmount
   useEffect(() => {

@@ -29,6 +29,7 @@ export function LiveTranscription() {
 
     const { scrollRef, onScroll, isScrolledToBottom } = useAutoScroll(chunks)
     const [windowHeight, setWindowHeight] = useState(0)
+    const [isDesktop, setIsDesktop] = useState(false)
     const [mergeModalOpen, setMergeModalOpen] = useState(false)
     const [sizes, setSizes] = useState([50, 50])
     const router = useRouter()
@@ -39,6 +40,7 @@ export function LiveTranscription() {
         const vh = window.innerHeight
         const headerOffset = 32
         setWindowHeight(vh - headerOffset)
+        setIsDesktop(window.innerWidth >= 768)
     }
 
     // Window resize handler
@@ -47,6 +49,8 @@ export function LiveTranscription() {
         window.addEventListener('resize', updateHeight)
         return () => window.removeEventListener('resize', updateHeight)
     }, []) // Empty deps array since updateHeight is stable
+
+
 
     useEffect(() => {
         console.log('live transcription component mounted')
@@ -132,7 +136,7 @@ export function LiveTranscription() {
                     snapOffset={100}
                     onDragEnd={onDragEnd}
                     onDrag={onDrag}
-                    direction={typeof window !== 'undefined' && window.innerWidth >= 768 ? 'horizontal' : 'vertical'}
+                    direction={isDesktop ? 'horizontal' : 'vertical'}
                 >
                     {/* Transcription Panel */}
                     <div className="h-full overflow-hidden">
@@ -144,8 +148,8 @@ export function LiveTranscription() {
 
                     {/* Notes Panel */}
                     <div className="h-full overflow-hidden">
-                        <NotesEditor 
-                            onTimeClick={handleTimeClick} 
+                        <NotesEditor
+                            onTimeClick={handleTimeClick}
                             onNewMeeting={handleNewMeeting}
                             isRecording={isRecording}
                             onToggleRecording={toggleRecording}

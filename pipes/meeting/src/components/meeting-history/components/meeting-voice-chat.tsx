@@ -66,9 +66,10 @@ export function MeetingVoiceChat({ meeting }: { meeting: LiveMeetingData }) {
                     { role: "user", content: userMsg.content }
                 ],
                 temperature: 0.7,
+                stream: false,
             })
 
-            const answer = response?.choices?.[0]?.message?.content || "I couldn't generate an answer."
+            const answer = (response as any)?.choices?.[0]?.message?.content || "I couldn't generate an answer."
 
             setMessages((prev: Message[]) => [...prev, { role: 'assistant', content: answer, id: crypto.randomUUID() }])
 
