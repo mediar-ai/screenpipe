@@ -156,8 +156,13 @@ fn create_error_callback(
             is_disconnected.store(true, Ordering::Relaxed);
         } else {
             error!("an error occurred on the audio stream: {}", err);
-            if err.to_string().contains("device is no longer valid") {
-                warn!("audio device disconnected. stopping recording.");
+            let err_msg = err.to_string().to_lowercase();
+            if err_msg.contains("device is no longer valid") 
+                || err_msg.contains("stream error") 
+                || err_msg.contains("backend error")
+            {
+                warn!("fatal audio stream error detected. marking device as disconnected.");
+                is_disconnected.store(true, Ordering::Relaxed);
                 if let Some(arc) = is_running_weak.upgrade() {
                     arc.store(false, Ordering::Relaxed);
                 }

@@ -2,9 +2,12 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
-use crate::{core::device::parse_audio_device, device::device_manager::DeviceManager};
+use crate::{
+    core::{device::parse_audio_device, get_device_capture_time},
+    device::device_manager::DeviceManager,
+};
 
 use super::{AudioManager, AudioManagerStatus};
 
@@ -65,7 +68,21 @@ pub async fn start_device_monitor(
 
                         match audio_manager.start_device(&device).await {
                             Ok(()) => {
-                                //
+                                // check heartbeat
+                                let last_capture = get_device_capture_time(device_name);
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
+
+                                if now - last_capture > 30 {
+                                    warn!(
+                                        "Heartbeat failed for device {device_name} (last capture {}s ago). Restarting...",
+                                        now - last_capture
+                                    );
+                                    let _ = audio_manager.stop_device(device_name).await;
+                                    let _ = audio_manager.start_device(&device).await;
+                                }
                             }
                             Err(e) => {
                                 let e_str = e.to_string();
