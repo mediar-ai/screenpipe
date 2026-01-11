@@ -41,8 +41,8 @@ class TestWhatsAppScraper(unittest.TestCase):
         # Verify the payload structure matches our new /add endpoint
         args, kwargs = mock_post.call_args
         payload = kwargs['json']
-        self.assertEqual(payload['content']['content_type'], 'ui')
-        self.assertEqual(payload['content']['data']['text'], 'test message')
+        self.assertEqual(payload['content']['content_type'], 'frames')
+        self.assertEqual(payload['content']['data'][0]['ocr_results'][0]['text'], 'test message')
 
 if __name__ == '__main__':
     unittest.main()
