@@ -1358,6 +1358,15 @@ pub struct AddContentData {
 pub enum ContentData {
     Frames(Vec<FrameContent>),
     Transcription(AudioTranscription),
+    Ui(AddUiContent),
+}
+
+#[derive(OaSchema, Deserialize)]
+pub struct AddUiContent {
+    pub text: String,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub app_name: String,
+    pub window_name: String,
 }
 
 #[derive(OaSchema, Deserialize)]
@@ -1485,6 +1494,19 @@ async fn add_transcription_to_db(
     Ok(())
 }
 
+async fn add_ui_content_to_db(
+    state: &AppState,
+    ui: &AddUiContent,
+) -> Result<(), anyhow::Error> {
+    state.db.insert_ui_content(
+        &ui.text,
+        ui.timestamp.unwrap_or_else(Utc::now),
+        &ui.app_name,
+        &ui.window_name,
+    ).await?;
+    Ok(())
+}
+
 #[oasgen]
 pub(crate) async fn add_to_database(
     State(state): State<Arc<AppState>>,
@@ -1565,6 +1587,24 @@ pub(crate) async fn add_to_database(
                 }
 
                 success_messages.push("Transcription added successfully".to_string());
+            }
+        }
+        "ui" => {
+            if let ContentData::Ui(ui) = &payload.content.data {
+                if let Err(e) = add_ui_content_to_db(&state, ui).await {
+                    error!(
+                        "Failed to add UI content for device {}: {}",
+                        device_name, e
+                    );
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(
+                            json!({"error": format!("Failed to add UI content: {}", e)}),
+                        ),
+                    ));
+                }
+
+                success_messages.push("UI content added successfully".to_string());
             }
         }
         _ => {

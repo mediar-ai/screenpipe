@@ -1686,6 +1686,29 @@ impl DatabaseManager {
         Ok(tags.into_iter().map(|t| t.0).collect())
     }
 
+    pub async fn insert_ui_content(
+        &self,
+        text_output: &str,
+        timestamp: DateTime<Utc>,
+        app: &str,
+        window: &str,
+    ) -> Result<i64, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+        let id = sqlx::query(
+            "INSERT INTO ui_monitoring (text_output, timestamp, app, window, initial_traversal_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .bind(text_output)
+        .bind(timestamp)
+        .bind(app)
+        .bind(window)
+        .bind(timestamp)
+        .execute(&mut *tx)
+        .await?
+        .last_insert_rowid();
+        tx.commit().await?;
+        Ok(id)
+    }
+
     pub async fn get_audio_chunks_for_speaker(
         &self,
         speaker_id: i64,
