@@ -16,11 +16,12 @@ impl fmt::Display for DatabaseError {
 
 impl StdError for DatabaseError {}
 
-#[derive(OaSchema, Debug, Serialize, Deserialize)]
+#[derive(OaSchema, Debug, Serialize, Deserialize, Clone)]
 pub enum SearchResult {
     OCR(OCRResult),
     Audio(AudioResult),
     UI(UiContent),
+    Session(Session),
 }
 
 #[derive(FromRow, Debug)]
@@ -49,7 +50,7 @@ pub struct OCRResultRaw {
     pub device_name: String,
 }
 
-#[derive(OaSchema, Debug, Serialize, Deserialize)]
+#[derive(OaSchema, Debug, Serialize, Deserialize, Clone)]
 pub struct OCRResult {
     pub frame_id: i64,
     pub frame_name: String,
@@ -84,6 +85,17 @@ pub enum ContentType {
     #[serde(rename = "audio+ocr")]
     #[serde(alias = "audio ocr")]
     AudioAndOcr,
+    Session,
+}
+
+#[derive(OaSchema, Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct Session {
+    pub id: i64,
+    pub app_name: String,
+    pub window_name: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub duration_secs: f64,
 }
 
 #[derive(FromRow)]
@@ -115,7 +127,7 @@ pub enum DeviceType {
     Output,
 }
 
-#[derive(OaSchema, Debug, Serialize, Deserialize)]
+#[derive(OaSchema, Debug, Serialize, Deserialize, Clone)]
 pub struct AudioResult {
     pub audio_chunk_id: i64,
     pub transcription: String,
@@ -138,7 +150,7 @@ pub enum TagContentType {
     Audio,
 }
 
-#[derive(OaSchema, Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(OaSchema, Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
 pub struct UiContent {
     pub id: i64,
     #[sqlx(rename = "text_output")]

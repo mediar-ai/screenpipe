@@ -50,6 +50,7 @@ pub async fn process_transcription_result(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     previous_transcript: Option<String>,
     previous_transcript_id: Option<i64>,
+    session_id: Option<i64>,
 ) -> Result<Option<i64>, anyhow::Error> {
     if result.error.is_some() || result.transcription.is_none() {
         error!(
@@ -111,6 +112,7 @@ pub async fn process_transcription_result(
                     Some(speaker.id),
                     Some(result.start_time),
                     Some(result.end_time),
+                    session_id,
                 )
                 .await
             {
