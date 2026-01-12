@@ -1230,6 +1230,7 @@ impl SCServer {
             .post("/speakers/hallucination", mark_as_hallucination_handler)
             .post("/speakers/merge", merge_speakers_handler)
             .get("/speakers/similar", get_similar_speakers_handler)
+            .get("/sessions", sessions_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
             .post("/experimental/operator", find_elements_handler)
@@ -1424,6 +1425,9 @@ async fn add_frame_to_db(
                 &ocr.text,
                 ocr.text_json.as_deref().unwrap_or(""),
                 Arc::new(OcrEngine::default().into()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
+                device_name,
+                frame.app_name.as_deref().unwrap_or("unknown"),
+                frame.window_name.as_deref().unwrap_or("unknown"),
             )
             .await?;
         }
@@ -2000,6 +2004,71 @@ async fn get_similar_speakers_handler(
 
     Ok(JsonResponse(similar_speakers))
 }
+
+#[derive(OaSchema, Deserialize)]
+pub struct SessionsQuery {
+    #[serde(default)]
+    device_name: Option<String>,
+    #[serde(default)]
+    app_name: Option<String>,
+    #[serde(default)]
+    window_name: Option<String>,
+    #[serde(default)]
+    start_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    end_time: Option<DateTime<Utc>>,
+    #[serde(default = "default_limit")]
+    limit: u32,
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    offset: u32,
+}
+
+#[derive(OaSchema, Serialize)]
+pub struct SessionsResponse {
+    pub data: Vec<screenpipe_db::Session>,
+    pub pagination: PaginationInfo,
+}
+
+#[oasgen]
+async fn sessions_handler(
+    Query(query): Query<SessionsQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<SessionsResponse>, (StatusCode, JsonResponse<Value>)> {
+    let sessions = state
+        .db
+        .query_sessions(
+            query.device_name.as_deref(),
+            query.app_name.as_deref(),
+            query.window_name.as_deref(),
+            query.start_time,
+            query.end_time,
+            Some(query.limit),
+            Some(query.offset),
+        )
+        .await
+        .map_err(|e| {
+            error!("Failed to query sessions: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+        // MVP: Using -1 to indicate total count is not yet implemented
+        // This avoids adding a count query in the initial implementation
+        let total = -1;
+
+    Ok(JsonResponse(SessionsResponse {
+        data: sessions,
+        pagination: PaginationInfo {
+            limit: query.limit,
+            offset: query.offset,
+            total,
+        },
+    }))
+}
+
 // #[derive(OaSchema, Deserialize)]
 // pub struct AudioDeviceControlRequest {
 //     device_name: String,

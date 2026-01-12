@@ -382,6 +382,9 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         "Test OCR text",
         "{'text': 'Test OCR text', 'confidence': 0.9}",
         Arc::new(OcrEngine::Tesseract.into()),
+        "test_device",
+        "test_app",
+        "test_window",
     )
     .await
     .unwrap();

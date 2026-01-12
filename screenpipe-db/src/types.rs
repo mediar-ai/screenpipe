@@ -325,3 +325,13 @@ impl Default for CustomOcrConfig {
         }
     }
 }
+
+#[derive(FromRow, OaSchema, Debug, Serialize, Deserialize)]
+pub struct Session {
+    pub id: i64,
+    pub device_name: String,
+    pub app_name: String,
+    pub window_name: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+}

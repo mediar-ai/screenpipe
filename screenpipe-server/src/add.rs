@@ -227,6 +227,9 @@ pub async fn handle_index_command(
                     &text,
                     "{}", // empty json
                     ocr_engine.clone().unwrap().into(),
+                    "imported_files", // device_name for imported videos
+                    "unknown",        // app_name not applicable for imports
+                    "unknown",        // window_name not applicable for imports
                 )
                 .await
             {

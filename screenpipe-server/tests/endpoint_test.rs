@@ -192,6 +192,9 @@ mod tests {
             "This is a test OCR text", // 21 chars
             "",
             Arc::new(OcrEngine::Tesseract.into()),
+            "test_device",
+            "test_app",
+            "test_window",
         )
         .await
         .unwrap();
@@ -200,6 +203,9 @@ mod tests {
             "Another OCR text for testing that should be longer than thirty characters", // >30 chars
             "",
             Arc::new(OcrEngine::Tesseract.into()),
+            "test_device",
+            "test_app",
+            "test_window",
         )
         .await
         .unwrap();
@@ -414,6 +420,9 @@ mod tests {
             "old ocr text",
             "",
             Arc::new(OcrEngine::Tesseract.into()),
+            "test_device",
+            "test_app",
+            "test_window",
         )
         .await
         .unwrap();
@@ -626,6 +635,9 @@ mod tests {
             "old task: write documentation",
             "",
             Arc::new(OcrEngine::Tesseract.into()),
+            "test_device",
+            "test_app",
+            "test_window",
         )
         .await
         .unwrap();
@@ -635,6 +647,9 @@ mod tests {
             "current task: fix bug #123",
             "",
             Arc::new(OcrEngine::Tesseract.into()),
+            "test_device",
+            "test_app",
+            "test_window",
         )
         .await
         .unwrap();

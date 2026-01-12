@@ -308,6 +308,9 @@ async fn record_video(
                                 text,
                                 &text_json,
                                 Arc::new((*ocr_engine).clone().into()),
+                                &device_name,
+                                &window_result.app_name,
+                                &window_result.window_name,
                             )
                             .await
                         {

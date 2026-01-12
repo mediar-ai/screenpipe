@@ -45,6 +45,12 @@ mod tests {
             "Hello, world!",
             "",
             Arc::new(OcrEngine::Tesseract),
+            "test_device",
+            "test",
+            "",
+            "test_device",
+            "test",
+            "",
         )
         .await
         .unwrap();
@@ -249,6 +255,12 @@ mod tests {
             "Hello from OCR",
             "",
             Arc::new(OcrEngine::Tesseract),
+            "test_device",
+            "test",
+            "",
+            "test_device",
+            "test_app",
+            "test_window",
         )
         .await
         .unwrap();
@@ -356,6 +368,12 @@ mod tests {
             "Hello from OCR 1",
             "",
             Arc::new(OcrEngine::Tesseract),
+            "test_device",
+            "test",
+            "",
+            "test_device",
+            "test",
+            "",
         )
         .await
         .unwrap();
@@ -396,6 +414,12 @@ mod tests {
             "Hello from OCR 2",
             "",
             Arc::new(OcrEngine::Tesseract),
+            "test_device",
+            "test",
+            "",
+            "test_device",
+            "test",
+            "",
         )
         .await
         .unwrap();
@@ -611,6 +635,12 @@ mod tests {
             "Hello from OCR 1",
             "",
             Arc::new(OcrEngine::Tesseract),
+            "test_device",
+            "test",
+            "",
+            "test_device",
+            "test",
+            "",
         )
         .await
         .unwrap();
@@ -649,6 +679,9 @@ mod tests {
             "Hello from OCR 2",
             "",
             Arc::new(OcrEngine::Tesseract),
+            "test_device",
+            "test",
+            "",
         )
         .await
         .unwrap();
@@ -1082,6 +1115,9 @@ mod tests {
             "Hello from frame 1",
             "",
             Arc::new(OcrEngine::Tesseract),
+            "test_device",
+            "test",
+            "",
         )
         .await
         .unwrap();
@@ -1096,6 +1132,9 @@ mod tests {
             "Hello from frame 2",
             "",
             Arc::new(OcrEngine::Tesseract),
+            "test_device",
+            "test",
+            "",
         )
         .await
         .unwrap();
@@ -1342,6 +1381,9 @@ mod tests {
             "Hello from OCR",
             "",
             Arc::new(OcrEngine::Tesseract),
+            "test_device",
+            "test",
+            "",
         )
         .await
         .unwrap();

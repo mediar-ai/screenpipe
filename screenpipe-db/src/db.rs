@@ -22,12 +22,13 @@ use futures::future::try_join_all;
 use crate::{
     AudioChunksResponse, AudioDevice, AudioEntry, AudioResult, AudioResultRaw, ContentType,
     DeviceType, FrameData, FrameRow, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock,
-    Order, SearchMatch, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
-    TimeSeriesChunk, UiContent, VideoMetadata,
+    Order, SearchMatch, SearchResult, SessionManager, Speaker, TagContentType, TextBounds,
+    TextPosition, TimeSeriesChunk, UiContent, VideoMetadata,
 };
 
 pub struct DatabaseManager {
     pub pool: SqlitePool,
+    pub session_manager: SessionManager,
 }
 
 impl DatabaseManager {
@@ -73,10 +74,14 @@ impl DatabaseManager {
             .execute(&pool)
             .await?;
 
-        let db_manager = DatabaseManager { pool };
-
         // Run migrations after establishing the connection
-        Self::run_migrations(&db_manager.pool).await?;
+        Self::run_migrations(&pool).await?;
+
+        let session_manager = SessionManager::new(pool.clone());
+        let db_manager = DatabaseManager {
+            pool,
+            session_manager,
+        };
 
         Ok(db_manager)
     }
@@ -144,11 +149,19 @@ impl DatabaseManager {
         end_time: Option<f64>,
     ) -> Result<i64, sqlx::Error> {
         let text_length = transcription.len() as i64;
+        
+        // Get or create session for this audio device
+        // Audio doesn't have app/window context, so we use generic "audio_capture" for both
+        let session_id = self
+            .session_manager
+            .ensure_session(&device.name, "audio_capture", "audio_capture")
+            .await?;
+
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
         let id = sqlx::query(
-            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time, text_length, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         )
         .bind(audio_chunk_id)
         .bind(transcription)
@@ -161,6 +174,7 @@ impl DatabaseManager {
         .bind(start_time)
         .bind(end_time)
         .bind(text_length)
+        .bind(session_id)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -168,6 +182,7 @@ impl DatabaseManager {
         // Commit the transaction for the full transcription
         tx.commit().await?;
 
+        debug!("Audio transcription inserted with session_id: {}", session_id);
         Ok(id)
     }
 
@@ -363,26 +378,38 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_ocr_text(
         &self,
         frame_id: i64,
         text: &str,
         text_json: &str,
         ocr_engine: Arc<OcrEngine>,
+        device_name: &str,
+        app_name: &str,
+        window_name: &str,
     ) -> Result<(), sqlx::Error> {
         let text_length = text.len() as i64;
+        
+        // Get or create session for this context
+        let session_id = self
+            .session_manager
+            .ensure_session(device_name, app_name, window_name)
+            .await?;
+
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, ocr_engine, text_length) VALUES (?1, ?2, ?3, ?4, ?5)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, ocr_engine, text_length, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
             .bind(format!("{:?}", *ocr_engine))
             .bind(text_length)
+            .bind(session_id)
             .execute(&mut *tx)
             .await?;
 
         tx.commit().await?;
-        debug!("OCR text inserted into db successfully");
+        debug!("OCR text inserted into db successfully with session_id: {}", session_id);
         Ok(())
     }
 
@@ -2402,6 +2429,67 @@ pub fn find_matching_positions(blocks: &[OcrTextBlock], query: &str) -> Vec<Text
             }
         })
         .collect()
+}
+
+impl DatabaseManager {
+    #[allow(clippy::too_many_arguments)]
+    pub async fn query_sessions(
+        &self,
+        device_name: Option<&str>,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Vec<crate::Session>, sqlx::Error> {
+        let mut query = String::from("SELECT id, device_name, app_name, window_name, start_time, end_time FROM sessions WHERE 1=1");
+        
+        if device_name.is_some() {
+            query.push_str(" AND device_name = ?");
+        }
+        if app_name.is_some() {
+            query.push_str(" AND app_name = ?");
+        }
+        if window_name.is_some() {
+            query.push_str(" AND window_name = ?");
+        }
+        if start_time.is_some() {
+            query.push_str(" AND start_time >= ?");
+        }
+        if end_time.is_some() {
+            query.push_str(" AND (end_time IS NULL OR end_time <= ?)");
+        }
+        
+        query.push_str(" ORDER BY start_time DESC");
+        
+        if let Some(lim) = limit {
+            query.push_str(&format!(" LIMIT {}", lim));
+        }
+        if let Some(off) = offset {
+            query.push_str(&format!(" OFFSET {}", off));
+        }
+
+        let mut query_builder = sqlx::query_as::<_, crate::Session>(&query);
+        
+        if let Some(dev) = device_name {
+            query_builder = query_builder.bind(dev);
+        }
+        if let Some(app) = app_name {
+            query_builder = query_builder.bind(app);
+        }
+        if let Some(win) = window_name {
+            query_builder = query_builder.bind(win);
+        }
+        if let Some(start) = start_time {
+            query_builder = query_builder.bind(start);
+        }
+        if let Some(end) = end_time {
+            query_builder = query_builder.bind(end);
+        }
+
+        query_builder.fetch_all(&self.pool).await
+    }
 }
 
 fn calculate_confidence(positions: &[TextPosition]) -> f32 {
