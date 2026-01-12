@@ -317,10 +317,11 @@ const AISection = ({
             },
           });
           if (!r.ok) {
-            // TODO better UX for this
+            const errorData = await r.json().catch(() => ({}));
+            const errorMessage = errorData.error?.message || "please check your api key";
             toast({
               title: "error fetching models",
-              description: "please check your api key",
+              description: errorMessage,
               variant: "destructive",
             });
             return;
