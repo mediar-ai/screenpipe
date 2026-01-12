@@ -142,13 +142,14 @@ impl DatabaseManager {
         speaker_id: Option<i64>,
         start_time: Option<f64>,
         end_time: Option<f64>,
+        session_id: Option<i64>,
     ) -> Result<i64, sqlx::Error> {
         let text_length = transcription.len() as i64;
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
         let id = sqlx::query(
-            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time, text_length, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         )
         .bind(audio_chunk_id)
         .bind(transcription)
@@ -161,6 +162,7 @@ impl DatabaseManager {
         .bind(start_time)
         .bind(end_time)
         .bind(text_length)
+        .bind(session_id)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -305,6 +307,7 @@ impl DatabaseManager {
         app_name: Option<&str>,
         window_name: Option<&str>,
         focused: bool,
+        session_id: Option<i64>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
@@ -341,7 +344,7 @@ impl DatabaseManager {
 
         // Insert the new frame with file_path as name and app/window metadata
         let id = sqlx::query(
-            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url, app_name, window_name, focused, device_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url, app_name, window_name, focused, device_name, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         )
         .bind(video_chunk_id)
         .bind(offset_index)
@@ -352,6 +355,7 @@ impl DatabaseManager {
         .bind(window_name)
         .bind(focused)
         .bind(device_name)
+        .bind(session_id)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -631,6 +635,20 @@ impl DatabaseManager {
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
             }
+            ContentType::Session => {
+                let session_results = self
+                    .search_sessions(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit,
+                        offset,
+                    )
+                    .await?;
+                results.extend(session_results.into_iter().map(SearchResult::Session));
+            }
         }
 
         // Sort results by timestamp in descending order
@@ -639,11 +657,13 @@ impl DatabaseManager {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
                 SearchResult::UI(ui) => ui.timestamp,
+                SearchResult::Session(session) => session.start_time,
             };
             let timestamp_b = match b {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
                 SearchResult::UI(ui) => ui.timestamp,
+                SearchResult::Session(session) => session.start_time,
             };
             timestamp_b.cmp(&timestamp_a)
         });
@@ -1154,6 +1174,14 @@ impl DatabaseManager {
                     "audio_transcriptions_fts MATCH ?1"
                 }
             ),
+            ContentType::Session => format!(
+                r#"SELECT COUNT(*) FROM sessions
+                   WHERE (?1 = '' OR app_name LIKE '%' || ?1 || '%' OR window_name LIKE '%' || ?1 || '%')
+                       AND (?2 IS NULL OR start_time >= ?2)
+                       AND (?3 IS NULL OR start_time <= ?3)
+                       AND (?4 IS NULL OR app_name = ?4)
+                       AND (?5 IS NULL OR window_name = ?5)"#
+            ),
             _ => return Ok(0),
         };
 
@@ -1204,6 +1232,16 @@ impl DatabaseManager {
                     .bind(min_length.map(|l| l as i64))
                     .bind(max_length.map(|l| l as i64))
                     .bind(json_array)
+                    .fetch_one(&self.pool)
+                    .await?
+            }
+            ContentType::Session => {
+                sqlx::query_scalar(&sql)
+                    .bind(query)
+                    .bind(start_time)
+                    .bind(end_time)
+                    .bind(app_name)
+                    .bind(window_name)
                     .fetch_one(&self.pool)
                     .await?
             }
@@ -2387,4 +2425,95 @@ fn calculate_confidence(positions: &[TextPosition]) -> f32 {
     }
 
     positions.iter().map(|pos| pos.confidence).sum::<f32>() / positions.len() as f32
+}
+
+impl DatabaseManager {
+    pub async fn insert_session(
+        &self,
+        app_name: &str,
+        window_name: &str,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+    ) -> Result<i64, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+        let id = sqlx::query(
+            "INSERT INTO sessions (app_name, window_name, start_time, end_time) VALUES (?, ?, ?, ?)",
+        )
+        .bind(app_name)
+        .bind(window_name)
+        .bind(start_time)
+        .bind(end_time)
+        .execute(&mut *tx)
+        .await?
+        .last_insert_rowid();
+
+        tx.commit().await?;
+        Ok(id)
+    }
+
+    pub async fn update_session(
+        &self,
+        id: i64,
+        end_time: DateTime<Utc>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE sessions SET end_time = ? WHERE id = ?")
+            .bind(end_time)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn search_sessions(
+        &self,
+        query: &str,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Session>, sqlx::Error> {
+        let mut sql = "SELECT * FROM sessions WHERE 1=1".to_string();
+        
+        if !query.is_empty() {
+             sql.push_str(" AND (app_name LIKE '%' || ? || '%' OR window_name LIKE '%' || ? || '%')");
+        }
+        if start_time.is_some() {
+            sql.push_str(" AND start_time >= ?");
+        }
+        if end_time.is_some() {
+             sql.push_str(" AND end_time <= ?");
+        }
+        if app_name.is_some() {
+            sql.push_str(" AND app_name = ?");
+        }
+        if window_name.is_some() {
+             sql.push_str(" AND window_name = ?");
+        }
+       
+        sql.push_str(" ORDER BY start_time DESC LIMIT ? OFFSET ?");
+
+        let mut query_builder = sqlx::query_as::<_, Session>(&sql);
+        
+        if !query.is_empty() {
+            query_builder = query_builder.bind(query).bind(query);
+        }
+        if let Some(start) = start_time {
+             query_builder = query_builder.bind(start);
+        }
+        if let Some(end) = end_time {
+             query_builder = query_builder.bind(end);
+        }
+         if let Some(app) = app_name {
+             query_builder = query_builder.bind(app);
+        }
+        if let Some(window) = window_name {
+             query_builder = query_builder.bind(window);
+        }
+        
+        query_builder = query_builder.bind(limit).bind(offset);
+
+        query_builder.fetch_all(&self.pool).await
+    }
 }

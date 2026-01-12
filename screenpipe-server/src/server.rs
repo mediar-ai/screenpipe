@@ -15,7 +15,7 @@ use screenpipe_core::Desktop;
 
 use chrono::TimeZone;
 use screenpipe_db::{
-    ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, Speaker,
+    ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, SessionManager, Speaker,
     TagContentType,
 };
 
@@ -86,6 +86,7 @@ pub type FrameImageCache = LruCache<i64, (String, Instant)>;
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
     pub audio_manager: Arc<AudioManager>,
+    pub session_manager: Arc<SessionManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -193,6 +194,7 @@ pub enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
     UI(UiContent),
+    Session(SessionContent),
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Debug)]
@@ -239,6 +241,16 @@ pub struct UiContent {
     pub offset_index: i64,
     pub frame_name: Option<String>,
     pub browser_url: Option<String>,
+}
+
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
+pub struct SessionContent {
+    pub id: i64,
+    pub app_name: String,
+    pub window_name: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub duration_secs: f64,
 }
 
 #[derive(OaSchema, Serialize)]
@@ -413,6 +425,14 @@ pub(crate) async fn search(
                 offset_index: ui.offset_index,
                 frame_name: ui.frame_name.clone(),
                 browser_url: ui.browser_url.clone(),
+            }),
+            SearchResult::Session(session) => ContentItem::Session(SessionContent {
+                id: session.id,
+                app_name: session.app_name.clone(),
+                window_name: session.window_name.clone(),
+                start_time: session.start_time,
+                end_time: session.end_time,
+                duration_secs: session.duration_secs,
             }),
         })
         .collect();
@@ -1112,6 +1132,7 @@ pub struct SCServer {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
     audio_manager: Arc<AudioManager>,
+    session_manager: Arc<SessionManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -1131,6 +1152,7 @@ impl SCServer {
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
         audio_manager: Arc<AudioManager>,
+        session_manager: Arc<SessionManager>,
         enable_pipe: bool,
     ) -> Self {
         SCServer {
@@ -1142,6 +1164,7 @@ impl SCServer {
             audio_disabled,
             ui_monitoring_enabled,
             audio_manager,
+            session_manager,
             enable_pipe,
         }
     }
@@ -1169,6 +1192,7 @@ impl SCServer {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
             audio_manager: self.audio_manager.clone(),
+            session_manager: self.session_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager.clone(),

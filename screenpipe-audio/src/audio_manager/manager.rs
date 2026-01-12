@@ -13,7 +13,7 @@ use tokio::{
 use tracing::{error, info, warn};
 use whisper_rs::WhisperContext;
 
-use screenpipe_db::DatabaseManager;
+use screenpipe_db::{DatabaseManager, SessionManager};
 
 use super::{start_device_monitor, stop_device_monitor, AudioManagerOptions};
 use crate::{
@@ -49,6 +49,7 @@ pub struct AudioManager {
     segmentation_manager: Arc<SegmentationManager>,
     status: Arc<RwLock<AudioManagerStatus>>,
     db: Arc<DatabaseManager>,
+    session_manager: Arc<SessionManager>,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     recording_handles: Arc<RecordingHandlesMap>,
     recording_sender: Arc<crossbeam::channel::Sender<AudioInput>>,
@@ -61,7 +62,11 @@ pub struct AudioManager {
 }
 
 impl AudioManager {
-    pub async fn new(options: AudioManagerOptions, db: Arc<DatabaseManager>) -> Result<Self> {
+    pub async fn new(
+        options: AudioManagerOptions,
+        db: Arc<DatabaseManager>,
+        session_manager: Arc<SessionManager>,
+    ) -> Result<Self> {
         let device_manager = DeviceManager::new().await?;
         let segmentation_manager = Arc::new(SegmentationManager::new().await?);
         let status = RwLock::new(AudioManagerStatus::Stopped);
@@ -84,6 +89,7 @@ impl AudioManager {
             segmentation_manager,
             status: Arc::new(status),
             db,
+            session_manager,
             vad_engine,
             recording_sender: Arc::new(recording_sender),
             recording_receiver: Arc::new(recording_receiver),
@@ -347,9 +353,11 @@ impl AudioManager {
     async fn start_transcription_receiver_handler(&self) -> Result<JoinHandle<()>> {
         let transcription_receiver = self.transcription_receiver.clone();
         let db = self.db.clone();
+        let session_manager = self.session_manager.clone();
         let transcription_engine = self.options.read().await.transcription_engine.clone();
         Ok(tokio::spawn(handle_new_transcript(
             db,
+            session_manager,
             transcription_receiver,
             transcription_engine,
         )))

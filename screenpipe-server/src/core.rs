@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
 use tracing::{debug, error, info, warn};
+use screenpipe_db::SessionManager;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn start_continuous_recording(
@@ -28,6 +29,7 @@ pub async fn start_continuous_recording(
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
     realtime_vision: bool,
+    session_manager: Arc<SessionManager>,
 ) -> Result<()> {
     info!("Starting video recording for monitors {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -38,7 +40,9 @@ pub async fn start_continuous_recording(
                 let output_path_video = Arc::clone(&output_path);
                 let ocr_engine = Arc::clone(&ocr_engine);
                 let ignored_windows_video = ignored_windows.to_vec();
+                let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
+                let session_manager = Arc::clone(&session_manager);
 
                 let languages = languages.clone();
 
@@ -59,7 +63,9 @@ pub async fn start_continuous_recording(
                             video_chunk_duration,
                             languages.clone(),
                             capture_unfocused_windows,
+                            capture_unfocused_windows,
                             realtime_vision,
+                            session_manager.clone(),
                         )
                         .await
                         {
@@ -123,7 +129,9 @@ async fn record_video(
     video_chunk_duration: Duration,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
+    capture_unfocused_windows: bool,
     realtime_vision: bool,
+    session_manager: Arc<SessionManager>,
 ) -> Result<()> {
     info!("record_video: Starting for monitor {}", monitor_id);
     let device_name = Arc::new(format!("monitor_{}", monitor_id));
@@ -237,6 +245,20 @@ async fn record_video(
 
             for window_result in &frame.window_ocr_results {
                 let insert_frame_start = std::time::Instant::now();
+                
+                let session_id = match session_manager.handle_activity(
+                    &window_result.app_name, 
+                    &window_result.window_name, 
+                    frame.timestamp,
+                    window_result.focused
+                ).await {
+                    Ok(id) => Some(id),
+                    Err(e) => {
+                        error!("Failed to handle session activity: {}", e);
+                        None
+                    }
+                };
+
                 let result = db
                     .insert_frame(
                         &device_name,
@@ -245,6 +267,7 @@ async fn record_video(
                         Some(window_result.app_name.as_str()),
                         Some(window_result.window_name.as_str()),
                         window_result.focused,
+                        session_id,
                     )
                     .await;
 

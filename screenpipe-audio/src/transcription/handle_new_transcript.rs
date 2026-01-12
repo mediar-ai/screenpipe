@@ -1,13 +1,13 @@
 use std::sync::Arc;
-
 use crate::{core::engine::AudioTranscriptionEngine, transcription::process_transcription_result};
-use screenpipe_db::DatabaseManager;
+use screenpipe_db::{DatabaseManager, SessionManager};
 use tracing::{error, info};
 
 use super::TranscriptionResult;
 
 pub async fn handle_new_transcript(
     db: Arc<DatabaseManager>,
+    session_manager: Arc<SessionManager>,
     transcription_receiver: Arc<crossbeam::channel::Receiver<TranscriptionResult>>,
     transcription_engine: Arc<AudioTranscriptionEngine>,
 ) {
@@ -51,6 +51,9 @@ pub async fn handle_new_transcript(
         } else {
             continue;
         }
+
+        let session_id = session_manager.get_focused_session().await;
+
         // Process the transcription result
         match process_transcription_result(
             &db,
@@ -58,6 +61,7 @@ pub async fn handle_new_transcript(
             transcription_engine.clone(),
             processed_previous,
             previous_transcript_id,
+            session_id,
         )
         .await
         {

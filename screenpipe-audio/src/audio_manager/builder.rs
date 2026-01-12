@@ -2,16 +2,16 @@ use anyhow::Result;
 use std::{collections::HashSet, env, path::PathBuf, sync::Arc, time::Duration};
 
 use screenpipe_core::Language;
-use screenpipe_db::DatabaseManager;
+use screenpipe_db::{DatabaseManager, SessionManager};
 
 use crate::{
     core::{
         device::{default_input_device, default_output_device},
         engine::AudioTranscriptionEngine,
     },
-    transcription::deepgram::CUSTOM_DEEPGRAM_API_TOKEN,
     vad::{VadEngineEnum, VadSensitivity},
 };
+use crate::transcription::deepgram::CUSTOM_DEEPGRAM_API_TOKEN;
 
 use crate::audio_manager::AudioManager;
 
@@ -137,7 +137,11 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub async fn build(&mut self, db: Arc<DatabaseManager>) -> Result<AudioManager> {
+    pub async fn build(
+        &mut self,
+        db: Arc<DatabaseManager>,
+        session_manager: Arc<SessionManager>,
+    ) -> Result<AudioManager> {
         self.validate_options()?;
         let options = &mut self.options;
 
@@ -148,7 +152,7 @@ impl AudioManagerBuilder {
             ]);
         }
 
-        AudioManager::new(options.clone(), db).await
+        AudioManager::new(options.clone(), db, session_manager).await
     }
 
     pub fn output_path(mut self, output_path: PathBuf) -> Self {

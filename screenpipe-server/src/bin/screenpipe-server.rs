@@ -13,7 +13,7 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_db::{
-    create_migration_worker, DatabaseManager, MigrationCommand, MigrationConfig, MigrationStatus,
+    create_migration_worker, DatabaseManager, MigrationCommand, MigrationConfig, MigrationStatus, SessionManager,
 };
 use screenpipe_server::{
     cli::{
@@ -632,6 +632,7 @@ async fn main() -> anyhow::Result<()> {
                 e
             })?,
     );
+    let session_manager = Arc::new(SessionManager::new(db.clone()));
 
     let db_server = db.clone();
 
@@ -665,6 +666,7 @@ async fn main() -> anyhow::Result<()> {
     let ignored_windows_clone = cli.ignored_windows.clone();
     let included_windows_clone = cli.included_windows.clone();
     let realtime_audio_devices_clone = realtime_audio_devices.clone();
+    let session_manager_clone = Arc::clone(&session_manager);
 
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps
@@ -686,7 +688,7 @@ async fn main() -> anyhow::Result<()> {
         .deepgram_api_key(cli.deepgram_api_key.clone())
         .output_path(PathBuf::from(output_path_clone.clone().to_string()));
 
-    let audio_manager = match audio_manager_builder.build(db.clone()).await {
+    let audio_manager = match audio_manager_builder.build(db.clone(), session_manager.clone()).await {
         Ok(manager) => Arc::new(manager),
         Err(e) => {
             error!("{e}");
@@ -714,6 +716,7 @@ async fn main() -> anyhow::Result<()> {
                     languages_clone.clone(),
                     cli.capture_unfocused_windows,
                     cli.enable_realtime_audio_transcription,
+                    session_manager_clone.clone(),
                 );
 
                 let result = tokio::select! {
