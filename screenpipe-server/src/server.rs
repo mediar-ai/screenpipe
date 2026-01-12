@@ -1,3 +1,4 @@
+use reqwest::Client;
 use axum::{
     body::Body,
     extract::{
@@ -300,6 +301,241 @@ pub struct HealthCheckResponse {
 pub struct SearchResponse {
     pub data: Vec<ContentItem>,
     pub pagination: PaginationInfo,
+}
+
+
+#[derive(Deserialize, Debug)]
+pub struct DeepSearchQuery {
+    pub query: String,
+    pub start_time: Option<DateTime<Utc>>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub app_name: Option<String>,
+    pub window_name: Option<String>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct ResearchStep {
+    pub step: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct DeepSearchResponse {
+    pub answer: String,
+    pub steps: Vec<ResearchStep>,
+    pub sources: Vec<ContentItem>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct LlmRequest {
+    model: String,
+    messages: Vec<serde_json::Value>,
+    stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize, Debug)]
+struct LlmResponse {
+    choices: Vec<LlmChoice>,
+}
+
+#[derive(Deserialize, Debug)]
+struct LlmChoice {
+    message: LlmMessage,
+}
+
+#[derive(Deserialize, Debug)]
+struct LlmMessage {
+    content: Option<String>,
+}
+
+async fn query_llm(
+    system_prompt: &str,
+    user_prompt: &str,
+) -> anyhow::Result<String> {
+    let client = Client::new();
+    let url = std::env::var("SCREENPIPE_LLM_URL").unwrap_or_else(|_| "http://localhost:11434/v1/chat/completions".to_string());
+    let model = std::env::var("SCREENPIPE_LLM_MODEL").unwrap_or_else(|_| "llama3".to_string());
+
+    let response = client
+        .post(url)
+        .json(&LlmRequest {
+            model,
+            messages: vec![
+                json!({ "role": "system", "content": system_prompt }),
+                json!({ "role": "user", "content": user_prompt }),
+            ],
+            stream: false,
+            response_format: None,
+        })
+        .send()
+        .await?;
+
+    let response_json: LlmResponse = response.json().await?;
+    let content = response_json.choices.first()
+        .and_then(|c| c.message.content.clone())
+        .ok_or_else(|| anyhow::anyhow!("No content in LLM response"))?;
+
+    Ok(content)
+}
+
+#[oasgen]
+pub(crate) async fn deep_search(
+    Query(query): Query<DeepSearchQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<DeepSearchResponse>, (StatusCode, JsonResponse<serde_json::Value>)> {
+    info!("received deep search request: {:?}", query);
+    let mut steps = Vec::new();
+
+    // Step 1: Planning
+    steps.push(ResearchStep {
+        step: "Planning search strategy".to_string(),
+        timestamp: Utc::now(),
+    });
+
+    let system_prompt = r#"You are a helpful assistant for planning a search strategy over a local user activity database (Screenpipe).
+The database contains OCR text (screen content) and Audio transcriptions.
+Given a user query, extract keywords and parameters to search for.
+Return a JSON object with:
+{
+    "keywords": ["list", "of", "keywords"],
+    "app_name": "optional_app_name_filter",
+    "window_name": "optional_window_name_filter",
+    "start_time": "optional_iso_timestamp",
+    "end_time": "optional_iso_timestamp"
+}
+Ensure keywords are specific and relevant.
+"#;
+
+    let planning_response = match query_llm(system_prompt, &query.query).await {
+        Ok(r) => r,
+        Err(e) => {
+            error!("LLM planning failed: {}", e);
+            // Fallback to simple keyword search using the query itself
+            json!({ "keywords": [query.query.clone()] }).to_string()
+        }
+    };
+
+    let plan: serde_json::Value = serde_json::from_str(&planning_response).unwrap_or(json!({ "keywords": [query.query.clone()] }));
+    
+    // Extract keywords string for search
+    let keywords_value = plan.get("keywords").and_then(|v| v.as_array());
+    let search_query = if let Some(kws) = keywords_value {
+        kws.iter()
+            .map(|v| v.as_str().unwrap_or("").to_string())
+            .collect::<Vec<String>>()
+            .join(" ")
+    } else {
+        query.query.clone()
+    };
+    
+    let app_filter = plan.get("app_name").and_then(|v| v.as_str()).map(|s| s.to_string()).or(query.app_name.clone());
+    let window_filter = plan.get("window_name").and_then(|v| v.as_str()).map(|s| s.to_string()).or(query.window_name.clone());
+
+    steps.push(ResearchStep {
+        step: format!("Executing search for: '{}'", search_query),
+        timestamp: Utc::now(),
+    });
+
+    // Step 2: Execution
+    let (results, _) = state.db.search(
+        &search_query,
+        ContentType::All,
+        query.limit.unwrap_or(50) as usize,
+        query.offset.unwrap_or(0) as usize,
+        query.start_time,
+        query.end_time,
+        app_filter.as_deref(),
+        window_filter.as_deref(),
+        None, // min_length
+        None, // max_length
+        None, // speaker_ids
+        None, // frame_name
+        None, // browser_url
+        false // focused
+    ).await.map_err(|e| {
+        error!("search failed: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, JsonResponse(json!({"error": e.to_string()})))
+    })?;
+
+    // Step 3: Synthesis
+    steps.push(ResearchStep {
+        step: format!("Synthesizing {} results", results.len()),
+        timestamp: Utc::now(),
+    });
+
+    let results_text = results.iter().take(20).map(|r| format!("{:?}", r)).collect::<Vec<_>>().join("\n");
+    let synthesis_system_prompt = "You are a helpful assistant. Synthesize the following search results to answer the user's query. Cite specific applications or windows if relevant. If the results are not sufficient, state that clearly.";
+    let synthesis_user_prompt = format!("User Query: {}\n\nSearch Results:\n{}", query.query, results_text);
+    
+    let answer = query_llm(synthesis_system_prompt, &synthesis_user_prompt).await.unwrap_or_else(|e| {
+        error!("LLM synthesis failed: {}", e);
+        format!("Failed to generate summary: {}", e)
+    });
+
+    // Convert results to ContentItem for response
+     let content_items: Vec<ContentItem> = results
+        .iter()
+        .map(|result| match result {
+            SearchResult::OCR(ocr) => ContentItem::OCR(OCRContent {
+                frame_id: ocr.frame_id,
+                text: ocr.ocr_text.clone(),
+                timestamp: ocr.timestamp,
+                file_path: ocr.file_path.clone(),
+                offset_index: ocr.offset_index,
+                app_name: ocr.app_name.clone(),
+                window_name: ocr.window_name.clone(),
+                tags: ocr.tags.clone(),
+                frame: None,
+                frame_name: Some(ocr.frame_name.clone()),
+                browser_url: ocr.browser_url.clone(),
+                focused: ocr.focused,
+                device_name: ocr.device_name.clone(),
+            }),
+            SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
+                chunk_id: audio.audio_chunk_id,
+                transcription: audio.transcription.clone(),
+                timestamp: audio.timestamp,
+                file_path: audio.file_path.clone(),
+                offset_index: audio.offset_index,
+                tags: audio.tags.clone(),
+                device_name: audio.device_name.clone(),
+                device_type: audio.device_type.clone().into(),
+                speaker: audio.speaker.clone(),
+                start_time: audio.start_time,
+                end_time: audio.end_time,
+            }),
+            SearchResult::UI(ui) => ContentItem::UI(UiContent {
+                id: ui.id,
+                text: ui.text.clone(),
+                timestamp: ui.timestamp,
+                app_name: ui.app_name.clone(),
+                window_name: ui.window_name.clone(),
+                initial_traversal_at: ui.initial_traversal_at,
+                file_path: ui.file_path.clone(),
+                offset_index: ui.offset_index,
+                frame_name: ui.frame_name.clone(),
+                browser_url: ui.browser_url.clone(),
+            }),
+            SearchResult::Session(session) => ContentItem::Session(SessionContent {
+                id: session.id,
+                app_name: session.app_name.clone(),
+                window_name: session.window_name.clone(),
+                start_time: session.start_time,
+                end_time: session.end_time,
+                duration_secs: session.duration_secs,
+            }),
+        })
+        .collect();
+
+    Ok(JsonResponse(DeepSearchResponse {
+        answer,
+        steps,
+        sources: content_items,
+    }))
 }
 
 // Update the search function
@@ -1205,6 +1441,7 @@ impl SCServer {
             ]);
         let server = Server::axum()
             .get("/search", search)
+            .get("/search/deep", deep_search)
             .get("/audio/list", api_list_audio_devices)
             .get("/vision/list", api_list_monitors)
             .post("/tags/:content_type/:id", add_tags)
