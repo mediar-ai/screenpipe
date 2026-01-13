@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { pipe } from "@screenpipe/js";
-import { generateDailyReport, deduplicateScreenData } from "@/lib/helpers";
+import { generateWorkLog, deduplicateScreenData } from "@/lib/helpers";
 import { NotionClient } from "@/lib/notion/client";
 import { settingsStore } from "@/lib/store/settings-store";
 
-const hour = (h: number) => h * 60 * 60 * 1000;
+const minute = (m: number) => m * 60 * 1000;
 
 export async function GET() {
   try {
@@ -15,6 +15,7 @@ export async function GET() {
     const pageSize = settings?.pageSize || 500;
     const customPrompt = settings?.prompt;
     const deduplicationEnabled = settings?.deduplicationEnabled ?? false;
+    const intervalMinutes = settings?.shortTasksInterval || 5;
 
     if (!aiPreset) {
       return NextResponse.json(
@@ -31,15 +32,11 @@ export async function GET() {
     }
 
     const now = new Date();
-    // Get data from the start of today (or last 12 hours for testing)
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
+    const startTime = new Date(now.getTime() - minute(intervalMinutes));
 
-    // Use start of day or 12 hours ago, whichever is more recent
-    const twelveHoursAgo = new Date(now.getTime() - hour(12));
-    const startTime = startOfDay > twelveHoursAgo ? startOfDay : twelveHoursAgo;
-
-    console.log(`fetching screen data from ${startTime.toISOString()} to ${now.toISOString()}`);
+    console.log(
+      `fetching screen data from ${startTime.toISOString()} to ${now.toISOString()}`,
+    );
 
     const screenData = await pipe.queryScreenpipe({
       startTime: startTime.toISOString(),
@@ -57,7 +54,6 @@ export async function GET() {
 
     console.log(`found ${screenData.data.length} screen data items`);
 
-    // Only deduplicate if enabled in settings
     if (deduplicationEnabled) {
       try {
         screenData.data = await deduplicateScreenData(screenData.data);
@@ -70,7 +66,7 @@ export async function GET() {
       }
     }
 
-    const dailyReport = await generateDailyReport(
+    const logEntry = await generateWorkLog(
       screenData.data,
       aiPreset,
       startTime,
@@ -78,20 +74,20 @@ export async function GET() {
       customPrompt,
     );
 
-    console.log("daily report generated:", dailyReport);
+    console.log("work log generated:", logEntry);
 
     const notionClient = new NotionClient(settings.notion);
-    const deepLink = await notionClient.createDailyReport(dailyReport);
+    const deepLink = await notionClient.createLog(logEntry);
 
     return NextResponse.json({
-      message: "daily report synced successfully",
-      report: dailyReport,
-      deepLink: deepLink,
+      message: "work log synced successfully",
+      logEntry,
+      deepLink,
     });
   } catch (error) {
-    console.error("error in daily report api:", error);
+    console.error("error in work log api:", error);
     return NextResponse.json(
-      { error: `failed to process daily report: ${error}` },
+      { error: `failed to process work log: ${error}` },
       { status: 500 },
     );
   }

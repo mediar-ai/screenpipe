@@ -58,3 +58,8 @@ app.py
 *.py3z
 __pycache__/
 
+# Claude Code workflow files (development only)
+.claude/
+AGENTS.md
+CLAUDE.md
+Plans.md

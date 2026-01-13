@@ -2,11 +2,13 @@ import {
   WorkLog,
   Intelligence,
   NotionCredentials,
+  DailyReport,
 } from "@/lib/types";
 import {
   validateCredentials,
   syncWorkLog,
   syncIntelligence,
+  syncDailyReport,
 } from "./notion";
 
 export class NotionClient {
@@ -22,6 +24,10 @@ export class NotionClient {
 
   async createLog(logEntry: WorkLog): Promise<string> {
     return await syncWorkLog(this.credentials, logEntry);
+  }
+
+  async createDailyReport(report: DailyReport): Promise<string> {
+    return await syncDailyReport(this.credentials, report);
   }
 
   async createIntelligence(intelligence: Intelligence): Promise<string> {

@@ -16,31 +16,36 @@ export interface PipeSettings extends PipeSettingsFromTypes {
 type AIPreset = ScreenpipeAppSettings["aiPresets"][number];
 
 const DEFAULT_SETTINGS: Partial<PipeSettings> = {
-  prompt: `yo, you're my personal data detective! 🕵
+  prompt: `あなたは私の作業日報を作成するアシスタントです。
 
-rules for the investigation:
-- extract names of people i interact with and what we discussed, when i encounter a person, make sure to extract their name like this [[John Doe]] so it's linked in my notes
-- identify recurring topics/themes in my convos, use tags or [[Link them]] to my notes
-- spot any promises or commitments made (by me or others)
-- catch interesting ideas or insights dropped in casual chat
-- note emotional vibes and energy levels in conversations
-- highlight potential opportunities or connections
-- track project progress and blockers mentioned
+## 分析の重点
 
-style rules:
-- always put people's names in double square brackets, eg: [[John Doe]] to link to their notes, same for companies, eg: [[Google]], or projects, eg: [[Project X]]
-- keep it real and conversational
-- use bullet points for clarity
-- include relevant timestamps
-- group related info together
-- max 4 lines per insight
-- no corporate speak, keep it human
-- for tags use hyphen between words, no spaces, eg: #my-tag not #my tag nor #myTag nor #my_tag
+1. **メイン作業の特定**
+   - 最も時間をかけた活動を3-5項目抽出
+   - 具体的なプロジェクト名、ツール名を含める
+   - 成果や進捗を明記
 
-remember: you're analyzing screen ocr text & audio, etc. from my computer, so focus on actual interactions and content!
-you'll get chunks of 5 mins roughly of data screen & audio recordings and have to write logs.
-this data will be used later for analysis, it must contains valuable insights on what i am doing.
-if you do your job well, i'll give you a 🍺 and $1m`,
+2. **知見・メモの抽出**
+   - リサーチで発見した重要な情報
+   - ミーティングでの気づきや決定事項
+   - 技術的な学びやTips
+   - 処理中・検討中の事項
+
+3. **時間配分の可視化**
+   - カテゴリ別の作業時間を推定
+   - 開発、リサーチ、ミーティング、ドキュメント作成など
+
+4. **作業ファイルの追跡**
+   - 編集・閲覧したファイル名
+   - 作業中のドキュメントやコード
+
+## スタイルルール
+
+- 人名は [[山田太郎]] 形式でリンク化
+- 会社名・プロジェクト名も [[リンク]] 形式
+- タグは #カテゴリ 形式
+- 簡潔だが具体的に
+- 日本語で出力`,
 };
 
 type Listener = () => void;

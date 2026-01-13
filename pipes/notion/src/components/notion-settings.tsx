@@ -76,6 +76,7 @@ export function NotionSettings() {
       const isValid = await validateCredentials({
         accessToken: settings?.notion?.accessToken || "",
         databaseId: settings?.notion?.databaseId || "",
+        dailyReportDbId: settings?.notion?.dailyReportDbId || "",
         intelligenceDbId: settings?.notion?.intelligenceDbId || "",
       });
       if (!isValid) {
@@ -87,6 +88,7 @@ export function NotionSettings() {
         notion: {
           accessToken: settings?.notion?.accessToken || "",
           databaseId: settings?.notion?.databaseId || "",
+          dailyReportDbId: settings?.notion?.dailyReportDbId || "",
           intelligenceDbId: settings?.notion?.intelligenceDbId || "",
         },
       });
@@ -99,7 +101,7 @@ export function NotionSettings() {
       toast({
         title: "Error",
         description:
-          "Failed to connect to Notion, make sure your integration have to databases",
+          "Failed to connect to Notion, make sure your integration has access to the databases",
         variant: "destructive",
       });
     } finally {
@@ -118,6 +120,7 @@ export function NotionSettings() {
       const notionCreds = {
         accessToken: credentials.accessToken,
         databaseId: credentials.databaseId,
+        dailyReportDbId: credentials.dailyReportDbId,
         intelligenceDbId: credentials.intelligenceDbId,
       };
 
@@ -149,7 +152,7 @@ export function NotionSettings() {
   const handleTestLog = async () => {
     setTestingLog(true);
     try {
-      const response = await fetch("/api/log");
+      const response = await fetch("/api/work-log");
       const data = await response.json();
 
       if (!response.ok) throw new Error(data.message);
@@ -216,6 +219,10 @@ export function NotionSettings() {
             localSettings?.notion?.databaseId ||
             settings?.notion?.databaseId ||
             "",
+          dailyReportDbId:
+            localSettings?.notion?.dailyReportDbId ||
+            settings?.notion?.dailyReportDbId ||
+            "",
           intelligenceDbId:
             localSettings?.notion?.intelligenceDbId ||
             settings?.notion?.intelligenceDbId ||
@@ -224,7 +231,7 @@ export function NotionSettings() {
       });
 
       if (localSettings?.shortTasksInterval !== settings?.shortTasksInterval) {
-        await updatePipeConfig(localSettings?.shortTasksInterval || 5, "/api/log", "minute");
+        await updatePipeConfig(localSettings?.shortTasksInterval || 5, "/api/work-log", "minute");
       }
 
       if (localSettings?.interval !== settings?.interval) {
@@ -268,6 +275,7 @@ export function NotionSettings() {
         const isValid = await validateCredentials({
           accessToken: settings.notion.accessToken,
           databaseId: settings.notion.databaseId,
+          dailyReportDbId: settings.notion.dailyReportDbId || "",
           intelligenceDbId: settings.notion.intelligenceDbId,
         });
         setIsConnectedToNotion(isValid);
@@ -278,7 +286,7 @@ export function NotionSettings() {
     };
     
     checkConnection();
-  }, [settings?.notion?.accessToken, settings?.notion?.databaseId, settings?.notion?.intelligenceDbId]);
+  }, [settings?.notion?.accessToken, settings?.notion?.databaseId, settings?.notion?.dailyReportDbId, settings?.notion?.intelligenceDbId]);
 
   // Check if manual connection is ready
   const isManualConnectionReady = !!(
@@ -471,7 +479,7 @@ export function NotionSettings() {
                 id="workspace"
                 type="text"
                 placeholder="Required"
-                value={settings?.workspace || ""}
+                value={localSettings?.workspace ?? settings?.workspace ?? ""}
                 onChange={(e) =>
                   setLocalSettings({
                     ...localSettings!,
@@ -515,6 +523,7 @@ export function NotionSettings() {
                             ...localSettings?.notion,
                             accessToken: e.target.value,
                             databaseId: localSettings?.notion?.databaseId || "",
+                            dailyReportDbId: localSettings?.notion?.dailyReportDbId || "",
                             intelligenceDbId: localSettings?.notion?.intelligenceDbId || "",
                           },
                         })
@@ -540,7 +549,7 @@ export function NotionSettings() {
                   <div className="space-y-2">
                       <NotionDatabaseSelector
                       accessToken={localSettings?.notion?.accessToken || ""}
-                      label="Database ID"
+                      label="Activity Logs Database"
                       value={localSettings?.notion?.databaseId || ""}
                       onChange={(value) =>
                         setLocalSettings({
@@ -549,11 +558,32 @@ export function NotionSettings() {
                             ...localSettings?.notion,
                             databaseId: value,
                             accessToken: localSettings?.notion?.accessToken || "",
+                            dailyReportDbId: localSettings?.notion?.dailyReportDbId || "",
                             intelligenceDbId: localSettings?.notion?.intelligenceDbId || "",
                           },
                         })
                       }
                         />
+                  </div>
+
+                  <div className="space-y-2">
+                    <NotionDatabaseSelector
+                      accessToken={localSettings?.notion?.accessToken || ""}
+                      label="Daily Reports Database"
+                      value={localSettings?.notion?.dailyReportDbId || ""}
+                      onChange={(value) =>
+                        setLocalSettings({
+                          ...localSettings!,
+                          notion: {
+                            ...localSettings?.notion,
+                            dailyReportDbId: value,
+                            accessToken: localSettings?.notion?.accessToken || "",
+                            databaseId: localSettings?.notion?.databaseId || "",
+                            intelligenceDbId: localSettings?.notion?.intelligenceDbId || "",
+                          },
+                        })
+                      }
+                    />
                   </div>
                   
                   <div className="space-y-2">
@@ -569,6 +599,7 @@ export function NotionSettings() {
                             intelligenceDbId: value,
                             accessToken: localSettings?.notion?.accessToken || "",
                             databaseId: localSettings?.notion?.databaseId || "",
+                            dailyReportDbId: localSettings?.notion?.dailyReportDbId || "",
                           },
                         })
                       }

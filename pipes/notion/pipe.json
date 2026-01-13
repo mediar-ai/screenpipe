@@ -1,8 +1,12 @@
 {
     "crons": [
         {
-            "path": "/api/log",
+            "path": "/api/work-log",
             "schedule": "0 */5 * * * *"
+        },
+        {
+            "path": "/api/log",
+            "schedule": "0 0 18 * * *"
         },
         {
             "path": "/api/intelligence",

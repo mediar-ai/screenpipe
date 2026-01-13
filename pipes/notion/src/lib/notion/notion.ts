@@ -1,17 +1,49 @@
 "use server";
 
 import { Client } from "@notionhq/client";
-import { WorkLog, Intelligence, NotionCredentials } from "@/lib/types";
+import { WorkLog, Intelligence, NotionCredentials, DailyReport } from "@/lib/types";
 import { BlockObjectRequest, DatabaseObjectResponse } from "@notionhq/client/build/src/api-endpoints";
+
+// Retry helper for rate limiting
+async function withRetry<T>(
+	fn: () => Promise<T>,
+	maxRetries: number = 3,
+	baseDelay: number = 1000
+): Promise<T> {
+	for (let i = 0; i < maxRetries; i++) {
+		try {
+			return await fn();
+		} catch (error: unknown) {
+			const isRateLimit = error instanceof Error && error.message.includes("429");
+			if (isRateLimit && i < maxRetries - 1) {
+				const delay = baseDelay * Math.pow(2, i);
+				console.log(`rate limited, retrying in ${delay}ms...`);
+				await new Promise(resolve => setTimeout(resolve, delay));
+			} else {
+				throw error;
+			}
+		}
+	}
+	throw new Error("max retries exceeded");
+}
 
 export async function validateCredentials(
 	credentials: NotionCredentials,
 ): Promise<boolean> {
 	try {
 		const client = new Client({ auth: credentials.accessToken });
+		const logsDbId = credentials.databaseId;
+		const dailyReportDbId = credentials.dailyReportDbId || credentials.databaseId;
+
 		await client.databases.retrieve({
-			database_id: credentials.databaseId,
+			database_id: logsDbId,
 		});
+
+		if (dailyReportDbId !== logsDbId) {
+			await client.databases.retrieve({
+				database_id: dailyReportDbId,
+			});
+		}
 
 		await client.databases.retrieve({
 			database_id: credentials.intelligenceDbId,
@@ -19,7 +51,7 @@ export async function validateCredentials(
 
 		// Reset logs database properties
 		await client.databases.update({
-			database_id: credentials.databaseId,
+			database_id: logsDbId,
 			title: [{ text: { content: "Activity Logs" } }],
 			properties: {
 				Description: { rich_text: {} },
@@ -30,6 +62,19 @@ export async function validateCredentials(
 				Summary: { rich_text: {} },
 			},
 		});
+
+		if (dailyReportDbId !== logsDbId) {
+			await client.databases.update({
+				database_id: dailyReportDbId,
+				title: [{ text: { content: "Daily Reports" } }],
+				properties: {
+					Description: { rich_text: {} },
+					Tags: { multi_select: {} },
+					Date: { date: {} },
+					Summary: { rich_text: {} },
+				},
+			});
+		}
 
 		await client.databases.update({
 			database_id: credentials.intelligenceDbId,
@@ -53,9 +98,10 @@ export async function syncWorkLog(
 ): Promise<string> {
 	const client = new Client({ auth: credentials.accessToken });
 	const today = new Date();
+	const logsDbId = credentials.databaseId;
 
 	await client.pages.create({
-		parent: { database_id: credentials.databaseId },
+		parent: { database_id: logsDbId },
 		properties: {
 			Name: { title: [{ text: { content: logEntry.title } }] },
 			Description: { rich_text: [{ text: { content: logEntry.description } }] },
@@ -77,8 +123,506 @@ export async function syncWorkLog(
 		},
 	});
 
-	return `https://notion.so/${credentials.databaseId}`;
+	return `https://notion.so/${logsDbId}`;
 }
+
+export async function syncDailyReport(
+	credentials: NotionCredentials,
+	report: DailyReport,
+): Promise<string> {
+	const client = new Client({ auth: credentials.accessToken });
+	const dailyReportDbId = credentials.dailyReportDbId || credentials.databaseId;
+
+	// Check for existing report for today (exclude archived pages)
+	const existingReports = await withRetry(() => client.databases.query({
+		database_id: dailyReportDbId,
+		filter: {
+			and: [
+				{
+					property: "Date",
+					date: {
+						equals: report.date,
+					},
+				},
+			],
+		},
+	}));
+
+	// Filter out archived pages
+	const activeReports = existingReports.results.filter(
+		(page) => "archived" in page && !page.archived
+	);
+
+	// Generate description from summary
+	const descriptionText = report.summary?.oneLine || report.mainActivities
+		.map((a, i) => `${i + 1}. ${a.title}`)
+		.join("\n");
+
+	const properties = {
+		Name: {
+			title: [{ text: { content: `作業日報 ${report.date}` } }],
+		},
+		Description: {
+			rich_text: [
+				{
+					text: {
+						content: descriptionText.substring(0, 2000), // Notion limit
+					},
+				},
+			],
+		},
+		Date: { date: { start: report.date } },
+		Tags: { multi_select: report.tags.map((tag) => ({ name: tag })) },
+		Summary: {
+			rich_text: [
+				{
+					text: {
+						content: `${report.summary?.oneLine || ""} | 記録: ${report.recordingPeriod}`,
+					},
+				},
+			],
+		},
+	};
+
+	// Build content blocks
+	const children: BlockObjectRequest[] = [
+		// Header info
+		{
+			type: "callout",
+			callout: {
+				rich_text: [
+					{
+						type: "text",
+						text: {
+							content: `記録期間: ${report.recordingPeriod}  キャプチャ数: ${report.captureCount}回`,
+						},
+					},
+				],
+				icon: { emoji: "📊" },
+			},
+		},
+	];
+
+	// ==================== 総括セクション ====================
+	if (report.summary) {
+		children.push(
+			{
+				type: "heading_1",
+				heading_1: {
+					rich_text: [{ type: "text", text: { content: "📝 総括" } }],
+				},
+			},
+			{
+				type: "quote",
+				quote: {
+					rich_text: [{ type: "text", text: { content: report.summary.oneLine || "（総括なし）" } }],
+				},
+			}
+		);
+
+		if (report.summary.achievements?.length > 0) {
+			children.push({
+				type: "heading_3",
+				heading_3: {
+					rich_text: [{ type: "text", text: { content: "✅ 達成できたこと" } }],
+				},
+			});
+			report.summary.achievements.forEach((achievement) => {
+				children.push({
+					type: "bulleted_list_item",
+					bulleted_list_item: {
+						rich_text: [{ type: "text", text: { content: achievement } }],
+					},
+				});
+			});
+		}
+
+		if (report.summary.challenges?.length > 0) {
+			children.push({
+				type: "heading_3",
+				heading_3: {
+					rich_text: [{ type: "text", text: { content: "⚠️ 課題・困難だったこと" } }],
+				},
+			});
+			report.summary.challenges.forEach((challenge) => {
+				children.push({
+					type: "bulleted_list_item",
+					bulleted_list_item: {
+						rich_text: [{ type: "text", text: { content: challenge } }],
+					},
+				});
+			});
+		}
+
+		children.push({ type: "divider", divider: {} });
+	}
+
+	// ==================== 行動分析セクション ====================
+	if (report.actionAnalysis) {
+		children.push({
+			type: "heading_1",
+			heading_1: {
+				rich_text: [{ type: "text", text: { content: "🔍 行動分析" } }],
+			},
+		});
+
+		if (report.actionAnalysis.focusTime) {
+			children.push({
+				type: "callout",
+				callout: {
+					rich_text: [{ type: "text", text: { content: `集中できた時間帯: ${report.actionAnalysis.focusTime}` } }],
+					icon: { emoji: "🎯" },
+				},
+			});
+		}
+
+		if (report.actionAnalysis.patterns?.length > 0) {
+			children.push({
+				type: "heading_3",
+				heading_3: {
+					rich_text: [{ type: "text", text: { content: "行動パターン" } }],
+				},
+			});
+			report.actionAnalysis.patterns.forEach((pattern) => {
+				children.push({
+					type: "bulleted_list_item",
+					bulleted_list_item: {
+						rich_text: [{ type: "text", text: { content: pattern } }],
+					},
+				});
+			});
+		}
+
+		if (report.actionAnalysis.distractions?.length > 0) {
+			children.push({
+				type: "heading_3",
+				heading_3: {
+					rich_text: [{ type: "text", text: { content: "⚡ 気が散った要因" } }],
+				},
+			});
+			report.actionAnalysis.distractions.forEach((distraction) => {
+				children.push({
+					type: "bulleted_list_item",
+					bulleted_list_item: {
+						rich_text: [{ type: "text", text: { content: distraction } }],
+					},
+				});
+			});
+		}
+
+		children.push({ type: "divider", divider: {} });
+	}
+
+	// ==================== メイン作業セクション ====================
+	children.push({
+		type: "heading_2",
+		heading_2: {
+			rich_text: [{ type: "text", text: { content: "📍 本日のメイン作業" } }],
+		},
+	});
+
+	// Add main activities with outcome
+	report.mainActivities.forEach((activity, index) => {
+		children.push(
+			{
+				type: "heading_3",
+				heading_3: {
+					rich_text: [
+						{ type: "text", text: { content: `${index + 1}. ${activity.title}` } },
+					],
+				},
+			},
+			{
+				type: "paragraph",
+				paragraph: {
+					rich_text: [{ type: "text", text: { content: activity.description } }],
+				},
+			}
+		);
+		// Add outcome if available
+		if (activity.outcome) {
+			children.push({
+				type: "callout",
+				callout: {
+					rich_text: [{ type: "text", text: { content: `成果: ${activity.outcome}` } }],
+					icon: { emoji: "🎯" },
+				},
+			});
+		}
+	});
+
+	// Time Allocation Section
+	children.push(
+		{
+			type: "heading_2",
+			heading_2: {
+				rich_text: [{ type: "text", text: { content: "⏱️ 時間配分" } }],
+			},
+		},
+		{
+			type: "table",
+			table: {
+				table_width: 3,
+				has_column_header: true,
+				has_row_header: false,
+				children: [
+					{
+						type: "table_row",
+						table_row: {
+							cells: [
+								[{ type: "text", text: { content: "カテゴリ" } }],
+								[{ type: "text", text: { content: "時間" } }],
+								[{ type: "text", text: { content: "割合" } }],
+							],
+						},
+					},
+					...report.timeAllocation.map((item) => ({
+						type: "table_row" as const,
+						table_row: {
+							cells: [
+								[{ type: "text" as const, text: { content: item.category } }],
+								[{ type: "text" as const, text: { content: item.duration } }],
+								[{ type: "text" as const, text: { content: `${item.percentage}%` } }],
+							],
+						},
+					})),
+				],
+			},
+		}
+	);
+
+	// Insights Section
+	if (report.insights.length > 0) {
+		children.push({
+			type: "heading_2",
+			heading_2: {
+				rich_text: [{ type: "text", text: { content: "💡 得られた知見・メモ" } }],
+			},
+		});
+
+		report.insights.forEach((insight) => {
+			children.push({
+				type: "heading_3",
+				heading_3: {
+					rich_text: [{ type: "text", text: { content: insight.topic } }],
+				},
+			});
+			insight.points.forEach((point) => {
+				children.push({
+					type: "bulleted_list_item",
+					bulleted_list_item: {
+						rich_text: [{ type: "text", text: { content: point } }],
+					},
+				});
+			});
+		});
+	}
+
+	// ==================== 注意点・警告セクション ====================
+	if (report.attentionPoints && report.attentionPoints.length > 0) {
+		children.push(
+			{ type: "divider", divider: {} },
+			{
+				type: "heading_1",
+				heading_1: {
+					rich_text: [{ type: "text", text: { content: "🚨 注意点・警告" } }],
+				},
+			}
+		);
+
+		report.attentionPoints.forEach((point) => {
+			children.push(
+				{
+					type: "callout",
+					callout: {
+						rich_text: [
+							{ type: "text", text: { content: `問題: ${point.issue}\n` }, annotations: { bold: true } },
+							{ type: "text", text: { content: `リスク: ${point.risk}\n` } },
+							{ type: "text", text: { content: `対処法: ${point.suggestion}` } },
+						],
+						icon: { emoji: "⚠️" },
+					},
+				}
+			);
+		});
+	}
+
+	// ==================== 改善点・次のアクションセクション ====================
+	if (report.improvements && report.improvements.length > 0) {
+		children.push(
+			{ type: "divider", divider: {} },
+			{
+				type: "heading_1",
+				heading_1: {
+					rich_text: [{ type: "text", text: { content: "🚀 改善点・次のアクション" } }],
+				},
+			}
+		);
+
+		// Priority order
+		const priorityOrder = { high: 0, medium: 1, low: 2 };
+		const sortedImprovements = [...report.improvements].sort(
+			(a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]
+		);
+
+		sortedImprovements.forEach((improvement) => {
+			const priorityEmoji = improvement.priority === "high" ? "🔴" : improvement.priority === "medium" ? "🟡" : "🟢";
+			children.push(
+				{
+					type: "heading_3",
+					heading_3: {
+						rich_text: [{ type: "text", text: { content: `${priorityEmoji} ${improvement.area}` } }],
+					},
+				},
+				{
+					type: "bulleted_list_item",
+					bulleted_list_item: {
+						rich_text: [
+							{ type: "text", text: { content: "現状: " }, annotations: { bold: true } },
+							{ type: "text", text: { content: improvement.current } },
+						],
+					},
+				},
+				{
+					type: "bulleted_list_item",
+					bulleted_list_item: {
+						rich_text: [
+							{ type: "text", text: { content: "アクション: " }, annotations: { bold: true } },
+							{ type: "text", text: { content: improvement.action } },
+						],
+					},
+				}
+			);
+		});
+	}
+
+	// Working Files Section
+	if (report.workingFiles.length > 0) {
+		children.push({
+			type: "heading_2",
+			heading_2: {
+				rich_text: [{ type: "text", text: { content: "📁 作業中だったファイル" } }],
+			},
+		});
+
+		report.workingFiles.forEach((file) => {
+			children.push({
+				type: "bulleted_list_item",
+				bulleted_list_item: {
+					rich_text: [
+						{ type: "text", text: { content: file.filename }, annotations: { code: true } },
+						{ type: "text", text: { content: ` - ${file.description}` } },
+					],
+				},
+			});
+		});
+	}
+
+	// App Usage Section
+	if (report.appUsage.length > 0) {
+		children.push(
+			{
+				type: "heading_2",
+				heading_2: {
+					rich_text: [{ type: "text", text: { content: "💻 アプリ使用状況" } }],
+				},
+			},
+			{
+				type: "table",
+				table: {
+					table_width: 4,
+					has_column_header: true,
+					has_row_header: false,
+					children: [
+						{
+							type: "table_row",
+							table_row: {
+								cells: [
+									[{ type: "text", text: { content: "アプリ" } }],
+									[{ type: "text", text: { content: "使用時間" } }],
+									[{ type: "text", text: { content: "割合" } }],
+									[{ type: "text", text: { content: "主な用途" } }],
+								],
+							},
+						},
+						...report.appUsage.map((app) => ({
+							type: "table_row" as const,
+							table_row: {
+								cells: [
+									[{ type: "text" as const, text: { content: app.app } }],
+									[{ type: "text" as const, text: { content: app.duration } }],
+									[{ type: "text" as const, text: { content: `${app.percentage}%` } }],
+									[{ type: "text" as const, text: { content: app.mainUsage } }],
+								],
+							},
+						})),
+					],
+				},
+			}
+		);
+	}
+
+	let pageId: string;
+
+	console.log(`daily report: ${children.length} blocks to add`);
+
+	if (activeReports.length > 0) {
+		// Update existing report
+		pageId = activeReports[0].id;
+		console.log(`updating existing report: ${pageId}`);
+
+		await withRetry(() => client.pages.update({
+			page_id: pageId,
+			properties,
+		}));
+
+		// Delete existing blocks
+		const existingBlocks = await withRetry(() => client.blocks.children.list({
+			block_id: pageId,
+		}));
+
+		console.log(`deleting ${existingBlocks.results.length} existing blocks`);
+		for (const block of existingBlocks.results) {
+			try {
+				await withRetry(() => client.blocks.delete({
+					block_id: block.id,
+				}));
+				// Small delay between deletes to avoid rate limiting
+				await new Promise(resolve => setTimeout(resolve, 100));
+			} catch (e) {
+				console.warn(`failed to delete block ${block.id}:`, e);
+			}
+		}
+
+		// Add new blocks in batches (Notion limit: 100 blocks per request)
+		const batchSize = 100;
+		for (let i = 0; i < children.length; i += batchSize) {
+			const batch = children.slice(i, i + batchSize);
+			console.log(`adding blocks batch ${i / batchSize + 1}: ${batch.length} blocks`);
+			try {
+				await withRetry(() => client.blocks.children.append({
+					block_id: pageId,
+					children: batch,
+				}));
+			} catch (e) {
+				console.error(`failed to append blocks batch:`, e);
+				throw e;
+			}
+		}
+	} else {
+		// Create new report
+		console.log(`creating new report`);
+		const newPage = await withRetry(() => client.pages.create({
+			parent: { database_id: dailyReportDbId },
+			properties,
+			children,
+		}));
+		pageId = newPage.id;
+	}
+
+	return `https://notion.so/${pageId.replace(/-/g, "")}`;
+}
+
 export async function syncIntelligence(
 	credentials: NotionCredentials,
 	intelligence: Intelligence,
@@ -308,6 +852,6 @@ export async function getAvailableDatabases(accessToken: string) {
 			database.object === "database" && "title" in database)
 		.map((database) => ({
 			id: database.id,
-			title: database.title[0].plain_text,
+			title: database.title[0]?.plain_text || "Untitled",
 		}));
 }

@@ -119,6 +119,7 @@ export function NotionDatabaseSelector({
 }: NotionDatabaseSelectorProps) {
   const [databases, setDatabases] = useState<Database[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [manualInput, setManualInput] = useState(false);
 
   useEffect(() => {
     const fetchDatabases = async () => {
@@ -133,31 +134,51 @@ export function NotionDatabaseSelector({
     };
     fetchDatabases();
   }, [accessToken]);
-  
+
 
   return (
    <div className="space-y-2">
     <Label>{label}</Label>
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger>
-        <SelectValue placeholder={isLoading ? "Loading databases..." : label}>
-          {isLoading ? "Loading..." : databases.find(db => db.id.replaceAll("-", "") === value.replaceAll("-", ""))?.title || label}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {isLoading ? (
-          <SelectItem value="loading">Loading...</SelectItem>
-        ) : databases.length > 0 ?  (
-          databases.map((database) => (
-            <SelectItem key={database.id} value={database.id}>
-              {database.title}
-            </SelectItem>
-          ))
-        ) : (
-          <SelectItem value="no-databases">No databases found</SelectItem>
+    {manualInput || databases.length === 0 ? (
+      <div className="flex gap-2">
+        <Input
+          placeholder="Enter Database ID manually"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {databases.length > 0 && (
+          <Button variant="outline" onClick={() => setManualInput(false)}>
+            Select
+          </Button>
         )}
-      </SelectContent>
-    </Select>
+      </div>
+    ) : (
+      <div className="flex gap-2">
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="flex-1">
+            <SelectValue placeholder={isLoading ? "Loading databases..." : label}>
+              {isLoading ? "Loading..." : databases.find(db => db.id.replaceAll("-", "") === value.replaceAll("-", ""))?.title || label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {isLoading ? (
+              <SelectItem value="loading">Loading...</SelectItem>
+            ) : databases.length > 0 ?  (
+              databases.map((database) => (
+                <SelectItem key={database.id} value={database.id}>
+                  {database.title}
+                </SelectItem>
+              ))
+            ) : (
+              <SelectItem value="no-databases">No databases found</SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+        <Button variant="outline" onClick={() => setManualInput(true)}>
+          Manual
+        </Button>
+      </div>
+    )}
    </div>
   )
 }

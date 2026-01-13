@@ -35,59 +35,65 @@ async function analyzeRelationships(
 		throw new Error("ai preset not found");
 	}
 
-	const prompt = `You are a professional relationship intelligence analyst. Your task is to analyze work logs and generate a comprehensive relationship intelligence report.
+	const prompt = `あなたはプロフェッショナルな人脈インテリジェンスアナリストです。作業ログを分析し、人脈に関する包括的なレポートを生成してください。
 
-    ANALYSIS OBJECTIVES:
-    1. Extract all individuals mentioned, including their full names and organizations
-    2. Determine the nature and quality of each interaction (positive, neutral, negative)
-    3. Calculate sentiment scores (-1 to 1) based on interaction context
-    4. Identify recurring discussion topics and their importance
-    5. Recognize potential business opportunities and collaboration possibilities
-    6. Suggest specific, actionable follow-ups for each contact
+    【重要な制約】
+    - 出力は全て日本語で行うこと
+    - 抽出するのは「実際の人物」のみ。プロジェクト名、ツール名、会社名を人物として抽出しないこと
+    - 例: "Screenpipe", "Notion", "ClaudeCode" などはツール/プロジェクト名なので抽出しない
+    - 例: "Jon Wilcox", "田中太郎" などの実際の人名のみを抽出する
 
-    CONTEXT:
-    Today's date: ${new Date().toISOString().split("T")[0]}
-    Current time: ${new Date().toLocaleTimeString()}
-    Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
+    【分析の目的】
+    1. ログに登場する実際の人物の氏名と所属組織を抽出
+    2. 各やり取りの性質と質を判定（ポジティブ、ニュートラル、ネガティブ）
+    3. やり取りの文脈に基づいてセンチメントスコア（-1〜1）を算出
+    4. 繰り返し議論されているトピックとその重要性を特定
+    5. ビジネスチャンスやコラボレーションの可能性を認識
+    6. 各連絡先に対する具体的でアクション可能なフォローアップを提案
 
-    WORK LOGS TO ANALYZE:
+    【コンテキスト】
+    本日の日付: ${new Date().toISOString().split("T")[0]}
+    現在時刻: ${new Date().toLocaleTimeString()}
+    タイムゾーン: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
+
+    【分析対象の作業ログ】
     ${recentLogs}
 
-    RESPONSE FORMAT:
-    Return a JSON object with the following structure:
+    【レスポンス形式】
+    以下の構造のJSONオブジェクトを返してください:
     {
       "contacts": [
         {
-          "name": "Full Name",
-          "company": "Organization Name",
+          "name": "氏名（実際の人物名のみ）",
+          "company": "所属組織名",
           "lastInteraction": "YYYY-MM-DD",
-          "sentiment": 0.X, // Range from -1.0 (negative) to 1.0 (positive)
-          "topics": ["topic1", "topic2", "topic3"],
-          "nextSteps": ["specific action 1", "specific action 2"]
-        },
-        // Additional contacts...
+          "sentiment": 0.X, // -1.0（ネガティブ）〜 1.0（ポジティブ）
+          "topics": ["トピック1", "トピック2", "トピック3"],
+          "nextSteps": ["具体的なアクション1", "具体的なアクション2"]
+        }
       ],
       "insights": {
-        "followUps": ["priority follow-up 1", "priority follow-up 2"],
-        "opportunities": ["business opportunity 1", "business opportunity 2"]
+        "followUps": ["優先フォローアップ1", "優先フォローアップ2"],
+        "opportunities": ["ビジネスチャンス1", "ビジネスチャンス2"]
       }
     }
 
-    IMPORTANT:
-    - Use only real names and companies found in the logs
-    - Ensure sentiment scores accurately reflect interaction quality
-    - Provide specific, actionable next steps tailored to each contact
-    - Prioritize follow-ups based on urgency and potential value
-    - Identify concrete business opportunities with clear potential benefits
+    【重要事項】
+    - 実際の人物名のみを抽出すること（ツール名・プロジェクト名・会社名は除外）
+    - ログに人物が見つからない場合は、contactsを空配列にすること
+    - センチメントスコアはやり取りの質を正確に反映すること
+    - 各連絡先に対して具体的でアクション可能な次のステップを提案すること
+    - 緊急度と潜在的価値に基づいてフォローアップの優先順位をつけること
+    - 明確な潜在的メリットを持つ具体的なビジネスチャンスを特定すること
     `;
 
 	const openai = new OpenAI({
 		apiKey: aiPreset.apiKey,
 		baseURL: aiPreset.url,
-		dangerouslyAllowBrowser: true,
 	});
 
-	console.log("prompt", prompt);
+	// Debug logging disabled for production - contains user data
+	// console.log("prompt", prompt);
 
 
 	const response = await openai.chat.completions.create({
@@ -202,7 +208,7 @@ export async function GET() {
 	} catch (error) {
 		console.error("error in intelligence api:", error);
 		return NextResponse.json(
-			{ error: `failed to process intelligence: ${error}` },
+			{ error: "failed to process intelligence" },
 			{ status: 500 },
 		);
 	}
