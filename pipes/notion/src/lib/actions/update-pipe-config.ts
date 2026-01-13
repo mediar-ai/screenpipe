@@ -33,7 +33,12 @@ export async function updatePipeConfig(interval: number, apiPath: string, schedu
     // get schedule from schedule
     const scheduleTimer = schedule === "minute" ? `0 */${interval} * * * *` : schedule === "hour" ? `0 0 */${interval} * * *` : `0 0 0 */${interval} * *`;
 
-    config.crons = config.crons.map((cron: any) => cron.path === apiPath ? { ...cron, schedule: scheduleTimer } : cron);
+    const existingCron = config.crons.find((cron: any) => cron.path === apiPath);
+    if (existingCron) {
+      config.crons = config.crons.map((cron: any) => cron.path === apiPath ? { ...cron, schedule: scheduleTimer } : cron);
+    } else {
+      config.crons.push({ path: apiPath, schedule: scheduleTimer });
+    }
 
     config.enabled = config.enabled ?? true;
     config.is_nextjs = config.is_nextjs ?? true;

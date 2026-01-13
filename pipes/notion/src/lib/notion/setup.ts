@@ -194,7 +194,7 @@ export async function automateNotionSetup(
 		await switchWorkspace(setupPage, workspace);
 
 		const logsDbId = await createTable(setupPage, "Activity Logs");
-
+		const dailyReportDbId = await createTable(setupPage, "Daily Reports");
 		const intelligenceDbId = await createTable(
 			setupPage,
 			"Relationship Intelligence",
@@ -202,8 +202,8 @@ export async function automateNotionSetup(
 
 		await setupPage.waitForTimeout(1000);
 
-		console.log(accessToken, logsDbId, intelligenceDbId);
-		if (!accessToken || !logsDbId || !intelligenceDbId) {
+		console.log(accessToken, logsDbId, dailyReportDbId, intelligenceDbId);
+		if (!accessToken || !logsDbId || !dailyReportDbId || !intelligenceDbId) {
 			throw new Error("Failed to get credentials");
 		}
 
@@ -212,6 +212,7 @@ export async function automateNotionSetup(
 		return {
 			accessToken,
 			databaseId: logsDbId,
+			dailyReportDbId,
 			intelligenceDbId,
 		};
 	} catch (error) {

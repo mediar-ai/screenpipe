@@ -32,9 +32,18 @@ export async function validateCredentials(
 ): Promise<boolean> {
 	try {
 		const client = new Client({ auth: credentials.accessToken });
+		const logsDbId = credentials.databaseId;
+		const dailyReportDbId = credentials.dailyReportDbId || credentials.databaseId;
+
 		await client.databases.retrieve({
-			database_id: credentials.databaseId,
+			database_id: logsDbId,
 		});
+
+		if (dailyReportDbId !== logsDbId) {
+			await client.databases.retrieve({
+				database_id: dailyReportDbId,
+			});
+		}
 
 		await client.databases.retrieve({
 			database_id: credentials.intelligenceDbId,
@@ -42,7 +51,7 @@ export async function validateCredentials(
 
 		// Reset logs database properties
 		await client.databases.update({
-			database_id: credentials.databaseId,
+			database_id: logsDbId,
 			title: [{ text: { content: "Activity Logs" } }],
 			properties: {
 				Description: { rich_text: {} },
@@ -53,6 +62,19 @@ export async function validateCredentials(
 				Summary: { rich_text: {} },
 			},
 		});
+
+		if (dailyReportDbId !== logsDbId) {
+			await client.databases.update({
+				database_id: dailyReportDbId,
+				title: [{ text: { content: "Daily Reports" } }],
+				properties: {
+					Description: { rich_text: {} },
+					Tags: { multi_select: {} },
+					Date: { date: {} },
+					Summary: { rich_text: {} },
+				},
+			});
+		}
 
 		await client.databases.update({
 			database_id: credentials.intelligenceDbId,
@@ -76,9 +98,10 @@ export async function syncWorkLog(
 ): Promise<string> {
 	const client = new Client({ auth: credentials.accessToken });
 	const today = new Date();
+	const logsDbId = credentials.databaseId;
 
 	await client.pages.create({
-		parent: { database_id: credentials.databaseId },
+		parent: { database_id: logsDbId },
 		properties: {
 			Name: { title: [{ text: { content: logEntry.title } }] },
 			Description: { rich_text: [{ text: { content: logEntry.description } }] },
@@ -100,7 +123,7 @@ export async function syncWorkLog(
 		},
 	});
 
-	return `https://notion.so/${credentials.databaseId}`;
+	return `https://notion.so/${logsDbId}`;
 }
 
 export async function syncDailyReport(
@@ -108,10 +131,11 @@ export async function syncDailyReport(
 	report: DailyReport,
 ): Promise<string> {
 	const client = new Client({ auth: credentials.accessToken });
+	const dailyReportDbId = credentials.dailyReportDbId || credentials.databaseId;
 
 	// Check for existing report for today (exclude archived pages)
 	const existingReports = await withRetry(() => client.databases.query({
-		database_id: credentials.databaseId,
+		database_id: dailyReportDbId,
 		filter: {
 			and: [
 				{
@@ -589,7 +613,7 @@ export async function syncDailyReport(
 		// Create new report
 		console.log(`creating new report`);
 		const newPage = await withRetry(() => client.pages.create({
-			parent: { database_id: credentials.databaseId },
+			parent: { database_id: dailyReportDbId },
 			properties,
 			children,
 		}));

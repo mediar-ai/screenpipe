@@ -3,7 +3,7 @@ import type { Settings as ScreenpipeAppSettings } from "@screenpipe/js";
 export interface NotionCredentials {
   accessToken: string;
   databaseId: string;
-  logsDbId?: string;
+  dailyReportDbId?: string;
   intelligenceDbId: string;
 }
 
