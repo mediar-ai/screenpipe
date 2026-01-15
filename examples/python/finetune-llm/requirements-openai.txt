@@ -1,0 +1,4 @@
+# Requirements for OpenAI fine-tuning
+# Install with: pip install -r requirements-openai.txt
+
+openai>=1.0.0

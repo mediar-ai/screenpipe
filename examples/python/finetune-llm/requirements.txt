@@ -1,0 +1,12 @@
+# Core dependencies (always required)
+# None - uses Python standard library for data export
+
+# Local fine-tuning (optional - install with: pip install -r requirements-local.txt)
+# unsloth
+# transformers
+# trl
+# datasets
+# torch
+
+# OpenAI fine-tuning (optional - install with: pip install openai)
+# openai
