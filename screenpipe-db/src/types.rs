@@ -21,6 +21,55 @@ pub enum SearchResult {
     OCR(OCRResult),
     Audio(AudioResult),
     UI(UiContent),
+    Session(SessionResult),
+}
+
+#[derive(FromRow, Debug)]
+pub struct SessionResultRaw {
+    pub id: i64,
+    pub app_name: String,
+    pub window_name: String,
+    pub device_name: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub duration_secs: Option<i64>,
+    pub frame_count: i64,
+    pub audio_count: i64,
+    pub ui_count: i64,
+    pub metadata: Option<String>,
+}
+
+#[derive(OaSchema, Debug, Serialize, Deserialize, Clone)]
+pub struct SessionResult {
+    pub id: i64,
+    pub app_name: String,
+    pub window_name: String,
+    pub device_name: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub duration_secs: Option<i64>,
+    pub frame_count: i64,
+    pub audio_count: i64,
+    pub ui_count: i64,
+    pub metadata: Option<String>,
+}
+
+impl From<SessionResultRaw> for SessionResult {
+    fn from(raw: SessionResultRaw) -> Self {
+        SessionResult {
+            id: raw.id,
+            app_name: raw.app_name,
+            window_name: raw.window_name,
+            device_name: raw.device_name,
+            start_time: raw.start_time,
+            end_time: raw.end_time,
+            duration_secs: raw.duration_secs,
+            frame_count: raw.frame_count,
+            audio_count: raw.audio_count,
+            ui_count: raw.ui_count,
+            metadata: raw.metadata,
+        }
+    }
 }
 
 #[derive(FromRow, Debug)]
@@ -75,6 +124,7 @@ pub enum ContentType {
     OCR,
     Audio,
     UI,
+    Session,
     #[serde(rename = "audio+ui")]
     #[serde(alias = "audio ui")]
     AudioAndUi,
