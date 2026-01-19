@@ -47,6 +47,9 @@ import { generateId, Message } from "ai";
 import { OpenAI } from "openai";
 import { ChatMessage } from "@/components/chat-message";
 import { spinner } from "@/components/spinner";
+import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui/react";
+import type { ThreadMessageLike } from "@assistant-ui/react";
+import { Thread, Composer } from "@/components/assistant-ui";
 import {
   Accordion,
   AccordionContent,
@@ -181,6 +184,19 @@ const AGENTS: Agent[] = [
   },
 ];
 
+// Convert AI SDK Message to assistant-ui ThreadMessageLike
+const convertMessageToThreadMessage = (message: Message): ThreadMessageLike => {
+  return {
+    role: message.role as "user" | "assistant" | "system",
+    content: message.content,
+    id: message.id,
+    createdAt: message.createdAt,
+    status: message.role === "assistant"
+      ? { type: "complete", reason: "stop" }
+      : undefined,
+  };
+};
+
 // Add this helper function to highlight keywords in text
 const highlightKeyword = (text: string, keyword: string): JSX.Element => {
   if (!keyword || !text) return <>{text}</>;
@@ -285,6 +301,35 @@ export function SearchChat() {
 
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // assistant-ui runtime for chat interface
+  const runtime = useExternalStoreRuntime({
+    isRunning: isAiLoading,
+    messages: chatMessages,
+    convertMessage: convertMessageToThreadMessage,
+    onNew: async (message) => {
+      const textContent = message.content
+        .filter((part): part is { type: "text"; text: string } => part.type === "text" && "text" in part)
+        .map((part) => part.text)
+        .join("");
+
+      if (textContent.trim()) {
+        setFloatingInput(textContent);
+        // Trigger submit programmatically
+        const form = document.querySelector('form[data-chat-form]') as HTMLFormElement;
+        if (form) {
+          form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        }
+      }
+    },
+    onCancel: async () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        setIsStreaming(false);
+        setIsAiLoading(false);
+      }
+    },
+  });
 
   const [selectAll, setSelectAll] = useState(true);
 
@@ -2000,6 +2045,7 @@ export function SearchChat() {
             className="fixed bottom-4 left-0 right-0 mx-auto w-full max-w-2xl z-50"
           >
             <form
+              data-chat-form
               onSubmit={handleFloatingInputSubmit}
               className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
             >
@@ -2136,16 +2182,14 @@ export function SearchChat() {
 
       {results.length > 0 && <Separator className="my-8" />}
 
-      {/* Display chat messages - Update this section */}
+      {/* Display chat messages using assistant-ui */}
       {(chatMessages.length > 0 || isAiLoading) && (
-        <>
+        <AssistantRuntimeProvider runtime={runtime}>
           <div className="flex flex-col items-start flex-1 max-w-2xl gap-8 px-4 mx-auto">
-            {chatMessages.map((msg, index) => (
-              <ChatMessage key={index} message={msg} />
-            ))}
+            <Thread />
             {isAiLoading && spinner}
           </div>
-        </>
+        </AssistantRuntimeProvider>
       )}
 
       <div className="w-1/3 mx-auto">
