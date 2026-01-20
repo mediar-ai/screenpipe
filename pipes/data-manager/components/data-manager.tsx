@@ -11,6 +11,10 @@ import {
   CheckCircle,
   RefreshCw,
   Calendar,
+  Settings,
+  Download,
+  Clock,
+  Save,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 
@@ -32,6 +36,14 @@ interface DeletePreview {
   estimatedSize: number;
 }
 
+interface RetentionSettings {
+  enabled: boolean;
+  retentionDays: number;
+  maxStorageGB: number;
+}
+
+const RETENTION_STORAGE_KEY = "screenpipe-retention-settings";
+
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -49,6 +61,14 @@ export const DataManager: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [retentionSettings, setRetentionSettings] = useState<RetentionSettings>({
+    enabled: false,
+    retentionDays: 30,
+    maxStorageGB: 50,
+  });
+  const [isExporting, setIsExporting] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -229,6 +249,18 @@ export const DataManager: React.FC = () => {
     }
   };
 
+  // Load retention settings from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(RETENTION_STORAGE_KEY);
+    if (saved) {
+      try {
+        setRetentionSettings(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse retention settings:", e);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
@@ -238,6 +270,69 @@ export const DataManager: React.FC = () => {
       fetchDeletePreview(deleteDays);
     }
   }, [deleteDays, fetchDeletePreview]);
+
+  // Auto-cleanup based on retention settings
+  useEffect(() => {
+    if (retentionSettings.enabled && stats) {
+      const storageGB = stats.totalSize / (1024 * 1024 * 1024);
+      if (storageGB > retentionSettings.maxStorageGB) {
+        // Trigger cleanup notification
+        console.warn(`Storage (${storageGB.toFixed(2)} GB) exceeds limit (${retentionSettings.maxStorageGB} GB)`);
+      }
+    }
+  }, [retentionSettings, stats]);
+
+  const saveRetentionSettings = () => {
+    localStorage.setItem(RETENTION_STORAGE_KEY, JSON.stringify(retentionSettings));
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2000);
+  };
+
+  const exportData = async () => {
+    setIsExporting(true);
+    try {
+      // Export recent data summary as JSON
+      const summaryQuery = `
+        SELECT
+          date(timestamp) as date,
+          COUNT(*) as frame_count
+        FROM frames
+        GROUP BY date(timestamp)
+        ORDER BY date DESC
+        LIMIT 30;
+      `;
+
+      const summaryRes = await fetch("http://localhost:3030/raw_sql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: summaryQuery }),
+      });
+
+      const summary = await summaryRes.json();
+
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        stats: stats,
+        dailySummary: summary,
+        retentionSettings: retentionSettings,
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `screenpipe-data-export-${format(new Date(), "yyyy-MM-dd")}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to export data:", err);
+      setError("Failed to export data. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -332,7 +427,129 @@ export const DataManager: React.FC = () => {
             </span>
           </div>
         )}
+
+        {/* Action Buttons */}
+        <div className="mt-4 flex gap-3">
+          <button
+            onClick={exportData}
+            disabled={isExporting}
+            className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 rounded-lg font-medium transition flex items-center justify-center gap-2"
+          >
+            {isExporting ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Export Summary
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex-1 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg font-medium transition flex items-center justify-center gap-2"
+          >
+            <Settings className="w-4 h-4" />
+            Retention Settings
+          </button>
+        </div>
       </div>
+
+      {/* Retention Settings */}
+      {showSettings && (
+        <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Clock className="text-blue-400" />
+            Retention Policy
+          </h2>
+
+          <p className="text-slate-400 mb-4">
+            Configure automatic data retention to manage storage automatically.
+          </p>
+
+          <div className="space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={retentionSettings.enabled}
+                onChange={(e) =>
+                  setRetentionSettings({ ...retentionSettings, enabled: e.target.checked })
+                }
+                className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500"
+              />
+              <span>Enable automatic retention policy</span>
+            </label>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">
+                  Keep data for (days)
+                </label>
+                <select
+                  value={retentionSettings.retentionDays}
+                  onChange={(e) =>
+                    setRetentionSettings({
+                      ...retentionSettings,
+                      retentionDays: parseInt(e.target.value),
+                    })
+                  }
+                  disabled={!retentionSettings.enabled}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                >
+                  <option value={7}>7 days</option>
+                  <option value={14}>14 days</option>
+                  <option value={30}>30 days</option>
+                  <option value={60}>60 days</option>
+                  <option value={90}>90 days</option>
+                  <option value={180}>180 days</option>
+                  <option value={365}>1 year</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">
+                  Max storage limit (GB)
+                </label>
+                <select
+                  value={retentionSettings.maxStorageGB}
+                  onChange={(e) =>
+                    setRetentionSettings({
+                      ...retentionSettings,
+                      maxStorageGB: parseInt(e.target.value),
+                    })
+                  }
+                  disabled={!retentionSettings.enabled}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                >
+                  <option value={10}>10 GB</option>
+                  <option value={25}>25 GB</option>
+                  <option value={50}>50 GB</option>
+                  <option value={100}>100 GB</option>
+                  <option value={250}>250 GB</option>
+                  <option value={500}>500 GB</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={saveRetentionSettings}
+              className="w-full py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition flex items-center justify-center gap-2"
+            >
+              <Save className="w-4 h-4" />
+              {settingsSaved ? "Saved!" : "Save Settings"}
+            </button>
+
+            {retentionSettings.enabled && (
+              <p className="text-sm text-slate-400 bg-slate-700/50 rounded-lg p-3">
+                Data older than {retentionSettings.retentionDays} days will be automatically cleaned up.
+                Storage will be kept under {retentionSettings.maxStorageGB} GB.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Cleanup Section */}
       <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 mb-6">

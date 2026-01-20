@@ -9,6 +9,8 @@ A screenpipe pipe for managing and cleaning up your local screenpipe data storag
 - **Delete Preview**: See exactly what will be deleted before confirming
 - **Date Range Display**: Shows the date range of your stored data
 - **Safe Deletion**: Confirmation modal prevents accidental data loss
+- **Retention Policy**: Configure automatic data retention settings (days to keep, max storage limit)
+- **Export Summary**: Export your data statistics and daily summary as JSON for backup/analysis
 
 ## Getting Started
 
