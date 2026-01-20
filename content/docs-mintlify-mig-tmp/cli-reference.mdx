@@ -334,6 +334,90 @@ Invoke-Item $profile
 . $PROFILE  
 ```
 
+### Environment Variables
+
+screenpipe supports various environment variables for configuration. These are particularly useful for users in regions with restricted access to certain services or for advanced customization.
+
+#### Hugging Face Configuration
+
+- **HF_ENDPOINT**: Custom Hugging Face mirror URL
+  - use case: Users in China or regions where huggingface.co is blocked
+  - example: `export HF_ENDPOINT=https://hf-mirror.com`
+  - note: Set this before running screenpipe to download Whisper models from a mirror
+
+#### Deepgram (Cloud Transcription)
+
+- **DEEPGRAM_API_KEY**: Your Deepgram API key for cloud transcription
+  - required when using `--audio-transcription-engine deepgram`
+  - get your key at: https://deepgram.com
+- **DEEPGRAM_API_URL**: Custom Deepgram API endpoint
+  - default: `https://api.deepgram.com/v1/listen`
+  - use case: Custom proxy or enterprise endpoints
+- **DEEPGRAM_WEBSOCKET_URL**: Custom Deepgram WebSocket endpoint for realtime transcription
+  - use case: Custom proxy or enterprise endpoints
+- **CUSTOM_DEEPGRAM_API_TOKEN**: Alternative token for Deepgram (used by screenpipe cloud)
+
+#### OCR Configuration
+
+- **UNSTRUCTURED_API_KEY**: API key for Unstructured.io OCR service
+  - required when using `--ocr-engine unstructured`
+  - get your key at: https://unstructured.io
+- **SCREENPIPE_CUSTOM_OCR_CONFIG**: JSON configuration for custom OCR engine
+  - example:
+    ```bash
+    export SCREENPIPE_CUSTOM_OCR_CONFIG='{
+      "api_url": "http://localhost:8000/ocr",
+      "api_key": "",
+      "timeout_ms": 5000
+    }'
+    ```
+- **TESSDATA_PREFIX**: Path to Tesseract data files
+  - auto-configured on most systems
+  - use case: Custom Tesseract installation
+
+#### Screenpipe Core
+
+- **SCREENPIPE_DIR**: Override default data directory
+  - default: `$HOME/.screenpipe`
+  - use case: Custom storage location
+- **SCREENPIPE_LOG**: Log level filter
+  - options: `error`, `warn`, `info`, `debug`, `trace`
+  - example: `export SCREENPIPE_LOG=debug`
+
+#### LLM Integration
+
+- **OLLAMA_ORIGINS**: CORS origins for Ollama integration
+  - auto-set by desktop app
+  - use case: Allow cross-origin requests to Ollama
+
+#### Development & Debugging
+
+- **SAVE_RESOURCE_USAGE**: Enable resource usage logging to file
+  - example: `export SAVE_RESOURCE_USAGE=1`
+- **TAURI_ENV_DEBUG**: Enable debug mode in Tauri app
+  - example: `export TAURI_ENV_DEBUG=true`
+- **SENTRY_RELEASE_NAME_APPEND**: Append to Sentry release name for error tracking
+
+#### Example: Running in China
+
+```bash
+# Set Hugging Face mirror
+export HF_ENDPOINT=https://hf-mirror.com
+
+# Run screenpipe
+screenpipe
+```
+
+#### Example: Using Deepgram Cloud
+
+```bash
+# Set Deepgram API key
+export DEEPGRAM_API_KEY=your_api_key_here
+
+# Run with Deepgram transcription
+screenpipe --audio-transcription-engine deepgram
+```
+
 ### LLM links
 
 paste these links into your Cursor chat for context:
