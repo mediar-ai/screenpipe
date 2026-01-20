@@ -22,8 +22,8 @@ use futures::future::try_join_all;
 use crate::{
     AudioChunksResponse, AudioDevice, AudioEntry, AudioResult, AudioResultRaw, ContentType,
     DeviceType, FrameData, FrameRow, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock,
-    Order, SearchMatch, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
-    TimeSeriesChunk, UiContent, VideoMetadata,
+    Order, SearchMatch, SearchResult, SessionResult, SessionResultRaw, Speaker, TagContentType,
+    TextBounds, TextPosition, TimeSeriesChunk, UiContent, VideoMetadata,
 };
 
 pub struct DatabaseManager {
@@ -631,6 +631,22 @@ impl DatabaseManager {
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
             }
+            ContentType::Session => {
+                let session_results = self
+                    .search_sessions(
+                        query,
+                        limit,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                    )
+                    .await?;
+                results.extend(session_results.into_iter().map(SearchResult::Session));
+            }
         }
 
         // Sort results by timestamp in descending order
@@ -639,11 +655,13 @@ impl DatabaseManager {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
                 SearchResult::UI(ui) => ui.timestamp,
+                SearchResult::Session(session) => session.start_time,
             };
             let timestamp_b = match b {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
                 SearchResult::UI(ui) => ui.timestamp,
+                SearchResult::Session(session) => session.start_time,
             };
             timestamp_b.cmp(&timestamp_a)
         });
@@ -1649,6 +1667,159 @@ impl DatabaseManager {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn search_sessions(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+        min_duration: Option<usize>,
+        max_duration: Option<usize>,
+    ) -> Result<Vec<SessionResult>, sqlx::Error> {
+        let mut fts_parts = Vec::new();
+        if !query.is_empty() {
+            fts_parts.push(query.to_owned());
+        }
+        if let Some(app) = app_name {
+            fts_parts.push(format!("app_name:{}", app));
+        }
+        if let Some(window) = window_name {
+            fts_parts.push(format!("window_name:{}", window));
+        }
+        let combined_query = fts_parts.join(" ");
+
+        let base_sql = if combined_query.is_empty() {
+            "sessions"
+        } else {
+            "sessions_fts JOIN sessions ON sessions_fts.id = sessions.id"
+        };
+
+        let where_clause = if combined_query.is_empty() {
+            "WHERE 1=1"
+        } else {
+            "WHERE sessions_fts MATCH ?1"
+        };
+
+        let sql = format!(
+            r#"
+            SELECT
+                sessions.id,
+                sessions.app_name,
+                sessions.window_name,
+                sessions.start_time,
+                sessions.end_time,
+                sessions.duration_secs,
+                sessions.focused_duration_secs,
+                sessions.device_name
+            FROM {}
+            {}
+                AND (?2 IS NULL OR sessions.start_time >= ?2)
+                AND (?3 IS NULL OR sessions.end_time <= ?3)
+                AND (?4 IS NULL OR sessions.duration_secs >= ?4)
+                AND (?5 IS NULL OR sessions.duration_secs <= ?5)
+            ORDER BY sessions.start_time DESC
+            LIMIT ?6 OFFSET ?7
+            "#,
+            base_sql, where_clause
+        );
+
+        let raw_results: Vec<SessionResultRaw> = sqlx::query_as(&sql)
+            .bind(if combined_query.is_empty() {
+                "*".to_owned()
+            } else {
+                combined_query
+            })
+            .bind(start_time)
+            .bind(end_time)
+            .bind(min_duration.map(|d| d as f64))
+            .bind(max_duration.map(|d| d as f64))
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(raw_results
+            .into_iter()
+            .map(|r| SessionResult {
+                id: r.id,
+                app_name: r.app_name,
+                window_name: r.window_name,
+                start_time: r.start_time,
+                end_time: r.end_time,
+                duration_secs: r.duration_secs,
+                focused_duration_secs: r.focused_duration_secs,
+                device_name: r.device_name,
+            })
+            .collect())
+    }
+
+    pub async fn create_session(
+        &self,
+        app_name: &str,
+        window_name: &str,
+        device_name: Option<&str>,
+    ) -> Result<i64, sqlx::Error> {
+        let id = sqlx::query(
+            "INSERT INTO sessions (app_name, window_name, start_time, device_name) VALUES (?1, ?2, ?3, ?4)",
+        )
+        .bind(app_name)
+        .bind(window_name)
+        .bind(Utc::now())
+        .bind(device_name)
+        .execute(&self.pool)
+        .await?
+        .last_insert_rowid();
+
+        Ok(id)
+    }
+
+    pub async fn end_session(&self, session_id: i64) -> Result<(), sqlx::Error> {
+        let now = Utc::now();
+        sqlx::query(
+            r#"
+            UPDATE sessions
+            SET end_time = ?1,
+                duration_secs = (julianday(?1) - julianday(start_time)) * 86400
+            WHERE id = ?2 AND end_time IS NULL
+            "#,
+        )
+        .bind(now)
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_active_session(
+        &self,
+        app_name: &str,
+        window_name: &str,
+    ) -> Result<Option<i64>, sqlx::Error> {
+        let result: Option<(i64,)> = sqlx::query_as(
+            "SELECT id FROM sessions WHERE app_name = ?1 AND window_name = ?2 AND end_time IS NULL LIMIT 1",
+        )
+        .bind(app_name)
+        .bind(window_name)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.map(|r| r.0))
+    }
+
+    pub async fn update_frame_session(&self, frame_id: i64, session_id: i64) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE frames SET session_id = ?1 WHERE id = ?2")
+            .bind(session_id)
+            .bind(frame_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     // Add tags to UI monitoring entry

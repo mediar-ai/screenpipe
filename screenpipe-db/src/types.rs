@@ -21,6 +21,7 @@ pub enum SearchResult {
     OCR(OCRResult),
     Audio(AudioResult),
     UI(UiContent),
+    Session(SessionResult),
 }
 
 #[derive(FromRow, Debug)]
@@ -75,6 +76,7 @@ pub enum ContentType {
     OCR,
     Audio,
     UI,
+    Session,
     #[serde(rename = "audio+ui")]
     #[serde(alias = "audio ui")]
     AudioAndUi,
@@ -324,4 +326,28 @@ impl Default for CustomOcrConfig {
             timeout_ms: 5000,
         }
     }
+}
+
+#[derive(FromRow, Debug)]
+pub struct SessionResultRaw {
+    pub id: i64,
+    pub app_name: String,
+    pub window_name: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub duration_secs: Option<f64>,
+    pub focused_duration_secs: Option<f64>,
+    pub device_name: Option<String>,
+}
+
+#[derive(OaSchema, Debug, Serialize, Deserialize, Clone)]
+pub struct SessionResult {
+    pub id: i64,
+    pub app_name: String,
+    pub window_name: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub duration_secs: Option<f64>,
+    pub focused_duration_secs: Option<f64>,
+    pub device_name: Option<String>,
 }

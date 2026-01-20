@@ -1445,4 +1445,197 @@ mod tests {
             .unwrap();
         assert_eq!(count, 0, "Should count zero results for non-matching query");
     }
+
+    #[tokio::test]
+    async fn test_create_and_search_sessions() {
+        let db = setup_test_db().await;
+
+        // Create a session
+        let session_id = db
+            .create_session("test_app", "test_window", Some("test_device"))
+            .await
+            .unwrap();
+        assert!(session_id > 0);
+
+        // Verify session was created
+        let results = db
+            .search(
+                "",
+                ContentType::Session,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        if let SearchResult::Session(session) = &results[0] {
+            assert_eq!(session.app_name, "test_app");
+            assert_eq!(session.window_name, "test_window");
+            assert_eq!(session.device_name, Some("test_device".to_string()));
+            assert!(session.end_time.is_none());
+            assert!(session.duration_secs.is_none());
+        } else {
+            panic!("Expected Session result");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_end_session() {
+        let db = setup_test_db().await;
+
+        let session_id = db
+            .create_session("test_app", "test_window", None)
+            .await
+            .unwrap();
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        db.end_session(session_id).await.unwrap();
+
+        let results = db
+            .search(
+                "",
+                ContentType::Session,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        if let SearchResult::Session(session) = &results[0] {
+            assert!(session.end_time.is_some());
+            assert!(session.duration_secs.is_some());
+            assert!(session.duration_secs.unwrap() >= 0.0);
+        } else {
+            panic!("Expected Session result");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_active_session() {
+        let db = setup_test_db().await;
+
+        // Initially no active session
+        let active = db
+            .get_active_session("test_app", "test_window")
+            .await
+            .unwrap();
+        assert!(active.is_none());
+
+        // Create a session
+        let session_id = db
+            .create_session("test_app", "test_window", None)
+            .await
+            .unwrap();
+
+        // Now there should be an active session
+        let active = db
+            .get_active_session("test_app", "test_window")
+            .await
+            .unwrap();
+        assert_eq!(active, Some(session_id));
+
+        // End the session
+        db.end_session(session_id).await.unwrap();
+
+        // No active session anymore
+        let active = db
+            .get_active_session("test_app", "test_window")
+            .await
+            .unwrap();
+        assert!(active.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_search_sessions_with_app_filter() {
+        let db = setup_test_db().await;
+
+        // Create sessions for different apps
+        db.create_session("app_one", "window_one", None)
+            .await
+            .unwrap();
+        db.create_session("app_two", "window_two", None)
+            .await
+            .unwrap();
+
+        // Search for specific app
+        let results = db
+            .search(
+                "",
+                ContentType::Session,
+                100,
+                0,
+                None,
+                None,
+                Some("app_one"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        if let SearchResult::Session(session) = &results[0] {
+            assert_eq!(session.app_name, "app_one");
+        } else {
+            panic!("Expected Session result");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_update_frame_session() {
+        let db = setup_test_db().await;
+
+        // Create video chunk and frame
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
+        let frame_id = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
+
+        // Create session
+        let session_id = db
+            .create_session("test", "", None)
+            .await
+            .unwrap();
+
+        // Update frame with session
+        db.update_frame_session(frame_id, session_id).await.unwrap();
+
+        // Verify the frame has session_id (check via raw query)
+        let frame_session: Option<(Option<i64>,)> =
+            sqlx::query_as("SELECT session_id FROM frames WHERE id = ?")
+                .bind(frame_id)
+                .fetch_optional(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(frame_session.unwrap().0, Some(session_id));
+    }
 }
