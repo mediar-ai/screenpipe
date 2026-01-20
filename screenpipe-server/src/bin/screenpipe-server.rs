@@ -22,7 +22,7 @@ use screenpipe_server::{
     },
     handle_index_command,
     pipe_manager::PipeInfo,
-    start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer,
+    start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer, VisionManager,
 };
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
@@ -694,9 +694,69 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let handle = {
+    let local_data_dir_clone_2 = local_data_dir_clone.clone();
+    #[cfg(feature = "llm")]
+    debug!("LLM initializing");
+
+    #[cfg(feature = "llm")]
+    let _llm = {
+        match cli.enable_llm {
+            true => Some(screenpipe_core::LLM::new(
+                screenpipe_core::ModelName::Llama,
+            )?),
+            false => None,
+        }
+    };
+
+    #[cfg(feature = "llm")]
+    debug!("LLM initialized");
+
+    // Create VisionManager if use_all_monitors is enabled
+    let vision_manager = if cli.use_all_monitors && !cli.disable_vision {
+        let vm = Arc::new(VisionManager::new(
+            db.clone(),
+            output_path_clone.clone(),
+            fps,
+            Duration::from_secs(cli.video_chunk_duration),
+            Arc::new(cli.ocr_engine.clone().into()),
+            cli.use_pii_removal,
+            cli.ignored_windows.clone(),
+            cli.included_windows.clone(),
+            languages.clone(),
+            cli.capture_unfocused_windows,
+            cli.enable_realtime_vision,
+            cli.use_all_monitors,
+        ));
+
+        // Start the VisionManager
+        let vm_clone = vm.clone();
+        let shutdown_tx_vm = shutdown_tx.clone();
+        let vision_handle_vm = vision_handle.clone();
+        tokio::spawn(async move {
+            let mut shutdown_rx = shutdown_tx_vm.subscribe();
+
+            // Start recording on all monitors
+            if let Err(e) = vm_clone.start(&vision_handle_vm).await {
+                error!("Failed to start VisionManager: {:?}", e);
+                return;
+            }
+            info!("VisionManager started with dynamic monitor detection");
+
+            // Wait for shutdown signal
+            let _ = shutdown_rx.recv().await;
+            info!("Shutting down VisionManager");
+            let _ = vm_clone.stop().await;
+        });
+
+        Some(vm)
+    } else {
+        None
+    };
+
+    // Only use traditional recording if use_all_monitors is not enabled
+    let handle = if vision_manager.is_none() {
         let runtime = &tokio::runtime::Handle::current();
-        runtime.spawn(async move {
+        Some(runtime.spawn(async move {
             loop {
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
                 let recording_future = start_continuous_recording(
@@ -728,25 +788,10 @@ async fn main() -> anyhow::Result<()> {
                     error!("continuous recording error: {:?}", e);
                 }
             }
-        })
+        }))
+    } else {
+        None
     };
-
-    let local_data_dir_clone_2 = local_data_dir_clone.clone();
-    #[cfg(feature = "llm")]
-    debug!("LLM initializing");
-
-    #[cfg(feature = "llm")]
-    let _llm = {
-        match cli.enable_llm {
-            true => Some(screenpipe_core::LLM::new(
-                screenpipe_core::ModelName::Llama,
-            )?),
-            false => None,
-        }
-    };
-
-    #[cfg(feature = "llm")]
-    debug!("LLM initialized");
 
     let server = SCServer::new(
         db_server,
@@ -757,6 +802,7 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_audio,
         cli.enable_ui_monitoring,
         audio_manager.clone(),
+        vision_manager.clone(),
         cli.enable_pipe_manager,
     );
 
@@ -852,6 +898,10 @@ async fn main() -> anyhow::Result<()> {
         } else {
             "not set"
         }
+    );
+    println!(
+        "│ use all monitors       │ {:<34} │",
+        cli.use_all_monitors
     );
 
     const VALUE_WIDTH: usize = 34;

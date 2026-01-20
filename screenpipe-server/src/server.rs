@@ -38,6 +38,7 @@ use crate::{
         extract_frame, extract_frame_from_video, extract_high_quality_frame, merge_videos,
         validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
+    vision_manager::VisionManager,
     PipeManager,
 };
 use chrono::{DateTime, Utc};
@@ -86,6 +87,7 @@ pub type FrameImageCache = LruCache<i64, (String, Instant)>;
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
     pub audio_manager: Arc<AudioManager>,
+    pub vision_manager: Option<Arc<VisionManager>>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -1112,6 +1114,7 @@ pub struct SCServer {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
     audio_manager: Arc<AudioManager>,
+    vision_manager: Option<Arc<VisionManager>>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -1131,6 +1134,7 @@ impl SCServer {
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
         audio_manager: Arc<AudioManager>,
+        vision_manager: Option<Arc<VisionManager>>,
         enable_pipe: bool,
     ) -> Self {
         SCServer {
@@ -1142,6 +1146,7 @@ impl SCServer {
             audio_disabled,
             ui_monitoring_enabled,
             audio_manager,
+            vision_manager,
             enable_pipe,
         }
     }
@@ -1169,6 +1174,7 @@ impl SCServer {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
             audio_manager: self.audio_manager.clone(),
+            vision_manager: self.vision_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager.clone(),
@@ -1262,6 +1268,10 @@ impl SCServer {
             .post("/experimental/operator/pixel", input_control_handler)
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
+            .post("/vision/start", start_vision)
+            .post("/vision/stop", stop_vision)
+            .post("/vision/monitor/start", start_vision_monitor)
+            .post("/vision/monitor/stop", stop_vision_monitor)
             .get("/semantic-search", semantic_search_handler)
             .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
             .get("/search/keyword", keyword_search_handler)
@@ -2409,6 +2419,167 @@ async fn stop_audio(
             })),
         )),
     }
+}
+
+#[derive(OaSchema, Debug, Serialize)]
+struct VisionControlResponse {
+    success: bool,
+    message: String,
+    active_monitors: Option<Vec<u32>>,
+}
+
+#[derive(OaSchema, Debug, Deserialize)]
+struct VisionMonitorControlRequest {
+    monitor_id: u32,
+}
+
+#[oasgen]
+async fn start_vision(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<VisionControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let vision_manager = match &state.vision_manager {
+        Some(vm) => vm,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                JsonResponse(json!({
+                    "success": false,
+                    "message": "Vision manager not available"
+                })),
+            ))
+        }
+    };
+
+    // Get current runtime handle
+    let handle = tokio::runtime::Handle::current();
+
+    if let Err(e) = vision_manager.start(&handle).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start vision recording: {}", e)
+            })),
+        ));
+    }
+
+    let active_monitors = vision_manager.get_active_monitors().await;
+
+    Ok(Json(VisionControlResponse {
+        success: true,
+        message: "Vision recording started".to_string(),
+        active_monitors: Some(active_monitors),
+    }))
+}
+
+#[oasgen]
+async fn stop_vision(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<VisionControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let vision_manager = match &state.vision_manager {
+        Some(vm) => vm,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                JsonResponse(json!({
+                    "success": false,
+                    "message": "Vision manager not available"
+                })),
+            ))
+        }
+    };
+
+    if let Err(e) = vision_manager.stop().await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to stop vision recording: {}", e)
+            })),
+        ));
+    }
+
+    Ok(Json(VisionControlResponse {
+        success: true,
+        message: "Vision recording stopped".to_string(),
+        active_monitors: None,
+    }))
+}
+
+#[oasgen]
+async fn start_vision_monitor(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VisionMonitorControlRequest>,
+) -> Result<Json<VisionControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let vision_manager = match &state.vision_manager {
+        Some(vm) => vm,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                JsonResponse(json!({
+                    "success": false,
+                    "message": "Vision manager not available"
+                })),
+            ))
+        }
+    };
+
+    let handle = tokio::runtime::Handle::current();
+
+    if let Err(e) = vision_manager.start_monitor(payload.monitor_id, &handle).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start monitor {}: {}", payload.monitor_id, e)
+            })),
+        ));
+    }
+
+    let active_monitors = vision_manager.get_active_monitors().await;
+
+    Ok(Json(VisionControlResponse {
+        success: true,
+        message: format!("Started recording monitor {}", payload.monitor_id),
+        active_monitors: Some(active_monitors),
+    }))
+}
+
+#[oasgen]
+async fn stop_vision_monitor(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VisionMonitorControlRequest>,
+) -> Result<Json<VisionControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let vision_manager = match &state.vision_manager {
+        Some(vm) => vm,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                JsonResponse(json!({
+                    "success": false,
+                    "message": "Vision manager not available"
+                })),
+            ))
+        }
+    };
+
+    if let Err(e) = vision_manager.stop_monitor(payload.monitor_id).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to stop monitor {}: {}", payload.monitor_id, e)
+            })),
+        ));
+    }
+
+    let active_monitors = vision_manager.get_active_monitors().await;
+
+    Ok(Json(VisionControlResponse {
+        success: true,
+        message: format!("Stopped recording monitor {}", payload.monitor_id),
+        active_monitors: Some(active_monitors),
+    }))
 }
 
 pub async fn handle_video_export_ws(
