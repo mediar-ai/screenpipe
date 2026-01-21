@@ -13,72 +13,17 @@
   },
   "logo": "favicon.ico",
   "navigation": {
-    "dropdowns": [
+    "tabs": [
       {
-        "dropdown": "Terminator",
-        "icon": "robot",
+        "tab": "Getting Started",
         "pages": [
-          {
-            "group": "Getting Started",
-            "icon": "rocket",
-            "pages": [
-              "terminator/introduction",
-              "terminator/getting-started"
-            ]
-          },
-          {
-            "group": "Reference",
-            "icon": "code",
-            "pages": [
-              "terminator/js-sdk-reference",
-              "terminator/python-sdk-reference"
-            ]
-          }
+          "home",
+          "getting-started",
+          "faq"
         ]
       },
       {
-        "dropdown": "Screenpipe",
-        "icon": "monitor-recorder",
-        "pages": [
-          {
-            "group": "Getting Started",
-            "icon": "rocket",
-            "pages": [
-              "home",
-              "getting-started"
-            ]
-          },
-          {
-            "group": "Reference",
-            "icon": "code",
-            "pages": [
-              "sdk-reference",
-              "operator-api",
-              "architecture",
-              "cli-reference"
-            ]
-          },
-          {
-            "group": "Extend",
-            "icon": "puzzle-piece",
-            "pages": [
-              "plugins",
-              "mcp-server",
-              "contributing"
-            ]
-          },
-          {
-            "group": "Help",
-            "icon": "question-circle",
-            "pages": [
-              "faq"
-            ]
-          }
-        ]
-      },
-      {
-        "dropdown": "Screenpipe API Reference",
-        "icon": "terminal",
+        "tab": "API Reference",
         "openapi": "openapi.yaml"
       }
     ]
