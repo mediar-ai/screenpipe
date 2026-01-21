@@ -111,9 +111,9 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const openSystemPreferences = async (type: "screen" | "audio") => {
     try {
       if (type === "screen") {
-        await commands.openScreenRecordingPreferences();
+        await commands.openPermissionSettings("screenRecording");
       } else {
-        await commands.openMicrophonePreferences();
+        await commands.openPermissionSettings("microphone");
       }
     } catch (error) {
       console.error("Failed to open preferences:", error);
