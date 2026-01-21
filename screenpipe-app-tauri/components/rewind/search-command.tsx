@@ -55,13 +55,17 @@ export function SearchCommand() {
 
 	// Close dialog when window loses focus to prevent stuck invisible overlay
 	React.useEffect(() => {
-		const handleBlur = () => {
-			if (open) {
+		if (!open) return;
+
+		// Small delay to prevent closing immediately on open
+		const timeoutId = setTimeout(() => {
+			const handleBlur = () => {
 				setOpen(false);
-			}
-		};
-		window.addEventListener("blur", handleBlur);
-		return () => window.removeEventListener("blur", handleBlur);
+			};
+			window.addEventListener("blur", handleBlur, { once: true });
+		}, 100);
+
+		return () => clearTimeout(timeoutId);
 	}, [open]);
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
