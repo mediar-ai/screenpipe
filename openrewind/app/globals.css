@@ -4,109 +4,111 @@
 
 @layer base {
   :root {
-    /* Base colors */
-    --background: 0 0% 100%; /* white */
-    --foreground: 0 0% 0%; /* black */
+    /*
+     * Screenpipe Brand Style Guide
+     * Black & White Geometric Minimalism
+     * No color. Sharp corners. Monospace typography.
+     */
 
-    /* Surface colors */
-    --surface: 0 0% 98%;
-    --surface-secondary: 210 40% 98%;
-    --surface-tertiary: 220 14.3% 95.9%;
-    
+    /* Base colors - Pure B&W */
+    --background: 0 0% 100%; /* #FFFFFF */
+    --foreground: 0 0% 0%; /* #000000 */
+
+    /* Surface colors - Limited grays */
+    --surface: 0 0% 96%; /* ~#F5F5F5 */
+    --surface-secondary: 0 0% 93%; /* ~#EDEDED */
+    --surface-tertiary: 0 0% 90%; /* ~#E5E5E5 */
+
     /* Card colors */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --card-hover: 210 40% 98%;
+    --card-foreground: 0 0% 0%;
+    --card-hover: 0 0% 0%; /* Invert on hover */
 
     /* Popover colors */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 0 0% 0%;
 
-    /* Primary brand colors */
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --primary-hover: 221.2 83.2% 48%;
-    --primary-muted: 221.2 83.2% 93%;
+    /* Primary - Pure black */
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 0 0% 20%;
+    --primary-muted: 0 0% 90%;
 
-    /* Secondary colors */
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --secondary-hover: 210 40% 92%;
+    /* Secondary - Gray */
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 0%;
+    --secondary-hover: 0 0% 90%;
 
-    /* Success colors */
-    --success: 142.1 76.2% 36.3%;
-    --success-foreground: 355.7 100% 97.3%;
-    --success-muted: 142.1 76.2% 90%;
+    /* Status colors - Grayscale only */
+    --success: 0 0% 20%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 0 0% 90%;
 
-    /* Warning colors */
-    --warning: 32.4 95.4% 58%;
-    --warning-foreground: 26 83.3% 14.1%;
-    --warning-muted: 32.4 95.4% 90%;
+    --warning: 0 0% 40%;
+    --warning-foreground: 0 0% 100%;
+    --warning-muted: 0 0% 85%;
 
-    /* Error/Destructive colors */
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --destructive-hover: 0 84.2% 55%;
-    --destructive-muted: 0 84.2% 95%;
+    --destructive: 0 0% 0%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-hover: 0 0% 20%;
+    --destructive-muted: 0 0% 90%;
 
-    /* Info colors */
-    --info: 199.4 89.2% 48.4%;
-    --info-foreground: 210 40% 98%;
-    --info-muted: 199.4 89.2% 90%;
+    --info: 0 0% 40%;
+    --info-foreground: 0 0% 100%;
+    --info-muted: 0 0% 90%;
 
     /* Muted colors */
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%; /* #666666 */
 
     /* Accent colors */
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --accent-hover: 210 40% 92%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 0%;
+    --accent-hover: 0 0% 90%;
 
-    /* Border and input colors */
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --input-focus: 221.2 83.2% 53.3%;
-    --ring: 221.2 83.2% 53.3%;
+    /* Border and input - 1px black/gray */
+    --border: 0 0% 80%;
+    --input: 0 0% 100%;
+    --input-focus: 0 0% 0%;
+    --ring: 0 0% 0%;
 
-    /* Text colors */
-    --text-primary: 222.2 84% 4.9%;
-    --text-secondary: 215.4 16.3% 46.9%;
-    --text-tertiary: 215.4 16.3% 65%;
-    --text-disabled: 215.4 16.3% 75%;
+    /* Text colors - B&W hierarchy */
+    --text-primary: 0 0% 0%;
+    --text-secondary: 0 0% 40%; /* #666666 */
+    --text-tertiary: 0 0% 60%; /* #999999 */
+    --text-disabled: 0 0% 70%;
 
-    /* Brand accent colors */
-    --brand-1: 0 100% 63%;
-    --brand-2: 270 100% 63%;
-    --brand-3: 210 100% 63%;
-    --brand-4: 195 100% 63%;
-    --brand-5: 90 100% 63%;
+    /* Brand colors - All black for B&W aesthetic */
+    --brand-1: 0 0% 0%;
+    --brand-2: 0 0% 20%;
+    --brand-3: 0 0% 40%;
+    --brand-4: 0 0% 60%;
+    --brand-5: 0 0% 80%;
 
-    /* Rainbow button color mappings */
-    --color-1: 0 100% 63%;
-    --color-2: 270 100% 63%;
-    --color-3: 210 100% 63%;
-    --color-4: 195 100% 63%;
-    --color-5: 90 100% 63%;
+    --color-1: 0 0% 0%;
+    --color-2: 0 0% 20%;
+    --color-3: 0 0% 40%;
+    --color-4: 0 0% 60%;
+    --color-5: 0 0% 80%;
 
     /* Sidebar colors */
     --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 221.2 83.2% 53.3%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 222.2 84% 4.9%;
-    --sidebar-border: 214.3 31.8% 91.4%;
-    --sidebar-ring: 221.2 83.2% 53.3%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-primary: 0 0% 0%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 0 0% 80%;
+    --sidebar-ring: 0 0% 0%;
 
-    /* Utility */
-    --radius: 0.5rem;
+    /* Sharp corners - no radius */
+    --radius: 0;
   }
 
   .dark {
-    /* Base colors */
-    --background: 0 0% 0%;
-    --foreground: 210 40% 98%;
+    /* Base colors - Pure B&W inverted */
+    --background: 0 0% 0%; /* #000000 */
+    --foreground: 0 0% 100%; /* #FFFFFF */
 
     /* Surface colors */
     --surface: 0 0% 5%;
@@ -115,89 +117,85 @@
 
     /* Card colors */
     --card: 0 0% 3%;
-    --card-foreground: 210 40% 98%;
-    --card-hover: 0 0% 6%;
+    --card-foreground: 0 0% 100%;
+    --card-hover: 0 0% 100%; /* Invert on hover */
 
     /* Popover colors */
-    --popover: 0 0% 3%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 100%;
 
-    /* Primary brand colors */
-    --primary: 217.2 91.2% 59.8%;
+    /* Primary - Pure white */
+    --primary: 0 0% 100%;
     --primary-foreground: 0 0% 0%;
-    --primary-hover: 217.2 91.2% 65%;
-    --primary-muted: 217.2 91.2% 15%;
+    --primary-hover: 0 0% 80%;
+    --primary-muted: 0 0% 15%;
 
-    /* Secondary colors */
+    /* Secondary */
     --secondary: 0 0% 10%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary-foreground: 0 0% 100%;
     --secondary-hover: 0 0% 15%;
 
-    /* Success colors */
-    --success: 142.1 70.6% 45.3%;
-    --success-foreground: 144.9 80.4% 10%;
-    --success-muted: 142.1 70.6% 15%;
+    /* Status colors - Grayscale */
+    --success: 0 0% 80%;
+    --success-foreground: 0 0% 0%;
+    --success-muted: 0 0% 15%;
 
-    /* Warning colors */
-    --warning: 32.4 95.4% 58%;
-    --warning-foreground: 26 83.3% 14.1%;
-    --warning-muted: 32.4 95.4% 15%;
+    --warning: 0 0% 60%;
+    --warning-foreground: 0 0% 0%;
+    --warning-muted: 0 0% 15%;
 
-    /* Error/Destructive colors */
-    --destructive: 0 75.7% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --destructive-hover: 0 75.7% 65%;
-    --destructive-muted: 0 75.7% 15%;
+    --destructive: 0 0% 100%;
+    --destructive-foreground: 0 0% 0%;
+    --destructive-hover: 0 0% 80%;
+    --destructive-muted: 0 0% 15%;
 
-    /* Info colors */
-    --info: 199.4 89.2% 58.4%;
+    --info: 0 0% 60%;
     --info-foreground: 0 0% 0%;
-    --info-muted: 199.4 89.2% 15%;
+    --info-muted: 0 0% 15%;
 
     /* Muted colors */
-    --muted: 0 0% 8%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 60%; /* #999999 */
 
     /* Accent colors */
-    --accent: 0 0% 8%;
-    --accent-foreground: 210 40% 98%;
-    --accent-hover: 0 0% 12%;
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 0 0% 15%;
 
-    /* Border and input colors */
-    --border: 0 0% 15%;
-    --input: 0 0% 10%;
-    --input-focus: 217.2 91.2% 59.8%;
-    --ring: 217.2 91.2% 59.8%;
+    /* Border and input */
+    --border: 0 0% 20%;
+    --input: 0 0% 5%;
+    --input-focus: 0 0% 100%;
+    --ring: 0 0% 100%;
 
     /* Text colors */
-    --text-primary: 210 40% 98%;
-    --text-secondary: 215 20.2% 65.1%;
-    --text-tertiary: 215.4 16.3% 50%;
-    --text-disabled: 215.4 16.3% 35%;
+    --text-primary: 0 0% 100%;
+    --text-secondary: 0 0% 60%; /* #999999 */
+    --text-tertiary: 0 0% 40%; /* #666666 */
+    --text-disabled: 0 0% 30%;
 
-    /* Brand accent colors (same as light) */
-    --brand-1: 0 100% 63%;
-    --brand-2: 270 100% 63%;
-    --brand-3: 210 100% 63%;
-    --brand-4: 195 100% 63%;
-    --brand-5: 90 100% 63%;
+    /* Brand colors */
+    --brand-1: 0 0% 100%;
+    --brand-2: 0 0% 80%;
+    --brand-3: 0 0% 60%;
+    --brand-4: 0 0% 40%;
+    --brand-5: 0 0% 20%;
 
-    /* Rainbow button color mappings */
-    --color-1: 0 100% 63%;
-    --color-2: 270 100% 63%;
-    --color-3: 210 100% 63%;
-    --color-4: 195 100% 63%;
-    --color-5: 90 100% 63%;
+    --color-1: 0 0% 100%;
+    --color-2: 0 0% 80%;
+    --color-3: 0 0% 60%;
+    --color-4: 0 0% 40%;
+    --color-5: 0 0% 20%;
 
     /* Sidebar colors */
     --sidebar-background: 0 0% 0%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217.2 91.2% 59.8%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
     --sidebar-primary-foreground: 0 0% 0%;
-    --sidebar-accent: 0 0% 8%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 0 0% 10%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 0 0% 100%;
   }
 }
 

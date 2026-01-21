@@ -63,13 +63,13 @@ export function DiskUsageSection() {
 
       {/* Loading Progress Indicator */}
       {isLoading && (
-        <Card className="border-blue-200 bg-blue-50/50">
+        <Card className="border-border bg-muted/50">
           <CardContent className="pt-6">
             <div className="flex items-center space-x-3">
-              <Calculator className="h-5 w-5 text-blue-600 animate-pulse" />
+              <Calculator className="h-5 w-5 text-foreground animate-pulse" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-blue-900">Calculating disk usage...</p>
-                <p className="text-xs text-blue-700 mt-1">
+                <p className="text-sm font-medium text-foreground">Calculating disk usage...</p>
+                <p className="text-xs text-muted-foreground mt-1">
                   Scanning directories and analyzing file sizes. This may take a moment for large datasets.
                 </p>
                 <Progress value={undefined} className="mt-3 h-2" />
@@ -138,7 +138,7 @@ export function DiskUsageSection() {
               </div>
             ) : (
               <>
-                <div className="text-2xl font-bold text-green-600">{diskUsage?.available_space || "Unknown"}</div>
+                <div className="text-2xl font-bold">{diskUsage?.available_space || "Unknown"}</div>
                 <p className="text-xs text-muted-foreground">
                   Free disk space
                 </p>
@@ -192,14 +192,14 @@ export function DiskUsageSection() {
             <>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Video className="h-4 w-4 text-blue-500" />
+                  <Video className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">Video Files</span>
                 </div>
                 <Badge variant="secondary">{diskUsage?.media.videos_size || "0 KB"}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Mic className="h-4 w-4 text-green-500" />
+                  <Mic className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">Audio Files</span>
                 </div>
                 <Badge variant="secondary">{diskUsage?.media.audios_size || "0 KB"}</Badge>

@@ -170,17 +170,6 @@ export function AccountSection() {
         : "https://buy.stripe.com/7sIdRzbym4RA98c7sX" +
           `?client_reference_id=${clientRefId}`,
     },
-    {
-      title: "enterprise",
-      price: "book a call",
-      features: [
-        "enterprise screen search engine",
-        "dedicated support",
-        "consulting",
-        "custom features",
-      ],
-      url: "https://cal.com/louis030195/screenpipe-for-businesses",
-    },
   ];
 
   const handleConnectStripe = async () => {
@@ -292,12 +281,6 @@ export function AccountSection() {
                     price={plan.price}
                     features={plan.features}
                     onSelect={async () => {
-                      if (plan.title.toLowerCase() === "enterprise") {
-                        posthog.capture("enterprise_plan_selected");
-                        openUrl(plan.url);
-                        return;
-                      }
-
                       if (!settings.user?.id) {
                         toast({
                           title: "not logged in",

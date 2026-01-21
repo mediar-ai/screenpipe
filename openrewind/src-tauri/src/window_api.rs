@@ -233,12 +233,12 @@ impl ShowRewindWindow {
             .accept_first_mouse(true)
             .shadow(true);
 
-        // This is for windows to have minimum size
-        // if let Some(min) = id.min_size() {
-        //     builder = builder
-        //         .inner_size(min.0, min.1)
-        //         .min_inner_size(min.0, min.1);
-        // }
+        // Set minimum size for windows
+        if let Some(min) = id.min_size() {
+            builder = builder
+                .inner_size(min.0, min.1)
+                .min_inner_size(min.0, min.1);
+        }
 
         #[cfg(target_os = "macos")]
         {

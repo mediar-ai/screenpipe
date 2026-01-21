@@ -18,8 +18,9 @@ module.exports = {
 	  },
 	  extend: {
 		fontFamily: {
-		  sans: ["var(--font-geist-sans)"],
-		  mono: ["var(--font-geist-mono)"],
+		  /* Screenpipe Brand: Monospace primary */
+		  sans: ["JetBrains Mono", "SF Mono", "IBM Plex Mono", "ui-monospace", "monospace"],
+		  mono: ["JetBrains Mono", "SF Mono", "IBM Plex Mono", "ui-monospace", "monospace"],
 		},
 		colors: {
 		  // Base colors
