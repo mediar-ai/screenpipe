@@ -1,27 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Check, HelpCircle, Video, ChevronDown } from "lucide-react";
-import OnboardingNavigation from "@/components/onboarding/navigation";
+import { Check, Monitor, Mic } from "lucide-react";
 import { Button } from "../ui/button";
-import { Switch } from "../ui/switch";
-import {
-  TooltipProvider,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "../ui/tooltip";
-import { useSettings } from "@/lib/hooks/use-settings";
-import { Label } from "../ui/label";
-import { LogFileButton } from "../log-file-button";
-import { Separator } from "../ui/separator";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
-import { toast } from "@/components/ui/use-toast";
-import { PermissionButtons } from "../status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
-import { pipe } from "@screenpipe/browser";
-import { VisionEvent } from "@screenpipe/browser";
-import Image from "next/image";
 import { commands, OSPermissionsCheck } from "@/lib/utils/tauri";
+import { motion } from "framer-motion";
+import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
 
 interface OnboardingStatusProps {
   className?: string;
@@ -29,474 +14,250 @@ interface OnboardingStatusProps {
   handleNextSlide: () => void;
 }
 
+type SetupState = "checking" | "needs-permissions" | "ready" | "starting" | "recording";
+
 const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   className = "",
-  handlePrevSlide,
   handleNextSlide,
 }) => {
-  const [status, setStatus] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [useChineseMirror, setUseChineseMirror] = useState(false);
-  const { updateSettings, settings } = useSettings();
-  const { isMac: isMacOS } = usePlatform();
-  const [stats, setStats] = useState<{
-    screenshots: number;
-    audioSeconds: number;
-  } | null>(null);
-  const [visionEvent, setVisionEvent] = useState<VisionEvent | null>(null);
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [setupState, setSetupState] = useState<SetupState>("checking");
   const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(null);
+  const { isMac: isMacOS } = usePlatform();
+  const { settings, updateSettings } = useSettings();
+  const hasStartedRef = useRef(false);
 
-  // Check permissions on macOS
-  useEffect(() => {
-    const checkPermissions = async () => {
-      if (isMacOS) {
-        try {
-          const perms = await commands.doPermissionsCheck(true);
-          setPermissions(perms);
-        } catch (error) {
-          console.error("Failed to check permissions:", error);
-        }
-      }
-    };
-
-    // Poll permissions every 2 seconds
-    const intervalId = setInterval(() => {
-      checkPermissions();
-    }, 2000);
-
-    // Initial check
-    checkPermissions();
-
-    // Cleanup interval on unmount
-    return () => clearInterval(intervalId);
-  }, [isMacOS]);
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const screenshotsResponse = await fetch(
-          "http://localhost:3030/raw_sql",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              query: `SELECT COUNT(*) as count FROM frames`,
-            }),
-          }
-        );
-        const screenshotsResult = await screenshotsResponse.json();
-
-        const audioResponse = await fetch("http://localhost:3030/raw_sql", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: `
-              SELECT 
-                ROUND(SUM((end_time - start_time)), 2) as total_seconds
-              FROM audio_transcriptions 
-              WHERE start_time IS NOT NULL 
-              AND end_time IS NOT NULL
-            `,
-          }),
-        });
-        const audioResult = await audioResponse.json();
-
-        setStats({
-          screenshots: screenshotsResult[0].count,
-          audioSeconds: audioResult[0].total_seconds || 0,
-        });
-      } catch (error) {
-        console.error("failed to fetch stats:", error);
-      }
-    };
-
-    // initial fetch
-    fetchStats();
-
-    // set up interval for periodic updates
-    const interval = setInterval(fetchStats, 1000); // refresh every second
-
-    // cleanup interval on unmount
-    return () => clearInterval(interval);
-  }, []);
-
-  // Add effect for streaming screenshots when recording starts
-  useEffect(() => {
-    let isActive = false;
-
-    const streamVision = async () => {
-      if (status !== "ok" || isActive) return;
-
-      isActive = true;
-      try {
-        console.log("starting vision stream");
-        for await (const event of pipe.streamVision(true)) {
-          setVisionEvent(event.data);
-          console.log("vision event received");
-
-          // Scroll to bottom when new vision event is received
-          setTimeout(() => {
-            if (containerRef.current) {
-              // Only auto-scroll if already near the bottom
-              const { scrollTop, scrollHeight, clientHeight } =
-                containerRef.current;
-              const isNearBottom =
-                scrollHeight - scrollTop - clientHeight < 150;
-
-              if (isNearBottom) {
-                containerRef.current.scrollTo({
-                  top: containerRef.current.scrollHeight,
-                  behavior: "smooth",
-                });
-              } else if (!showScrollButton) {
-                setShowScrollButton(true);
-              }
-            }
-          }, 100);
-        }
-      } catch (error) {
-        console.error("vision stream error:", error);
-      } finally {
-        isActive = false;
-      }
-    };
-
-    streamVision();
-
-    return () => {
-      pipe.disconnect();
-    };
-  }, [status, showScrollButton]);
-
-  // Add effect to scroll to bottom when status changes to "ok"
-  useEffect(() => {
-    if (status === "ok" && containerRef.current) {
-      setTimeout(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTo({
-            top: containerRef.current.scrollHeight,
-            behavior: "smooth",
-          });
-        }
-      }, 500); // Give time for the UI to render
-    }
-  }, [status]);
-
-  // Add scroll event listener to show/hide scroll button
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      // Show button if not at bottom (with some threshold)
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-      setShowScrollButton(!isAtBottom);
-    };
-
-    container.addEventListener("scroll", handleScroll);
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  const scrollToBottom = () => {
-    if (containerRef.current) {
-      containerRef.current.scrollTo({
-        top: containerRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+  // Create default screenpipe-cloud preset if none exists
+  const ensureDefaultPreset = async () => {
+    if (settings.aiPresets.length === 0) {
+      const defaultPreset = {
+        id: crypto.randomUUID(),
+        provider: "screenpipe-cloud" as const,
+        url: "https://ai-proxy.i-f9f.workers.dev/v1",
+        model: "gpt-4o-mini",
+        maxContextChars: 512000,
+        defaultPreset: true,
+        prompt: DEFAULT_PROMPT,
+      };
+      await updateSettings({ aiPresets: [defaultPreset] });
     }
   };
 
-  const handleStartScreenpipe = async () => {
-    posthog.capture("screenpipe_setup_start");
-    setIsLoading(true);
-    const toastId = toast({
-      title: "starting screenpipe",
-      description:
-        "please wait as we download AI models and start recording\nplease check logs if this is taking longer than expected (30s)",
-      duration: Infinity,
-    });
-    try {
-      await invoke("stop_screenpipe");
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
-
-      await invoke("spawn_screenpipe", {
-        overrideArgs: ["--enable-realtime-vision"],
-      });
-      await new Promise((resolve) => setTimeout(resolve, 5_000));
-      toastId.update({
-        id: toastId.id,
-        title: "screenpipe started",
-        description: "screenpipe is now running.",
-        duration: 3000,
-      });
-      setStatus("ok");
-    } catch (error) {
-      console.error("failed to start screenpipe:", error);
-      toastId.update({
-        id: toastId.id,
-        title: "error",
-        description: "failed to start screenpipe.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    } finally {
-      toastId.dismiss();
-      setIsLoading(false);
-    }
-  };
-
-  const handleNext = () => {
-    setStatus(null);
+  const handleComplete = async () => {
+    await ensureDefaultPreset();
     handleNextSlide();
   };
 
-  const handlePrev = () => {
-    setStatus(null);
-    handlePrevSlide();
-  };
+  // Check permissions
+  useEffect(() => {
+    const checkPermissions = async () => {
+      // Don't check if already starting or recording
+      if (hasStartedRef.current) return;
 
-  const handleChineseMirrorToggle = async (checked: boolean) => {
-    setUseChineseMirror(checked);
-    updateSettings({ useChineseMirror: checked });
-  };
+      if (!isMacOS) {
+        setSetupState("ready");
+        return;
+      }
 
-  // Helper function to check if screen recording permission is granted
-  const isScreenRecordingPermissionGranted = () => {
-    if (!isMacOS) {
-      // On non-macOS platforms, assume permission is granted
-      return true;
+      try {
+        const perms = await commands.doPermissionsCheck(true);
+        setPermissions(perms);
+
+        const screenOk = perms.screenRecording === "granted" || perms.screenRecording === "notNeeded";
+        const audioOk = perms.microphone === "granted" || perms.microphone === "notNeeded";
+
+        if (screenOk && audioOk && !hasStartedRef.current) {
+          setSetupState("ready");
+        } else if (!hasStartedRef.current) {
+          setSetupState("needs-permissions");
+        }
+      } catch (error) {
+        console.error("Failed to check permissions:", error);
+        if (!hasStartedRef.current) {
+          setSetupState("ready");
+        }
+      }
+    };
+
+    checkPermissions();
+    const interval = setInterval(checkPermissions, 2000);
+    return () => clearInterval(interval);
+  }, [isMacOS]);
+
+  // Auto-start when ready (only once)
+  useEffect(() => {
+    if (setupState === "ready" && !hasStartedRef.current) {
+      hasStartedRef.current = true;
+      handleStartRecording();
     }
-    
-    const screenPermission = permissions?.screenRecording;
-    return screenPermission === "granted" || screenPermission === "notNeeded";
-  };
+  }, [setupState]);
 
-  // Helper function to check if audio permission is granted (when audio is enabled)
-  const isAudioPermissionGranted = () => {
-    if (!isMacOS || settings.disableAudio) {
-      // On non-macOS platforms or when audio is disabled, assume permission is granted
-      return true;
+  const handleStartRecording = async () => {
+    posthog.capture("screenpipe_setup_start");
+    setSetupState("starting");
+
+    try {
+      await invoke("stop_screenpipe");
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await invoke("spawn_screenpipe");
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      setSetupState("recording");
+    } catch (error) {
+      console.error("Failed to start screenpipe:", error);
+      setSetupState("ready");
     }
-    
-    const audioPermission = permissions?.microphone;
-    return audioPermission === "granted" || audioPermission === "notNeeded";
   };
 
-  // Helper function to check if all required permissions are granted
-  const areRequiredPermissionsGranted = () => {
-    return isScreenRecordingPermissionGranted() && isAudioPermissionGranted();
+  const openSystemPreferences = async (type: "screen" | "audio") => {
+    try {
+      if (type === "screen") {
+        await commands.openScreenRecordingPreferences();
+      } else {
+        await commands.openMicrophonePreferences();
+      }
+    } catch (error) {
+      console.error("Failed to open preferences:", error);
+    }
   };
 
-  // Check if next button should be disabled
-  const isNextDisabled = isLoading || (isMacOS && !areRequiredPermissionsGranted());
+  const screenGranted = permissions?.screenRecording === "granted" || permissions?.screenRecording === "notNeeded";
+  const audioGranted = permissions?.microphone === "granted" || permissions?.microphone === "notNeeded";
 
   return (
-    <div
-      ref={containerRef}
-      className={`${className} w-full flex flex-col items-center relative max-h-full`}
-    >
-      <div className="flex flex-col items-center justify-start w-full overflow-y-auto py-4"> 
-        <div className="w-32 h-32 flex items-center justify-center">
-            <img className="w-32 h-32" src="/128x128.png" alt="screenpipe-logo" />
-          </div> 
-        <h1 className="text-center text-2xl text-text-primary">
-          setting up screenpipe
-        </h1>
-        <p className="text-sm text-text-secondary pt-2">
-          100% local-first • your data never leaves your device
-        </p>
+    <div className={`${className} w-full flex flex-col items-center justify-center min-h-[400px]`}>
 
-      {isMacOS && (
-        <div className="mt-6 pt-4 border-t border-border w-full flex flex-col items-center">
-          <h4 className="text-sm font-medium mb-3 text-text-primary">check permissions</h4>
-          <div className="space-y-2">
-            <PermissionButtons type="screen" />
-            <PermissionButtons type="audio" />
-          </div>
-          {!areRequiredPermissionsGranted() && (
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 text-center">
-              {!isScreenRecordingPermissionGranted() && !isAudioPermissionGranted() 
-                ? "screen recording and audio permissions are required to continue"
-                : !isScreenRecordingPermissionGranted() 
-                ? "screen recording permission is required to continue"
-                : "audio permission is required to continue"}
-            </p>
-          )}
-        </div>
+      {/* Checking state */}
+      {setupState === "checking" && (
+        <motion.div
+          className="flex flex-col items-center space-y-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin" />
+          <p className="font-mono text-sm text-muted-foreground">checking permissions...</p>
+        </motion.div>
       )}
 
-      <Separator className="w-full my-2 bg-border" />
-
-      <div className="flex items-center space-x-2 mt-4">
-        <Switch
-          id="chinese-mirror-toggle"
-          checked={useChineseMirror}
-          onCheckedChange={handleChineseMirrorToggle}
-        />
-        <Label
-          htmlFor="chinese-mirror-toggle"
-          className="flex items-center space-x-2"
+      {/* Needs permissions */}
+      {setupState === "needs-permissions" && (
+        <motion.div
+          className="flex flex-col items-center space-y-8 max-w-md"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
         >
-          <span>i am currently in mainland china</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 cursor-default" />
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>
-                  enable this option to use a chinese cloud for
-                  <br />
-                  downloading AI models
-                  <br />
-                  which are blocked in mainland china.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </Label>
-      </div>
-      <div className="w-full flex flex-col items-center justify-center gap-2 my-1">
-        {status === null ? (
-          <Button
-            onClick={handleStartScreenpipe}
-            disabled={isLoading}
-            className="mt-4"
-          >
-            {isLoading ? (
-              <svg
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                viewBox="0 0 24 24"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                xmlns="http://www.w3.org/2000/svg"
-                className="size-5 animate-spin text-text-secondary mr-2"
-              >
-                <path d="M12 3v3m6.366-.366-2.12 2.12M21 12h-3m.366 6.366-2.12-2.12M12 21v-3m-6.366.366 2.12-2.12M3 12h3m-.366-6.366 2.12 2.12"></path>
-              </svg>
-            ) : (
-              <Video className="h-4 w-4 mr-2" />
-            )}
-            {isLoading ? "starting..." : "start recording"}
+          <div className="text-center space-y-2">
+            <h2 className="font-mono text-xl text-foreground">grant access</h2>
+            <p className="font-mono text-xs text-muted-foreground">
+              screenpipe needs permission to capture your screen and audio
+            </p>
+          </div>
+
+          <div className="space-y-3 w-full">
+            <button
+              onClick={() => openSystemPreferences("screen")}
+              className="w-full flex items-center justify-between p-4 border border-border hover:bg-foreground hover:text-background transition-all group"
+            >
+              <div className="flex items-center space-x-3">
+                <Monitor className="w-5 h-5" strokeWidth={1.5} />
+                <span className="font-mono text-sm">screen recording</span>
+              </div>
+              {screenGranted ? (
+                <Check className="w-5 h-5 text-foreground group-hover:text-background" strokeWidth={1.5} />
+              ) : (
+                <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">click to enable</span>
+              )}
+            </button>
+
+            <button
+              onClick={() => openSystemPreferences("audio")}
+              className="w-full flex items-center justify-between p-4 border border-border hover:bg-foreground hover:text-background transition-all group"
+            >
+              <div className="flex items-center space-x-3">
+                <Mic className="w-5 h-5" strokeWidth={1.5} />
+                <span className="font-mono text-sm">microphone</span>
+              </div>
+              {audioGranted ? (
+                <Check className="w-5 h-5 text-foreground group-hover:text-background" strokeWidth={1.5} />
+              ) : (
+                <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">click to enable</span>
+              )}
+            </button>
+          </div>
+
+          <p className="font-mono text-xs text-muted-foreground text-center">
+            toggle permissions in system settings, then return here
+          </p>
+        </motion.div>
+      )}
+
+      {/* Starting state */}
+      {setupState === "starting" && (
+        <motion.div
+          className="flex flex-col items-center space-y-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin" />
+          <div className="text-center space-y-2">
+            <p className="font-mono text-sm text-foreground">starting screenpipe...</p>
+            <p className="font-mono text-xs text-muted-foreground">downloading AI models</p>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Recording state */}
+      {setupState === "recording" && (
+        <motion.div
+          className="flex flex-col items-center space-y-8"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-3 h-3 bg-foreground animate-pulse" />
+            <span className="font-mono text-lg text-foreground">recording</span>
+          </div>
+
+          <div className="text-center space-y-2">
+            <p className="font-mono text-sm text-muted-foreground">
+              screenpipe is now capturing your screen and audio
+            </p>
+            <p className="font-mono text-xs text-muted-foreground">
+              find it in your menu bar anytime
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-4 text-xs font-mono text-muted-foreground">
+            <div className="flex items-center space-x-2">
+              <Check className="w-4 h-4" strokeWidth={1.5} />
+              <span>screen</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Check className="w-4 h-4" strokeWidth={1.5} />
+              <span>audio</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Check className="w-4 h-4" strokeWidth={1.5} />
+              <span>local</span>
+            </div>
+          </div>
+
+          <Button onClick={handleComplete} size="lg">
+            continue
           </Button>
-        ) : status === "ok" ? (
-          <div className="flex flex-col items-center mt-4">
-            <Check className="size-5 text-success" />
-            <p className="text-sm text-text-secondary mt-2 text-center">
-              screenpipe setup complete. <br />
-              AI models downloaded.
-            </p>
-          </div>
-        ) : (
-          <p className="text-center mt-4 text-text-primary">{status}</p>
-        )}
+        </motion.div>
+      )}
 
-        <LogFileButton />
-      </div>
-
-      {/* Screenshot stream display */}
-      {status === "ok" && (
-        <div
-          className="w-full mt-4 p-4 space-y-3 rounded-lg border bg-card text-card-foreground shadow-sm"
-          id="screenshot-preview"
+      {/* Ready but not auto-started (fallback) */}
+      {setupState === "ready" && (
+        <motion.div
+          className="flex flex-col items-center space-y-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
         >
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-text-primary">live preview</h3>
-            <span className="text-xs text-text-secondary">
-              {visionEvent ? "streaming..." : "waiting for stream..."}
-            </span>
-          </div>
-
-          {visionEvent?.image ? (
-            <div className="space-y-3">
-              <div className="relative w-full h-[250px] overflow-hidden rounded-md">
-                <Image
-                  src={`data:image/jpeg;base64,${visionEvent.image}`}
-                  alt="screen capture"
-                  fill
-                  style={{ objectFit: "contain" }}
-                  className="rounded-md"
-                  priority
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-text-secondary">
-                <div>
-                  <span className="font-medium">app:</span>{" "}
-                  {visionEvent.app_name || "unknown"}
-                </div>
-                <div>
-                  <span className="font-medium">window:</span>{" "}
-                  {visionEvent.window_name || "unknown"}
-                </div>
-                <div>
-                  <span className="font-medium">time:</span>{" "}
-                  {new Date(visionEvent.timestamp).toLocaleTimeString()}
-                </div>
-                {visionEvent.browser_url && (
-                  <div className="col-span-2 truncate">
-                    <span className="font-medium">url:</span>{" "}
-                    {visionEvent.browser_url}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="animate-pulse bg-muted rounded-md w-full h-[250px]" />
-          )}
-        </div>
+          <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin" />
+          <p className="font-mono text-sm text-muted-foreground">preparing...</p>
+        </motion.div>
       )}
-
-      {/* Stats display */}
-      {stats && (
-        <div className="w-full p-4 space-y-3 rounded-lg border bg-card text-card-foreground shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Video className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">screenshots</span>
-            </div>
-            <span className="font-mono text-sm">
-              {stats.screenshots.toLocaleString()}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Video className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">audio</span>
-            </div>
-            <span className="font-mono text-sm">
-              {Math.round(stats.audioSeconds / 60)}m
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Scroll to bottom button */}
-      {showScrollButton && status === "ok" && visionEvent && (
-        <button
-          onClick={scrollToBottom}
-          className="fixed bottom-16 right-4 bg-primary text-primary-foreground rounded-full p-2 shadow-md hover:bg-primary/90 transition-opacity z-20"
-          aria-label="Scroll to bottom"
-        >
-          <ChevronDown className="h-4 w-4" />
-        </button>
-      )}
-      </div>
-        <OnboardingNavigation
-          handlePrevSlide={handlePrev}
-          handleNextSlide={handleNext}
-          prevBtnText="previous"
-          nextBtnText="next"
-          isLoading={isNextDisabled}
-        />
     </div>
   );
 };

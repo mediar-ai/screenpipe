@@ -4,47 +4,25 @@ import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import OnboardingStatus from "@/components/onboarding/status";
 import OnboardingIntro from "@/components/onboarding/introduction";
-import OnboardingAPISetup from "@/components/onboarding/api-setup";
-import OnboardingInstructions from "@/components/onboarding/explain-instructions";
-import OnboardingLogin from "@/components/onboarding/login";
-import OnboardingShortcuts from "@/components/onboarding/shortcuts";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import posthog from "posthog-js";
 import { commands } from "@/lib/utils/tauri";
 
-type SlideKey =
-  | "intro"
-  | "status" 
-  | "login"
-  | "apiSetup"
-  | "shortcuts"
-  | "instructions";
+type SlideKey = "intro" | "status";
 
 // Window size configurations for each slide
 const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = {
-  intro: { width: 1100, height: 850 }, // Increased for demo content
-  status: { width: 1100, height: 850 }, // Good for status checks
-  login: { width: 1100, height: 680 }, // Compact for login form
-  apiSetup: { width: 1100, height: 1000 }, // Taller for AI presets configuration
-  shortcuts: { width: 1100, height: 850 }, // Good size for shortcuts display
-  instructions: { width: 1100, height: 1050 }, // Largest for the final comprehensive instructions
+  intro: { width: 800, height: 750 },
+  status: { width: 800, height: 500 },
 };
 
-// Simplified flow - linear progression
+// Simple 2-step flow: intro → status → done
 const getNextSlide = (currentSlide: SlideKey): SlideKey | null => {
   switch (currentSlide) {
     case "intro":
       return "status";
     case "status":
-      return "login";
-    case "login":
-      return "apiSetup";
-    case "apiSetup":
-      return "shortcuts";
-    case "shortcuts":
-      return "instructions";
-    case "instructions":
-      return null;
+      return null; // Complete onboarding
     default:
       return null;
   }
@@ -56,14 +34,6 @@ const getPrevSlide = (currentSlide: SlideKey): SlideKey | null => {
       return null;
     case "status":
       return "intro";
-    case "login":
-      return "status";
-    case "apiSetup":
-      return "login";
-    case "shortcuts":
-      return "apiSetup";
-    case "instructions":
-      return "shortcuts";
     default:
       return null;
   }
@@ -270,8 +240,8 @@ export default function OnboardingPage() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading onboarding...</p>
+          <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin mx-auto mb-4"></div>
+          <p className="font-mono text-xs text-muted-foreground">loading...</p>
         </div>
       </div>
     );
@@ -279,28 +249,22 @@ export default function OnboardingPage() {
 
   return (
     <div className="flex flex-col w-full h-screen overflow-hidden bg-background">
-      {/* Progress indicator with drag region */}
-      <div className="w-full bg-secondary p-4 border-b border-border" data-tauri-drag-region>
-        <div className="flex items-center justify-between max-w-4xl mx-auto">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-text-primary">Progress:</span>
-            <div className="text-sm text-text-secondary">
-              Step {["intro", "status", "login", "apiSetup", "shortcuts", "instructions"].indexOf(currentSlide) + 1} of 6
-            </div>
-          </div>
+      {/* Minimal header with drag region */}
+      <div className="w-full bg-background p-4" data-tauri-drag-region>
+        <div className="flex items-center justify-end max-w-4xl mx-auto">
           <button
             onClick={handleSkip}
             disabled={isTransitioning}
-            className="text-sm text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors"
+            className="font-mono text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
           >
-            Skip onboarding
+            skip
           </button>
         </div>
       </div>
 
-      {/* Main content container - centered and properly sized */}
+      {/* Main content container */}
       <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
-        <div className="w-full max-w-4xl mx-auto h-full flex items-center justify-center">
+        <div className="w-full max-w-2xl mx-auto">
           {currentSlide === "intro" && (
             <OnboardingIntro
               className={`transition-opacity duration-300 w-full
@@ -313,39 +277,7 @@ export default function OnboardingPage() {
               className={`transition-opacity duration-300 w-full
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handlePrevSlide={handlePrevSlide}
-              handleNextSlide={handleNextSlide}
-            />
-          )}
-          {currentSlide === "login" && (
-            <OnboardingLogin
-              className={`transition-opacity duration-300 w-full
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
-              handlePrevSlide={handlePrevSlide}
-            />
-          )}
-          {currentSlide === "apiSetup" && (
-            <OnboardingAPISetup
-              className={`transition-opacity duration-300 ease-in-out w-full
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
-              handlePrevSlide={handlePrevSlide}
-            />
-          )}
-          {currentSlide === "shortcuts" && (
-            <OnboardingShortcuts
-              className={`transition-opacity duration-300 ease-in-out w-full
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
-              handlePrevSlide={handlePrevSlide}
-            />
-          )}
-          {currentSlide === "instructions" && (
-            <OnboardingInstructions
-              className={`transition-opacity duration-300 ease-in-out w-full
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleNextSlide={handleEnd}
-              handlePrevSlide={handlePrevSlide}
             />
           )}
         </div>
