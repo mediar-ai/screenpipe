@@ -52,77 +52,107 @@ export function useHealthCheck() {
   const retryIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchHealth = useCallback(async () => {
+    // Clean up existing WebSocket connection
     if (wsRef.current) {
-      wsRef.current.close();
+      try {
+        if (wsRef.current.readyState === WebSocket.OPEN || 
+            wsRef.current.readyState === WebSocket.CONNECTING) {
+          wsRef.current.close();
+        }
+      } catch (error) {
+        console.warn("Error closing existing WebSocket:", error);
+      }
+      wsRef.current = null;
     }
 
-    const ws = new WebSocket("ws://127.0.0.1:3030/ws/health");
-    wsRef.current = ws;
+    try {
+      const ws = new WebSocket("ws://127.0.0.1:3030/ws/health");
+      wsRef.current = ws;
 
-    ws.onopen = () => {
-      setIsLoading(false);
-      if (retryIntervalRef.current) {
-        clearInterval(retryIntervalRef.current);
-        retryIntervalRef.current = null;
-      }
-    };
-
-    ws.onmessage = (event) => {
-      const data: HealthCheckResponse = JSON.parse(event.data);
-      if (isHealthChanged(healthRef.current, data)) {
-        setHealth(data);
-        healthRef.current = data;
-      }
-
-      if (
-        data.status === "unhealthy" &&
-        previousHealthStatus.current === "healthy"
-      ) {
-        unhealthyTransitionsRef.current += 1;
-      }
-
-      previousHealthStatus.current = data.status;
-    };
-
-    ws.onerror = (event) => {
-      const error = event as ErrorEvent;
-      const errorHealth: HealthCheckResponse = {
-        status: "error",
-        status_code: 500,
-        last_frame_timestamp: null,
-        last_audio_timestamp: null,
-        last_ui_timestamp: null,
-        frame_status: "error",
-        audio_status: "error",
-        ui_status: "error",
-        message: error.message,
+      ws.onopen = () => {
+        setIsServerDown(false);
+        setIsLoading(false);
+        if (retryIntervalRef.current) {
+          clearInterval(retryIntervalRef.current);
+          retryIntervalRef.current = null;
+        }
       };
-      setHealth(errorHealth);
+
+      ws.onmessage = (event) => {
+        try {
+          const data: HealthCheckResponse = JSON.parse(event.data);
+          if (isHealthChanged(healthRef.current, data)) {
+            setHealth(data);
+            healthRef.current = data;
+            setIsServerDown(false);
+          }
+
+          if (
+            data.status === "unhealthy" &&
+            previousHealthStatus.current === "healthy"
+          ) {
+            unhealthyTransitionsRef.current += 1;
+          }
+
+          previousHealthStatus.current = data.status;
+        } catch (error) {
+          console.error("Error parsing health data:", error);
+        }
+      };
+
+      ws.onerror = (event) => {
+        console.warn("WebSocket error:", event);
+        const errorHealth: HealthCheckResponse = {
+          status: "error",
+          status_code: 500,
+          last_frame_timestamp: null,
+          last_audio_timestamp: null,
+          last_ui_timestamp: null,
+          frame_status: "error",
+          audio_status: "error",
+          ui_status: "error",
+          message: "Connection error",
+        };
+        setHealth(errorHealth);
+        setIsServerDown(true);
+        setIsLoading(false);
+        
+        // Start retry interval if not already running
+        if (!retryIntervalRef.current) {
+          retryIntervalRef.current = setInterval(fetchHealth, 3000);
+        }
+      };
+
+      ws.onclose = (event) => {
+        console.log("WebSocket closed:", event.code, event.reason);
+        const errorHealth: HealthCheckResponse = {
+          status: "error",
+          status_code: 500,
+          last_frame_timestamp: null,
+          last_audio_timestamp: null,
+          last_ui_timestamp: null,
+          frame_status: "error",
+          audio_status: "error",
+          ui_status: "error",
+          message: "WebSocket connection closed",
+        };
+        setHealth(errorHealth);
+        setIsServerDown(true);
+        
+        // Only start retry if this wasn't a manual close
+        if (!retryIntervalRef.current && event.code !== 1000) {
+          retryIntervalRef.current = setInterval(fetchHealth, 3000);
+        }
+      };
+    } catch (error) {
+      console.error("Error creating WebSocket:", error);
       setIsServerDown(true);
       setIsLoading(false);
+      
       if (!retryIntervalRef.current) {
-        retryIntervalRef.current = setInterval(fetchHealth, 2000);
+        retryIntervalRef.current = setInterval(fetchHealth, 3000);
       }
-    };
-
-    ws.onclose = () => {
-      const errorHealth: HealthCheckResponse = {
-        status: "error",
-        status_code: 500,
-        last_frame_timestamp: null,
-        last_audio_timestamp: null,
-        last_ui_timestamp: null,
-        frame_status: "error",
-        audio_status: "error",
-        ui_status: "error",
-        message: "WebSocket connection closed",
-      };
-      setHealth(errorHealth);
-      setIsServerDown(true);
-      if (!retryIntervalRef.current) {
-        retryIntervalRef.current = setInterval(fetchHealth, 2000);
-      }
-    };
+    }
   }, []);
 
   const debouncedFetchHealth = useCallback(() => {
@@ -140,11 +170,23 @@ export function useHealthCheck() {
   useEffect(() => {
     fetchHealth();
     return () => {
+      // Clean up WebSocket connection
       if (wsRef.current) {
-        wsRef.current.close();
+        try {
+          if (wsRef.current.readyState === WebSocket.OPEN || 
+              wsRef.current.readyState === WebSocket.CONNECTING) {
+            wsRef.current.close(1000, "Component unmounting");
+          }
+        } catch (error) {
+          console.warn("Error closing WebSocket during cleanup:", error);
+        }
+        wsRef.current = null;
       }
+      
+      // Clear retry interval
       if (retryIntervalRef.current) {
         clearInterval(retryIntervalRef.current);
+        retryIntervalRef.current = null;
       }
     };
   }, [fetchHealth]);

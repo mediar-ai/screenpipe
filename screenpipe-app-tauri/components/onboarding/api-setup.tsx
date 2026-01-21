@@ -3,7 +3,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { CardContent } from "@/components/ui/card";
 import { ArrowUpRight } from "lucide-react";
-import { DialogTitle } from "@/components/ui/dialog";
 import { open } from "@tauri-apps/plugin-shell";
 
 import OnboardingNavigation from "@/components/onboarding/navigation";
@@ -37,10 +36,10 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
 
   // Check if at least one preset exists and has required fields
   const hasValidPreset = React.useMemo(() => {
-    if (!settings.aiPresets || settings.aiPresets.length === 0) return false;
+    if (!settings?.aiPresets || settings?.aiPresets.length === 0) return false;
     
     // Find the default preset or the first one if no default is set
-    const defaultPreset = settings.aiPresets.find(p => p.defaultPreset) || settings.aiPresets[0];
+    const defaultPreset = settings?.aiPresets.find(p => p.defaultPreset) || settings?.aiPresets[0];
     
     if (!defaultPreset) return false;
     
@@ -59,14 +58,14 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
     return url?.trim() !== "" && 
            model?.trim() !== "" && 
            hasRequiredApiKey;
-  }, [settings.aiPresets]);
+  }, [settings?.aiPresets]);
 
   const handleValidationMoveNextSlide = async () => {
     setIsValidating(true);
     
     try {
       // Find the default preset or the first one
-      const defaultPreset = settings.aiPresets.find(p => p.defaultPreset) || settings.aiPresets[0];
+      const defaultPreset = settings?.aiPresets.find(p => p.defaultPreset) || settings?.aiPresets[0];
       
       if (!defaultPreset) {
         toast({
@@ -84,7 +83,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
       const apiKey = (provider === "openai" || provider === "custom") && "apiKey" in defaultPreset 
         ? defaultPreset.apiKey 
         : provider === "screenpipe-cloud"
-          ? settings.user.token
+          ? settings?.user?.token
           : "";
       
       const t = toast({
@@ -154,9 +153,9 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
             src="/128x128.png"
             alt="screenpipe-logo"
           />
-          <DialogTitle className="text-center text-2xl">
+          <h1 className="text-center text-2xl text-text-primary">
             setup your ai settings
-          </DialogTitle>
+          </h1>
         </div>
         <div className="mt-4 h-full w-full">
           <CardContent className="flex flex-col items-center space-y-4 h-full">
@@ -166,7 +165,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
                 open("https://github.com/ollama/ollama?tab=readme-ov-file#ollama")
               }
               href="#"
-              className="text-muted-foreground text-sm !text-center hover:underline"
+              className="text-text-secondary text-sm !text-center hover:underline hover:text-text-primary transition-colors"
             >
               don&apos;t have api key ? set up ollama locally
               <ArrowUpRight className="inline w-4 h-4 ml-1" />

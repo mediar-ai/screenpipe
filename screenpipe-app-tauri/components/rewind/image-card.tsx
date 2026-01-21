@@ -1,0 +1,249 @@
+import { format } from "date-fns";
+import { useEffect, useRef, useMemo, useState, RefObject } from "react";
+import { SearchMatch } from "@/lib/hooks/use-keyword-search-store";
+import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
+import { cn } from "@/lib/utils";
+import { throttle } from "lodash";
+import { Loader2 } from "lucide-react";
+import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
+
+export const SkeletonCard = () => (
+	<div className="flex flex-col relative overflow-hidden bg-card border border-border">
+		<div className="p-2 border-b border-border">
+			<div className="h-3 bg-muted animate-pulse w-32" />
+		</div>
+		<div className="aspect-video bg-muted animate-pulse" />
+		<div className="p-2 space-y-1 border-t border-border">
+			<div className="h-4 bg-muted animate-pulse w-20" />
+			<div className="h-3 bg-muted animate-pulse w-32" />
+		</div>
+	</div>
+);
+
+export const ImageGrid = ({
+	searchResult,
+	pageRef,
+}: {
+	searchResult: SearchMatch[];
+	pageRef: RefObject<HTMLDivElement | null>;
+}) => {
+	const containerRef = useRef<HTMLDivElement>(null);
+	const { setCurrentResultIndex, currentResultIndex, searchKeywords } =
+		useKeywordSearchStore();
+	const [{ start_time, end_time, query, apps }] = useKeywordParams();
+	const { searchResults, isSearching } = useKeywordSearchStore();
+
+	const checkScrollAndFetch = useMemo(
+		() =>
+			throttle(() => {
+				const container = containerRef.current;
+				if (!container) return;
+				if (searchResults.length === 0) return;
+
+				const scrollPosition = container.scrollTop;
+				const scrollHeight = container.scrollHeight;
+				const clientHeight = container.clientHeight;
+
+				const scrollPercentage = scrollPosition / (scrollHeight - clientHeight);
+
+				if (scrollPercentage > 0.7) {
+					searchKeywords(query ?? "", {
+						offset: searchResult.length,
+						limit: 20,
+						...(start_time && { start_time }),
+						...(end_time && { end_time }),
+						...(apps?.length && { app_names: apps }),
+					});
+				}
+			}, 400),
+		[searchResult.length, searchKeywords, query, start_time, end_time, apps],
+	);
+
+	useEffect(() => {
+		const container = containerRef.current;
+		if (container) {
+			container.addEventListener("scroll", checkScrollAndFetch);
+		}
+
+		return () => {
+			if (container) {
+				container.removeEventListener("scroll", checkScrollAndFetch);
+			}
+		};
+	}, [checkScrollAndFetch]);
+
+	// Keyboard navigation for grid
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (searchResult.length === 0) return;
+
+			const cols = 5; // Match lg:grid-cols-5
+			let newIndex = currentResultIndex;
+
+			switch (e.key) {
+				case "ArrowRight":
+					newIndex = Math.min(currentResultIndex + 1, searchResult.length - 1);
+					break;
+				case "ArrowLeft":
+					newIndex = Math.max(currentResultIndex - 1, 0);
+					break;
+				case "ArrowDown":
+					newIndex = Math.min(currentResultIndex + cols, searchResult.length - 1);
+					break;
+				case "ArrowUp":
+					newIndex = Math.max(currentResultIndex - cols, 0);
+					break;
+				default:
+					return;
+			}
+
+			if (newIndex !== currentResultIndex) {
+				e.preventDefault();
+				setCurrentResultIndex(newIndex);
+			}
+		};
+
+		document.addEventListener("keydown", handleKeyDown);
+		return () => document.removeEventListener("keydown", handleKeyDown);
+	}, [currentResultIndex, searchResult.length, setCurrentResultIndex]);
+
+	return (
+		<div className="relative w-full h-full">
+			<div
+				ref={containerRef}
+				className="w-full overflow-y-auto overflow-x-hidden select-none scrollbar-hide"
+			>
+				<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-4">
+					{searchResult.map((result, index) => (
+						<div
+							key={result.frame_id}
+							data-timestamp={result.timestamp}
+							className={cn(
+								"group flex flex-col relative overflow-hidden bg-card border border-border transition-all duration-200 cursor-pointer",
+								currentResultIndex === index && "ring-1 ring-foreground",
+							)}
+							onClick={() => setCurrentResultIndex(index)}
+						>
+							<div className="text-xs font-mono text-muted-foreground p-2 border-b border-border">
+								{format(new Date(result.timestamp), "yyyy-MM-dd HH:mm:ss")}
+							</div>
+							<div className="aspect-video overflow-hidden relative">
+								<div className="absolute inset-0 flex items-center justify-center bg-muted">
+									<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+								</div>
+								<img
+									src={`http://localhost:3030/frames/${result.frame_id}`}
+									alt={`${result.app_name} - ${result.window_name}`}
+									className="h-full w-full object-cover transition-transform duration-200 relative group-hover:scale-105"
+									loading="lazy"
+									draggable={false}
+									onLoad={(e) => {
+										(e.target as HTMLImageElement).style.opacity = "1";
+									}}
+									style={{ opacity: 0 }}
+								/>
+							</div>
+							<div className="p-2 space-y-1 border-t border-border">
+								<p className="text-sm font-mono truncate">
+									{result.app_name}
+								</p>
+								<p className="text-xs font-mono text-muted-foreground truncate">
+									{result.window_name}
+								</p>
+							</div>
+						</div>
+					))}
+				</div>
+				{isSearching && (
+					<div className="flex justify-center py-4">
+						<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+					</div>
+				)}
+			</div>
+		</div>
+	);
+};
+
+interface TextBounds {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+}
+
+interface TextPosition {
+	text: string;
+	confidence: number;
+	bounds: TextBounds;
+}
+
+export const MainImage = () => {
+	const { searchResults, currentResultIndex } = useKeywordSearchStore();
+	const imageRef = useRef<HTMLImageElement>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
+	const [imageRect, setImageRect] = useState<DOMRect | null>(null);
+
+	const currentFrame = searchResults[currentResultIndex];
+
+	useEffect(() => {
+		const updateImageRect = () => {
+			if (imageRef.current) {
+				const rect = imageRef.current.getBoundingClientRect();
+				setImageRect(rect);
+			}
+		};
+
+		updateImageRect();
+		const resizeObserver = new ResizeObserver(updateImageRect);
+		if (containerRef.current) {
+			resizeObserver.observe(containerRef.current);
+		}
+
+		window.addEventListener("resize", updateImageRect);
+		return () => {
+			window.removeEventListener("resize", updateImageRect);
+			resizeObserver.disconnect();
+		};
+	}, [currentFrame]);
+
+	if (!currentFrame) {
+		return (
+			<div className="relative col-span-3 aspect-video w-full h-full overflow-hidden rounded-lg bg-neutral-100">
+				<div className="animate-pulse absolute inset-0 bg-neutral-200" />
+				<div className="h-full w-full object-cover opacity-0 transition-opacity duration-300" />
+			</div>
+		);
+	}
+
+	return (
+		<div
+			ref={containerRef}
+			className="relative aspect-auto w-full h-full overflow-hidden rounded-lg bg-neutral-100"
+		>
+			<div className="absolute inset-0 flex items-center justify-center">
+				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+			</div>
+			<div className="relative">
+				<img
+					ref={imageRef}
+					src={`http://localhost:3030/frames/${currentFrame.frame_id}`}
+					alt={`${currentFrame.app_name} - ${currentFrame.window_name}`}
+					className="h-full w-full object-contain max-h-[75vh]"
+					draggable={false}
+					onLoad={(e) => {
+						(e.target as HTMLImageElement).style.opacity = "1";
+					}}
+					style={{ opacity: 0 }}
+				/>
+				{imageRect && (
+					<div
+						className="absolute inset-0 pointer-events-none"
+						style={{
+							width: imageRect.width,
+						}}
+					/>
+				)}
+			</div>
+		</div>
+	);
+};

@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import { invoke } from "@tauri-apps/api/core";
+import { SettingsStore } from "@/lib/utils/tauri";
 
 interface OnboardingDevOrNonDevProps {
   className?: string;
@@ -46,14 +47,14 @@ const CardItem: React.FC<{
         className={`absolute inset-0 rounded-lg transition-transform duration-300 ease-out group-hover:scale-105`}
       />
       <Card
-        className={`p-4 h-64 mt-[-5px] cursor-pointer bg-white dark:bg-gray-800 transition-transform duration-300 ease-out group-hover:scale-105 
+        className={`p-4 h-64 mt-[-5px] cursor-pointer bg-card transition-transform duration-300 ease-out group-hover:scale-105 
         ${isSelected ? "bg-accent" : ""}`}
         onClick={onClick}
       >
         <CardContent className="flex flex-col w-60 justify-start">
-          <Icon className="w-12 h-12 mx-auto" />
-          <h2 className="font-semibold text-xl text-center mt-1">{title}</h2>
-          <span className="text-sm mt-0">{description}</span>
+          <Icon className="w-12 h-12 mx-auto text-text-primary" />
+          <h2 className="font-semibold text-xl text-center mt-1 text-text-primary">{title}</h2>
+          <span className="text-sm mt-0 text-text-secondary">{description}</span>
         </CardContent>
       </Card>
     </div>
@@ -75,7 +76,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
     try {
       if (option === "devMode") {
         await updateSettings({ devMode: true });
-        setLocalSettings({ ...localSettings, devMode: true });
+        setLocalSettings({ ...localSettings, devMode: true } as SettingsStore);
         toast({
           title: "success",
           description: "dev mode enabled successfully",
@@ -83,7 +84,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
         });
       } else if (option === "nonDevMode") {
         await updateSettings({ devMode: false });
-        setLocalSettings({ ...localSettings, devMode: false });
+        setLocalSettings({ ...localSettings, devMode: false } as SettingsStore);
         toast({
           title: "success",
           description: "screenpipe backend is in standard mode",
@@ -111,7 +112,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
           src="/128x128.png"
           alt="screenpipe-logo"
         />
-        <DialogTitle className="text-center text-2xl">
+        <DialogTitle className="text-center text-2xl text-text-primary">
           how do you prefer to use screenpipe?
         </DialogTitle>
       </DialogHeader>

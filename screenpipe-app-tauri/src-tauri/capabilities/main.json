@@ -48,6 +48,8 @@
     "core:window:default",
     "core:window:allow-get-all-windows",
     "core:window:allow-close",
+    "core:window:allow-destroy",
+    "core:window:allow-start-dragging",
     {
       "identifier": "fs:scope",
       "allow": [
@@ -112,7 +114,11 @@
           "requireLiteralLeadingDot": false
         },
         {
-          "path": "$HOME/.screenpipe/pipes/**",
+          "path": "$HOME/.screenpipe/**",
+          "requireLiteralLeadingDot": false
+        },
+        {
+          "path": "$RESOURCE/.screenpipe/**",
           "requireLiteralLeadingDot": false
         }
       ]
@@ -156,6 +162,7 @@
     "core:path:default",
     "process:default",
     "core:webview:allow-internal-toggle-devtools",
+    "core:webview:allow-create-webview-window",
     {
       "identifier": "shell:allow-execute",
       "allow": [

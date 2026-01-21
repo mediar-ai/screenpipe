@@ -80,10 +80,9 @@ impl AnalyticsManager {
                 let disk_data = json!({
                     "disk_total_data_size": disk_usage.total_data_size,
                     "disk_total_cache_size": disk_usage.total_cache_size,
-                    "disk_available_space": disk_usage.avaiable_space,
+                    "disk_available_space": disk_usage.available_space,
                     "disk_media_videos_size": disk_usage.media.videos_size,
                     "disk_media_audios_size": disk_usage.media.audios_size,
-                    "disk_total_pipes_size": disk_usage.pipes.total_pipes_size,
                 });
                 payload_props.extend(disk_data.as_object().unwrap().clone());
             }

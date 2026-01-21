@@ -103,16 +103,9 @@
     "trayIcon": {
       "id": "screenpipe_main",
       "iconPath": "assets/screenpipe-logo-tray-white.png",
-      "iconAsTemplate": true
+      "iconAsTemplate": true,
+      "menuOnLeftClick": true
     },
-    "windows": [
-      {
-        "title": "screenpipe",
-        "width": 1200,
-        "height": 850,
-        "resizable": true
-      }
-    ],
     "security": {
       "assetProtocol": {
         "enable": true,

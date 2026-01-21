@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "../ui/button";
 import {
-  AIPreset,
   DEFAULT_PROMPT,
   useSettings,
 } from "@/lib/hooks/use-settings";
-import { AIModel, AIProviderCard, OllamaModel } from "./ai-section";
 import { Label } from "../ui/label";
-import { Input } from "../ui/input";
+import { ValidatedInput } from "../ui/validated-input";
+import { ValidatedTextarea } from "../ui/validated-textarea";
 import {
   ArrowLeft,
   ChevronsUpDown,
@@ -20,6 +19,8 @@ import {
   Settings2,
   Trash2,
   XIcon,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { Textarea } from "../ui/textarea";
 import {
@@ -40,7 +41,7 @@ import {
 } from "../ui/command";
 import { Badge } from "../ui/badge";
 import { toast } from "../ui/use-toast";
-import { Card } from "../ui/card";
+import { Card, CardContent } from "../ui/card";
 import { AIProviderType } from "@screenpipe/browser";
 import {
   AlertDialog,
@@ -54,6 +55,83 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { AIPreset } from "@/lib/utils/tauri";
+import { 
+  validatePresetName, 
+  validateUrl, 
+  validateApiKey, 
+  validateContextLength,
+  debounce,
+  FieldValidationResult
+} from "@/lib/utils/validation";
+
+export interface AIProviderCardProps {
+  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
+  title: string;
+  description: string;
+  imageSrc: string;
+  selected: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  warningText?: string;
+  imageClassName?: string;
+}
+
+export interface OllamaModel {
+  name: string;
+  size: number;
+  digest: string;
+  modified_at: string;
+}
+
+export interface AIModel {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+export const AIProviderCard = ({
+  type,
+  title,
+  description,
+  imageSrc,
+  selected,
+  onClick,
+  disabled,
+  warningText,
+  imageClassName,
+}: AIProviderCardProps) => {
+  return (
+    <Card
+      onClick={onClick}
+      className={cn(
+        "flex py-4 px-4 rounded-lg hover:bg-accent transition-colors h-[145px] w-full cursor-pointer",
+        selected ? "border-black/60 border-[1.5px]" : "",
+        disabled && "opacity-50 cursor-not-allowed",
+      )}
+    >
+      <CardContent className="flex flex-col p-0 w-full">
+        <div className="flex items-center gap-2 mb-2">
+          <img
+            src={imageSrc}
+            alt={title}
+            className={cn(
+              "rounded-lg shrink-0 size-8",
+              type === "native-ollama" &&
+                "outline outline-gray-300 outline-1 outline-offset-2",
+              imageClassName,
+            )}
+          />
+          <span className="text-lg font-medium truncate">{title}</span>
+        </div>
+        <p className="text-sm text-muted-foreground line-clamp-3">
+          {description}
+        </p>
+        {warningText && <Badge className="w-fit mt-2">{warningText}</Badge>}
+      </CardContent>
+    </Card>
+  );
+};
 
 const AISection = ({
   preset,
@@ -70,42 +148,86 @@ const AISection = ({
   >(preset);
   const [isLoading, setIsLoading] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [nameError, setNameError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  const validateName = (name: string) => {
-    if (!name) {
-      setNameError("name is required");
-      return false;
+  // Optimized validation with debouncing
+  const debouncedValidatePreset = useMemo(
+    () => debounce((presetData: Partial<AIPreset>) => {
+      const errors: Record<string, string> = {};
+      
+      // Validate name
+      if (presetData.id) {
+        const nameValidation = validatePresetName(
+          presetData.id, 
+          settings.aiPresets, 
+          preset?.id
+        );
+        if (!nameValidation.isValid && nameValidation.error) {
+          errors.id = nameValidation.error;
+        }
+      }
+      
+      // Validate URL
+      if (presetData.url) {
+        const urlValidation = validateUrl(presetData.url);
+        if (!urlValidation.isValid && urlValidation.error) {
+          errors.url = urlValidation.error;
+        }
+      }
+      
+      // Validate API key
+      if (presetData.apiKey && presetData.provider) {
+        const apiKeyValidation = validateApiKey(presetData.apiKey, presetData.provider);
+        if (!apiKeyValidation.isValid && apiKeyValidation.error) {
+          errors.apiKey = apiKeyValidation.error;
+        }
+      }
+      
+      // Validate context length
+      if (presetData.maxContextChars && presetData.model) {
+        const contextValidation = validateContextLength(presetData.maxContextChars, presetData.model);
+        if (!contextValidation.isValid && contextValidation.error) {
+          errors.maxContextChars = contextValidation.error;
+        }
+      }
+      
+      setValidationErrors(errors);
+    }, 300),
+    [settings.aiPresets, preset?.id]
+  );
+
+  // Update validation when preset changes
+  useEffect(() => {
+    if (settingsPreset) {
+      debouncedValidatePreset(settingsPreset);
     }
-    if (name.trim().toLowerCase().endsWith("copy")) {
-      setNameError("name cannot end with 'copy'");
-      return false;
-    }
-    if (
-      settings.aiPresets.find(
-        (p) => p.id.toLowerCase() === name.toLowerCase() && p.id !== preset?.id
-      )
-    ) {
-      setNameError("name already exists");
-      return false;
-    }
-    setNameError(null);
-    return true;
-  };
+  }, [settingsPreset, debouncedValidatePreset]);
+
+  const isFormValid = useMemo(() => {
+    return Object.keys(validationErrors).length === 0 && 
+           settingsPreset?.id && 
+           settingsPreset?.provider && 
+           settingsPreset?.model;
+  }, [validationErrors, settingsPreset]);
 
   const updateStoreSettings = async () => {
+    if (!isFormValid) {
+      toast({
+        title: "Validation errors",
+        description: "Please fix all validation errors before saving",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       if (!settingsPreset?.id) {
         toast({
-          title: "please enter a name",
-          description: "name is required",
+          title: "Please enter a name",
+          description: "Name is required",
           variant: "destructive",
         });
-        return;
-      }
-
-      if (!validateName(settingsPreset.id)) {
         return;
       }
 
@@ -119,20 +241,12 @@ const AISection = ({
         } as AIPreset;
 
         await updateSettings({
-          aiModel: defaultPreset?.model,
-          aiProviderType: defaultPreset?.provider,
-          customPrompt: defaultPreset?.prompt,
-          aiMaxContextChars: defaultPreset?.maxContextChars,
-          aiUrl: defaultPreset?.url,
-          ...("apiKey" in defaultPreset && {
-            openaiApiKey: defaultPreset.apiKey,
-          }),
           aiPresets: [defaultPreset],
         });
 
         toast({
-          title: "preset created",
-          description: "default preset has been created",
+          title: "Preset created",
+          description: "Default preset has been created successfully",
         });
 
         setDialog(false);
@@ -153,14 +267,7 @@ const AISection = ({
             // If this is the default preset, update global settings too
             if (p.defaultPreset) {
               updateSettings({
-                aiModel: updatedPreset.model,
-                aiProviderType: updatedPreset.provider,
-                customPrompt: updatedPreset.prompt,
-                aiMaxContextChars: updatedPreset.maxContextChars,
-                aiUrl: updatedPreset.url,
-                ...("apiKey" in updatedPreset && {
-                  openaiApiKey: updatedPreset.apiKey,
-                }),
+                aiPresets: updatedPresets,
               });
             }
 
@@ -174,8 +281,8 @@ const AISection = ({
         });
 
         toast({
-          title: "preset updated",
-          description: "changes have been saved",
+          title: "Preset updated",
+          description: "Changes have been saved successfully",
         });
       } else {
         // Handle create case (new preset or duplicate)
@@ -191,18 +298,18 @@ const AISection = ({
         });
 
         toast({
-          title: isDuplicating ? "preset duplicated" : "preset created",
+          title: isDuplicating ? "Preset duplicated" : "Preset created",
           description: isDuplicating
-            ? "duplicate has been saved"
-            : "new preset has been added",
+            ? "Duplicate has been saved successfully"
+            : "New preset has been added successfully",
         });
       }
 
       setDialog(false);
     } catch (error) {
       toast({
-        title: "error saving preset",
-        description: "something went wrong while saving the preset",
+        title: "Error saving preset",
+        description: "Something went wrong while saving the preset",
         variant: "destructive",
       });
     } finally {
@@ -210,38 +317,27 @@ const AISection = ({
     }
   };
 
-  const updateSettingsPreset = (presetsObject: Partial<AIPreset>) => {
-    setSettingsPreset({ ...settingsPreset, ...presetsObject });
-  };
+  const updateSettingsPreset = useCallback((presetsObject: Partial<AIPreset>) => {
+    setSettingsPreset(prev => ({ ...prev, ...presetsObject }));
+  }, []);
 
-  const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    updateSettingsPreset({
-      apiKey: value,
-    });
-  };
+  const handleApiKeyChange = useCallback((value: string, isValid: boolean) => {
+    updateSettingsPreset({ apiKey: value });
+  }, [updateSettingsPreset]);
 
-  const handleMaxContextCharsChange = (value: number[]) => {
-    updateSettingsPreset({
-      maxContextChars: value[0],
-    });
-  };
+  const handleMaxContextCharsChange = useCallback((value: number[]) => {
+    updateSettingsPreset({ maxContextChars: value[0] });
+  }, [updateSettingsPreset]);
 
-  const handleCustomPromptChange = (
-    e: React.ChangeEvent<HTMLTextAreaElement>
-  ) => {
-    updateSettingsPreset({
-      prompt: e.target.value ?? DEFAULT_PROMPT,
-    });
-  };
+  const handleCustomPromptChange = useCallback((value: string, isValid: boolean) => {
+    updateSettingsPreset({ prompt: value });
+  }, [updateSettingsPreset]);
 
-  const handleResetCustomPrompt = () => {
-    updateSettingsPreset({
-      prompt: DEFAULT_PROMPT,
-    });
-  };
+  const handleResetCustomPrompt = useCallback(() => {
+    updateSettingsPreset({ prompt: DEFAULT_PROMPT });
+  }, [updateSettingsPreset]);
 
-  const handleAiProviderChange = (newValue: AIPreset["provider"]) => {
+  const handleAiProviderChange = useCallback((newValue: AIPreset["provider"]) => {
     let newUrl = "";
     let newModel = settingsPreset?.model;
 
@@ -265,7 +361,7 @@ const AISection = ({
       url: newUrl,
       model: newModel,
     });
-  };
+  }, [settingsPreset?.url, settingsPreset?.model, updateSettingsPreset]);
 
   const isApiKeyRequired =
     settingsPreset?.url !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
@@ -275,9 +371,8 @@ const AISection = ({
   const [models, setModels] = useState<AIModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
 
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     setIsLoadingModels(true);
-    console.log(settingsPreset);
     try {
       switch (settingsPreset?.provider) {
         case "screenpipe-cloud":
@@ -317,16 +412,14 @@ const AISection = ({
             },
           });
           if (!r.ok) {
-            // TODO better UX for this
             toast({
-              title: "error fetching models",
-              description: "please check your api key",
+              title: "Error fetching models",
+              description: "Please check your API key",
               variant: "destructive",
             });
             return;
           }
           const d = await r.json();
-          console.log(d);
           const models = d.data.map((model: { id: string }) => ({
             id: model.id,
             name: model.id,
@@ -349,7 +442,6 @@ const AISection = ({
               return;
             }
             const customData = await customResponse.json();
-            console.log(customData);
             setModels(
               (customData.data || []).map((model: { id: string }) => ({
                 id: model.id,
@@ -378,7 +470,7 @@ const AISection = ({
     } finally {
       setIsLoadingModels(false);
     }
-  };
+  }, [settingsPreset?.provider, settingsPreset?.url, settingsPreset?.apiKey, settings.user?.id]);
 
   const apiKey = useMemo(() => {
     if (settingsPreset && "apiKey" in settingsPreset) {
@@ -388,7 +480,6 @@ const AISection = ({
   }, [settingsPreset]);
 
   useEffect(() => {
-    console.log("hello");
     if (
       (settingsPreset?.provider === "openai" ||
         settingsPreset?.provider === "custom") &&
@@ -396,7 +487,7 @@ const AISection = ({
     )
       return;
     fetchModels();
-  }, [settingsPreset?.provider, settingsPreset?.url, apiKey]);
+  }, [fetchModels]);
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -409,20 +500,21 @@ const AISection = ({
           <ArrowLeft className="w-4 h-4" /> back
         </Button>
         <h1 className="text-2xl font-bold">
-          {preset ? "update preset" : "create preset"}
+          {preset ? "Update preset" : "Create preset"}
         </h1>
       </div>
+
       <div className="w-full">
         <div className="flex flex-col gap-2">
           <Label htmlFor="aiUrl" className="min-w-[80px]">
-            ai provider
+            AI provider
           </Label>
         </div>
         <div className="grid grid-cols-2 gap-4 mb-4 mt-4">
           <AIProviderCard
             type="openai"
-            title="openai"
-            description="use your own openai api key for gpt-4 and other models"
+            title="OpenAI"
+            description="Use your own OpenAI API key for GPT-4 and other models"
             imageSrc="/images/openai.png"
             selected={settingsPreset?.provider === "openai"}
             onClick={() => handleAiProviderChange("openai")}
@@ -430,25 +522,25 @@ const AISection = ({
 
           <AIProviderCard
             type="screenpipe-cloud"
-            title="screenpipe cloud"
-            description="use openai, anthropic and google models without worrying about api keys or usage"
+            title="Screenpipe Cloud"
+            description="Use OpenAI, Anthropic and Google models without worrying about API keys or usage"
             imageSrc="/images/screenpipe.png"
             selected={settingsPreset?.provider === "screenpipe-cloud"}
             onClick={() => handleAiProviderChange("screenpipe-cloud")}
             disabled={!settings.user}
             warningText={
               !settings.user
-                ? "login required"
+                ? "Login required"
                 : !settings.user?.credits?.amount
-                ? "requires credits"
+                ? "Requires credits"
                 : undefined
             }
           />
 
           <AIProviderCard
             type="native-ollama"
-            title="ollama"
-            description="run ai models locally using your existing ollama installation"
+            title="Ollama"
+            description="Run AI models locally using your existing Ollama installation"
             imageSrc="/images/ollama.png"
             selected={settingsPreset?.provider === "native-ollama"}
             onClick={() => handleAiProviderChange("native-ollama")}
@@ -456,84 +548,62 @@ const AISection = ({
 
           <AIProviderCard
             type="custom"
-            title="custom"
-            description="connect to your own ai provider or self-hosted models"
+            title="Custom"
+            description="Connect to your own AI provider or self-hosted models"
             imageSrc="/images/custom.png"
             selected={settingsPreset?.provider === "custom"}
             onClick={() => handleAiProviderChange("custom")}
           />
         </div>
       </div>
-      <div className="w-full">
-        <div className="flex flex-col gap-4 mb-4">
-          <Label htmlFor="preset_id" className="flex items-center gap-2">
-            name
-            {nameError && (
-              <span className="text-xs text-destructive font-normal">
-                {nameError}
-              </span>
-            )}
-          </Label>
-          <Input
-            id="preset_id"
-            value={settingsPreset?.id}
-            onChange={(e) => {
-              const namePreset = e.target.value;
-              validateName(namePreset);
-              updateSettingsPreset({ id: namePreset });
-            }}
-            className={cn(
-              "flex-grow",
-              nameError && "border-destructive focus-visible:ring-destructive"
-            )}
-            placeholder="enter name"
-            autoCorrect="off"
-            autoCapitalize="off"
-            autoComplete="off"
-            type="text"
-            disabled={!!preset && !isDuplicating && preset.id !== undefined}
-          />
-        </div>
-      </div>
+
+      <ValidatedInput
+        id="preset_id"
+        label="Preset Name"
+        value={settingsPreset?.id || ""}
+        onChange={(value, isValid) => updateSettingsPreset({ id: value })}
+        validation={(value) => validatePresetName(value, settings.aiPresets, preset?.id)}
+        placeholder="Enter preset name"
+        required={true}
+        disabled={!!preset && !isDuplicating && preset.id !== undefined}
+        helperText="Only letters, numbers, spaces, hyphens, and underscores allowed"
+      />
 
       {settingsPreset?.provider === "custom" && (
-        <div className="w-full">
-          <div className="flex flex-col gap-4 mb-4">
-            <Label htmlFor="customAiUrl">custom url</Label>
-            <Input
-              id="customAiUrl"
-              value={settingsPreset?.url}
-              onChange={(e) => {
-                const newUrl = e.target.value;
-                updateSettingsPreset({ url: newUrl });
-              }}
-              className="flex-grow"
-              placeholder="enter custom ai url"
-              autoCorrect="off"
-              autoCapitalize="off"
-              autoComplete="off"
-              type="text"
-            />
-          </div>
-        </div>
+        <ValidatedInput
+          id="customAiUrl"
+          label="Custom URL"
+          value={settingsPreset?.url || ""}
+          onChange={(value, isValid) => updateSettingsPreset({ url: value })}
+          validation={validateUrl}
+          placeholder="Enter custom AI URL"
+          required={true}
+          helperText="Enter the base URL for your custom AI provider"
+        />
       )}
+
       {isApiKeyRequired &&
         (settingsPreset?.provider === "openai" ||
           settingsPreset?.provider === "custom") && (
           <div className="w-full">
             <div className="flex flex-col gap-4 mb-4 w-full">
-              <Label htmlFor="aiApiKey">API Key</Label>
+              <Label htmlFor="aiApiKey" className="flex items-center gap-1">
+                API Key
+                <span className="text-destructive">*</span>
+                {validationErrors.apiKey && (
+                  <AlertCircle className="h-4 w-4 text-destructive ml-1" />
+                )}
+              </Label>
               <div className="flex-grow relative">
-                <Input
+                <ValidatedInput
                   id="aiApiKey"
                   type={showApiKey ? "text" : "password"}
-                  value={settingsPreset?.apiKey}
+                  value={settingsPreset?.apiKey || ""}
                   onChange={handleApiKeyChange}
+                  validation={(value) => validateApiKey(value, settingsPreset?.provider || "openai")}
+                  placeholder="Enter your AI API key"
+                  required={true}
                   className="pr-10"
-                  placeholder="enter your ai api key"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  autoComplete="off"
                 />
                 <Button
                   type="button"
@@ -555,13 +625,19 @@ const AISection = ({
 
       <div className="w-full">
         <div className="flex flex-col gap-4 mb-4 w-full">
-          <Label htmlFor="aiModel">ai model</Label>
+          <Label htmlFor="aiModel" className="flex items-center gap-1">
+            AI Model
+            <span className="text-destructive">*</span>
+          </Label>
           <Popover modal={true}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
                 role="combobox"
-                className="w-full justify-between"
+                className={cn(
+                  "w-full justify-between",
+                  !settingsPreset?.model && "text-muted-foreground"
+                )}
                 disabled={
                   (settingsPreset?.provider === "openai" &&
                     !settingsPreset?.apiKey) ||
@@ -572,26 +648,26 @@ const AISection = ({
               >
                 {settingsPreset?.provider === "openai" &&
                 !settingsPreset?.apiKey
-                  ? "api key required to fetch models"
+                  ? "API key required to fetch models"
                   : settingsPreset?.provider === "screenpipe-cloud" &&
                     (!settings.user || settings.user.cloud_subscribed === false)
-                  ? "subscription required to access models"
-                  : settingsPreset?.model || "select model..."}
+                  ? "Subscription required to access models"
+                  : settingsPreset?.model || "Select model..."}
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-full p-0">
               <Command>
-                <CommandInput placeholder="select or type model name" />
+                <CommandInput placeholder="Select or type model name" />
                 <CommandList>
                   <CommandEmpty>
-                    press enter to use &quot;{settingsPreset?.model}&quot;
+                    Press enter to use &quot;{settingsPreset?.model}&quot;
                   </CommandEmpty>
-                  <CommandGroup heading="Suggestions">
+                  <CommandGroup heading="Available Models">
                     {isLoadingModels ? (
                       <CommandItem value="loading" disabled>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        loading models...
+                        Loading models...
                       </CommandItem>
                     ) : (
                       models?.map((model) => (
@@ -602,10 +678,12 @@ const AISection = ({
                             updateSettingsPreset({ model: model.id });
                           }}
                         >
-                          {model.name}
-                          <Badge variant="outline" className="ml-2">
-                            {model.provider}
-                          </Badge>
+                          <div className="flex items-center justify-between w-full">
+                            <span>{model.name}</span>
+                            <Badge variant="outline" className="ml-2">
+                              {model.provider}
+                            </Badge>
+                          </div>
                         </CommandItem>
                       ))
                     )}
@@ -616,35 +694,30 @@ const AISection = ({
           </Popover>
         </div>
       </div>
-      <div className="w-full">
-        <div className="flex flex-col gap-4 mb-4 w-full">
-          <Label htmlFor="customPrompt">prompt</Label>
-          <div className="flex-grow relative">
-            <Textarea
-              id="customPrompt"
-              value={settingsPreset?.prompt || DEFAULT_PROMPT}
-              onChange={handleCustomPromptChange}
-              className="min-h-[100px]"
-              placeholder="enter your custom prompt here"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="absolute right-2 top-2"
-              onClick={handleResetCustomPrompt}
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              reset
-            </Button>
-          </div>
-        </div>
-      </div>
+
+      <ValidatedTextarea
+        id="customPrompt"
+        label="Custom Prompt"
+        value={settingsPreset?.prompt || DEFAULT_PROMPT}
+        onChange={handleCustomPromptChange}
+        validation={(value) => {
+          if (value.length < 10) {
+            return { isValid: false, error: "Prompt must be at least 10 characters" };
+          }
+          return { isValid: true };
+        }}
+        placeholder="Enter your custom prompt here"
+        required={true}
+        minLength={10}
+        maxLength={5000}
+        className="min-h-[100px] resize-none"
+        helperText="This prompt will be used to guide the AI's responses"
+      />
 
       <div className="w-full">
         <div className="flex flex-col gap-4 mb-4 w-full">
           <Label htmlFor="aiMaxContextChars" className="flex items-center">
-            max context{" "}
+            Max Context Characters{" "}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -652,22 +725,25 @@ const AISection = ({
                 </TooltipTrigger>
                 <TooltipContent side="left">
                   <p>
-                    maximum number of characters (think 4 characters per token)
-                    to send to the ai model. <br />
-                    usually, openai models support up to 200k tokens, which is
-                    roughly 1m characters. <br />
-                    we&apos;ll use this for UI purposes to show you how much you
+                    Maximum number of characters (think 4 characters per token)
+                    to send to the AI model. <br />
+                    Usually, OpenAI models support up to 200k tokens, which is
+                    roughly 1M characters. <br />
+                    We&apos;ll use this for UI purposes to show you how much you
                     can send.
                   </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {validationErrors.maxContextChars && (
+              <AlertCircle className="h-4 w-4 text-destructive ml-1" />
+            )}
           </Label>
           <div className="flex-grow flex items-center">
             <Slider
               id="aiMaxContextChars"
-              min={10000}
-              max={1000000}
+              min={1000}
+              max={2000000}
               step={10000}
               value={
                 settingsPreset?.maxContextChars
@@ -677,16 +753,37 @@ const AISection = ({
               onValueChange={handleMaxContextCharsChange}
               className="flex-grow"
             />
-            <span className="ml-2 min-w-[60px] text-right">
-              {settingsPreset?.maxContextChars?.toLocaleString() ?? 512000}
+            <span className="ml-2 min-w-[80px] text-right">
+              {(settingsPreset?.maxContextChars ?? 512000).toLocaleString()}
             </span>
           </div>
+          {validationErrors.maxContextChars && (
+            <p className="text-sm text-destructive">{validationErrors.maxContextChars}</p>
+          )}
         </div>
       </div>
-      <div className="flex justify-end">
-        <Button onClick={() => updateStoreSettings()} disabled={isLoading}>
-          {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-          {preset ? "update preset" : "create preset"}
+
+      <div className="flex justify-end gap-2">
+        <Button 
+          variant="outline" 
+          onClick={() => setDialog(false)}
+          disabled={isLoading}
+        >
+          Cancel
+        </Button>
+        <Button 
+          onClick={updateStoreSettings} 
+          disabled={isLoading || !isFormValid}
+          className="flex items-center gap-2"
+        >
+          {isLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : isFormValid ? (
+            <CheckCircle2 className="w-4 h-4" />
+          ) : (
+            <AlertCircle className="w-4 h-4" />
+          )}
+          {preset ? "Update preset" : "Create preset"}
         </Button>
       </div>
     </div>
@@ -736,8 +833,8 @@ export const AIPresets = () => {
 
       if (checkIfDefault) {
         toast({
-          title: "cannot delete default preset",
-          description: "please set another preset as default first",
+          title: "Cannot delete default preset",
+          description: "Please set another preset as default first",
           variant: "destructive",
         });
         return;
@@ -749,8 +846,8 @@ export const AIPresets = () => {
 
       if (!checkIfIDPresent) {
         toast({
-          title: "preset not found",
-          description: "the preset you're trying to delete doesn't exist",
+          title: "Preset not found",
+          description: "The preset you're trying to delete doesn't exist",
           variant: "destructive",
         });
         return;
@@ -765,13 +862,13 @@ export const AIPresets = () => {
       });
 
       toast({
-        title: "preset deleted",
-        description: "the preset has been removed successfully",
+        title: "Preset deleted",
+        description: "The preset has been removed successfully",
       });
     } catch (error) {
       toast({
-        title: "error deleting preset",
-        description: "something went wrong while deleting the preset",
+        title: "Error deleting preset",
+        description: "Something went wrong while deleting the preset",
         variant: "destructive",
       });
     } finally {
@@ -807,13 +904,13 @@ export const AIPresets = () => {
       await updateSettings(updateData);
 
       toast({
-        title: "default preset updated",
-        description: "the preset has been set as default",
+        title: "Default preset updated",
+        description: "The preset has been set as default",
       });
     } catch (error) {
       toast({
-        title: "error updating default preset",
-        description: "something went wrong while updating the default preset",
+        title: "Error updating default preset",
+        description: "Something went wrong while updating the default preset",
         variant: "destructive",
       });
     } finally {
@@ -839,113 +936,184 @@ export const AIPresets = () => {
 
   if (!settings.aiPresets?.length) {
     return (
-      <div className="w-full h-[400px] flex flex-col items-center justify-center space-y-4">
-        <Settings2 className="w-12 h-12 text-muted-foreground" />
-        <h2 className="text-xl font-medium text-muted-foreground">
-          no presets yet
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          create your first ai preset to get started
-        </p>
-        <Button onClick={() => setCreatePresentDialog(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          create preset
-        </Button>
+      <div className="space-y-8">
+        <div className="space-y-3">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            AI Settings
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Configure AI models, prompts, and processing preferences
+          </p>
+        </div>
+        
+        <div className="w-full h-[400px] flex flex-col items-center justify-center space-y-4">
+          <Settings2 className="w-12 h-12 text-muted-foreground" />
+          <h2 className="text-xl font-medium text-muted-foreground">
+            No AI presets yet
+          </h2>
+          <p className="text-sm text-muted-foreground text-center max-w-md">
+            Create your first AI preset to get started with intelligent features.
+            Presets allow you to quickly switch between different AI configurations.
+          </p>
+          <Button onClick={() => setCreatePresentDialog(true)} size="lg">
+            <Plus className="w-4 h-4 mr-2" />
+            Create Your First Preset
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full space-y-6 py-4">
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          AI Settings
+        </h1>
+        <p className="text-muted-foreground text-lg">
+          Configure AI models, prompts, and processing preferences
+        </p>
+      </div>
+      
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">ai settings</h1>
+        <div className="flex items-center gap-4">
+          <Badge variant="outline" className="px-3 py-1">
+            {settings.aiPresets.length} preset{settings.aiPresets.length !== 1 ? 's' : ''}
+          </Badge>
+          {settings.aiPresets.some(p => p.defaultPreset) && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              Default preset configured
+            </div>
+          )}
+        </div>
         <Button onClick={() => setCreatePresentDialog(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          create preset
+          Create Preset
         </Button>
       </div>
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6">
         {settings.aiPresets.map((preset) => {
           const isDefault = preset.defaultPreset;
+          const hasValidation = preset.provider && preset.model && preset.url;
+          
           return (
             <Card
               key={preset.id}
-              className="p-4 relative group transition-all hover:shadow-md"
+              className={cn(
+                "p-6 relative group transition-all hover:shadow-lg border-border bg-card cursor-pointer",
+                isDefault && "ring-2 ring-primary/20"
+              )}
+              onClick={() => {
+                setSelectedPreset(preset);
+                setIsDuplicating(false);
+                setCreatePresentDialog(true);
+              }}
             >
-              <div
-                className="flex justify-between items-start cursor-pointer"
-                onClick={() => {
-                  setSelectedPreset(preset);
-                  setIsDuplicating(false);
-                  setCreatePresentDialog(true);
-                }}
-              >
-                <div className="space-y-2">
-                  <div className="text-lg font-semibold text-foreground flex items-center gap-2">
-                    {preset.id}
-                    {isDefault && (
-                      <Badge variant="secondary" className="font-normal">
-                        default
-                      </Badge>
+              <div className="space-y-4">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-foreground truncate">
+                        {preset.id}
+                      </h3>
+                      {isDefault && (
+                        <Badge variant="default" className="text-xs">
+                          default
+                        </Badge>
+                      )}
+                      {!hasValidation && (
+                        <AlertCircle className="h-4 w-4 text-destructive" />
+                      )}
+                    </div>
+                    
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Provider:</span>
+                        <span className="capitalize">{preset.provider.replace('-', ' ')}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Model:</span>
+                        <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
+                          {preset.model || 'Not set'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Context:</span>
+                        <span>
+                          {preset.maxContextChars?.toLocaleString() || '512,000'} chars
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <img
+                      src={providerImageSrc[preset.provider]}
+                      alt={`${preset.provider} logo`}
+                      className="w-10 h-10 opacity-80 group-hover:opacity-100 transition-opacity rounded"
+                    />
+                    {hasValidation ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <AlertCircle className="h-5 w-5 text-destructive" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Configuration incomplete</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
                   </div>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span>model:</span>
-                      <span className="font-medium">{preset.model}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span>context:</span>
-                      <span className="font-medium">
-                        {preset.maxContextChars?.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
                 </div>
-                <img
-                  src={providerImageSrc[preset.provider]}
-                  alt={`${preset.provider} logo`}
-                  className="w-10 h-10 opacity-80 group-hover:opacity-100 transition-opacity"
-                />
-              </div>
-              <div className="flex justify-end gap-2 mt-4">
-                <Button
-                  className="text-xs"
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    duplicatePreset(preset.id);
-                  }}
-                  disabled={isLoading}
-                >
-                  duplicate
-                </Button>
-                <Button
-                  className="text-xs"
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPresetToSetDefault(preset.id);
-                  }}
-                  disabled={isLoading || isDefault}
-                >
-                  {isDefault ? "current default" : "set as default"}
-                </Button>
-                <Button
-                  className="text-xs text-destructive"
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPresetToDelete(preset.id);
-                  }}
-                  disabled={isLoading || isDefault}
-                >
-                  <Trash2 className="w-3 h-3 mr-1" />
-                  remove
-                </Button>
+
+                <div className="flex justify-between items-center pt-2 border-t border-border">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        duplicatePreset(preset.id);
+                      }}
+                      disabled={isLoading}
+                      className="text-xs"
+                    >
+                      Duplicate
+                    </Button>
+                    
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPresetToSetDefault(preset.id);
+                      }}
+                      disabled={isLoading || isDefault}
+                      className="text-xs"
+                    >
+                      {isDefault ? "Current default" : "Set as default"}
+                    </Button>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPresetToDelete(preset.id);
+                    }}
+                    disabled={isLoading || isDefault}
+                    className="text-xs text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" />
+                    Remove
+                  </Button>
+                </div>
               </div>
             </Card>
           );
@@ -958,14 +1126,14 @@ export const AIPresets = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              this action cannot be undone. this will permanently delete the
-              preset.
+              This action cannot be undone. This will permanently delete the
+              preset &quot;{presetToDelete}&quot;.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => presetToDelete && removePreset(presetToDelete)}
@@ -973,7 +1141,7 @@ export const AIPresets = () => {
               {isLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                "delete"
+                "Delete"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -986,13 +1154,14 @@ export const AIPresets = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>change default preset?</AlertDialogTitle>
+            <AlertDialogTitle>Change default preset?</AlertDialogTitle>
             <AlertDialogDescription>
-              this will set this preset as the default and apply its settings.
+              This will set &quot;{presetToSetDefault}&quot; as the default preset and apply its settings.
+              The current default preset will remain but will no longer be the default.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
                 presetToSetDefault && setDefaultPreset(presetToSetDefault)
@@ -1001,7 +1170,7 @@ export const AIPresets = () => {
               {isLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                "continue"
+                "Continue"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

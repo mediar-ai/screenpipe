@@ -175,6 +175,10 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
     }
   };
 
+  if (!settings) {
+    return null;
+  }
+
   return (
     <>
       <div className="w-full my-4 flex justify-center">

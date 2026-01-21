@@ -4,112 +4,212 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /*
+     * Screenpipe Brand Style Guide
+     * Black & White Geometric Minimalism
+     * No color. Sharp corners. Monospace typography.
+     */
 
+    /* Base colors - Pure B&W */
+    --background: 0 0% 100%; /* #FFFFFF */
+    --foreground: 0 0% 0%; /* #000000 */
+
+    /* Surface colors - Limited grays */
+    --surface: 0 0% 96%; /* ~#F5F5F5 */
+    --surface-secondary: 0 0% 93%; /* ~#EDEDED */
+    --surface-tertiary: 0 0% 90%; /* ~#E5E5E5 */
+
+    /* Card colors */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 0 0% 0%;
+    --card-hover: 0 0% 0%; /* Invert on hover */
 
+    /* Popover colors */
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: 0 0% 0%;
 
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
+    /* Primary - Pure black */
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 0 0% 20%;
+    --primary-muted: 0 0% 90%;
 
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    /* Secondary - Gray */
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 0%;
+    --secondary-hover: 0 0% 90%;
 
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    /* Status colors - Grayscale only */
+    --success: 0 0% 20%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 0 0% 90%;
 
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --warning: 0 0% 40%;
+    --warning-foreground: 0 0% 100%;
+    --warning-muted: 0 0% 85%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 0% 0%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-hover: 0 0% 20%;
+    --destructive-muted: 0 0% 90%;
 
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    --info: 0 0% 40%;
+    --info-foreground: 0 0% 100%;
+    --info-muted: 0 0% 90%;
 
-    --radius: 0.5rem;
+    /* Muted colors */
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%; /* #666666 */
 
-    --color-1: 0 100% 63%;
+    /* Accent colors */
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 0%;
+    --accent-hover: 0 0% 90%;
 
-    --color-2: 270 100% 63%;
+    /* Border and input - 1px black/gray */
+    --border: 0 0% 80%;
+    --input: 0 0% 100%;
+    --input-focus: 0 0% 0%;
+    --ring: 0 0% 0%;
 
-    --color-3: 210 100% 63%;
+    /* Text colors - B&W hierarchy */
+    --text-primary: 0 0% 0%;
+    --text-secondary: 0 0% 40%; /* #666666 */
+    --text-tertiary: 0 0% 60%; /* #999999 */
+    --text-disabled: 0 0% 70%;
 
-    --color-4: 195 100% 63%;
+    /* Brand colors - All black for B&W aesthetic */
+    --brand-1: 0 0% 0%;
+    --brand-2: 0 0% 20%;
+    --brand-3: 0 0% 40%;
+    --brand-4: 0 0% 60%;
+    --brand-5: 0 0% 80%;
 
-    --color-5: 90 100% 63%;
+    --color-1: 0 0% 0%;
+    --color-2: 0 0% 20%;
+    --color-3: 0 0% 40%;
+    --color-4: 0 0% 60%;
+    --color-5: 0 0% 80%;
 
+    /* Sidebar colors */
     --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-primary: 0 0% 0%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 0 0% 80%;
+    --sidebar-ring: 0 0% 0%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Sharp corners - no radius */
+    --radius: 0;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
+    /* Base colors - Pure B&W inverted */
+    --background: 0 0% 0%; /* #000000 */
+    --foreground: 0 0% 100%; /* #FFFFFF */
 
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
+    /* Surface colors */
+    --surface: 0 0% 5%;
+    --surface-secondary: 0 0% 8%;
+    --surface-tertiary: 0 0% 12%;
 
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    /* Card colors */
+    --card: 0 0% 3%;
+    --card-foreground: 0 0% 100%;
+    --card-hover: 0 0% 100%; /* Invert on hover */
 
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
+    /* Popover colors */
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 100%;
 
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
+    /* Primary - Pure white */
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --primary-hover: 0 0% 80%;
+    --primary-muted: 0 0% 15%;
 
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
+    /* Secondary */
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 100%;
+    --secondary-hover: 0 0% 15%;
 
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    /* Status colors - Grayscale */
+    --success: 0 0% 80%;
+    --success-foreground: 0 0% 0%;
+    --success-muted: 0 0% 15%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    --warning: 0 0% 60%;
+    --warning-foreground: 0 0% 0%;
+    --warning-muted: 0 0% 15%;
 
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-    --color-1: 0 100% 63%;
-    --color-2: 270 100% 63%;
-    --color-3: 210 100% 63%;
-    --color-4: 195 100% 63%;
-    --color-5: 90 100% 63%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --destructive: 0 0% 100%;
+    --destructive-foreground: 0 0% 0%;
+    --destructive-hover: 0 0% 80%;
+    --destructive-muted: 0 0% 15%;
+
+    --info: 0 0% 60%;
+    --info-foreground: 0 0% 0%;
+    --info-muted: 0 0% 15%;
+
+    /* Muted colors */
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 60%; /* #999999 */
+
+    /* Accent colors */
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 0 0% 15%;
+
+    /* Border and input */
+    --border: 0 0% 20%;
+    --input: 0 0% 5%;
+    --input-focus: 0 0% 100%;
+    --ring: 0 0% 100%;
+
+    /* Text colors */
+    --text-primary: 0 0% 100%;
+    --text-secondary: 0 0% 60%; /* #999999 */
+    --text-tertiary: 0 0% 40%; /* #666666 */
+    --text-disabled: 0 0% 30%;
+
+    /* Brand colors */
+    --brand-1: 0 0% 100%;
+    --brand-2: 0 0% 80%;
+    --brand-3: 0 0% 60%;
+    --brand-4: 0 0% 40%;
+    --brand-5: 0 0% 20%;
+
+    --color-1: 0 0% 100%;
+    --color-2: 0 0% 80%;
+    --color-3: 0 0% 60%;
+    --color-4: 0 0% 40%;
+    --color-5: 0 0% 20%;
+
+    /* Sidebar colors */
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 10%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 0 0% 100%;
   }
 }
 
 @layer base {
   * {
     @apply border-border;
-    scrollbar-width: thin !important;
   }
+  
+  /* Prevent flash during theme initialization and support transparency */
+  html {
+    background-color: hsl(var(--background));
+    transition: background-color 0ms; /* Instant transition to prevent flash */
+  }
+  
   body {
     @apply bg-background text-foreground !pointer-events-auto !overscroll-none;
   }
@@ -129,6 +229,30 @@
     user-select: none;
     /* cursor: default; */
   }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 1.5s infinite linear;
+  }
+
+
 }
 
 .pf-v6-c-text-input-group__text-input {
@@ -155,3 +279,47 @@
   line-height: 21px !important;
   position: absolute !important;
 }
+
+/* PatternFly LogViewer dark theme overrides */
+.dark .pf-v5-c-log-viewer {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .pf-v5-c-log-viewer__main {
+  background-color: hsl(var(--background)) !important;
+}
+
+.dark .pf-v5-c-log-viewer__list {
+  background-color: hsl(var(--background)) !important;
+}
+
+.dark .pf-v5-c-log-viewer__list-item {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pf-v5-c-toolbar {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pf-v5-c-toolbar__content {
+  background-color: hsl(var(--background)) !important;
+}
+
+.dark .pf-v5-c-text-input-group {
+  background-color: hsl(var(--input)) !important;
+}
+
+.dark .pf-v5-c-text-input-group__text-input {
+  background-color: hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .pf-v5-c-text-input-group__text-input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+

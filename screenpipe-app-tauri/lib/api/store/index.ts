@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "../../utils/tauri";
 import localforage from "localforage";
 
 export interface PipeStorePlugin {
@@ -109,7 +109,7 @@ export class PipeApi {
 
   private async init(authToken: string) {
     try {
-      const BASE_URL = await invoke("get_env", { name: "BASE_URL_PRIVATE" });
+      const BASE_URL = await commands.getEnv("BASE_URL_PRIVATE");
       if (BASE_URL) {
         this.baseUrl = BASE_URL as string;
       }
