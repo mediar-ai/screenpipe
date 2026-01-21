@@ -125,18 +125,15 @@ function SearchPage() {
 			) : null}
 
 			{isSearching && searchResults.length === 0 && (
-				<div
-					className="flex flex-row gap-4 p-8 overflow-hidden"
-					style={{ direction: "rtl" }}
-				>
-					{Array.from({ length: 8 }).map((_, index) => (
+				<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-4">
+					{Array.from({ length: 15 }).map((_, index) => (
 						<SkeletonCard key={`skeleton-${index}`} />
 					))}
 				</div>
 			)}
 
 			{querys.query && !(searchResults.length === 0) ? (
-				<div className="h-64 flex items-end">
+				<div className="flex-1 overflow-hidden">
 					<ImageGrid searchResult={searchResults} pageRef={pageRef} />
 				</div>
 			) : (
