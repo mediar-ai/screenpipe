@@ -53,6 +53,17 @@ export function SearchCommand() {
 		return () => document.removeEventListener("keydown", down, true);
 	}, [open]);
 
+	// Close dialog when window loses focus to prevent stuck invisible overlay
+	React.useEffect(() => {
+		const handleBlur = () => {
+			if (open) {
+				setOpen(false);
+			}
+		};
+		window.addEventListener("blur", handleBlur);
+		return () => window.removeEventListener("blur", handleBlur);
+	}, [open]);
+
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter") {
 			e.preventDefault();
