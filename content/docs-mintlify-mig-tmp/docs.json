@@ -15,7 +15,7 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Getting Started",
+        "tab": "getting started",
         "pages": [
           "home",
           "getting-started",
@@ -23,7 +23,7 @@
         ]
       },
       {
-        "tab": "API Reference",
+        "tab": "api reference",
         "openapi": "openapi.yaml"
       }
     ]
@@ -36,17 +36,17 @@
   "navbar": {
     "links": [
       {
-        "label": "Support",
+        "label": "support",
         "href": "https://discord.gg/dU9EBuw7Uq"
       },
       {
-        "label": "GitHub",
+        "label": "github",
         "href": "https://github.com/mediar-ai/screenpipe"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Get App",
+      "label": "get app",
       "href": "https://screenpi.pe/onboarding"
     }
   },
@@ -56,7 +56,7 @@
     }
   },
   "search": {
-    "prompt": "Search documentation..."
+    "prompt": "search documentation..."
   },
   "integrations": {
     "posthog": {

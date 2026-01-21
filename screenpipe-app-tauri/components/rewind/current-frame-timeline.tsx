@@ -59,18 +59,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	}
 
 	return (
-		<div className="absolute inset-0 w-full h-full bg-red-500/20">
-			{/* Debug info */}
-	{
-		process.env.NODE_ENV === 'development' && (
-			<div className="absolute top-4 left-4 z-50 bg-info text-info-foreground p-2 rounded text-xs">
-				<div>Frame ID: {frameId}</div>
-				<div>Loading: {isLoading ? 'Yes' : 'No'}</div>
-				<div>Error: {hasError ? 'Yes' : 'No'}</div>
-				<div>Image URL: {imageUrl}</div>
-			</div>
-		)
-	}	
+		<div className="absolute inset-0 w-full h-full">
 			{isLoading && <SkeletonLoader />}
 			<img
 				src={imageUrl}
