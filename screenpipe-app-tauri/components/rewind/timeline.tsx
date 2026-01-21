@@ -73,6 +73,11 @@ export default function Timeline() {
 		setCurrentIndex(index);
 	});
 
+	// Re-show audio transcript when navigating timeline
+	useEffect(() => {
+		setShowAudioTranscript(true);
+	}, [currentIndex]);
+
 	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched } =
 		useTimelineStore();
 
