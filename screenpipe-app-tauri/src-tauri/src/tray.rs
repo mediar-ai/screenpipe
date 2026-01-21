@@ -1,4 +1,5 @@
 use crate::commands::show_main_window;
+use crate::health::{get_recording_status, RecordingStatus};
 use crate::store::get_store;
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -20,6 +21,7 @@ static LAST_MENU_STATE: Lazy<Mutex<MenuState>> = Lazy::new(|| Mutex::new(MenuSta
 #[derive(Default, PartialEq, Clone)]
 struct MenuState {
     shortcuts: HashMap<String, String>,
+    recording_status: Option<RecordingStatus>,
 }
 
 pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> Result<()> {
@@ -58,6 +60,18 @@ fn create_dynamic_menu(
             format!("show screenpipe ({})", format_shortcut(&show_shortcut)),
         )
         .build(app)?,
+    );
+
+    // Recording status indicator
+    let status_text = match get_recording_status() {
+        RecordingStatus::Recording => "● recording",
+        RecordingStatus::Stopped => "○ stopped",
+        RecordingStatus::Error => "○ error",
+    };
+    menu_builder = menu_builder.item(
+        &MenuItemBuilder::with_id("recording_status", status_text)
+            .enabled(false)
+            .build(app)?,
     );
 
     // Version and update items
@@ -155,6 +169,7 @@ async fn update_menu_if_needed(
     // Get current state
     let new_state = MenuState {
         shortcuts: get_current_shortcuts(app)?,
+        recording_status: Some(get_recording_status()),
     };
 
     // Compare with last state

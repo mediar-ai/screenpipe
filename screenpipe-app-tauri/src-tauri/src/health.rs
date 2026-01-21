@@ -1,8 +1,29 @@
 use anyhow::Result;
 use dark_light::Mode;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
+use std::sync::RwLock;
 use tauri::{path::BaseDirectory, Manager};
 use tokio::time::{interval, Duration};
+
+// Shared recording status that can be read by the tray menu
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum RecordingStatus {
+    Recording,
+    Stopped,
+    Error,
+}
+
+static RECORDING_STATUS: Lazy<RwLock<RecordingStatus>> =
+    Lazy::new(|| RwLock::new(RecordingStatus::Stopped));
+
+pub fn get_recording_status() -> RecordingStatus {
+    *RECORDING_STATUS.read().unwrap()
+}
+
+fn set_recording_status(status: RecordingStatus) {
+    *RECORDING_STATUS.write().unwrap() = status;
+}
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -38,10 +59,17 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
             let health_result = check_health(&client).await;
             let current_status = match health_result {
                 Ok(health) if health.status == "unhealthy" || health.status == "error" => {
+                    set_recording_status(RecordingStatus::Error);
                     "unhealthy"
                 }
-                Ok(_) => "healthy",
-                Err(_) => "error",
+                Ok(_) => {
+                    set_recording_status(RecordingStatus::Recording);
+                    "healthy"
+                }
+                Err(_) => {
+                    set_recording_status(RecordingStatus::Stopped);
+                    "error"
+                }
             };
 
             // Update icon if either health status OR theme changes
