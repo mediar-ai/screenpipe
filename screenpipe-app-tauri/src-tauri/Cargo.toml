@@ -120,6 +120,7 @@ winreg = "0.52.0"
 lazy_static = "1.5.0"
 image = "0.25.5"
 windows-icons = { git = "https://github.com/tribhuwan-kumar/windows-icons.git" }
+base64 = "0.22.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.1"
