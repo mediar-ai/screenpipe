@@ -1,5 +1,5 @@
 ---
-title: "Getting Started"
+title: "getting started"
 icon: "rocket"
 ---
 
@@ -18,13 +18,13 @@ icon: "rocket"
 
 <Tabs>
   <Tab title="macos/linux">
-    ```bash 
+    ```bash
     curl -fsSL get.screenpi.pe/cli | sh
     screenpipe
     ```
   </Tab>
   <Tab title="windows">
-    ```powershell 
+    ```powershell
     iwr get.screenpi.pe/cli.ps1 | iex
     screenpipe.exe
     ```
@@ -37,9 +37,9 @@ icon: "rocket"
 
 ### query data with javascript sdk
 
-then query the data using our javaScript sdk:
+then query the data using our javascript sdk:
 
-```typescript 
+```typescript
 import { pipe } from "@screenpipe/js";
 
 async function queryScreenpipe() {
@@ -65,7 +65,7 @@ async function queryScreenpipe() {
       console.log(`OCR: ${JSON.stringify(item.content)}`);
     } else if (item.type === "Audio") {
       console.log(`transcript: ${JSON.stringify(item.content)}`);
-    } 
+    }
   }
 }
 
@@ -74,34 +74,34 @@ queryScreenpipe().catch(console.error);
 
 now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to add more features\!
 
-### connect to AI providers
+### connect to ai providers
 
-screenpipe can connect to various AI providers to process your data. here's how to set up popular local AI providers:
+screenpipe can connect to various ai providers to process your data. here's how to set up popular local ai providers:
 
 <Tabs>
   <Tab title="ollama">
     1. install ollama from [ollama.ai](https://ollama.ai) and run your preferred model
 
-    ```bash 
+    ```bash
     # start ollama with your preferred model
     ollama run phi4:14b-q4_K_M
     ```
 
     1. then configure screenpipe to use ollama in your settings with model phi4:14b-q4_K_M
 
-    that's it\! screenpipe will now use ollama for AI like search, rewind, and more. you can change the model in settings.
+    that's it\! screenpipe will now use ollama for ai like search, rewind, and more. you can change the model in settings.
   </Tab>
-  <Tab title="LMStudio">
-    to use LMStudio:
+  <Tab title="lmstudio">
+    to use lmstudio:
 
-    1. download and install [LMStudio](https://lmstudio.ai)
+    1. download and install [lmstudio](https://lmstudio.ai)
     2. select your preferred model
     3. start the local server
 
     <Frame>
       <img
         src="public/lmstudio2.png"
-        alt="Select model in LMStudio"
+        alt="select model in lmstudio"
         width={800}
         height={450}
         className="rounded-lg"
@@ -111,17 +111,17 @@ screenpipe can connect to various AI providers to process your data. here's how 
     <Frame>
       <img
         src="public/lmstudio3.png"
-        alt="Start server in LMStudio"
+        alt="start server in lmstudio"
         width={800}
         height={450}
         className="rounded-lg"
       />
     </Frame>
 
-    <Frame> 
+    <Frame>
       <img
         src="public/lmstudio1.png"
-        alt="LMStudio setup"
+        alt="lmstudio setup"
         width={800}
         height={450}
         className="rounded-lg"

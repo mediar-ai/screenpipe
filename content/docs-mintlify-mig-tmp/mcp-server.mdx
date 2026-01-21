@@ -1,68 +1,68 @@
 ---
-title: "MCP"
+title: "mcp"
 icon: "server"
 ---
 
-Screenpipe offers robust capabilities for integrating with various MCP clients, allowing users to leverage its features across different platforms. This guide will walk you through the setup and usage of Screenpipe with supported MCP clients.
+screenpipe offers robust capabilities for integrating with various mcp clients, allowing users to leverage its features across different platforms. this guide will walk you through the setup and usage of screenpipe with supported mcp clients.
 
-## Prerequisites
+## prerequisites
 
-Before setting up the MCP server, ensure you have the following installed:
+before setting up the mcp server, ensure you have the following installed:
 
-### 1. Python
+### 1. python
 
-Install Python from the [official Python website](https://www.python.org/). Make sure to add Python to your system's PATH during installation.
+install python from the [official python website](https://www.python.org/). make sure to add python to your system's path during installation.
 
-### 2. uv Package Manager
+### 2. uv package manager
 
-Install uv using one of these commands based on your operating system:
+install uv using one of these commands based on your operating system:
 
 <Tabs>
-  <Tab title="macOS/Linux">
+  <Tab title="macos/linux">
     ```bash
     curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
   </Tab>
-  <Tab title="Windows">
+  <Tab title="windows">
     ```powershell
     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
   </Tab>
 </Tabs>
 
-Verify the installation by running:
+verify the installation by running:
 
 ```bash
 uv --version
 ```
 
-## Supported MCP Clients
+## supported mcp clients
 
-- [Claude Desktop](#claude-desktop)
-- [Cursor IDE](#cursor-ide)
+- [claude desktop](#claude-desktop)
+- [cursor ide](#cursor-ide)
 
-## Setting Up the MCP Server
+## setting up the mcp server
 
-To set up the MCP server, execute the following command in your terminal:
+to set up the mcp server, execute the following command in your terminal:
 
 ```bash
 screenpipe mcp setup
 ```
 
-Upon successful setup, you will see the following confirmation:
+upon successful setup, you will see the following confirmation:
 
 ```
-MCP setup completed successfully
-Directory: C:\Users\divan\.screenpipe\mcp
-Config file: C:\Users\divan\.screenpipe\mcp\config.json
+mcp setup completed successfully
+directory: c:\users\divan\.screenpipe\mcp
+config file: c:\users\divan\.screenpipe\mcp\config.json
 
-To run the MCP server, use this command:
-$ uv --directory C:\Users\divan\.screenpipe\mcp run screenpipe-mcp --port 3030
+to run the mcp server, use this command:
+$ uv --directory c:\users\divan\.screenpipe\mcp run screenpipe-mcp --port 3030
 ```
 
-## Configuration
+## configuration
 
-The configuration for the MCP server is stored in `config.json` located in the `.screenpipe\mcp` directory. Here is an example configuration:
+the configuration for the mcp server is stored in `config.json` located in the `.screenpipe\mcp` directory. here is an example configuration:
 
 ```json
 {
@@ -82,41 +82,41 @@ The configuration for the MCP server is stored in `config.json` located in the `
 }
 ```
 
-## Claude Desktop
+## claude desktop
 
-Screenpipe integrates with **Claude Desktop**, allowing seamless interaction via MCP. Follow this guide to set it up properly.
+screenpipe integrates with **claude desktop**, allowing seamless interaction via mcp. follow this guide to set it up properly.
 
-### 1. Open the Configuration File
+### 1. open the configuration file
 
 <Tabs>
-  <Tab title="Windows">
-    Open the configuration file using Notepad:
+  <Tab title="windows">
+    open the configuration file using notepad:
 
     <Tabs>
-      <Tab title="PowerShell">
+      <Tab title="powershell">
         ```powershell
-        notepad $env:AppData\Claude\claude_desktop_config.json  
+        notepad $env:AppData\Claude\claude_desktop_config.json
         ```
       </Tab>
-      <Tab title="CMD">
+      <Tab title="cmd">
         ```cmd
-        notepad %APPDATA%\Claude\claude_desktop_config.json  
+        notepad %APPDATA%\Claude\claude_desktop_config.json
         ```
       </Tab>
     </Tabs>
   </Tab>
-  <Tab title="macOS">
-    Open the configuration file using your preferred editor (e.g., VSCode, Cursor, or Vim):
+  <Tab title="macos">
+    open the configuration file using your preferred editor (e.g., vscode, cursor, or vim):
 
     ```bash
-    code "~/Library/Application Support/Claude/claude_desktop_config.json"  
+    code "~/Library/Application Support/Claude/claude_desktop_config.json"
     ```
   </Tab>
 </Tabs>
 
-### 2. Update the Configuration
+### 2. update the configuration
 
-Modify the `claude_desktop_config.json` file to include the following configuration:
+modify the `claude_desktop_config.json` file to include the following configuration:
 
 ```json
 {
@@ -136,54 +136,54 @@ Modify the `claude_desktop_config.json` file to include the following configurat
 }
 ```
 
-> **Note:** Ensure that this configuration matches the generated `config.json` by the [MCP server setup](#setting-up-the-mcp-server).
+> **note:** ensure that this configuration matches the generated `config.json` by the [mcp server setup](#setting-up-the-mcp-server).
 
-### 3. Restart Claude Desktop
+### 3. restart claude desktop
 
-After making changes to the configuration, restart Claude Desktop to apply the updates.
+after making changes to the configuration, restart claude desktop to apply the updates.
 
-![Claude Setup Gi](https://media.githubusercontent.com/media/mediar-ai/screenpipe/refs/heads/main/content/docs-mintlify-mig-tmp/public/claude-setup.gif)
+![claude setup gif](https://media.githubusercontent.com/media/mediar-ai/screenpipe/refs/heads/main/content/docs-mintlify-mig-tmp/public/claude-setup.gif)
 
-If the setup is successful, you'll see a **hammer icon** appear in the interface.
+if the setup is successful, you'll see a **hammer icon** appear in the interface.
 
-## Cursor IDE
+## cursor ide
 
-Screenpipe MCP can be integrated with **Cursor IDE** to make it available across all your projects. Follow these steps to set it up.
+screenpipe mcp can be integrated with **cursor ide** to make it available across all your projects. follow these steps to set it up.
 
-### 1. Open Cursor Settings
+### 1. open cursor settings
 
-- Launch **Cursor IDE**.
-- Click on the **gear icon** to open **Settings**.
-- In the left sidebar, select **MCP**.
+- launch **cursor ide**.
+- click on the **gear icon** to open **settings**.
+- in the left sidebar, select **mcp**.
 
-### 2. Add a Global MCP Server
+### 2. add a global mcp server
 
-- Click on **"Add New Global MCP Server"**.
-- If the configuration file doesn't exist yet, click **"Create File"** (as shown in Cursor IDE).
-- Paste the configuration from the [Configuration](#configuration) section.
+- click on **"add new global mcp server"**.
+- if the configuration file doesn't exist yet, click **"create file"** (as shown in cursor ide).
+- paste the configuration from the [configuration](#configuration) section.
 
-### 3. Restart MCP in Cursor
+### 3. restart mcp in cursor
 
-- Navigate back to the **Cursor Settings** tab.
-- Click the **refresh icon** next to MCP servers.
+- navigate back to the **cursor settings** tab.
+- click the **refresh icon** next to mcp servers.
 
   <Frame>
-    ![Cursor IDE](https://media.githubusercontent.com/media/mediar-ai/screenpipe/refs/heads/main/content/docs-mintlify-mig-tmp/public/cursor-setup.gif)
+    ![cursor ide](https://media.githubusercontent.com/media/mediar-ai/screenpipe/refs/heads/main/content/docs-mintlify-mig-tmp/public/cursor-setup.gif)
   </Frame>
 
-That's it\! Now Cursor IDE should recognize and use the Screenpipe MCP server.
+that's it\! now cursor ide should recognize and use the screenpipe mcp server.
 
-- Start by opening a new Composer and enable Agent mode
-- From there onwards you can use this tool
+- start by opening a new composer and enable agent mode
+- from there onwards you can use this tool
 
-![Cursor Mcp Result Pn](/content/docs-mintlify-mig-tmp/public/cursor-mcp-result.png)
+![cursor mcp result](/content/docs-mintlify-mig-tmp/public/cursor-mcp-result.png)
 
-## Mintlify MCP (use our docs in Cursor, Claude, etc.)
+## mintlify mcp (use our docs in cursor, claude, etc.)
 
 ```shellscript
 npx mint-mcp add mediar-ai
 ```
 
-## Important Note
+## important note
 
-For more detailed information, please refer to our [GitHub repository](https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-integrations/screenpipe-mcp).
+for more detailed information, please refer to our [github repository](https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-integrations/screenpipe-mcp).
