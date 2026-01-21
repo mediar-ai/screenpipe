@@ -60,6 +60,7 @@ const easeOutCubic = (x: number): number => {
 export default function Timeline() {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [isAiPanelExpanded, setIsAiPanelExpanded] = useState(false);
+	const [showAudioTranscript, setShowAudioTranscript] = useState(true);
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const [aiPanelPosition, setAiPanelPosition] = useState({ x: 0, y: 0 });
 	// const [searchResults, setSearchResults] = useState<number[]>([]);
@@ -429,12 +430,13 @@ export default function Timeline() {
 				)}
 
 				{/* Audio Transcript Panel - Re-enabled and properly positioned */}
-				{currentFrame && (
+				{currentFrame && showAudioTranscript && (
 					<div className="absolute bottom-28 left-4 right-4 z-35">
 						<AudioTranscript
 							frames={frames}
 							currentIndex={currentIndex}
 							groupingWindowMs={30000} // 30 seconds window
+							onClose={() => setShowAudioTranscript(false)}
 						/>
 					</div>
 				)}

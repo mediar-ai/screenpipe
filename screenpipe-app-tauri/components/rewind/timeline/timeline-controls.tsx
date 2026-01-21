@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, RefreshCw, Mail, User, Settings2, Book, Heart, Play, Folder } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import {
 	endOfDay,
 	format,
@@ -11,48 +11,11 @@ import {
 } from "date-fns";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMemo, useState } from "react";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuGroup,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { open } from "@tauri-apps/plugin-shell";
-import HealthStatus from "@/components/screenpipe-status";
-import { ShareLogsButton } from "@/components/share-logs-button";
-import { useOnboarding } from "@/lib/hooks/use-onboarding";
-import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
-import { openSettingsWindow } from "@/lib/utils/window";
-import { commands } from "@/lib/utils/tauri";
-
-import { CommandShortcut } from "@/components/ui/command";
+import { useMemo } from "react";
 
 interface TimeRange {
 	start: Date;
 	end: Date;
-}
-
-interface InboxMessageAction {
-	label: string;
-	action: string;
-}
-
-interface Message {
-	id: string;
-	title: string;
-	body: string;
-	date: string;
-	read: boolean;
-	actions?: InboxMessageAction[];
 }
 
 interface TimelineControlsProps {
@@ -70,18 +33,6 @@ export function TimelineControls({
 	onJumpToday,
 	className,
 }: TimelineControlsProps) {
-	const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
-
-	const { setShowChangelogDialog } = useChangelogDialog();
-
-	const handleShowOnboarding = async () => {
-		try {
-			await commands.showWindow("Onboarding");
-		} catch (error) {
-			console.error("Failed to show onboarding window:", error);
-		}
-	};
-
 	const jumpDay = async (days: number) => {
 		const today = new Date();
 
@@ -122,31 +73,31 @@ export function TimelineControls({
 			
 			
 			{/* Center section - Timeline controls */}
-			<div className="flex items-center gap-4">	
-				<div className="flex items-center gap-1 bg-card border border-border rounded-2xl p-1 shadow-2xl">
+			<div className="flex items-center gap-2 mt-8">
+				<div className="flex items-center h-10 bg-card/80 backdrop-blur-sm border border-border rounded-full px-1 shadow-lg">
 					<Button
 						variant="ghost"
 						size="icon"
 						onClick={() => jumpDay(-1)}
-						className="h-9 w-9 text-foreground hover:bg-accent hover:text-accent-foreground border-0 rounded-xl"
+						className="h-8 w-8 text-foreground/70 hover:text-foreground hover:bg-accent/50 rounded-full transition-colors"
 						disabled={canGoBack}
 					>
-						<ChevronLeft className="h-5 w-5" />
+						<ChevronLeft className="h-4 w-4" />
 					</Button>
 
 					<AnimatePresence mode="wait">
 						<motion.div
 							key={currentDate.toISOString()}
-							initial={{ y: -20, opacity: 0 }}
+							initial={{ y: -10, opacity: 0 }}
 							animate={{ y: 0, opacity: 1 }}
-							exit={{ y: 20, opacity: 0 }}
+							exit={{ y: 10, opacity: 0 }}
 							transition={{
 								type: "spring",
 								stiffness: 500,
 								damping: 30,
-								duration: 0.2,
+								duration: 0.15,
 							}}
-							className="bg-card border border-border rounded-xl px-4 py-2 text-sm font-medium text-foreground min-w-[120px] text-center"
+							className="px-2 text-sm font-medium text-foreground min-w-[100px] text-center"
 						>
 							{format(currentDate, "d MMM yyyy")}
 						</motion.div>
@@ -156,28 +107,26 @@ export function TimelineControls({
 						variant="ghost"
 						size="icon"
 						onClick={() => jumpDay(1)}
-						className="h-9 w-9 text-foreground hover:bg-accent hover:text-accent-foreground border-0 rounded-xl"
+						className="h-8 w-8 text-foreground/70 hover:text-foreground hover:bg-accent/50 rounded-full transition-colors"
 						disabled={isAtToday}
 					>
-						<ChevronRight className="h-5 w-5" />
+						<ChevronRight className="h-4 w-4" />
 					</Button>
-
-					<div className="h-5 w-px bg-white/20 mx-1" />
 
 					<Button
 						variant="ghost"
 						size="icon"
 						onClick={onJumpToday}
-						className="h-9 w-9 text-foreground hover:bg-accent hover:text-accent-foreground border-0 rounded-xl"
+						className="h-8 w-8 text-foreground/70 hover:text-foreground hover:bg-accent/50 rounded-full transition-colors"
 						disabled={isAtToday}
 					>
-						<RefreshCw className="h-5 w-5" />
+						<RefreshCw className="h-4 w-4" />
 					</Button>
 				</div>
-				
-				<div className="flex items-center gap-2 bg-card border border-border rounded-2xl px-3 py-2">
-					<CommandShortcut className="text-muted-foreground">⌘K</CommandShortcut>
-					<span className="text-xs text-muted-foreground">to search</span>
+
+				<div className="flex items-center h-10 gap-1.5 bg-card/80 backdrop-blur-sm border border-border rounded-full px-4 shadow-lg">
+					<span className="text-xs text-muted-foreground">⌘K</span>
+					<span className="text-xs text-muted-foreground">search</span>
 				</div>
 			</div>
 

@@ -42,10 +42,16 @@ export function SearchCommand() {
 				e.preventDefault();
 				setOpen((open) => !open);
 			}
+			// Always close on escape when dialog is open
+			if (e.key === "Escape" && open) {
+				e.preventDefault();
+				e.stopPropagation();
+				setOpen(false);
+			}
 		};
-		document.addEventListener("keydown", down);
-		return () => document.removeEventListener("keydown", down);
-	}, []);
+		document.addEventListener("keydown", down, true); // Use capture phase
+		return () => document.removeEventListener("keydown", down, true);
+	}, [open]);
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter") {

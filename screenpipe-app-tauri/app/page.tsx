@@ -17,18 +17,10 @@ import { ModelDownloadTracker } from "../components/model-download-tracker";
 import Timeline from "@/components/rewind/timeline";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
-import { RefreshCw, AlertTriangle, Settings, Mail } from "lucide-react";
+import { RefreshCw, AlertTriangle } from "lucide-react";
 import { PermissionButtons } from "@/components/status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import SplashScreen from "@/components/splash-screen";
-import { openSettingsWindow } from "@/lib/utils/window";
-import HealthStatus from "@/components/screenpipe-status";
-import { ShareLogsButton } from "@/components/share-logs-button";
 import { SearchCommand } from "@/components/rewind/search-command";
 
 export default function Home() {
@@ -38,7 +30,6 @@ export default function Home() {
   const { isServerDown } = useHealthCheck();
   const { isMac } = usePlatform();
   const [isRestarting, setIsRestarting] = useState(false);
-  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const isProcessingRef = useRef(false);
 
   // Load onboarding status on mount
@@ -139,31 +130,7 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center flex-1 mx-auto relative scrollbar-hide">
       {/* Transparent titlebar area */}
-      <div className="h-8 bg-gradient-to-b from-black/15 to-transparent w-full fixed top-0 left-0 z-[1000]" data-tauri-drag-region>
-          <div className="flex items-center justify-between gap-2">
-            <div/>
-            <h1 className="text-xs font-bold"></h1>
-            <div className="flex items-center gap-2">
-              <HealthStatus className="cursor-pointer" />
-              <Popover open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="link" size="icon">
-                    <Mail className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-100 rounded-2xl bg-background border border-border">
-                  <ShareLogsButton 
-                    showShareLink={false} 
-                    onComplete={() => setIsFeedbackOpen(false)} 
-                  />
-                </PopoverContent>
-              </Popover>
-              <Button variant="link" size="icon" onClick={() => openSettingsWindow()}>
-                <Settings className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-      </div>
+      <div className="h-8 bg-gradient-to-b from-black/15 to-transparent w-full fixed top-0 left-0 z-[1000]" data-tauri-drag-region />
       
       <NotificationHandler />
       {/* Only render content after settings are loaded */}
