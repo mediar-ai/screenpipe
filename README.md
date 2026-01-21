@@ -8,7 +8,7 @@
 
 <h1 align="center">[ screenpipe ]</h1>
 <p align="center">24/7 memory for your desktop</p>
-<p align="center">rewind.ai but open source. 100% local. you own your data.</p>
+<p align="center">rewind but open source. 100% local. you own your data.</p>
 
 <p align="center">
     <a href="https://screenpi.pe" target="_blank">
@@ -35,7 +35,7 @@
 
 ## what is this?
 
-screenpipe records your screen and audio 24/7, stores everything locally, and lets you search through your digital history using ai.
+screenpipe records your screen and audio 24/7, stores everything locally, and lets you connect digital history to ai.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -72,12 +72,6 @@ or [download the desktop app](https://screenpi.pe)
 - 4gb ram
 - ~15gb storage/month
 - works offline
-
-## why open source?
-
-your memories shouldn't live on someone else's server.
-
-we raised [$2.8m](https://x.com/louis030195/status/1948745185178914929) to build this in the open.
 
 ---
 
