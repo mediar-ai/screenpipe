@@ -164,7 +164,7 @@ function SettingsPageContent() {
             {/* Footer */}
             <div className="p-4 border-t border-border flex-shrink-0">
               <div className="text-xs text-muted-foreground text-center">
-                OpenRewind Settings
+                screenpipe Settings
               </div>
             </div>
           </div>

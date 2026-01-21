@@ -1,11 +1,11 @@
 [package]
-name = "openrewind"
+name = "screenpipe-app"
 version = "0.44.3"
 description = ""
 authors = ["you"]
 license = ""
 repository = ""
-default-run = "openrewind"
+default-run = "screenpipe-app"
 edition = "2021"
 rust-version = "1.84"
 

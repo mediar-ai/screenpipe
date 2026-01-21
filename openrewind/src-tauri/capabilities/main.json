@@ -114,11 +114,11 @@
           "requireLiteralLeadingDot": false
         },
         {
-          "path": "$HOME/.openrewind/**",
+          "path": "$HOME/.screenpipe/**",
           "requireLiteralLeadingDot": false
         },
         {
-          "path": "$RESOURCE/.openrewind/**",
+          "path": "$RESOURCE/.screenpipe/**",
           "requireLiteralLeadingDot": false
         }
       ]

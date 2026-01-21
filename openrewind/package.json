@@ -1,5 +1,5 @@
 {
-  "name": "openrewind",
+  "name": "screenpipe",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,7 +9,7 @@
     "predev": "bun scripts/pre_build.js",
     "prebuild": "bun scripts/pre_build.js",
     "tauri": "tauri",
-    "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{openrewind-*,tesseract-*,ffmpeg*,bun*,ollama*,ui_monitor*} node_modules"
+    "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe-*,tesseract-*,ffmpeg*,bun*,ollama*,ui_monitor*} node_modules"
   },
   "dependencies": {
     "@patternfly/react-core": "^6.1.0",

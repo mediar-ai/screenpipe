@@ -69,7 +69,7 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
-                  var theme = localStorage.getItem('openrewind-ui-theme');
+                  var theme = localStorage.getItem('screenpipe-ui-theme');
                   if (!theme) {
                     theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                   }

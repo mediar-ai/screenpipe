@@ -26,7 +26,7 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  storageKey = "openrewind-ui-theme",
+  storageKey = "screenpipe-ui-theme",
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<ColorTheme | undefined>(undefined);

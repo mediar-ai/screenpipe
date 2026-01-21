@@ -27,7 +27,7 @@ export const Providers = forwardRef<
 
   return (
     <NuqsAdapter>
-      <ThemeProvider defaultTheme="light" storageKey="openrewind-ui-theme">
+      <ThemeProvider defaultTheme="light" storageKey="screenpipe-ui-theme">
         <SettingsProvider>
           <ChangelogDialogProvider>
             <PostHogProvider client={posthog}>{children}</PostHogProvider>

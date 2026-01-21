@@ -97,7 +97,7 @@ impl ShortcutConfig {
 
         Ok(Self {
             show: store
-                .show_openrewind_shortcut,
+                .show_screenpipe_shortcut,
             start: store
                 .start_recording_shortcut,
             stop: store
@@ -266,8 +266,8 @@ pub struct LogFile {
 #[tauri::command]
 #[specta::specta]
 async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
-    let data_dir = get_openrewind_data_dir(&app).map_err(|e| e.to_string())?;
-    let openrewind_data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
+    let data_dir = get_screenpipe_data_dir(&app).map_err(|e| e.to_string())?;
+    let screenpipe_data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
     let mut log_files = Vec::new();
 
     // Collect all entries first
@@ -275,7 +275,7 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
     let mut dir = tokio::fs::read_dir(&data_dir)
         .await
         .map_err(|e| e.to_string())?;
-    let mut openrewind_dir = tokio::fs::read_dir(&openrewind_data_dir)
+    let mut screenpipe_dir = tokio::fs::read_dir(&screenpipe_data_dir)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -286,7 +286,7 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
         }
     }
 
-    while let Some(entry) = openrewind_dir.next_entry().await.map_err(|e| e.to_string())? {
+    while let Some(entry) = screenpipe_dir.next_entry().await.map_err(|e| e.to_string())? {
         // Get metadata immediately for each entry
         if let Ok(metadata) = entry.metadata().await {
             entries.push((entry, metadata));
@@ -352,8 +352,8 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     }
 }
 
-fn get_openrewind_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
-    let default_path = app.path().home_dir().unwrap().join(".openrewind");
+fn get_screenpipe_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    let default_path = app.path().home_dir().unwrap().join(".screenpipe");
     Ok(default_path)
 }
 
@@ -741,12 +741,12 @@ async fn main() {
             // Set up rolling file appender
             let file_appender = RollingFileAppender::builder()
                 .rotation(Rotation::DAILY)
-                .filename_prefix("openrewind-app")
+                .filename_prefix("screenpipe-app")
                 .filename_suffix("log")
                 .max_log_files(5)
                 .build(
-                    get_openrewind_data_dir(app.handle())
-                        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".openrewind")),
+                    get_screenpipe_data_dir(app.handle())
+                        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")),
                 )?;
 
             // Create a custom layer for file logging
@@ -865,7 +865,7 @@ async fn main() {
             let update_manager = start_update_check(&app_handle, 5)?;
 
             // Setup tray
-            if let Some(_) = app_handle.tray_by_id("openrewind_main") {
+            if let Some(_) = app_handle.tray_by_id("screenpipe_main") {
                 let update_item = update_manager.update_now_menu_item_ref().clone();
                 if let Err(e) = tray::setup_tray(&app_handle, &update_item) {
                     error!("Failed to setup tray: {}", e);

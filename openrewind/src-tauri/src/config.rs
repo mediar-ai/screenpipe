@@ -5,7 +5,7 @@ pub fn get_base_dir(
     app: &tauri::AppHandle,
     custom_path: Option<String>,
 ) -> anyhow::Result<PathBuf> {
-    let default_path = app.path().local_data_dir().unwrap().join("openrewind");
+    let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
 

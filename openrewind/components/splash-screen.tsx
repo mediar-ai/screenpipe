@@ -17,7 +17,7 @@ const SplashScreen: React.FC = () => {
         >
           <motion.img
             src="/128x128.png"
-            alt="OpenRewind Logo"
+            alt="screenpipe Logo"
             className="w-24 h-24"
             animate={{ 
               scale: [1, 1.05, 1],
@@ -55,7 +55,7 @@ const SplashScreen: React.FC = () => {
           className="text-center"
         >
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            OpenRewind
+            screenpipe
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Your AI-powered digital memory

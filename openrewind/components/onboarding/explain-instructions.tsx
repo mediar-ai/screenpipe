@@ -30,7 +30,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
     {
       icon: MonitorSpeaker,
       title: "Background Recording",
-      description: "OpenRewind runs quietly in the background, capturing your screen and audio activities without interruption.",
+      description: "screenpipe runs quietly in the background, capturing your screen and audio activities without interruption.",
       color: "text-blue-500"
     },
     {
@@ -54,7 +54,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
   ];
 
   const shortcuts = [
-    { key: "⌘ + ⌥ + S", description: "Show/Hide OpenRewind" },
+    { key: "⌘ + ⌥ + S", description: "Show/Hide screenpipe" },
     { key: "⌘ + ⌥ + U", description: "Start Recording" },
     { key: "⌘ + ⌥ + X", description: "Stop Recording" },
   ];
@@ -74,7 +74,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
           You&apos;re All Set! 🎉
         </h1>
         <p className="text-center text-text-secondary max-w-md">
-          OpenRewind is now configured and ready to help you remember everything. Here&apos;s how to get the most out of it.
+          screenpipe is now configured and ready to help you remember everything. Here&apos;s how to get the most out of it.
         </p>
       </div>
 
@@ -127,7 +127,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
           className="text-center"
         >
           <p className="text-sm text-text-secondary mb-4">
-            Start using your computer normally. OpenRewind will build your timeline in the background.
+            Start using your computer normally. screenpipe will build your timeline in the background.
           </p>
           <div className="bg-warning-muted border border-warning rounded-lg p-3">
             <p className="text-xs text-text-primary">
@@ -146,7 +146,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
           Back
         </Button>
         <RainbowButton onClick={handleNextSlide}>
-          Start Using OpenRewind
+          Start Using screenpipe
           <ArrowRight className="w-4 h-4 ml-2" />
         </RainbowButton>
       </div>

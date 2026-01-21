@@ -114,7 +114,7 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
         <motion.img
           className="w-20 h-20 justify-center mb-4"
           src="/128x128.png"
-          alt="openrewind-logo"
+          alt="screenpipe-logo"
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5 }}

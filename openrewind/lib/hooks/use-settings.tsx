@@ -148,7 +148,7 @@ let DEFAULT_SETTINGS: Settings = {
 				contact: null,
 				cloud_subscribed: null
 			},
-			showOpenrewindShortcut: "Super+Alt+S",
+			showScreenpipeShortcut: "Super+Alt+S",
 			startRecordingShortcut: "Super+Alt+U",
 			stopRecordingShortcut: "Super+Alt+X",
 			startAudioShortcut: "",
@@ -182,7 +182,7 @@ let _store: Promise<Store> | undefined;
 export const getStore = async () => {
 	if (!_store) {
 		const dir = await localDataDir();
-		_store = Store.load(`${dir}/openrewind/store.bin`, {
+		_store = Store.load(`${dir}/screenpipe/store.bin`, {
 			autoSave: false,
 		});
 	}
@@ -326,7 +326,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 		)
 			return settings.dataDir;
 
-		return `${homeDirPath}/.openrewind`;
+		return `${homeDirPath}/.screenpipe`;
 	};
 
 	const loadUser = async (token: string, forceReload = false) => {

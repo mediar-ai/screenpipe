@@ -157,8 +157,8 @@ pub struct SettingsStore {
     pub disabled_shortcuts: Vec<String>,
     #[serde(rename = "user")]
     pub user: User,
-    #[serde(rename = "showOpenrewindShortcut")]
-    pub show_openrewind_shortcut: String,
+    #[serde(rename = "showScreenpipeShortcut")]
+    pub show_screenpipe_shortcut: String,
     #[serde(rename = "startRecordingShortcut")]
     pub start_recording_shortcut: String,
     #[serde(rename = "stopRecordingShortcut")]
@@ -386,7 +386,7 @@ impl Default for SettingsStore {
                 contact: None,
                 cloud_subscribed: None,
             },
-            show_openrewind_shortcut: "Super+Ctrl+S".to_string(),
+            show_screenpipe_shortcut: "Super+Ctrl+S".to_string(),
             start_recording_shortcut: "Super+Ctrl+U".to_string(),
             stop_recording_shortcut: "Super+Ctrl+X".to_string(),
             start_audio_shortcut: "".to_string(),

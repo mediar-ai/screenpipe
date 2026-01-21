@@ -100,25 +100,6 @@ fn setup_tray_click_handlers(main_tray: &TrayIcon) -> Result<()> {
         handle_menu_event(app_handle, event);
     });
 
-    main_tray.on_tray_icon_event(move |tray, event| {
-        if let tauri::tray::TrayIconEvent::Click {
-            button,
-            button_state,
-            ..
-        } = event
-        {
-            if button == MouseButton::Left && button_state == MouseButtonState::Up {
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                } else {
-                    show_main_window(app, true);
-                }
-            }
-        }
-    });
-
     Ok(())
 }
 

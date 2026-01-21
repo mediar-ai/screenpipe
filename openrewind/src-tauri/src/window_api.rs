@@ -180,7 +180,7 @@ impl RewindWindowId {
 
     pub fn title(&self) -> &str {
         match self {
-            RewindWindowId::Main => "openrewind",
+            RewindWindowId::Main => "screenpipe",
             RewindWindowId::Settings => "settings",
             RewindWindowId::Search => "search",
             RewindWindowId::Onboarding => "onboarding",

@@ -64,7 +64,7 @@ export default function GeneralSettings() {
                     Auto-start Application
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Automatically launch OpenRewind when your computer starts up. 
+                    Automatically launch screenpipe when your computer starts up. 
                     This ensures you never miss capturing important moments.
                   </p>
                 </div>

@@ -20,10 +20,10 @@ const ShortcutSection = () => {
       <div className="space-y-6">
         <ShortcutRow
           type="global"
-          shortcut="showOpenrewindShortcut"
-          title="toggle openrewind overlay"
+          shortcut="showScreenpipeShortcut"
+          title="toggle screenpipe overlay"
           description="global shortcut to show/hide the main interface"
-          value={settings.showOpenrewindShortcut}
+          value={settings.showScreenpipeShortcut}
         />
 
         <ShortcutRow

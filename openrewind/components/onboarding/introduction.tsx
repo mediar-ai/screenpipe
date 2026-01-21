@@ -66,7 +66,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
   ];
 
   const demoSteps = [
-    "🖥️ OpenRewind quietly records your screen activity",
+    "🖥️ screenpipe quietly records your screen activity",
     "🎙️ Captures audio from meetings and conversations", 
     "📅 Creates a beautiful timeline of your day",
     "🤖 AI helps you find anything: 'What did I discuss in my 2pm meeting?'"
@@ -78,13 +78,13 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
         <motion.img
           className="w-24 h-24 justify-center"
           src="/128x128.png"
-          alt="openrewind-logo"
+          alt="screenpipe-logo"
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5 }}
         />
         <h1 className="text-center text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          Welcome to OpenRewind
+          Welcome to screenpipe
         </h1>
         <p className="text-center text-lg text-text-secondary mt-2">
           Your AI-powered digital memory assistant
@@ -158,7 +158,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
               <div className="w-3 h-3 bg-red-500 rounded-full"></div>
               <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-text-secondary text-sm ml-2">OpenRewind Demo</span>
+              <span className="text-text-secondary text-sm ml-2">screenpipe Demo</span>
             </div>
             <div className="p-6 h-64 bg-gradient-to-br from-surface to-surface-tertiary relative overflow-hidden">
               <motion.div
