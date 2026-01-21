@@ -37,6 +37,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         maxContextChars: 512000,
         defaultPreset: true,
         prompt: DEFAULT_PROMPT,
+        apiKey: null,
       };
       await updateSettings({ aiPresets: [defaultPreset] });
     }
