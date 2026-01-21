@@ -20,8 +20,8 @@ console.log('cwd', cwd)
 const config = {
 	ffmpegRealname: 'ffmpeg',
 	windows: {
-		ffmpegName: 'ffmpeg-7.0.2-full_build-shared',
-		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.0.2-full_build-shared.7z',
+		ffmpegName: 'ffmpeg-7.1.1-full_build-shared',
+		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.1.1-full_build-shared.7z',
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
 	linux: {
