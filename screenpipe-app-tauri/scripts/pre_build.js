@@ -20,8 +20,8 @@ console.log('cwd', cwd)
 const config = {
 	ffmpegRealname: 'ffmpeg',
 	windows: {
-		ffmpegName: 'ffmpeg-7.0.2-full_build-shared',
-		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.0.2-full_build-shared.7z',
+		ffmpegName: 'ffmpeg-8.0.1-full_build-shared',
+		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.0.1-full_build-shared.7z',
 		vcpkgPackages: ['opencl', 'onnxruntime-gpu'],
 	},
 	linux: {
@@ -308,7 +308,7 @@ if (platform == 'windows') {
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`${wgetPath} --no-config --tries=10 --retry-connrefused --waitretry=10 --secure-protocol=auto --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
-		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${config.windows.ffmpegName}.7z`
+		await $`7z x ${config.windows.ffmpegName}.7z`
 		await $`mv ${config.windows.ffmpegName} ${config.ffmpegRealname}`
 		await $`rm -rf ${config.windows.ffmpegName}.7z`
 	}
