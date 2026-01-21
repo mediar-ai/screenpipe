@@ -37,7 +37,7 @@ hf-hub = "0.3.2"
 # https://github.com/pdeljanov/Symphonia/tree/master?tab=readme-ov-file#optimizations
 symphonia = { version = "0.5.4", features = ["aac", "isomp4", "opt-simd"] }
 rubato = "0.15.0"
-whisper-rs = { git = "https://github.com/tazz4843/whisper-rs.git", rev = "e0597486400ec436669e6ee3d8cc94b3859355f5", features = [
+whisper-rs = { git = "https://github.com/tazz4843/whisper-rs.git", rev = "135b60b85a15714862806b6ea9f76abec38156f1", features = [
   "tracing_backend",
 ] } # pin revision to avoid breaking changes
 

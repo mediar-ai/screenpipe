@@ -635,7 +635,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "regex",
@@ -653,7 +653,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -3822,7 +3822,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -8836,8 +8836,8 @@ dependencies = [
 
 [[package]]
 name = "whisper-rs"
-version = "0.14.2"
-source = "git+https://github.com/tazz4843/whisper-rs.git?rev=e0597486400ec436669e6ee3d8cc94b3859355f5#e0597486400ec436669e6ee3d8cc94b3859355f5"
+version = "0.14.3"
+source = "git+https://github.com/tazz4843/whisper-rs.git?rev=135b60b85a15714862806b6ea9f76abec38156f1#135b60b85a15714862806b6ea9f76abec38156f1"
 dependencies = [
  "tracing",
  "whisper-rs-sys",
@@ -8845,8 +8845,8 @@ dependencies = [
 
 [[package]]
 name = "whisper-rs-sys"
-version = "0.12.1"
-source = "git+https://github.com/tazz4843/whisper-rs.git?rev=e0597486400ec436669e6ee3d8cc94b3859355f5#e0597486400ec436669e6ee3d8cc94b3859355f5"
+version = "0.13.0"
+source = "git+https://github.com/tazz4843/whisper-rs.git?rev=135b60b85a15714862806b6ea9f76abec38156f1#135b60b85a15714862806b6ea9f76abec38156f1"
 dependencies = [
  "bindgen 0.71.1",
  "cfg-if",
