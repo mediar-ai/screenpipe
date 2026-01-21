@@ -5,6 +5,7 @@ use analytics::AnalyticsManager;
 use commands::show_main_window;
 use serde_json::json;
 use serde_json::Value;
+#[cfg(target_os = "macos")]
 use tauri_nspanel::ManagerExt;
 use std::env;
 use std::fs::File;
@@ -175,21 +176,43 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     // Register show shortcut
     register_shortcut(app, &config.show, config.is_disabled("show"), |app| {
         info!("show shortcut triggered");
-        if let Ok(window) = app.get_webview_panel("main") {
-            match window.is_visible() {
-                true => {
-                    info!("window is visible, hiding main window");
-                    hide_main_window(app)
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(window) = app.get_webview_panel("main") {
+                match window.is_visible() {
+                    true => {
+                        info!("window is visible, hiding main window");
+                        hide_main_window(app)
+                    }
+                    false => {
+                        info!(
+                            "window is not visible or error checking visibility, showing main window"
+                        );
+                        show_main_window(app, false)
+                    }
                 }
-                false => {
-                    info!(
-                        "window is not visible or error checking visibility, showing main window"
-                    );
-                    show_main_window(app, false)
-                }
+            } else {
+                debug!("main window not found");
             }
-        } else {
-            debug!("main window not found");
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            if let Some(window) = app.get_webview_window("main") {
+                match window.is_visible() {
+                    Ok(true) => {
+                        info!("window is visible, hiding main window");
+                        hide_main_window(app)
+                    }
+                    _ => {
+                        info!(
+                            "window is not visible or error checking visibility, showing main window"
+                        );
+                        show_main_window(app, false)
+                    }
+                }
+            } else {
+                debug!("main window not found");
+            }
         }
     })
     .await?;
@@ -696,9 +719,12 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_sentry::init(&sentry_guard))
-        .plugin(tauri_nspanel::init())
-        .manage(sidecar_state)
+        .plugin(tauri_plugin_sentry::init(&sentry_guard));
+
+        #[cfg(target_os = "macos")]
+        let app = app.plugin(tauri_nspanel::init());
+
+        let app = app.manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             stop_screenpipe,

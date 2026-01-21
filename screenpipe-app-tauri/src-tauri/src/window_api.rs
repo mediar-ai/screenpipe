@@ -3,6 +3,7 @@ use std::{path::PathBuf, str::FromStr};
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
+#[cfg(target_os = "macos")]
 use tauri_nspanel::ManagerExt;
 use tracing::{error, info};
 #[cfg(target_os = "macos")]
@@ -285,13 +286,19 @@ impl ShowRewindWindow {
 
             if id.label() == RewindWindowId::Main.label() {
                     info!("showing panel");
-                    let app_clone = app.clone();
-                     
-                    app.run_on_main_thread(move || {
-                        if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
-                            panel.show();
-                        }
-                    }).ok();
+                    #[cfg(target_os = "macos")]
+                    {
+                        let app_clone = app.clone();
+                        app.run_on_main_thread(move || {
+                            if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
+                                panel.show();
+                            }
+                        }).ok();
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        window.show().ok();
+                    }
                     return Ok(window);
             }
 
@@ -328,8 +335,12 @@ impl ShowRewindWindow {
                 
                 let monitor = app.primary_monitor().unwrap().unwrap();
                 let logical_size = monitor.size().to_logical(monitor.scale_factor());
-                let builder = self.window_builder(app, "/")
-                    .hidden_title(true)
+                let mut builder = self.window_builder(app, "/");
+                #[cfg(target_os = "macos")]
+                {
+                    builder = builder.hidden_title(true);
+                }
+                let builder = builder
                     .visible_on_all_workspaces(true)
                     .always_on_top(true)
                     .decorations(false)
@@ -419,7 +430,12 @@ impl ShowRewindWindow {
                 window
             }
             ShowRewindWindow::Settings {  page: _  } => {
-                let builder = self.window_builder(app, "/settings").hidden_title(true).focused(true);
+                let mut builder = self.window_builder(app, "/settings");
+                #[cfg(target_os = "macos")]
+                {
+                    builder = builder.hidden_title(true);
+                }
+                let builder = builder.focused(true);
                 let window = builder.build()?;
                 window
             }
@@ -431,7 +447,12 @@ impl ShowRewindWindow {
                     // let encoded_query = q.replace(' ', "%20").replace('#', "%23").replace('&', "%26");
                     url.push_str(&format!("{}", q));
                 }
-                let builder = self.window_builder(app, url).hidden_title(true).focused(true);
+                let mut builder = self.window_builder(app, url);
+                #[cfg(target_os = "macos")]
+                {
+                    builder = builder.hidden_title(true);
+                }
+                let builder = builder.focused(true);
 
                 let window = builder.build()?;
                 window
