@@ -10,9 +10,8 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIcon};
 use tauri::Emitter;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
-    AppHandle, Manager, Wry,
+    AppHandle, Wry,
 };
-use tauri_plugin_opener::OpenerExt;
 
 use tracing::{debug, error};
 
@@ -100,10 +99,8 @@ fn create_dynamic_menu(
     // Settings and quit
     menu_builder = menu_builder
         .item(&PredefinedMenuItem::separator(app)?)
-        .item(&MenuItemBuilder::with_id("quick_start", "quick start").build(app)?)
         .item(&MenuItemBuilder::with_id("settings", "settings").build(app)?)
-        .item(&MenuItemBuilder::with_id("changelog", "changelog").build(app)?)
-        .item(&MenuItemBuilder::with_id("status", "status").build(app)?)
+        .item(&MenuItemBuilder::with_id("onboarding", "onboarding").build(app)?)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?);
 
@@ -129,27 +126,11 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         "stop_recording" => {
             let _ = app_handle.emit("shortcut-stop-recording", ());
         }
-        "quick_start" => {
-            // focus on the main window
-            let _ = app_handle.get_webview_window("main").unwrap().set_focus();
-            let _ = app_handle
-                .opener()
-                .open_url("screenpipe://onboarding", None::<&str>);
-        }
         "settings" => {
             let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
         }
-        "changelog" => {
-            let _ = app_handle.get_webview_window("main").unwrap().set_focus();
-            let _ = app_handle
-                .opener()
-                .open_url("screenpipe://changelog", None::<&str>);
-        }
-        "status" => {
-            let _ = app_handle.get_webview_window("main").unwrap().set_focus();
-            let _ = app_handle
-                .opener()
-                .open_url("screenpipe://status", None::<&str>);
+        "onboarding" => {
+            let _ = ShowRewindWindow::Onboarding.show(app_handle);
         }
         "quit" => {
             debug!("Quit requested");
