@@ -53,6 +53,15 @@ import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
 import { AIPreset } from "@/lib/utils/tauri";
 
+// Helper to detect UUID-like strings and format preset names nicely
+const formatPresetName = (name: string): string => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(name)) {
+    return `Preset ${name.slice(0, 8)}...`;
+  }
+  return name;
+};
+
 export const Icons = {
   openai: (props: any) => (
     <svg
@@ -985,11 +994,11 @@ export const AIPresetsSelector = ({
                   {selectedPreset ? (
                     <div className="flex w-full items-center justify-between gap-2 overflow-hidden">
                       <span className="font-medium min-w-[80px] max-w-[30%] truncate text-left">
-                        {
+                        {formatPresetName(
                           aiPresets.find(
                             (preset) => preset.id === selectedPreset,
-                          )?.id
-                        }
+                          )?.id || ''
+                        )}
                       </span>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground overflow-hidden">
                         <span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
@@ -1145,8 +1154,8 @@ export const AIPresetsSelector = ({
                                 : "opacity-0",
                             )}
                           />
-                          <span className="font-medium truncate max-w-[120px]">
-                            {preset.id}
+                          <span className="font-medium truncate max-w-[120px]" title={preset.id}>
+                            {formatPresetName(preset.id)}
                           </span>
                           {preset.defaultPreset && (
                             <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium shrink-0">

@@ -56,14 +56,24 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { AIPreset } from "@/lib/utils/tauri";
-import { 
-  validatePresetName, 
-  validateUrl, 
-  validateApiKey, 
+import {
+  validatePresetName,
+  validateUrl,
+  validateApiKey,
   validateContextLength,
   debounce,
   FieldValidationResult
 } from "@/lib/utils/validation";
+
+// Helper to detect UUID-like strings and format preset names nicely
+const formatPresetName = (name: string): string => {
+  // Check if the name looks like a UUID (8-4-4-4-12 format)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(name)) {
+    return `Preset ${name.slice(0, 8)}...`;
+  }
+  return name;
+};
 
 export interface AIProviderCardProps {
   type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
@@ -982,7 +992,7 @@ export const AIPresets = () => {
           </Badge>
           {settings.aiPresets.some(p => p.defaultPreset) && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 text-foreground/70" />
               Default preset configured
             </div>
           )}
@@ -1015,8 +1025,8 @@ export const AIPresets = () => {
                 <div className="flex justify-between items-start">
                   <div className="space-y-2 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-semibold text-foreground truncate">
-                        {preset.id}
+                      <h3 className="text-lg font-semibold text-foreground truncate" title={preset.id}>
+                        {formatPresetName(preset.id)}
                       </h3>
                       {isDefault && (
                         <Badge variant="default" className="text-xs">
@@ -1055,7 +1065,7 @@ export const AIPresets = () => {
                       className="w-10 h-10 opacity-80 group-hover:opacity-100 transition-opacity rounded"
                     />
                     {hasValidation ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-foreground/70" />
                     ) : (
                       <TooltipProvider>
                         <Tooltip>
@@ -1129,7 +1139,7 @@ export const AIPresets = () => {
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the
-              preset &quot;{presetToDelete}&quot;.
+              preset &quot;{presetToDelete ? formatPresetName(presetToDelete) : ''}&quot;.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1156,7 +1166,7 @@ export const AIPresets = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Change default preset?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will set &quot;{presetToSetDefault}&quot; as the default preset and apply its settings.
+              This will set &quot;{presetToSetDefault ? formatPresetName(presetToSetDefault) : ''}&quot; as the default preset and apply its settings.
               The current default preset will remain but will no longer be the default.
             </AlertDialogDescription>
           </AlertDialogHeader>
