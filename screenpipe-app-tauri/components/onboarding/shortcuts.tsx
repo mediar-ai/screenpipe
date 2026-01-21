@@ -36,11 +36,11 @@ export default function OnboardingShortcuts({
 
   const shortcuts = [
     {
-      id: "showOpenrewindShortcut",
-      title: "Show/Hide Openrewind",
+      id: "showScreenpipeShortcut",
+      title: "Show/Hide screenpipe",
       defaultShortcut: "Super+Alt+S",
-      description: "Quickly toggle the Openrewind interface",
-      value: settings.showOpenrewindShortcut,
+      description: "Quickly toggle the screenpipe interface",
+      value: settings.showScreenpipeShortcut,
     },
     {
       id: "startRecordingShortcut",
@@ -131,7 +131,7 @@ export default function OnboardingShortcuts({
 
       // Sync with backend
       await commands.updateGlobalShortcuts(
-        settings.showOpenrewindShortcut,
+        settings.showScreenpipeShortcut,
         settings.startRecordingShortcut,
         settings.stopRecordingShortcut,
         settings.startAudioShortcut,
@@ -162,7 +162,7 @@ export default function OnboardingShortcuts({
       });
 
       await commands.updateGlobalShortcuts(
-        settings.showOpenrewindShortcut,
+        settings.showScreenpipeShortcut,
         settings.startRecordingShortcut,
         settings.stopRecordingShortcut,
         settings.startAudioShortcut,
