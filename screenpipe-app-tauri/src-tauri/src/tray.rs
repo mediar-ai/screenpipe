@@ -1,6 +1,7 @@
 use crate::commands::show_main_window;
 use crate::health::{get_recording_status, RecordingStatus};
 use crate::store::get_store;
+use crate::window_api::ShowRewindWindow;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -136,10 +137,7 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
                 .open_url("screenpipe://onboarding", None::<&str>);
         }
         "settings" => {
-            let _ = app_handle.get_webview_window("main").unwrap().set_focus();
-            let _ = app_handle
-                .opener()
-                .open_url("screenpipe://settings", None::<&str>);
+            let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
         }
         "changelog" => {
             let _ = app_handle.get_webview_window("main").unwrap().set_focus();
