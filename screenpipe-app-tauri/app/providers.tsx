@@ -4,9 +4,10 @@ import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useEffect } from "react";
 import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
+import { SettingsProvider } from "@/lib/hooks/use-settings";
+import { ThemeProvider } from "@/components/theme-provider";
 import { forwardRef } from "react";
-import { store as SettingsStore, useSettings } from "@/lib/hooks/use-settings";
-import { profilesStore as ProfilesStore } from "@/lib/hooks/use-profiles";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 
 export const Providers = forwardRef<
   HTMLDivElement,
@@ -25,13 +26,15 @@ export const Providers = forwardRef<
   }, []);
 
   return (
-    <SettingsStore.Provider>
-      <ProfilesStore.Provider>
-        <ChangelogDialogProvider>
-          <PostHogProvider client={posthog}>{children}</PostHogProvider>
-        </ChangelogDialogProvider>
-      </ProfilesStore.Provider>
-    </SettingsStore.Provider>
+    <NuqsAdapter>
+      <ThemeProvider defaultTheme="light" storageKey="screenpipe-ui-theme">
+        <SettingsProvider>
+          <ChangelogDialogProvider>
+            <PostHogProvider client={posthog}>{children}</PostHogProvider>
+          </ChangelogDialogProvider>
+        </SettingsProvider>
+      </ThemeProvider>
+    </NuqsAdapter>
   );
 });
 

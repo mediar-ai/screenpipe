@@ -42,7 +42,7 @@
       "active": true,
       "dialog": true,
       "endpoints": [
-        "https://cdn.crabnebula.app/update/mediar/screenpipe/{{target}}-{{arch}}/{{current_version}}"
+        "https://cdn.crabnebula.app/update/mediar/openrewind/{{target}}-{{arch}}/{{current_version}}"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyQjQ2RkQzMUNBOUFDMTcKUldRWHJLa2MwMiswSWl3RlBGUW5zYUE0Zm0vNFFRRTltNUZZTUVxR2FxUDNtSWdUSHgyL3JNcmcK"
     },
@@ -103,16 +103,9 @@
     "trayIcon": {
       "id": "screenpipe_main",
       "iconPath": "assets/screenpipe-logo-tray-white.png",
-      "iconAsTemplate": true
+      "iconAsTemplate": true,
+      "menuOnLeftClick": true
     },
-    "windows": [
-      {
-        "title": "screenpipe",
-        "width": 1200,
-        "height": 850,
-        "resizable": true
-      }
-    ],
     "security": {
       "assetProtocol": {
         "enable": true,

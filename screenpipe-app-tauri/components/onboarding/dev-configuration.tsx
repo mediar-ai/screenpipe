@@ -95,14 +95,14 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
           src="/128x128.png"
           alt="screenpipe-logo"
         />
-        <DialogTitle className="text-center text-2xl">
+        <DialogTitle className="text-center text-2xl text-text-primary">
           screenpipe in dev mode
         </DialogTitle>
       </DialogHeader>
       <div className="mt-8 w-full flex justify-around flex-col">
         <div className="mx-3">
-          <p className="text-muted-foreground text-[14px]">
-            <span className="font-medium prose text-[14px] mr-1">
+          <p className="text-text-secondary text-[14px]">
+            <span className="font-medium prose text-[14px] mr-1 text-text-primary">
               by using the cli,
             </span>
             you can manually configure and manage backend processes for advanced
@@ -111,14 +111,14 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
         </div>
         {instructions.length > 0 && (
           <div className="mx-3 mt-1">
-            <h1 className="font-medium text-md">
+            <h1 className="font-medium text-md text-text-primary">
               run the screenpipe backend via cli:
             </h1>
             <ul className="mt-0">
               {instructions.map((instructions, index) => (
                 <li key={index} className="list-disc mt-1">
-                  <p className="text-muted-foreground text-sm ml-4">
-                    <span className="font-medium text-nowrap text-[14px] mr-1 prose">
+                  <p className="text-text-secondary text-sm ml-4">
+                    <span className="font-medium text-nowrap text-[14px] mr-1 prose text-text-primary">
                       {instructions.label}
                     </span>
                     {instructions.description}
@@ -136,13 +136,13 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
         <a
           onClick={() => open("https://docs.screenpi.pe/")}
           href="#"
-          className="mt-4 text-muted-foreground text-sm mr-auto ml-auto !text-center hover:underline"
+          className="mt-4 text-text-secondary text-sm mr-auto ml-auto !text-center hover:underline"
         >
           learn more about screenpipe args &amp; api
           <ArrowUpRight className="inline w-4 h-4 ml-1 " />
         </a>
       </div>
-      <p className="text-xs text-muted-foreground text-center mt-2">
+      <p className="text-xs text-text-secondary text-center mt-2">
         note: if you use dev mode, you will have to start and maintain the
         recording process yourself in the terminal
       </p>

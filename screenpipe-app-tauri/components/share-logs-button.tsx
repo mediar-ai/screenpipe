@@ -2,7 +2,7 @@ import { Button } from "./ui/button";
 import { useToast } from "./ui/use-toast";
 import { Upload, Loader, Copy, X, Camera, Video } from "lucide-react";
 import { readTextFile } from "@tauri-apps/plugin-fs";
-import { invoke } from "@tauri-apps/api/core";
+import { commands, LogFile } from "@/lib/utils/tauri";
 import { useState, useEffect } from "react";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { useSettings } from "@/lib/hooks/use-settings";
@@ -19,12 +19,6 @@ import {
   TooltipProvider,
 } from "./ui/tooltip";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-
-interface LogFile {
-  name: string;
-  path: string;
-  modified_at: number;
-}
 
 interface VideoChunk {
   device_name: string;
@@ -104,8 +98,17 @@ export const ShareLogsButton = ({
 
   const getLogFiles = async () => {
     try {
-      const logFiles = await invoke("get_log_files");
-      return logFiles as LogFile[];
+      const result = await commands.getLogFiles();
+      if (result.status === "ok") {
+        return result.data.map(file => ({
+          name: file.name,
+          path: file.path,
+          modified_at: Number(file.modified_at)
+        }));
+      } else {
+        console.error("failed to get log files:", result.error);
+        return [];
+      }
     } catch (error) {
       console.error("failed to get log files:", error);
       return [];
@@ -250,11 +253,11 @@ export const ShareLogsButton = ({
           signedUrl: signedUrlVideo,
         });
 
-        const videoUploaded = await invoke("upload_file_to_s3", {
-          filePath: mergedVideoPath,
-          signedUrl: signedUrlVideo,
-        });
-        if (!videoUploaded) throw new Error("Failed to upload video");
+        const videoResult = await commands.uploadFileToS3(
+          mergedVideoPath,
+          signedUrlVideo
+        );
+        if (videoResult.status !== "ok") throw new Error("Failed to upload video");
       }
 
       const os = osPlatform();
@@ -364,7 +367,7 @@ export const ShareLogsButton = ({
                 </TooltipTrigger>
                 <TooltipContent
                   side="bottom"
-                  className="text-xs bg-secondary/80 backdrop-blur-sm border-secondary/30"
+                  className="text-xs bg-secondary border border-secondary/30"
                 >
                   attach last 5 minutes of screen recording
                 </TooltipContent>
@@ -382,7 +385,7 @@ export const ShareLogsButton = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute top-2 right-2 h-7 w-7 rounded-full bg-background/80 hover:bg-background/95 backdrop-blur-sm"
+                  className="absolute top-2 right-2 h-7 w-7 rounded-full bg-background/80 hover:bg-background/95 border border-border"
                   onClick={() => setScreenshot(null)}
                 >
                   <X className="h-3.5 w-3.5" />

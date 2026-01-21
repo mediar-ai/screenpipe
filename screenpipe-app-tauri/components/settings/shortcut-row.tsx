@@ -1,19 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { Settings, Shortcut, useSettings } from "@/lib/hooks/use-settings";
-import { useProfiles } from "@/lib/hooks/use-profiles";
 import { parseKeyboardShortcut } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { Pencil } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/lib/utils/tauri";
 import hotkeys from "hotkeys-js";
 
 interface ShortcutRowProps {
   shortcut: string;
   title: string;
   description: string;
-  type: "global" | "profile" | "pipe";
+  type: "global";
   value?: string;
 }
 
@@ -32,7 +31,6 @@ const ShortcutRow = ({
 }: ShortcutRowProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const { settings, updateSettings } = useSettings();
-  const { profileShortcuts, updateProfileShortcut } = useProfiles();
 
   useEffect(() => {
     if (!isRecording) return;
@@ -86,34 +84,29 @@ const ShortcutRow = ({
   }, [isRecording]);
 
   const syncShortcuts = async (updatedShortcuts: {
-    showScreenpipeShortcut: string;
+    showOpenrewindShortcut: string;
     startRecordingShortcut: string;
     stopRecordingShortcut: string;
     startAudioShortcut: string;
     stopAudioShortcut: string;
-    profileShortcuts: Record<string, string>;
-    pipeShortcuts: Record<string, string>;
   }) => {
     console.log("syncing shortcuts:", {
-      showShortcut: updatedShortcuts.showScreenpipeShortcut,
+      showShortcut: updatedShortcuts.showOpenrewindShortcut,
       startShortcut: updatedShortcuts.startRecordingShortcut,
       stopShortcut: updatedShortcuts.stopRecordingShortcut,
       startAudioShortcut: updatedShortcuts.startAudioShortcut,
       stopAudioShortcut: updatedShortcuts.stopAudioShortcut,
-      profileShortcuts: updatedShortcuts.profileShortcuts,
-      pipeShortcuts: updatedShortcuts.pipeShortcuts,
     });
     // wait 1 second
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    await invoke("update_global_shortcuts", {
-      showShortcut: updatedShortcuts.showScreenpipeShortcut,
-      startShortcut: updatedShortcuts.startRecordingShortcut,
-      stopShortcut: updatedShortcuts.stopRecordingShortcut,
-      startAudioShortcut: updatedShortcuts.startAudioShortcut,
-      stopAudioShortcut: updatedShortcuts.stopAudioShortcut,
-      profileShortcuts: updatedShortcuts.profileShortcuts,
-      pipeShortcuts: updatedShortcuts.pipeShortcuts,
-    });
+    await commands.updateGlobalShortcuts(
+      updatedShortcuts.showOpenrewindShortcut,
+      updatedShortcuts.startRecordingShortcut,
+      updatedShortcuts.stopRecordingShortcut,
+      updatedShortcuts.startAudioShortcut,
+      updatedShortcuts.stopAudioShortcut,
+    {}
+    );
 
     return true;
   };
@@ -136,44 +129,15 @@ const ShortcutRow = ({
         case "global":
           updateSettings({ [shortcut]: keys });
           await syncShortcuts({
-            ...settings,
-            [shortcut]: keys,
-            profileShortcuts,
-            pipeShortcuts: settings.pipeShortcuts,
-          });
+            showOpenrewindShortcut: settings.showOpenrewindShortcut,
+            startRecordingShortcut: settings.startRecordingShortcut,
+            stopRecordingShortcut: settings.stopRecordingShortcut,
+            startAudioShortcut: settings.startAudioShortcut,
+            stopAudioShortcut: settings.stopAudioShortcut,
+          } as any);
           break;
-        case "profile":
-          const profileId = shortcut.replace("profile_", "");
-          updateProfileShortcut({
-            profile: profileId,
-            shortcut: keys,
-          });
-          await syncShortcuts({
-            ...settings,
-            profileShortcuts: {
-              ...profileShortcuts,
-              [profileId]: keys,
-            },
-            pipeShortcuts: settings.pipeShortcuts,
-          });
-          break;
-        case "pipe":
-          const pipeId = shortcut.replace("pipe_", "");
-          updateSettings({
-            pipeShortcuts: {
-              ...settings.pipeShortcuts,
-              [pipeId]: keys,
-            },
-          });
-          await syncShortcuts({
-            ...settings,
-            profileShortcuts,
-            pipeShortcuts: {
-              ...settings.pipeShortcuts,
-              [pipeId]: keys,
-            },
-          });
-          break;
+        default:
+          throw new Error(`Invalid shortcut type: ${type}`);
       }
     } catch (error) {
       console.error("error updating shortcut", error);
@@ -198,9 +162,11 @@ const ShortcutRow = ({
     });
 
     await syncShortcuts({
-      ...settings,
-      profileShortcuts,
-      pipeShortcuts: settings.pipeShortcuts,
+      showOpenrewindShortcut: settings.showOpenrewindShortcut,
+      startRecordingShortcut: settings.startRecordingShortcut,
+      stopRecordingShortcut: settings.stopRecordingShortcut,
+      startAudioShortcut: settings.startAudioShortcut,
+      stopAudioShortcut: settings.stopAudioShortcut,
     });
   };
 

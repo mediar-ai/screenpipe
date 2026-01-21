@@ -1,22 +1,17 @@
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
-#[cfg(target_os = "macos")]
-#[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
-    fn AXIsProcessTrusted() -> bool;
-    fn AXIsProcessTrustedWithOptions(options: core_foundation::dictionary::CFDictionaryRef)
-        -> bool;
-}
 
-#[derive(Serialize, Deserialize)]
+
+#[derive(Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum OSPermission {
     ScreenRecording,
     Microphone,
-    Accessibility,
 }
 
 #[tauri::command(async)]
+#[specta::specta]
 pub fn open_permission_settings(permission: OSPermission) {
     #[cfg(target_os = "macos")]
     {
@@ -33,17 +28,12 @@ pub fn open_permission_settings(permission: OSPermission) {
                 .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
                 .spawn()
                 .expect("Failed to open Microphone settings"),
-            OSPermission::Accessibility => Command::new("open")
-                .arg(
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-                )
-                .spawn()
-                .expect("Failed to open Accessibility settings"),
         };
     }
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn request_permission(permission: OSPermission) {
     #[cfg(target_os = "macos")]
     {
@@ -54,7 +44,6 @@ pub async fn request_permission(permission: OSPermission) {
                 ScreenCaptureAccess.request();
             }
             OSPermission::Microphone => request_av_permission(AVMediaType::Audio),
-            OSPermission::Accessibility => request_accessibility_permission(),
         }
     }
 }
@@ -73,7 +62,7 @@ fn request_av_permission(media_type: nokhwa_bindings_macos::AVMediaType) {
     };
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum OSPermissionStatus {
     // This platform does not require this permission
@@ -92,21 +81,21 @@ impl OSPermissionStatus {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OSPermissionsCheck {
     pub screen_recording: OSPermissionStatus,
     pub microphone: OSPermissionStatus,
-    pub accessibility: OSPermissionStatus,
 }
 
 impl OSPermissionsCheck {
     pub fn necessary_granted(&self) -> bool {
-        self.screen_recording.permitted() && self.accessibility.permitted()
+        self.screen_recording.permitted()
     }
 }
 
 #[tauri::command(async)]
+#[specta::specta]
 pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
     #[cfg(target_os = "macos")]
     {
@@ -137,7 +126,6 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
                 }
             },
             microphone: check_av_permission(AVMediaType::Audio),
-            accessibility: { check_accessibility_permission() },
         }
     }
 
@@ -146,42 +134,6 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
         OSPermissionsCheck {
             screen_recording: OSPermissionStatus::NotNeeded,
             microphone: OSPermissionStatus::NotNeeded,
-            accessibility: OSPermissionStatus::NotNeeded,
-        }
-    }
-}
-
-pub fn check_accessibility_permission() -> OSPermissionStatus {
-    #[cfg(target_os = "macos")]
-    {
-        if unsafe { AXIsProcessTrusted() } {
-            OSPermissionStatus::Granted
-        } else {
-            OSPermissionStatus::Denied
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // For non-macOS platforms, assume permission is granted
-        OSPermissionStatus::NotNeeded
-    }
-}
-
-pub fn request_accessibility_permission() {
-    #[cfg(target_os = "macos")]
-    {
-        use core_foundation::base::TCFType;
-        use core_foundation::dictionary::CFDictionary; // Import CFDictionaryRef
-        use core_foundation::string::CFString;
-
-        let prompt_key = CFString::new("AXTrustedCheckOptionPrompt");
-        let prompt_value = core_foundation::boolean::CFBoolean::true_value();
-
-        let options =
-            CFDictionary::from_CFType_pairs(&[(prompt_key.as_CFType(), prompt_value.as_CFType())]);
-
-        unsafe {
-            AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef());
         }
     }
 }

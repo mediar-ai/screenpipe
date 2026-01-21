@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Check, HelpCircle, Video, ChevronDown } from "lucide-react";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
@@ -22,6 +21,7 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { pipe } from "@screenpipe/browser";
 import { VisionEvent } from "@screenpipe/browser";
 import Image from "next/image";
+import { commands, OSPermissionsCheck } from "@/lib/utils/tauri";
 
 interface OnboardingStatusProps {
   className?: string;
@@ -37,7 +37,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
-  const { updateSettings } = useSettings();
+  const { updateSettings, settings } = useSettings();
   const { isMac: isMacOS } = usePlatform();
   const [stats, setStats] = useState<{
     screenshots: number;
@@ -46,6 +46,32 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [visionEvent, setVisionEvent] = useState<VisionEvent | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(null);
+
+  // Check permissions on macOS
+  useEffect(() => {
+    const checkPermissions = async () => {
+      if (isMacOS) {
+        try {
+          const perms = await commands.doPermissionsCheck(true);
+          setPermissions(perms);
+        } catch (error) {
+          console.error("Failed to check permissions:", error);
+        }
+      }
+    };
+
+    // Poll permissions every 2 seconds
+    const intervalId = setInterval(() => {
+      checkPermissions();
+    }, 2000);
+
+    // Initial check
+    checkPermissions();
+
+    // Cleanup interval on unmount
+    return () => clearInterval(intervalId);
+  }, [isMacOS]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -241,6 +267,36 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     updateSettings({ useChineseMirror: checked });
   };
 
+  // Helper function to check if screen recording permission is granted
+  const isScreenRecordingPermissionGranted = () => {
+    if (!isMacOS) {
+      // On non-macOS platforms, assume permission is granted
+      return true;
+    }
+    
+    const screenPermission = permissions?.screenRecording;
+    return screenPermission === "granted" || screenPermission === "notNeeded";
+  };
+
+  // Helper function to check if audio permission is granted (when audio is enabled)
+  const isAudioPermissionGranted = () => {
+    if (!isMacOS || settings.disableAudio) {
+      // On non-macOS platforms or when audio is disabled, assume permission is granted
+      return true;
+    }
+    
+    const audioPermission = permissions?.microphone;
+    return audioPermission === "granted" || audioPermission === "notNeeded";
+  };
+
+  // Helper function to check if all required permissions are granted
+  const areRequiredPermissionsGranted = () => {
+    return isScreenRecordingPermissionGranted() && isAudioPermissionGranted();
+  };
+
+  // Check if next button should be disabled
+  const isNextDisabled = isLoading || (isMacOS && !areRequiredPermissionsGranted());
+
   return (
     <div
       ref={containerRef}
@@ -250,25 +306,33 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         <div className="w-32 h-32 flex items-center justify-center">
             <img className="w-32 h-32" src="/128x128.png" alt="screenpipe-logo" />
           </div> 
-        <DialogTitle className="text-center text-2xl">
+        <h1 className="text-center text-2xl text-text-primary">
           setting up screenpipe
-        </DialogTitle>
-        <p className="text-sm text-muted-foreground pt-2">
+        </h1>
+        <p className="text-sm text-text-secondary pt-2">
           100% local-first • your data never leaves your device
         </p>
 
       {isMacOS && (
-        <div className="mt-6 pt-4 border-t w-full flex flex-col items-center">
-          <h4 className="text-sm font-medium mb-3">check permissions</h4>
+        <div className="mt-6 pt-4 border-t border-border w-full flex flex-col items-center">
+          <h4 className="text-sm font-medium mb-3 text-text-primary">check permissions</h4>
           <div className="space-y-2">
             <PermissionButtons type="screen" />
             <PermissionButtons type="audio" />
-            <PermissionButtons type="accessibility" />
           </div>
+          {!areRequiredPermissionsGranted() && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 text-center">
+              {!isScreenRecordingPermissionGranted() && !isAudioPermissionGranted() 
+                ? "screen recording and audio permissions are required to continue"
+                : !isScreenRecordingPermissionGranted() 
+                ? "screen recording permission is required to continue"
+                : "audio permission is required to continue"}
+            </p>
+          )}
         </div>
       )}
 
-      <Separator className="w-full my-2" />
+      <Separator className="w-full my-2 bg-border" />
 
       <div className="flex items-center space-x-2 mt-4">
         <Switch
@@ -315,7 +379,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 xmlns="http://www.w3.org/2000/svg"
-                className="size-5 animate-spin stroke-zinc-400 mr-2"
+                className="size-5 animate-spin text-text-secondary mr-2"
               >
                 <path d="M12 3v3m6.366-.366-2.12 2.12M21 12h-3m.366 6.366-2.12-2.12M12 21v-3m-6.366.366 2.12-2.12M3 12h3m-.366-6.366 2.12 2.12"></path>
               </svg>
@@ -326,14 +390,14 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           </Button>
         ) : status === "ok" ? (
           <div className="flex flex-col items-center mt-4">
-            <Check className="size-5 stroke-zinc-400" />
-            <p className="text-sm text-zinc-600 mt-2 text-center">
+            <Check className="size-5 text-success" />
+            <p className="text-sm text-text-secondary mt-2 text-center">
               screenpipe setup complete. <br />
               AI models downloaded.
             </p>
           </div>
         ) : (
-          <p className="text-center mt-4">{status}</p>
+          <p className="text-center mt-4 text-text-primary">{status}</p>
         )}
 
         <LogFileButton />
@@ -346,8 +410,8 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           id="screenshot-preview"
         >
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium">live preview</h3>
-            <span className="text-xs text-muted-foreground">
+            <h3 className="text-sm font-medium text-text-primary">live preview</h3>
+            <span className="text-xs text-text-secondary">
               {visionEvent ? "streaming..." : "waiting for stream..."}
             </span>
           </div>
@@ -364,7 +428,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                   priority
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <div className="grid grid-cols-2 gap-2 text-xs text-text-secondary">
                 <div>
                   <span className="font-medium">app:</span>{" "}
                   {visionEvent.app_name || "unknown"}
@@ -386,7 +450,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
               </div>
             </div>
           ) : (
-            <div className="animate-pulse bg-gray-200 rounded-md w-full h-[250px]" />
+            <div className="animate-pulse bg-muted rounded-md w-full h-[250px]" />
           )}
         </div>
       )}
@@ -431,6 +495,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           handleNextSlide={handleNext}
           prevBtnText="previous"
           nextBtnText="next"
+          isLoading={isNextDisabled}
         />
     </div>
   );

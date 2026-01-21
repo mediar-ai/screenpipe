@@ -1,4 +1,6 @@
 use crate::get_store;
+use crate::store::SettingsStore;
+use crate::permissions::do_permissions_check;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -6,9 +8,8 @@ use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 pub struct SidecarState(pub Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -40,42 +41,91 @@ pub struct User {
     pub cloud_subscribed: Option<bool>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MonitorDevice {
+    pub id: u32,
+    pub name: String,
+    pub is_default: bool,
+    pub width: u32,
+    pub height: u32,
+}
+
 impl User {
-    pub fn from_store<R: tauri::Runtime>(store: &Store<R>) -> Self {
+    pub fn from_store(store: &SettingsStore) -> Self {
         Self {
-            id: store
-                .get("user.id")
-                .and_then(|v| v.as_str().map(String::from)),
-            email: store
-                .get("user.email")
-                .and_then(|v| v.as_str().map(String::from)),
-            name: store
-                .get("user.name")
-                .and_then(|v| v.as_str().map(String::from)),
-            image: store
-                .get("user.image")
-                .and_then(|v| v.as_str().map(String::from)),
-            token: store
-                .get("user.token")
-                .and_then(|v| v.as_str().map(String::from)),
-            clerk_id: store
-                .get("user.clerk_id")
-                .and_then(|v| v.as_str().map(String::from)),
-            credits: Some(UserCredits {
-                amount: store
-                    .get("user.credits.amount")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0),
-                created_at: store
-                    .get("user.credits.created_at")
-                    .and_then(|v| v.as_str().map(String::from)),
+            id: store.user.id.clone(),
+            email: store.user.email.clone(),
+            name: store.user.name.clone(),
+            image: store.user.image.clone(),
+            token: store.user.token.clone(),
+            clerk_id: store.user.clerk_id.clone(),
+            credits: store.user.credits.clone().map(|c| UserCredits {
+                amount: c.amount as i64,
+                created_at: None,
             }),
-            cloud_subscribed: store.get("user.cloud_subscribed").and_then(|v| v.as_bool()),
+            cloud_subscribed: store.user.cloud_subscribed.clone(),
         }
     }
 }
 
+/// Get all available monitors connected to the device
+pub async fn get_available_monitors(app: &tauri::AppHandle) -> Result<Vec<MonitorDevice>, String> {
+    debug!("Getting available monitors");
+    
+    let sidecar = app.shell().sidecar("screenpipe")
+        .map_err(|e| format!("Failed to create sidecar command: {}", e))?;
+    
+    let output = sidecar
+        .args(&["vision", "list", "-o", "json"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute monitor listing command: {}", e))?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!("Failed to get monitors: {}", stderr);
+        return Err(format!("Failed to get monitors: {}", stderr));
+    }
+    
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|e| format!("Failed to parse monitor output as UTF-8: {}", e))?;
+    
+    debug!("Monitor command output: {}", stdout);
+    
+    // Parse the JSON response which might be in {data: [...], success: true} format
+    let json_value: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse monitor JSON: {}", e))?;
+    
+    let monitors_array = if let Some(data) = json_value.get("data") {
+        data.as_array()
+    } else {
+        json_value.as_array()
+    }.ok_or("Monitor response is not an array")?;
+
+    
+    let monitors: Vec<MonitorDevice> = monitors_array
+        .iter()
+        .filter_map(|monitor| {
+            serde_json::from_value(monitor.clone()).ok()
+        })
+        .collect();
+    
+    if monitors.is_empty() {
+        return Err("No monitors found".to_string());
+    }
+    
+    debug!("Found {} monitors", monitors.len());
+    Ok(monitors)
+}
+
 #[tauri::command]
+#[specta::specta]
+pub async fn get_monitors(app: tauri::AppHandle) -> Result<Vec<MonitorDevice>, String> {
+    get_available_monitors(&app).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn stop_screenpipe(
     state: State<'_, SidecarState>,
     _app: tauri::AppHandle,
@@ -139,7 +189,9 @@ pub async fn stop_screenpipe(
     {
         // -15 from gnu man page
         // ref: https://www.gnu.org/software/coreutils/manual/html_node/kill-invocation.html
-        let command = format!("pgrep -x screenpipe | xargs -I {{}} kill -15 {{}}",);
+        let command = format!(
+            "pgrep -x screenpipe | xargs -I {{}} kill -15 {{}}",
+        );
         match tokio::process::Command::new("sh")
             .arg("-c")
             .arg(command)
@@ -159,11 +211,31 @@ pub async fn stop_screenpipe(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spawn_screenpipe(
     state: tauri::State<'_, SidecarState>,
     app: tauri::AppHandle,
     override_args: Option<Vec<String>>,
 ) -> Result<(), String> {
+    // Check permissions before spawning
+    let permissions_check = do_permissions_check(false);
+    let store = app.state::<SettingsStore>();
+    let disable_audio = store.disable_audio;
+    
+    // Always check screen recording permission - this is required and needs restart
+    if !permissions_check.screen_recording.permitted() {
+        warn!("Screen recording permission not granted: {:?}. Cannot spawn screenpipe.", permissions_check.screen_recording);
+        return Err("Screen recording permission required. Please grant permission through settings and restart the app.".to_string());
+    }
+    
+    // Check microphone permission if audio recording is enabled - but don't block startup
+    if !disable_audio && !permissions_check.microphone.permitted() {
+        warn!("Microphone permission not granted and audio recording is enabled: {:?}. Audio recording will not work until permission is granted.", permissions_check.microphone);
+        // Continue with spawn - microphone permission can be granted at runtime
+    }
+    
+    info!("Screen recording permission granted for manual spawn. Audio disabled: {}, microphone permission: {:?}", disable_audio, permissions_check.microphone);
+    
     let mut manager = state.0.lock().await;
     if manager.is_none() {
         *manager = Some(SidecarManager::new());
@@ -176,125 +248,65 @@ pub async fn spawn_screenpipe(
     }
 }
 
-fn spawn_sidecar(
-    app: &tauri::AppHandle,
-    override_args: Option<Vec<String>>,
-) -> Result<CommandChild, String> {
-    let store = get_store(app, None).unwrap();
+async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<CommandChild, String> {
+    let store = app.state::<SettingsStore>();
 
-    let audio_transcription_engine = store
-        .get("audioTranscriptionEngine")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
+    let audio_transcription_engine = store.audio_transcription_engine.clone();
 
-    let ocr_engine = store
-        .get("ocrEngine")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
+    let ocr_engine = store.ocr_engine.clone();
 
-    let monitor_ids = store
-        .get("monitorIds")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+    let monitor_ids = store.monitor_ids.clone();
 
-    let audio_devices = store
-        .get("audioDevices")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
 
-    let use_pii_removal = store
-        .get("usePiiRemoval")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
 
-    let port = store.get("port").and_then(|v| v.as_u64()).unwrap_or(3030);
+    let audio_devices = store.audio_devices.clone();
 
-    let disable_audio = store
-        .get("disableAudio")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let use_pii_removal = store.use_pii_removal;
 
-    let ignored_windows = store
-        .get("ignoredWindows")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+    let port = store.port;
 
-    let included_windows = store
-        .get("includedWindows")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+    let disable_audio = store.disable_audio;
 
-    let deepgram_api_key = store
-        .get("deepgramApiKey")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
+    let ignored_windows = store.ignored_windows.clone();
 
-    let fps = store.get("fps").and_then(|v| v.as_f64()).unwrap_or(0.2);
+    let included_windows = store.included_windows.clone();
+
+    let deepgram_api_key = store.deepgram_api_key.clone();
+
+    let fps = store.fps;
 
     let dev_mode = store
-        .get("devMode")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .dev_mode;
 
-    let vad_sensitivity = store
-        .get("vadSensitivity")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("high"));
+    let vad_sensitivity = store.vad_sensitivity.clone();
 
-    let audio_chunk_duration = store
-        .get("audioChunkDuration")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(30);
+    let audio_chunk_duration = store.audio_chunk_duration;
 
     let telemetry_enabled = store
-        .get("analyticsEnabled")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+        .analytics_enabled;
 
     let use_chinese_mirror = store
-        .get("useChineseMirror")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .use_chinese_mirror;
 
-    let languages = store
-        .get("languages")
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
+    let languages = store.languages.clone();
 
     let enable_beta = store
-        .get("enableBeta")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .enable_beta;
 
     let enable_frame_cache = store
-        .get("enableFrameCache")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .enable_frame_cache;
 
-    let enable_ui_monitoring = store
-        .get("enableUiMonitoring")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
 
-    let data_dir = store
-        .get("dataDir")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
+    let data_dir = store.data_dir.clone();
 
     let enable_realtime_audio_transcription = store
-        .get("enableRealtimeAudioTranscription")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .enable_realtime_audio_transcription;
 
     let enable_realtime_vision = store
-        .get("enableRealtimeVision")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .enable_realtime_vision;
 
     let _use_all_monitors = store
-        .get("useAllMonitors")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .use_all_monitors;
 
     let user = User::from_store(&store);
 
@@ -302,8 +314,9 @@ fn spawn_sidecar(
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
-    let mut args = vec!["--port", port_str.as_str(), "--enable-pipe-manager"];
+    let mut args = vec!["--port", port_str.as_str()];
     let fps_str = fps.to_string();
+    let mut monitor_id_str = String::new(); // Store monitor ID string
     if fps != 0.2 {
         args.push("--fps");
         args.push(fps_str.as_str());
@@ -324,18 +337,40 @@ fn spawn_sidecar(
         let model = ocr_engine.as_str();
         args.push(model);
     }
-
-    if !monitor_ids.is_empty() && monitor_ids[0] != Value::String("default".to_string()) {
-        for monitor in &monitor_ids {
-            args.push("--monitor-id");
-            args.push(monitor.as_str().unwrap());
+    if !monitor_ids.is_empty() {
+        if monitor_ids.contains(&"default".to_string()) {
+            // Get the default monitor and use its ID
+            match get_available_monitors(app).await {
+                Ok(monitors) => {
+                    if let Some(default_monitor) = monitors.iter().find(|m| m.is_default) {
+                        monitor_id_str = default_monitor.id.to_string();
+                        args.push("--monitor-id");
+                        args.push(&monitor_id_str);
+                    } else if let Some(first_monitor) = monitors.first() {
+                        // Fallback to first monitor if no default is found
+                        monitor_id_str = first_monitor.id.to_string();
+                        args.push("--monitor-id");
+                        args.push(&monitor_id_str);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to get default monitor: {}", e);
+                    // Continue without monitor specification
+                }
+            }
+        } else {
+            // Use specific monitor IDs
+            for monitor in &monitor_ids {
+                args.push("--monitor-id");
+                args.push(monitor.as_str());
+            }
         }
     }
 
     if !languages.is_empty() && languages[0] != Value::String("default".to_string()) {
         for language in &languages {
             args.push("--language");
-            args.push(language.as_str().unwrap());
+            args.push(language.as_str());
         }
     }
 
@@ -348,7 +383,7 @@ fn spawn_sidecar(
     if !audio_devices.is_empty() && audio_devices[0] != Value::String("default".to_string()) {
         for device in &audio_devices {
             args.push("--audio-device");
-            args.push(device.as_str().unwrap());
+            args.push(device.as_str());
         }
     }
 
@@ -363,14 +398,14 @@ fn spawn_sidecar(
     if !ignored_windows.is_empty() {
         for window in &ignored_windows {
             args.push("--ignored-windows");
-            args.push(window.as_str().unwrap());
+            args.push(window.as_str());
         }
     }
 
     if !included_windows.is_empty() {
         for window in &included_windows {
             args.push("--included-windows");
-            args.push(window.as_str().unwrap());
+            args.push(window.as_str());
         }
     }
     let current_pid = std::process::id();
@@ -404,10 +439,6 @@ fn spawn_sidecar(
         args.push("--enable-frame-cache");
     }
 
-    if enable_ui_monitoring {
-        args.push("--enable-ui-monitoring");
-    }
-
     if data_dir != "default" && !data_dir.is_empty() {
         args.push("--data-dir");
         args.push(data_dir.as_str());
@@ -426,9 +457,7 @@ fn spawn_sidecar(
     // }
 
     let disable_vision = store
-        .get("disableVision")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .disable_vision;
 
     if disable_vision {
         args.push("--disable-vision");
@@ -464,9 +493,7 @@ fn spawn_sidecar(
         c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
         // only supports --enable-realtime-vision for now, avoid adding if already present
-        if !args.contains(&"--enable-realtime-vision")
-            && override_args_as_vec.contains(&"--enable-realtime-vision".to_string())
-        {
+        if !args.contains(&"--enable-realtime-vision") && override_args_as_vec.contains(&"--enable-realtime-vision".to_string()) {
             args.extend(override_args_as_vec.iter().map(|s| s.as_str()));
         }
         let c = c.args(&args);
@@ -510,9 +537,7 @@ fn spawn_sidecar(
     c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
     // only supports --enable-realtime-vision for now, avoid adding if already present
-    if !args.contains(&"--enable-realtime-vision")
-        && override_args_as_vec.contains(&"--enable-realtime-vision".to_string())
-    {
+    if !args.contains(&"--enable-realtime-vision") && override_args_as_vec.contains(&"--enable-realtime-vision".to_string()) {
         args.extend(override_args_as_vec.iter().map(|s| s.as_str()));
     }
     let c = c.args(&args);
@@ -563,17 +588,33 @@ impl SidecarManager {
         }
     }
 
-    pub async fn spawn(
-        &mut self,
-        app: &tauri::AppHandle,
-        override_args: Option<Vec<String>>,
-    ) -> Result<(), String> {
+    pub async fn spawn(&mut self, app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<(), String> {
         info!("Spawning sidecar with override args: {:?}", override_args);
-        // Update settings from store
+        
+        // Update settings from store first to get audio settings
         self.update_settings(app).await?;
+        
+        // Check permissions before spawning
+        let permissions_check = do_permissions_check(false);
+        let store = app.state::<SettingsStore>();
+        let disable_audio = store.disable_audio;
+        
+        // Always check screen recording permission - this is required and needs restart
+        if !permissions_check.screen_recording.permitted() {
+            warn!("Screen recording permission not granted: {:?}. Cannot spawn sidecar.", permissions_check.screen_recording);
+            return Err("Screen recording permission required. Please grant permission through settings and restart the app.".to_string());
+        }
+        
+        // Check microphone permission if audio recording is enabled - but don't block startup
+        if !disable_audio && !permissions_check.microphone.permitted() {
+            warn!("Microphone permission not granted and audio recording is enabled: {:?}. Audio recording will not work until permission is granted.", permissions_check.microphone);
+            // Continue with spawn - microphone permission can be granted at runtime
+        }
+        
+        info!("Screen recording permission granted, proceeding with sidecar spawn. Audio disabled: {}, microphone permission: {:?}", disable_audio, permissions_check.microphone);
 
         // Spawn the sidecar
-        let child = spawn_sidecar(app, override_args)?;
+        let child = spawn_sidecar(app, override_args).await?;
         self.child = Some(child);
 
         Ok(())

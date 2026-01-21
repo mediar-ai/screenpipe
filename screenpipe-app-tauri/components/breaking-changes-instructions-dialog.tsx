@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Trash2, Loader2 } from "lucide-react";
 import localforage from "localforage";
 import { useToast } from "@/components/ui/use-toast";
-import { Command } from "@tauri-apps/plugin-shell";
 
 export function BreakingChangesInstructionsDialog() {
   const { toast } = useToast();
@@ -27,7 +26,7 @@ export function BreakingChangesInstructionsDialog() {
       try {
         const response = await fetch("http://localhost:3030/pipes/list");
         const data = await response.json();
-        setHasPipes(data.data.length > 0);
+        setHasPipes(data?.data?.length > 0);
       } catch (error) {
         console.error("failed to check pipes:", error);
       }

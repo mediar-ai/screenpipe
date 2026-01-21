@@ -2,25 +2,23 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use analytics::AnalyticsManager;
-use commands::load_pipe_config;
-use commands::save_pipe_config;
 use commands::show_main_window;
 use serde_json::json;
 use serde_json::Value;
+use tauri_nspanel::ManagerExt;
 use std::env;
-use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use tauri::Config;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_global_shortcut::ShortcutState;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_store::StoreBuilder;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
@@ -28,9 +26,18 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 use updates::start_update_check;
+use window_api::ShowRewindWindow;
+
+// TypeScript bindings generation imports (only in debug builds)
+#[cfg(debug_assertions)]
+use specta_typescript::Typescript;
+#[cfg(debug_assertions)]
+use tauri_specta::{collect_commands, Builder};
+
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
+use crate::store::SettingsStore;
 
 mod commands;
 mod disk_usage;
@@ -47,31 +54,31 @@ pub use server::*;
 pub use sidecar::*;
 
 pub use icons::*;
-pub use store::*;
+pub use store::get_store;
 
 mod config;
 pub use config::get_base_dir;
 
-pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::spawn_screenpipe;
 pub use sidecar::stop_screenpipe;
-pub use store::get_profiles_store;
-pub use store::get_store;
+// Removed: pub use store::get_profiles_store; // Profile functionality has been removed
 
 use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
 use std::collections::HashMap;
-use tauri::AppHandle;
+use tauri::{AppHandle, WebviewUrl, WebviewWindow};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 use tauri_plugin_sentry::sentry;
 mod health;
+use base64::Engine;
 use health::start_health_check;
+use window_api::RewindWindowId;
 
 // New struct to hold shortcut configuration
 #[derive(Debug, Default)]
@@ -81,82 +88,26 @@ struct ShortcutConfig {
     stop: String,
     start_audio: String,
     stop_audio: String,
-    profile_shortcuts: HashMap<String, String>,
-    pipe_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
 }
 
 impl ShortcutConfig {
     async fn from_store(app: &AppHandle) -> Result<Self, String> {
-        let store = get_store(app, None).map_err(|e| e.to_string())?;
-
-        let profile_shortcuts = match get_profiles_store(app) {
-            Ok(profiles_store) => {
-                let profiles = profiles_store
-                    .get("profiles")
-                    .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
-                    .unwrap_or_default();
-
-                profiles
-                    .into_iter()
-                    .filter_map(|profile| {
-                        profiles_store
-                            .get(format!("shortcuts.{}", profile))
-                            .and_then(|v| v.as_str().map(String::from))
-                            .map(|shortcut| (profile, shortcut))
-                    })
-                    .collect()
-            }
-            Err(_) => HashMap::new(),
-        };
-
-        let pipe_shortcuts = store
-            .keys()
-            .into_iter()
-            .filter_map(|key| {
-                if key.starts_with("pipeShortcuts.") {
-                    store
-                        .get(key.clone())
-                        .and_then(|v| v.as_str().map(String::from))
-                        .map(|v| {
-                            (
-                                key.trim_start_matches("pipeShortcuts.").to_string(),
-                                v.to_string(),
-                            )
-                        })
-                } else {
-                    None
-                }
-            })
-            .collect::<HashMap<String, String>>();
+        let store = SettingsStore::get(app).unwrap_or_default().unwrap_or_default();
 
         Ok(Self {
             show: store
-                .get("showScreenpipeShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "Super+Alt+S".to_string()),
+                .show_screenpipe_shortcut,
             start: store
-                .get("startRecordingShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "Super+Alt+U".to_string()),
+                .start_recording_shortcut,
             stop: store
-                .get("stopRecordingShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "Super+Alt+X".to_string()),
+                .stop_recording_shortcut,
             start_audio: store
-                .get("startAudioShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_default(),
+                .start_audio_shortcut,
             stop_audio: store
-                .get("stopAudioShortcut")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_default(),
-            profile_shortcuts,
-            pipe_shortcuts,
+                .stop_audio_shortcut,
             disabled: store
-                .get("disabledShortcuts")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_default(),
+                .disabled_shortcuts,
         })
     }
 
@@ -191,7 +142,7 @@ async fn register_shortcut(
 }
 
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
+#[specta::specta]
 async fn update_global_shortcuts(
     app: AppHandle,
     show_shortcut: String,
@@ -199,8 +150,7 @@ async fn update_global_shortcuts(
     stop_shortcut: String,
     start_audio_shortcut: String,
     stop_audio_shortcut: String,
-    profile_shortcuts: HashMap<String, String>,
-    pipe_shortcuts: HashMap<String, String>,
+    _profile_shortcuts: HashMap<String, String>, // Keep for API compatibility but ignore
 ) -> Result<(), String> {
     let config = ShortcutConfig {
         show: show_shortcut,
@@ -208,8 +158,6 @@ async fn update_global_shortcuts(
         stop: stop_shortcut,
         start_audio: start_audio_shortcut,
         stop_audio: stop_audio_shortcut,
-        profile_shortcuts,
-        pipe_shortcuts,
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
     };
     apply_shortcuts(&app, &config).await
@@ -227,13 +175,13 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     // Register show shortcut
     register_shortcut(app, &config.show, config.is_disabled("show"), |app| {
         info!("show shortcut triggered");
-        if let Some(window) = app.get_webview_window("main") {
+        if let Ok(window) = app.get_webview_panel("main") {
             match window.is_visible() {
-                Ok(true) => {
+                true => {
                     info!("window is visible, hiding main window");
                     hide_main_window(app)
                 }
-                Ok(false) | Err(_) => {
+                false => {
                     info!(
                         "window is not visible or error checking visibility, showing main window"
                     );
@@ -246,6 +194,7 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     })
     .await?;
 
+  
     // Register start shortcut
     register_shortcut(
         app,
@@ -267,18 +216,6 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
-
-    // Register profile shortcuts
-    for (profile, shortcut) in &config.profile_shortcuts {
-        if !shortcut.is_empty() {
-            let profile = profile.clone();
-            register_shortcut(app, shortcut, false, move |app| {
-                info!("switch-profile shortcut triggered for profile: {}", profile);
-                let _ = app.emit("switch-profile", profile.clone());
-            })
-            .await?;
-        }
-    }
 
     // Register start audio shortcut
     register_shortcut(
@@ -310,57 +247,16 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     )
     .await?;
 
-    info!("pipe_shortcuts: {:?}", config.pipe_shortcuts);
-
-    // Register pipe shortcuts
-    for (pipe_id, shortcut) in &config.pipe_shortcuts {
-        if !shortcut.is_empty() {
-            let pipe_id = pipe_id.clone();
-            let shortcut_id = format!("pipe_{}", pipe_id);
-            info!(
-                "registering pipe shortcut for pipe: {}, is disabled: {}",
-                shortcut_id,
-                config.is_disabled(&shortcut_id)
-            );
-            register_shortcut(
-                app,
-                shortcut,
-                config.is_disabled(&shortcut_id),
-                move |app| {
-                    info!("pipe shortcut triggered for pipe: {}", pipe_id);
-                    let _ = app.emit("open-pipe", pipe_id.clone());
-                },
-            )
-            .await?;
-        }
-    }
-
     Ok(())
 }
 
 #[tauri::command]
+#[specta::specta]
 fn get_env(name: &str) -> String {
     std::env::var(String::from(name)).unwrap_or(String::from(""))
 }
 
-async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
-    // Fetch pipe config from API
-    let client = reqwest::Client::new();
-    let response = client
-        .get(format!("http://localhost:3030/pipes/info/{}", pipe_id))
-        .send()
-        .await?
-        .json::<Value>()
-        .await?;
-
-    // Extract port from response
-    response["data"]["config"]["port"]
-        .as_u64()
-        .map(|p| p as u16)
-        .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
-}
-
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, specta::Type)]
 pub struct LogFile {
     name: String,
     path: String,
@@ -368,8 +264,10 @@ pub struct LogFile {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
-    let data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
+    let data_dir = get_screenpipe_data_dir(&app).map_err(|e| e.to_string())?;
+    let screenpipe_data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
     let mut log_files = Vec::new();
 
     // Collect all entries first
@@ -377,7 +275,18 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
     let mut dir = tokio::fs::read_dir(&data_dir)
         .await
         .map_err(|e| e.to_string())?;
+    let mut screenpipe_dir = tokio::fs::read_dir(&screenpipe_data_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
     while let Some(entry) = dir.next_entry().await.map_err(|e| e.to_string())? {
+        // Get metadata immediately for each entry
+        if let Ok(metadata) = entry.metadata().await {
+            entries.push((entry, metadata));
+        }
+    }
+
+    while let Some(entry) = screenpipe_dir.next_entry().await.map_err(|e| e.to_string())? {
         // Get metadata immediately for each entry
         if let Ok(metadata) = entry.metadata().await {
             entries.push((entry, metadata));
@@ -443,9 +352,71 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     }
 }
 
+fn get_screenpipe_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
+    let default_path = app.path().home_dir().unwrap().join(".screenpipe");
+    Ok(default_path)
+}
+
 use tokio::time::{sleep, Duration};
 
 #[tauri::command]
+#[specta::specta]
+async fn get_media_file(file_path: &str) -> Result<serde_json::Value, String> {
+    use std::path::Path;
+
+    debug!("Reading media file: {}", file_path);
+
+    let path = Path::new(file_path);
+    if !path.exists() {
+        return Err(format!("File does not exist: {}", file_path));
+    }
+
+    // Read file contents
+    let file_contents = match tokio::fs::read(path).await {
+        Ok(contents) => {
+            debug!("Successfully read file of size: {} bytes", contents.len());
+            contents
+        }
+        Err(e) => {
+            error!("Failed to read file: {}", e);
+            return Err(format!("Failed to read file: {}", e));
+        }
+    };
+
+    // Convert to base64
+    let data = base64::prelude::BASE64_STANDARD.encode(&file_contents);
+
+    // Determine MIME type
+    let mime_type = get_mime_type(file_path);
+
+    Ok(serde_json::json!({
+        "data": data,
+        "mimeType": mime_type
+    }))
+}
+
+fn get_mime_type(path: &str) -> String {
+    let ext = path.split('.').last().unwrap_or("").to_lowercase();
+    let is_audio = path.to_lowercase().contains("input") || path.to_lowercase().contains("output");
+
+    match ext.as_str() {
+        "mp4" => "video/mp4".to_string(),
+        "webm" => "video/webm".to_string(),
+        "ogg" => "video/ogg".to_string(),
+        "mp3" => "audio/mpeg".to_string(),
+        "wav" => "audio/wav".to_string(),
+        _ => {
+            if is_audio {
+                "audio/mpeg".to_string()
+            } else {
+                "video/mp4".to_string()
+            }
+        }
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
 async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, String> {
     debug!("Starting upload for file: {}", file_path);
 
@@ -591,6 +562,17 @@ fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
     Ok(Shortcut::new(Some(modifiers), code))
 }
 
+// check if the server is running
+#[tauri::command]
+#[specta::specta]
+async fn is_server_running(app: AppHandle) -> Result<bool, String> {
+    let store = app.state::<store::SettingsStore>();
+    let port = store.port;
+    let client = reqwest::Client::new();
+    let response = client.get(format!("http://localhost:{}", port)).send().await;
+    Ok(response.is_ok())
+}
+
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
@@ -622,6 +604,54 @@ async fn main() {
                 info!("permanently set OLLAMA_ORIGINS=* for user");
             }
         }
+    }
+
+    // Generate TypeScript bindings in debug mode
+    #[cfg(debug_assertions)]
+    {
+        use crate::store::{SettingsStore, OnboardingStore};
+
+        info!("Generating TypeScript bindings...");
+        let builder = Builder::new()
+            .commands(collect_commands![
+                // Commands from permissions.rs
+                permissions::open_permission_settings,
+                permissions::request_permission,
+                permissions::do_permissions_check,
+                // Commands from main.rs
+                get_env,
+                get_log_files,
+                get_media_file,
+                upload_file_to_s3,
+                update_global_shortcuts,
+                spawn_screenpipe,
+                stop_screenpipe,
+                // Commands from commands.rs
+                commands::get_disk_usage,
+                commands::open_pipe_window,
+                commands::update_show_screenpipe_shortcut,
+                commands::show_window,
+                commands::close_window,
+                commands::set_window_size,
+                // Onboarding commands
+                commands::get_onboarding_status,
+                commands::complete_onboarding,
+                commands::reset_onboarding,
+                commands::show_onboarding_window,
+                commands::open_search_window,
+                // Commands from tray.rs
+                set_tray_unhealth_icon,
+                set_tray_health_icon,
+            ])
+            .typ::<SettingsStore>()
+            .typ::<OnboardingStore>();
+
+        builder
+            .export(
+                Typescript::default().bigint(specta_typescript::BigIntExportBehavior::BigInt),
+                "../lib/utils/tauri.ts",
+            )
+            .expect("Failed to export TypeScript bindings");
     }
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
@@ -667,6 +697,7 @@ async fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_sentry::init(&sentry_guard))
+        .plugin(tauri_nspanel::init())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -674,18 +705,25 @@ async fn main() {
             permissions::open_permission_settings,
             permissions::request_permission,
             permissions::do_permissions_check,
-            load_pipe_config,
-            save_pipe_config,
-            reset_all_pipes,
             set_tray_unhealth_icon,
             set_tray_health_icon,
             commands::update_show_screenpipe_shortcut,
             commands::get_disk_usage,
             commands::open_pipe_window,
+            commands::show_window,
+            commands::close_window,
+            commands::set_window_size,
+            // Onboarding commands
+            commands::get_onboarding_status,
+            commands::complete_onboarding,
+            commands::reset_onboarding,
+            commands::show_onboarding_window,
+            commands::open_search_window,
             get_log_files,
+            get_media_file,
             upload_file_to_s3,
             update_global_shortcuts,
-            get_env,
+            get_env
         ])
         .setup(|app| {
             //deep link register_all
@@ -694,9 +732,9 @@ async fn main() {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
             }
+            let app_handle = app.handle();
 
             // Logging setup
-            let app_handle = app.handle();
             let base_dir =
                 get_base_dir(app_handle, None).expect("Failed to ensure local data directory");
 
@@ -707,7 +745,7 @@ async fn main() {
                 .filename_suffix("log")
                 .max_log_files(5)
                 .build(
-                    get_data_dir(app.handle())
+                    get_screenpipe_data_dir(app.handle())
                         .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")),
                 )?;
 
@@ -754,26 +792,23 @@ async fn main() {
             }
 
             // Store setup and initialization - must be done first
-            let store = StoreBuilder::new(app.handle(), path.clone())
-                .build()
-                .unwrap();
-
-            // Initialize default store values if empty
-            if store.is_empty() {
-                store.set("analyticsEnabled".to_string(), Value::Bool(true));
-                store.set(
-                    "config".to_string(),
-                    serde_json::to_value(Config::default())?,
-                );
-                store.save()?;
-            }
-
-            // Ensure store is saved and managed
-            store.save()?;
+            let store = store::init_store(&app.handle()).unwrap();
             app.manage(store.clone());
+
+            // Initialize onboarding store
+            let onboarding_store = store::init_onboarding_store(&app.handle()).unwrap();
+            app.manage(onboarding_store.clone());
+
+            // Show onboarding window if not completed
+            if !onboarding_store.is_completed {
+                let _ = ShowRewindWindow::Onboarding.show(&app.handle());
+            } else {
+                let _ = ShowRewindWindow::Main.show(&app.handle());
+            }
 
             // Get app handle once for all initializations
             let app_handle = app.handle().clone();
+            let server_running = is_server_running(app_handle.clone());
 
             // Initialize server first (core service)
             let server_shutdown_tx = spawn_server(app_handle.clone(), 11435);
@@ -785,18 +820,39 @@ async fn main() {
 
             // Dev mode check and sidecar initialization
             let use_dev_mode = store
-                .get("devMode")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+                .dev_mode;
 
             info!("use_dev_mode: {}", use_dev_mode);
 
             // Start sidecar in non-dev mode (production behavior)
-            if !use_dev_mode {
+            if !use_dev_mode  {
                 let sidecar_manager_clone = sidecar_manager.clone();
                 let app_handle_clone = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
                     let mut manager = sidecar_manager_clone.lock().await;
+                    if server_running.await.unwrap_or(false) {
+                        return;
+                    }
+                    
+                    // Check permissions before spawning sidecar
+                    let permissions_check = permissions::do_permissions_check(false);
+                    let disable_audio = store.disable_audio;
+                    
+                    // Always check screen recording permission - this is required and needs restart
+                    if !permissions_check.screen_recording.permitted() {
+                        warn!("Screen recording permission not granted: {:?}. Sidecar will not start until permission is granted.", permissions_check.screen_recording);
+                        // Don't start the sidecar if screen recording permission isn't granted
+                        // User will need to grant permission through the onboarding/settings UI and restart
+                        return;
+                    }
+                    
+                    // Check microphone permission if audio recording is enabled - but don't block startup
+                    if !disable_audio && !permissions_check.microphone.permitted() {
+                        warn!("Microphone permission not granted and audio recording is enabled: {:?}. Audio recording will not work until permission is granted, but sidecar will still start.", permissions_check.microphone);
+                        // Continue with sidecar startup - microphone permission can be granted at runtime
+                    }
+                    
+                    info!("Screen recording permission granted, spawning screenpipe sidecar. Audio disabled: {}, microphone permission: {:?}", disable_audio, permissions_check.microphone);
                     if let Err(e) = manager.spawn(&app_handle_clone, None).await {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }
@@ -818,16 +874,10 @@ async fn main() {
 
             // Check analytics settings from store
             let is_analytics_enabled = store
-                .get("analyticsEnabled")
-                .unwrap_or(Value::Bool(true))
-                .as_bool()
-                .unwrap_or(true);
+                .analytics_enabled;
 
             let is_autostart_enabled = store
-                .get("autoStartEnabled")
-                .unwrap_or(Value::Bool(true))
-                .as_bool()
-                .unwrap_or(true);
+                .auto_start_enabled;
 
             if is_autostart_enabled {
                 let _ = autostart_manager.enable();
@@ -840,15 +890,8 @@ async fn main() {
                 autostart_manager.is_enabled().unwrap()
             );
 
-            let unique_id = store
-                .get("user.id")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_default();
-
-            let email = store
-                .get("user.email")
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_default();
+            let unique_id = store.user.id.unwrap_or_default();
+            let email = store.user.email.unwrap_or_default();
 
             if is_analytics_enabled {
                 match start_analytics(
@@ -871,7 +914,7 @@ async fn main() {
 
             // Start health check service (macos only)
             let app_handle_clone = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 if let Err(e) = start_health_check(app_handle_clone).await {
                     error!("Failed to start health check service: {}", e);
                 }
@@ -934,25 +977,34 @@ async fn main() {
                 drop(server_shutdown_tx.send(()));
             }
         }
+
         tauri::RunEvent::WindowEvent {
             label,
-            event: tauri::WindowEvent::Focused(focused),
+            event: tauri::WindowEvent::Destroyed,
             ..
         } => {
-            if label == "main" && focused {
-                let window = app_handle.get_webview_window("main").unwrap();
-                window.show().unwrap();
-                window.set_focus().unwrap();
+            if let Ok(window_id) = RewindWindowId::from_str(label.as_str()) {
+                match window_id {
+                    RewindWindowId::Settings => {
+                        if let Some(window) = RewindWindowId::Main.get(&app_handle) {
+                            let _ = window.destroy();
+                        }
+
+                        return;
+                    }
+
+                    _ => {}
+                }
             }
         }
+
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen {
-            has_visible_windows,
             ..
         } => {
-            if !has_visible_windows {
-                show_main_window(app_handle, false);
-            }
+
+
+            let _ = ShowRewindWindow::Main.show(&app_handle);
         }
         _ => {}
     });

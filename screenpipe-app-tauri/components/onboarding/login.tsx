@@ -23,28 +23,28 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
     <div className="w-full h-full flex flex-col items-center justify-center space-y-6 py-4">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2 mb-8">
-          <h1 className="text-3xl font-bold">login to screenpipe</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-bold text-text-primary">login to screenpipe</h1>
+          <p className="text-sm text-text-secondary">
             connect your account to unlock all features
           </p>
         </div>
 
-        <div className="p-6 border border-border/50 rounded-lg bg-background/50">
+        <div className="p-6 border border-border rounded-lg bg-card">
           <div className="space-y-4">
-            {settings.user?.token ? (
-              <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
-                <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
-                logged in as {settings.user.email}
+            {settings?.user?.token ? (
+              <p className="text-sm text-text-secondary flex items-center justify-center gap-2">
+                <span className="inline-flex h-2 w-2 rounded-full bg-success" />
+                logged in as {settings?.user?.email}
               </p>
             ) : (
-              <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
-                <span className="inline-flex h-2 w-2 rounded-full bg-yellow-500" />
+              <p className="text-sm text-text-secondary flex items-center justify-center gap-2">
+                <span className="inline-flex h-2 w-2 rounded-full bg-warning" />
                 not logged in - some features will be limited
               </p>
             )}
 
             <div className="flex flex-col gap-2">
-              {settings.user?.token ? (
+              {settings?.user?.token ? (
                 <>
                   <Button
                     variant="outline"
@@ -58,7 +58,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      updateSettings({ user: { token: undefined } });
+                      updateSettings({ user: undefined });
                       toast({
                         title: "logged out",
                         description: "you have been logged out",

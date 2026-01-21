@@ -18,48 +18,123 @@ module.exports = {
 	  },
 	  extend: {
 		fontFamily: {
-		  sans: ["var(--font-geist-sans)"],
-		  mono: ["var(--font-geist-mono)"],
+		  /* Screenpipe Brand: Monospace primary */
+		  sans: ["JetBrains Mono", "SF Mono", "IBM Plex Mono", "ui-monospace", "monospace"],
+		  mono: ["JetBrains Mono", "SF Mono", "IBM Plex Mono", "ui-monospace", "monospace"],
 		},
 		colors: {
+		  // Base colors
 		  border: "hsl(var(--border))",
-		  input: "hsl(var(--input))",
+		  input: {
+			DEFAULT: "hsl(var(--input))",
+			focus: "hsl(var(--input-focus))",
+		  },
 		  ring: "hsl(var(--ring))",
 		  background: "hsl(var(--background))",
 		  foreground: "hsl(var(--foreground))",
+		  
+		  // Surface colors
+		  surface: {
+			DEFAULT: "hsl(var(--surface))",
+			secondary: "hsl(var(--surface-secondary))",
+			tertiary: "hsl(var(--surface-tertiary))",
+		  },
+		  
+		  // Primary brand colors
 		  primary: {
 			DEFAULT: "hsl(var(--primary))",
 			foreground: "hsl(var(--primary-foreground))",
+			hover: "hsl(var(--primary-hover))",
+			muted: "hsl(var(--primary-muted))",
 		  },
+		  
+		  // Secondary colors
 		  secondary: {
 			DEFAULT: "hsl(var(--secondary))",
 			foreground: "hsl(var(--secondary-foreground))",
+			hover: "hsl(var(--secondary-hover))",
 		  },
+		  
+		  // Success colors
+		  success: {
+			DEFAULT: "hsl(var(--success))",
+			foreground: "hsl(var(--success-foreground))",
+			muted: "hsl(var(--success-muted))",
+		  },
+		  
+		  // Warning colors
+		  warning: {
+			DEFAULT: "hsl(var(--warning))",
+			foreground: "hsl(var(--warning-foreground))",
+			muted: "hsl(var(--warning-muted))",
+		  },
+		  
+		  // Error/Destructive colors
 		  destructive: {
 			DEFAULT: "hsl(var(--destructive))",
 			foreground: "hsl(var(--destructive-foreground))",
+			hover: "hsl(var(--destructive-hover))",
+			muted: "hsl(var(--destructive-muted))",
 		  },
+		  
+		  // Info colors
+		  info: {
+			DEFAULT: "hsl(var(--info))",
+			foreground: "hsl(var(--info-foreground))",
+			muted: "hsl(var(--info-muted))",
+		  },
+		  
+		  // Muted colors
 		  muted: {
 			DEFAULT: "hsl(var(--muted))",
 			foreground: "hsl(var(--muted-foreground))",
 		  },
+		  
+		  // Accent colors
 		  accent: {
 			DEFAULT: "hsl(var(--accent))",
 			foreground: "hsl(var(--accent-foreground))",
+			hover: "hsl(var(--accent-hover))",
 		  },
+		  
+		  // Card colors
+		  card: {
+			DEFAULT: "hsl(var(--card))",
+			foreground: "hsl(var(--card-foreground))",
+			hover: "hsl(var(--card-hover))",
+		  },
+		  
+		  // Popover colors
 		  popover: {
 			DEFAULT: "hsl(var(--popover))",
 			foreground: "hsl(var(--popover-foreground))",
 		  },
-		  card: {
-			DEFAULT: "hsl(var(--card))",
-			foreground: "hsl(var(--card-foreground))",
+		  
+		  // Text colors
+		  text: {
+			primary: "hsl(var(--text-primary))",
+			secondary: "hsl(var(--text-secondary))",
+			tertiary: "hsl(var(--text-tertiary))",
+			disabled: "hsl(var(--text-disabled))",
 		  },
-		  "color-1": "hsl(var(--color-1))",
-		  "color-2": "hsl(var(--color-2))",
-		  "color-3": "hsl(var(--color-3))",
-		  "color-4": "hsl(var(--color-4))",
-		  "color-5": "hsl(var(--color-5))",
+		  
+		  // Brand accent colors
+		  brand: {
+			1: "hsl(var(--brand-1))",
+			2: "hsl(var(--brand-2))",
+			3: "hsl(var(--brand-3))",
+			4: "hsl(var(--brand-4))",
+			5: "hsl(var(--brand-5))",
+		  },
+		  
+		  // Legacy color mappings for backward compatibility
+		  "color-1": "hsl(var(--brand-1))",
+		  "color-2": "hsl(var(--brand-2))",
+		  "color-3": "hsl(var(--brand-3))",
+		  "color-4": "hsl(var(--brand-4))",
+		  "color-5": "hsl(var(--brand-5))",
+		  
+		  // Sidebar colors
 		  sidebar: {
 			DEFAULT: "hsl(var(--sidebar-background))",
 			foreground: "hsl(var(--sidebar-foreground))",
