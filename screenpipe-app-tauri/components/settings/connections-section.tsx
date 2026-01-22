@@ -11,7 +11,7 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { platform } from "@tauri-apps/plugin-os";
 import { tempDir, join } from "@tauri-apps/api/path";
 
-const MCPB_RELEASE_URL = "https://github.com/mediar-ai/screenpipe/releases/download/mcp-v0.2.0/screenpipe-mcp.mcpb";
+const MCPB_RELEASE_URL = "https://github.com/mediar-ai/screenpipe/releases/download/mcp-v0.3.1/screenpipe-mcp.mcpb";
 
 export function ConnectionsSection() {
   const [downloadState, setDownloadState] = useState<"idle" | "downloading" | "downloaded">("idle");

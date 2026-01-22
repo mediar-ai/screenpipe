@@ -6,6 +6,9 @@ on:
       - "mcp-v*"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -32,3 +35,25 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install mcpb CLI
+        run: npm install -g @anthropic-ai/mcpb
+
+      - name: Build mcpb bundle
+        working-directory: screenpipe-integrations/screenpipe-mcp
+        run: mcpb pack
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ steps.version.outputs.VERSION }} \
+            --title "${{ steps.version.outputs.VERSION }}" \
+            --generate-notes \
+            screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb \
+            || gh release upload ${{ steps.version.outputs.VERSION }} \
+            screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb --clobber
