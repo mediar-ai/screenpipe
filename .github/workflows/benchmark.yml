@@ -60,7 +60,7 @@ jobs:
 
       - name: Run Windows OCR benchmarks
         run: |
-          # FIX: Bytte till 'bencher' för konsekvens och tog bort kommentaren så filen skapas
+          # Vi använder bencher-formatet och Tee-Object för att spara filen korrekt på Windows
           cargo bench --bench ocr_benchmark -- --output-format bencher | Tee-Object -FilePath ocr_output.txt
 
       - name: Upload OCR benchmark artifact
@@ -107,7 +107,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./cache/ocr
-          # OBS: Detta skapar undermappar för varje artifact (t.ex ./cache/ocr/apple-ocr-benchmark-data/...)
 
       - name: Download STT benchmark data
         uses: actions/download-artifact@v4
@@ -115,10 +114,10 @@ jobs:
           name: stt-benchmark-data
           path: ./cache/stt
 
-      - name: List contents of cache directory (Debug)
+      - name: List contents (Debug)
         run: ls -R ./cache
 
-      # FIX: Slå ihop alla resultatfiler från undermapparna till en enda fil
+      # DETTA FIXAR FELET: Slår ihop filerna som ligger i undermappar
       - name: Merge OCR benchmark results
         run: |
           find ./cache/ocr -name "ocr_output.txt" -exec cat {} + > ./cache/ocr/merged_ocr_output.txt
@@ -128,7 +127,7 @@ jobs:
         with:
           name: OCR Benchmarks
           tool: "cargo"
-          output-file-path: ./cache/ocr/merged_ocr_output.txt # FIX: Pekar på den ihopslagna filen
+          output-file-path: ./cache/ocr/merged_ocr_output.txt
           github-token: ${{ secrets.GH_PAGES_TOKEN }}
           auto-push: true
           alert-threshold: "200%"
