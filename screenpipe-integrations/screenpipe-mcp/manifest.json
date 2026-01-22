@@ -1,0 +1,58 @@
+{
+  "name": "screenpipe",
+  "version": "0.2.0",
+  "description": "Search your screen recordings, audio transcriptions, and control your computer with AI",
+  "author": {
+    "name": "Mediar AI",
+    "url": "https://screenpi.pe"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mediar-ai/screenpipe"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry": "dist/index.js"
+  },
+  "tools": [
+    {
+      "name": "search-content",
+      "description": "Search through recorded screen content, audio transcriptions, and UI elements"
+    },
+    {
+      "name": "pixel-control",
+      "description": "Control mouse and keyboard (type text, press keys, move mouse, click)"
+    },
+    {
+      "name": "find-elements",
+      "description": "Find UI elements in applications by role (macOS only)"
+    },
+    {
+      "name": "click-element",
+      "description": "Click UI elements by ID (macOS only)"
+    },
+    {
+      "name": "fill-element",
+      "description": "Type text into UI elements (macOS only)"
+    },
+    {
+      "name": "scroll-element",
+      "description": "Scroll UI elements (macOS only)"
+    },
+    {
+      "name": "open-application",
+      "description": "Open applications by name (macOS only)"
+    },
+    {
+      "name": "open-url",
+      "description": "Open URLs in browser (macOS only)"
+    }
+  ],
+  "requirements": {
+    "screenpipe": "Requires screenpipe to be running on localhost:3030"
+  },
+  "icon": "icon.png",
+  "categories": ["productivity", "automation", "search"],
+  "keywords": ["screen-recording", "ocr", "audio-transcription", "automation", "memory"]
+}

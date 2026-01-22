@@ -1,21 +1,19 @@
-# Python cache files
-__pycache__/
-*.py[cod]
-*$py.class
+# Dependencies
+node_modules/
 
-# Distribution / packaging
+# Build output
 dist/
-build/
-*.egg-info/
-
-# Virtual environments
-venv/
-env/
-.env/
-.venv/
 
 # IDE specific files
 .vscode/
 .idea/
 *.swp
 .DS_Store
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*

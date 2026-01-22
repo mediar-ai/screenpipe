@@ -1,81 +1,103 @@
-<h1>Screenpipe-MCP</h1>
+# Screenpipe MCP Server
+
 <a href="https://www.pulsemcp.com/servers/mediar-ai-screenpipe"><img src="https://www.pulsemcp.com/badge/top-pick/mediar-ai-screenpipe" width="400" alt="PulseMCP Badge"></a>
 
 <br/>
 
 https://github.com/user-attachments/assets/7466a689-7703-4f0b-b3e1-b1cb9ed70cff
 
+MCP server for screenpipe - search your screen recordings, audio transcriptions, and control your computer with AI.
 
-### 1. Configure Claude Desktop
+## Installation
 
-[Download Claude desktop app ](https://claude.ai/download)
+### Option 1: NPX (Recommended)
 
-Clone the repo: 
+The easiest way to use screenpipe-mcp is with npx. Edit your Claude Desktop config:
 
-```bash
-git clone https://github.com/mediar-ai/screenpipe
-```
-
-Edit claude app config
-
-- Windows: `notepad $env:AppData\Claude\claude_desktop_config.json`
-- Mac: `code "~/Library/Application Support/Claude/claude_desktop_config.json"` (or `cursor` or `vim`)
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%AppData%\Claude\claude_desktop_config.json`
 
 ```json
 {
-    "mcpServers": {
-        "screenpipe": {
-            "command": "uv",
-            "args": [
-                "--directory",
-                "/absolute/path/to/screenpipe-mcp",
-                "run",
-                "screenpipe-mcp"
-            ]
-        }
+  "mcpServers": {
+    "screenpipe": {
+      "command": "npx",
+      "args": ["-y", "screenpipe-mcp"]
     }
+  }
 }
 ```
-Note: Restart Claude Desktop after making changes.
 
+### Option 2: From Source
 
-### 2. Test the Server
+Clone and build from source:
 
-1. First test with MCP Inspector:
 ```bash
-npx @modelcontextprotocol/inspector uv run screenpipe-mcp
+git clone https://github.com/mediar-ai/screenpipe
+cd screenpipe/screenpipe-integrations/screenpipe-mcp
+npm install
+npm run build
 ```
 
-2. Example queries in Claude:
+Then configure Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "screenpipe": {
+      "command": "node",
+      "args": ["/absolute/path/to/screenpipe-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+**Note:** Restart Claude Desktop after making changes.
+
+## Testing
+
+Test with MCP Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector npx screenpipe-mcp
+```
+
+## Available Tools
+
+### Cross-Platform
+
+- **search-content** - Search through recorded screen content, audio transcriptions, and UI elements
+  - Full text search with content type filtering (OCR/Audio/UI)
+  - Time range and app/window filtering
+  - Pagination support
+
+- **pixel-control** - Control mouse and keyboard
+  - Type text, press keys, move mouse, click
+
+### macOS Only
+
+- **find-elements** - Find UI elements in applications by role
+- **click-element** - Click UI elements by accessibility ID
+- **fill-element** - Type text into UI elements
+- **scroll-element** - Scroll UI elements
+- **open-application** - Open applications by name
+- **open-url** - Open URLs in default browser
+
+## Example Queries in Claude
+
 - "Search for any mentions of 'rust' in my screen recordings"
 - "Find audio transcriptions from the last hour"
 - "Show me what was on my screen in VSCode yesterday"
+- "Open Safari and go to github.com"
+- "Find the search button in Chrome and click it"
 
-### Key Features
+## Requirements
 
-1. **Search Parameters**:
-- Full text search
-- Content type filtering (OCR/Audio/UI)
-- Time range filtering
-- App/window filtering
-- Length constraints
-- Pagination
+- screenpipe must be running on localhost:3030
+- Node.js >= 18.0.0
 
-2. **Response Formatting**:
-- Clearly formatted results by content type
-- Relevant metadata included
-- Timestamps and source information
+## Notes
 
-3. **Error Handling**:
-- Connection errors
-- Invalid parameters
-- No results cases
-
-### Notes
-
-1. Make sure screenpipe server is running on port 3030
-2. The server assumes local connection - adjust SCREENPIPE_API if needed
-3. All timestamps are handled in UTC
-4. Results are formatted for readability in Claude's interface
-
-Would you like me to explain any part in more detail or help with testing?
+- All timestamps are handled in UTC
+- Results are formatted for readability in Claude's interface
+- macOS automation features require accessibility permissions
