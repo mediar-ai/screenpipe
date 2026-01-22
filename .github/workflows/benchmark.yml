@@ -5,10 +5,11 @@ on: [push]
 env:
   CARGO_TERM_COLOR: always
 
-# VIKTIGT: Detta ger GITHUB_TOKEN rättigheter att pusha till gh-pages
+# VIKTIGT: Ger GitHub tillåtelse att uppdatera din benchmark-sida
 permissions:
   contents: write
   deployments: write
+  pages: write
 
 jobs:
   apple_ocr_benchmark:
@@ -132,7 +133,7 @@ jobs:
           name: OCR Benchmarks
           tool: "cargo"
           output-file-path: ./cache/ocr/merged_ocr_output.txt
-          # HÄR ÄR FIXEN: Vi använder den inbyggda GITHUB_TOKEN
+          # HÄR ÄR FIXEN: Vi använder den inbyggda nyckeln
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           alert-threshold: "200%"
