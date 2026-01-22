@@ -734,7 +734,7 @@ impl DatabaseManager {
             AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
             AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
         GROUP BY frames.id
-        ORDER BY frames.timestamp DESC
+        ORDER BY {order_clause}
         LIMIT ?7 OFFSET ?8
         "#,
             frame_fts_join = if frame_query.trim().is_empty() {
@@ -756,6 +756,12 @@ impl DatabaseManager {
                 ""
             } else {
                 "AND ocr_text_fts MATCH ?6"
+            },
+            // Use FTS5 rank (BM25 relevance) when searching, timestamp when browsing
+            order_clause = if query.trim().is_empty() {
+                "frames.timestamp DESC"
+            } else {
+                "ocr_text_fts.rank, frames.timestamp DESC"
             }
         );
 
