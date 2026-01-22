@@ -194,7 +194,8 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
                     }
                 }
             } else {
-                debug!("main window not found");
+                debug!("main window not found, creating it");
+                show_main_window(app, false)
             }
         }
         #[cfg(not(target_os = "macos"))]
@@ -213,7 +214,8 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
                     }
                 }
             } else {
-                debug!("main window not found");
+                debug!("main window not found, creating it");
+                show_main_window(app, false)
             }
         }
     })

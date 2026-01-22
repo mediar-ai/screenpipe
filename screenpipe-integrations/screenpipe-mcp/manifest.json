@@ -1,7 +1,10 @@
 {
+  "manifest_version": "0.3",
   "name": "screenpipe",
+  "display_name": "Screenpipe",
   "version": "0.2.0",
   "description": "Search your screen recordings, audio transcriptions, and control your computer with AI",
+  "long_description": "Screenpipe is a 24/7 screen and audio recorder that lets you search everything you've seen or heard. This extension connects Claude to your local screenpipe instance, enabling AI-powered search through your digital memory and computer control capabilities.",
   "author": {
     "name": "Mediar AI",
     "url": "https://screenpi.pe"
@@ -10,10 +13,17 @@
     "type": "git",
     "url": "https://github.com/mediar-ai/screenpipe"
   },
+  "homepage": "https://screenpi.pe",
+  "documentation": "https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-integrations/screenpipe-mcp",
+  "support": "https://github.com/mediar-ai/screenpipe/issues",
   "license": "MIT",
   "server": {
     "type": "node",
-    "entry": "dist/index.js"
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"]
+    }
   },
   "tools": [
     {
@@ -49,10 +59,11 @@
       "description": "Open URLs in browser (macOS only)"
     }
   ],
-  "requirements": {
-    "screenpipe": "Requires screenpipe to be running on localhost:3030"
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
   },
-  "icon": "icon.png",
-  "categories": ["productivity", "automation", "search"],
-  "keywords": ["screen-recording", "ocr", "audio-transcription", "automation", "memory"]
+  "keywords": ["screen-recording", "ocr", "audio-transcription", "automation", "memory", "search"]
 }
