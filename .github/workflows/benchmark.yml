@@ -59,9 +59,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Run Windows OCR benchmarks
+        # FIX: Använder Out-File med UTF8 för att garantera att filen skapas korrekt på Windows
         run: |
-          # Vi använder bencher-formatet och Tee-Object för att spara filen korrekt på Windows
-          cargo bench --bench ocr_benchmark -- --output-format bencher | Tee-Object -FilePath ocr_output.txt
+          cargo bench --bench ocr_benchmark -- --output-format bencher | Out-File -FilePath ocr_output.txt -Encoding utf8
 
       - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v4
@@ -117,7 +117,7 @@ jobs:
       - name: List contents (Debug)
         run: ls -R ./cache
 
-      # DETTA FIXAR FELET: Slår ihop filerna som ligger i undermappar
+      # FIX: Slår ihop filerna som ligger i undermappar till en fil
       - name: Merge OCR benchmark results
         run: |
           find ./cache/ocr -name "ocr_output.txt" -exec cat {} + > ./cache/ocr/merged_ocr_output.txt
@@ -127,6 +127,7 @@ jobs:
         with:
           name: OCR Benchmarks
           tool: "cargo"
+          # VIKTIGT: Pekar på den ihopslagna filen, inte originalet
           output-file-path: ./cache/ocr/merged_ocr_output.txt
           github-token: ${{ secrets.GH_PAGES_TOKEN }}
           auto-push: true
