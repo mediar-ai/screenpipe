@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { listen } from "@tauri-apps/api/event";
 
 import { useState } from "react";
 import {
@@ -53,20 +54,18 @@ export function SearchCommand() {
 		return () => document.removeEventListener("keydown", down, true);
 	}, [open]);
 
-	// Close dialog when window loses focus to prevent stuck invisible overlay
+	// Close dialog when Tauri window loses focus
 	React.useEffect(() => {
-		if (!open) return;
-
-		// Small delay to prevent closing immediately on open
-		const timeoutId = setTimeout(() => {
-			const handleBlur = () => {
+		const unlisten = listen<boolean>("window-focused", (event) => {
+			if (!event.payload && open) {
 				setOpen(false);
-			};
-			window.addEventListener("blur", handleBlur, { once: true });
-		}, 100);
-
-		return () => clearTimeout(timeoutId);
+			}
+		});
+		return () => {
+			unlisten.then((fn) => fn());
+		};
 	}, [open]);
+
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter") {

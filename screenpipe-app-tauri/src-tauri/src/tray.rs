@@ -1,6 +1,6 @@
 use crate::commands::show_main_window;
 use crate::health::{get_recording_status, RecordingStatus};
-use crate::store::get_store;
+use crate::store::{get_store, OnboardingStore};
 use crate::window_api::ShowRewindWindow;
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -130,6 +130,10 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
             let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
         }
         "onboarding" => {
+            // Reset onboarding state so it shows even if previously completed
+            let _ = OnboardingStore::update(app_handle, |onboarding| {
+                onboarding.reset();
+            });
             let _ = ShowRewindWindow::Onboarding.show(app_handle);
         }
         "quit" => {
