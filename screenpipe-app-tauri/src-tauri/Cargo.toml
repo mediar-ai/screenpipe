@@ -122,6 +122,13 @@ winreg = "0.52.0"
 lazy_static = "1.5.0"
 image = "0.25.5"
 windows-icons = { git = "https://github.com/tribhuwan-kumar/windows-icons.git" }
+base64 = "0.22.1"
+raw-window-handle = "0.6"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Dwm",
+] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.1"

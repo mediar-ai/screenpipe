@@ -49,6 +49,8 @@ mod store;
 mod tray;
 mod updates;
 mod window_api;
+#[cfg(target_os = "windows")]
+mod windows_overlay;
 
 pub use server::*;
 
@@ -745,6 +747,10 @@ async fn main() {
             commands::reset_onboarding,
             commands::show_onboarding_window,
             commands::open_search_window,
+            // Overlay commands (Windows)
+            commands::enable_overlay_click_through,
+            commands::disable_overlay_click_through,
+            commands::is_overlay_click_through,
             get_log_files,
             get_media_file,
             upload_file_to_s3,

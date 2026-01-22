@@ -332,29 +332,66 @@ impl ShowRewindWindow {
                 if !onboarding_store.is_completed {
                     return ShowRewindWindow::Onboarding.show(app);
                 }
-                
-                let monitor = app.primary_monitor().unwrap().unwrap();
-                let logical_size = monitor.size().to_logical(monitor.scale_factor());
-                let mut builder = self.window_builder(app, "/");
+
+                // macOS uses fullscreen transparent panel overlay
                 #[cfg(target_os = "macos")]
-                {
-                    builder = builder.hidden_title(true);
-                }
-                let builder = builder
-                    .visible_on_all_workspaces(true)
-                    .always_on_top(true)
-                    .decorations(false)
-                    .skip_taskbar(true)
-                    .focused(false)
-                    .transparent(true)
-                    .visible(false)
-                    .inner_size(logical_size.width, logical_size.height)
-                    .max_inner_size(logical_size.width, logical_size.height)
-                    .position(0.0, 0.0);
-                    
-                    
-                
-                let window = builder.build()?;
+                let window = {
+                    let monitor = app.primary_monitor().unwrap().unwrap();
+                    let logical_size = monitor.size().to_logical(monitor.scale_factor());
+                    let builder = self.window_builder(app, "/")
+                        .visible_on_all_workspaces(true)
+                        .always_on_top(true)
+                        .decorations(false)
+                        .skip_taskbar(true)
+                        .focused(false)
+                        .transparent(true)
+                        .visible(false)
+                        .hidden_title(true)
+                        .inner_size(logical_size.width, logical_size.height)
+                        .max_inner_size(logical_size.width, logical_size.height)
+                        .position(0.0, 0.0);
+                    builder.build()?
+                };
+
+                // Windows uses a fullscreen transparent overlay with Win32 click-through
+                #[cfg(target_os = "windows")]
+                let window = {
+                    let monitor = app.primary_monitor().unwrap().unwrap();
+                    let logical_size = monitor.size().to_logical(monitor.scale_factor());
+                    let builder = self.window_builder(app, "/")
+                        .title("screenpipe")
+                        .visible_on_all_workspaces(true)
+                        .always_on_top(true)
+                        .decorations(false)
+                        .skip_taskbar(true)
+                        .focused(true)
+                        .transparent(true)
+                        .visible(false)
+                        .inner_size(logical_size.width, logical_size.height)
+                        .max_inner_size(logical_size.width, logical_size.height)
+                        .position(0.0, 0.0);
+                    let win = builder.build()?;
+
+                    // Setup Win32 overlay with click-through disabled so user can interact
+                    if let Err(e) = crate::windows_overlay::setup_overlay(&win, false) {
+                        error!("Failed to setup Windows overlay: {}", e);
+                    }
+
+                    win
+                };
+
+                // Linux uses a normal decorated window (overlay not yet implemented)
+                #[cfg(target_os = "linux")]
+                let window = {
+                    let builder = self.window_builder(app, "/")
+                        .title("screenpipe")
+                        .inner_size(1200.0, 800.0)
+                        .min_inner_size(800.0, 600.0)
+                        .decorations(true)
+                        .visible(true)
+                        .focused(true);
+                    builder.build()?
+                };
 
                 #[cfg(target_os = "macos")]
                 {
@@ -430,12 +467,9 @@ impl ShowRewindWindow {
                 window
             }
             ShowRewindWindow::Settings {  page: _  } => {
-                let mut builder = self.window_builder(app, "/settings");
+                let builder = self.window_builder(app, "/settings").focused(true);
                 #[cfg(target_os = "macos")]
-                {
-                    builder = builder.hidden_title(true);
-                }
-                let builder = builder.focused(true);
+                let builder = builder.hidden_title(true);
                 let window = builder.build()?;
                 window
             }
@@ -447,14 +481,12 @@ impl ShowRewindWindow {
                     // let encoded_query = q.replace(' ', "%20").replace('#', "%23").replace('&', "%26");
                     url.push_str(&format!("{}", q));
                 }
-                let mut builder = self.window_builder(app, url);
-                #[cfg(target_os = "macos")]
-                {
-                    builder = builder.hidden_title(true);
-                }
-                let builder = builder.focused(true);
 
+                let builder = self.window_builder(app, url.clone()).focused(true);
+                #[cfg(target_os = "macos")]
+                let builder = builder.hidden_title(true);
                 let window = builder.build()?;
+
                 window
             }
             ShowRewindWindow::Onboarding => {

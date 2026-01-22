@@ -39,6 +39,47 @@ pub fn hide_main_window(app_handle: &tauri::AppHandle) {
     ShowRewindWindow::Main.close(app_handle).unwrap();
 }
 
+/// Enable click-through mode on the main overlay window (Windows only)
+/// When enabled, mouse events pass through to windows below
+#[tauri::command]
+#[specta::specta]
+pub fn enable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            crate::windows_overlay::enable_click_through(&window)?;
+        }
+    }
+    Ok(())
+}
+
+/// Disable click-through mode on the main overlay window (Windows only)
+/// When disabled, the overlay receives mouse events normally
+#[tauri::command]
+#[specta::specta]
+pub fn disable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            crate::windows_overlay::disable_click_through(&window)?;
+        }
+    }
+    Ok(())
+}
+
+/// Check if click-through is currently enabled (Windows only)
+#[tauri::command]
+#[specta::specta]
+pub fn is_overlay_click_through(app_handle: tauri::AppHandle) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            return crate::windows_overlay::is_click_through_enabled(&window);
+        }
+    }
+    false
+}
+
 const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 
 #[tauri::command(rename_all = "snake_case")]
