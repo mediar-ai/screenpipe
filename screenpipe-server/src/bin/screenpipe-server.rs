@@ -182,7 +182,7 @@ async fn main() -> anyhow::Result<()> {
             sentry_release_name_append
         );
         Some(sentry::init((
-            "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
+            "https://aece4a4136d0e4907c59bbc6634505ab@o4505591122886656.ingest.us.sentry.io/4510755391406080",
             sentry::ClientOptions {
                 release: Some(release_name.into()),
                 traces_sample_rate: 0.1,
