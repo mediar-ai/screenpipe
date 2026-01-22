@@ -16,6 +16,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useLoginDialog } from "@/components/login-dialog";
 import { ExportButton } from "../export-button";
 import Image from "next/image";
 import { AIPresetsSelector } from "../ai-presets-selector";
@@ -70,6 +71,7 @@ export function AIPanel({
 	const resizerRef = useRef<HTMLDivElement | null>(null);
 	const { toast } = useToast();
 	const { selectionRange, setSelectionRange } = useTimelineSelection();
+	const { checkLogin } = useLoginDialog();
 	const isAvailable = settings.aiPresets && settings.aiPresets.length > 0;
 	const error = !isAvailable ? "No AI presets configured" : "";
 	const [activePreset, setActivePreset] = useState<AIPreset | undefined>(undefined);
@@ -219,6 +221,11 @@ export function AIPanel({
 	const handleAiSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!selectionRange || !aiInput.trim()) return;
+
+		// Check login for screenpipe-cloud
+		if (activePreset?.provider === "screenpipe-cloud" && !checkLogin(settings.user)) {
+			return;
+		}
 
 		// Create new abort controller for this request
 		abortControllerRef.current = new AbortController();

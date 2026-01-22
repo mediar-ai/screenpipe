@@ -33,7 +33,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         id: crypto.randomUUID(),
         provider: "screenpipe-cloud" as const,
         url: "https://ai-proxy.i-f9f.workers.dev/v1",
-        model: "gpt-4o-mini",
+        model: "claude-haiku-4-5",
         maxContextChars: 512000,
         defaultPreset: true,
         prompt: DEFAULT_PROMPT,
