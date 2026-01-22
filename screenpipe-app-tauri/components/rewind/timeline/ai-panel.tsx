@@ -73,7 +73,8 @@ export function AIPanel({
 	const { selectionRange, setSelectionRange } = useTimelineSelection();
 	const { checkLogin } = useLoginDialog();
 	const isAvailable = settings.aiPresets && settings.aiPresets.length > 0;
-	const error = !isAvailable ? "No AI presets configured" : "";
+	const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
+	const error = !isAvailable ? "No AI presets configured" : !hasValidModel ? "No model selected in preset" : "";
 	const [activePreset, setActivePreset] = useState<AIPreset | undefined>(undefined);
 
 	// Add abort controller ref
@@ -490,7 +491,7 @@ export function AIPanel({
 													onChange={(e) => setAiInput(e.target.value)}
 													placeholder="ask about this time range..."
 													className="flex-1 bg-background border border-muted-foreground text-foreground placeholder-muted-foreground"
-													disabled={isAiLoading || !isAvailable}
+													disabled={isAiLoading || !isAvailable || !hasValidModel}
 												/>
 											</div>
 										</TooltipTrigger>
@@ -503,7 +504,7 @@ export function AIPanel({
 									type="submit"
 									variant="outline"
 									className="hover:bg-accent transition-colors"
-									disabled={!isAvailable}
+									disabled={!isAvailable || !hasValidModel}
 									onClick={isStreaming ? handleStopStreaming : handleAiSubmit}
 								>
 									{isStreaming ? (

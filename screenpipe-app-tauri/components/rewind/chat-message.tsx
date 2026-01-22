@@ -94,7 +94,7 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 			>
 				{message.role === "user" ? (
 					<IconUser />
-				) : activePreset?.model.includes("gpt") ? (
+				) : activePreset?.model?.includes("gpt") ? (
 					<IconOpenAI />
 				) : activePreset?.model?.includes("claude") ? (
 					<IconClaude />
