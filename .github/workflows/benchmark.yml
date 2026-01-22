@@ -60,9 +60,8 @@ jobs:
 
       - name: Run Windows OCR benchmarks
         run: |
-          cargo bench --bench ocr_benchmark -- --output-format criterion 
-          # TODO broken
-          # | Tee-Object -Append -FilePath ocr_output.txt
+          # FIX: Bytte till 'bencher' för konsekvens och tog bort kommentaren så filen skapas
+          cargo bench --bench ocr_benchmark -- --output-format bencher | Tee-Object -FilePath ocr_output.txt
 
       - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v4
@@ -108,6 +107,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./cache/ocr
+          # OBS: Detta skapar undermappar för varje artifact (t.ex ./cache/ocr/apple-ocr-benchmark-data/...)
 
       - name: Download STT benchmark data
         uses: actions/download-artifact@v4
@@ -115,32 +115,23 @@ jobs:
           name: stt-benchmark-data
           path: ./cache/stt
 
-      - name: List contents of cache directory
+      - name: List contents of cache directory (Debug)
         run: ls -R ./cache
+
+      # FIX: Slå ihop alla resultatfiler från undermapparna till en enda fil
+      - name: Merge OCR benchmark results
+        run: |
+          find ./cache/ocr -name "ocr_output.txt" -exec cat {} + > ./cache/ocr/merged_ocr_output.txt
 
       - name: Analyze OCR benchmarks
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: OCR Benchmarks
           tool: "cargo"
-          output-file-path: ./cache/ocr/ocr_output.txt
+          output-file-path: ./cache/ocr/merged_ocr_output.txt # FIX: Pekar på den ihopslagna filen
           github-token: ${{ secrets.GH_PAGES_TOKEN }}
           auto-push: true
           alert-threshold: "200%"
           comment-on-alert: true
           fail-on-alert: true
           alert-comment-cc-users: "@louis030195"
-
-      # todo broken
-      # - name: Analyze STT benchmarks
-      #   uses: benchmark-action/github-action-benchmark@v1
-      #   with:
-      #     name: STT Benchmarks
-      #     tool: "cargo"
-      #     output-file-path: ./cache/stt/stt_output.txt
-      #     github-token: ${{ secrets.GH_PAGES_TOKEN }}
-      #     auto-push: true
-      #     alert-threshold: "200%"
-      #     comment-on-alert: true
-      #     fail-on-alert: true
-      #     alert-comment-cc-users: "@louis030195"
