@@ -227,20 +227,6 @@ export function AIPanel({
 			return;
 		}
 
-		// Validate model for screenpipe-cloud (only Claude and Gemini are supported)
-		if (activePreset?.provider === "screenpipe-cloud") {
-			const model = activePreset.model?.toLowerCase() || "";
-			const isSupported = model.includes("claude") || model.includes("gemini");
-			if (!isSupported) {
-				toast({
-					title: "unsupported model",
-					description: `"${activePreset.model}" is not supported on screenpipe cloud. please edit your preset and select a claude or gemini model.`,
-					variant: "destructive",
-				});
-				return;
-			}
-		}
-
 		// Create new abort controller for this request
 		abortControllerRef.current = new AbortController();
 
