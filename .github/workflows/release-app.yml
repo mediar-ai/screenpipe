@@ -577,6 +577,8 @@ jobs:
           KNF_STATIC_CRT: ${{ matrix.os_type == 'windows' && '1' || '' }}
           # Fix linuxdeploy crash on AppImage bundling
           NO_STRIP: ${{ matrix.os_type == 'linux' && '1' || '' }}
+          LINUXDEPLOY_OUTPUT_VERSION: ${{ matrix.os_type == 'linux' && '1' || '' }}
+          APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.os_type == 'linux' && '1' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
