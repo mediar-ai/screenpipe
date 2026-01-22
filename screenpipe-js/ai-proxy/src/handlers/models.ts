@@ -28,7 +28,8 @@ export async function handleModelListing(env: Env): Promise<Response> {
       )
       .flatMap((result) => result.value);
 
-    return createSuccessResponse({ models });
+    // Return in OpenAI-compatible format (data array)
+    return createSuccessResponse({ data: models });
   } catch (error) {
     console.error('Error fetching models:', error);
     return createErrorResponse(
