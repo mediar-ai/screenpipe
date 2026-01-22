@@ -74,6 +74,7 @@ export function AIPanel({
 	const { checkLogin } = useLoginDialog();
 	const [activePreset, setActivePreset] = useState<AIPreset | undefined>(undefined);
 	const isAvailable = settings.aiPresets && settings.aiPresets.length > 0;
+	const [activePreset, setActivePreset] = useState<AIPreset | undefined>(undefined);
 	const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
 	const error = !isAvailable ? "No AI presets configured" : !hasValidModel ? "No model selected in preset" : "";
 
