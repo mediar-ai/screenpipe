@@ -624,16 +624,6 @@ export function RecordingSettings() {
     handleSettingsChange({ dataDir: settings.dataDir }, true);
   };
 
-  const handleFrameCacheToggle = (checked: boolean) => {
-    handleSettingsChange(
-      {
-        enableFrameCache: checked,
-      },
-      true
-    );
-  };
-
-
   const handleIgnoredWindowsChange = (values: string[]) => {
     // Convert all values to lowercase for comparison
     const lowerCaseValues = values.map((v) => v.toLowerCase());
@@ -757,15 +747,6 @@ export function RecordingSettings() {
         </Alert>
       )}
 
-      {settings.devMode || (!isUpdating && isDisabled) ? (
-        <Alert>
-          <Terminal className="h-4 w-4" />
-          <AlertTitle>Development Mode</AlertTitle>
-          <AlertDescription>
-            Make sure to turn off dev mode and start screenpipe recorder first (go to status)
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       {/* Enhanced Deepgram API Key Section */}
       {settings.audioTranscriptionEngine === "deepgram" && (
@@ -1475,37 +1456,6 @@ export function RecordingSettings() {
             />
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="enableRealtimeVision">Enable realtime vision</Label>
-              <p className="text-sm text-muted-foreground">
-                Process screen content in real-time for immediate analysis
-              </p>
-            </div>
-            <Switch
-              id="enableRealtimeVision"
-              checked={settings.enableRealtimeVision}
-              onCheckedChange={(checked) =>
-                handleSettingsChange({ enableRealtimeVision: checked }, true)
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="enableFrameCache">Enable frame cache</Label>
-              <p className="text-sm text-muted-foreground">
-                Cache frames to improve performance and reduce resource usage
-              </p>
-            </div>
-            <Switch
-              id="enableFrameCache"
-              checked={settings.enableFrameCache}
-              onCheckedChange={handleFrameCacheToggle}
-            />
-          </div>
-
-       
         </div>
       </div>
 
@@ -1594,40 +1544,6 @@ export function RecordingSettings() {
           helperText="Port for the Screenpipe server (requires restart)"
         />
 
-        {/* Restart Interval */}
-        <div className="flex flex-col space-y-2">
-          <Label htmlFor="restartInterval" className="flex items-center space-x-2">
-            <span>Restart interval (minutes)</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>
-                    Automatically restart the recording process at this interval. Set to 0 to disable.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <div className="flex items-center space-x-4">
-            <Slider
-              id="restartInterval"
-              min={0}
-              max={1440}
-              step={15}
-              value={[settings.restartInterval]}
-              onValueChange={(value) =>
-                handleSettingsChange({ restartInterval: value[0] }, true)
-              }
-              className="flex-grow"
-            />
-            <span className="w-16 text-right">
-              {settings.restartInterval === 0 ? "Disabled" : `${settings.restartInterval}m`}
-            </span>
-          </div>
-        </div>
 
         {/* System Toggles */}
         <div className="space-y-4">
@@ -1659,37 +1575,6 @@ export function RecordingSettings() {
             />
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="devMode">Developer mode</Label>
-              <p className="text-sm text-muted-foreground">
-                Enable developer features and debug logging
-              </p>
-            </div>
-            <Switch
-              id="devMode"
-              checked={settings.devMode}
-              onCheckedChange={(checked) =>
-                handleSettingsChange({ devMode: checked }, false)
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="enableBeta">Enable beta features</Label>
-              <p className="text-sm text-muted-foreground">
-                Access experimental features (may be unstable)
-              </p>
-            </div>
-            <Switch
-              id="enableBeta"
-              checked={settings.enableBeta}
-              onCheckedChange={(checked) =>
-                handleSettingsChange({ enableBeta: checked }, false)
-              }
-            />
-          </div>
         </div>
       </div>
 

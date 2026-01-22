@@ -5,7 +5,9 @@ import { subDays } from "date-fns";
 
 interface TimelineState {
 	frames: StreamTimeSeriesResponse[];
+	frameTimestamps: Set<string>; // For O(1) deduplication lookups
 	isLoading: boolean;
+	loadingProgress: { loaded: number; isStreaming: boolean }; // Track loading progress
 	error: string | null;
 	message: string | null;
 	currentDate: Date;
@@ -26,7 +28,9 @@ interface TimelineState {
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
 	frames: [],
+	frameTimestamps: new Set<string>(), // O(1) lookup for deduplication
 	isLoading: true,
+	loadingProgress: { loaded: 0, isStreaming: false },
 	error: null,
 	message: null,
 	currentDate: new Date(),
@@ -48,7 +52,13 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		const ws = new WebSocket("ws://localhost:3030/stream/frames");
 
 		ws.onopen = () => {
-			set({ websocket: ws, error: null, message: null, isLoading: true });
+			set({
+				websocket: ws,
+				error: null,
+				message: null,
+				isLoading: true,
+				loadingProgress: { loaded: 0, isStreaming: true }
+			});
 			console.log("WebSocket connection established");
 		};
 
@@ -75,32 +85,49 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 					return;
 				}
 
-				// Handle batched frames
+				// Handle batched frames - OPTIMIZED: incremental deduplication
 				if (Array.isArray(data)) {
 					set((state) => {
-						const newFrames = [...state.frames];
-						const uniqueFrames = new Map();
+						// Filter out frames we already have using O(1) Set lookup
+						const newUniqueFrames = data.filter(
+							(frame) => !state.frameTimestamps.has(frame.timestamp)
+						);
 
-						// First, add existing frames to the map
-						newFrames.forEach((frame) => {
-							uniqueFrames.set(frame.timestamp, frame);
+						// If no new frames, just update loading state
+						if (newUniqueFrames.length === 0) {
+							return {
+								isLoading: false,
+								loadingProgress: {
+									loaded: state.frames.length,
+									isStreaming: true
+								},
+								message: null,
+								error: null,
+							};
+						}
+
+						// Add new timestamps to the Set
+						const updatedTimestamps = new Set(state.frameTimestamps);
+						newUniqueFrames.forEach((frame) => {
+							updatedTimestamps.add(frame.timestamp);
 						});
 
-						// Add new frames to the map (this automatically handles duplicates)
-						data.forEach((frame) => {
-							uniqueFrames.set(frame.timestamp, frame);
-						});
-
-						// Convert map back to array and sort by timestamp
-						const sortedFrames = Array.from(uniqueFrames.values()).sort(
+						// Merge and sort only when we have new frames
+						// Use insertion sort optimization for mostly-sorted data
+						const mergedFrames = [...state.frames, ...newUniqueFrames].sort(
 							(a, b) =>
 								new Date(b.timestamp).getTime() -
 								new Date(a.timestamp).getTime(),
 						);
 
 						return {
-							frames: sortedFrames,
+							frames: mergedFrames,
+							frameTimestamps: updatedTimestamps,
 							isLoading: false,
+							loadingProgress: {
+								loaded: mergedFrames.length,
+								isStreaming: true
+							},
 							message: null,
 							error: null,
 						};
@@ -108,21 +135,20 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 					return;
 				}
 
-				// Handle single frame (legacy support)
+				// Handle single frame (legacy support) - OPTIMIZED with Set lookup
 				if (data.timestamp && data.devices) {
 					set((state) => {
-						const timestamp = new Date(data.timestamp).getTime();
-
-						// Check for duplicate
-						if (
-							state.frames.some(
-								(f) => new Date(f.timestamp).getTime() === timestamp,
-							)
-						) {
+						// O(1) duplicate check using Set
+						if (state.frameTimestamps.has(data.timestamp)) {
 							return state;
 						}
 
+						// Add to timestamps Set
+						const updatedTimestamps = new Set(state.frameTimestamps);
+						updatedTimestamps.add(data.timestamp);
+
 						// Use binary search to find insertion point
+						const timestamp = new Date(data.timestamp).getTime();
 						const newFrames = [...state.frames];
 						let left = 0;
 						let right = newFrames.length;
@@ -140,7 +166,12 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 						newFrames.splice(left, 0, data);
 						return {
 							frames: newFrames,
+							frameTimestamps: updatedTimestamps,
 							isLoading: false,
+							loadingProgress: {
+								loaded: newFrames.length,
+								isStreaming: true
+							},
 							message: null,
 							error: null,
 						};
@@ -161,7 +192,11 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		};
 
 		ws.onclose = () => {
-			set({ message: "Connection closed", isLoading: false });
+			set({
+				message: "Connection closed",
+				isLoading: false,
+				loadingProgress: { loaded: get().frames.length, isStreaming: false }
+			});
 			// Attempt to reconnect after a delay
 			setTimeout(() => get().connectWebSocket(), 5000);
 		};

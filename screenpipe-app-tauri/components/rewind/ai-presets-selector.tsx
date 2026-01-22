@@ -31,6 +31,8 @@ import {
   Eye,
   EyeOff,
   Settings,
+  LogIn,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -262,6 +264,46 @@ export function AIProviderConfig({
       setIsLoading(false);
     }
   };
+
+  // Check if editing a screenpipe-cloud preset while not logged in
+  const isScreenpipeCloudWithoutLogin =
+    selectedProvider === "screenpipe-cloud" && !settings?.user?.token;
+
+  // If editing an existing screenpipe-cloud preset without being logged in, show login prompt
+  if (defaultPreset?.provider === "screenpipe-cloud" && !settings?.user?.token) {
+    return (
+      <div className="w-full space-y-6 rounded-lg bg-card p-6">
+        <div>
+          <h2 className="text-lg font-semibold">edit ai provider</h2>
+          <p className="text-sm text-muted-foreground">
+            modify your ai provider settings
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center justify-center py-8 space-y-4">
+          <div className="p-4 rounded-full bg-amber-500/10">
+            <LogIn className="h-8 w-8 text-amber-500" />
+          </div>
+          <div className="text-center space-y-2">
+            <h3 className="font-semibold text-lg">Login Required</h3>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              This preset uses Screenpipe Cloud. Please log in to your Screenpipe account to edit it.
+            </p>
+          </div>
+          <Button
+            onClick={() => {
+              // Navigate to account settings
+              window.location.href = "/settings?section=account";
+            }}
+            className="gap-2"
+          >
+            <LogIn className="h-4 w-4" />
+            Go to Login
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-6 rounded-lg bg-card p-6">
@@ -770,6 +812,12 @@ export const AIPresetsSelector = ({
     return defaultPreset?.id || settings?.aiPresets?.[0]?.id || undefined;
   }, [settings?.aiPresets]);
 
+  // Check if selected preset requires login
+  const selectedPresetRequiresLogin = useMemo(() => {
+    const preset = aiPresets.find((p) => p.id === selectedPreset);
+    return preset?.provider === "screenpipe-cloud" && !settings?.user?.token;
+  }, [aiPresets, selectedPreset, settings?.user?.token]);
+
   useEffect(() => {
     if (onPresetChange) {
       onPresetChange(aiPresets.find((p) => p.id === selectedPreset) as AIPreset);
@@ -980,7 +1028,27 @@ export const AIPresetsSelector = ({
 
   return (
     <>
-      <div className="flex w-full items-center gap-2">
+      <div className="flex flex-col w-full gap-2">
+        {selectedPresetRequiresLogin && (
+          <div className="flex items-center gap-2 p-2 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+            <span className="text-amber-600 dark:text-amber-400 flex-1">
+              Login required to use Screenpipe Cloud
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 h-7 text-xs border-amber-500/30 hover:bg-amber-500/10"
+              onClick={() => {
+                window.location.href = "/settings?section=account";
+              }}
+            >
+              <LogIn className="h-3 w-3 mr-1" />
+              Login
+            </Button>
+          </div>
+        )}
+        <div className="flex w-full items-center gap-2">
         <Popover open={open} onOpenChange={setOpen}>
           <TooltipProvider>
             <Tooltip>
@@ -989,17 +1057,25 @@ export const AIPresetsSelector = ({
                   variant="outline"
                   role="combobox"
                   aria-expanded={open}
-                  className="w-full justify-between"
+                  className={cn(
+                    "w-full justify-between",
+                    selectedPresetRequiresLogin && "border-amber-500/50"
+                  )}
                 >
                   {selectedPreset ? (
                     <div className="flex w-full items-center justify-between gap-2 overflow-hidden">
-                      <span className="font-medium min-w-[80px] max-w-[30%] truncate text-left">
-                        {formatPresetName(
-                          aiPresets.find(
-                            (preset) => preset.id === selectedPreset,
-                          )?.id || ''
+                      <div className="flex items-center gap-2 min-w-[80px] max-w-[30%]">
+                        {selectedPresetRequiresLogin && (
+                          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
                         )}
-                      </span>
+                        <span className="font-medium truncate text-left">
+                          {formatPresetName(
+                            aiPresets.find(
+                              (preset) => preset.id === selectedPreset,
+                            )?.id || ''
+                          )}
+                        </span>
+                      </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground overflow-hidden">
                         <span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
                           {
@@ -1032,13 +1108,19 @@ export const AIPresetsSelector = ({
                 </Button>
               </PopoverTrigger>
               <TooltipContent>
-                <p className="flex items-center gap-2">
-                  <span>Press</span>
-                  <kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">
-                    ⌘/
-                  </kbd>
-                  <span>to cycle presets</span>
-                </p>
+                {selectedPresetRequiresLogin ? (
+                  <p className="text-amber-500">
+                    Login required to use this preset
+                  </p>
+                ) : (
+                  <p className="flex items-center gap-2">
+                    <span>Press</span>
+                    <kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">
+                      ⌘/
+                    </kbd>
+                    <span>to cycle presets</span>
+                  </p>
+                )}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -1246,6 +1328,7 @@ export const AIPresetsSelector = ({
             </Command>
           </PopoverContent>
         </Popover>
+        </div>
       </div>
       <AIPresetDialog
         open={dialogOpen}

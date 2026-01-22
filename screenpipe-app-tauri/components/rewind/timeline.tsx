@@ -78,13 +78,25 @@ export default function Timeline() {
 		setShowAudioTranscript(true);
 	}, [currentIndex]);
 
-	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched } =
+	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress } =
 		useTimelineStore();
 
 	const { frames, isLoading, error, message, fetchNextDayData } =
 		useTimelineData(currentDate, (frame) => {
 			setCurrentFrame(frame);
 		});
+
+	// Progressive loading: show UI immediately once we have any frames
+	const hasInitialFrames = frames.length > 0;
+	const showBlockingLoader = isLoading && !hasInitialFrames;
+
+	// Auto-select first frame when frames arrive and no frame is selected
+	useEffect(() => {
+		if (!currentFrame && frames.length > 0) {
+			setCurrentFrame(frames[0]);
+			setCurrentIndex(0);
+		}
+	}, [frames.length, currentFrame, setCurrentFrame]);
 
 	useEffect(() => {
 		const getStartDateAndSet = async () => {
@@ -354,21 +366,16 @@ export default function Timeline() {
 				<div className="absolute inset-0 z-10">
 					{currentFrame ? (
 						<CurrentFrameTimeline currentFrame={currentFrame} />
-					) : (
-					!isLoading && !error && frames.length === 0 && (
+					) : !showBlockingLoader && !error && frames.length === 0 && !isLoading ? (
 						<div className="absolute inset-0 flex items-center justify-center bg-background/90">
 							<div className="text-center text-foreground p-8">
 								<h3 className="text-lg font-medium mb-2">No Frame Available</h3>
 								<p className="text-sm text-muted-foreground">
-									{isLoading ? 'Loading timeline data...' : 
-									 error ? 'Failed to load timeline data' : 
-									 frames.length === 0 ? 'No frames found for this date' :
-									 'Select a frame from the timeline below'}
+									No frames found for this date
 								</p>
 							</div>
 						</div>
-					)
-					)}
+					) : null}
 				</div>
 
 				{/* Top Gradient Overlay - Very subtle */}
@@ -387,8 +394,8 @@ export default function Timeline() {
 					/>
 				</div>
 
-				{/* Loading/Error States */}
-				{isLoading && (
+				{/* Loading/Error States - Progressive loading: only block when no frames yet */}
+				{showBlockingLoader && (
 					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
 						<div className="bg-card text-foreground p-6 rounded-2xl text-center space-y-3 max-w-md mx-4">
 							<h3 className="font-medium">Loading Timeline</h3>
@@ -396,6 +403,16 @@ export default function Timeline() {
 								Fetching your recorded frames...
 							</p>
 							<Loader2 className="h-5 w-5 animate-spin mx-auto mt-2" />
+						</div>
+					</div>
+				)}
+
+				{/* Non-blocking streaming indicator - shows when frames are loading in background */}
+				{loadingProgress.isStreaming && hasInitialFrames && (
+					<div className="absolute top-20 left-1/2 -translate-x-1/2 z-45 pointer-events-none">
+						<div className="bg-card/80 backdrop-blur-sm text-foreground px-4 py-2 rounded-full text-sm flex items-center gap-2 border border-border shadow-lg">
+							<Loader2 className="h-3 w-3 animate-spin" />
+							<span>Loading frames... {loadingProgress.loaded.toLocaleString()}</span>
 						</div>
 					</div>
 				)}
@@ -463,17 +480,33 @@ export default function Timeline() {
 							startAndEndDates={startAndEndDates}
 						/>
 					) : (
-						<div className="bg-card p-4 text-center border-t border-border">
+						<div className="bg-card/80 backdrop-blur-sm p-4 border-t border-border">
 							<div className="text-foreground text-sm">
 								{isLoading ? (
-									<div className="flex items-center justify-center gap-2">
-										<div className="w-4 h-4 border-2 border-border border-t-foreground rounded-full animate-spin"></div>
-										Loading timeline...
+									<div className="space-y-3">
+										{/* Skeleton timeline slider */}
+										<div className="flex items-center gap-2 justify-center">
+											<Loader2 className="w-4 h-4 animate-spin" />
+											<span>Loading timeline...</span>
+										</div>
+										<div className="h-16 bg-muted/50 rounded-lg animate-pulse flex items-end gap-0.5 px-2 pb-2">
+											{/* Skeleton bars */}
+											{Array.from({ length: 60 }).map((_, i) => (
+												<div
+													key={i}
+													className="flex-1 bg-muted rounded-t"
+													style={{
+														height: `${Math.random() * 60 + 20}%`,
+														animationDelay: `${i * 20}ms`
+													}}
+												/>
+											))}
+										</div>
 									</div>
 								) : error ? (
-									<div className="text-destructive">Failed to load timeline data</div>
+									<div className="text-destructive text-center">Failed to load timeline data</div>
 								) : (
-									<div>No timeline data available for this date</div>
+									<div className="text-center">No timeline data available for this date</div>
 								)}
 							</div>
 						</div>

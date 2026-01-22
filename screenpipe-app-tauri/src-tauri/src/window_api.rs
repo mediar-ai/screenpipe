@@ -288,10 +288,29 @@ impl ShowRewindWindow {
                     info!("showing panel");
                     #[cfg(target_os = "macos")]
                     {
+                        // CRITICAL: Set Accessory activation policy BEFORE showing the panel
+                        // This is required for the panel to appear above fullscreen apps on macOS
+                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
                         let app_clone = app.clone();
                         app.run_on_main_thread(move || {
+                            use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+
                             if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
-                                panel.show();
+                                // Re-apply window level each time we show to ensure it stays above fullscreen
+                                // CGShieldingWindowLevel (1000) + 1 ensures it appears above everything
+                                panel.set_level(1001);
+
+                                // Re-apply collection behaviors
+                                panel.set_collection_behaviour(
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
+                                );
+
+                                // Use order_front_regardless to show above fullscreen apps without switching spaces
+                                panel.order_front_regardless();
                             }
                         }).ok();
                     }
@@ -336,6 +355,10 @@ impl ShowRewindWindow {
                 // macOS uses fullscreen transparent panel overlay
                 #[cfg(target_os = "macos")]
                 let window = {
+                    // CRITICAL: Set Accessory activation policy BEFORE creating the panel
+                    // This is required for the panel to appear above fullscreen apps on macOS
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
                     let monitor = app.primary_monitor().unwrap().unwrap();
                     let logical_size = monitor.size().to_logical(monitor.scale_factor());
                     let builder = self.window_builder(app, "/")
@@ -405,14 +428,19 @@ impl ShowRewindWindow {
                             use tauri_nspanel::cocoa::appkit::{NSWindowCollectionBehavior};
                             
                             if let Ok(panel) = window_clone.to_panel() {
-                                panel.set_level(26);
+                                // Use a very high window level to appear above fullscreen apps
+                                // CGShieldingWindowLevel (1000) + 1 ensures it appears above everything including fullscreen
+                                panel.set_level(1001);
 
                                 panel.released_when_closed(true);
 
                                 panel.set_style_mask(0);
 
                                 panel.set_collection_behaviour(
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
                                 );
                             }
                         }).ok();
@@ -516,6 +544,10 @@ impl ShowRewindWindow {
                         panel.order_out(None);
                     }
                 }).ok();
+
+                // Reset to Regular activation policy when hiding the panel
+                // so other windows (like Settings) work normally
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
             }
 
             #[cfg(not(target_os = "macos"))]
@@ -524,7 +556,7 @@ impl ShowRewindWindow {
             window.close().ok();
         }
             }
-            
+
             return Ok(());
         }
 

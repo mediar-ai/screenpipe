@@ -9,6 +9,7 @@ import {
   User,
   Settings as SettingsIcon,
   HardDrive,
+  Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccountSection } from "@/components/settings/account-section";
@@ -17,6 +18,7 @@ import { AIPresets } from "@/components/settings/ai-presets";
 import { RecordingSettings } from "@/components/settings/recording-settings";
 import GeneralSettings from "@/components/settings/general-settings";
 import { DiskUsageSection } from "@/components/settings/disk-usage-section";
+import { ConnectionsSection } from "@/components/settings/connections-section";
 import { useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
 import { listen } from "@tauri-apps/api/event";
@@ -27,14 +29,15 @@ type SettingsSection =
   | "shortcuts"
   | "recording"
   | "account"
-  | "disk-usage";
+  | "disk-usage"
+  | "connections";
 
 function SettingsPageContent() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useQueryState("section", {
     defaultValue: "general" as SettingsSection,
     parse: (value) => {
-      if (["general", "ai", "shortcuts", "recording", "account", "disk-usage"].includes(value)) {
+      if (["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections"].includes(value)) {
         return value as SettingsSection;
       }
       return "general" as SettingsSection;
@@ -58,6 +61,8 @@ function SettingsPageContent() {
         return <ShortcutSection />;
       case "disk-usage":
         return <DiskUsageSection />;
+      case "connections":
+        return <ConnectionsSection />;
     }
   };
 
@@ -98,6 +103,12 @@ function SettingsPageContent() {
       icon: <HardDrive className="h-4 w-4" />,
       description: "Monitor storage usage for Screenpipe data",
     },
+    {
+      id: "connections",
+      label: "Connections",
+      icon: <Plug className="h-4 w-4" />,
+      description: "Connect to AI assistants like Claude",
+    },
   ];
 
   // Listen for navigation events from other windows
@@ -105,7 +116,7 @@ function SettingsPageContent() {
     const unlisten = listen<{ url: string }>("navigate", (event) => {
       const url = new URL(event.payload.url, window.location.origin);
       const section = url.searchParams.get("section");
-      if (section && ["general", "ai", "shortcuts", "recording", "account", "disk-usage"].includes(section)) {
+      if (section && ["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections"].includes(section)) {
         setActiveSection(section as SettingsSection);
       }
     });

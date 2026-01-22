@@ -6,7 +6,7 @@
   "description": "Search your screen recordings, audio transcriptions, and control your computer with AI",
   "long_description": "Screenpipe is a 24/7 screen and audio recorder that lets you search everything you've seen or heard. This extension connects Claude to your local screenpipe instance, enabling AI-powered search through your digital memory and computer control capabilities.",
   "author": {
-    "name": "Mediar AI",
+    "name": "screenpipe",
     "url": "https://screenpi.pe"
   },
   "repository": {
