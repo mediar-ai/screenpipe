@@ -80,7 +80,6 @@ fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
 axum = "0.6.0" # or your current version
-axum-macros = "0.5.0"
 
 
 
@@ -125,9 +124,9 @@ windows-icons = { git = "https://github.com/tribhuwan-kumar/windows-icons.git" }
 base64 = "0.22.1"
 raw-window-handle = "0.6"
 windows = { version = "0.58", features = [
-    "Win32_Foundation",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_Graphics_Dwm",
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Graphics_Dwm",
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
