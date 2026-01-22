@@ -1,22 +1,5 @@
-### **New Features:**
-- **Added grid layout for search results:** Enhanced visual organization of search results with a grid layout.
-- **Added submenu with icons to tray menu:** Improved user interface for the tray menu with a new submenu design that includes icons.
-- **Added search page:** Introduced a dedicated search page to enhance user navigation and accessibility.
-- **Added window overlay for onboarding:** Implemented a new overlay feature for onboarding, improving user guidance during the initial setup.
-- **Improved shortcuts to onboarding:** Added and optimized shortcuts to streamline user onboarding experience.
-
-### **Improvements:**
-- **Enhanced onboarding UX:** Improved the flow and user experience of the onboarding process for a more intuitive setup.
-- **Refined settings modal UI:** Upgraded the user interface of the settings modal for better usability and appearance.
-- **Clarified monthly data usage:** Provided clearer information regarding the 15 GB/month usage to avoid user confusion.
-
 ### **Fixes:**
-- **Fixed updater URL:** Corrected the updater URL to ensure it points to the correct Screenpipe resources.
-- **Resolved permission pop-up issue:** Fixed an issue related to permission pop-ups for a smoother user experience.
-- **Fixed zoomed-in view:** Addressed problems with the view being zoomed in to restore the intended display.
-- **Fixed fetching frames issue:** Resolved issues that caused problems when fetching frames from recordings.
-- **Fixed onboarding window issue:** Corrected an issue with the onboarding window to ensure it displays correctly. 
-- **Fixed escape shortcut functionality:** Fixed the ESC shortcut to properly close pop-ups during onboarding.
+- **Fixed transcription engine:** Resolved issues with the screenpipe-cloud transcription engine for improved accuracy and reliability.
 
-#### **Full Changelog:** [36ca2..9b1b9](https://github.com/mediar-ai/screenpipe/compare/36ca2..9b1b9)
+#### **Full Changelog:** [94b3f..9cc26](https://github.com/mediar-ai/screenpipe/compare/94b3f..9cc26)
 
