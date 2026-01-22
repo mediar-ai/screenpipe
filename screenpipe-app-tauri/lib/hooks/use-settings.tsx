@@ -184,6 +184,7 @@ export const getStore = async () => {
 		const dir = await localDataDir();
 		_store = Store.load(`${dir}/screenpipe/store.bin`, {
 			autoSave: false,
+			defaults: {},
 		});
 	}
 	return _store;
