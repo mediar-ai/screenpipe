@@ -5,6 +5,11 @@ on: [push]
 env:
   CARGO_TERM_COLOR: always
 
+# VIKTIGT: Detta ger GITHUB_TOKEN rättigheter att pusha till gh-pages
+permissions:
+  contents: write
+  deployments: write
+
 jobs:
   apple_ocr_benchmark:
     name: Run Apple OCR benchmark
@@ -59,7 +64,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Run Windows OCR benchmarks
-        # FIX: Använder Out-File med UTF8 för att garantera att filen skapas korrekt på Windows
+        # Vi använder Out-File med UTF8 för att garantera att filen skapas korrekt på Windows
         run: |
           cargo bench --bench ocr_benchmark -- --output-format bencher | Out-File -FilePath ocr_output.txt -Encoding utf8
 
@@ -117,7 +122,6 @@ jobs:
       - name: List contents (Debug)
         run: ls -R ./cache
 
-      # FIX: Slår ihop filerna som ligger i undermappar till en fil
       - name: Merge OCR benchmark results
         run: |
           find ./cache/ocr -name "ocr_output.txt" -exec cat {} + > ./cache/ocr/merged_ocr_output.txt
@@ -127,9 +131,9 @@ jobs:
         with:
           name: OCR Benchmarks
           tool: "cargo"
-          # VIKTIGT: Pekar på den ihopslagna filen, inte originalet
           output-file-path: ./cache/ocr/merged_ocr_output.txt
-          github-token: ${{ secrets.GH_PAGES_TOKEN }}
+          # HÄR ÄR FIXEN: Vi använder den inbyggda GITHUB_TOKEN
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           alert-threshold: "200%"
           comment-on-alert: true
