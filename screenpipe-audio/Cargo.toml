@@ -31,7 +31,7 @@ clap = { version = "4.3", features = ["derive"] }
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Local Embeddings + STT
-vad-rs = "0.1.4"
+vad-rs = "=0.1.4"
 anyhow = "1.0.86"
 hf-hub = "0.3.2"
 # https://github.com/pdeljanov/Symphonia/tree/master?tab=readme-ov-file#optimizations
@@ -73,8 +73,8 @@ lazy_static = { version = "1.4.0" }
 realfft = "3.4.0"
 ndarray = "0.16"
 ort = "=2.0.0-rc.6"
+ort-sys = "=2.0.0-rc.6"
 knf-rs = { git = "https://github.com/Neptune650/knf-rs.git" }
-ort-sys = "=2.0.0-rc.8"
 futures = "0.3.31"
 deepgram = "0.6.4"
 bytes = { version = "1.9.0", features = ["serde"] }
@@ -94,6 +94,7 @@ libsamplerate-sys = "0.1.10"
 [target.'cfg(target_os = "macos")'.dependencies]
 once_cell = "1.17.1"
 objc = "0.2.7"
+ort = { version = "=2.0.0-rc.6", features = ["download-binaries"] }
 
 [dev-dependencies]
 tempfile = "3.3.0"
