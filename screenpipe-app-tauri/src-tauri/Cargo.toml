@@ -45,9 +45,9 @@ http = "0.2"
 
 # TypeScript bindings
 specta = { version = "=2.0.0-rc.20", features = [
-	"derive",
-	"serde_json",
-	"uuid",
+    "derive",
+    "serde_json",
+    "uuid",
 ] }
 tauri-specta = { version = "=2.0.0-rc.20", features = ["derive", "typescript"] }
 specta-typescript = "0.0.7"
@@ -80,9 +80,7 @@ fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
 axum = "0.6.0" 
-axum-macros = "0.5.0"  # <--- RESTORED THIS
-
-
+# axum-macros togs bort härifrån eftersom axum 0.6 redan inkluderar rätt version internt.
 
 dirs = "5.0.1"
 tauri-plugin-deep-link = "=2.4.5"
@@ -156,7 +154,7 @@ custom-protocol = ["tauri/custom-protocol"]
 
 
 [package.metadata.cargo-machete]
-ignored = ["tauri-utils", "axum-macros"] # <--- ADDED IGNORE HERE
+ignored = ["tauri-utils", "axum-macros"] # Vi behåller denna så inte machete klagar
 
 [profile.release]
 codegen-units = 1
