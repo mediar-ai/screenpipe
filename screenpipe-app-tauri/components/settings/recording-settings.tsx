@@ -949,6 +949,7 @@ export function RecordingSettings() {
                 <SelectValue placeholder="Select transcription engine" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="screenpipe-cloud">Screenpipe Cloud</SelectItem>
                 <SelectItem value="whisper-tiny">Whisper Tiny</SelectItem>
                 <SelectItem value="whisper-tiny-quantized">Whisper Tiny Quantized</SelectItem>
                 <SelectItem value="whisper-large">Whisper Large V3</SelectItem>
@@ -985,6 +986,7 @@ export function RecordingSettings() {
                 <SelectValue placeholder="Select realtime transcription engine" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="screenpipe-cloud">Screenpipe Cloud</SelectItem>
                 <SelectItem value="whisper-tiny">Whisper Tiny</SelectItem>
                 <SelectItem value="whisper-tiny-quantized">Whisper Tiny Quantized</SelectItem>
                 <SelectItem value="whisper-large">Whisper Large V3</SelectItem>
@@ -996,22 +998,6 @@ export function RecordingSettings() {
             </Select>
           </div>
 
-          {/* Enable Realtime Transcription */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="enableRealtimeAudioTranscription">Enable realtime audio transcription</Label>
-              <p className="text-sm text-muted-foreground">
-                Transcribe audio in real-time for immediate processing
-              </p>
-            </div>
-            <Switch
-              id="enableRealtimeAudioTranscription"
-              checked={settings.enableRealtimeAudioTranscription}
-              onCheckedChange={(checked) =>
-                handleSettingsChange({ enableRealtimeAudioTranscription: checked }, true)
-              }
-            />
-          </div>
         </div>
       </div>
 
