@@ -578,7 +578,11 @@ impl UIFrame {
     }
 }
 
-fn get_active_browser_url_sync(app_name: &str, process_id: i32, window_title: &str) -> Result<String, std::io::Error> {
+fn get_active_browser_url_sync(
+    app_name: &str,
+    process_id: i32,
+    window_title: &str,
+) -> Result<String, std::io::Error> {
     let detector = create_url_detector();
     match detector.get_active_url(app_name, process_id, window_title) {
         Ok(Some(url)) => Ok(url),

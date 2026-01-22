@@ -1,6 +1,5 @@
 use anyhow::Result;
 use chrono::Utc;
-use tracing::debug;
 use screenpipe_core::find_ffmpeg_path;
 use std::io::Write;
 use std::path::PathBuf;
@@ -8,6 +7,7 @@ use std::{
     path::Path,
     process::{Command, Stdio},
 };
+use tracing::debug;
 use tracing::error;
 
 fn encode_single_audio(

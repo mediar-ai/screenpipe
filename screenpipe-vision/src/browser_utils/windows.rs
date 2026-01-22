@@ -1,11 +1,11 @@
-use reqwest::Error;
-use anyhow::{Result, anyhow};
-use tracing::{debug, error};
+use anyhow::{anyhow, Result};
 use reqwest::blocking::Client;
-use uiautomation::variants::Variant;
+use reqwest::Error;
+use tracing::{debug, error};
 use uiautomation::types::UIProperty::ProcessId;
-use uiautomation::{UIAutomation, controls::ControlType};
-use uiautomation::types::{UIProperty, TreeScope};
+use uiautomation::types::{TreeScope, UIProperty};
+use uiautomation::variants::Variant;
+use uiautomation::{controls::ControlType, UIAutomation};
 
 use super::BrowserUrlDetector;
 
@@ -24,25 +24,25 @@ impl WindowsUrlDetector {
             Err(_) => Ok(false),
         }
     }
-    
+
     fn get_active_url_from_window(pid: i32) -> Result<Option<String>> {
         let automation = UIAutomation::new().unwrap();
         let root_ele = automation.get_root_element().unwrap();
-        let condition = automation.create_property_condition(
-            ProcessId, 
-            Variant::from(pid as i32),
-            None
-        ).unwrap();
+        let condition = automation
+            .create_property_condition(ProcessId, Variant::from(pid as i32), None)
+            .unwrap();
 
         match root_ele.find_first(TreeScope::Subtree, &condition) {
             Ok(ele) => {
-                let control_condition = automation.create_property_condition(
-                    UIProperty::ControlType,
-                    Variant::from(ControlType::Edit as i32),
-                    None,
-                ).unwrap();
+                let control_condition = automation
+                    .create_property_condition(
+                        UIProperty::ControlType,
+                        Variant::from(ControlType::Edit as i32),
+                        None,
+                    )
+                    .unwrap();
 
-                if let Ok(address_bar) = ele.find_first(TreeScope::Subtree, &control_condition){
+                if let Ok(address_bar) = ele.find_first(TreeScope::Subtree, &control_condition) {
                     debug!("address bar: {:?}", address_bar);
                     if let Ok(value) = address_bar.get_property_value(UIProperty::ValueValue) {
                         if let Ok(url) = value.get_string() {
@@ -81,8 +81,12 @@ impl WindowsUrlDetector {
 }
 
 impl BrowserUrlDetector for WindowsUrlDetector {
-    fn get_active_url(&self, _app_name: &str, process_id: i32, _window_title: &str) -> Result<Option<String>> {
-         return Self::get_active_url_from_window(process_id);
+    fn get_active_url(
+        &self,
+        _app_name: &str,
+        process_id: i32,
+        _window_title: &str,
+    ) -> Result<Option<String>> {
+        return Self::get_active_url_from_window(process_id);
     }
 }
-

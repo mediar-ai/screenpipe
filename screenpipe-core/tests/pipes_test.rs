@@ -2,21 +2,16 @@
 mod tests {
     use chrono::{TimeZone, Utc};
     use screenpipe_core::{
-        run_pipe, 
-        download_pipe,
-        sanitize_pipe_name,
-        save_cron_execution,
-        download_pipe_private,
-        get_last_cron_execution,
-        PipeState
+        download_pipe, download_pipe_private, get_last_cron_execution, run_pipe,
+        sanitize_pipe_name, save_cron_execution, PipeState,
     };
 
-    use tokio::io::AsyncWriteExt;
     use serde_json::json;
     use std::sync::Arc;
     use std::sync::Once;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use tempfile::TempDir;
+    use tokio::io::AsyncWriteExt;
     use tokio::sync::Mutex;
     use tokio::time::sleep;
     use tracing::subscriber::set_global_default;
@@ -269,13 +264,17 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let source_dir = temp_dir.path().join("test-pipe-name");
         tokio::fs::create_dir_all(&source_dir).await.unwrap();
-        assert_eq!(sanitize_pipe_name(
-            source_dir.to_str().expect("failed to convert path to str")
-        ), "test-pipe-name");
+        assert_eq!(
+            sanitize_pipe_name(source_dir.to_str().expect("failed to convert path to str")),
+            "test-pipe-name"
+        );
 
         // test with a non-GitHub URL
         let non_github_url = "https://example.com/some/path";
-        assert_eq!(sanitize_pipe_name(non_github_url), "https---example-com-some-path");
+        assert_eq!(
+            sanitize_pipe_name(non_github_url),
+            "https---example-com-some-path"
+        );
 
         // url including invalid characters
         let invalid_chars = "invalid:name/with*chars";
@@ -289,10 +288,17 @@ mod tests {
         let screenpipe_dir = temp_dir.path().to_path_buf();
 
         let source_dir = temp_dir.path().join("source_pipe");
-        let result = download_pipe(&source_dir.to_str().expect("failed bathbuf to str"),
-            screenpipe_dir.clone()).await;
-       
-        assert!(result.is_err(), "test failed for non existence local pipe: {:?}", result.err());
+        let result = download_pipe(
+            &source_dir.to_str().expect("failed bathbuf to str"),
+            screenpipe_dir.clone(),
+        )
+        .await;
+
+        assert!(
+            result.is_err(),
+            "test failed for non existence local pipe: {:?}",
+            result.err()
+        );
     }
 
     #[tokio::test]
@@ -314,10 +320,11 @@ mod tests {
         .unwrap();
 
         // Try to download the pipe using the Windows path
-        let result = download_pipe(&source_dir.to_str().expect("failed to convert to str"),
-            screenpipe_dir.clone()
-        ).await;
-
+        let result = download_pipe(
+            &source_dir.to_str().expect("failed to convert to str"),
+            screenpipe_dir.clone(),
+        )
+        .await;
 
         // The function should succeed for every os
         assert!(
@@ -331,7 +338,10 @@ mod tests {
         let dest_path = screenpipe_dir.join("pipes").join(pipe_name);
 
         assert!(dest_path.exists(), "Destination pipe directory not found");
-        assert!(dest_path.join("pipe.js").exists(), "pipe.js not found in destination");
+        assert!(
+            dest_path.join("pipe.js").exists(),
+            "pipe.js not found in destination"
+        );
 
         // tests for urls
         let urls = vec![
@@ -346,12 +356,17 @@ mod tests {
 
             let pipe_name = sanitize_pipe_name(url);
             let dest_path = screenpipe_dir.join("pipes").join(&pipe_name);
-            assert!(dest_path.exists(), "Destination pipe directory not found for URL: {}", url);
+            assert!(
+                dest_path.exists(),
+                "Destination pipe directory not found for URL: {}",
+                url
+            );
 
             // verify pipe.json
             let pipe_json_path = dest_path.join("pipe.json");
             let pipe_json_content = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
-            let pipe_json: serde_json::Value = serde_json::from_str(&pipe_json_content).expect("Invalid JSON format");
+            let pipe_json: serde_json::Value =
+                serde_json::from_str(&pipe_json_content).expect("Invalid JSON format");
             assert!(pipe_json.is_object(), "expected json to be an object");
 
             // enable side loaded pipe, even tho its enabled by default
@@ -362,7 +377,9 @@ mod tests {
             pipe_config["enabled"] = json!(true);
             let updated_pipe_json = serde_json::to_string_pretty(&pipe_config);
             let mut file = tokio::fs::File::create(&pipe_json_path).await.unwrap();
-            file.write_all(updated_pipe_json.expect("failed to write").as_bytes()).await.unwrap();
+            file.write_all(updated_pipe_json.expect("failed to write").as_bytes())
+                .await
+                .unwrap();
 
             // run pipe
             let run_result = run_pipe(&pipe_name, screenpipe_dir.clone()).await;
@@ -376,9 +393,16 @@ mod tests {
                 PipeState::Port(port) => {
                     // verify the pipe is running on the expected port
                     let client = reqwest::Client::new();
-                    let response = client.get(format!("http://localhost:{}", port)).send().await;
+                    let response = client
+                        .get(format!("http://localhost:{}", port))
+                        .send()
+                        .await;
 
-                    assert!(response.is_ok(), "Failed to connect to the pipe on port {}", port);
+                    assert!(
+                        response.is_ok(),
+                        "Failed to connect to the pipe on port {}",
+                        port
+                    );
 
                     // if successfull clean up the process
                     #[cfg(windows)]
@@ -400,9 +424,8 @@ mod tests {
                         assert!(
                             output.status.success(),
                             "{} hasn't ran successfully",
-                            pipe_name 
+                            pipe_name
                         );
-
                     }
 
                     #[cfg(unix)]
@@ -431,7 +454,6 @@ mod tests {
                     // check by `ps axuw | grep pipes | grep -v grep`
                 }
             }
-
         }
     }
 
@@ -450,13 +472,16 @@ mod tests {
             "Failed to download private pipe: {:?}",
             result.err()
         );
-        assert!(screenpipe_dir.join("pipes").join(pipe_name).exists(), 
+        assert!(
+            screenpipe_dir.join("pipes").join(pipe_name).exists(),
             "test failed for downloading private pipe: {:?}",
             result.err()
         );
 
         // any zip shouldn't exists
-        let mut entries = tokio::fs::read_dir(screenpipe_dir.join("pipes").join(pipe_name)).await.unwrap();
+        let mut entries = tokio::fs::read_dir(screenpipe_dir.join("pipes").join(pipe_name))
+            .await
+            .unwrap();
         let mut zip_exists = false;
         while let Some(entry) = entries.next_entry().await.unwrap() {
             let path = entry.path();
@@ -465,15 +490,20 @@ mod tests {
                 break;
             }
         }
-        assert!(!zip_exists, 
+        assert!(
+            !zip_exists,
             "failed zip extraction for downloading private pipe: {:?}",
             result.err()
         );
 
         // verify pipe.json
-        let pipe_json_path = screenpipe_dir.join("pipes").join(pipe_name).join("pipe.json");
+        let pipe_json_path = screenpipe_dir
+            .join("pipes")
+            .join(pipe_name)
+            .join("pipe.json");
         let pipe_json_content = tokio::fs::read_to_string(&pipe_json_path).await.unwrap();
-        let pipe_json: serde_json::Value = serde_json::from_str(&pipe_json_content).expect("Invalid JSON format");
+        let pipe_json: serde_json::Value =
+            serde_json::from_str(&pipe_json_content).expect("Invalid JSON format");
 
         assert!(pipe_json.is_object(), "expected json to be an object");
 
@@ -485,7 +515,9 @@ mod tests {
         pipe_config["enabled"] = json!(true);
         let updated_pipe_json = serde_json::to_string_pretty(&pipe_config);
         let mut file = tokio::fs::File::create(&pipe_json_path).await.unwrap();
-        file.write_all(updated_pipe_json.expect("failed to write").as_bytes()).await.unwrap();
+        file.write_all(updated_pipe_json.expect("failed to write").as_bytes())
+            .await
+            .unwrap();
 
         // run pipe
         let run_result = run_pipe(pipe_name, screenpipe_dir.clone()).await;
@@ -499,9 +531,16 @@ mod tests {
             PipeState::Port(port) => {
                 // verify the pipe is running on the expected port
                 let client = reqwest::Client::new();
-                let response = client.get(format!("http://localhost:{}", port)).send().await;
+                let response = client
+                    .get(format!("http://localhost:{}", port))
+                    .send()
+                    .await;
 
-                assert!(response.is_ok(), "Failed to connect to the pipe on port {}", port);
+                assert!(
+                    response.is_ok(),
+                    "Failed to connect to the pipe on port {}",
+                    port
+                );
 
                 // if successfull clean up the process
                 #[cfg(windows)]
@@ -523,9 +562,8 @@ mod tests {
                     assert!(
                         output.status.success(),
                         "{} hasn't ran successfully",
-                        pipe_name 
+                        pipe_name
                     );
-
                 }
 
                 #[cfg(unix)]
@@ -545,7 +583,7 @@ mod tests {
                     assert!(
                         output.status.success(),
                         "{} hasn't ran successfully",
-                        pipe_name 
+                        pipe_name
                     );
                 }
             }

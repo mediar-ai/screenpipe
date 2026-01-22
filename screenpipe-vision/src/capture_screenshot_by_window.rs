@@ -225,7 +225,7 @@ pub async fn capture_all_visible_windows(
                         debug!("Window {} ({}) is_minimized", app_name, title);
                         return None;
                     }
-                },
+                }
                 Err(e) => {
                     // Log warning and skip this window
                     // mostly noise

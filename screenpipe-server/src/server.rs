@@ -1091,7 +1091,9 @@ async fn get_pipe_info_handler(
 }
 
 #[oasgen]
-async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+async fn list_pipes_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     if !state.enable_pipe_manager {
         return Err((
             StatusCode::FORBIDDEN,

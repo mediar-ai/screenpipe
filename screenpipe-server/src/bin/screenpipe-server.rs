@@ -2,9 +2,10 @@ use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
 use dirs::home_dir;
-use reqwest::Client;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
+use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
+use reqwest::Client;
 use screenpipe_audio::{
     audio_manager::AudioManagerBuilder,
     core::device::{
@@ -17,8 +18,8 @@ use screenpipe_db::{
 };
 use screenpipe_server::{
     cli::{
-        AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, MigrationSubCommand,
-        OutputFormat, PipeCommand, VisionCommand, McpCommand,
+        AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, McpCommand,
+        MigrationSubCommand, OutputFormat, PipeCommand, VisionCommand,
     },
     handle_index_command,
     pipe_manager::PipeInfo,
@@ -27,10 +28,18 @@ use screenpipe_server::{
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
+use serde::Deserialize;
 use serde_json::{json, Value};
+use std::path::Path;
 use std::{
-    env, fs, io::Write, net::SocketAddr, ops::Deref, path::PathBuf, sync::Arc, time::Duration,
+    env, fs,
+    io::Write,
+    net::SocketAddr,
     net::{IpAddr, Ipv4Addr},
+    ops::Deref,
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
 };
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
@@ -39,9 +48,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, Layer};
-use serde::Deserialize;
-use std::path::Path;
-use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 
 const DISPLAY: &str = r"
                                             _          
@@ -1177,7 +1183,6 @@ async fn handle_pipe_command(
     pipe_manager: &Arc<PipeManager>,
     enable_pipe_manager: bool,
 ) -> anyhow::Result<()> {
-
     if !enable_pipe_manager {
         println!("note: pipe functionality is disabled");
         return Ok(());
@@ -1423,7 +1428,10 @@ async fn handle_pipe_command(
     Ok(())
 }
 
-pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) -> Result<(), anyhow::Error> {
+pub async fn handle_mcp_command(
+    command: &McpCommand,
+    local_data_dir: &PathBuf,
+) -> Result<(), anyhow::Error> {
     let client = Client::new();
 
     // Check if Python is installed
@@ -1437,7 +1445,13 @@ pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) 
     }
 
     match command {
-        McpCommand::Setup { directory, output, port, update, purge } => {
+        McpCommand::Setup {
+            directory,
+            output,
+            port,
+            update,
+            purge,
+        } => {
             let mcp_dir = directory
                 .as_ref()
                 .map(PathBuf::from)
@@ -1448,7 +1462,7 @@ pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) 
                 if mcp_dir.exists() {
                     info!("Purging MCP directory: {}", mcp_dir.display());
                     tokio::fs::remove_dir_all(&mcp_dir).await?;
-                    
+
                     match output {
                         OutputFormat::Json => println!(
                             "{}",
@@ -1524,7 +1538,7 @@ pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) 
 
             if should_download {
                 tokio::fs::create_dir_all(&mcp_dir).await?;
-                
+
                 // Log the start of the download process
                 info!("starting download process for MCP directory");
 
@@ -1561,7 +1575,8 @@ pub async fn handle_mcp_command(command: &McpCommand, local_data_dir: &PathBuf) 
                 // Handle download result
                 match download_result {
                     Ok(_) => {
-                        tokio::fs::write(&config_path, serde_json::to_string_pretty(&config)?).await?;
+                        tokio::fs::write(&config_path, serde_json::to_string_pretty(&config)?)
+                            .await?;
                     }
                     Err(e) => {
                         // Clean up on failure
@@ -1627,7 +1642,11 @@ async fn download_mcp_directory(
     if !response.status().is_success() {
         let status = response.status();
         let error_text = response.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!("GitHub API error (status {}): {}", status, error_text));
+        return Err(anyhow::anyhow!(
+            "GitHub API error (status {}): {}",
+            status,
+            error_text
+        ));
     }
 
     let contents: Vec<GitHubContent> = response
@@ -1637,40 +1656,46 @@ async fn download_mcp_directory(
 
     for item in contents {
         let target_path = target_dir.join(&item.name);
-        
+
         match item.content_type.as_str() {
             "file" => {
                 if let Some(download_url) = item.download_url {
-                    let file_response = client
-                        .get(&download_url)
-                        .send()
-                        .await
-                        .map_err(|e| anyhow::anyhow!("Failed to download file {}: {}", download_url, e))?;
+                    let file_response = client.get(&download_url).send().await.map_err(|e| {
+                        anyhow::anyhow!("Failed to download file {}: {}", download_url, e)
+                    })?;
 
                     let content = file_response
                         .bytes()
                         .await
                         .map_err(|e| anyhow::anyhow!("Failed to get file content: {}", e))?;
 
-                    tokio::fs::write(&target_path, content)
-                        .await
-                        .map_err(|e| anyhow::anyhow!("Failed to write file {}: {}", target_path.display(), e))?;
+                    tokio::fs::write(&target_path, content).await.map_err(|e| {
+                        anyhow::anyhow!("Failed to write file {}: {}", target_path.display(), e)
+                    })?;
 
                     debug!("Downloaded file: {}", target_path.display());
                 }
             }
             "dir" => {
-                tokio::fs::create_dir_all(&target_path)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to create directory {}: {}", target_path.display(), e))?;
+                tokio::fs::create_dir_all(&target_path).await.map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to create directory {}: {}",
+                        target_path.display(),
+                        e
+                    )
+                })?;
 
                 let subdir_api_url = format!(
                     "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
                     "mediar-ai", "screenpipe", item.path, "main"
                 );
-                
+
                 // Fix recursion with Box::pin
-                let future = Box::pin(download_mcp_directory(client, &subdir_api_url, &target_path));
+                let future = Box::pin(download_mcp_directory(
+                    client,
+                    &subdir_api_url,
+                    &target_path,
+                ));
                 future.await?;
             }
             _ => {
