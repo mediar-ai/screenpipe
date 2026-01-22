@@ -494,8 +494,12 @@ impl ShowRewindWindow {
 
                 window
             }
-            ShowRewindWindow::Settings {  page: _  } => {
-                let builder = self.window_builder(app, "/settings").focused(true);
+            ShowRewindWindow::Settings { page } => {
+                let url = match page {
+                    Some(p) => format!("/settings?section={}", p),
+                    None => "/settings".to_string(),
+                };
+                let builder = self.window_builder(app, &url).focused(true);
                 #[cfg(target_os = "macos")]
                 let builder = builder.hidden_title(true);
                 let window = builder.build()?;

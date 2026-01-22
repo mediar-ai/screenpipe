@@ -10,6 +10,7 @@ import {
   Settings as SettingsIcon,
   HardDrive,
   Plug,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccountSection } from "@/components/settings/account-section";
@@ -19,6 +20,7 @@ import { RecordingSettings } from "@/components/settings/recording-settings";
 import GeneralSettings from "@/components/settings/general-settings";
 import { DiskUsageSection } from "@/components/settings/disk-usage-section";
 import { ConnectionsSection } from "@/components/settings/connections-section";
+import { FeedbackSection } from "@/components/settings/feedback-section";
 import { useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
 import { listen } from "@tauri-apps/api/event";
@@ -30,14 +32,15 @@ type SettingsSection =
   | "recording"
   | "account"
   | "disk-usage"
-  | "connections";
+  | "connections"
+  | "feedback";
 
 function SettingsPageContent() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useQueryState("section", {
     defaultValue: "general" as SettingsSection,
     parse: (value) => {
-      if (["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections"].includes(value)) {
+      if (["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections", "feedback"].includes(value)) {
         return value as SettingsSection;
       }
       return "general" as SettingsSection;
@@ -63,6 +66,8 @@ function SettingsPageContent() {
         return <DiskUsageSection />;
       case "connections":
         return <ConnectionsSection />;
+      case "feedback":
+        return <FeedbackSection />;
     }
   };
 
@@ -109,6 +114,12 @@ function SettingsPageContent() {
       icon: <Plug className="h-4 w-4" />,
       description: "Connect to AI assistants like Claude",
     },
+    {
+      id: "feedback",
+      label: "Send Feedback",
+      icon: <MessageSquare className="h-4 w-4" />,
+      description: "Report issues or share suggestions",
+    },
   ];
 
   // Listen for navigation events from other windows
@@ -116,7 +127,7 @@ function SettingsPageContent() {
     const unlisten = listen<{ url: string }>("navigate", (event) => {
       const url = new URL(event.payload.url, window.location.origin);
       const section = url.searchParams.get("section");
-      if (section && ["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections"].includes(section)) {
+      if (section && ["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections", "feedback"].includes(section)) {
         setActiveSection(section as SettingsSection);
       }
     });

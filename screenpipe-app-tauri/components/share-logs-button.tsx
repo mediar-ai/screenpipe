@@ -189,15 +189,27 @@ export const ShareLogsButton = ({
       const identifier = settings.user?.id || machineId;
       const type = settings.user?.id ? "user" : "machine";
 
-      // Get all log contents
+      // Get log contents - limit to last 100KB per file to avoid OOM
+      const MAX_LOG_SIZE = 100 * 1024; // 100KB per file
       const logContents = await Promise.all(
-        logFiles.map(async (file) => ({
-          name: file.name,
-          content: await readTextFile(file.path),
-        }))
+        logFiles.slice(0, 5).map(async (file) => { // Only process 5 most recent logs
+          try {
+            const content = await readTextFile(file.path);
+            // Only keep last MAX_LOG_SIZE characters
+            const truncatedContent = content.length > MAX_LOG_SIZE
+              ? `... [truncated, showing last ${MAX_LOG_SIZE / 1024}KB] ...\n` + content.slice(-MAX_LOG_SIZE)
+              : content;
+            return {
+              name: file.name,
+              content: truncatedContent,
+            };
+          } catch (e) {
+            return { name: file.name, content: `[Error reading file: ${e}]` };
+          }
+        })
       );
 
-      const consoleLog = localStorage.getItem("console_logs") || "";
+      const consoleLog = (localStorage.getItem("console_logs") || "").slice(-50000); // Last 50KB of console logs
 
       const signedRes = await fetch(`${BASE_URL}/api/logs`, {
         method: "POST",

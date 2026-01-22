@@ -96,10 +96,11 @@ fn create_dynamic_menu(
             .item(&MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?);
     }
 
-    // Settings and quit
+    // Settings, feedback and quit
     menu_builder = menu_builder
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("settings", "settings").build(app)?)
+        .item(&MenuItemBuilder::with_id("feedback", "send feedback").build(app)?)
         .item(&MenuItemBuilder::with_id("onboarding", "onboarding").build(app)?)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?);
@@ -128,6 +129,9 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         }
         "settings" => {
             let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
+        }
+        "feedback" => {
+            let _ = ShowRewindWindow::Settings { page: Some("feedback".to_string()) }.show(app_handle);
         }
         "onboarding" => {
             // Reset onboarding state so it shows even if previously completed
