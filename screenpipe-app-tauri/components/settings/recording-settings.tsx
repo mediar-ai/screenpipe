@@ -924,6 +924,33 @@ export function RecordingSettings() {
           <h3 className="text-lg font-semibold">Audio Transcription</h3>
         </div>
         <div className="space-y-4">
+          {/* Screenpipe Cloud Subscription Status */}
+          {settings.user && (
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-secondary/20 border-secondary/50">
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "h-2 w-2 rounded-full",
+                  settings.user.cloud_subscribed ? "bg-foreground" : "bg-muted-foreground"
+                )} />
+                <span className="text-sm text-muted-foreground">
+                  Screenpipe Cloud: {settings.user.cloud_subscribed ? "Subscribed" : "Not subscribed"}
+                </span>
+              </div>
+              {!settings.user.cloud_subscribed && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const clientRefId = `${settings.user?.id}&customer_email=${encodeURIComponent(settings.user?.email ?? "")}`;
+                    openUrl(`https://buy.stripe.com/7sIdRzbym4RA98c7sX?client_reference_id=${clientRefId}`);
+                  }}
+                >
+                  Subscribe
+                </Button>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col space-y-2">
             <Label htmlFor="audioTranscriptionEngine" className="flex items-center space-x-2">
               <span>Audio transcription engine</span>
@@ -949,44 +976,9 @@ export function RecordingSettings() {
                 <SelectValue placeholder="Select transcription engine" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="screenpipe-cloud">Screenpipe Cloud</SelectItem>
-                <SelectItem value="whisper-tiny">Whisper Tiny</SelectItem>
-                <SelectItem value="whisper-tiny-quantized">Whisper Tiny Quantized</SelectItem>
-                <SelectItem value="whisper-large">Whisper Large V3</SelectItem>
-                <SelectItem value="whisper-large-quantized">Whisper Large V3 Quantized</SelectItem>
-                <SelectItem value="whisper-large-v3-turbo">Whisper Large V3 Turbo</SelectItem>
-                <SelectItem value="whisper-large-v3-turbo-quantized">Whisper Large V3 Turbo Quantized</SelectItem>
-                <SelectItem value="deepgram">Deepgram</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Realtime Transcription */}
-          <div className="flex flex-col space-y-2">
-            <Label htmlFor="realtimeAudioTranscriptionEngine" className="flex items-center space-x-2">
-              <span>Realtime audio transcription engine</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="h-4 w-4 cursor-default" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>
-                      Engine used for real-time transcription. This can be different from the main transcription engine.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <Select
-              value={settings.realtimeAudioTranscriptionEngine}
-              onValueChange={(value) => handleAudioTranscriptionModelChange(value, true)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select realtime transcription engine" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="screenpipe-cloud">Screenpipe Cloud</SelectItem>
+                <SelectItem value="screenpipe-cloud" disabled={!settings.user?.cloud_subscribed}>
+                  Screenpipe Cloud {!settings.user?.cloud_subscribed && "(requires subscription)"}
+                </SelectItem>
                 <SelectItem value="whisper-tiny">Whisper Tiny</SelectItem>
                 <SelectItem value="whisper-tiny-quantized">Whisper Tiny Quantized</SelectItem>
                 <SelectItem value="whisper-large">Whisper Large V3</SelectItem>

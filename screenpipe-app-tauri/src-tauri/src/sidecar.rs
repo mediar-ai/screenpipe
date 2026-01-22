@@ -473,21 +473,16 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
-        // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-        if user.cloud_subscribed.is_some()
-            && (deepgram_api_key == "default" || deepgram_api_key == "")
-        {
+        // Use screenpipe cloud proxy when screenpipe-cloud engine is selected
+        if audio_transcription_engine == "screenpipe-cloud" && user.id.is_some() {
             c = c.env(
                 "DEEPGRAM_API_URL",
                 "https://ai-proxy.i-f9f.workers.dev/v1/listen",
             );
             c = c.env("DEEPGRAM_WEBSOCKET_URL", "wss://ai-proxy.i-f9f.workers.dev");
-            // Add token if screenpipe-cloud is selected and user has a token
-            if user.id.is_some() {
-                c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
-                args.push("--deepgram-api-key");
-                args.push(user.id.as_ref().unwrap());
-            }
+            c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
+            args.push("--deepgram-api-key");
+            args.push(user.id.as_ref().unwrap());
         }
 
         c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
@@ -514,11 +509,10 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
         c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
     }
 
-    // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-    if user.cloud_subscribed.is_some() && (deepgram_api_key == "default" || deepgram_api_key == "")
-    {
+    // Use screenpipe cloud proxy when screenpipe-cloud engine is selected
+    if audio_transcription_engine == "screenpipe-cloud" && user.id.is_some() {
         info!(
-            "Adding AI proxy env vars for deepgram: {:?}",
+            "Using screenpipe cloud with user id: {:?}",
             user.id.as_ref().unwrap()
         );
         c = c.env(
@@ -526,12 +520,9 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
             "https://ai-proxy.i-f9f.workers.dev/v1/listen",
         );
         c = c.env("DEEPGRAM_WEBSOCKET_URL", "wss://ai-proxy.i-f9f.workers.dev");
-        // Add token if screenpipe-cloud is selected and user has a token
-        if user.id.is_some() {
-            c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
-            args.push("--deepgram-api-key");
-            args.push(user.id.as_ref().unwrap());
-        }
+        c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
+        args.push("--deepgram-api-key");
+        args.push(user.id.as_ref().unwrap());
     }
 
     c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
