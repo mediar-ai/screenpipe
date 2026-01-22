@@ -15,10 +15,10 @@ const DEFAULT_SETTINGS: RAGSettings = {
 
 export async function getSettings(): Promise<RAGSettings> {
   try {
-    const settings = await pipe.settings.getCustomSetting<RAGSettings>(
+    const settings = await pipe.settings.getCustomSetting(
       SETTINGS_KEY,
       "config"
-    );
+    ) as RAGSettings | null;
     return { ...DEFAULT_SETTINGS, ...settings };
   } catch (error) {
     console.error("Error loading settings:", error);

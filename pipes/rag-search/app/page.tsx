@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
 
 interface Message {
   role: "user" | "assistant";
@@ -42,8 +43,16 @@ export default function ChatPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Chat request failed");
+        const errorData = await response.json();
+        // Handle specific error actions
+        if (errorData.action === "run_indexing") {
+          throw new Error("No documents indexed yet. Click 'Run Index' above to index your screen recordings first.");
+        } else if (errorData.action === "configure_api_key") {
+          throw new Error("Please configure your OpenAI API key in Settings before searching.");
+        } else if (response.status === 429) {
+          throw new Error(errorData.error || "Too many requests. Please wait a moment.");
+        }
+        throw new Error(errorData.error || "Search failed. Please try again.");
       }
 
       const reader = response.body?.getReader();
@@ -96,24 +105,43 @@ export default function ChatPage() {
 
   const runIndexing = async (fullReindex = false) => {
     setIsIndexing(true);
-    setIndexStatus(fullReindex ? "Full reindexing (this may take a while)..." : "Indexing...");
+    setIndexStatus(fullReindex ? "Starting full reindex..." : "Starting indexing...");
 
     try {
       const url = fullReindex ? "/api/index?full=true" : "/api/index";
+
+      // Show progress stages
+      setIndexStatus(fullReindex
+        ? "Step 1/3: Fetching all screen recordings..."
+        : "Step 1/3: Fetching new screen recordings...");
+
       const response = await fetch(url);
       const data = await response.json();
 
       if (!response.ok) {
+        // Handle rate limiting
+        if (response.status === 429) {
+          throw new Error(data.error || `Rate limited. Try again in ${data.retryAfter || 5} seconds.`);
+        }
         throw new Error(data.error || "Indexing failed");
       }
 
-      setIndexStatus(
-        `Indexed ${data.documentsIndexed} documents. Total: ${data.totalDocuments}`
-      );
+      // Show detailed success message with stats
+      if (data.stats) {
+        const stats = data.stats;
+        setIndexStatus(
+          `Indexing complete! Processed ${stats.ocrItems} screen captures and ${stats.audioItems} audio clips. ` +
+          `Added ${data.documentsIndexed} new documents (${stats.skippedDuplicates} duplicates skipped). ` +
+          `Total indexed: ${data.totalDocuments}`
+        );
+      } else {
+        setIndexStatus(
+          `Indexed ${data.documentsIndexed} documents. Total: ${data.totalDocuments}`
+        );
+      }
     } catch (error) {
-      setIndexStatus(
-        `Error: ${error instanceof Error ? error.message : "Indexing failed"}`
-      );
+      const errorMsg = error instanceof Error ? error.message : "Indexing failed";
+      setIndexStatus(`Error: ${errorMsg}`);
     } finally {
       setIsIndexing(false);
     }
@@ -167,7 +195,7 @@ export default function ChatPage() {
         ) : (
           messages.map((message, index) => (
             <div key={index} className={`message ${message.role}`}>
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+              <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{message.content}</ReactMarkdown>
             </div>
           ))
         )}

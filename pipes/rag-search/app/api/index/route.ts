@@ -12,6 +12,10 @@ import {
 const SCREENPIPE_API = "http://localhost:3030";
 const MAX_ITEMS = 50000; // Maximum items to fetch in one request
 
+// Simple rate limiting: track last request time
+let lastIndexRequestTime = 0;
+const MIN_REQUEST_INTERVAL_MS = 5000; // Minimum 5 seconds between index requests
+
 async function fetchAllScreenpipeData(contentType: "ocr" | "audio") {
   // Note: Screenpipe API offset is broken, so we fetch all at once with high limit
   const url = `${SCREENPIPE_API}/search?content_type=${contentType}&limit=${MAX_ITEMS}`;
@@ -33,17 +37,37 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const fullReindex = searchParams.get("full") === "true";
 
+    // Rate limiting: prevent concurrent/rapid index requests
+    const now = Date.now();
+    if (now - lastIndexRequestTime < MIN_REQUEST_INTERVAL_MS) {
+      const waitTime = Math.ceil((MIN_REQUEST_INTERVAL_MS - (now - lastIndexRequestTime)) / 1000);
+      return NextResponse.json(
+        {
+          error: `Please wait ${waitTime} seconds before starting another indexing operation.`,
+          retryAfter: waitTime
+        },
+        { status: 429 }
+      );
+    }
+    lastIndexRequestTime = now;
+
     const settings = await getSettings();
 
     if (!settings.openaiApiKey) {
       return NextResponse.json(
-        { error: "OpenAI API key not configured" },
+        {
+          error: "OpenAI API key not configured. Go to Settings and enter your API key to enable indexing.",
+          action: "configure_api_key"
+        },
         { status: 400 }
       );
     }
 
     if (!settings.indexingEnabled) {
-      return NextResponse.json({ message: "Indexing disabled" });
+      return NextResponse.json({
+        message: "Indexing is disabled. Enable it in Settings to index your screen recordings.",
+        action: "enable_indexing"
+      });
     }
 
     let store = loadVectorStore();
@@ -177,11 +201,38 @@ export async function GET(request: Request) {
       documentsIndexed: vectorDocs.length,
       totalDocuments: updatedStore.documents.length,
       lastIndexedTime: updatedStore.lastIndexedTime,
+      stats: {
+        ocrItems: ocrDataItems.length,
+        audioItems: audioDataItems.length,
+        chunksProcessed: documentsToIndex.length,
+        newChunks: newDocumentsToIndex.length,
+        skippedDuplicates: documentsToIndex.length - newDocumentsToIndex.length
+      }
     });
   } catch (error) {
     console.error("Indexing error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+    // Provide actionable error messages based on error type
+    let actionableMessage = errorMessage;
+    let action = "unknown_error";
+
+    if (errorMessage.includes("ECONNREFUSED") || errorMessage.includes("fetch failed")) {
+      actionableMessage = "Cannot connect to Screenpipe. Make sure Screenpipe is running on localhost:3030.";
+      action = "start_screenpipe";
+    } else if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+      actionableMessage = "Invalid OpenAI API key. Please check your API key in Settings.";
+      action = "check_api_key";
+    } else if (errorMessage.includes("429") || errorMessage.includes("rate limit")) {
+      actionableMessage = "OpenAI rate limit exceeded. Please wait a few minutes and try again.";
+      action = "wait_rate_limit";
+    } else if (errorMessage.includes("insufficient_quota")) {
+      actionableMessage = "OpenAI quota exceeded. Please check your billing at platform.openai.com.";
+      action = "check_quota";
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Indexing failed" },
+      { error: actionableMessage, action, details: errorMessage },
       { status: 500 }
     );
   }

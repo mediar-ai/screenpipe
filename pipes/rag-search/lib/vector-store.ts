@@ -204,7 +204,7 @@ export function searchSimilar(
     }
   }
 
-  // Step 4: Get ALL chunks from matched frames (siblings)
+  // Step 6: Get ALL chunks from matched frames (siblings)
   const frameChunks = new Map<string, Array<VectorDocument & { score: number }>>();
 
   for (const doc of scoredDocs) {
@@ -217,7 +217,7 @@ export function searchSimilar(
     }
   }
 
-  // Step 5: Sort chunks within each frame by chunk index, then combine
+  // Step 7: Sort chunks within each frame by chunk index, then combine
   const results: Array<VectorDocument & { score: number }> = [];
 
   // Sort frames by their best matching score
