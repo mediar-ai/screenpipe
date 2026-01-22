@@ -65,7 +65,8 @@ export default function Timeline() {
 	const [aiPanelPosition, setAiPanelPosition] = useState({ x: 0, y: 0 });
 	// const [searchResults, setSearchResults] = useState<number[]>([]);
 	const [startAndEndDates, setStartAndEndDates] = useState<TimeRange>({
-		start: new Date(new Date().setHours(0, 0, 0, 0)),
+		// Default to 1 year ago so navigation works even if getStartDate fails
+		start: new Date(new Date().setFullYear(new Date().getFullYear() - 1)),
 		end: new Date(),
 	});
 
