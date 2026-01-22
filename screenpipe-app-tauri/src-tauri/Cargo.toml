@@ -79,7 +79,8 @@ sysinfo = "=0.29.0"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
-axum = "0.6.0" # or your current version
+axum = "0.6.0" 
+axum-macros = "0.5.0"  # <--- RESTORED THIS
 
 
 
@@ -155,7 +156,7 @@ custom-protocol = ["tauri/custom-protocol"]
 
 
 [package.metadata.cargo-machete]
-ignored = ["tauri-utils"]
+ignored = ["tauri-utils", "axum-macros"] # <--- ADDED IGNORE HERE
 
 [profile.release]
 codegen-units = 1
