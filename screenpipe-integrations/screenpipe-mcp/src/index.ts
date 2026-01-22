@@ -29,7 +29,7 @@ const SCREENPIPE_API = `http://localhost:${port}`;
 const server = new Server(
   {
     name: "screenpipe",
-    version: "0.2.0",
+    version: "0.3.0",
   },
   {
     capabilities: {
@@ -45,7 +45,8 @@ const BASE_TOOLS: Tool[] = [
     description:
       "Search through screenpipe recorded content (OCR text, audio transcriptions, UI elements). " +
       "Use this to find specific content that has appeared on your screen or been spoken. " +
-      "Results include timestamps, app context, and the content itself.",
+      "Results include timestamps, app context, and the content itself. " +
+      "Set include_frames=true to get screenshot images for visual analysis (OCR results only).",
     inputSchema: {
       type: "object",
       properties: {
@@ -98,6 +99,14 @@ const BASE_TOOLS: Tool[] = [
         max_length: {
           type: "integer",
           description: "Maximum content length in characters",
+        },
+        include_frames: {
+          type: "boolean",
+          description:
+            "Include screenshot images in results for visual analysis. Only applies to OCR results. " +
+            "When true, returns base64-encoded images that can be analyzed with vision capabilities. " +
+            "Note: Images are limited to ~1MB each. Default: false",
+          default: false,
         },
       },
     },
@@ -403,6 +412,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "search-content": {
+        const includeFrames = args.include_frames === true;
         const params = new URLSearchParams();
         for (const [key, value] of Object.entries(args)) {
           if (value !== null && value !== undefined) {
@@ -424,47 +434,81 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        const formattedResults = results
-          .map((result: any) => {
-            const content = result.content;
-            if (!content) return null;
+        // Build content array with text and optional images
+        const contentItems: Array<
+          | { type: "text"; text: string }
+          | { type: "image"; data: string; mimeType: string }
+        > = [];
 
-            if (result.type === "OCR") {
-              return (
-                `OCR Text: ${content.text || "N/A"}\n` +
-                `App: ${content.app_name || "N/A"}\n` +
-                `Window: ${content.window_name || "N/A"}\n` +
-                `Time: ${content.timestamp || "N/A"}\n` +
-                "---"
-              );
-            } else if (result.type === "Audio") {
-              return (
-                `Audio Transcription: ${content.transcription || "N/A"}\n` +
+        const formattedResults: string[] = [];
+        const images: Array<{ data: string; context: string }> = [];
+
+        for (const result of results) {
+          const content = result.content;
+          if (!content) continue;
+
+          if (result.type === "OCR") {
+            const textResult =
+              `OCR Text: ${content.text || "N/A"}\n` +
+              `App: ${content.app_name || "N/A"}\n` +
+              `Window: ${content.window_name || "N/A"}\n` +
+              `Time: ${content.timestamp || "N/A"}\n` +
+              `Frame ID: ${content.frame_id || "N/A"}\n` +
+              "---";
+            formattedResults.push(textResult);
+
+            // Collect frame if available and requested
+            if (includeFrames && content.frame) {
+              images.push({
+                data: content.frame,
+                context: `Screenshot from ${content.app_name || "unknown"} - ${content.window_name || "unknown"} at ${content.timestamp || "unknown"}`,
+              });
+            }
+          } else if (result.type === "Audio") {
+            formattedResults.push(
+              `Audio Transcription: ${content.transcription || "N/A"}\n` +
                 `Device: ${content.device_name || "N/A"}\n` +
                 `Time: ${content.timestamp || "N/A"}\n` +
                 "---"
-              );
-            } else if (result.type === "UI") {
-              return (
-                `UI Text: ${content.text || "N/A"}\n` +
+            );
+          } else if (result.type === "UI") {
+            formattedResults.push(
+              `UI Text: ${content.text || "N/A"}\n` +
                 `App: ${content.app_name || "N/A"}\n` +
                 `Window: ${content.window_name || "N/A"}\n` +
                 `Time: ${content.timestamp || "N/A"}\n` +
                 "---"
-              );
-            }
-            return null;
-          })
-          .filter(Boolean);
+            );
+          }
+        }
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Search Results:\n\n" + formattedResults.join("\n"),
-            },
-          ],
-        };
+        // Add text results
+        contentItems.push({
+          type: "text",
+          text:
+            "Search Results:\n\n" +
+            formattedResults.join("\n") +
+            (images.length > 0
+              ? `\n\n${images.length} screenshot(s) included below for visual analysis:`
+              : ""),
+        });
+
+        // Add images if requested and available
+        for (const img of images) {
+          // Add context for the image
+          contentItems.push({
+            type: "text",
+            text: `\n📷 ${img.context}`,
+          });
+          // Add the image itself
+          contentItems.push({
+            type: "image",
+            data: img.data,
+            mimeType: "image/png",
+          });
+        }
+
+        return { content: contentItems };
       }
 
       case "pixel-control": {
