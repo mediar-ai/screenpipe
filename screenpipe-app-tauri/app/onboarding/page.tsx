@@ -10,10 +10,10 @@ import { commands } from "@/lib/utils/tauri";
 
 type SlideKey = "intro" | "status";
 
-// Window size configurations for each slide
+// Window size configurations for each slide - consistent size to avoid resizing issues
 const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = {
-  intro: { width: 800, height: 750 },
-  status: { width: 800, height: 500 },
+  intro: { width: 900, height: 800 },
+  status: { width: 900, height: 800 },
 };
 
 // Simple 2-step flow: intro → status → done

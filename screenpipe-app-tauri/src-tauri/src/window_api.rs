@@ -202,7 +202,7 @@ impl RewindWindowId {
             RewindWindowId::Main => (1200.0, 850.0),
             RewindWindowId::Settings => (1200.0, 850.0),
             RewindWindowId::Search => (1200.0, 850.0),
-            RewindWindowId::Onboarding => (1000.0, 640.0),
+            RewindWindowId::Onboarding => (900.0, 800.0),
         })
     }
 
