@@ -72,10 +72,10 @@ export function AIPanel({
 	const { toast } = useToast();
 	const { selectionRange, setSelectionRange } = useTimelineSelection();
 	const { checkLogin } = useLoginDialog();
+	const [activePreset, setActivePreset] = useState<AIPreset | undefined>(undefined);
 	const isAvailable = settings.aiPresets && settings.aiPresets.length > 0;
 	const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
 	const error = !isAvailable ? "No AI presets configured" : !hasValidModel ? "No model selected in preset" : "";
-	const [activePreset, setActivePreset] = useState<AIPreset | undefined>(undefined);
 
 	// Add abort controller ref
 	const abortControllerRef = useRef<AbortController | null>(null);

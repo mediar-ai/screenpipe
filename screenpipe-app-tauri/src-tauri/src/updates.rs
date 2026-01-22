@@ -107,8 +107,7 @@ impl UpdatesManager {
                     .buttons(MessageDialogButtons::OkCancelCustom(
                         "update now".to_string(),
                         "later".to_string(),
-                    ))
-                    .parent(&self.app.get_webview_window("main").unwrap());
+                    ));
 
                 update_dialog.show(move |answer| {
                     let _ = tx.send(answer);
