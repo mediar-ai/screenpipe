@@ -581,7 +581,8 @@ jobs:
           LINUXDEPLOY_OUTPUT_VERSION: ${{ matrix.os_type == 'linux' && '1' || '' }}
           APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.os_type == 'linux' && '1' || '' }}
         with:
-          args: ${{ matrix.tauri-args }}
+          # Use production config for release builds (different identifier, updater enabled)
+          args: ${{ matrix.tauri-args }} --config src-tauri/tauri.prod.conf.json
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -vvv
           retryAttempts: 3

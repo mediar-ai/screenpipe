@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "screenpipe",
-  "identifier": "screenpi.pe",
+  "productName": "screenpipe - Development",
+  "identifier": "screenpi.pe.dev",
   "build": {
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build",
@@ -9,7 +9,7 @@
     "devUrl": "http://localhost:3000"
   },
   "bundle": {
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "active": true,
     "category": "DeveloperTool",
     "shortDescription": "24/7 memory for your desktop",
@@ -41,12 +41,8 @@
   },
   "plugins": {
     "updater": {
-      "active": true,
-      "dialog": true,
-      "endpoints": [
-        "https://cdn.crabnebula.app/update/mediar/screenpipe/{{target}}-{{arch}}/{{current_version}}"
-      ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyQjQ2RkQzMUNBOUFDMTcKUldRWHJLa2MwMiswSWl3RlBGUW5zYUE0Zm0vNFFRRTltNUZZTUVxR2FxUDNtSWdUSHgyL3JNcmcK"
+      "active": false,
+      "pubkey": ""
     },
     "deep-link": {
       "desktop": {

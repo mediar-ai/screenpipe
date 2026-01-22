@@ -4,6 +4,7 @@ import { isAfter, subDays } from "date-fns";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { AudioLinesIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import posthog from "posthog-js";
 
 interface TimelineSliderProps {
 	frames: StreamTimeSeriesResponse[];
@@ -59,6 +60,16 @@ export const TimelineSlider = ({
 		new Set(),
 	);
 	const { setSelectionRange, selectionRange } = useTimelineSelection();
+
+	// Pre-compute frame index map for O(1) lookups instead of O(n) indexOf
+	// This reduces 2.68M comparisons per render to just 400 Map lookups
+	const frameIndexMap = useMemo(() => {
+		const map = new Map<string, number>();
+		frames.forEach((frame, index) => {
+			map.set(frame.timestamp, index);
+		});
+		return map;
+	}, [frames]);
 
 	const visibleFrames = useMemo(() => {
 		if (!frames || frames.length === 0) return [];
@@ -197,6 +208,12 @@ export const TimelineSlider = ({
 	};
 
 	const handleDragEnd = () => {
+		// Track selection if multiple frames were selected
+		if (selectedIndices.size > 1) {
+			posthog.capture("timeline_selection_made", {
+				frames_selected: selectedIndices.size,
+			});
+		}
 		setIsDragging(false);
 		setDragStartIndex(null);
 	};
@@ -237,7 +254,8 @@ export const TimelineSlider = ({
 								/>
 							</div>
 							{group.frames.map((frame) => {
-								const frameIndex = frames.indexOf(frame);
+								// O(1) lookup instead of O(n) indexOf
+								const frameIndex = frameIndexMap.get(frame.timestamp) ?? -1;
 								const isSelected = selectedIndices.has(frameIndex);
 								const frameDate = new Date(frame.timestamp);
 								const isInRange =

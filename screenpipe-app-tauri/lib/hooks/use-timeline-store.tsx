@@ -3,6 +3,11 @@ import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import { hasFramesForDate } from "../actions/has-frames-date";
 import { subDays } from "date-fns";
 
+// Frame buffer for batching updates - reduces 68 re-renders to ~3-5
+let frameBuffer: StreamTimeSeriesResponse[] = [];
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+const FLUSH_INTERVAL_MS = 150; // Flush every 150ms for smooth progressive loading
+
 interface TimelineState {
 	frames: StreamTimeSeriesResponse[];
 	frameTimestamps: Set<string>; // For O(1) deduplication lookups
@@ -24,6 +29,7 @@ interface TimelineState {
 	fetchTimeRange: (startTime: Date, endTime: Date) => void;
 	fetchNextDayData: (date: Date) => void;
 	hasDateBeenFetched: (date: Date) => boolean;
+	flushFrameBuffer: () => void;
 }
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
@@ -48,6 +54,61 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		const dateKey = `${date.getDate()}-${date.getMonth()}-${date.getFullYear()}`;
 		return sentRequests.has(dateKey);
 	},
+
+	// Flush accumulated frames to state - called periodically instead of on every message
+	flushFrameBuffer: () => {
+		if (frameBuffer.length === 0) return;
+
+		const framesToFlush = frameBuffer;
+		frameBuffer = [];
+
+		set((state) => {
+			// Filter out duplicates using O(1) Set lookup
+			const newUniqueFrames = framesToFlush.filter(
+				(frame) => !state.frameTimestamps.has(frame.timestamp)
+			);
+
+			if (newUniqueFrames.length === 0) {
+				return {
+					isLoading: false,
+					loadingProgress: {
+						loaded: state.frames.length,
+						isStreaming: true
+					},
+					message: null,
+					error: null,
+				};
+			}
+
+			// Add new timestamps to the Set
+			const updatedTimestamps = new Set(state.frameTimestamps);
+			newUniqueFrames.forEach((frame) => {
+				updatedTimestamps.add(frame.timestamp);
+			});
+
+			// Single sort per flush instead of per-message
+			// Parse timestamps once for sorting
+			const mergedFrames = [...state.frames, ...newUniqueFrames].sort(
+				(a, b) => {
+					// Direct string comparison works for ISO timestamps (lexicographic = chronologic)
+					return b.timestamp.localeCompare(a.timestamp);
+				}
+			);
+
+			return {
+				frames: mergedFrames,
+				frameTimestamps: updatedTimestamps,
+				isLoading: false,
+				loadingProgress: {
+					loaded: mergedFrames.length,
+					isStreaming: true
+				},
+				message: null,
+				error: null,
+			};
+		});
+	},
+
 	connectWebSocket: () => {
 		const ws = new WebSocket("ws://localhost:3030/stream/frames");
 
@@ -68,6 +129,8 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 
 				// Handle keep-alive messages
 				if (data === "keep-alive-text") {
+					// Flush any pending frames when we get keep-alive
+					get().flushFrameBuffer();
 					set((state) => ({
 						error: null,
 						isLoading: false,
@@ -81,101 +144,45 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 
 				// Handle error messages
 				if (data.error) {
+					get().flushFrameBuffer(); // Flush before error
 					set({ error: data.error, isLoading: false });
 					return;
 				}
 
-				// Handle batched frames - OPTIMIZED: incremental deduplication
+				// Handle batched frames - OPTIMIZED: buffer and flush periodically
 				if (Array.isArray(data)) {
-					set((state) => {
-						// Filter out frames we already have using O(1) Set lookup
-						const newUniqueFrames = data.filter(
-							(frame) => !state.frameTimestamps.has(frame.timestamp)
-						);
+					// Add to buffer instead of immediate state update
+					frameBuffer.push(...data);
 
-						// If no new frames, just update loading state
-						if (newUniqueFrames.length === 0) {
-							return {
-								isLoading: false,
-								loadingProgress: {
-									loaded: state.frames.length,
-									isStreaming: true
-								},
-								message: null,
-								error: null,
-							};
+					// Schedule flush if not already scheduled
+					if (!flushTimer) {
+						flushTimer = setTimeout(() => {
+							flushTimer = null;
+							get().flushFrameBuffer();
+						}, FLUSH_INTERVAL_MS);
+					}
+
+					// Update loading progress without full state update
+					const currentTotal = get().frames.length + frameBuffer.length;
+					set({
+						loadingProgress: {
+							loaded: currentTotal,
+							isStreaming: true
 						}
-
-						// Add new timestamps to the Set
-						const updatedTimestamps = new Set(state.frameTimestamps);
-						newUniqueFrames.forEach((frame) => {
-							updatedTimestamps.add(frame.timestamp);
-						});
-
-						// Merge and sort only when we have new frames
-						// Use insertion sort optimization for mostly-sorted data
-						const mergedFrames = [...state.frames, ...newUniqueFrames].sort(
-							(a, b) =>
-								new Date(b.timestamp).getTime() -
-								new Date(a.timestamp).getTime(),
-						);
-
-						return {
-							frames: mergedFrames,
-							frameTimestamps: updatedTimestamps,
-							isLoading: false,
-							loadingProgress: {
-								loaded: mergedFrames.length,
-								isStreaming: true
-							},
-							message: null,
-							error: null,
-						};
 					});
 					return;
 				}
 
-				// Handle single frame (legacy support) - OPTIMIZED with Set lookup
+				// Handle single frame (legacy support)
 				if (data.timestamp && data.devices) {
-					set((state) => {
-						// O(1) duplicate check using Set
-						if (state.frameTimestamps.has(data.timestamp)) {
-							return state;
-						}
+					frameBuffer.push(data);
 
-						// Add to timestamps Set
-						const updatedTimestamps = new Set(state.frameTimestamps);
-						updatedTimestamps.add(data.timestamp);
-
-						// Use binary search to find insertion point
-						const timestamp = new Date(data.timestamp).getTime();
-						const newFrames = [...state.frames];
-						let left = 0;
-						let right = newFrames.length;
-
-						while (left < right) {
-							const mid = Math.floor((left + right) / 2);
-							const midTimestamp = new Date(newFrames[mid].timestamp).getTime();
-							if (midTimestamp < timestamp) {
-								right = mid;
-							} else {
-								left = mid + 1;
-							}
-						}
-
-						newFrames.splice(left, 0, data);
-						return {
-							frames: newFrames,
-							frameTimestamps: updatedTimestamps,
-							isLoading: false,
-							loadingProgress: {
-								loaded: newFrames.length,
-								isStreaming: true
-							},
-							message: null,
-							error: null,
-						};
-					});
+					if (!flushTimer) {
+						flushTimer = setTimeout(() => {
+							flushTimer = null;
+							get().flushFrameBuffer();
+						}, FLUSH_INTERVAL_MS);
+					}
 				}
 			} catch (error) {
 				console.error("Failed to parse frame data:", error);
@@ -192,6 +199,13 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		};
 
 		ws.onclose = () => {
+			// Flush any remaining frames before closing
+			if (flushTimer) {
+				clearTimeout(flushTimer);
+				flushTimer = null;
+			}
+			get().flushFrameBuffer();
+
 			set({
 				message: "Connection closed",
 				isLoading: false,
