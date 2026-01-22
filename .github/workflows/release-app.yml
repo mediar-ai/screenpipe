@@ -528,13 +528,11 @@ jobs:
           $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
           New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
 
-          # Install and copy VcRedist
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
-
-          Write-Host "Copying DLL files..."
+          # Copy vcruntime DLLs from System32 (already present on Windows runners with VS installed)
+          Write-Host "Copying DLL files from System32..."
           Copy-Item C:\Windows\System32\vcruntime140.dll -Destination $vcredist_dir -Force
+          Copy-Item C:\Windows\System32\vcruntime140_1.dll -Destination $vcredist_dir -Force -ErrorAction SilentlyContinue
+          Copy-Item C:\Windows\System32\msvcp140.dll -Destination $vcredist_dir -Force -ErrorAction SilentlyContinue
 
           # Verify DLLs were copied
           $dll_count = (Get-ChildItem -Path $vcredist_dir -Filter "*.dll").Count
