@@ -11,7 +11,46 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { platform } from "@tauri-apps/plugin-os";
 import { tempDir, join } from "@tauri-apps/api/path";
 
-const MCPB_RELEASE_URL = "https://github.com/mediar-ai/screenpipe/releases/download/mcp-v0.3.1/screenpipe-mcp.mcpb";
+const GITHUB_RELEASES_API = "https://api.github.com/repos/mediar-ai/screenpipe/releases";
+
+interface GitHubAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+interface GitHubRelease {
+  tag_name: string;
+  assets: GitHubAsset[];
+}
+
+async function getLatestMcpbUrl(): Promise<string> {
+  const response = await tauriFetch(GITHUB_RELEASES_API, {
+    method: "GET",
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch releases");
+  }
+
+  const releases: GitHubRelease[] = await response.json();
+
+  // Find the latest mcp release (tag starts with "mcp-v")
+  const mcpRelease = releases.find(r => r.tag_name.startsWith("mcp-v"));
+  if (!mcpRelease) {
+    throw new Error("No MCP release found");
+  }
+
+  // Find the .mcpb asset
+  const mcpbAsset = mcpRelease.assets.find(a => a.name.endsWith(".mcpb"));
+  if (!mcpbAsset) {
+    throw new Error("No .mcpb file found in release");
+  }
+
+  return mcpbAsset.browser_download_url;
+}
 
 export function ConnectionsSection() {
   const [downloadState, setDownloadState] = useState<"idle" | "downloading" | "downloaded">("idle");
@@ -20,8 +59,11 @@ export function ConnectionsSection() {
     try {
       setDownloadState("downloading");
 
+      // Get the latest mcpb URL dynamically
+      const mcpbUrl = await getLatestMcpbUrl();
+
       // Use Tauri's HTTP client to avoid CORS issues
-      const response = await tauriFetch(MCPB_RELEASE_URL, {
+      const response = await tauriFetch(mcpbUrl, {
         method: "GET",
       });
 

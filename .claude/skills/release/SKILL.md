@@ -23,7 +23,6 @@ Automate releasing all components of the screenpipe monorepo.
 
 ### 1. Check Current Versions
 ```bash
-cd /Users/louisbeaumont/Documents/screenpipe
 echo "=== App ===" && grep '^version' screenpipe-app-tauri/src-tauri/Cargo.toml | head -1
 echo "=== CLI ===" && grep '^version' Cargo.toml | head -1
 echo "=== MCP ===" && grep '"version"' screenpipe-integrations/screenpipe-mcp/package.json
@@ -37,7 +36,6 @@ Use Edit tool to update version strings in the files listed above.
 
 ### 3. Commit & Push
 ```bash
-cd /Users/louisbeaumont/Documents/screenpipe
 git add -A
 git commit -m "Bump versions: App vX.Y.Z, CLI v0.2.X, MCP vX.Y.Z"
 git pull --rebase
@@ -48,25 +46,21 @@ git push
 
 **Desktop App (macOS + Windows):**
 ```bash
-cd /Users/louisbeaumont/Documents/screenpipe
 gh workflow run release-app.yml
 ```
 
 **CLI (all platforms):**
 ```bash
-cd /Users/louisbeaumont/Documents/screenpipe
 gh workflow run release-cli.yml
 ```
 
 **MCP:**
 ```bash
-cd /Users/louisbeaumont/Documents/screenpipe
 gh workflow run release-mcp.yml
 ```
 
 ### 5. Monitor Build Status
 ```bash
-cd /Users/louisbeaumont/Documents/screenpipe
 # List recent runs
 gh run list --limit 5
 
@@ -79,8 +73,6 @@ gh run view <RUN_ID> --json status,conclusion,jobs --jq '{status: .status, concl
 Most common release - just the desktop app:
 
 ```bash
-cd /Users/louisbeaumont/Documents/screenpipe
-
 # 1. Bump app version (edit Cargo.toml)
 # 2. Commit and push
 git add -A && git commit -m "Bump app to vX.Y.Z" && git pull --rebase && git push
@@ -97,8 +89,6 @@ sleep 5 && gh run list --workflow=release-app.yml --limit=1
 Release everything:
 
 ```bash
-cd /Users/louisbeaumont/Documents/screenpipe
-
 # Trigger all release workflows
 gh workflow run release-app.yml
 gh workflow run release-cli.yml
