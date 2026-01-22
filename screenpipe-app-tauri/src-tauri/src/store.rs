@@ -193,11 +193,14 @@ pub enum AIProviderType {
 }
 
 #[derive(Serialize, Deserialize,Type,Clone)]
+#[serde(default)]
 pub struct AIPreset {
     pub id: String,
     pub prompt: String,
     pub provider: AIProviderType,
+    #[serde(default)]
     pub url: String,
+    #[serde(default)]
     pub model: String,
     #[serde(rename = "defaultPreset")]
     pub default_preset: bool,
@@ -205,6 +208,21 @@ pub struct AIPreset {
     pub api_key: Option<String>,
     #[serde(rename = "maxContextChars")]
     pub max_context_chars: u32,
+}
+
+impl Default for AIPreset {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            prompt: String::new(),
+            provider: AIProviderType::ScreenpipeCloud,
+            url: "https://ai-proxy.i-f9f.workers.dev/v1".to_string(),
+            model: "claude-3-5-haiku-latest".to_string(),
+            default_preset: false,
+            api_key: None,
+            max_context_chars: 512000,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize,Type,Clone)]
