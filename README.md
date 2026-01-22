@@ -7,8 +7,18 @@
 </p>
 
 <h1 align="center">[ screenpipe ]</h1>
+
+
 <p align="center">24/7 memory for your desktop</p>
 <p align="center">rewind but open source. 100% local. you own your data.</p>
+
+
+
+<p align="center">
+   <a href ="https://screenpi.pe">
+      <img src="https://github.com/user-attachments/assets/c88d218e-40a7-405d-b419-eec1553ea287" alt="logo" width="800">
+   </a>
+</p>
 
 <p align="center">
     <a href="https://screenpi.pe" target="_blank">
