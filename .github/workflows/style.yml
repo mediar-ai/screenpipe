@@ -10,41 +10,42 @@ jobs:
     name: Dependency & Performance Checks
     strategy:
       matrix:
+        # Vi kör på alla system för att vara säkra
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check for unused dependencies
-        uses: bnjbvr/cargo-machete@main
+      # FIX: Vi använder taiki-e/install-action som funkar på både Windows och Linux
+      - name: Install cargo-machete
+        uses: taiki-e/install-action@cargo-machete
 
-      - name: Install dependencies
+      - name: Check for unused dependencies
+        run: cargo machete
+
+      - name: Install dependencies (Ubuntu only)
         if: matrix.os == 'ubuntu-latest'
         run: .github/scripts/install_dependencies.sh
 
-      - name: Install cargo-udeps
-        run: |
-          rustup install nightly
-          cargo +nightly install cargo-udeps --locked
+      # Installera nightly toolchain för udeps
+      - name: Install Rust Nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      # FIX: Snabbare installation av verktyg (slipper kompilera i 10 minuter)
+      - name: Install tools (udeps, bloat, audit, deny)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-udeps, cargo-bloat, cargo-audit, cargo-deny
 
       - name: Run cargo-udeps
         run: cargo +nightly udeps
 
-      - name: Install cargo-bloat
-        run: cargo install cargo-bloat
-
       - name: Analyze binary size
         run: cargo bloat --release
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
       - name: Security audit
         run: cargo audit
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
 
       - name: Check duplicate dependencies
         run: cargo deny check duplicates
