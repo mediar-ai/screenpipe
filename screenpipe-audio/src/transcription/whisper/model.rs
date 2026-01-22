@@ -37,7 +37,7 @@ pub fn download_whisper_model(engine: Arc<AudioTranscriptionEngine>) -> Result<P
 
     info!("model downloaded {}", model_name);
 
-    return Ok(model);
+    Ok(model)
 }
 
 pub fn create_whisper_context_parameters<'a>(

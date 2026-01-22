@@ -1162,7 +1162,7 @@ impl SCServer {
             app.into_make_service_with_connect_info::<SocketAddr>(),
         )
         .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(|e| std::io::Error::other(e))?;
 
         Ok(())
     }
@@ -3851,7 +3851,7 @@ async fn list_interactable_elements_handler(
         timestamp: now.to_rfc3339(),
         expires_at: expires_at.to_rfc3339(),
         element_count: elements.len(),
-        ttl_seconds: ttl_seconds,
+        ttl_seconds,
     };
 
     Ok(JsonResponse(ListInteractableElementsResponse {

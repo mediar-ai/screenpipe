@@ -14,6 +14,12 @@ use super::BrowserUrlDetector;
 
 pub struct MacOSUrlDetector;
 
+impl Default for MacOSUrlDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MacOSUrlDetector {
     pub fn new() -> Self {
         Self

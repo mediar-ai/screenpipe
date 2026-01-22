@@ -273,10 +273,7 @@ impl VideoCapture {
                 check_interval.tick().await;
 
                 // Check if monitor is available
-                let monitor_exists = match get_monitor_by_id(monitor_id).await {
-                    Some(_) => true,
-                    None => false,
-                };
+                let monitor_exists = (get_monitor_by_id(monitor_id).await).is_some();
 
                 // Update availability flag
                 let current_availability = monitor_available_clone.load(Ordering::SeqCst);
@@ -624,7 +621,7 @@ async fn write_frame_with_retry(
 
 async fn flush_ffmpeg_input(stdin: &mut ChildStdin, frame_count: usize, fps: f64) {
     let frames_per_flush = (fps.max(0.1) * 1.0).ceil() as usize;
-    if frame_count % frames_per_flush == 0 {
+    if frame_count.is_multiple_of(frames_per_flush) {
         debug!("Flushing FFmpeg input after {} frames", frames_per_flush);
         if let Err(e) = stdin.flush().await {
             error!("Failed to flush FFmpeg input: {}", e);

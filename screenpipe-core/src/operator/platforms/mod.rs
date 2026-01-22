@@ -56,10 +56,10 @@ pub fn create_engine(
 ) -> Result<Box<dyn AccessibilityEngine>, AutomationError> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(Box::new(macos::MacOSEngine::new(
+        Ok(Box::new(macos::MacOSEngine::new(
             use_background_apps,
             activate_app,
-        )?));
+        )?))
     }
     #[cfg(target_os = "windows")]
     {

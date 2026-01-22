@@ -186,7 +186,7 @@ async fn record_video(
     loop {
         // Increment and check heartbeat
         heartbeat_counter += 1;
-        if heartbeat_counter % heartbeat_interval == 0 {
+        if heartbeat_counter.is_multiple_of(heartbeat_interval) {
             let uptime = start_time.elapsed().as_secs();
             let frames_per_sec = if uptime > 0 {
                 frames_processed as f64 / uptime as f64
@@ -200,7 +200,7 @@ async fn record_video(
         }
 
         // Periodically check database health
-        if heartbeat_counter % db_health_check_interval == 0 {
+        if heartbeat_counter.is_multiple_of(db_health_check_interval) {
             debug!("Checking database health for monitor {}", monitor_id);
             // Just log that we're checking the DB health
             debug!("Database health check periodic reminder");
@@ -208,7 +208,7 @@ async fn record_video(
         }
 
         // In the try-catch block inside the loop, add health checks
-        if heartbeat_counter % health_check_interval == 0 {
+        if heartbeat_counter.is_multiple_of(health_check_interval) {
             debug!(
                 "Checking VideoCapture task health for monitor {}",
                 monitor_id
@@ -343,7 +343,7 @@ async fn record_video(
             }
         } else {
             // Log when frame queue is empty
-            if heartbeat_counter % 10 == 0 {
+            if heartbeat_counter.is_multiple_of(10) {
                 debug!(
                     "record_video: No frames in queue for monitor {}",
                     monitor_id

@@ -915,10 +915,7 @@ impl DatabaseManager {
             .into_iter()
             .map(|raw| async move {
                 let speaker = match raw.speaker_id {
-                    Some(id) => match self.get_speaker_by_id(id).await {
-                        Ok(speaker) => Some(speaker),
-                        Err(_) => None,
-                    },
+                    Some(id) => (self.get_speaker_by_id(id).await).ok(),
                     None => None,
                 };
 

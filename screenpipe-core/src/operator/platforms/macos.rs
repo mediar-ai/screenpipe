@@ -244,7 +244,7 @@ impl MacOSEngine {
 
             // Check if cached element is still valid
             match cached_element.0.role() {
-                Ok(role) if role.to_string() == "AXApplication" => {
+                Ok(role) if role == "AXApplication" => {
                     // First try to activate the app using the cached element
                     unsafe {
                         use objc::{class, msg_send, sel, sel_impl};
@@ -387,7 +387,7 @@ fn map_generic_role_to_macos_roles(role: &str) -> Vec<String> {
 
 fn macos_role_to_generic_role(role: &str) -> Vec<String> {
     match role.to_lowercase().as_str() {
-        "AXWindow" => vec!["window".to_string()],
+        "axwindow" => vec!["window".to_string()],
         "AXButton" | "AXMenuItem" | "AXMenuBarItem" => vec!["button".to_string()],
         "AXTextField" | "AXTextArea" | "AXTextEdit" | "AXSearchField" | "AXURIField"
         | "AXAddressField" => vec![
@@ -397,7 +397,7 @@ fn macos_role_to_generic_role(role: &str) -> Vec<String> {
             "url".to_string(),
             "urlfield".to_string(),
         ],
-        "AXList" => vec!["list".to_string()],
+        "axlist" => vec!["list".to_string()],
         "AXCell" => vec!["listitem".to_string()],
         "AXSheet" | "AXDialog" => vec!["dialog".to_string()],
         "AXGroup" | "AXGenericElement" | "AXWebArea" => {
@@ -538,7 +538,7 @@ impl AccessibilityEngine for MacOSEngine {
                     .element
                     .0
                     .role()
-                    .map_or(false, |r| r.to_string() == "AXApplication")
+                    .is_ok_and(|r| r == "AXApplication")
                 {
                     if let Some(app_name) = root_elem.attributes().label {
                         self.refresh_accessibility_tree(Some(&app_name))?;
@@ -622,7 +622,7 @@ impl AccessibilityEngine for MacOSEngine {
                     &self.system_wide.0,
                     move |e| {
                         // Use move to take ownership of name_owned
-                        e.title().unwrap_or(CFString::new("")).to_string() == name_owned
+                        e.title().unwrap_or(CFString::new("")) == name_owned
                     },
                     None,
                 );
@@ -712,14 +712,14 @@ impl AccessibilityEngine for MacOSEngine {
                         }
                     }
 
-                    return Err(AutomationError::ElementNotFound(format!(
+                    Err(AutomationError::ElementNotFound(format!(
                         "No element found with role '{}' and id '{}'",
                         role, id
-                    )));
+                    )))
                 } else {
-                    return Err(AutomationError::UnsupportedOperation(
+                    Err(AutomationError::UnsupportedOperation(
                         "Only role -> id chains are supported".to_string(),
-                    ));
+                    ))
                 }
             }
             Selector::Filter(_) => Err(AutomationError::UnsupportedOperation(
@@ -766,7 +766,7 @@ impl AccessibilityEngine for MacOSEngine {
             Selector::Id(id) => {
                 let id_owned = id.clone();
                 let collector = ElementsCollectorWithWindows::new(start_element, move |e| {
-                    e.identifier().unwrap_or(CFString::new("")).to_string() == id_owned
+                    e.identifier().unwrap_or(CFString::new("")) == id_owned
                 });
 
                 let ax_ui_elements = collector.find_all();
@@ -782,7 +782,7 @@ impl AccessibilityEngine for MacOSEngine {
             Selector::Name(name) => {
                 let name_owned = name.clone();
                 let collector = ElementsCollectorWithWindows::new(start_element, move |e| {
-                    e.title().unwrap_or(CFString::new("")).to_string() == name_owned
+                    e.title().unwrap_or(CFString::new("")) == name_owned
                 });
 
                 let ax_ui_elements = collector.find_all();
@@ -930,8 +930,10 @@ impl fmt::Display for ClickMethod {
 
 // Define enum for click method selection
 #[derive(Debug)]
+#[derive(Default)]
 pub enum ClickMethodSelection {
     /// Try all methods in sequence (current behavior)
+    #[default]
     Auto,
     /// Use only AXPress action
     AXPress,
@@ -941,11 +943,6 @@ pub enum ClickMethodSelection {
     MouseSimulation,
 }
 
-impl Default for ClickMethodSelection {
-    fn default() -> Self {
-        ClickMethodSelection::Auto
-    }
-}
 
 // Our concrete UIElement implementation for macOS
 pub struct MacOSUIElement {
@@ -973,7 +970,7 @@ impl MacOSUIElement {
         loop {
             // Check if current element is an application
             if let Ok(role) = current.0.role() {
-                if role.to_string() == "AXApplication" {
+                if role == "AXApplication" {
                     return Some(MacOSUIElement {
                         element: current,
                         use_background_apps: self.use_background_apps,
@@ -1050,7 +1047,7 @@ impl MacOSUIElement {
 
     fn click_press(&self) -> Result<ClickResult, AutomationError> {
         let press_attr = AXAttribute::new(&CFString::new("AXPress"));
-        match self.element.0.perform_action(&press_attr.as_CFString()) {
+        match self.element.0.perform_action(press_attr.as_CFString()) {
             Ok(_) => {
                 debug!("Successfully clicked element with AXPress");
                 Ok(ClickResult {
@@ -1068,7 +1065,7 @@ impl MacOSUIElement {
 
     fn click_accessibility_click(&self) -> Result<ClickResult, AutomationError> {
         let click_attr = AXAttribute::new(&CFString::new("AXClick"));
-        match self.element.0.perform_action(&click_attr.as_CFString()) {
+        match self.element.0.perform_action(click_attr.as_CFString()) {
             Ok(_) => {
                 debug!("Successfully clicked element with AXClick");
                 Ok(ClickResult {
@@ -1346,7 +1343,7 @@ impl UIElementImpl for MacOSUIElement {
             .element
             .0
             .role()
-            .map_or(false, |r| r.to_string() == "AXWindow");
+            .is_ok_and(|r| r == "AXWindow");
 
         // Special case for windows
         if is_window {
@@ -1669,7 +1666,7 @@ impl UIElementImpl for MacOSUIElement {
 
         // First try using the AXRaise action
         let raise_attr = AXAttribute::new(&CFString::new("AXRaise"));
-        if let Ok(_) = self.element.0.perform_action(&raise_attr.as_CFString()) {
+        if self.element.0.perform_action(raise_attr.as_CFString()).is_ok() {
             debug!("Successfully raised element");
 
             // Now try to directly focus the element
@@ -1704,7 +1701,7 @@ impl UIElementImpl for MacOSUIElement {
         self.click().map(|_result| {
             // Optionally log the details of how the click was performed
             debug!("Focus achieved via click method: {}", _result.method);
-            ()
+            
         })
     }
 
@@ -1946,7 +1943,7 @@ impl UIElementImpl for MacOSUIElement {
 
         self.element
             .0
-            .perform_action(&action_attr.as_CFString())
+            .perform_action(action_attr.as_CFString())
             .map_err(|e| {
                 AutomationError::PlatformError(format!(
                     "Failed to perform action {}: {}",
@@ -1964,7 +1961,7 @@ impl UIElementImpl for MacOSUIElement {
             .element
             .0
             .role()
-            .map_or(false, |r| r.to_string() == "AXApplication")
+            .is_ok_and(|r| r == "AXApplication")
         {
             if let Some(app_name) = self.attributes().label {
                 engine.refresh_accessibility_tree(Some(&app_name))?;
@@ -2157,7 +2154,7 @@ fn parse_ax_attribute_value(
                     // Create an array of element addresses
                     let mut items = Vec::with_capacity(count as usize);
                     for i in 0..count {
-                        let item = CFArrayGetValueAtIndex(array_ref, i as isize);
+                        let item = CFArrayGetValueAtIndex(array_ref, i);
                         if !item.is_null() {
                             // Correctly wrap the raw pointer into AXUIElement
                             let ax_element = AXUIElement::wrap_under_get_rule(item as *mut _);
@@ -2186,7 +2183,7 @@ fn element_contains_text(e: &AXUIElement, text: &str) -> bool {
         .value()
         .ok()
         .and_then(|v| v.downcast_into::<CFString>())
-        .map_or(false, |s| s.to_string().contains(text));
+        .is_some_and(|s| s.to_string().contains(text));
 
     if contains_in_value {
         return true;
@@ -2196,12 +2193,12 @@ fn element_contains_text(e: &AXUIElement, text: &str) -> bool {
     let contains_in_title = e
         .title()
         .ok()
-        .map_or(false, |t| t.to_string().contains(text));
+        .is_some_and(|t| t.to_string().contains(text));
 
     let contains_in_desc = e
         .description()
         .ok()
-        .map_or(false, |d| d.to_string().contains(text));
+        .is_some_and(|d| d.to_string().contains(text));
 
     // Check common text attributes
     for attr_name in &[
