@@ -1,6 +1,9 @@
 /// Tests for ONNX Runtime model loading and inference
 /// These tests verify that the ort crate is properly configured and working
 /// on the current platform (especially important for macOS Apple Silicon).
+///
+/// These tests are ignored by default because they require downloading large models.
+/// Run them locally with: cargo test -p screenpipe-audio --test onnx_model_test -- --ignored
 
 #[cfg(test)]
 mod tests {
@@ -22,6 +25,7 @@ mod tests {
     /// Test that we can create an ONNX session for the embedding model
     /// This tests the core ort::Session creation which is where segfaults typically occur
     #[tokio::test]
+    #[ignore = "requires model download, run locally with --ignored"]
     async fn test_onnx_embedding_model_loads() -> Result<()> {
         setup();
         println!("Testing ONNX embedding model loading...");
@@ -50,6 +54,7 @@ mod tests {
 
     /// Test that we can create an ONNX session for the segmentation model
     #[tokio::test]
+    #[ignore = "requires model download, run locally with --ignored"]
     async fn test_onnx_segmentation_model_loads() -> Result<()> {
         setup();
         println!("Testing ONNX segmentation model loading...");
@@ -83,6 +88,7 @@ mod tests {
 
     /// Test that SileroVad can initialize (uses ONNX via vad-rs crate)
     #[tokio::test]
+    #[ignore = "requires model download, run locally with --ignored"]
     async fn test_silero_vad_initializes() -> Result<()> {
         setup();
         println!("Testing SileroVad initialization (uses ONNX via vad-rs)...");
@@ -110,6 +116,7 @@ mod tests {
 
     /// Test that EmbeddingExtractor can run inference
     #[tokio::test]
+    #[ignore = "requires model download, run locally with --ignored"]
     async fn test_embedding_extractor_inference() -> Result<()> {
         setup();
         println!("Testing EmbeddingExtractor inference...");
@@ -144,6 +151,7 @@ mod tests {
     /// Combined test that mimics the startup initialization sequence
     /// This tests all ONNX models in the order they're loaded during app startup
     #[tokio::test]
+    #[ignore = "requires model download, run locally with --ignored"]
     async fn test_onnx_startup_sequence() -> Result<()> {
         setup();
         println!("Testing ONNX startup sequence (mimics app initialization)...");
