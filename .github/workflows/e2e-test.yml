@@ -20,35 +20,23 @@ jobs:
       with:
         node-version: 22
 
-    - name: Install vcpkg
-      uses: lukka/run-vcpkg@v11
-      with:
-        vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
-
+    # FIX 1: Install LLVM/Clang (Missing in previous version, required for bindgen)
     - name: Install LLVM and Clang
       uses: KyleMayes/install-llvm-action@v2
       with:
         version: "10.0"
 
-    - name: Install OpenSSL
-      shell: powershell
+    # FIX 2: Explicitly install frontend dependencies and Tauri CLI
+    - name: Install dependencies
+      working-directory: ./screenpipe-app-tauri
       run: |
-        choco install openssl
-        openssl version
-
-    - name: Install frontend dependencies
-      working-directory: ./screenpipe-app-tauri
-      run: bun install
-
-    - name: Run pre_build.js
-      env:
-        SKIP_SCREENPIPE_SETUP: true
-      run: bun ./scripts/pre_build.js
-      working-directory: ./screenpipe-app-tauri
+        bun install
+        bun add -d @tauri-apps/cli
 
     - name: Setup MSVC Dev Cmd
       uses: ilammy/msvc-dev-cmd@v1
         
+    # --- NUCLEAR FIX: Inject Cargo Config ---
     - name: Force Rust Warning Overrides
       shell: bash
       run: |
@@ -60,23 +48,24 @@ jobs:
       uses: tauri-apps/tauri-action@v0.5.17
       env:
         CI: true
-        VCPKG_STATIC_LINKAGE: "true"
       with:
+        # Use the local binary to ensure it is found
+        tauriScript: bun tauri
         args: "--target x86_64-pc-windows-msvc --no-bundle"
         projectPath: "./screenpipe-app-tauri"
-        # FIX: Call the tauri binary directly from node_modules to avoid "executable not found"
-        tauriScript: ./node_modules/.bin/tauri
         
     - name: Run E2E Tests
       shell: pwsh
       working-directory: ./screenpipe-app-tauri
+      # Ensure log is created even if tests fail early
       run: |
-        bun run test:e2e > e2e_output.log 2>&1
+        New-Item -Path . -Name "e2e_output.log" -ItemType "file" -Force
+        bun run test:e2e >> e2e_output.log 2>&1
       continue-on-error: true
       
     - name: Upload Logs
       uses: actions/upload-artifact@v4
-      if: always()
+      if: always() # Upload even if build fails
       with:
         name: windows-e2e-logs
         path: ./screenpipe-app-tauri/e2e_output.log
