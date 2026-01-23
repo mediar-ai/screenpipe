@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          # Including libdbus, ssl, fonts, and locales for a complete test environment
+          # Standardized dependencies to prevent panics and support locales
           sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev \
             libxtst-dev libxdo-dev libtesseract-dev libssl-dev libdbus-1-dev \
             clang cmake locales xfonts-base
@@ -26,6 +26,7 @@ jobs:
       - env:
           LANG: en_US.UTF-8
           LC_ALL: en_US.UTF-8
+          TEMP: /tmp
         run: cargo test --workspace --exclude screenpipe-app-tauri --no-fail-fast -- --skip pipes_test --skip video_utils_test
 
   test-windows:
@@ -49,9 +50,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: brew install ffmpeg
+        run: brew install ffmpeg pkg-config cmake
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - shell: bash
         env:
+          PKG_CONFIG_PATH: "/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr

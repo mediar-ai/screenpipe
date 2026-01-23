@@ -21,7 +21,7 @@ jobs:
     - name: Install Critical Dependencies
       run: |
         sudo apt-get update
-        # Added fonts, locales, and xterm as suggested for better X11 compatibility
+        # Added fonts, locales, and xterm for improved X11 headless compatibility
         sudo apt-get install -y xvfb fluxbox x11-utils xdotool xterm locales \
           xfonts-base xfonts-100dpi xfonts-75dpi xfonts-cyrillic \
           libasound2-dev pkg-config
@@ -40,14 +40,13 @@ jobs:
         
         until xset -q > /dev/null 2>&1; do sleep 1; done
         fluxbox &
-        sleep 5 # Increased sleep for window manager readiness
+        sleep 5 # Ensure window manager is fully ready
         
-        # FIX: Using xterm instead of xmessage to avoid COMPOUND_TEXT issues
-        # It opens a terminal and prints the test string
-        xterm -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
+        # FIX: xterm is used to display test text, bypassing COMPOUND_TEXT errors
+        xterm -geometry 80x24+0+0 -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
         sleep 5
         
-        # Verify window is present
+        # Verify window presence before starting screenpipe
         xwininfo -name "xterm" || echo "Warning: xterm window not found"
     
     - name: Run Integration Tests
@@ -56,6 +55,7 @@ jobs:
         LANG: en_US.UTF-8
         LC_ALL: en_US.UTF-8
         RUST_LOG: debug
+        # Force fullscreen capture to bypass window-specific title parsing errors
         SCREENPIPE_CAPTURE_FULLSCREEN: "true"
       run: |
         touch screenpipe_output.log
