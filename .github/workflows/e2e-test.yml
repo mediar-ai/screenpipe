@@ -40,9 +40,10 @@ jobs:
       working-directory: ./screenpipe-app-tauri
       run: bun install
 
+    # FIX: We set SKIP_SCREENPIPE_SETUP to true to prevent the 404 FFmpeg download error
     - name: Run pre_build.js
       env:
-        SKIP_SCREENPIPE_SETUP: true
+        SKIP_SCREENPIPE_SETUP: "true"
       run: bun ./scripts/pre_build.js
       working-directory: ./screenpipe-app-tauri
 
@@ -56,7 +57,6 @@ jobs:
         echo '[build]' >> .cargo/config.toml
         echo 'rustflags = ["-A", "warnings", "-A", "unexpected_cfgs", "-C", "target-feature=+crt-static", "-C", "link-arg=/LTCG"]' >> .cargo/config.toml
 
-    # This ensures the upload step doesn't fail if the build crashes early
     - name: Pre-create Log File
       shell: bash
       run: |
@@ -68,6 +68,7 @@ jobs:
       env:
         CI: true
         VCPKG_STATIC_LINKAGE: "true"
+        SKIP_SCREENPIPE_SETUP: "true"
       with:
         args: "--target x86_64-pc-windows-msvc --no-bundle"
         projectPath: "./screenpipe-app-tauri"
