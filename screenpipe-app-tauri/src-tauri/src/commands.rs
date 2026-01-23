@@ -382,9 +382,9 @@ pub async fn show_shortcut_reminder(
     let screen_size = monitor.size();
     let scale_factor = monitor.scale_factor();
 
-    // Compact window dimensions (wider for hover state)
-    let window_width = 280.0;
-    let window_height = 40.0;
+    // Compact window dimensions
+    let window_width = 180.0;
+    let window_height = 28.0;
 
     // Position at top center of screen
     let x = ((screen_size.width as f64 / scale_factor) - window_width) / 2.0;
