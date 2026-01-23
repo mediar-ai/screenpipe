@@ -2,9 +2,9 @@ name: Linux Integration Test
 
 on:
   push:
-    branches: [ main  ]
+    branches: [ main ]
   pull_request:
-    branches: [ main  ]
+    branches: [ main ]
 
 jobs:
   test-linux:
@@ -21,7 +21,11 @@ jobs:
         rustflags: ""
 
     - name: Install dependencies
-      run: .github/scripts/install_dependencies.sh
+      # FIX: Added xvfb, fluxbox, and alsa-utils for virtual desktop/audio
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb fluxbox alsa-utils libasound2-dev pkg-config
+        .github/scripts/install_dependencies.sh
     
     - name: Verify Tesseract installation
       run: .github/scripts/verify_tesseract.sh
@@ -29,19 +33,36 @@ jobs:
     - name: Build CLI
       run: cargo build --release
     
-    - name: Set up virtual display with window manager
-      run: .github/scripts/setup_display.sh
+    # FIX: Robust Virtual Display and Audio setup
+    - name: Set up virtual display and dummy audio
+      run: |
+        # Start Xvfb
+        Xvfb :99 -screen 0 1280x1024x24 &
+        export DISPLAY=:99
+        sleep 3
+        # Start a window manager so "No windows were detected" fix
+        fluxbox &
+        # Setup dummy ALSA device
+        sudo modprobe snd-dummy
     
     - name: Setup audio
+      env:
+        DISPLAY: :99
       run: .github/scripts/setup_audio.sh
     
     - name: Run Screenpipe
+      env:
+        DISPLAY: :99
       run: .github/scripts/run_screenpipe.sh
     
     - name: Test OCR
+      env:
+        DISPLAY: :99
       run: .github/scripts/test_ocr.sh
     
     - name: Test Audio Capture
+      env:
+        DISPLAY: :99
       run: .github/scripts/test_audio_capture.sh
     
     - name: Stop screenpipe
@@ -57,20 +78,5 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: screenpipe-logs
+        name: screenpipe-linux-logs
         path: screenpipe_output.log
-    
-    - name: Upload captured data
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: screenpipe-data
-        path: |
-          ~/.screenpipe/data/
-    
-    - name: Upload test image
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-image
-        path: test_image.png
