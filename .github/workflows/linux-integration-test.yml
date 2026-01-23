@@ -21,29 +21,47 @@ jobs:
     - name: Install Critical Dependencies
       run: |
         sudo apt-get update
-        # added imagemagick for 'display' and 'import' tools
-        sudo apt-get install -y xvfb fluxbox x11-utils imagemagick libasound2-dev pkg-config
+        # Added xdotool and xwininfo for window verification and stabilization
+        sudo apt-get install -y xvfb fluxbox x11-utils xdotool imagemagick libasound2-dev pkg-config
         .github/scripts/install_dependencies.sh
     
     - name: Build CLI
       run: cargo build --release
     
-    - name: Start Virtual Desktop and Create Content
+    - name: Start Virtual Desktop and Verify Content
       run: |
         Xvfb :99 -screen 0 1280x1024x24 &
         export DISPLAY=:99
         until xset -q > /dev/null 2>&1; do sleep 1; done
         fluxbox &
         sleep 2
-        # FIX: use a simpler background text that doesn't rely on window management titles
+        
+        # Launch content and verify its existence
         xmessage -center "Screenpipe Integration Test Content" &
+        
+        # FIX: Robust wait/check for the window appearance
+        echo "Waiting for xmessage window..."
+        MAX_RETRIES=10
+        COUNT=0
+        while ! xwininfo -name "xmessage" > /dev/null 2>&1; do
+          sleep 1
+          COUNT=$((COUNT+1))
+          if [ $COUNT -ge $MAX_RETRIES ]; then
+            echo "Error: xmessage window never appeared"
+            exit 1
+          fi
+        done
+        
+        # Use xdotool to ensure it is focused and visible
+        xdotool search --name "xmessage" windowactivate
+        echo "Window verified and focused."
         sleep 2
     
     - name: Run Integration Tests
       env:
         DISPLAY: :99
         RUST_LOG: debug
-        # FIX: force full screen capture to bypass "COMPOUND_TEXT not supported" window errors
+        # Force fullscreen to bypass the COMPOUND_TEXT window title panic
         SCREENPIPE_CAPTURE_FULLSCREEN: "true"
       run: |
         touch screenpipe_output.log
