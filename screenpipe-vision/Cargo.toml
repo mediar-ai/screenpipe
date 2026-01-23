@@ -84,6 +84,7 @@ windows = { version = "0.58", features = [
   "Media_Ocr",
   "Storage",
   "Storage_Streams",
+  "Foundation_Collections",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -40,42 +40,37 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> Result<(String, String
     let mut full_text = String::new();
     let mut ocr_results: Vec<serde_json::Value> = Vec::new();
 
-    // Iterate through lines and words to get bounding boxes
-    if let Ok(lines) = result.Lines() {
-        for line in lines {
-            if let Ok(words) = line.Words() {
-                for word in words {
-                    if let Ok(text) = word.Text() {
-                        let text_str = text.to_string();
-                        if !text_str.is_empty() {
-                            if !full_text.is_empty() {
-                                full_text.push(' ');
-                            }
-                            full_text.push_str(&text_str);
-
-                            // Get bounding box for PII redaction support
-                            if let Ok(rect) = word.BoundingRect() {
-                                ocr_results.push(serde_json::json!({
-                                    "text": text_str,
-                                    "left": rect.X.to_string(),
-                                    "top": rect.Y.to_string(),
-                                    "width": rect.Width.to_string(),
-                                    "height": rect.Height.to_string(),
-                                    "conf": "1.0"  // Windows OCR doesn't provide word-level confidence
-                                }));
-                            }
-                        }
-                    }
+    // Try to iterate through lines and words to get bounding boxes
+    // The Windows OCR API returns lines, each containing words with bounding rects
+    let lines = result.Lines()?;
+    for line in lines {
+        let words = line.Words()?;
+        for word in words {
+            let text = word.Text()?;
+            let text_str = text.to_string();
+            if !text_str.is_empty() {
+                if !full_text.is_empty() {
+                    full_text.push(' ');
                 }
+                full_text.push_str(&text_str);
+
+                // Get bounding box for PII redaction support
+                let rect = word.BoundingRect()?;
+                ocr_results.push(serde_json::json!({
+                    "text": text_str,
+                    "left": rect.X.to_string(),
+                    "top": rect.Y.to_string(),
+                    "width": rect.Width.to_string(),
+                    "height": rect.Height.to_string(),
+                    "conf": "1.0"  // Windows OCR doesn't provide word-level confidence
+                }));
             }
         }
     }
 
-    // Fallback if iteration failed
+    // Fallback if no words were extracted
     if full_text.is_empty() {
-        if let Ok(text) = result.Text() {
-            full_text = text.to_string();
-        }
+        full_text = result.Text()?.to_string();
     }
 
     let json_output = serde_json::to_string(&ocr_results).unwrap_or_else(|_| "[]".to_string());
