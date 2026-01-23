@@ -1,130 +1,99 @@
-<p align="center">
-   <a href="README.md">English</a> | <a href="README-zh_CN.md">简体中文</a> | 日本語
-</p>
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=c3628864-a0cb-47a1-a822-2f936cff50b2" />
 
 <p align="center">
-   <a href="https://screenpi.pe">
-      <img src="https://github.com/user-attachments/assets/d3b1de26-c3c0-4c84-b9c4-b03213b97a30" alt="ロゴ" width="200">
+   <a href ="https://screenpi.pe">
+      <img src="https://github.com/user-attachments/assets/d3b1de26-c3c0-4c84-b9c4-b03213b97a30" alt="logo" width="200">
    </a>
 </p>
 
-<p align="center" style="font-family: 'Press Start 2P', monospace;">
-   <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">AIアプリを構築、配布、収益化するためのライブラリ＆プラットフォーム（Rewind、Granolaなどと同様）</p>
-   <p align="center">オープンソース | 100% ローカル | 開発者フレンドリー | 24/7画面、マイク、キーボードの記録と制御</p>
+<p align="center">
+   <a href="README.md">English</a> | <a href="README-zh_CN.md">简体中文</a> | <a href="README-ja.md">日本語</a>
 </p>
 
-<p align="center" style="font-family: monospace;">
-   <code>[ ピクセル単位で現実を記録する ]</code>
+<h1 align="center">[ screenpipe ]</h1>
+
+
+<p align="center">デスクトップの24時間メモリー</p>
+<p align="center">オープンソース版 rewind。100% ローカル。データはあなたのもの。</p>
+
+
+
+<p align="center">
+   <a href ="https://screenpi.pe">
+      <img src="https://github.com/user-attachments/assets/c88d218e-40a7-405d-b419-eec1553ea287" alt="logo" width="800">
+   </a>
 </p>
 
 <p align="center">
     <a href="https://screenpi.pe" target="_blank">
-        <img src="https://img.shields.io/badge/Download%20The-Desktop%20App-blue?style=for-the-badge" alt="デスクトップアプリをダウンロード">
+        <img src="https://img.shields.io/badge/ダウンロード-デスクトップアプリ-black?style=for-the-badge" alt="ダウンロード">
     </a>
-</p>
-
-<p align="center">
-    <a href="https://www.youtube.com/@mediar_ai" target="_blank">
-       <img alt="YouTubeチャンネル登録者数" src="https://img.shields.io/youtube/channel/subscribers/UCwjkpAsb70_mENKvy7hT5bw">
+    <a href="https://github.com/mediar-ai/screenpipe/raw/main/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb" target="_blank">
+        <img src="https://img.shields.io/badge/インストール-Claude%20拡張機能-D97706?style=for-the-badge&logo=anthropic&logoColor=white" alt="claude拡張機能をインストール">
     </a>
 </p>
 
 <p align="center">
     <a href="https://discord.gg/dU9EBuw7Uq">
-        <img src="https://img.shields.io/discord/823813159592001537?color=5865F2&logo=discord&logoColor=white&style=flat-square" alt="Discordに参加">
+        <img src="https://img.shields.io/discord/823813159592001537?color=5865F2&logo=discord&logoColor=white&style=flat-square" alt="discord">
     </a>
-   <a href="https://twitter.com/screen_pipe"><img alt="Xアカウント" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=Follow%20%40screen_pipe"></a>
-   <a href="https://console.algora.io/org/mediar-ai/bounties?status=completed">
-       <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dcompleted" alt="報酬付きバウンティ">
-   </a>
-   <a href="https://console.algora.io/org/mediar-ai/bounties?status=open">
-       <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dopen" alt="オープンバウンティ">
-   </a>
+    <a href="https://twitter.com/screen_pipe">
+        <img alt="x" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=フォロー%20%40screen_pipe">
+    </a>
 </p>
 
-<p align="center">
-   <img width="1312" alt="スクリーンショット1" src="https://github.com/user-attachments/assets/26b2986d-01aa-43de-acf0-375a72752894" />
-   <img width="1312" alt="スクリーンショット2" src="https://github.com/user-attachments/assets/0da6e948-4fa2-48ab-b18c-d8fbd1246261" />
-   <img width="1142" alt="スクリーンショット3" src="https://github.com/user-attachments/assets/5b6f7015-b522-4894-a0d7-d91d648895f5" />
-   <img width="1312" alt="スクリーンショット4" src="https://github.com/user-attachments/assets/08f1d8bd-803e-4cc5-8b8f-ad33bfebfd7e" />
-</p>
+<br>
+
+
+![image](https://github.com/user-attachments/assets/dec2e07c-b3d5-46dd-9f36-c0c26a82c9fb)
+
 
 ---
 
-*ニュース* 🔥
-- [2025/01] Different AIと提携し、[画面に基づく金融自動化](https://github.com/different-ai/hypr-v0)と[Obsidian内のGranola代替](https://github.com/different-ai/file-organizer-2000)を提供
-- [2024/12] パイプストアにStripe連携: 開発者は数行のJSで収益化（Reddit、LinkedIn、タイムラインエージェントなど）
-- [2024/11] [GitHubトレンド1位に再び選出](https://x.com/louis030195/status/1859628763425931479)
-- [2024/10] [Founders, Inc.](https://f.inc/)から支援を受ける
-- [2024/09] [GitHubトレンド1位、Hacker Newsに掲載！](https://x.com/louis030195/status/1840859691754344483)
-- [2024/08] アプリインターフェースからGitHubリポジトリ/ディレクトリに基づいて[パイプの作成、共有、インストール](https://docs.screenpi.pe/docs/plugins)が可能に
-- [2024/08] バウンティプログラム開始！ScreenPipeに貢献して収益を得られます。[課題を確認](https://github.com/mediar-ai/screenpipe/issues)
-- [2024/08] Apple & Windows ネイティブOCRをリリース
-- [2024/07] 🎁 AGI Houseのハッカソンでスクリーンパイプが受賞（近日統合予定）
-- [2024/07] **デスクトップアプリをリリース！ [今すぐダウンロード！](https://screenpi.pe)**
+## これは何？
 
----
+screenpipeは画面と音声を24時間365日録画し、すべてをローカルに保存し、デジタル履歴をAIに接続できます。
 
-# どうやって動くの？
-
-- 24時間365日、100%ローカルで記録（CPU使用率10%、メモリ4GB、月15GB）
-- APIで索引化
-- 開発者はユーザーの完全なコンテキストを持つAIアプリをデスクトップネイティブ、Next.js環境で構築、公開、収益化
-
-<img src="./content/diagram2.png" width="800" />
-
-<img src="https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91" width="400" />
-
-# なぜ必要なの？
-
-1. コンテキストは知能の暗黒物質
-2. 記録していない1秒1秒がAGIにとって欠落したコンテキスト
-
-## 始め方
-
-macOS、Linux:
-
-```bash
-curl -fsSL raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | sh
+```
+┌─────────────────────────────────────────┐
+│  画面 + 音声 → ローカル保存 → AI        │
+└─────────────────────────────────────────┘
 ```
 
-Windowsの場合
+- **すべてを記憶** - 見たこと、聞いたこと、やったことを忘れない
+- **AIで検索** - 自然言語で何でも検索
+- **100% ローカル** - データはあなたのマシンから出ない
+- **オープンソース** - 検査、変更、所有が可能
+
+## インストール
+
+macOS、Linux：
 
 ```bash
-irm https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.ps1 | iex
-```
-
-その後
-
-```bash
+curl -fsSL get.screenpi.pe/cli | sh
 screenpipe
 ```
 
-macOSでは画面とマイクの許可を必ず設定してください
-
-- [デスクトップアプリをダウンロード](https://screenpi.pe/)
-- [ドキュメント & ソースからビルド](https://docs.screenpi.pe/getting-started)
-
-## プラグインの作成
+Windows：
 
 ```bash
-bunx --bun @screenpipe/dev@latest pipe create
+iwr get.screenpi.pe/cli.ps1 | iex
+screenpipe
 ```
 
-ScreenPipeには「パイプ」と呼ばれるプラグインシステムがあり、Rustコード内のサンドボックス環境でNext.jsデスクトップアプリを作成できます。[詳細はこちら](https://docs.screenpi.pe/plugins)
+または[デスクトップアプリをダウンロード](https://screenpi.pe)
 
-## スター履歴
+## スペック
 
-![スター履歴 2024年11月](https://github.com/user-attachments/assets/c7e4de14-0771-4bbb-9a4c-7f2102a1a6cd)
+- CPU使用率 10%
+- RAM 4GB
+- ストレージ 約15GB/月
+- オフライン動作可能
 
-## コントリビューション
+---
 
-貢献を歓迎します！貢献したい方は [CONTRIBUTING.md](CONTRIBUTING.md) をお読みください。
-
-   <a href="https://console.algora.io/org/mediar-ai/bounties?status=completed">
-       <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dcompleted" alt="報酬付きバウンティ">
-   </a>
-   <a href="https://console.algora.io/org/mediar-ai/bounties?status=open">
-       <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dopen" alt="オープンバウンティ">
-   </a>
+<p align="center">
+    <a href="https://docs.screenpi.pe">ドキュメント</a> ·
+    <a href="https://discord.gg/dU9EBuw7Uq">discord</a> ·
+    <a href="https://twitter.com/screen_pipe">x</a>
+</p>

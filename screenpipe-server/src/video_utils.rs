@@ -569,7 +569,8 @@ pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Res
         }
     };
 
-    let offset_seconds = offset_index as f64 * source_fps;
+    // Convert frame index to seconds: frame_time = frame_index / fps
+    let offset_seconds = offset_index as f64 / source_fps;
     let offset_str = format!("{:.3}", offset_seconds);
 
     // Create a temporary directory for frames if it doesn't exist
@@ -673,7 +674,8 @@ pub async fn extract_high_quality_frame(
         }
     };
 
-    let frame_time = offset_index as f64 * source_fps;
+    // Convert frame index to seconds: frame_time = frame_index / fps
+    let frame_time = offset_index as f64 / source_fps;
 
     let frame_filename = format!(
         "frame_{}_{}.png",
