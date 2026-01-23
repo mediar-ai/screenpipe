@@ -16,14 +16,12 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         toolchain: stable
-        override: true
         cache: true
-        rustflags: ""
 
     - name: Install Critical Dependencies
       run: |
         sudo apt-get update
-        # Added fluxbox (WM), xvfb (Display), and x11-utils (Tools)
+        # fluxbox provides the 'windows' screenpipe needs to see
         sudo apt-get install -y xvfb fluxbox x11-utils libasound2-dev pkg-config
         .github/scripts/install_dependencies.sh
     
@@ -32,11 +30,10 @@ jobs:
     
     - name: Start Virtual Desktop
       run: |
-        # Start Xvfb and wait for it to be ready
         Xvfb :99 -screen 0 1280x1024x24 &
         export DISPLAY=:99
+        # Wait for Xvfb to be ready
         until xset -q > /dev/null 2>&1; do sleep 1; done
-        # Start Fluxbox so the app has "windows" to detect
         fluxbox &
         sleep 2
     
@@ -45,9 +42,8 @@ jobs:
         DISPLAY: :99
         RUST_LOG: debug
       run: |
-        # Manually create the log file to ensure artifact upload always sees it
+        # Force create log so artifact upload always finds it
         touch screenpipe_output.log
-        # Run the scripts with the virtual display context
         .github/scripts/setup_audio.sh
         .github/scripts/run_screenpipe.sh
         .github/scripts/test_ocr.sh
@@ -59,7 +55,7 @@ jobs:
 
     - name: Upload Logs
       uses: actions/upload-artifact@v4
-      if: always() # Ensures you get logs even on failure
+      if: always() 
       with:
         name: screenpipe-linux-logs
         path: screenpipe_output.log
