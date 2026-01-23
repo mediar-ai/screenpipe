@@ -57,6 +57,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires Silero VAD ONNX models, run locally with --ignored"]
     async fn test_search_audio_with_length_constraints() {
         let (app, db) = setup_test_app().await;
 
@@ -381,6 +382,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires Silero VAD ONNX models, run locally with --ignored"]
     async fn test_search_with_time_constraints() {
         let (_, db) = setup_test_app().await;
 
@@ -578,6 +580,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires Silero VAD ONNX models, run locally with --ignored"]
     async fn test_recent_tasks_no_bleeding() {
         let (_, db) = setup_test_app().await;
 
