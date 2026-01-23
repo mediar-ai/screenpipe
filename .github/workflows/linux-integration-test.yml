@@ -41,22 +41,25 @@ jobs:
         fluxbox &
         sleep 5 
         
-        # FIX: Start xterm with a larger wait and a validation loop
-        xterm -geometry 80x24+0+0 -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
-        sleep 10
+        # Start xterm with an explicit title and class to make it easier to find
+        xterm -title "test-window" -class "test-class" -geometry 80x24+0+0 -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
         
-        # Try up to 5 times to wait for xterm window to appear for OCR
-        for i in {1..5}; do
-          if xwininfo -name "xterm" > /dev/null 2>&1; then 
-            echo "xterm window detected!"
+        # Give the X server a moment to map the window
+        sleep 5
+        
+        # FIX: Search by class if name fails, and increase retries
+        echo "Validating window presence..."
+        for i in {1..10}; do
+          if xwininfo -name "test-window" > /dev/null 2>&1 || xdotool search --class "test-class" > /dev/null 2>&1; then 
+            echo "Test window detected!"
             break 
           fi
-          echo "Waiting for xterm window (attempt $i)..."
-          sleep 2
+          echo "Waiting for window (attempt $i)..."
+          sleep 3
         done
         
-        # Final verification
-        xwininfo -name "xterm" || (echo "Error: xterm window not found" && exit 1)
+        # Final check: activate the window to ensure it's visible to the OCR engine
+        xdotool search --class "test-class" windowactivate || (echo "Error: Test window not found" && exit 1)
     
     - name: Run Integration Tests
       env:
@@ -64,6 +67,7 @@ jobs:
         LANG: en_US.UTF-8
         LC_ALL: en_US.UTF-8
         RUST_LOG: debug
+        # Force fullscreen capture to bypass window-specific title parsing errors
         SCREENPIPE_CAPTURE_FULLSCREEN: "true"
       run: |
         touch screenpipe_output.log

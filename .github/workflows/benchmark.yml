@@ -17,7 +17,7 @@ jobs:
             cmd: brew install ffmpeg && cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_apple.txt
           - os: ubuntu-latest
             name: tesseract
-            # FIX: tee moved inside the block to prevent shell syntax errors
+            # FIX: Moved tee inside the command string to avoid shell syntax errors
             cmd: |
               sudo apt-get update && \
               sudo apt-get install -y pkg-config libasound2-dev libleptonica-dev libtesseract-dev \
@@ -34,7 +34,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Run benchmark
         shell: bash
-        # FIX: Simplified to avoid unexpected token '|' errors
+        # Simplified to prevent unexpected token errors
         run: ${{ matrix.cmd }}
       - uses: actions/upload-artifact@v4
         with:
