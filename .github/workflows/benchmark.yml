@@ -17,7 +17,8 @@ jobs:
             cmd: brew install ffmpeg && cargo bench --bench ocr_benchmark -- --output-format bencher
           - os: ubuntu-latest
             name: tesseract
-            cmd: sudo apt-get update && sudo apt-get install -y pkg-config libasound2-dev libleptonica-dev libtesseract-dev tesseract-ocr-eng libx11-dev libxi-dev libxext-dev libxtst-dev libxrandr-dev libxinerama-dev libxcursor-dev libxdo-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev && cargo bench --bench ocr_benchmark -- --output-format bencher
+            # FIX: Added libssl-dev to prevent the 101 panic during compilation
+            cmd: sudo apt-get update && sudo apt-get install -y pkg-config libasound2-dev libleptonica-dev libtesseract-dev tesseract-ocr-eng libx11-dev libxi-dev libxext-dev libxtst-dev libxrandr-dev libxinerama-dev libxcursor-dev libxdo-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libssl-dev && cargo bench --bench ocr_benchmark -- --output-format bencher
           - os: windows-latest
             name: windows
             cmd: cargo bench --bench ocr_benchmark -- --output-format bencher
