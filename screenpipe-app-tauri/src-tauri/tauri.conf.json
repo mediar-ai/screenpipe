@@ -39,6 +39,9 @@
     ]
   },
   "plugins": {
+    "updater": {
+      "endpoints": []
+    },
     "deep-link": {
       "desktop": {
         "schemes": [
