@@ -17,6 +17,14 @@ export default function ShortcutReminderLayout({
             padding: 0;
             overflow: hidden;
           }
+          /* Suppress all tooltips */
+          [title] {
+            pointer-events: auto;
+          }
+          [data-tauri-drag-region] {
+            -webkit-user-select: none;
+            user-select: none;
+          }
         `}</style>
       </head>
       <body style={{ background: "transparent", margin: 0, padding: 0 }}>
