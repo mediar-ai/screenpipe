@@ -140,5 +140,4 @@ jobs:
         with:
           name: screenpipe-linux-logs
           path: screenpipe_output.log
-    name: screenpipe-linux-logs
-    path: screenpipe_output.log
+
