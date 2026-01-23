@@ -12,6 +12,13 @@ jobs:
     runs-on: windows-2019
     steps:
     - uses: actions/checkout@v4
+      with:
+        # Initial submodule metadata fetch
+        submodules: recursive
+
+    - name: Initialize Submodules
+      # Forces the actual file download into the vcpkg directory
+      run: git submodule update --init --recursive
 
     - name: Setup Bun & Node
       uses: oven-sh/setup-bun@v2
@@ -20,9 +27,19 @@ jobs:
       with:
         node-version: 22
 
+    - name: Bootstrap vcpkg
+      shell: pwsh
+      # Navigate into the folder to ensure relative paths work
+      run: |
+        cd vcpkg
+        ./bootstrap-vcpkg.bat
+        cd ..
+
     - name: Install vcpkg
       uses: lukka/run-vcpkg@v11
       with:
+        # Points to the local bootstrapped directory
+        vcpkgDirectory: ${{ github.workspace }}/vcpkg
         vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
     - name: Install LLVM and Clang
@@ -40,9 +57,9 @@ jobs:
       working-directory: ./screenpipe-app-tauri
       run: bun install
 
-    # FIX: We set SKIP_SCREENPIPE_SETUP to true to prevent the 404 FFmpeg download error
     - name: Run pre_build.js
       env:
+        # Bypass the dead FFmpeg URL causing 404s
         SKIP_SCREENPIPE_SETUP: "true"
       run: bun ./scripts/pre_build.js
       working-directory: ./screenpipe-app-tauri
