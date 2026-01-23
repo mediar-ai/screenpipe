@@ -10,14 +10,15 @@ jobs:
   windows-e2e-test:
     name: Windows E2E Tests
     runs-on: windows-2019
+    env:
+      # FIX: Global env ensures pre_build.js skips the broken download logic
+      SKIP_SCREENPIPE_SETUP: "1"
     steps:
     - uses: actions/checkout@v4
       with:
-        # Initial submodule metadata fetch
         submodules: recursive
 
     - name: Initialize Submodules
-      # Forces the actual file download into the vcpkg directory
       run: git submodule update --init --recursive
 
     - name: Setup Bun & Node
@@ -29,7 +30,6 @@ jobs:
 
     - name: Bootstrap vcpkg
       shell: pwsh
-      # Navigate into the folder to ensure relative paths work
       run: |
         cd vcpkg
         ./bootstrap-vcpkg.bat
@@ -38,7 +38,6 @@ jobs:
     - name: Install vcpkg
       uses: lukka/run-vcpkg@v11
       with:
-        # Points to the local bootstrapped directory
         vcpkgDirectory: ${{ github.workspace }}/vcpkg
         vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
@@ -47,20 +46,21 @@ jobs:
       with:
         version: "10.0"
 
-    - name: Install OpenSSL
+    - name: Install OpenSSL and FFmpeg
       shell: powershell
       run: |
-        choco install openssl
+        # FIX: Install FFmpeg via Chocolatey to replace the broken URL
+        choco install openssl ffmpeg -y
+        refreshenv || true
         openssl version
+        ffmpeg -version
 
     - name: Install frontend dependencies
       working-directory: ./screenpipe-app-tauri
       run: bun install
 
     - name: Run pre_build.js
-      env:
-        # Bypass the dead FFmpeg URL causing 404s
-        SKIP_SCREENPIPE_SETUP: "true"
+      # SKIP_SCREENPIPE_SETUP is inherited from job-level env
       run: bun ./scripts/pre_build.js
       working-directory: ./screenpipe-app-tauri
 
@@ -85,7 +85,6 @@ jobs:
       env:
         CI: true
         VCPKG_STATIC_LINKAGE: "true"
-        SKIP_SCREENPIPE_SETUP: "true"
       with:
         args: "--target x86_64-pc-windows-msvc --no-bundle"
         projectPath: "./screenpipe-app-tauri"
