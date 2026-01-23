@@ -42,7 +42,8 @@ impl SileroVad {
         }
 
         let cache_dir = Self::get_cache_dir()?;
-        let path = cache_dir.join("silero_vad.onnx");
+        // Use v5 model filename to differentiate from old cached model
+        let path = cache_dir.join("silero_vad_v5.onnx");
 
         if path.exists() {
             *model_path = Some(path.clone());
@@ -67,19 +68,21 @@ impl SileroVad {
     }
 
     async fn download_model() -> anyhow::Result<()> {
-        debug!("downloading silerovad model...");
+        debug!("downloading Silero VAD v5 model...");
+        // Silero VAD v5: 3x faster, 6000+ languages, better accuracy
+        // https://github.com/snakers4/silero-vad/discussions/471
         let url =
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
+            "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx";
         let response = reqwest::get(url).await?;
         let model_data = response.bytes().await?;
 
         let cache_dir = Self::get_cache_dir()?;
         tokio::fs::create_dir_all(&cache_dir).await?;
-        let path = cache_dir.join("silero_vad.onnx");
+        let path = cache_dir.join("silero_vad_v5.onnx");
 
         let mut file = tokio::fs::File::create(&path).await?;
         tokio::io::AsyncWriteExt::write_all(&mut file, &model_data).await?;
-        debug!("silerovad model downloaded and saved to: {:?}", path);
+        debug!("Silero VAD v5 model downloaded and saved to: {:?}", path);
 
         Ok(())
     }
@@ -127,7 +130,8 @@ impl SileroVad {
 
 impl VadEngine for SileroVad {
     fn is_voice_segment(&mut self, audio_chunk: &[f32]) -> anyhow::Result<bool> {
-        const CHUNK_SIZE: usize = 1600; // 100 milliseconds
+        // Silero VAD v5 requires fixed 512 samples for 16kHz (~32ms)
+        const CHUNK_SIZE: usize = 512;
 
         let threshold = self.get_threshold();
 
@@ -145,7 +149,8 @@ impl VadEngine for SileroVad {
     }
 
     fn audio_type(&mut self, audio_chunk: &[f32]) -> anyhow::Result<VadStatus> {
-        const CHUNK_SIZE: usize = 1600; // 100 milliseconds
+        // Silero VAD v5 requires fixed 512 samples for 16kHz (~32ms)
+        const CHUNK_SIZE: usize = 512;
 
         let threshold = self.get_threshold();
 
