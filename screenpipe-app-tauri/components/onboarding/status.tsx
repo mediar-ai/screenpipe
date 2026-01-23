@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Check, Monitor, Mic } from "lucide-react";
+import { Check, Monitor, Mic, AlertTriangle } from "lucide-react";
 import { Button } from "../ui/button";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
@@ -7,6 +7,8 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { commands, type OSPermissionsCheck } from "@/lib/utils/tauri";
 import { motion } from "framer-motion";
 import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
+import { open as openPath } from "@tauri-apps/plugin-shell";
+import { homeDir, join } from "@tauri-apps/api/path";
 
 // Format shortcut for display (platform-aware)
 function formatShortcut(shortcut: string, isMac: boolean): string {
@@ -34,15 +36,19 @@ interface OnboardingStatusProps {
 
 type SetupState = "checking" | "needs-permissions" | "ready" | "starting" | "recording";
 
+const STUCK_TIMEOUT_MS = 30000; // 30 seconds
+
 const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   className = "",
   handleNextSlide,
 }) => {
   const [setupState, setSetupState] = useState<SetupState>("checking");
   const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(null);
+  const [isStuck, setIsStuck] = useState(false);
   const { isMac: isMacOS } = usePlatform();
   const { settings, updateSettings } = useSettings();
   const hasStartedRef = useRef(false);
+  const stuckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Create default screenpipe-cloud preset if none exists
   const ensureDefaultPreset = async () => {
@@ -113,6 +119,41 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       handleStartRecording();
     }
   }, [setupState]);
+
+  // Track stuck state with timeout
+  useEffect(() => {
+    // Clear any existing timeout
+    if (stuckTimeoutRef.current) {
+      clearTimeout(stuckTimeoutRef.current);
+      stuckTimeoutRef.current = null;
+    }
+
+    // Set timeout for "ready" or "starting" states
+    if (setupState === "ready" || setupState === "starting") {
+      setIsStuck(false);
+      stuckTimeoutRef.current = setTimeout(() => {
+        setIsStuck(true);
+      }, STUCK_TIMEOUT_MS);
+    } else {
+      setIsStuck(false);
+    }
+
+    return () => {
+      if (stuckTimeoutRef.current) {
+        clearTimeout(stuckTimeoutRef.current);
+      }
+    };
+  }, [setupState]);
+
+  const openLogsFolder = async () => {
+    try {
+      const home = await homeDir();
+      const screenpipeDir = await join(home, ".screenpipe");
+      await openPath(screenpipeDir);
+    } catch (error) {
+      console.error("Failed to open logs folder:", error);
+    }
+  };
 
   const handleStartRecording = async () => {
     posthog.capture("screenpipe_setup_start");
@@ -224,6 +265,31 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             <p className="font-mono text-sm text-foreground">starting screenpipe...</p>
             <p className="font-mono text-xs text-muted-foreground">downloading AI models</p>
           </div>
+
+          {isStuck && (
+            <motion.div
+              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-yellow-500/30 bg-yellow-500/5 rounded-lg max-w-md"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="flex items-center space-x-2 text-yellow-600 dark:text-yellow-500">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="font-mono text-sm">taking longer than expected</span>
+              </div>
+              <p className="font-mono text-xs text-muted-foreground text-center">
+                this might be due to missing permissions or a startup issue.
+                {isMacOS && " try granting screen recording & microphone access in system settings."}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openLogsFolder}
+                className="font-mono text-xs"
+              >
+                open logs folder
+              </Button>
+            </motion.div>
+          )}
         </motion.div>
       )}
 
@@ -290,6 +356,43 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         >
           <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin" />
           <p className="font-mono text-sm text-muted-foreground">preparing...</p>
+
+          {isStuck && (
+            <motion.div
+              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-yellow-500/30 bg-yellow-500/5 rounded-lg max-w-md"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="flex items-center space-x-2 text-yellow-600 dark:text-yellow-500">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="font-mono text-sm">taking longer than expected</span>
+              </div>
+              <p className="font-mono text-xs text-muted-foreground text-center">
+                this might be due to missing permissions or a startup issue.
+                {isMacOS && " try granting screen recording & microphone access in system settings."}
+              </p>
+              <div className="flex items-center space-x-2">
+                {isMacOS && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openSystemPreferences("screen")}
+                    className="font-mono text-xs"
+                  >
+                    check permissions
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openLogsFolder}
+                  className="font-mono text-xs"
+                >
+                  open logs folder
+                </Button>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       )}
     </div>
