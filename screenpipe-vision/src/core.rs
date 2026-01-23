@@ -590,8 +590,9 @@ fn get_active_browser_url_sync(
             std::io::ErrorKind::NotFound,
             "No active URL found",
         )),
-        Err(e) => Err(std::io::Error::other(
-            format!("Failed to get active URL: {}", e),
-        )),
+        Err(e) => Err(std::io::Error::other(format!(
+            "Failed to get active URL: {}",
+            e
+        ))),
     }
 }

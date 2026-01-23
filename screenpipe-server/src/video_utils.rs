@@ -818,9 +818,8 @@ mod pii_redaction_tests {
 
     fn create_test_jpeg() -> Vec<u8> {
         // Create a simple 100x100 white image
-        let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_fn(100, 100, |_, _| {
-            Rgb([255, 255, 255])
-        });
+        let img: ImageBuffer<Rgb<u8>, Vec<u8>> =
+            ImageBuffer::from_fn(100, 100, |_, _| Rgb([255, 255, 255]));
         let dynamic_img = DynamicImage::ImageRgb8(img);
 
         let mut output = Cursor::new(Vec::new());
@@ -887,7 +886,7 @@ mod pii_redaction_tests {
         let regions = vec![PiiRegion {
             x: 90,
             y: 90,
-            width: 50,  // Would extend beyond 100px image
+            width: 50, // Would extend beyond 100px image
             height: 50,
             pii_type: "SSN".to_string(),
         }];
