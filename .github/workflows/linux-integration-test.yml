@@ -21,8 +21,7 @@ jobs:
     - name: Install Critical Dependencies
       run: |
         sudo apt-get update
-        # Install Xvfb for virtual display, fluxbox for window management, 
-        # and x11-utils to handle window metadata
+        # Install Xvfb (Display), fluxbox (Window Manager), and PulseAudio (Audio Mock)
         sudo apt-get install -y xvfb fluxbox x11-utils xdotool xterm locales \
           xfonts-base xfonts-100dpi xfonts-75dpi xfonts-cyrillic \
           libasound2-dev pkg-config imagemagick pulseaudio alsa-utils
@@ -32,26 +31,26 @@ jobs:
     - name: Build CLI
       run: cargo build --release
     
-    - name: Start Virtual Desktop and Mock Audio
+    - name: Initialize Virtual Environment (Display & Audio)
       run: |
-        # 1. Start Xvfb virtual display
+        # 1. Start Virtual Display
         Xvfb :99 -screen 0 1280x1024x24 &
         export DISPLAY=:99
         export LANG=en_US.UTF-8
         export LC_ALL=en_US.UTF-8
         
-        # 2. Wait for X server and start window manager
+        # 2. Start Window Manager to fix "session.screen0" read errors
         until xset -q > /dev/null 2>&1; do sleep 1; done
         fluxbox &
         sleep 5 
         
-        # 3. Mock PulseAudio to prevent 'Cannot open device /dev/dsp'
+        # 3. Start PulseAudio to fix "/dev/dsp" and ALSA errors
         pulseaudio --start --exit-idle-time=-1 || true
         
-        # 4. Create a test window with explicit text content for OCR
+        # 4. Create actual window content for OCR to recognize
         xterm -T "test-window" -geometry 80x24+0+0 -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
         
-        # 5. Validation loop to ensure window exists before testing
+        # 5. Validation loop for window detection
         for i in {1..10}; do
           if xwininfo -name "test-window" > /dev/null 2>&1; then 
             echo "SUCCESS: Test window detected!"
@@ -61,7 +60,7 @@ jobs:
           sleep 3
         done
         
-        # Final check: Ensure the window is focused for the vision engine
+        # Ensure window is active for the vision engine
         xdotool search --name "test-window" windowactivate || (echo "Error: Window not found" && exit 1)
     
     - name: Run Integration Tests
@@ -70,7 +69,7 @@ jobs:
         LANG: en_US.UTF-8
         LC_ALL: en_US.UTF-8
         RUST_LOG: debug
-        # FIX: Force fullscreen capture to ignore COMPOUND_TEXT title errors
+        # Force fullscreen to bypass COMPOUND_TEXT title errors
         SCREENPIPE_CAPTURE_FULLSCREEN: "true"
       run: |
         touch screenpipe_output.log
