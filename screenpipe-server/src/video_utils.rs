@@ -312,6 +312,11 @@ pub async fn extract_frames_from_video(
 }
 
 async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
+    let (fps, _) = get_video_fps_and_duration(ffmpeg_path, video_path).await?;
+    Ok(fps)
+}
+
+async fn get_video_fps_and_duration(ffmpeg_path: &PathBuf, video_path: &str) -> Result<(f64, f64)> {
     let ffprobe_path = ffmpeg_path.with_file_name("ffprobe");
 
     let output = Command::new(&ffprobe_path)
@@ -323,7 +328,8 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
             "-select_streams",
             "v:0", // Select first video stream
             "-show_entries",
-            "stream=r_frame_rate", // Only request frame rate information
+            "stream=r_frame_rate:format=duration", // Request frame rate and duration
+            "-show_format",
             video_path,
         ])
         .output()
@@ -337,7 +343,7 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     debug!("ffprobe output: {}", stdout);
 
-    // Parse the simplified JSON output
+    // Parse the JSON output
     let parsed: serde_json::Value = serde_json::from_str(&stdout)?;
 
     let fps = parsed
@@ -356,8 +362,15 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
         })
         .unwrap_or(1.0);
 
-    debug!("Video FPS: {}", fps);
-    Ok(fps)
+    let duration = parsed
+        .get("format")
+        .and_then(|format| format.get("duration"))
+        .and_then(|d| d.as_str())
+        .and_then(|d| d.parse::<f64>().ok())
+        .unwrap_or(f64::MAX);
+
+    debug!("Video FPS: {}, Duration: {}s", fps, duration);
+    Ok((fps, duration))
 }
 
 fn parse_time_from_filename(path: &str) -> Option<DateTime<Utc>> {
@@ -561,16 +574,38 @@ impl VideoMetadataOverride {
 pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Result<String> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
-    let source_fps = match get_video_fps(&ffmpeg_path, file_path).await {
-        Ok(fps) => fps,
+    // Get video FPS and duration
+    let (source_fps, video_duration) = match get_video_fps_and_duration(&ffmpeg_path, file_path).await {
+        Ok((fps, duration)) => (fps, duration),
         Err(e) => {
-            error!("failed to get video fps, using default 1fps: {}", e);
-            1.0
+            error!("failed to get video metadata, using defaults: {}", e);
+            (1.0, f64::MAX) // Use MAX duration to disable validation on error
         }
     };
 
     // Convert frame index to seconds: frame_time = frame_index / fps
-    let offset_seconds = offset_index as f64 / source_fps;
+    let mut offset_seconds = offset_index as f64 / source_fps;
+
+    // Calculate the actual last frame position based on FPS
+    // For a video with N frames at fps F, frames are at 0, 1/F, 2/F, ..., (N-1)/F
+    // N = floor(duration * fps), so last frame is at (N-1)/F = (floor(duration * fps) - 1) / fps
+    let total_frames = (video_duration * source_fps).floor();
+    let last_frame_time = if total_frames > 0.0 {
+        (total_frames - 1.0) / source_fps
+    } else {
+        0.0
+    };
+
+    // Validate offset doesn't exceed last valid frame position
+    if offset_seconds > last_frame_time {
+        debug!(
+            "offset {}s exceeds last frame at {}s (video duration: {}s, fps: {}, frames: {}), clamping",
+            offset_seconds, last_frame_time, video_duration, source_fps, total_frames
+        );
+        // Clamp to the last valid frame position
+        offset_seconds = last_frame_time.max(0.0);
+    }
+
     let offset_str = format!("{:.3}", offset_seconds);
 
     // Create a temporary directory for frames if it doesn't exist
