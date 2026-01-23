@@ -21,48 +21,48 @@ jobs:
     - name: Install Critical Dependencies
       run: |
         sudo apt-get update
+        # Install Xvfb for virtual display, fluxbox for window management, 
+        # and x11-utils to handle window metadata
         sudo apt-get install -y xvfb fluxbox x11-utils xdotool xterm locales \
           xfonts-base xfonts-100dpi xfonts-75dpi xfonts-cyrillic \
-          libasound2-dev pkg-config imagemagick
+          libasound2-dev pkg-config imagemagick pulseaudio alsa-utils
         sudo locale-gen en_US.UTF-8
         .github/scripts/install_dependencies.sh
     
     - name: Build CLI
       run: cargo build --release
     
-    - name: Start Virtual Desktop and Create Content
+    - name: Start Virtual Desktop and Mock Audio
       run: |
+        # 1. Start Xvfb virtual display
         Xvfb :99 -screen 0 1280x1024x24 &
         export DISPLAY=:99
         export LANG=en_US.UTF-8
         export LC_ALL=en_US.UTF-8
         
+        # 2. Wait for X server and start window manager
         until xset -q > /dev/null 2>&1; do sleep 1; done
         fluxbox &
         sleep 5 
         
-        # Start xterm with an explicit title and class for easier discovery
-        xterm -T "test-window" -class "TestClass" -geometry 80x24+0+0 -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
+        # 3. Mock PulseAudio to prevent 'Cannot open device /dev/dsp'
+        pulseaudio --start --exit-idle-time=-1 || true
         
-        # Give the X server a moment to map the window
-        sleep 10
+        # 4. Create a test window with explicit text content for OCR
+        xterm -T "test-window" -geometry 80x24+0+0 -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
         
-        # FIX: Try up to 10 times with multiple search methods (name and class)
-        echo "Searching for test window..."
+        # 5. Validation loop to ensure window exists before testing
         for i in {1..10}; do
-          if xwininfo -name "test-window" > /dev/null 2>&1 || xdotool search --class "TestClass" > /dev/null 2>&1; then 
+          if xwininfo -name "test-window" > /dev/null 2>&1; then 
             echo "SUCCESS: Test window detected!"
-            xwininfo -name "test-window"
             break 
           fi
-          echo "Waiting for window (attempt $i)..."
-          # DEBUG: List all active windows if not found
-          xwininfo -root -tree | grep -i "test" || true
+          echo "Waiting for test-window (attempt $i)..."
           sleep 3
         done
         
-        # Final check: Ensure it's active so OCR sees it
-        xdotool search --class "TestClass" windowactivate || (echo "FATAL: Window never appeared" && exit 1)
+        # Final check: Ensure the window is focused for the vision engine
+        xdotool search --name "test-window" windowactivate || (echo "Error: Window not found" && exit 1)
     
     - name: Run Integration Tests
       env:
@@ -70,6 +70,7 @@ jobs:
         LANG: en_US.UTF-8
         LC_ALL: en_US.UTF-8
         RUST_LOG: debug
+        # FIX: Force fullscreen capture to ignore COMPOUND_TEXT title errors
         SCREENPIPE_CAPTURE_FULLSCREEN: "true"
       run: |
         touch screenpipe_output.log
