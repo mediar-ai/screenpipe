@@ -40,10 +40,6 @@
     ]
   },
   "plugins": {
-    "updater": {
-      "active": false,
-      "pubkey": ""
-    },
     "deep-link": {
       "desktop": {
         "schemes": [
