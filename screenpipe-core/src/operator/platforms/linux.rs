@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_variables)]
 use crate::operator::element::UIElementImpl;
 use crate::operator::platforms::AccessibilityEngine;
 use crate::operator::ClickResult;
