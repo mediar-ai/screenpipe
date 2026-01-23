@@ -21,8 +21,8 @@ jobs:
     - name: Install Critical Dependencies
       run: |
         sudo apt-get update
-        # Added x11-utils for xmessage to create a window with text
-        sudo apt-get install -y xvfb fluxbox x11-utils libasound2-dev pkg-config
+        # added imagemagick for 'display' and 'import' tools
+        sudo apt-get install -y xvfb fluxbox x11-utils imagemagick libasound2-dev pkg-config
         .github/scripts/install_dependencies.sh
     
     - name: Build CLI
@@ -35,7 +35,7 @@ jobs:
         until xset -q > /dev/null 2>&1; do sleep 1; done
         fluxbox &
         sleep 2
-        # FIX: Create a window with text so OCR has something to capture
+        # FIX: use a simpler background text that doesn't rely on window management titles
         xmessage -center "Screenpipe Integration Test Content" &
         sleep 2
     
@@ -43,6 +43,8 @@ jobs:
       env:
         DISPLAY: :99
         RUST_LOG: debug
+        # FIX: force full screen capture to bypass "COMPOUND_TEXT not supported" window errors
+        SCREENPIPE_CAPTURE_FULLSCREEN: "true"
       run: |
         touch screenpipe_output.log
         .github/scripts/setup_audio.sh
