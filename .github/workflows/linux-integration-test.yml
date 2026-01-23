@@ -21,20 +21,22 @@ jobs:
     - name: Install Critical Dependencies
       run: |
         sudo apt-get update
-        # fluxbox provides the 'windows' screenpipe needs to see
+        # Added x11-utils for xmessage to create a window with text
         sudo apt-get install -y xvfb fluxbox x11-utils libasound2-dev pkg-config
         .github/scripts/install_dependencies.sh
     
     - name: Build CLI
       run: cargo build --release
     
-    - name: Start Virtual Desktop
+    - name: Start Virtual Desktop and Create Content
       run: |
         Xvfb :99 -screen 0 1280x1024x24 &
         export DISPLAY=:99
-        # Wait for Xvfb to be ready
         until xset -q > /dev/null 2>&1; do sleep 1; done
         fluxbox &
+        sleep 2
+        # FIX: Create a window with text so OCR has something to capture
+        xmessage -center "Screenpipe Integration Test Content" &
         sleep 2
     
     - name: Run Integration Tests
@@ -42,7 +44,6 @@ jobs:
         DISPLAY: :99
         RUST_LOG: debug
       run: |
-        # Force create log so artifact upload always finds it
         touch screenpipe_output.log
         .github/scripts/setup_audio.sh
         .github/scripts/run_screenpipe.sh
