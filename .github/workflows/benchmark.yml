@@ -4,58 +4,37 @@ on: [push]
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-A unexpected_cfgs -A unused_variables -A unused_imports -A dead_code"
 
 jobs:
-  apple_ocr_benchmark:
-    runs-on: macos-latest
+  run_benchmarks:
+    name: Run Benchmarks
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            name: apple
+            cmd: brew install ffmpeg && cargo bench --bench ocr_benchmark -- --output-format bencher
+          - os: ubuntu-latest
+            name: tesseract
+            cmd: sudo apt-get update && sudo apt-get install -y libleptonica-dev libtesseract-dev tesseract-ocr-eng && cargo bench --bench ocr_benchmark -- --output-format bencher
+          - os: windows-latest
+            name: windows
+            cmd: cargo bench --bench ocr_benchmark -- --output-format bencher
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: brew install ffmpeg
-      - run: cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_apple.txt
+      - name: Run benchmark
+        shell: bash
+        run: ${{ matrix.cmd }} | tee ocr_${{ matrix.name }}.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: ocr-data-apple
-          path: ocr_apple.txt
+          name: ocr-data-${{ matrix.name }}
+          path: ocr_${{ matrix.name }}.txt
 
-  tesseract_ocr_benchmark:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: sudo apt-get update && sudo apt-get install -y libleptonica-dev libtesseract-dev tesseract-ocr-eng
-      - run: cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_tesseract.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ocr-data-tesseract
-          path: ocr_tesseract.txt
-
-  windows_ocr_benchmark:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - shell: bash
-        run: cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_windows.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ocr-data-windows
-          path: ocr_windows.txt
-
-  stt_benchmark:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr libtesseract-dev libavformat-dev libavfilter-dev libavdevice-dev libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
-      - run: cargo bench --bench stt_benchmark -- --output-format bencher | tee stt_output.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: stt-data
-          path: stt_output.txt
-
-  analyze_benchmarks:
-    needs: [apple_ocr_benchmark, tesseract_ocr_benchmark, windows_ocr_benchmark, stt_benchmark]
+  analyze:
+    needs: run_benchmarks
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -65,9 +44,10 @@ jobs:
         with:
           path: ./cache/raw
           merge-multiple: true
-      - run: |
+      - name: Consolidate
+        run: |
           mkdir -p ./cache/ocr
-          cat ./cache/raw/ocr_*.txt > ./cache/ocr/ocr_output.txt || touch ./cache/ocr/ocr_output.txt
+          cat ./cache/raw/ocr_*.txt > ./cache/ocr/ocr_output.txt || echo "No data" > ./cache/ocr/ocr_output.txt
       - uses: benchmark-action/github-action-benchmark@v1
         with:
           name: OCR Benchmarks
