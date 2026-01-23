@@ -650,7 +650,7 @@ async fn main() {
 
     // Initialize Sentry early
     let sentry_guard = sentry::init((
-        "https://94947b0de60286011f7852f1728afbf6@o4505591122886656.ingest.us.sentry.io/4510755389767680",
+        "https://ee250955c0511823f71188e7cd64cf5f@o4505591122886656.ingest.us.sentry.io/4510761352364032",
         sentry::ClientOptions {
             release: sentry::release_name!(),
             ..Default::default()
