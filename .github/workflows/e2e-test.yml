@@ -165,7 +165,8 @@ jobs:
         CARGO_PROFILE_RELEASE_STRIP: symbols
         CARGO_PROFILE_RELEASE_PANIC: abort
         CARGO_PROFILE_RELEASE_INCREMENTAL: false
-        RUSTFLAGS: "-C target-feature=+crt-static -C link-arg=/LTCG"
+        # Uppdaterad för att ignorera varningar vid bygge
+        RUSTFLAGS: "-A unexpected_cfgs -A unused_variables -A unused_imports -A dead_code -C target-feature=+crt-static -C link-arg=/LTCG"
         VCPKG_STATIC_LINKAGE: "true"
         KNF_STATIC_CRT: "1"
       with:
@@ -227,6 +228,7 @@ jobs:
         include-hidden-files: true
         path: |
           ~/.screenpipe/*
+
   linux-e2e-test:
     name: Linux E2E Tests
     runs-on: ubuntu-latest
@@ -326,6 +328,8 @@ jobs:
       uses: tauri-apps/tauri-action@v0.5.17
       env:
         CI: true
+        # Tillagd för att ignorera varningar om oanvänd kod (dead code)
+        RUSTFLAGS: "-A unexpected_cfgs -A unused_variables -A unused_imports -A dead_code"
         CARGO_PROFILE_RELEASE_LTO: false
         CARGO_PROFILE_RELEASE_OPT_LEVEL: 3
         CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 16
