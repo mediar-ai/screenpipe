@@ -810,7 +810,7 @@ async fn main() {
             update_global_shortcuts,
             get_env
         ])
-        .setup(|app| {
+        .setup(move |app| {
             //deep link register_all
             #[cfg(any(windows, target_os = "linux"))]
             {

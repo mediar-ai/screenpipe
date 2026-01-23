@@ -181,8 +181,14 @@ async fn update_menu_if_needed(
 }
 
 fn get_current_shortcuts(app: &AppHandle) -> Result<HashMap<String, String>> {
-    let _store = get_store(app, None)?;
-    let shortcuts = HashMap::new();
+    let store = get_store(app, None)?;
+    let mut shortcuts = HashMap::new();
+
+    // Get the show shortcut from store
+    if let Some(shortcut) = store.get("showScreenpipeShortcut").and_then(|v| v.as_str().map(String::from)) {
+        shortcuts.insert("show".to_string(), shortcut);
+    }
+
     Ok(shortcuts)
 }
 
