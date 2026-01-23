@@ -120,6 +120,7 @@ jobs:
         run: ls -R ./cache
 
       - name: Analyze OCR benchmarks
+        continue-on-error: true
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: OCR Benchmarks

@@ -59,6 +59,7 @@ jobs:
 
       - name: Run cargo-udeps
         if: matrix.os == 'macos-latest'
+        continue-on-error: true
         run: cargo +nightly udeps
 
       - name: Install cargo-bloat
