@@ -418,6 +418,9 @@ pub async fn show_shortcut_reminder(
         if let Ok(_panel) = window.to_panel() {
             info!("Successfully converted shortcut-reminder to panel");
 
+            // Show the window first (required - order_front_regardless doesn't make invisible windows visible)
+            let _ = window.show();
+
             // Clone window to pass into main thread closure
             let window_clone = window.clone();
             let _ = app_handle.run_on_main_thread(move || {
@@ -444,6 +447,8 @@ pub async fn show_shortcut_reminder(
             });
         } else {
             error!("Failed to convert shortcut-reminder to panel");
+            // Fallback: just show the window
+            let _ = window.show();
         }
     }
 
