@@ -1,5 +1,4 @@
 import React from "react";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Brain,
   CircleCheck,
@@ -25,38 +24,38 @@ const OPTIONS = [
   {
     key: "memory",
     icon: Brain,
-    label: "Personal memory",
-    description: "I forget things and want to search my past screen activity",
+    label: "personal memory",
+    description: "i forget things and want to search my past screen activity",
   },
   {
     key: "meetings",
     icon: Calendar,
-    label: "Meeting summaries",
-    description: "I need help remembering what was discussed in meetings",
+    label: "meeting summaries",
+    description: "i need help remembering what was discussed in meetings",
   },
   {
     key: "productivity",
     icon: Search,
-    label: "Productivity tracking",
-    description: "I want to understand how I spend my time on my computer",
+    label: "productivity tracking",
+    description: "i want to understand how i spend my time on my computer",
   },
   {
     key: "developer",
     icon: Code,
-    label: "Building/developing",
-    description: "I'm a developer and want to build on top of Screenpipe",
+    label: "building/developing",
+    description: "i'm a developer and want to build on top of screenpipe",
   },
   {
     key: "privacy",
     icon: Shield,
-    label: "Privacy-focused alternative",
-    description: "I want a local/private alternative to cloud services",
+    label: "privacy-focused alternative",
+    description: "i want a local/private alternative to cloud services",
   },
   {
     key: "curious",
     icon: Sparkles,
-    label: "Just curious",
-    description: "Trying it out to see what it does",
+    label: "just curious",
+    description: "trying it out to see what it does",
   },
 ];
 
@@ -114,7 +113,7 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
 
   return (
     <div className={`${className} flex flex-col h-full`}>
-      <DialogHeader className="flex flex-col px-2 justify-center items-center mb-6">
+      <div className="flex flex-col px-2 justify-center items-center mb-6">
         <motion.img
           className="w-20 h-20 justify-center mb-4"
           src="/128x128.png"
@@ -123,13 +122,13 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5 }}
         />
-        <DialogTitle className="text-center text-2xl font-bold">
-          What brought you to Screenpipe?
-        </DialogTitle>
+        <h2 className="text-center text-2xl font-bold">
+          what brought you to screenpipe?
+        </h2>
         <p className="text-center text-muted-foreground mt-2">
-          Help us understand what you&apos;re looking for (select all that apply)
+          help us understand what you&apos;re looking for (select all that apply)
         </p>
-      </DialogHeader>
+      </div>
 
       <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl w-full px-4">

@@ -207,22 +207,6 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleSkip = async () => {
-    if (isTransitioning) return;
-    
-    try {
-      setIsTransitioning(true);
-      trackOnboardingStep("completed", { skipped: true });
-      
-      // Removed success toast to avoid spam
-      await handleEnd();
-    } catch (error) {
-      console.error("Error skipping onboarding:", error);
-      showErrorToast("Failed to skip onboarding");
-      setIsTransitioning(false);
-    }
-  };
-
   const handleEnd = async () => {
     try {
       setIsTransitioning(true);
@@ -267,15 +251,6 @@ export default function OnboardingPage() {
     <div className="flex flex-col w-full h-screen overflow-hidden bg-background">
       {/* Minimal header with drag region */}
       <div className="w-full bg-background p-4" data-tauri-drag-region>
-        <div className="flex items-center justify-end max-w-4xl mx-auto">
-          <button
-            onClick={handleSkip}
-            disabled={isTransitioning}
-            className="font-mono text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
-          >
-            skip
-          </button>
-        </div>
       </div>
 
       {/* Main content container */}

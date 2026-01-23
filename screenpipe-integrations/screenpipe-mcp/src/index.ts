@@ -5,12 +5,30 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { WebSocket } from "ws";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+
+// Helper to get current date in ISO format
+function getCurrentDateInfo(): { isoDate: string; localDate: string } {
+  const now = new Date();
+  return {
+    isoDate: now.toISOString(),
+    localDate: now.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }),
+  };
+}
 
 // Detect OS
 const CURRENT_OS = process.platform;
@@ -38,6 +56,8 @@ const server = new Server(
   {
     capabilities: {
       tools: {},
+      prompts: {},
+      resources: {},
     },
   }
 );
@@ -47,54 +67,50 @@ const BASE_TOOLS: Tool[] = [
   {
     name: "search-content",
     description:
-      "Search through screenpipe recorded content (OCR text, audio transcriptions, UI elements). " +
-      "Use this to find specific content that has appeared on your screen or been spoken. " +
-      "Results include timestamps, app context, and the content itself. " +
-      "Set include_frames=true to get screenshot images for visual analysis (OCR results only).",
+      "Search screenpipe's recorded content: screen text (OCR), audio transcriptions, and UI elements. " +
+      "Returns timestamped results with app context. " +
+      "Call with no parameters to get recent activity. " +
+      "Use the 'screenpipe://context' resource for current time when building time-based queries.",
     inputSchema: {
       type: "object",
       properties: {
         q: {
           type: "string",
-          description: "Search query to find in recorded content",
+          description: "Search query. Optional - omit to return all recent content.",
         },
         content_type: {
           type: "string",
           enum: ["all", "ocr", "audio", "ui"],
-          description:
-            "Type of content to search: 'ocr' for screen text, 'audio' for spoken words, 'ui' for UI elements, or 'all' for everything",
+          description: "Content type filter. Default: 'all'",
           default: "all",
         },
         limit: {
           type: "integer",
-          description: "Maximum number of results to return",
+          description: "Max results. Default: 10",
           default: 10,
         },
         offset: {
           type: "integer",
-          description: "Number of results to skip (for pagination)",
+          description: "Skip N results for pagination. Default: 0",
           default: 0,
         },
         start_time: {
           type: "string",
           format: "date-time",
-          description:
-            "Start time in ISO format UTC (e.g. 2024-01-01T00:00:00Z). Filter results from this time onward.",
+          description: "ISO 8601 UTC start time (e.g., 2024-01-15T10:00:00Z)",
         },
         end_time: {
           type: "string",
           format: "date-time",
-          description:
-            "End time in ISO format UTC (e.g. 2024-01-01T00:00:00Z). Filter results up to this time.",
+          description: "ISO 8601 UTC end time (e.g., 2024-01-15T18:00:00Z)",
         },
         app_name: {
           type: "string",
-          description:
-            "Filter by application name (e.g. 'Chrome', 'Safari', 'Terminal')",
+          description: "Filter by app (e.g., 'Google Chrome', 'Slack', 'zoom.us')",
         },
         window_name: {
           type: "string",
-          description: "Filter by window name or title",
+          description: "Filter by window title",
         },
         min_length: {
           type: "integer",
@@ -106,10 +122,7 @@ const BASE_TOOLS: Tool[] = [
         },
         include_frames: {
           type: "boolean",
-          description:
-            "Include screenshot images in results for visual analysis. Only applies to OCR results. " +
-            "When true, returns base64-encoded images that can be analyzed with vision capabilities. " +
-            "Note: Images are limited to ~1MB each. Default: false",
+          description: "Include base64 screenshots (OCR only). Default: false",
           default: false,
         },
       },
@@ -165,8 +178,11 @@ const BASE_TOOLS: Tool[] = [
     name: "export-video",
     description:
       "Export a video of screen recordings for a specific time range. " +
-      "Creates an MP4 video from the recorded frames between the start and end times. " +
-      "Example: 'Export video from 10:00 AM to 10:30 AM today'",
+      "Creates an MP4 video from the recorded frames between the start and end times.\n\n" +
+      "IMPORTANT: Use ISO 8601 UTC timestamps (e.g., 2024-01-15T10:00:00Z)\n\n" +
+      "EXAMPLES:\n" +
+      "- Last 30 minutes: Calculate timestamps from current time\n" +
+      "- Specific meeting: Use the meeting's start and end times in UTC",
     inputSchema: {
       type: "object",
       properties: {
@@ -174,18 +190,18 @@ const BASE_TOOLS: Tool[] = [
           type: "string",
           format: "date-time",
           description:
-            "Start time in ISO 8601 format UTC (e.g., '2024-01-15T10:00:00Z')",
+            "Start time in ISO 8601 format UTC. MUST include timezone (Z for UTC). Example: '2024-01-15T10:00:00Z'",
         },
         end_time: {
           type: "string",
           format: "date-time",
           description:
-            "End time in ISO 8601 format UTC (e.g., '2024-01-15T10:30:00Z')",
+            "End time in ISO 8601 format UTC. MUST include timezone (Z for UTC). Example: '2024-01-15T10:30:00Z'",
         },
         fps: {
           type: "number",
           description:
-            "Frames per second for the output video. Lower values create smaller files. Default: 1.0",
+            "Frames per second for the output video. Lower values (0.5-1.0) create smaller files, higher values (5-10) create smoother playback. Default: 1.0",
           default: 1.0,
         },
       },
@@ -400,6 +416,225 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools };
 });
 
+// MCP Resources - provide dynamic context data
+const RESOURCES = [
+  {
+    uri: "screenpipe://context",
+    name: "Current Context",
+    description: "Current date/time and pre-computed timestamps for common time ranges",
+    mimeType: "application/json",
+  },
+  {
+    uri: "screenpipe://guide",
+    name: "Usage Guide",
+    description: "How to use screenpipe search effectively",
+    mimeType: "text/markdown",
+  },
+];
+
+// List resources handler
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  return { resources: RESOURCES };
+});
+
+// Read resource handler
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const { uri } = request.params;
+  const dateInfo = getCurrentDateInfo();
+  const now = Date.now();
+
+  switch (uri) {
+    case "screenpipe://context":
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "application/json",
+            text: JSON.stringify({
+              current_time: dateInfo.isoDate,
+              current_date_local: dateInfo.localDate,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              timestamps: {
+                now: dateInfo.isoDate,
+                one_hour_ago: new Date(now - 60 * 60 * 1000).toISOString(),
+                three_hours_ago: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
+                today_start: `${new Date().toISOString().split("T")[0]}T00:00:00Z`,
+                yesterday_start: `${new Date(now - 24 * 60 * 60 * 1000).toISOString().split("T")[0]}T00:00:00Z`,
+                one_week_ago: new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString(),
+              },
+              common_apps: ["Google Chrome", "Safari", "Slack", "zoom.us", "Microsoft Teams", "Code", "Terminal"],
+            }, null, 2),
+          },
+        ],
+      };
+
+    case "screenpipe://guide":
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "text/markdown",
+            text: `# Screenpipe Search Guide
+
+## Quick Start
+- **Get recent activity**: Call search-content with no parameters
+- **Search text**: \`{"q": "search term", "content_type": "ocr"}\`
+- **Time filter**: Use start_time/end_time with ISO 8601 UTC timestamps
+
+## Content Types
+- \`ocr\`: Screen text (what you see)
+- \`audio\`: Transcribed speech
+- \`ui\`: UI element interactions
+- \`all\`: Everything (default)
+
+## Key Parameters
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| q | Search query | (none - returns all) |
+| content_type | ocr/audio/ui/all | all |
+| limit | Max results | 10 |
+| start_time | ISO 8601 UTC | (no filter) |
+| end_time | ISO 8601 UTC | (no filter) |
+| app_name | Filter by app | (no filter) |
+| include_frames | Include screenshots | false |
+
+## Tips
+1. Read screenpipe://context first to get current timestamps
+2. Omit \`q\` to get all content (useful for "what was I doing?")
+3. Use \`limit: 50-100\` for comprehensive searches
+4. Combine app_name + time filters for focused results`,
+          },
+        ],
+      };
+
+    default:
+      throw new Error(`Unknown resource: ${uri}`);
+  }
+});
+
+// MCP Prompts - static interaction templates
+const PROMPTS = [
+  {
+    name: "search-recent",
+    description: "Search recent screen activity",
+    arguments: [
+      { name: "query", description: "Optional search term", required: false },
+      { name: "hours", description: "Hours to look back (default: 1)", required: false },
+    ],
+  },
+  {
+    name: "find-in-app",
+    description: "Find content from a specific application",
+    arguments: [
+      { name: "app", description: "App name (e.g., Chrome, Slack)", required: true },
+      { name: "query", description: "Optional search term", required: false },
+    ],
+  },
+  {
+    name: "meeting-notes",
+    description: "Get audio transcriptions from meetings",
+    arguments: [
+      { name: "hours", description: "Hours to look back (default: 3)", required: false },
+    ],
+  },
+];
+
+// List prompts handler
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  return { prompts: PROMPTS };
+});
+
+// Get prompt handler
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  const { name, arguments: promptArgs } = request.params;
+  const dateInfo = getCurrentDateInfo();
+  const now = Date.now();
+
+  switch (name) {
+    case "search-recent": {
+      const query = promptArgs?.query || "";
+      const hours = parseInt(promptArgs?.hours || "1", 10);
+      const startTime = new Date(now - hours * 60 * 60 * 1000).toISOString();
+
+      return {
+        description: `Search recent activity (last ${hours} hour${hours > 1 ? "s" : ""})`,
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: `Search screenpipe for recent activity.
+
+Current time: ${dateInfo.isoDate}
+
+Use search-content with:
+${query ? `- q: "${query}"` : "- No query filter (get all content)"}
+- start_time: "${startTime}"
+- limit: 50`,
+            },
+          },
+        ],
+      };
+    }
+
+    case "find-in-app": {
+      const app = promptArgs?.app || "Google Chrome";
+      const query = promptArgs?.query || "";
+
+      return {
+        description: `Find content from ${app}`,
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: `Search screenpipe for content from ${app}.
+
+Current time: ${dateInfo.isoDate}
+
+Use search-content with:
+- app_name: "${app}"
+${query ? `- q: "${query}"` : "- No query filter"}
+- content_type: "ocr"
+- limit: 50`,
+            },
+          },
+        ],
+      };
+    }
+
+    case "meeting-notes": {
+      const hours = parseInt(promptArgs?.hours || "3", 10);
+      const startTime = new Date(now - hours * 60 * 60 * 1000).toISOString();
+
+      return {
+        description: `Get meeting transcriptions (last ${hours} hours)`,
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: `Get audio transcriptions from recent meetings.
+
+Current time: ${dateInfo.isoDate}
+
+Use search-content with:
+- content_type: "audio"
+- start_time: "${startTime}"
+- limit: 100
+
+Common meeting apps: zoom.us, Microsoft Teams, Google Meet, Slack`,
+            },
+          },
+        ],
+      };
+    }
+
+    default:
+      throw new Error(`Unknown prompt: ${name}`);
+  }
+});
+
 // Helper function to make HTTP requests
 async function fetchAPI(
   endpoint: string,
@@ -462,10 +697,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const data = await response.json();
         const results = data.data || [];
+        const pagination = data.pagination || {};
 
         if (results.length === 0) {
           return {
-            content: [{ type: "text", text: "No results found" }],
+            content: [
+              {
+                type: "text",
+                text: "No results found. Try: broader search terms, different content_type, or wider time range.",
+              },
+            ],
           };
         }
 
@@ -483,64 +724,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (!content) continue;
 
           if (result.type === "OCR") {
-            const textResult =
-              `OCR Text: ${content.text || "N/A"}\n` +
-              `App: ${content.app_name || "N/A"}\n` +
-              `Window: ${content.window_name || "N/A"}\n` +
-              `Time: ${content.timestamp || "N/A"}\n` +
-              `Frame ID: ${content.frame_id || "N/A"}\n` +
-              "---";
-            formattedResults.push(textResult);
-
-            // Collect frame if available and requested
+            formattedResults.push(
+              `[OCR] ${content.app_name || "?"} | ${content.window_name || "?"}\n` +
+              `${content.timestamp || ""}\n` +
+              `${content.text || ""}`
+            );
             if (includeFrames && content.frame) {
               images.push({
                 data: content.frame,
-                context: `Screenshot from ${content.app_name || "unknown"} - ${content.window_name || "unknown"} at ${content.timestamp || "unknown"}`,
+                context: `${content.app_name} at ${content.timestamp}`,
               });
             }
           } else if (result.type === "Audio") {
             formattedResults.push(
-              `Audio Transcription: ${content.transcription || "N/A"}\n` +
-                `Device: ${content.device_name || "N/A"}\n` +
-                `Time: ${content.timestamp || "N/A"}\n` +
-                "---"
+              `[Audio] ${content.device_name || "?"}\n` +
+              `${content.timestamp || ""}\n` +
+              `${content.transcription || ""}`
             );
           } else if (result.type === "UI") {
             formattedResults.push(
-              `UI Text: ${content.text || "N/A"}\n` +
-                `App: ${content.app_name || "N/A"}\n` +
-                `Window: ${content.window_name || "N/A"}\n` +
-                `Time: ${content.timestamp || "N/A"}\n` +
-                "---"
+              `[UI] ${content.app_name || "?"} | ${content.window_name || "?"}\n` +
+              `${content.timestamp || ""}\n` +
+              `${content.text || ""}`
             );
           }
         }
 
-        // Add text results
+        // Header with pagination info
+        const header = `Results: ${results.length}/${pagination.total || "?"}` +
+          (pagination.total > results.length ? ` (use offset=${(pagination.offset || 0) + results.length} for more)` : "");
+
         contentItems.push({
           type: "text",
-          text:
-            "Search Results:\n\n" +
-            formattedResults.join("\n") +
-            (images.length > 0
-              ? `\n\n${images.length} screenshot(s) included below for visual analysis:`
-              : ""),
+          text: header + "\n\n" + formattedResults.join("\n---\n"),
         });
 
-        // Add images if requested and available
+        // Add images if requested
         for (const img of images) {
-          // Add context for the image
-          contentItems.push({
-            type: "text",
-            text: `\n📷 ${img.context}`,
-          });
-          // Add the image itself
-          contentItems.push({
-            type: "image",
-            data: img.data,
-            mimeType: "image/png",
-          });
+          contentItems.push({ type: "text", text: `\n📷 ${img.context}` });
+          contentItems.push({ type: "image", data: img.data, mimeType: "image/png" });
         }
 
         return { content: contentItems };

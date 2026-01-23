@@ -37,22 +37,15 @@ export function SearchCommand() {
 			: state,
 	);
 
+	// Listen for Rust-level open-search event (Cmd+K / Ctrl+K global shortcut)
 	React.useEffect(() => {
-		const down = (e: KeyboardEvent) => {
-			if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-				e.preventDefault();
-				setOpen((open) => !open);
-			}
-			// Always close on escape when dialog is open
-			if (e.key === "Escape" && open) {
-				e.preventDefault();
-				e.stopPropagation();
-				setOpen(false);
-			}
+		const unlisten = listen("open-search", () => {
+			setOpen((open) => !open);
+		});
+		return () => {
+			unlisten.then((fn) => fn());
 		};
-		document.addEventListener("keydown", down, true); // Use capture phase
-		return () => document.removeEventListener("keydown", down, true);
-	}, [open]);
+	}, []);
 
 	// Close dialog when Tauri window loses focus
 	React.useEffect(() => {

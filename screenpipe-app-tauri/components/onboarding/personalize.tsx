@@ -1,5 +1,4 @@
 import React from "react";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Brain,
   CircleCheck,
@@ -107,7 +106,7 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
 }) => {
   return (
     <div className={`${className} flex flex-col h-full`}>
-      <DialogHeader className="flex flex-col px-2 justify-center items-center mb-6">
+      <div className="flex flex-col px-2 justify-center items-center mb-6">
         <motion.img
           className="w-20 h-20 justify-center mb-4"
           src="/128x128.png"
@@ -116,13 +115,13 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5 }}
         />
-        <DialogTitle className="text-center text-2xl font-bold">
+        <h2 className="text-center text-2xl font-bold">
           Choose your AI assistance level
-        </DialogTitle>
+        </h2>
         <p className="text-center text-muted-foreground mt-2 max-w-md">
           screenpipe uses AI to help you find and understand your recorded data. Choose how much AI assistance you&apos;d like.
         </p>
-      </DialogHeader>
+      </div>
 
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="flex flex-wrap justify-center gap-4 max-w-6xl">

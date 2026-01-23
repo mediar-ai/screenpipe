@@ -363,8 +363,11 @@ pub async fn show_shortcut_reminder(
 
     let label = "shortcut-reminder";
 
+    info!("show_shortcut_reminder called");
+
     // If window exists, just show it and update shortcut
     if let Some(window) = app_handle.get_webview_window(label) {
+        info!("shortcut-reminder window exists, showing and focusing");
         let _ = app_handle.emit_to(label, "shortcut-reminder-update", &shortcut);
         let _ = window.show();
         return Ok(());
@@ -379,41 +382,83 @@ pub async fn show_shortcut_reminder(
     let screen_size = monitor.size();
     let scale_factor = monitor.scale_factor();
 
-    // Window dimensions
-    let window_width = 350.0;
-    let window_height = 60.0;
+    // Compact window dimensions (wider for hover state)
+    let window_width = 280.0;
+    let window_height = 40.0;
 
-    // Position at bottom center of screen
+    // Position at top center of screen
     let x = ((screen_size.width as f64 / scale_factor) - window_width) / 2.0;
-    let y = (screen_size.height as f64 / scale_factor) - window_height - 100.0; // 100px from bottom
+    let y = 12.0; // 12px from top
 
-    let _window = WebviewWindowBuilder::new(
+    // CRITICAL: Set Accessory activation policy for fullscreen support on macOS
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    }
+
+    info!("Creating new shortcut-reminder window");
+    let window = WebviewWindowBuilder::new(
         &app_handle,
         label,
         tauri::WebviewUrl::App("shortcut-reminder".into()),
     )
-    .title("Shortcut Reminder")
+    .title("")
     .inner_size(window_width, window_height)
     .position(x, y)
-    .decorations(false)
-    .transparent(true)
+    .visible_on_all_workspaces(true)
     .always_on_top(true)
-    .resizable(false)
+    .decorations(false)
     .skip_taskbar(true)
     .focused(false)
-    .visible(true)
+    .transparent(true)
+    .visible(false)
+    .shadow(false)
+    .resizable(false)
     .build()
     .map_err(|e| format!("Failed to create shortcut reminder window: {}", e))?;
 
+    info!("shortcut-reminder window created");
+
+    // Convert to NSPanel on macOS for fullscreen support
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_nspanel::WebviewWindowExt;
+        use tauri_nspanel::ManagerExt;
+
+        if let Ok(_panel) = window.to_panel() {
+            info!("Successfully converted shortcut-reminder to panel");
+
+            let app_clone = app_handle.clone();
+            let _ = app_handle.run_on_main_thread(move || {
+                use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+
+                if let Ok(panel) = app_clone.get_webview_panel(label) {
+                    // Level 1001 = above CGShieldingWindowLevel, shows over fullscreen
+                    panel.set_level(1001);
+                    panel.set_style_mask(0);
+                    panel.set_collection_behaviour(
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
+                    );
+                    // Order front regardless to show above fullscreen
+                    panel.order_front_regardless();
+                    info!("Panel configured for fullscreen support");
+                }
+            });
+        } else {
+            error!("Failed to convert shortcut-reminder to panel");
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window.show();
+    }
+
     // Send the shortcut info to the window
     let _ = app_handle.emit_to(label, "shortcut-reminder-update", &shortcut);
-
-    // Set up auto-hide after 10 seconds
-    let app_handle_clone = app_handle.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-        let _ = app_handle_clone.emit_to("shortcut-reminder", "shortcut-reminder-hide", ());
-    });
 
     Ok(())
 }

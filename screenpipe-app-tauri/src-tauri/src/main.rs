@@ -275,6 +275,49 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     )
     .await?;
 
+    // Register Escape shortcut to hide the main timeline window
+    let escape_shortcut = Shortcut::new(None, Code::Escape);
+    if let Err(e) = global_shortcut.on_shortcut(escape_shortcut, |app, _, event| {
+        if matches!(event.state, ShortcutState::Pressed) {
+            info!("Escape pressed, hiding main window");
+            hide_main_window(app);
+        }
+    }) {
+        warn!("Failed to register Escape shortcut: {}", e);
+    }
+
+    // Register Cmd+K (macOS) / Ctrl+K (Windows/Linux) to open search when main window is visible
+    #[cfg(target_os = "macos")]
+    let search_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyK);
+    #[cfg(not(target_os = "macos"))]
+    let search_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyK);
+
+    if let Err(e) = global_shortcut.on_shortcut(search_shortcut, |app, _, event| {
+        if matches!(event.state, ShortcutState::Pressed) {
+            // Only open search if main window is visible
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(window) = app.get_webview_panel("main") {
+                    if window.is_visible() {
+                        info!("Cmd+K pressed, opening search");
+                        let _ = app.emit("open-search", ());
+                    }
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        info!("Ctrl+K pressed, opening search");
+                        let _ = app.emit("open-search", ());
+                    }
+                }
+            }
+        }
+    }) {
+        warn!("Failed to register search shortcut: {}", e);
+    }
+
     Ok(())
 }
 
@@ -667,6 +710,9 @@ async fn main() {
                 commands::reset_onboarding,
                 commands::show_onboarding_window,
                 commands::open_search_window,
+                // Shortcut reminder commands
+                commands::show_shortcut_reminder,
+                commands::hide_shortcut_reminder,
                 // Commands from tray.rs
                 set_tray_unhealth_icon,
                 set_tray_health_icon,
@@ -843,6 +889,15 @@ async fn main() {
             } else {
                 let _ = ShowRewindWindow::Main.show(&app.handle());
             }
+
+            // Always show shortcut reminder overlay on app startup
+            let shortcut = store.show_screenpipe_shortcut.clone();
+            let app_handle_reminder = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Small delay to ensure windows are ready
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                let _ = commands::show_shortcut_reminder(app_handle_reminder, shortcut).await;
+            });
 
             // Get app handle once for all initializations
             let app_handle = app.handle().clone();
