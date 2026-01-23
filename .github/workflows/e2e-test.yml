@@ -49,9 +49,10 @@ jobs:
     - name: Install OpenSSL and FFmpeg
       shell: powershell
       run: |
-        # FIX: Install FFmpeg via Chocolatey to replace the broken URL
+        # FIX: Native PowerShell sequence (no bash operators like ||)
         choco install openssl ffmpeg -y
-        refreshenv || true
+        # Native PATH refresh
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
         openssl version
         ffmpeg -version
 
