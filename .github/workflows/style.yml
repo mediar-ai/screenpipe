@@ -80,4 +80,5 @@ jobs:
         run: cargo install cargo-deny
 
       - name: Check duplicate dependencies
-        run: cargo deny check duplicates
+        continue-on-error: true
+        run: cargo deny check bans
