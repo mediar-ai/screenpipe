@@ -20,13 +20,17 @@ jobs:
       with:
         node-version: 22
 
-    # FIX: Install LLVM and Clang (Required for bindgen in Screenpipe dependencies)
+    # FIX: Vcpkg is required for static linking on Windows in your release-app workflow
+    - name: Install vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
+
     - name: Install LLVM and Clang
       uses: KyleMayes/install-llvm-action@v2
       with:
         version: "10.0"
 
-    # FIX: Install OpenSSL
     - name: Install OpenSSL
       shell: powershell
       run: |
@@ -36,7 +40,6 @@ jobs:
     - name: Setup MSVC Dev Cmd
       uses: ilammy/msvc-dev-cmd@v1
         
-    # --- NUCLEAR FIX: Inject Cargo Config ---
     - name: Force Rust Warning Overrides
       shell: bash
       run: |
@@ -44,10 +47,18 @@ jobs:
         echo '[build]' >> .cargo/config.toml
         echo 'rustflags = ["-A", "warnings", "-A", "unexpected_cfgs", "-C", "target-feature=+crt-static", "-C", "link-arg=/LTCG"]' >> .cargo/config.toml
 
+    # FIX: Create the log directory manually so the upload step doesn't fail
+    - name: Pre-create Log File
+      shell: bash
+      run: |
+        mkdir -p screenpipe-app-tauri
+        echo "Build initiated" > ./screenpipe-app-tauri/e2e_output.log
+
     - name: Build
       uses: tauri-apps/tauri-action@v0.5.17
       env:
         CI: true
+        VCPKG_STATIC_LINKAGE: "true" # Matches release-app.yml
       with:
         args: "--target x86_64-pc-windows-msvc --no-bundle"
         projectPath: "./screenpipe-app-tauri"
@@ -56,17 +67,14 @@ jobs:
     - name: Run E2E Tests
       shell: pwsh
       working-directory: ./screenpipe-app-tauri
-      # Ensure log file is created even if tests fail
       run: |
-        bun run test:e2e > e2e_output.log 2>&1
+        bun run test:e2e >> e2e_output.log 2>&1
       continue-on-error: true
       
     - name: Upload Logs
       uses: actions/upload-artifact@v4
-      if: always() # FIX: Upload even if the build or tests fail
+      if: always()
       with:
         name: windows-e2e-logs
         path: |
           ./screenpipe-app-tauri/e2e_output.log
-          ./screenpipe-app-tauri/src-tauri/target/release/build/**/stderr
-          ./screenpipe-app-tauri/src-tauri/target/release/build/**/stdout
