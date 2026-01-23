@@ -729,6 +729,7 @@ async fn main() {
     }
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
+    let sidecar_state_for_init = sidecar_state.0.clone(); // Clone for initial spawn
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -907,10 +908,6 @@ async fn main() {
             let server_shutdown_tx = spawn_server(app_handle.clone(), 11435);
             app.manage(server_shutdown_tx);
 
-            // Initialize sidecar manager and check dev mode
-            let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
-            app.manage(sidecar_manager.clone());
-
             // Dev mode check and sidecar initialization
             let use_dev_mode = store
                 .dev_mode;
@@ -918,11 +915,17 @@ async fn main() {
             info!("use_dev_mode: {}", use_dev_mode);
 
             // Start sidecar in non-dev mode (production behavior)
+            // Uses the same SidecarState that tauri commands use
             if !use_dev_mode  {
-                let sidecar_manager_clone = sidecar_manager.clone();
+                let sidecar_state_clone = sidecar_state_for_init.clone();
                 let app_handle_clone = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    let mut manager = sidecar_manager_clone.lock().await;
+                    let mut state_guard = sidecar_state_clone.lock().await;
+                    // Initialize the manager if it doesn't exist
+                    if state_guard.is_none() {
+                        *state_guard = Some(SidecarManager::new());
+                    }
+                    let manager = state_guard.as_mut().unwrap();
                     if server_running.await.unwrap_or(false) {
                         return;
                     }

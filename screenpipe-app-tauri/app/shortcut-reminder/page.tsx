@@ -3,14 +3,16 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import posthog from "posthog-js";
+import { usePlatform } from "@/lib/hooks/use-platform";
 
 export default function ShortcutReminderPage() {
-  const [shortcut, setShortcut] = useState("⌘⌃S");
+  const { isMac } = usePlatform();
+  const [shortcut, setShortcut] = useState(isMac ? "⌘⌃S" : "Win+Ctrl+S");
   const [hovered, setHovered] = useState(false);
 
   useEffect(() => {
     const unlistenShortcut = listen<string>("shortcut-reminder-update", (event) => {
-      setShortcut(formatShortcut(event.payload));
+      setShortcut(formatShortcut(event.payload, isMac));
     });
 
     posthog.capture("shortcut_reminder_shown");
@@ -18,7 +20,7 @@ export default function ShortcutReminderPage() {
     return () => {
       unlistenShortcut.then((fn) => fn());
     };
-  }, []);
+  }, [isMac]);
 
   return (
     <div
@@ -76,12 +78,19 @@ export default function ShortcutReminderPage() {
   );
 }
 
-function formatShortcut(shortcut: string): string {
-  if (!shortcut) return "⌘⌃S";
+function formatShortcut(shortcut: string, isMac: boolean): string {
+  if (!shortcut) return isMac ? "⌘⌃S" : "Win+Ctrl+S";
+  if (isMac) {
+    return shortcut
+      .replace(/Super|Command|Cmd/gi, "⌘")
+      .replace(/Ctrl|Control/gi, "⌃")
+      .replace(/Alt|Option/gi, "⌥")
+      .replace(/Shift/gi, "⇧")
+      .replace(/\+/g, "");
+  }
+  // Windows/Linux: use readable text
   return shortcut
-    .replace(/Super|Command|Cmd/gi, "⌘")
-    .replace(/Ctrl|Control/gi, "⌃")
-    .replace(/Alt|Option/gi, "⌥")
-    .replace(/Shift/gi, "⇧")
-    .replace(/\+/g, "");
+    .replace(/Super/gi, "Win")
+    .replace(/Command|Cmd/gi, "Ctrl")
+    .replace(/Option/gi, "Alt");
 }

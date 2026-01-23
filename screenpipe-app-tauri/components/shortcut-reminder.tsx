@@ -36,14 +36,21 @@ export function ShortcutTracker() {
   return null;
 }
 
-// Format shortcut for display (e.g., "Super+Alt+S" -> "⌘ ⌥ S")
-export function formatShortcut(shortcut: string): string {
+// Format shortcut for display (platform-aware)
+export function formatShortcut(shortcut: string, isMac: boolean = true): string {
   if (!shortcut) return "";
 
+  if (isMac) {
+    return shortcut
+      .replace(/Super|Command|Cmd/gi, "⌘")
+      .replace(/Ctrl|Control/gi, "⌃")
+      .replace(/Alt|Option/gi, "⌥")
+      .replace(/Shift/gi, "⇧")
+      .replace(/\+/g, " ");
+  }
+  // Windows/Linux: use readable text
   return shortcut
-    .replace(/Super|Command|Cmd/gi, "⌘")
-    .replace(/Ctrl|Control/gi, "⌃")
-    .replace(/Alt|Option/gi, "⌥")
-    .replace(/Shift/gi, "⇧")
-    .replace(/\+/g, " ");
+    .replace(/Super/gi, "Win")
+    .replace(/Command|Cmd/gi, "Ctrl")
+    .replace(/Option/gi, "Alt");
 }

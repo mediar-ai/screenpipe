@@ -8,15 +8,22 @@ import { commands, type OSPermissionsCheck } from "@/lib/utils/tauri";
 import { motion } from "framer-motion";
 import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
 
-// Format shortcut for display
-function formatShortcut(shortcut: string): string {
+// Format shortcut for display (platform-aware)
+function formatShortcut(shortcut: string, isMac: boolean): string {
   if (!shortcut) return "";
+  if (isMac) {
+    return shortcut
+      .replace(/Super|Command|Cmd/gi, "⌘")
+      .replace(/Ctrl|Control/gi, "⌃")
+      .replace(/Alt|Option/gi, "⌥")
+      .replace(/Shift/gi, "⇧")
+      .replace(/\+/g, " ");
+  }
+  // Windows/Linux: use readable text
   return shortcut
-    .replace(/Super|Command|Cmd/gi, "⌘")
-    .replace(/Ctrl|Control/gi, "⌃")
-    .replace(/Alt|Option/gi, "⌥")
-    .replace(/Shift/gi, "⇧")
-    .replace(/\+/g, " ");
+    .replace(/Super/gi, "Win")
+    .replace(/Command|Cmd/gi, "Ctrl")
+    .replace(/Option/gi, "Alt");
 }
 
 interface OnboardingStatusProps {
@@ -247,7 +254,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             <p className="font-mono text-xs text-center text-muted-foreground">
               press{" "}
               <span className="font-semibold text-foreground">
-                {formatShortcut(settings.showScreenpipeShortcut)}
+                {formatShortcut(settings.showScreenpipeShortcut, isMacOS)}
               </span>{" "}
               anytime to open screenpipe
             </p>

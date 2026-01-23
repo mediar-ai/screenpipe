@@ -585,7 +585,13 @@ impl SidecarManager {
 
     pub async fn spawn(&mut self, app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<(), String> {
         info!("Spawning sidecar with override args: {:?}", override_args);
-        
+
+        // Check if sidecar is already running
+        if self.child.is_some() {
+            info!("Sidecar already running, skipping spawn");
+            return Ok(());
+        }
+
         // Update settings from store first to get audio settings
         self.update_settings(app).await?;
         
