@@ -55,6 +55,8 @@ jobs:
 
   test-windows:
     runs-on: windows-2019
+    env:
+      RUSTFLAGS: "-A unused_variables -A unused_imports -A dead_code"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -119,6 +121,8 @@ jobs:
 
   test-macos:
     runs-on: macos-latest
+    env:
+      RUSTFLAGS: "-A unexpected_cfgs"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
