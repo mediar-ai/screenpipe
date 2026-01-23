@@ -458,6 +458,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "depends on external URL that may become unavailable"]
     async fn test_downloading_and_running_private_pipe() {
         init();
         let temp_dir = TempDir::new().unwrap();

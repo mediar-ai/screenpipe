@@ -112,16 +112,16 @@ jobs:
           cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
       - name: Run specific Windows OCR cargo test
-        run: cargo test test_process_ocr_task_windows
+        run: cargo test test_process_ocr_task_windows --release
 
       - name: Run PII removal tests
-        run: cargo test -p screenpipe-core pii_removal
+        run: cargo test -p screenpipe-core pii_removal --release
 
       - name: Run PII redaction tests
-        run: cargo test -p screenpipe-server --lib pii_redaction_tests
+        run: cargo test -p screenpipe-server --lib pii_redaction_tests --release
 
       - name: Run pipes_test
-        run: cargo test --package pipes_test
+        run: cargo test -p screenpipe-core --test pipes_test --release
 
   test-macos:
     runs-on: macos-latest
