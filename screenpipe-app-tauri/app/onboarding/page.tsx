@@ -4,22 +4,26 @@ import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import OnboardingStatus from "@/components/onboarding/status";
 import OnboardingIntro from "@/components/onboarding/introduction";
+import OnboardingSelection from "@/components/onboarding/usecases-selection";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import posthog from "posthog-js";
 import { commands } from "@/lib/utils/tauri";
 
-type SlideKey = "intro" | "status";
+type SlideKey = "intro" | "usecases" | "status";
 
 // Window size configurations for each slide - consistent size to avoid resizing issues
 const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = {
   intro: { width: 900, height: 800 },
+  usecases: { width: 900, height: 800 },
   status: { width: 900, height: 800 },
 };
 
-// Simple 2-step flow: intro → status → done
+// 3-step flow: intro → usecases → status → done
 const getNextSlide = (currentSlide: SlideKey): SlideKey | null => {
   switch (currentSlide) {
     case "intro":
+      return "usecases";
+    case "usecases":
       return "status";
     case "status":
       return null; // Complete onboarding
@@ -32,8 +36,10 @@ const getPrevSlide = (currentSlide: SlideKey): SlideKey | null => {
   switch (currentSlide) {
     case "intro":
       return null;
-    case "status":
+    case "usecases":
       return "intro";
+    case "status":
+      return "usecases";
     default:
       return null;
   }
@@ -69,11 +75,21 @@ export default function OnboardingPage() {
   const [isVisible, setIsVisible] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<SlideKey[]>(["intro"]);
-  const { 
-    onboardingData, 
-    completeOnboarding, 
-    isLoading 
+  const [selectedUsecases, setSelectedUsecases] = useState<string[]>([]);
+  const {
+    onboardingData,
+    completeOnboarding,
+    isLoading
   } = useOnboarding();
+
+  const handleUsecaseClick = (option: string) => {
+    setSelectedUsecases((prev) => {
+      if (prev.includes(option)) {
+        return prev.filter((o) => o !== option);
+      }
+      return [...prev, option];
+    });
+  };
 
   // Load onboarding status on mount
   useEffect(() => {
@@ -269,6 +285,16 @@ export default function OnboardingPage() {
             <OnboardingIntro
               className={`transition-opacity duration-300 w-full
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
+              handleNextSlide={handleNextSlide}
+            />
+          )}
+          {currentSlide === "usecases" && (
+            <OnboardingSelection
+              className={`transition-opacity duration-300 w-full
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
+              selectedOptions={selectedUsecases}
+              handleOptionClick={handleUsecaseClick}
+              handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
             />
           )}

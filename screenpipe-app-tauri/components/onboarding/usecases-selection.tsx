@@ -5,8 +5,9 @@ import {
   CircleCheck,
   Search,
   Calendar,
-  Users,
-  MessageSquare,
+  Code,
+  Shield,
+  Sparkles,
 } from "lucide-react";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import posthog from "posthog-js";
@@ -22,33 +23,41 @@ interface OnboardingSelectionProps {
 
 const OPTIONS = [
   {
-    key: "findInfo",
-    icon: Search,
-    label: "Find information quickly",
-    description: "Search through your recorded activities and conversations",
-    example: '"What was discussed in my morning meeting?"'
-  },
-  {
-    key: "meetingSummaries",
-    icon: Users,
-    label: "Get meeting summaries",
-    description: "Automatically summarize meetings and conversations",
-    example: '"Summarize my call with the client yesterday"'
-  },
-  {
-    key: "rememberContext",
+    key: "memory",
     icon: Brain,
-    label: "Remember context",
-    description: "Recall details about projects, decisions, and conversations",
-    example: '"What was the reason we chose option A?"'
+    label: "Personal memory",
+    description: "I forget things and want to search my past screen activity",
   },
   {
-    key: "trackActivities",
+    key: "meetings",
     icon: Calendar,
-    label: "Track daily activities",
-    description: "See how you spend your time and improve productivity",
-    example: '"How much time did I spend coding today?"'
-  }
+    label: "Meeting summaries",
+    description: "I need help remembering what was discussed in meetings",
+  },
+  {
+    key: "productivity",
+    icon: Search,
+    label: "Productivity tracking",
+    description: "I want to understand how I spend my time on my computer",
+  },
+  {
+    key: "developer",
+    icon: Code,
+    label: "Building/developing",
+    description: "I'm a developer and want to build on top of Screenpipe",
+  },
+  {
+    key: "privacy",
+    icon: Shield,
+    label: "Privacy-focused alternative",
+    description: "I want a local/private alternative to cloud services",
+  },
+  {
+    key: "curious",
+    icon: Sparkles,
+    label: "Just curious",
+    description: "Trying it out to see what it does",
+  },
 ];
 
 const SelectionItem: React.FC<{
@@ -57,13 +66,13 @@ const SelectionItem: React.FC<{
   onClick: () => void;
   index: number;
 }> = ({ option, isSelected, onClick, index }) => {
-  const { icon: Icon, label, description, example } = option;
+  const { icon: Icon, label, description } = option;
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
-      className={`w-full max-w-md flex flex-col border rounded-xl p-4 m-2 hover:shadow-lg cursor-pointer transition-all duration-300
+      className={`w-full flex flex-col border rounded-xl p-4 hover:shadow-lg cursor-pointer transition-all duration-300
         ${
           isSelected
             ? "bg-primary text-primary-foreground border-primary shadow-lg transform scale-105"
@@ -71,22 +80,17 @@ const SelectionItem: React.FC<{
         }`}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between mb-2">
         <div className="flex items-center">
           <Icon className={`h-5 w-5 mr-3 ${isSelected ? 'text-primary-foreground' : 'text-primary'}`} />
           <span className="font-medium">{label}</span>
         </div>
         {isSelected && <CircleCheck className="h-5 w-5 flex-shrink-0" />}
       </div>
-      
-      <p className={`text-sm mb-2 ${isSelected ? 'text-primary-foreground/90' : 'text-muted-foreground'}`}>
+
+      <p className={`text-sm ${isSelected ? 'text-primary-foreground/90' : 'text-muted-foreground'}`}>
         {description}
       </p>
-      
-      <div className={`text-xs italic ${isSelected ? 'text-primary-foreground/75' : 'text-muted-foreground/75'} bg-opacity-20 rounded p-2 ${isSelected ? 'bg-white/10' : 'bg-muted/50'}`}>
-        <MessageSquare className="h-3 w-3 inline mr-1" />
-        {example}
-      </div>
     </motion.div>
   );
 };
@@ -120,15 +124,15 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
           transition={{ duration: 0.5 }}
         />
         <DialogTitle className="text-center text-2xl font-bold">
-          What would you like to do with your recorded data?
+          What brought you to Screenpipe?
         </DialogTitle>
         <p className="text-center text-muted-foreground mt-2">
-          Select the features that interest you most (you can choose multiple)
+          Help us understand what you&apos;re looking for (select all that apply)
         </p>
       </DialogHeader>
 
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
+      <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl w-full px-4">
           {OPTIONS.map((option, index) => (
             <SelectionItem
               key={option.key}
@@ -139,14 +143,14 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
             />
           ))}
         </div>
-        
+
         {selectedOptions && selectedOptions.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-6 text-center text-sm text-muted-foreground"
+            className="mt-4 text-center text-sm text-muted-foreground"
           >
-            Great! We&apos;ll customize your experience for these features.
+            Thanks! This helps us improve Screenpipe for you.
           </motion.div>
         )}
       </div>
