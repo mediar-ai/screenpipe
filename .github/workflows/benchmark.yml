@@ -5,7 +5,7 @@ on: [push]
 env:
   CARGO_TERM_COLOR: always
 
-# VIKTIGT: Detta ger den inbyggda nyckeln rättighet att spara resultaten
+# VIKTIGT: Ger rättigheter att spara benchmark-resultat
 permissions:
   contents: write
   deployments: write
@@ -65,7 +65,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Run Windows OCR benchmarks
-        # Vi använder Out-File med UTF8 för att garantera att filen skapas korrekt på Windows
         run: |
           cargo bench --bench ocr_benchmark -- --output-format bencher | Out-File -FilePath ocr_output.txt -Encoding utf8
 
@@ -132,9 +131,9 @@ jobs:
         with:
           name: OCR Benchmarks
           tool: "cargo"
-          # Pekar på den ihopslagna filen
           output-file-path: ./cache/ocr/merged_ocr_output.txt
-          # HÄR ÄR ÄNDRINGEN: Vi använder den inbyggda nyckeln GITHUB_TOKEN
+          # HÄR ÄR FELET SOM MÅSTE BORT: github-token: ${{ secrets.GH_PAGES_TOKEN }}
+          # HÄR ÄR LÖSNINGEN:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           alert-threshold: "200%"
