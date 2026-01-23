@@ -4,7 +4,6 @@
 use analytics::AnalyticsManager;
 use commands::show_main_window;
 use serde_json::json;
-use serde_json::Value;
 #[cfg(target_os = "macos")]
 use tauri_nspanel::ManagerExt;
 use std::env;
@@ -12,7 +11,6 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use tauri::Config;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
@@ -21,7 +19,6 @@ use tauri_plugin_global_shortcut::ShortcutState;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tokio::sync::mpsc;
-use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
@@ -74,7 +71,7 @@ pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
 use std::collections::HashMap;
-use tauri::{AppHandle, WebviewUrl, WebviewWindow};
+use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 use tauri_plugin_sentry::sentry;

@@ -1,6 +1,4 @@
 use crate::{get_data_dir, window_api::ShowRewindWindow, store::OnboardingStore};
-use serde::Serialize;
-use specta::Type;
 use tauri::Manager;
 use tracing::{error, info};
 
@@ -46,10 +44,10 @@ pub fn hide_main_window(app_handle: &tauri::AppHandle) {
 /// When enabled, mouse events pass through to windows below
 #[tauri::command]
 #[specta::specta]
-pub fn enable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(), String> {
+pub fn enable_overlay_click_through(_app_handle: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        if let Some(window) = app_handle.get_webview_window("main") {
+        if let Some(window) = _app_handle.get_webview_window("main") {
             crate::windows_overlay::enable_click_through(&window)?;
         }
     }
@@ -60,10 +58,10 @@ pub fn enable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(), 
 /// When disabled, the overlay receives mouse events normally
 #[tauri::command]
 #[specta::specta]
-pub fn disable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(), String> {
+pub fn disable_overlay_click_through(_app_handle: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        if let Some(window) = app_handle.get_webview_window("main") {
+        if let Some(window) = _app_handle.get_webview_window("main") {
             crate::windows_overlay::disable_click_through(&window)?;
         }
     }
@@ -73,10 +71,10 @@ pub fn disable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(),
 /// Check if click-through is currently enabled (Windows only)
 #[tauri::command]
 #[specta::specta]
-pub fn is_overlay_click_through(app_handle: tauri::AppHandle) -> bool {
+pub fn is_overlay_click_through(_app_handle: tauri::AppHandle) -> bool {
     #[cfg(target_os = "windows")]
     {
-        if let Some(window) = app_handle.get_webview_window("main") {
+        if let Some(window) = _app_handle.get_webview_window("main") {
             return crate::windows_overlay::is_click_through_enabled(&window);
         }
     }
@@ -151,13 +149,6 @@ pub fn update_show_screenpipe_shortcut(
     }
 
     Ok(())
-}
-
-// Add these new structs
-#[derive(Debug, Serialize, Type)]
-pub struct AuthStatus {
-    authenticated: bool,
-    message: Option<String>,
 }
 
 #[tauri::command]

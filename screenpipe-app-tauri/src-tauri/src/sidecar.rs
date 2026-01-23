@@ -318,7 +318,9 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
     let port_str = port.to_string();
     let mut args = vec!["--port", port_str.as_str()];
     let fps_str = fps.to_string();
-    let mut monitor_id_str = String::new(); // Store monitor ID string
+    // Needs to be declared here for lifetime (used by args.push below)
+    #[allow(unused_assignments)]
+    let mut monitor_id_str = String::new();
     if fps != 0.2 {
         args.push("--fps");
         args.push(fps_str.as_str());
