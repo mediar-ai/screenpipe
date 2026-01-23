@@ -68,6 +68,7 @@ jobs:
 
       - name: Analyze binary size
         if: matrix.os == 'macos-latest'
+        continue-on-error: true
         run: cargo bloat --release
 
       - name: Install cargo-audit
