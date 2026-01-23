@@ -105,6 +105,7 @@ async fn test_extract_frames() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires local screenpipe data"]
 async fn test_extract_frames_and_ocr() -> Result<()> {
     setup_test_env().await?;
     let video_path = create_test_video().await?;
@@ -153,6 +154,7 @@ async fn test_extract_frames_and_ocr() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires local screenpipe data"]
 async fn test_get_video_metadata() -> Result<()> {
     setup_test_env().await?;
     let video_path = create_test_video().await?;

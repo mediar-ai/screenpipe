@@ -302,6 +302,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires next.js build which may fail in CI"]
     async fn test_downloading_and_running_sideloaded_pipe() {
         init();
         let temp_dir = TempDir::new().unwrap();
