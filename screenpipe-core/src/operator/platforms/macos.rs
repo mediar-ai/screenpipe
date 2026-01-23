@@ -929,8 +929,7 @@ impl fmt::Display for ClickMethod {
 }
 
 // Define enum for click method selection
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub enum ClickMethodSelection {
     /// Try all methods in sequence (current behavior)
     #[default]
@@ -942,7 +941,6 @@ pub enum ClickMethodSelection {
     /// Use only mouse simulation
     MouseSimulation,
 }
-
 
 // Our concrete UIElement implementation for macOS
 pub struct MacOSUIElement {
@@ -1339,11 +1337,7 @@ impl UIElementImpl for MacOSUIElement {
         let properties = HashMap::new();
 
         // Check if this is a window element first
-        let is_window = self
-            .element
-            .0
-            .role()
-            .is_ok_and(|r| r == "AXWindow");
+        let is_window = self.element.0.role().is_ok_and(|r| r == "AXWindow");
 
         // Special case for windows
         if is_window {
@@ -1666,7 +1660,12 @@ impl UIElementImpl for MacOSUIElement {
 
         // First try using the AXRaise action
         let raise_attr = AXAttribute::new(&CFString::new("AXRaise"));
-        if self.element.0.perform_action(raise_attr.as_CFString()).is_ok() {
+        if self
+            .element
+            .0
+            .perform_action(raise_attr.as_CFString())
+            .is_ok()
+        {
             debug!("Successfully raised element");
 
             // Now try to directly focus the element
@@ -1701,7 +1700,6 @@ impl UIElementImpl for MacOSUIElement {
         self.click().map(|_result| {
             // Optionally log the details of how the click was performed
             debug!("Focus achieved via click method: {}", _result.method);
-            
         })
     }
 
@@ -1957,12 +1955,7 @@ impl UIElementImpl for MacOSUIElement {
         let engine = MacOSEngine::new(self.use_background_apps, self.activate_app)?;
 
         // If this is an application element, refresh the tree
-        if self
-            .element
-            .0
-            .role()
-            .is_ok_and(|r| r == "AXApplication")
-        {
+        if self.element.0.role().is_ok_and(|r| r == "AXApplication") {
             if let Some(app_name) = self.attributes().label {
                 engine.refresh_accessibility_tree(Some(&app_name))?;
             }
@@ -2190,10 +2183,7 @@ fn element_contains_text(e: &AXUIElement, text: &str) -> bool {
     }
 
     // Check title, description and other text attributes
-    let contains_in_title = e
-        .title()
-        .ok()
-        .is_some_and(|t| t.to_string().contains(text));
+    let contains_in_title = e.title().ok().is_some_and(|t| t.to_string().contains(text));
 
     let contains_in_desc = e
         .description()

@@ -31,7 +31,9 @@ pub fn remove_pii(text: &str) -> String {
     let mut sanitized = text.to_string();
     for (pattern, replacement) in PII_PATTERNS.iter() {
         let replacement_bracketed = format!("[{}]", replacement);
-        sanitized = pattern.replace_all(&sanitized, replacement_bracketed.as_str()).to_string();
+        sanitized = pattern
+            .replace_all(&sanitized, replacement_bracketed.as_str())
+            .to_string();
     }
     sanitized
 }
@@ -111,7 +113,8 @@ pub fn detect_pii_regions(
 
         // Determine if coordinates are normalized (0-1) or pixel values
         // Apple OCR returns normalized, Tesseract returns pixels
-        let (x_px, y_px, w_px, h_px) = if left <= 1.0 && top <= 1.0 && width <= 1.0 && height <= 1.0 {
+        let (x_px, y_px, w_px, h_px) = if left <= 1.0 && top <= 1.0 && width <= 1.0 && height <= 1.0
+        {
             // Normalized coordinates (Apple OCR style)
             // Note: Apple's coordinate system has origin at bottom-left, so we need to flip Y
             let x = (left * image_width as f64) as u32;
@@ -182,7 +185,10 @@ mod tests {
 
     #[test]
     fn test_get_pii_type() {
-        assert_eq!(get_pii_type("4532-1234-5678-9012"), Some("CREDIT_CARD".to_string()));
+        assert_eq!(
+            get_pii_type("4532-1234-5678-9012"),
+            Some("CREDIT_CARD".to_string())
+        );
         assert_eq!(get_pii_type("123-45-6789"), Some("SSN".to_string()));
         assert_eq!(get_pii_type("test@example.com"), Some("EMAIL".to_string()));
         assert_eq!(get_pii_type("Hello World"), None);
@@ -191,15 +197,13 @@ mod tests {
     #[test]
     fn test_detect_pii_regions_credit_card_normalized() {
         // Simulating Apple OCR output with normalized coordinates
-        let text_json = vec![
-            HashMap::from([
-                ("text".to_string(), "4532-1234-5678-9012".to_string()),
-                ("left".to_string(), "0.1".to_string()),
-                ("top".to_string(), "0.8".to_string()),  // Apple has bottom-left origin
-                ("width".to_string(), "0.3".to_string()),
-                ("height".to_string(), "0.05".to_string()),
-            ])
-        ];
+        let text_json = vec![HashMap::from([
+            ("text".to_string(), "4532-1234-5678-9012".to_string()),
+            ("left".to_string(), "0.1".to_string()),
+            ("top".to_string(), "0.8".to_string()), // Apple has bottom-left origin
+            ("width".to_string(), "0.3".to_string()),
+            ("height".to_string(), "0.05".to_string()),
+        ])];
 
         let regions = detect_pii_regions(&text_json, 1920, 1080);
 
@@ -214,15 +218,13 @@ mod tests {
     #[test]
     fn test_detect_pii_regions_pixel_coordinates() {
         // Simulating Tesseract output with pixel coordinates
-        let text_json = vec![
-            HashMap::from([
-                ("text".to_string(), "test@example.com".to_string()),
-                ("left".to_string(), "100".to_string()),
-                ("top".to_string(), "200".to_string()),
-                ("width".to_string(), "300".to_string()),
-                ("height".to_string(), "50".to_string()),
-            ])
-        ];
+        let text_json = vec![HashMap::from([
+            ("text".to_string(), "test@example.com".to_string()),
+            ("left".to_string(), "100".to_string()),
+            ("top".to_string(), "200".to_string()),
+            ("width".to_string(), "300".to_string()),
+            ("height".to_string(), "50".to_string()),
+        ])];
 
         let regions = detect_pii_regions(&text_json, 1920, 1080);
 
@@ -268,15 +270,13 @@ mod tests {
 
     #[test]
     fn test_detect_pii_regions_no_pii() {
-        let text_json = vec![
-            HashMap::from([
-                ("text".to_string(), "Hello World".to_string()),
-                ("left".to_string(), "100".to_string()),
-                ("top".to_string(), "100".to_string()),
-                ("width".to_string(), "200".to_string()),
-                ("height".to_string(), "30".to_string()),
-            ]),
-        ];
+        let text_json = vec![HashMap::from([
+            ("text".to_string(), "Hello World".to_string()),
+            ("left".to_string(), "100".to_string()),
+            ("top".to_string(), "100".to_string()),
+            ("width".to_string(), "200".to_string()),
+            ("height".to_string(), "30".to_string()),
+        ])];
 
         let regions = detect_pii_regions(&text_json, 1920, 1080);
         assert!(regions.is_empty());
@@ -284,12 +284,10 @@ mod tests {
 
     #[test]
     fn test_detect_pii_regions_missing_coordinates() {
-        let text_json = vec![
-            HashMap::from([
-                ("text".to_string(), "4532-1234-5678-9012".to_string()),
-                // Missing bounding box coordinates
-            ]),
-        ];
+        let text_json = vec![HashMap::from([
+            ("text".to_string(), "4532-1234-5678-9012".to_string()),
+            // Missing bounding box coordinates
+        ])];
 
         let regions = detect_pii_regions(&text_json, 1920, 1080);
         assert!(regions.is_empty());

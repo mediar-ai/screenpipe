@@ -41,7 +41,6 @@ use crate::{
     },
     PipeManager,
 };
-use screenpipe_core::pii_removal::detect_pii_regions;
 use chrono::{DateTime, Utc};
 use screenpipe_audio::{
     audio_manager::AudioManager,
@@ -49,6 +48,7 @@ use screenpipe_audio::{
         default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
     },
 };
+use screenpipe_core::pii_removal::detect_pii_regions;
 use tracing::{debug, error, info};
 
 use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};

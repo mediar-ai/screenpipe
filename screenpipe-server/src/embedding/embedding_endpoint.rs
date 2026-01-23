@@ -68,7 +68,8 @@ pub async fn get_or_initialize_model() -> anyhow::Result<Arc<Mutex<EmbeddingMode
 
     EMBEDDING_MODEL
         .get()
-        .ok_or_else(|| anyhow::anyhow!("model initialization failed")).cloned()
+        .ok_or_else(|| anyhow::anyhow!("model initialization failed"))
+        .cloned()
 }
 
 #[oasgen]
