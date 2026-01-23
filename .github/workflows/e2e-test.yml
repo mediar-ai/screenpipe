@@ -17,21 +17,31 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: 22
+        
+    # --- NUCLEAR FIX: Inject Cargo Config ---
+    # This prevents the tauri-action from stripping our warning overrides
+    - name: Force Rust Warning Overrides
+      shell: bash
+      run: |
+        mkdir -p .cargo
+        echo '[build]' >> .cargo/config.toml
+        echo 'rustflags = ["-A", "warnings", "-A", "unexpected_cfgs", "-C", "target-feature=+crt-static", "-C", "link-arg=/LTCG"]' >> .cargo/config.toml
+
     - name: Build
       uses: tauri-apps/tauri-action@v0.5.17
       env:
         CI: true
-        # This is the hard override Tauri needs
-        RUSTFLAGS: "-A warnings -C target-feature=+crt-static -C link-arg=/LTCG"
       with:
         args: "--target x86_64-pc-windows-msvc --no-bundle"
         projectPath: "./screenpipe-app-tauri"
         tauriScript: bunx tauri -v
+        
     - name: Run E2E Tests
       shell: pwsh
       working-directory: ./screenpipe-app-tauri
       run: bun run test:e2e > e2e_output.log 2>&1
       continue-on-error: true
+      
     - name: Upload Logs
       uses: actions/upload-artifact@v4
       if: always()

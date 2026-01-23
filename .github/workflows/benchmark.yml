@@ -17,7 +17,8 @@ jobs:
             cmd: brew install ffmpeg && cargo bench --bench ocr_benchmark -- --output-format bencher
           - os: ubuntu-latest
             name: tesseract
-            cmd: sudo apt-get update && sudo apt-get install -y libleptonica-dev libtesseract-dev tesseract-ocr-eng && cargo bench --bench ocr_benchmark -- --output-format bencher
+            # FIX: Added pkg-config and libasound2-dev for ALSA audio dependency
+            cmd: sudo apt-get update && sudo apt-get install -y pkg-config libasound2-dev libleptonica-dev libtesseract-dev tesseract-ocr-eng && cargo bench --bench ocr_benchmark -- --output-format bencher
           - os: windows-latest
             name: windows
             cmd: cargo bench --bench ocr_benchmark -- --output-format bencher
