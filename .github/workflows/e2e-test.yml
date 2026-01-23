@@ -132,10 +132,8 @@ jobs:
       run: |
         $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
         New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
-        Set-ExecutionPolicy Bypass -Scope Process -Force
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        iex ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
-        Write-Host "Copying DLL files..."
+        Write-Host "Copying DLL files from System32..."
+        # vcruntime140.dll should already exist on GitHub runners with VS installed
         Copy-Item C:\Windows\System32\vcruntime140.dll -Destination $vcredist_dir -Force
         $dll_count = (Get-ChildItem -Path $vcredist_dir -Filter "*.dll").Count
         Write-Host "Found $dll_count DLLs in target directory"

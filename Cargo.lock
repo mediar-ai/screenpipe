@@ -8606,6 +8606,7 @@ dependencies = [
 [[package]]
 name = "vad-rs"
 version = "0.2.0"
+source = "git+https://github.com/mediar-ai/vad-rs-1.git#3af3b1829ab4d8f018f271fe53c6f382f15ca3a6"
 dependencies = [
  "eyre",
  "ndarray 0.16.1",
