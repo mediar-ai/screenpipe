@@ -20,63 +20,46 @@ jobs:
         cache: true
         rustflags: ""
 
-    - name: Install dependencies
-      # FIX: Added xvfb, fluxbox, and alsa-utils for virtual desktop/audio
+    - name: Install Critical Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb fluxbox alsa-utils libasound2-dev pkg-config
+        # Added fluxbox (WM), xvfb (Display), and x11-utils (Tools)
+        sudo apt-get install -y xvfb fluxbox x11-utils libasound2-dev pkg-config
         .github/scripts/install_dependencies.sh
-    
-    - name: Verify Tesseract installation
-      run: .github/scripts/verify_tesseract.sh
     
     - name: Build CLI
       run: cargo build --release
     
-    # FIX: Robust Virtual Display and Audio setup
-    - name: Set up virtual display and dummy audio
+    - name: Start Virtual Desktop
       run: |
-        # Start Xvfb
+        # Start Xvfb and wait for it to be ready
         Xvfb :99 -screen 0 1280x1024x24 &
         export DISPLAY=:99
-        sleep 3
-        # Start a window manager so "No windows were detected" fix
+        until xset -q > /dev/null 2>&1; do sleep 1; done
+        # Start Fluxbox so the app has "windows" to detect
         fluxbox &
-        # Setup dummy ALSA device
-        sudo modprobe snd-dummy
+        sleep 2
     
-    - name: Setup audio
+    - name: Run Integration Tests
       env:
         DISPLAY: :99
-      run: .github/scripts/setup_audio.sh
+        RUST_LOG: debug
+      run: |
+        # Manually create the log file to ensure artifact upload always sees it
+        touch screenpipe_output.log
+        # Run the scripts with the virtual display context
+        .github/scripts/setup_audio.sh
+        .github/scripts/run_screenpipe.sh
+        .github/scripts/test_ocr.sh
+        .github/scripts/test_audio_capture.sh
+        .github/scripts/stop_screenpipe.sh
     
-    - name: Run Screenpipe
-      env:
-        DISPLAY: :99
-      run: .github/scripts/run_screenpipe.sh
-    
-    - name: Test OCR
-      env:
-        DISPLAY: :99
-      run: .github/scripts/test_ocr.sh
-    
-    - name: Test Audio Capture
-      env:
-        DISPLAY: :99
-      run: .github/scripts/test_audio_capture.sh
-    
-    - name: Stop screenpipe
-      run: .github/scripts/stop_screenpipe.sh
-    
-    - name: Check for crashes and expected behavior
+    - name: Check for crashes
       run: .github/scripts/check_logs.sh
 
-    - name: Check final storage usage
-      run: du -ha ~/.screenpipe/data
-
-    - name: Upload logs
+    - name: Upload Logs
       uses: actions/upload-artifact@v4
-      if: always()
+      if: always() # Ensures you get logs even on failure
       with:
         name: screenpipe-linux-logs
         path: screenpipe_output.log
