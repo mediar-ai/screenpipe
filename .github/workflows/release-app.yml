@@ -542,6 +542,10 @@ jobs:
             throw "No DLLs found in target directory!"
           }
 
+      - name: Use production config for release
+        shell: bash
+        run: cp screenpipe-app-tauri/src-tauri/tauri.prod.conf.json screenpipe-app-tauri/src-tauri/tauri.conf.json
+
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
         env:
@@ -581,8 +585,7 @@ jobs:
           LINUXDEPLOY_OUTPUT_VERSION: ${{ matrix.os_type == 'linux' && '1' || '' }}
           APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.os_type == 'linux' && '1' || '' }}
         with:
-          # Use production config for release builds (different identifier, updater enabled)
-          args: ${{ matrix.tauri-args }} --config src-tauri/tauri.prod.conf.json
+          args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -vvv
           retryAttempts: 3
