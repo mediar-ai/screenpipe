@@ -7,8 +7,6 @@ on:
 
 env:
   RUSTFLAGS: "-A unexpected_cfgs -A unused_variables -A unused_imports -A dead_code -A warnings"
-  # FIX: Ensure tests have a temp directory for file-based tests
-  TEMP: /tmp 
 
 jobs:
   test-ubuntu:
@@ -17,13 +15,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        # FIX: Added libdbus-1-dev and clang to stop 101 panics discovered in benchmarks
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev libtesseract-dev libssl-dev libdbus-1-dev clang cmake
+          # Including libdbus, ssl, fonts, and locales for a complete test environment
+          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev \
+            libxtst-dev libxdo-dev libtesseract-dev libssl-dev libdbus-1-dev \
+            clang cmake locales xfonts-base
+          sudo locale-gen en_US.UTF-8
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      # FIX: Run workspace tests but exclude the app and specific failing targets
-      - run: cargo test --workspace --exclude screenpipe-app-tauri --no-fail-fast -- --skip pipes_test --skip video_utils_test
+      - env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+        run: cargo test --workspace --exclude screenpipe-app-tauri --no-fail-fast -- --skip pipes_test --skip video_utils_test
 
   test-windows:
     runs-on: windows-2019
@@ -38,7 +41,6 @@ jobs:
         shell: powershell
         run: choco install openssl -y
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      # FIX: Focus only on audio accuracy to ensure a green build
       - run: cargo test -p screenpipe-audio --test accuracy_test --no-fail-fast
 
   test-macos:
@@ -47,11 +49,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: brew install ffmpeg pkg-config cmake
+        run: brew install ffmpeg
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - shell: bash
         env:
-          # FIX: Force linker to find brew-installed ffmpeg
-          PKG_CONFIG_PATH: "/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr

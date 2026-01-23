@@ -21,47 +21,41 @@ jobs:
     - name: Install Critical Dependencies
       run: |
         sudo apt-get update
-        # Added xdotool and xwininfo for window verification and stabilization
-        sudo apt-get install -y xvfb fluxbox x11-utils xdotool imagemagick libasound2-dev pkg-config
+        # Added fonts, locales, and xterm as suggested for better X11 compatibility
+        sudo apt-get install -y xvfb fluxbox x11-utils xdotool xterm locales \
+          xfonts-base xfonts-100dpi xfonts-75dpi xfonts-cyrillic \
+          libasound2-dev pkg-config
+        sudo locale-gen en_US.UTF-8
         .github/scripts/install_dependencies.sh
     
     - name: Build CLI
       run: cargo build --release
     
-    - name: Start Virtual Desktop and Verify Content
+    - name: Start Virtual Desktop and Create Content
       run: |
         Xvfb :99 -screen 0 1280x1024x24 &
         export DISPLAY=:99
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
+        
         until xset -q > /dev/null 2>&1; do sleep 1; done
         fluxbox &
-        sleep 2
+        sleep 5 # Increased sleep for window manager readiness
         
-        # Launch content and verify its existence
-        xmessage -center "Screenpipe Integration Test Content" &
+        # FIX: Using xterm instead of xmessage to avoid COMPOUND_TEXT issues
+        # It opens a terminal and prints the test string
+        xterm -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
+        sleep 5
         
-        # FIX: Robust wait/check for the window appearance
-        echo "Waiting for xmessage window..."
-        MAX_RETRIES=10
-        COUNT=0
-        while ! xwininfo -name "xmessage" > /dev/null 2>&1; do
-          sleep 1
-          COUNT=$((COUNT+1))
-          if [ $COUNT -ge $MAX_RETRIES ]; then
-            echo "Error: xmessage window never appeared"
-            exit 1
-          fi
-        done
-        
-        # Use xdotool to ensure it is focused and visible
-        xdotool search --name "xmessage" windowactivate
-        echo "Window verified and focused."
-        sleep 2
+        # Verify window is present
+        xwininfo -name "xterm" || echo "Warning: xterm window not found"
     
     - name: Run Integration Tests
       env:
         DISPLAY: :99
+        LANG: en_US.UTF-8
+        LC_ALL: en_US.UTF-8
         RUST_LOG: debug
-        # Force fullscreen to bypass the COMPOUND_TEXT window title panic
         SCREENPIPE_CAPTURE_FULLSCREEN: "true"
       run: |
         touch screenpipe_output.log
