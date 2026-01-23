@@ -1,6 +1,9 @@
 import { MainImage } from "./image-card";
 import { cn } from "@/lib/utils";
 import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
+import { Copy, Check, Link } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 function isValidURL(url: string) {
 	try {
@@ -13,8 +16,18 @@ function isValidURL(url: string) {
 
 export const CurrentFrame = () => {
 	const { currentResultIndex, searchResults } = useKeywordSearchStore();
+	const [copied, setCopied] = useState(false);
 
 	const currentFrame = searchResults[currentResultIndex];
+
+	const copyUrl = async () => {
+		if (currentFrame?.url && isValidURL(currentFrame.url)) {
+			await navigator.clipboard.writeText(currentFrame.url);
+			setCopied(true);
+			toast.success("URL copied to clipboard");
+			setTimeout(() => setCopied(false), 2000);
+		}
+	};
 
 	return (
 		<div
@@ -25,15 +38,32 @@ export const CurrentFrame = () => {
 			<div className={cn("relative group w-full")}>
 				<MainImage />
 				{currentFrame?.url && isValidURL(currentFrame.url) && (
-					<a
-						className={cn(
-							"absolute text-xs rounded bottom-4 right-4 bg-muted  p-1 font-mono opacity-80 group-hover:opacity-100 transition-all duration-200",
-						)}
-						target="_blank"
-						href={currentFrame.url}
-					>
-						Open URL
-					</a>
+					<div className="absolute bottom-4 right-4 flex items-center gap-2">
+						<button
+							onClick={copyUrl}
+							className={cn(
+								"flex items-center gap-1 text-xs rounded bg-muted p-1.5 font-mono opacity-80 group-hover:opacity-100 transition-all duration-200 hover:bg-muted/80",
+							)}
+							title="Copy URL"
+						>
+							{copied ? (
+								<Check className="h-3 w-3 text-green-500" />
+							) : (
+								<Copy className="h-3 w-3" />
+							)}
+						</button>
+						<a
+							className={cn(
+								"flex items-center gap-1 text-xs rounded bg-muted p-1.5 font-mono opacity-80 group-hover:opacity-100 transition-all duration-200 hover:bg-muted/80",
+							)}
+							target="_blank"
+							href={currentFrame.url}
+							title="Open URL"
+						>
+							<Link className="h-3 w-3" />
+							Open
+						</a>
+					</div>
 				)}
 			</div>
 		</div>

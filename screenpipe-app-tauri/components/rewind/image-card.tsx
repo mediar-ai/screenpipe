@@ -1,11 +1,72 @@
 import { format } from "date-fns";
-import { useEffect, useRef, useMemo, useState, RefObject } from "react";
+import { useEffect, useRef, useMemo, useState, RefObject, useCallback } from "react";
 import { SearchMatch } from "@/lib/hooks/use-keyword-search-store";
 import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
 import { cn } from "@/lib/utils";
 import { throttle } from "lodash";
-import { Loader2 } from "lucide-react";
+import { Loader2, ImageOff } from "lucide-react";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000;
+
+const useImageWithRetry = (frameId: number) => {
+	const [src, setSrc] = useState(`http://localhost:3030/frames/${frameId}`);
+	const [isLoading, setIsLoading] = useState(true);
+	const [hasError, setHasError] = useState(false);
+	const retryCount = useRef(0);
+
+	const handleLoad = useCallback(() => {
+		setIsLoading(false);
+		setHasError(false);
+	}, []);
+
+	const handleError = useCallback(() => {
+		if (retryCount.current < MAX_RETRIES) {
+			retryCount.current += 1;
+			setTimeout(() => {
+				setSrc(`http://localhost:3030/frames/${frameId}?retry=${retryCount.current}`);
+			}, RETRY_DELAY * retryCount.current);
+		} else {
+			setIsLoading(false);
+			setHasError(true);
+		}
+	}, [frameId]);
+
+	return { src, isLoading, hasError, handleLoad, handleError };
+};
+
+const FrameImage = ({ frameId, alt }: { frameId: number; alt: string }) => {
+	const { src, isLoading, hasError, handleLoad, handleError } = useImageWithRetry(frameId);
+
+	return (
+		<div className="aspect-video overflow-hidden relative">
+			{isLoading && (
+				<div className="absolute inset-0 flex items-center justify-center bg-muted">
+					<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+				</div>
+			)}
+			{hasError ? (
+				<div className="absolute inset-0 flex items-center justify-center bg-muted">
+					<ImageOff className="h-5 w-5 text-muted-foreground" />
+				</div>
+			) : (
+				<img
+					src={src}
+					alt={alt}
+					className={cn(
+						"h-full w-full object-cover transition-all duration-200 relative group-hover:scale-105",
+						isLoading ? "opacity-0" : "opacity-100"
+					)}
+					loading="lazy"
+					draggable={false}
+					onLoad={handleLoad}
+					onError={handleError}
+				/>
+			)}
+		</div>
+	);
+};
 
 export const SkeletonCard = () => (
 	<div className="flex flex-col relative overflow-hidden bg-card border border-border">
@@ -127,22 +188,10 @@ export const ImageGrid = ({
 							<div className="text-xs font-mono text-muted-foreground p-2 border-b border-border">
 								{format(new Date(result.timestamp), "yyyy-MM-dd HH:mm:ss")}
 							</div>
-							<div className="aspect-video overflow-hidden relative">
-								<div className="absolute inset-0 flex items-center justify-center bg-muted">
-									<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-								</div>
-								<img
-									src={`http://localhost:3030/frames/${result.frame_id}`}
-									alt={`${result.app_name} - ${result.window_name}`}
-									className="h-full w-full object-cover transition-transform duration-200 relative group-hover:scale-105"
-									loading="lazy"
-									draggable={false}
-									onLoad={(e) => {
-										(e.target as HTMLImageElement).style.opacity = "1";
-									}}
-									style={{ opacity: 0 }}
-								/>
-							</div>
+							<FrameImage
+								frameId={result.frame_id}
+								alt={`${result.app_name} - ${result.window_name}`}
+							/>
 							<div className="p-2 space-y-1 border-t border-border">
 								<p className="text-sm font-mono truncate">
 									{result.app_name}
@@ -215,35 +264,53 @@ export const MainImage = () => {
 		);
 	}
 
+	const { src, isLoading, hasError, handleLoad, handleError } = useImageWithRetry(currentFrame.frame_id);
+
 	return (
 		<div
 			ref={containerRef}
 			className="relative aspect-auto w-full h-full overflow-hidden rounded-lg bg-neutral-100"
 		>
-			<div className="absolute inset-0 flex items-center justify-center">
-				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-			</div>
-			<div className="relative">
-				<img
-					ref={imageRef}
-					src={`http://localhost:3030/frames/${currentFrame.frame_id}`}
-					alt={`${currentFrame.app_name} - ${currentFrame.window_name}`}
-					className="h-full w-full object-contain max-h-[75vh]"
-					draggable={false}
-					onLoad={(e) => {
-						(e.target as HTMLImageElement).style.opacity = "1";
-					}}
-					style={{ opacity: 0 }}
-				/>
-				{imageRect && (
-					<div
-						className="absolute inset-0 pointer-events-none"
-						style={{
-							width: imageRect.width,
+			{isLoading && (
+				<div className="absolute inset-0 flex items-center justify-center">
+					<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+				</div>
+			)}
+			{hasError ? (
+				<div className="absolute inset-0 flex items-center justify-center">
+					<div className="flex flex-col items-center gap-2 text-muted-foreground">
+						<ImageOff className="h-8 w-8" />
+						<span className="text-sm">Failed to load frame</span>
+					</div>
+				</div>
+			) : (
+				<div className="relative">
+					<img
+						ref={imageRef}
+						src={src}
+						alt={`${currentFrame.app_name} - ${currentFrame.window_name}`}
+						className={cn(
+							"h-full w-full object-contain max-h-[75vh] transition-opacity duration-200",
+							isLoading ? "opacity-0" : "opacity-100"
+						)}
+						draggable={false}
+						onLoad={(e) => {
+							handleLoad();
+							const rect = (e.target as HTMLImageElement).getBoundingClientRect();
+							setImageRect(rect);
 						}}
+						onError={handleError}
 					/>
-				)}
-			</div>
+					{imageRect && (
+						<div
+							className="absolute inset-0 pointer-events-none"
+							style={{
+								width: imageRect.width,
+							}}
+						/>
+					)}
+				</div>
+			)}
 		</div>
 	);
 };
