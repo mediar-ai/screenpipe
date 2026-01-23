@@ -5,7 +5,7 @@ on: [push]
 env:
   CARGO_TERM_COLOR: always
 
-# VIKTIGT: Ger GitHub tillåtelse att uppdatera din benchmark-sida
+# VIKTIGT: Detta ger den inbyggda nyckeln rättighet att spara resultaten
 permissions:
   contents: write
   deployments: write
@@ -132,8 +132,9 @@ jobs:
         with:
           name: OCR Benchmarks
           tool: "cargo"
+          # Pekar på den ihopslagna filen
           output-file-path: ./cache/ocr/merged_ocr_output.txt
-          # HÄR ÄR FIXEN: Vi använder den inbyggda nyckeln
+          # HÄR ÄR ÄNDRINGEN: Vi använder den inbyggda nyckeln GITHUB_TOKEN
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           alert-threshold: "200%"
