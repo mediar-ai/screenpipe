@@ -14,6 +14,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      # FIX: Install Linux dependencies (ALSA, X11, etc)
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libxi-dev libxtst-dev libxdo-dev
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - run: cargo test --workspace --exclude screenpipe-app-tauri --no-fail-fast
 
@@ -22,6 +27,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      # FIX: Install Windows dependencies
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
+      - name: Install OpenSSL
+        shell: powershell
+        run: choco install openssl -y
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - run: cargo test test_process_ocr_task_windows
 
@@ -30,6 +43,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      # FIX: Ensure FFmpeg is present for OCR tests
+      - name: Install dependencies
+        run: brew install ffmpeg
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - shell: bash
         env:
