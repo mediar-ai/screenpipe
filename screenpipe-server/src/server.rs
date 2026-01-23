@@ -1,4 +1,4 @@
-#![allow(warnings, unexpected_cfgs)]
+#![allow(warnings, unexpected_cfgs, dead_code, unused_variables, unused_imports)]
 use axum::{
     body::Body,
     extract::{

@@ -6,7 +6,6 @@ on:
   pull_request:
 
 env:
-  # GLOBAL FIX: Silences the new strict cfg checks and all warnings
   RUSTFLAGS: "-A unexpected_cfgs -A unused_variables -A unused_imports -A dead_code -A warnings"
 
 jobs:
@@ -15,36 +14,24 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-      - name: Run cargo tests
-        run: cargo test --workspace --exclude screenpipe-app-tauri --no-fail-fast
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo test --workspace --exclude screenpipe-app-tauri --no-fail-fast
 
   test-windows:
     runs-on: windows-2019
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-      - name: Run specific Windows OCR cargo test
-        run: cargo test test_process_ocr_task_windows
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo test test_process_ocr_task_windows
 
   test-macos:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-      - name: Run specific Apple OCR cargo test
-        shell: bash
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - shell: bash
         env:
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr

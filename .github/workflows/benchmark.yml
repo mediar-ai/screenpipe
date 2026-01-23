@@ -9,6 +9,7 @@ env:
 jobs:
   run_benchmarks:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -25,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Run benchmark
-        shell: bash # Ensures 'tee' works on Windows
+        shell: bash
         run: ${{ matrix.cmd }} | tee ocr_${{ matrix.name }}.txt
       - uses: actions/upload-artifact@v4
         with:
@@ -35,19 +36,22 @@ jobs:
   analyze:
     needs: run_benchmarks
     runs-on: ubuntu-latest
+    if: always()
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - name: Download all benchmark data
+        uses: actions/download-artifact@v4
         with:
           path: ./cache/raw
-          merge-multiple: true # Flattens directory structure
+          merge-multiple: true
       - name: Consolidate
         run: |
           mkdir -p ./cache/ocr
           cat ./cache/raw/ocr_*.txt > ./cache/ocr/ocr_output.txt || echo "No data" > ./cache/ocr/ocr_output.txt
-      - uses: benchmark-action/github-action-benchmark@v1
+      - name: Analyze OCR benchmarks
+        uses: benchmark-action/github-action-benchmark@v1
         with:
           name: OCR Benchmarks
           tool: "cargo"

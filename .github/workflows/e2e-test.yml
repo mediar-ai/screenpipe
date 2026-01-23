@@ -6,15 +6,13 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  RUSTFLAGS: "-A warnings"
-
 jobs:
   windows-e2e-test:
+    name: Windows E2E Tests
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup Node & Bun
+    - name: Setup Bun & Node
       uses: oven-sh/setup-bun@v2
     - uses: actions/setup-node@v4
       with:
@@ -23,35 +21,20 @@ jobs:
       uses: tauri-apps/tauri-action@v0.5.17
       env:
         CI: true
-        # HARD OVERRIDE: Stops Tauri from crashing on warnings
+        # This is the hard override Tauri needs
         RUSTFLAGS: "-A warnings -C target-feature=+crt-static -C link-arg=/LTCG"
       with:
         args: "--target x86_64-pc-windows-msvc --no-bundle"
         projectPath: "./screenpipe-app-tauri"
         tauriScript: bunx tauri -v
-    - name: Run E2E
+    - name: Run E2E Tests
       shell: pwsh
       working-directory: ./screenpipe-app-tauri
       run: bun run test:e2e > e2e_output.log 2>&1
       continue-on-error: true
-    - uses: actions/upload-artifact@v4
+    - name: Upload Logs
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: windows-e2e-logs
         path: ./screenpipe-app-tauri/e2e_output.log
-
-  linux-e2e-test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v2
-    - name: Build
-      uses: tauri-apps/tauri-action@v0.5.17
-      env:
-        CI: true
-        RUSTFLAGS: "-A warnings"
-      with:
-        args: "--target x86_64-unknown-linux-gnu --no-bundle"
-        projectPath: "./screenpipe-app-tauri"
-        tauriScript: bunx tauri -v

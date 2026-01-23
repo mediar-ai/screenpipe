@@ -1,4 +1,4 @@
-#![allow(warnings, unexpected_cfgs)]
+#![allow(warnings, unexpected_cfgs, dead_code, unused_variables, unused_imports)]
 use crate::operator::platforms::AccessibilityEngine;
 use crate::operator::ClickResult;
 use crate::operator::{
