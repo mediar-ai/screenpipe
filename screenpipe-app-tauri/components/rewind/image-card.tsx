@@ -16,6 +16,14 @@ const useImageWithRetry = (frameId: number) => {
 	const [hasError, setHasError] = useState(false);
 	const retryCount = useRef(0);
 
+	// Reset state when frameId changes
+	useEffect(() => {
+		setSrc(`http://localhost:3030/frames/${frameId}`);
+		setIsLoading(true);
+		setHasError(false);
+		retryCount.current = 0;
+	}, [frameId]);
+
 	const handleLoad = useCallback(() => {
 		setIsLoading(false);
 		setHasError(false);
@@ -234,6 +242,9 @@ export const MainImage = () => {
 
 	const currentFrame = searchResults[currentResultIndex];
 
+	// Call hook unconditionally (React rules of hooks)
+	const { src, isLoading, hasError, handleLoad, handleError } = useImageWithRetry(currentFrame?.frame_id ?? 0);
+
 	useEffect(() => {
 		const updateImageRect = () => {
 			if (imageRef.current) {
@@ -263,8 +274,6 @@ export const MainImage = () => {
 			</div>
 		);
 	}
-
-	const { src, isLoading, hasError, handleLoad, handleError } = useImageWithRetry(currentFrame.frame_id);
 
 	return (
 		<div
