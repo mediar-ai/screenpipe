@@ -7,75 +7,49 @@ env:
 
 jobs:
   apple_ocr_benchmark:
-    name: Run Apple OCR benchmark
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install dependencies
-        run: brew install ffmpeg
-      - name: Run OCR benchmarks
-        env:
-          DYLD_LIBRARY_PATH: ${{ github.workspace }}/screenpipe-vision/lib:${{ env.DYLD_LIBRARY_PATH }}
-        run: |
-          cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_apple.txt
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - run: brew install ffmpeg
+      - run: cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_apple.txt
+      - uses: actions/upload-artifact@v4
         with:
           name: ocr-data-apple
           path: ocr_apple.txt
 
   tesseract_ocr_benchmark:
-    name: Run Tesseract OCR benchmark
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libleptonica-dev libtesseract-dev tesseract-ocr-eng
-      - name: Run Tesseract OCR benchmarks
-        run: |
-          cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_tesseract.txt
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - run: sudo apt-get update && sudo apt-get install -y libleptonica-dev libtesseract-dev tesseract-ocr-eng
+      - run: cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_tesseract.txt
+      - uses: actions/upload-artifact@v4
         with:
           name: ocr-data-tesseract
           path: ocr_tesseract.txt
 
   windows_ocr_benchmark:
-    name: Run Windows OCR benchmark
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Run Windows OCR benchmarks
-        shell: bash
-        run: |
-          # Vi tvingar bash för att 'tee' ska fungera och skapa filen på Windows
-          cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_windows.txt
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - shell: bash
+        run: cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_windows.txt
+      - uses: actions/upload-artifact@v4
         with:
           name: ocr-data-windows
           path: ocr_windows.txt
 
   stt_benchmark:
-    name: Run STT benchmark
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg tesseract-ocr libtesseract-dev libavformat-dev libavfilter-dev libavdevice-dev libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
-      - name: Run STT benchmarks
-        run: |
-          cargo bench --bench stt_benchmark -- --output-format bencher | tee stt_output.txt
-      - name: Upload STT benchmark artifact
-        uses: actions/upload-artifact@v4
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr libtesseract-dev libavformat-dev libavfilter-dev libavdevice-dev libasound2-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev
+      - run: cargo bench --bench stt_benchmark -- --output-format bencher | tee stt_output.txt
+      - uses: actions/upload-artifact@v4
         with:
           name: stt-data
           path: stt_output.txt
@@ -87,25 +61,17 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Download all benchmark data
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: ./cache/raw
-          merge-multiple: true # VIKTIGT: Lägger alla filer i samma mapp
-      
-      - name: Consolidate OCR results
-        run: |
+          merge-multiple: true
+      - run: |
           mkdir -p ./cache/ocr
-          # Slår ihop resultaten till EN fil som analysen förväntar sig
-          cat ./cache/raw/ocr_*.txt > ./cache/ocr/ocr_output.txt
-
-      - name: Analyze OCR benchmarks
-        uses: benchmark-action/github-action-benchmark@v1
+          cat ./cache/raw/ocr_*.txt > ./cache/ocr/ocr_output.txt || touch ./cache/ocr/ocr_output.txt
+      - uses: benchmark-action/github-action-benchmark@v1
         with:
           name: OCR Benchmarks
           tool: "cargo"
           output-file-path: ./cache/ocr/ocr_output.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
-          alert-threshold: "200%"
