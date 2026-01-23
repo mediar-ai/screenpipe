@@ -41,25 +41,28 @@ jobs:
         fluxbox &
         sleep 5 
         
-        # Start xterm with an explicit title and class to make it easier to find
-        xterm -title "test-window" -class "test-class" -geometry 80x24+0+0 -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
+        # Start xterm with an explicit title and class for easier discovery
+        xterm -T "test-window" -class "TestClass" -geometry 80x24+0+0 -e "echo 'Screenpipe Integration Test Content'; sleep 100" &
         
         # Give the X server a moment to map the window
-        sleep 5
+        sleep 10
         
-        # FIX: Search by class if name fails, and increase retries
-        echo "Validating window presence..."
+        # FIX: Try up to 10 times with multiple search methods (name and class)
+        echo "Searching for test window..."
         for i in {1..10}; do
-          if xwininfo -name "test-window" > /dev/null 2>&1 || xdotool search --class "test-class" > /dev/null 2>&1; then 
-            echo "Test window detected!"
+          if xwininfo -name "test-window" > /dev/null 2>&1 || xdotool search --class "TestClass" > /dev/null 2>&1; then 
+            echo "SUCCESS: Test window detected!"
+            xwininfo -name "test-window"
             break 
           fi
           echo "Waiting for window (attempt $i)..."
+          # DEBUG: List all active windows if not found
+          xwininfo -root -tree | grep -i "test" || true
           sleep 3
         done
         
-        # Final check: activate the window to ensure it's visible to the OCR engine
-        xdotool search --class "test-class" windowactivate || (echo "Error: Test window not found" && exit 1)
+        # Final check: Ensure it's active so OCR sees it
+        xdotool search --class "TestClass" windowactivate || (echo "FATAL: Window never appeared" && exit 1)
     
     - name: Run Integration Tests
       env:
@@ -67,7 +70,6 @@ jobs:
         LANG: en_US.UTF-8
         LC_ALL: en_US.UTF-8
         RUST_LOG: debug
-        # Force fullscreen capture to bypass window-specific title parsing errors
         SCREENPIPE_CAPTURE_FULLSCREEN: "true"
       run: |
         touch screenpipe_output.log
