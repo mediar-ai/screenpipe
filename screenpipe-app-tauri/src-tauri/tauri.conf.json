@@ -9,6 +9,7 @@
     "devUrl": "http://localhost:3000"
   },
   "bundle": {
+    "createUpdaterArtifacts": true,
     "active": true,
     "category": "DeveloperTool",
     "shortDescription": "24/7 memory for your desktop",

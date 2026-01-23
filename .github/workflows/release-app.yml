@@ -642,35 +642,6 @@ jobs:
             exit 1
           }
 
-          # Upload updater artifacts separately
-          Write-Host "Uploading updater artifacts..."
-          $bundleDir = "target/x86_64-pc-windows-msvc/release/bundle/nsis"
-
-          # Find the nsis.zip file (updater artifact)
-          $nsisZip = Get-ChildItem -Path $bundleDir -Filter "*.nsis.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
-
-          if ($nsisZip) {
-            $sigFile = "$($nsisZip.FullName).sig"
-
-            if (Test-Path $sigFile) {
-              Write-Host "Found updater artifacts:"
-              Write-Host "  zip: $($nsisZip.FullName)"
-              Write-Host "  sig: $sigFile"
-
-              Write-Host "Uploading updater artifact for windows-x86_64"
-              & $cliFullPath release upload ${{ secrets.CN_APP_SLUG }} `
-                --file $nsisZip.FullName `
-                --update-platform "windows-x86_64" `
-                --signature $sigFile `
-                -vv
-            } else {
-              Write-Host "Warning: Signature file not found: $sigFile"
-            }
-          } else {
-            Write-Host "Warning: No .nsis.zip updater artifact found in $bundleDir"
-            Get-ChildItem -Path $bundleDir -ErrorAction SilentlyContinue
-          }
-
       - name: Upload Assets to CrabNebula Cloud (Non-Windows)
         if: matrix.os_type != 'windows'
         uses: crabnebula-dev/cloud-release@v0.2.6
@@ -680,53 +651,6 @@ jobs:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./screenpipe-app-tauri/src-tauri
-
-      - name: Upload Updater Artifacts to CrabNebula Cloud (macOS)
-        if: matrix.os_type == 'macos'
-        shell: bash
-        env:
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-        run: |
-          # Download cn CLI
-          curl -L https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/darwin-binary-universal -o cn
-          chmod +x cn
-
-          # Find the updater artifacts
-          BUNDLE_DIR="screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/bundle/macos"
-
-          # Get version from Cargo.toml
-          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-
-          echo "Looking for updater artifacts in $BUNDLE_DIR"
-          ls -la "$BUNDLE_DIR" || true
-
-          # Find tar.gz file (could be screenpipe.app.tar.gz or similar)
-          TAR_GZ=$(find "$BUNDLE_DIR" -name "*.app.tar.gz" -type f | head -1)
-          SIG_FILE="${TAR_GZ}.sig"
-
-          if [ -f "$TAR_GZ" ] && [ -f "$SIG_FILE" ]; then
-            echo "Found updater artifacts:"
-            echo "  tar.gz: $TAR_GZ"
-            echo "  sig: $SIG_FILE"
-
-            # Determine update platform based on target
-            if [ "${{ matrix.target }}" == "aarch64-apple-darwin" ]; then
-              UPDATE_PLATFORM="darwin-aarch64"
-            else
-              UPDATE_PLATFORM="darwin-x86_64"
-            fi
-
-            echo "Uploading updater artifact for $UPDATE_PLATFORM"
-            ./cn release upload ${{ secrets.CN_APP_SLUG }} \
-              --file "$TAR_GZ" \
-              --update-platform "$UPDATE_PLATFORM" \
-              --signature "$SIG_FILE" \
-              -vv
-          else
-            echo "Warning: Could not find updater artifacts"
-            echo "TAR_GZ: $TAR_GZ (exists: $([ -f "$TAR_GZ" ] && echo yes || echo no))"
-            echo "SIG_FILE: $SIG_FILE (exists: $([ -f "$SIG_FILE" ] && echo yes || echo no))"
-          fi
 
   publish-release:
     needs: [check_commit, publish-tauri]
