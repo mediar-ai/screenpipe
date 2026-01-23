@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { throttle } from "lodash";
 import { Loader2, ImageOff } from "lucide-react";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
+import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
+import { TextOverlay } from "@/components/text-overlay";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
@@ -213,26 +215,22 @@ export const ImageGrid = ({
 	);
 };
 
-interface TextBounds {
-	left: number;
-	top: number;
-	width: number;
-	height: number;
-}
-
-interface TextPosition {
-	text: string;
-	confidence: number;
-	bounds: TextBounds;
-}
-
 export const MainImage = () => {
 	const { searchResults, currentResultIndex } = useKeywordSearchStore();
 	const imageRef = useRef<HTMLImageElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [imageRect, setImageRect] = useState<DOMRect | null>(null);
+	const [naturalDimensions, setNaturalDimensions] = useState<{
+		width: number;
+		height: number;
+	} | null>(null);
 
 	const currentFrame = searchResults[currentResultIndex];
+
+	// Fetch OCR text positions for text selection overlay
+	const { textPositions, isLoading: isOcrLoading } = useFrameOcrData(
+		currentFrame?.frame_id ?? null
+	);
 
 	useEffect(() => {
 		const updateImageRect = () => {
@@ -254,6 +252,11 @@ export const MainImage = () => {
 			resizeObserver.disconnect();
 		};
 	}, [currentFrame]);
+
+	// Reset natural dimensions when frame changes
+	useEffect(() => {
+		setNaturalDimensions(null);
+	}, [currentFrame?.frame_id]);
 
 	if (!currentFrame) {
 		return (
@@ -296,17 +299,25 @@ export const MainImage = () => {
 						draggable={false}
 						onLoad={(e) => {
 							handleLoad();
-							const rect = (e.target as HTMLImageElement).getBoundingClientRect();
+							const img = e.target as HTMLImageElement;
+							const rect = img.getBoundingClientRect();
 							setImageRect(rect);
+							// Store the image's natural (original) dimensions for text overlay scaling
+							setNaturalDimensions({
+								width: img.naturalWidth,
+								height: img.naturalHeight,
+							});
 						}}
 						onError={handleError}
 					/>
-					{imageRect && (
-						<div
-							className="absolute inset-0 pointer-events-none"
-							style={{
-								width: imageRect.width,
-							}}
+					{/* Text selection overlay */}
+					{imageRect && naturalDimensions && textPositions.length > 0 && (
+						<TextOverlay
+							textPositions={textPositions}
+							originalWidth={naturalDimensions.width}
+							originalHeight={naturalDimensions.height}
+							displayedWidth={imageRect.width}
+							displayedHeight={imageRect.height}
 						/>
 					)}
 				</div>

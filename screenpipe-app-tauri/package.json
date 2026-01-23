@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "wdio run wdio.conf.js",
     "test:e2e:terminator": "mocha",
     "build": "next build",
@@ -87,6 +89,9 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.1",
+    "@vitejs/plugin-react": "^4.2.1",
     "@tailwindcss/typography": "^0.5.13",
     "@tauri-apps/cli": "^2.9.6",
     "@types/js-levenshtein": "^1.1.3",
@@ -108,7 +113,9 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^1.3.1",
+    "jsdom": "^24.0.0"
   },
   "packageManager": "pnpm@8.15.8+sha512.d1a029e1a447ad90bc96cd58b0fad486d2993d531856396f7babf2d83eb1823bb83c5a3d0fc18f675b2d10321d49eb161fece36fe8134aa5823ecd215feed392",
   "trustedDependencies": [

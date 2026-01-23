@@ -16,7 +16,7 @@ use screenpipe_core::Desktop;
 use chrono::TimeZone;
 use screenpipe_db::{
     ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, Speaker,
-    TagContentType,
+    TagContentType, TextPosition,
 };
 
 use tokio_util::io::ReaderStream;
@@ -1240,6 +1240,7 @@ impl SCServer {
             .post("/pipes/delete", delete_pipe_handler)
             .post("/pipes/purge", purge_pipe_handler)
             .get("/frames/:frame_id", get_frame_data)
+            .get("/frames/:frame_id/ocr", get_frame_ocr_data)
             .get("/health", health_check)
             .post("/raw_sql", execute_raw_sql)
             .post("/add", add_to_database)
@@ -2906,6 +2907,38 @@ pub async fn get_frame_data(
                 StatusCode::REQUEST_TIMEOUT,
                 JsonResponse(json!({
                     "error": "Request timed out",
+                    "frame_id": frame_id
+                })),
+            ))
+        }
+    }
+}
+
+/// Response type for frame OCR data endpoint
+#[derive(OaSchema, Serialize)]
+pub struct FrameOcrResponse {
+    pub frame_id: i64,
+    pub text_positions: Vec<TextPosition>,
+}
+
+/// Get OCR text positions with bounding boxes for a specific frame.
+/// This enables text selection overlay on screenshots.
+#[oasgen]
+pub async fn get_frame_ocr_data(
+    State(state): State<Arc<AppState>>,
+    Path(frame_id): Path<i64>,
+) -> Result<JsonResponse<FrameOcrResponse>, (StatusCode, JsonResponse<Value>)> {
+    match state.db.get_frame_text_positions(frame_id).await {
+        Ok(text_positions) => Ok(JsonResponse(FrameOcrResponse {
+            frame_id,
+            text_positions,
+        })),
+        Err(e) => {
+            error!("Failed to get OCR data for frame {}: {}", frame_id, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Failed to get OCR data: {}", e),
                     "frame_id": frame_id
                 })),
             ))
