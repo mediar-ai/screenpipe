@@ -20,7 +20,6 @@ jobs:
       with:
         node-version: 22
 
-    # FIX: Vcpkg is required for static linking on Windows in your release-app workflow
     - name: Install vcpkg
       uses: lukka/run-vcpkg@v11
       with:
@@ -37,6 +36,16 @@ jobs:
         choco install openssl
         openssl version
 
+    - name: Install frontend dependencies
+      working-directory: ./screenpipe-app-tauri
+      run: bun install
+
+    - name: Run pre_build.js
+      env:
+        SKIP_SCREENPIPE_SETUP: true
+      run: bun ./scripts/pre_build.js
+      working-directory: ./screenpipe-app-tauri
+
     - name: Setup MSVC Dev Cmd
       uses: ilammy/msvc-dev-cmd@v1
         
@@ -47,28 +56,22 @@ jobs:
         echo '[build]' >> .cargo/config.toml
         echo 'rustflags = ["-A", "warnings", "-A", "unexpected_cfgs", "-C", "target-feature=+crt-static", "-C", "link-arg=/LTCG"]' >> .cargo/config.toml
 
-    # FIX: Create the log directory manually so the upload step doesn't fail
-    - name: Pre-create Log File
-      shell: bash
-      run: |
-        mkdir -p screenpipe-app-tauri
-        echo "Build initiated" > ./screenpipe-app-tauri/e2e_output.log
-
     - name: Build
       uses: tauri-apps/tauri-action@v0.5.17
       env:
         CI: true
-        VCPKG_STATIC_LINKAGE: "true" # Matches release-app.yml
+        VCPKG_STATIC_LINKAGE: "true"
       with:
         args: "--target x86_64-pc-windows-msvc --no-bundle"
         projectPath: "./screenpipe-app-tauri"
-        tauriScript: bunx tauri -v
+        # FIX: Call the tauri binary directly from node_modules to avoid "executable not found"
+        tauriScript: ./node_modules/.bin/tauri
         
     - name: Run E2E Tests
       shell: pwsh
       working-directory: ./screenpipe-app-tauri
       run: |
-        bun run test:e2e >> e2e_output.log 2>&1
+        bun run test:e2e > e2e_output.log 2>&1
       continue-on-error: true
       
     - name: Upload Logs
@@ -76,5 +79,4 @@ jobs:
       if: always()
       with:
         name: windows-e2e-logs
-        path: |
-          ./screenpipe-app-tauri/e2e_output.log
+        path: ./screenpipe-app-tauri/e2e_output.log
