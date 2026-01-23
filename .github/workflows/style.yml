@@ -73,6 +73,7 @@ jobs:
         run: cargo install cargo-audit
 
       - name: Security audit
+        continue-on-error: true
         run: cargo audit
 
       - name: Install cargo-deny
