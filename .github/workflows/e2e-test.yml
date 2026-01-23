@@ -56,7 +56,13 @@ jobs:
 
     - name: Start Windows Audio Service
       shell: powershell
-      run: net start audiosrv
+      run: |
+        $service = Get-Service -Name audiosrv
+        if ($service.Status -ne 'Running') {
+          net start audiosrv
+        } else {
+          Write-Host "Audio service is already running"
+        }
 
     - name: Install Rust
       run: |
@@ -208,7 +214,7 @@ jobs:
       shell: pwsh
       working-directory: ./screenpipe-app-tauri
       run: |
-        bun run test:e2e *> e2e_output.log
+        bun run test:e2e 2>&1 | Tee-Object -FilePath e2e_output.log
 
     - name: Upload E2E Test Artifacts
       uses: actions/upload-artifact@v4
@@ -362,7 +368,7 @@ jobs:
         export PULSE_SERVER=unix:${XDG_RUNTIME_DIR}/pulse/native
         export DISPLAY=:99
 
-        bun run test:e2e > e2e_output.log
+        bun run test:e2e 2>&1 | tee e2e_output.log
 
     - name: Upload E2E Test Artifacts
       uses: actions/upload-artifact@v4
