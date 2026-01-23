@@ -40,7 +40,8 @@
   },
   "plugins": {
     "updater": {
-      "endpoints": []
+      "endpoints": [],
+      "pubkey": ""
     },
     "deep-link": {
       "desktop": {
