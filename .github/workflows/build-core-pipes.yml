@@ -23,7 +23,7 @@ jobs:
       - name: setup bun
         uses: oven-sh/setup-bun@v1
         with:
-          bun-version: 1.1.43
+          bun-version: 1.2.2
           
       - name: get core pipes list
         id: core-pipes

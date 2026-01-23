@@ -80,7 +80,6 @@ fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
 axum = "0.6.0" # or your current version
-axum-macros = "0.5.0"
 
 
 

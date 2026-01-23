@@ -104,9 +104,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download benchmark data
+      - name: Download Apple OCR benchmark data
         uses: actions/download-artifact@v4
         with:
+          name: apple-ocr-benchmark-data
           path: ./cache/ocr
 
       - name: Download STT benchmark data
