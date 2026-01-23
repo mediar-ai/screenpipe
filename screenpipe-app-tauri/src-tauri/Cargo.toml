@@ -45,9 +45,9 @@ http = "0.2"
 
 # TypeScript bindings
 specta = { version = "=2.0.0-rc.20", features = [
-	"derive",
-	"serde_json",
-	"uuid",
+    "derive",
+    "serde_json",
+    "uuid",
 ] }
 tauri-specta = { version = "=2.0.0-rc.20", features = ["derive", "typescript"] }
 specta-typescript = "0.0.7"
@@ -79,10 +79,8 @@ sysinfo = "=0.29.0"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
-axum = "0.6.0" # or your current version
-axum-macros = "0.5.0"
-
-
+axum = "0.6.0" 
+# axum-macros togs bort härifrån eftersom axum 0.6 redan inkluderar rätt version internt.
 
 dirs = "5.0.1"
 tauri-plugin-deep-link = "=2.4.5"
@@ -126,9 +124,9 @@ windows-icons = { git = "https://github.com/tribhuwan-kumar/windows-icons.git" }
 base64 = "0.22.1"
 raw-window-handle = "0.6"
 windows = { version = "0.58", features = [
-    "Win32_Foundation",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_Graphics_Dwm",
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Graphics_Dwm",
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -157,7 +155,7 @@ custom-protocol = ["tauri/custom-protocol"]
 
 
 [package.metadata.cargo-machete]
-ignored = ["tauri-utils"]
+ignored = ["tauri-utils", "axum-macros"] # Vi behåller denna så inte machete klagar
 
 [profile.release]
 codegen-units = 1

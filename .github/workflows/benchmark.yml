@@ -5,6 +5,12 @@ on: [push]
 env:
   CARGO_TERM_COLOR: always
 
+# VIKTIGT: Ger rättigheter att spara benchmark-resultat
+permissions:
+  contents: write
+  deployments: write
+  pages: write
+
 jobs:
   apple_ocr_benchmark:
     name: Run Apple OCR benchmark
@@ -60,9 +66,7 @@ jobs:
 
       - name: Run Windows OCR benchmarks
         run: |
-          cargo bench --bench ocr_benchmark -- --output-format criterion 
-          # TODO broken
-          # | Tee-Object -Append -FilePath ocr_output.txt
+          cargo bench --bench ocr_benchmark -- --output-format bencher | Out-File -FilePath ocr_output.txt -Encoding utf8
 
       - name: Upload OCR benchmark artifact
         uses: actions/upload-artifact@v4
@@ -115,32 +119,24 @@ jobs:
           name: stt-benchmark-data
           path: ./cache/stt
 
-      - name: List contents of cache directory
+      - name: List contents (Debug)
         run: ls -R ./cache
+
+      - name: Merge OCR benchmark results
+        run: |
+          find ./cache/ocr -name "ocr_output.txt" -exec cat {} + > ./cache/ocr/merged_ocr_output.txt
 
       - name: Analyze OCR benchmarks
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: OCR Benchmarks
           tool: "cargo"
-          output-file-path: ./cache/ocr/ocr_output.txt
-          github-token: ${{ secrets.GH_PAGES_TOKEN }}
+          output-file-path: ./cache/ocr/merged_ocr_output.txt
+          # HÄR ÄR FELET SOM MÅSTE BORT: github-token: ${{ secrets.GH_PAGES_TOKEN }}
+          # HÄR ÄR LÖSNINGEN:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           alert-threshold: "200%"
           comment-on-alert: true
           fail-on-alert: true
           alert-comment-cc-users: "@louis030195"
-
-      # todo broken
-      # - name: Analyze STT benchmarks
-      #   uses: benchmark-action/github-action-benchmark@v1
-      #   with:
-      #     name: STT Benchmarks
-      #     tool: "cargo"
-      #     output-file-path: ./cache/stt/stt_output.txt
-      #     github-token: ${{ secrets.GH_PAGES_TOKEN }}
-      #     auto-push: true
-      #     alert-threshold: "200%"
-      #     comment-on-alert: true
-      #     fail-on-alert: true
-      #     alert-comment-cc-users: "@louis030195"
