@@ -19,7 +19,7 @@ describe('Screenpipe App Health Status', function() {
       const mainWindow = client.locator('window:Screenpipe');
       const rootWebArea = mainWindow.locator('role:Document');
 
-      const skipOnboarding = rootWebArea.locator('Name:skip onboarding');
+      const skipOnboarding = rootWebArea.locator('Name:skip');
       await skipOnboarding.click();
       await delay(3000);
 

@@ -19,16 +19,16 @@ describe('Project', () => {
 			return userAgent.includes('linux') && !userAgent.includes('android');
 		});
 
-		// Wait for the skip onboarding button to be visible
-		const button = await $('button.text-muted-foreground*=skip onboarding');
+		// Wait for the skip button to be visible (button text is just "skip")
+		const button = await $('button.text-muted-foreground*=skip');
 		await button.waitForDisplayed({ timeout: 10000 });
-		
+
 		if (isLinux) {
 			// Use JavaScript click directly with a valid CSS selector on Linux
 			await browser.execute(() => {
-				const buttons = document.querySelectorAll('button');
+				const buttons = document.querySelectorAll('button.text-muted-foreground');
 				for (const btn of buttons) {
-					if (btn.textContent.includes('skip onboarding')) {
+					if (btn.textContent.trim() === 'skip') {
 						btn.click();
 						break;
 					}

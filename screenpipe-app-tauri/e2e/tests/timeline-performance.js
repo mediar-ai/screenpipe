@@ -41,9 +41,9 @@ describe('Timeline Performance', () => {
     });
 
     it('should measure timeline loading performance', async () => {
-        // Skip onboarding if present
+        // Skip onboarding if present (button text is just "skip")
         try {
-            const skipButton = await $('button*=skip onboarding');
+            const skipButton = await $('button.text-muted-foreground*=skip');
             if (await skipButton.isDisplayed()) {
                 await skipButton.click();
                 await browser.pause(500);
