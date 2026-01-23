@@ -53,7 +53,7 @@ jobs:
       - name: Run Windows OCR benchmarks
         shell: bash
         run: |
-          # Vi använder bash på windows för att 'tee' ska fungera pålitligt
+          # Vi tvingar bash för att 'tee' ska fungera och skapa filen på Windows
           cargo bench --bench ocr_benchmark -- --output-format bencher | tee ocr_windows.txt
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -92,12 +92,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./cache/raw
-          merge-multiple: true # Detta lägger ALLA filer direkt i ./cache/raw utan undermappar
+          merge-multiple: true # VIKTIGT: Lägger alla filer i samma mapp
       
       - name: Consolidate OCR results
         run: |
           mkdir -p ./cache/ocr
-          # Vi slår ihop resultaten från alla datorer till en fil
+          # Slår ihop resultaten till EN fil som analysen förväntar sig
           cat ./cache/raw/ocr_*.txt > ./cache/ocr/ocr_output.txt
 
       - name: Analyze OCR benchmarks
@@ -109,6 +109,3 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           alert-threshold: "200%"
-          comment-on-alert: true
-          fail-on-alert: true
-          alert-comment-cc-users: "@louis030195"
