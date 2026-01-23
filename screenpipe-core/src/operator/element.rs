@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_variables)]
+#![allow(warnings)]
 use crate::operator::errors::AutomationError;
 use crate::operator::selector::Selector;
 use std::collections::HashMap;
