@@ -51,7 +51,7 @@ const SCREENPIPE_API = `http://localhost:${port}`;
 const server = new Server(
   {
     name: "screenpipe",
-    version: "0.3.1",
+    version: "0.4.0",
   },
   {
     capabilities: {
