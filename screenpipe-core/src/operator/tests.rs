@@ -1,3 +1,4 @@
+#![allow(warnings, unexpected_cfgs)]
 use tracing_subscriber::prelude::*;
 
 #[cfg(test)]

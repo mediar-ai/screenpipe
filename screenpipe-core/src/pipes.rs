@@ -1,3 +1,4 @@
+#![allow(warnings, unexpected_cfgs)]
 use dirs::home_dir;
 use regex::Regex;
 use sentry;

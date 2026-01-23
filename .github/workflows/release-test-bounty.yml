@@ -18,26 +18,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0 # Detta fixar "exit code 128" git-felet
       
-      - name: Get version info
-        id: get_version
-        run: |
-          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          
-          # Check if this is a test-needed release
-          git fetch origin ${{ github.event.workflow_run.head_branch }}
-          COMMIT_MSG=$(git log -1 --pretty=%B ${{ github.event.workflow_run.head_sha }})
-          if echo "$COMMIT_MSG" | grep -q "release-app"; then
-            echo "NEED_TEST=true" >> $GITHUB_ENV
-          else
-            echo "NEED_TEST=false" >> $GITHUB_ENV
-          fi
+      - name: Get version and check if test needed
+        id: check_test
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const cargoContent = fs.readFileSync('screenpipe-app-tauri/src-tauri/Cargo.toml', 'utf8');
+            const versionMatch = cargoContent.match(/^version = "(.*)"/m);
+            const version = versionMatch ? versionMatch[1] : '0.0.0';
+            
+            const run = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id
+            });
+            const commitMsg = run.data.head_commit.message;
+            const needTest = commitMsg.includes('release-app');
+            
+            core.exportVariable('VERSION', version);
+            core.exportVariable('NEED_TEST', needTest.toString());
 
       - name: Create test bounty issue
         if: env.NEED_TEST == 'true'
-        id: create-issue
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -46,26 +51,18 @@ jobs:
             const version = process.env.VERSION;
             const releaseUrl = "https://web.crabnebula.cloud/mediar/screenpipe/releases";
             
-            // Read template file
             let templateContent = fs.readFileSync('.github/ISSUE_TEMPLATE/release-test-bounty-template.md', 'utf8');
-            
-            // Skip YAML frontmatter
             const frontmatterEnd = templateContent.indexOf('---', 3) + 3;
             templateContent = templateContent.substring(frontmatterEnd);
             
-            // Replace variables
             const replacedContent = templateContent
               .replace(/\$\{\{ env\.VERSION \}\}/g, version)
               .replace(/\$\{\{ env\.RELEASE_URL \}\}/g, releaseUrl);
             
-            // Create the issue
-            const issue = await github.rest.issues.create({
+            await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `🧪 testing bounty: release v${version}`,
               body: replacedContent,
               labels: ['testing', 'bounty', 'release', 'algora']
             });
-            
-            console.log(`created issue #${issue.data.number}: ${issue.data.html_url}`);
-            return issue.data.html_url; 

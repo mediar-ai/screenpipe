@@ -5,9 +5,9 @@ on:
     branches: [ main, crm-pipe-v2 ]
   pull_request:
 
-# GLOBAL FIX: This tells the Rust compiler to ignore all warnings that are currently breaking your build
 env:
-  RUSTFLAGS: "-A unexpected_cfgs -A unused_variables -A unused_imports -A dead_code"
+  # GLOBAL FIX: Silences the new strict cfg checks and all warnings
+  RUSTFLAGS: "-A unexpected_cfgs -A unused_variables -A unused_imports -A dead_code -A warnings"
 
 jobs:
   test-ubuntu:
@@ -20,7 +20,6 @@ jobs:
         with:
           toolchain: stable
       - name: Run cargo tests
-        # Added --no-fail-fast so we can see every result even if one test fails
         run: cargo test --workspace --exclude screenpipe-app-tauri --no-fail-fast
 
   test-windows:

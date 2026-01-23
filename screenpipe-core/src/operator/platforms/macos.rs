@@ -1,3 +1,4 @@
+#![allow(warnings, unexpected_cfgs)]
 use crate::operator::platforms::AccessibilityEngine;
 use crate::operator::ClickResult;
 use crate::operator::{

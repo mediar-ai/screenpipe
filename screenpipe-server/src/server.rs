@@ -1,4 +1,4 @@
-#![allow(warnings)]
+#![allow(warnings, unexpected_cfgs)]
 use axum::{
     body::Body,
     extract::{
