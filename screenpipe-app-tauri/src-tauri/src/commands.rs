@@ -423,16 +423,18 @@ pub async fn show_shortcut_reminder(
     #[cfg(target_os = "macos")]
     {
         use tauri_nspanel::WebviewWindowExt;
-        use tauri_nspanel::ManagerExt;
 
         if let Ok(_panel) = window.to_panel() {
             info!("Successfully converted shortcut-reminder to panel");
 
-            let app_clone = app_handle.clone();
+            // Clone window to pass into main thread closure
+            let window_clone = window.clone();
             let _ = app_handle.run_on_main_thread(move || {
                 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
 
-                if let Ok(panel) = app_clone.get_webview_panel(label) {
+                // Use to_panel() on window_clone directly instead of get_webview_panel
+                // This avoids race conditions with panel registration
+                if let Ok(panel) = window_clone.to_panel() {
                     // Level 1001 = above CGShieldingWindowLevel, shows over fullscreen
                     panel.set_level(1001);
                     panel.set_style_mask(0);
@@ -445,6 +447,8 @@ pub async fn show_shortcut_reminder(
                     // Order front regardless to show above fullscreen
                     panel.order_front_regardless();
                     info!("Panel configured for fullscreen support");
+                } else {
+                    error!("Failed to get panel in main thread");
                 }
             });
         } else {
