@@ -3,8 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "bunx vitest run",
+    "test:watch": "bunx vitest",
     "test:e2e": "wdio run wdio.conf.js",
     "test:e2e:terminator": "mocha",
     "build": "next build",
