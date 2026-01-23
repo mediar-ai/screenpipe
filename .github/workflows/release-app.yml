@@ -654,7 +654,7 @@ jobs:
 
   publish-release:
     needs: [check_commit, publish-tauri]
-    if: needs.check_commit.outputs.should_publish == 'true' && (needs.publish-tauri.result == 'success' || needs.retry-win.result == 'success')
+    if: (github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_publish == 'true') && (needs.publish-tauri.result == 'success' || needs.retry-win.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

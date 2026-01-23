@@ -58,8 +58,9 @@ impl ResourceMonitor {
             debug!("Telemetry disabled, will not send performance data to PostHog");
         }
 
-        // Generate a unique ID for this installation
-        let distinct_id = uuid::Uuid::new_v4().to_string();
+        // Use analytics ID from env var (passed from Tauri app) or generate random UUID
+        let distinct_id = env::var("SCREENPIPE_ANALYTICS_ID")
+            .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
 
         Arc::new(Self {
             start_time: Instant::now(),

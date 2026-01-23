@@ -17,6 +17,7 @@ use screenpipe_db::{
     create_migration_worker, DatabaseManager, MigrationCommand, MigrationConfig, MigrationStatus,
 };
 use screenpipe_server::{
+    analytics,
     cli::{
         AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, McpCommand,
         MigrationSubCommand, OutputFormat, PipeCommand, VisionCommand,
@@ -629,6 +630,9 @@ async fn main() -> anyhow::Result<()> {
     let audio_devices_clone = audio_devices.clone();
     let resource_monitor = ResourceMonitor::new(!cli.disable_telemetry);
     resource_monitor.start_monitoring(Duration::from_secs(30), Some(Duration::from_secs(60)));
+
+    // Initialize analytics for API tracking
+    analytics::init(!cli.disable_telemetry);
 
     let db = Arc::new(
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir.to_string_lossy()))

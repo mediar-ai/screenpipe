@@ -1,0 +1,33 @@
+# Copy this file to .dev.vars and fill in your values
+# These are used for local development with `wrangler dev`
+
+# Existing API keys
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=...
+DEEPGRAM_API_KEY=...
+
+# Analytics
+LANGFUSE_PUBLIC_KEY=...
+LANGFUSE_SECRET_KEY=...
+
+# Auth
+CLERK_SECRET_KEY=...
+
+# Supabase
+SUPABASE_URL=...
+SUPABASE_ANON_KEY=...
+
+# ===== Vertex AI Proxy for Agent SDK =====
+# These enable the /v1/messages endpoint to proxy to Vertex AI
+
+# Your GCP project ID
+VERTEX_PROJECT_ID=your-gcp-project-id
+
+# Region where Claude models are available (us-east5 recommended)
+VERTEX_REGION=us-east5
+
+# Service account JSON credentials (paste the entire JSON on one line)
+# Create a service account with "Vertex AI User" role
+# Generate a JSON key and paste it here (escape quotes if needed)
+VERTEX_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...","client_id":"...","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_x509_cert_url":"..."}

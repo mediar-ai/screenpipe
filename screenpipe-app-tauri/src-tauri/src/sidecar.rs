@@ -308,6 +308,8 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
     let _use_all_monitors = store
         .use_all_monitors;
 
+    let analytics_id = store.analytics_id.clone();
+
     let user = User::from_store(&store);
 
     println!("user: {:?}", user);
@@ -486,6 +488,7 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
         }
 
         c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
+        c = c.env("SCREENPIPE_ANALYTICS_ID", &analytics_id);
 
         // only supports --enable-realtime-vision for now, avoid adding if already present
         if !args.contains(&"--enable-realtime-vision") && override_args_as_vec.contains(&"--enable-realtime-vision".to_string()) {
@@ -526,6 +529,7 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
     }
 
     c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
+    c = c.env("SCREENPIPE_ANALYTICS_ID", &analytics_id);
 
     // only supports --enable-realtime-vision for now, avoid adding if already present
     if !args.contains(&"--enable-realtime-vision") && override_args_as_vec.contains(&"--enable-realtime-vision".to_string()) {

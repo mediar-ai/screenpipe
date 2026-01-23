@@ -31,6 +31,7 @@ use image::{GenericImageView, ImageFormat};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
 use crate::{
+    analytics,
     embedding::embedding_endpoint::create_embeddings,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
@@ -445,6 +446,21 @@ pub(crate) async fn search(
     }
 
     info!("search completed: found {} results", total);
+
+    // Track search analytics
+    analytics::capture_event_nonblocking(
+        "search_performed",
+        serde_json::json!({
+            "query_length": query.q.as_ref().map(|q| q.len()).unwrap_or(0),
+            "content_type": format!("{:?}", query.content_type),
+            "has_date_filter": query.start_time.is_some() || query.end_time.is_some(),
+            "has_app_filter": query.app_name.is_some(),
+            "result_count": total,
+            "limit": query.pagination.limit,
+            "offset": query.pagination.offset,
+        }),
+    );
+
     Ok(JsonResponse(SearchResponse {
         data: content_items,
         pagination: PaginationInfo {

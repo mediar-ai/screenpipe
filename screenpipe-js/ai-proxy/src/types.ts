@@ -124,6 +124,10 @@ export interface Env {
 	SUPABASE_URL: string;
 	SUPABASE_ANON_KEY: string;
 	NODE_ENV: string;
+	// Vertex AI credentials for Agent SDK proxy
+	VERTEX_SERVICE_ACCOUNT_JSON: string;
+	VERTEX_PROJECT_ID: string;
+	VERTEX_REGION: string;
 }
 
 export interface ResponseUtils {

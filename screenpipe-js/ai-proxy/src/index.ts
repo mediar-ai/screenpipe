@@ -8,6 +8,7 @@ import { handleChatCompletions } from './handlers/chat';
 import { handleModelListing } from './handlers/models';
 import { handleFileTranscription, handleWebSocketUpgrade } from './handlers/transcription';
 import { handleVoiceTranscription, handleVoiceQuery, handleTextToSpeech, handleVoiceChat } from './handlers/voice';
+import { handleVertexProxy, handleVertexModels } from './handlers/vertex-proxy';
 // import { handleTTSWebSocketUpgrade } from './handlers/voice-ws';
 
 export { RateLimiter };
@@ -97,6 +98,13 @@ export default Sentry.withSentry(
 				// if (path === '/v1/tts-ws' && upgradeHeader === 'websocket') {
 				// 	return await handleTTSWebSocketUpgrade(request, env);
 				// }
+
+				// Vertex AI proxy for Agent SDK
+				// The Agent SDK sends requests to ANTHROPIC_VERTEX_BASE_URL/v1/messages
+				if (path === '/v1/messages' && request.method === 'POST') {
+					console.log('Vertex AI proxy request to /v1/messages');
+					return await handleVertexProxy(request, env);
+				}
 
 				return createErrorResponse(404, 'not found');
 			} catch (error) {

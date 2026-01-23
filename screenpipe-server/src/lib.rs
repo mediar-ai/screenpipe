@@ -1,4 +1,5 @@
 mod add;
+pub mod analytics;
 mod auto_destruct;
 pub mod chunking;
 pub mod cli;

@@ -29,12 +29,19 @@ export async function verifyClerkToken(env: Env, token: string): Promise<boolean
  */
 export async function validateAuth(request: Request, env: Env): Promise<{ isValid: boolean; error?: string }> {
   const authHeader = request.headers.get('Authorization');
-  
+
   if (!authHeader || !(authHeader.startsWith('Bearer ') || authHeader.startsWith('Token '))) {
     return { isValid: false, error: 'unauthorized' };
   }
 
   const token = authHeader.split(' ')[1];
+
+  // Allow test token in development mode
+  if (env.NODE_ENV === 'development' && token === 'test-token') {
+    console.log('using test token in development mode');
+    return { isValid: true };
+  }
+
   let isValid = await validateSubscription(env, token);
 
   // If not valid, try to verify as a clerk token
