@@ -7,6 +7,10 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { WebSocket } from "ws";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 // Detect OS
 const CURRENT_OS = process.platform;
@@ -155,6 +159,37 @@ const BASE_TOOLS: Tool[] = [
         },
       },
       required: ["action_type", "data"],
+    },
+  },
+  {
+    name: "export-video",
+    description:
+      "Export a video of screen recordings for a specific time range. " +
+      "Creates an MP4 video from the recorded frames between the start and end times. " +
+      "Example: 'Export video from 10:00 AM to 10:30 AM today'",
+    inputSchema: {
+      type: "object",
+      properties: {
+        start_time: {
+          type: "string",
+          format: "date-time",
+          description:
+            "Start time in ISO 8601 format UTC (e.g., '2024-01-15T10:00:00Z')",
+        },
+        end_time: {
+          type: "string",
+          format: "date-time",
+          description:
+            "End time in ISO 8601 format UTC (e.g., '2024-01-15T10:30:00Z')",
+        },
+        fps: {
+          type: "number",
+          description:
+            "Frames per second for the output video. Lower values create smaller files. Default: 1.0",
+          default: 1.0,
+        },
+      },
+      required: ["start_time", "end_time"],
     },
   },
 ];
@@ -553,6 +588,172 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return {
           content: [{ type: "text", text: resultText }],
         };
+      }
+
+      case "export-video": {
+        const startTime = args.start_time as string;
+        const endTime = args.end_time as string;
+        const fps = (args.fps as number) || 1.0;
+
+        // Validate time inputs
+        if (!startTime || !endTime) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: Both start_time and end_time are required in ISO 8601 format (e.g., '2024-01-15T10:00:00Z')",
+              },
+            ],
+          };
+        }
+
+        // Step 1: Query the search API to get frame IDs for the time range
+        const searchParams = new URLSearchParams({
+          content_type: "ocr",
+          start_time: startTime,
+          end_time: endTime,
+          limit: "10000", // Get all frames in range
+        });
+
+        const searchResponse = await fetchAPI(`/search?${searchParams.toString()}`);
+        if (!searchResponse.ok) {
+          throw new Error(`Failed to search for frames: HTTP ${searchResponse.status}`);
+        }
+
+        const searchData = await searchResponse.json();
+        const results = searchData.data || [];
+
+        if (results.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `No screen recordings found between ${startTime} and ${endTime}. Make sure screenpipe was recording during this time period.`,
+              },
+            ],
+          };
+        }
+
+        // Extract unique frame IDs from OCR results
+        const frameIds: number[] = [];
+        const seenIds = new Set<number>();
+        for (const result of results) {
+          if (result.type === "OCR" && result.content?.frame_id) {
+            const frameId = result.content.frame_id;
+            if (!seenIds.has(frameId)) {
+              seenIds.add(frameId);
+              frameIds.push(frameId);
+            }
+          }
+        }
+
+        if (frameIds.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Found ${results.length} results but no valid frame IDs. The recordings may be audio-only.`,
+              },
+            ],
+          };
+        }
+
+        // Sort frame IDs
+        frameIds.sort((a, b) => a - b);
+
+        // Step 2: Connect to WebSocket and export video
+        const wsUrl = `ws://localhost:${port}/frames/export?frame_ids=${frameIds.join(",")}&fps=${fps}`;
+
+        const exportResult = await new Promise<{
+          success: boolean;
+          filePath?: string;
+          error?: string;
+          frameCount?: number;
+        }>((resolve) => {
+          const ws = new WebSocket(wsUrl);
+          let resolved = false;
+
+          const timeout = setTimeout(() => {
+            if (!resolved) {
+              resolved = true;
+              ws.close();
+              resolve({ success: false, error: "Export timed out after 5 minutes" });
+            }
+          }, 5 * 60 * 1000); // 5 minute timeout
+
+          ws.on("error", (error) => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeout);
+              resolve({ success: false, error: `WebSocket error: ${error.message}` });
+            }
+          });
+
+          ws.on("close", () => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeout);
+              resolve({ success: false, error: "Connection closed unexpectedly" });
+            }
+          });
+
+          ws.on("message", (data) => {
+            try {
+              const message = JSON.parse(data.toString());
+
+              if (message.status === "completed" && message.video_data) {
+                // Save video to temp file
+                const tempDir = os.tmpdir();
+                const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+                const filename = `screenpipe_export_${timestamp}.mp4`;
+                const filePath = path.join(tempDir, filename);
+
+                fs.writeFileSync(filePath, Buffer.from(message.video_data));
+
+                resolved = true;
+                clearTimeout(timeout);
+                ws.close();
+                resolve({
+                  success: true,
+                  filePath,
+                  frameCount: frameIds.length,
+                });
+              } else if (message.status === "error") {
+                resolved = true;
+                clearTimeout(timeout);
+                ws.close();
+                resolve({ success: false, error: message.error || "Export failed" });
+              }
+              // Ignore "extracting" and "encoding" status updates
+            } catch (parseError) {
+              // Ignore parse errors for progress messages
+            }
+          });
+        });
+
+        if (exportResult.success && exportResult.filePath) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Successfully exported video!\n\n` +
+                  `File: ${exportResult.filePath}\n` +
+                  `Frames: ${exportResult.frameCount}\n` +
+                  `Time range: ${startTime} to ${endTime}\n` +
+                  `FPS: ${fps}`,
+              },
+            ],
+          };
+        } else {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to export video: ${exportResult.error}`,
+              },
+            ],
+          };
+        }
       }
 
       case "click-element": {

@@ -105,6 +105,7 @@ export const settingsStoreSchema = z.object({
   isLoading: z.boolean(),
   installedPipes: z.array(z.any()), // Define proper pipe schema if needed
   userId: z.string(),
+  analyticsId: z.string(),
   embeddedLLM: embeddedLLMSchema,
   user: userSchema,
 });

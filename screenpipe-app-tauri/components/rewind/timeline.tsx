@@ -16,6 +16,7 @@ import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { hasFramesForDate } from "@/lib/actions/has-frames-date";
 import { CommandShortcut } from "@/components/ui/command";
 import { CurrentFrameTimeline } from "@/components/rewind/current-frame-timeline";
+import posthog from "posthog-js";
 
 export interface StreamTimeSeriesResponse {
 	timestamp: string;
@@ -98,6 +99,11 @@ export default function Timeline() {
 			setCurrentIndex(0);
 		}
 	}, [frames.length, currentFrame, setCurrentFrame]);
+
+	// Track timeline opened
+	useEffect(() => {
+		posthog.capture("timeline_opened");
+	}, []);
 
 	useEffect(() => {
 		const getStartDateAndSet = async () => {
@@ -307,6 +313,12 @@ export default function Timeline() {
 			if (isAfter(startAndEndDates.start, newDate)) {
 				return;
 			}
+
+			// Track date change
+			posthog.capture("timeline_date_changed", {
+				from_date: currentDate.toISOString(),
+				to_date: newDate.toISOString(),
+			});
 
 			setCurrentDate(newDate);
 		} else {

@@ -5,6 +5,7 @@ import { Providers } from "./providers";
 import { Toaster } from "@/components/ui/toaster";
 import { useEffect } from "react";
 import { DeeplinkHandler } from "@/components/deeplink-handler";
+import { ShortcutTracker } from "@/components/shortcut-reminder";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -85,6 +86,7 @@ export default function RootLayout({
       <Providers>
         <body className={`${inter.className} scrollbar-hide`}>
           <DeeplinkHandler />
+          <ShortcutTracker />
           {children}
           <Toaster />
         </body>

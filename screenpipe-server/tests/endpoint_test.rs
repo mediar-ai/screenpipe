@@ -48,7 +48,7 @@ mod tests {
             false,
             false,
             audio_manager,
-            true
+            true,
         );
 
         let router = app.create_router(true).await;

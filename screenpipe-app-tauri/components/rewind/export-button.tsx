@@ -5,6 +5,7 @@ import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { toast } from "./ui/use-toast";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { parseInt } from "lodash";
+import posthog from "posthog-js";
 
 export function ExportButton() {
 	const [isExporting, setIsExporting] = useState(false);
@@ -21,6 +22,13 @@ export function ExportButton() {
 			});
 			return;
 		}
+
+		// Track export started
+		posthog.capture("timeline_export_started", {
+			frames_count: selectionRange.frameIds.length,
+			selection_duration_ms: selectionRange.end.getTime() - selectionRange.start.getTime(),
+		});
+
 		setIsExporting(true);
 		setProgress(0);
 		try {
@@ -108,6 +116,9 @@ export function ExportButton() {
 												filePath,
 												new Uint8Array(data.video_data),
 											);
+											posthog.capture("timeline_export_completed", {
+												frames_count: selectionRange?.frameIds.length,
+											});
 											toast({
 												title: "Video exported",
 												description:
@@ -131,6 +142,9 @@ export function ExportButton() {
 										window.URL.revokeObjectURL(url);
 										a.remove();
 
+										posthog.capture("timeline_export_completed", {
+											frames_count: selectionRange?.frameIds.length,
+										});
 										toast({
 											title: "Video exported",
 											description: "Your video has been exported successfully",

@@ -99,6 +99,7 @@ let DEFAULT_SETTINGS: Settings = {
 			deepgramApiKey: "",
 			isLoading: false,
 			userId: "",
+			analyticsId: "",
 			devMode: false,
 			audioTranscriptionEngine: "whisper-large-v3-turbo",
 			ocrEngine: "default",
@@ -284,18 +285,19 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 		};
 	}, []);
 
-	// Track user changes for posthog
+	// Identify with persistent analyticsId for consistent tracking across frontend/backend
 	useEffect(() => {
-		if (settings.user && settings.user.id) {
-			posthog.identify(settings.user.id, {
-				email: settings.user.email,
-				name: settings.user.name,
-				github_username: settings.user.github_username,
-				website: settings.user.website,
-				contact: settings.user.contact,
+		if (settings.analyticsId) {
+			posthog.identify(settings.analyticsId, {
+				email: settings.user?.email,
+				name: settings.user?.name,
+				user_id: settings.user?.id,
+				github_username: settings.user?.github_username,
+				website: settings.user?.website,
+				contact: settings.user?.contact,
 			});
 		}
-	}, [settings.user?.id]);
+	}, [settings.analyticsId, settings.user?.id]);
 
 	const updateSettings = async (updates: Partial<Settings>) => {
 		await settingsStore.set(updates);

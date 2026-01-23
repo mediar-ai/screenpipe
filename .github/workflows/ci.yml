@@ -114,6 +114,12 @@ jobs:
       - name: Run specific Windows OCR cargo test
         run: cargo test test_process_ocr_task_windows
 
+      - name: Run PII removal tests
+        run: cargo test -p screenpipe-core pii_removal
+
+      - name: Run PII redaction tests
+        run: cargo test -p screenpipe-server --lib pii_redaction_tests
+
       - name: Run pipes_test
         run: cargo test --package pipes_test
 
@@ -159,3 +165,9 @@ jobs:
         env:
           DYLD_LIBRARY_PATH: /Users/runner/work/screenpipe/screenpipe/screenpipe-vision/lib
         run: cargo test test_apple_native_ocr
+
+      - name: Run PII removal tests
+        run: cargo test -p screenpipe-core pii_removal
+
+      - name: Run PII redaction tests
+        run: cargo test -p screenpipe-server --lib pii_redaction_tests

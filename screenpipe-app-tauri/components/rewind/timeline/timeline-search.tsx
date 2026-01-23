@@ -21,6 +21,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import posthog from "posthog-js";
 
 interface TimelineSearchProps {
 	frames: StreamTimeSeriesResponse[];
@@ -610,8 +611,14 @@ prioritize precision over recall - better to return no match than a wrong match.
 		setIsSearching(true);
 		setSearchStatus("");
 
+		// Track search
+		posthog.capture("timeline_search", {
+			query_length: query.length,
+			frames_count: frames.length,
+		});
+
 		const defaultPreset = settings?.aiPresets?.find(p => p.defaultPreset) || settings?.aiPresets?.[0];
-		
+
 		const openai = new OpenAI({
 			apiKey:
 				(defaultPreset?.provider === "screenpipe-cloud"
@@ -637,9 +644,15 @@ prioritize precision over recall - better to return no match than a wrong match.
 			);
 
 			if (frameIndex !== null) {
+				posthog.capture("timeline_search_result_found", {
+					query_length: query.length,
+				});
 				onResultSelect(frameIndex);
 				setOpen(false);
 			} else {
+				posthog.capture("timeline_search_no_result", {
+					query_length: query.length,
+				});
 				setSearchStatus(
 					"couldn't find that moment. try being more specific about the app or content you're looking for.",
 				);

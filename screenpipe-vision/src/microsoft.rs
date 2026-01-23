@@ -37,13 +37,48 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> Result<(String, String
     let engine = WindowsOcrEngine::TryCreateFromUserProfileLanguages()?;
     let result = engine.RecognizeAsync(&bitmap)?.get()?;
 
-    let text = result.Text()?.to_string();
+    let mut full_text = String::new();
+    let mut ocr_results: Vec<serde_json::Value> = Vec::new();
 
-    let json_output = serde_json::json!([{
-        "text": text,
-        "confidence": "1.0" // Windows OCR doesn't provide confidence scores
-    }])
-    .to_string();
+    // Iterate through lines and words to get bounding boxes
+    if let Ok(lines) = result.Lines() {
+        for line in lines {
+            if let Ok(words) = line.Words() {
+                for word in words {
+                    if let Ok(text) = word.Text() {
+                        let text_str = text.to_string();
+                        if !text_str.is_empty() {
+                            if !full_text.is_empty() {
+                                full_text.push(' ');
+                            }
+                            full_text.push_str(&text_str);
 
-    Ok((text, json_output, Some(1.0)))
+                            // Get bounding box for PII redaction support
+                            if let Ok(rect) = word.BoundingRect() {
+                                ocr_results.push(serde_json::json!({
+                                    "text": text_str,
+                                    "left": rect.X.to_string(),
+                                    "top": rect.Y.to_string(),
+                                    "width": rect.Width.to_string(),
+                                    "height": rect.Height.to_string(),
+                                    "conf": "1.0"  // Windows OCR doesn't provide word-level confidence
+                                }));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback if iteration failed
+    if full_text.is_empty() {
+        if let Ok(text) = result.Text() {
+            full_text = text.to_string();
+        }
+    }
+
+    let json_output = serde_json::to_string(&ocr_results).unwrap_or_else(|_| "[]".to_string());
+
+    Ok((full_text, json_output, Some(1.0)))
 }

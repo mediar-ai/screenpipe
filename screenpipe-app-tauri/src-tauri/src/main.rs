@@ -178,6 +178,7 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     // Register show shortcut
     register_shortcut(app, &config.show, config.is_disabled("show"), |app| {
         info!("show shortcut triggered");
+        let _ = app.emit("shortcut-show", ());
         #[cfg(target_os = "macos")]
         {
             if let Ok(window) = app.get_webview_panel("main") {
@@ -749,6 +750,9 @@ async fn main() {
             commands::reset_onboarding,
             commands::show_onboarding_window,
             commands::open_search_window,
+            // Shortcut reminder commands
+            commands::show_shortcut_reminder,
+            commands::hide_shortcut_reminder,
             // Overlay commands (Windows)
             commands::enable_overlay_click_through,
             commands::disable_overlay_click_through,
@@ -924,7 +928,8 @@ async fn main() {
                 autostart_manager.is_enabled().unwrap()
             );
 
-            let unique_id = store.user.id.unwrap_or_default();
+            // Use persistent analytics_id for PostHog (consistent across frontend and backend)
+            let unique_id = store.analytics_id.clone();
             let email = store.user.email.unwrap_or_default();
 
             if is_analytics_enabled {

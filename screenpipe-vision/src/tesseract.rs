@@ -58,53 +58,31 @@ fn data_output_to_text(data_output: &DataOutput) -> String {
 }
 
 fn data_output_to_json(data_output: &DataOutput) -> String {
-    let mut lines: Vec<HashMap<String, String>> = Vec::new();
-    let mut current_line = String::new();
-    let mut current_conf = 0.0;
-    let mut word_count = 0;
-    let mut last_word_num = 0;
+    let mut words: Vec<HashMap<String, String>> = Vec::new();
 
     for record in &data_output.data {
-        if record.word_num == 0 && !current_line.is_empty() {
-            let avg_conf = current_conf / word_count as f32;
-            let mut line_data = HashMap::new();
-            line_data.insert("text".to_string(), current_line.clone());
-            line_data.insert("confidence".to_string(), format!("{:.2}", avg_conf));
-            line_data.insert(
-                "line_position".to_string(),
-                format!(
-                    "level{}page_num{}block_num{}par_num{}line_num{}",
-                    record.level,
-                    record.page_num,
-                    record.block_num,
-                    record.par_num,
-                    record.line_num
-                ),
-            );
-            lines.push(line_data);
-            current_line.clear();
-            current_conf = 0.0;
-            word_count = 0;
+        // Only include records that have text (word_num > 0 means it's a word)
+        if record.word_num > 0 && !record.text.is_empty() {
+            let mut word_data = HashMap::new();
+            word_data.insert("text".to_string(), record.text.clone());
+            word_data.insert("conf".to_string(), format!("{:.2}", record.conf));
+            // Include bounding box coordinates for PII redaction
+            word_data.insert("left".to_string(), record.left.to_string());
+            word_data.insert("top".to_string(), record.top.to_string());
+            word_data.insert("width".to_string(), record.width.to_string());
+            word_data.insert("height".to_string(), record.height.to_string());
+            // Include position metadata
+            word_data.insert("level".to_string(), record.level.to_string());
+            word_data.insert("page_num".to_string(), record.page_num.to_string());
+            word_data.insert("block_num".to_string(), record.block_num.to_string());
+            word_data.insert("par_num".to_string(), record.par_num.to_string());
+            word_data.insert("line_num".to_string(), record.line_num.to_string());
+            word_data.insert("word_num".to_string(), record.word_num.to_string());
+            words.push(word_data);
         }
-        if record.word_num > last_word_num {
-            if !current_line.is_empty() {
-                current_line.push(' ');
-            }
-            current_line.push_str(&record.text);
-            current_conf += record.conf;
-            word_count += 1;
-        }
-        last_word_num = record.word_num;
-    }
-    if !current_line.is_empty() {
-        let avg_conf = current_conf / word_count as f32;
-        let mut line_data = HashMap::new();
-        line_data.insert("text".to_string(), current_line);
-        line_data.insert("confidence".to_string(), format!("{:.2}", avg_conf));
-        lines.push(line_data);
     }
 
-    serde_json::to_string_pretty(&lines).unwrap()
+    serde_json::to_string(&words).unwrap_or_else(|_| "[]".to_string())
 }
 
 fn calculate_overall_confidence(data_output: &DataOutput) -> f64 {

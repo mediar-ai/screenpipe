@@ -27,7 +27,7 @@ use futures::{
     future::{try_join, try_join_all},
     SinkExt, StreamExt,
 };
-use image::ImageFormat::{self};
+use image::{GenericImageView, ImageFormat};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
 use crate::{
@@ -36,10 +36,12 @@ use crate::{
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
         extract_frame, extract_frame_from_video, extract_high_quality_frame, merge_videos,
-        validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
+        redact_frame_pii, validate_media, MergeVideosRequest, MergeVideosResponse,
+        ValidateMediaParams,
     },
     PipeManager,
 };
+use screenpipe_core::pii_removal::detect_pii_regions;
 use chrono::{DateTime, Utc};
 use screenpipe_audio::{
     audio_manager::AudioManager,
@@ -2787,33 +2789,45 @@ pub struct KeywordSearchRequest {
     app_names: Option<Vec<String>>,
 }
 
+/// Query parameters for frame retrieval
+#[derive(Debug, Deserialize, OaSchema)]
+pub struct GetFrameQuery {
+    /// If true, blur/redact any detected PII (credit cards, SSNs, emails) in the frame
+    #[serde(default)]
+    pub redact_pii: bool,
+}
+
 #[oasgen]
 pub async fn get_frame_data(
     State(state): State<Arc<AppState>>,
     Path(frame_id): Path<i64>,
+    Query(query): Query<GetFrameQuery>,
 ) -> Result<Response<Body>, (StatusCode, JsonResponse<Value>)> {
     let start_time = Instant::now();
 
     match timeout(Duration::from_secs(5), async {
-        // Try to get frame from cache if enabled
-        if let Some(cache) = &state.frame_image_cache {
-            let cache_result = cache.try_lock();
-            match cache_result {
-                Ok(mut cache) => {
-                    if let Some((file_path, timestamp)) = cache.get(&frame_id) {
-                        if timestamp.elapsed() < Duration::from_secs(300) {
-                            debug!(
-                                "Cache hit for frame_id: {}. Retrieved in {:?}",
-                                frame_id,
-                                start_time.elapsed()
-                            );
-                            return serve_file(file_path).await;
+        // Skip cache if redact_pii is requested (need fresh processing)
+        if !query.redact_pii {
+            // Try to get frame from cache if enabled
+            if let Some(cache) = &state.frame_image_cache {
+                let cache_result = cache.try_lock();
+                match cache_result {
+                    Ok(mut cache) => {
+                        if let Some((file_path, timestamp)) = cache.get(&frame_id) {
+                            if timestamp.elapsed() < Duration::from_secs(300) {
+                                debug!(
+                                    "Cache hit for frame_id: {}. Retrieved in {:?}",
+                                    frame_id,
+                                    start_time.elapsed()
+                                );
+                                return serve_file(file_path).await;
+                            }
+                            cache.pop(&frame_id);
                         }
-                        cache.pop(&frame_id);
                     }
-                }
-                Err(_) => {
-                    debug!("Cache lock contention for frame_id: {}", frame_id);
+                    Err(_) => {
+                        debug!("Cache lock contention for frame_id: {}", frame_id);
+                    }
                 }
             }
         }
@@ -2823,6 +2837,11 @@ pub async fn get_frame_data(
             Ok(Some((file_path, offset_index))) => {
                 match extract_frame_from_video(&file_path, offset_index).await {
                     Ok(frame_path) => {
+                        // Apply PII redaction if requested
+                        if query.redact_pii {
+                            return apply_pii_redaction(&state, frame_id, &frame_path).await;
+                        }
+
                         // Store in cache if enabled and we can get the lock
                         if let Some(cache) = &state.frame_image_cache {
                             if let Ok(mut cache) = cache.try_lock() {
@@ -2874,6 +2893,92 @@ pub async fn get_frame_data(
                     "frame_id": frame_id
                 })),
             ))
+        }
+    }
+}
+
+/// Apply PII redaction to a frame image
+async fn apply_pii_redaction(
+    state: &Arc<AppState>,
+    frame_id: i64,
+    frame_path: &str,
+) -> Result<Response<Body>, (StatusCode, JsonResponse<Value>)> {
+    // Read the frame file
+    let frame_data = match tokio::fs::read(frame_path).await {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Failed to read frame file for PII redaction: {}", e);
+            return serve_file(frame_path).await; // Fall back to unredacted
+        }
+    };
+
+    // Get OCR text_json for this frame
+    let text_json_str = match state.db.get_frame_ocr_text_json(frame_id).await {
+        Ok(Some(json)) => json,
+        Ok(None) => {
+            debug!("No OCR data for frame {}, serving unredacted", frame_id);
+            return serve_file(frame_path).await;
+        }
+        Err(e) => {
+            error!("Failed to get OCR data for frame {}: {}", frame_id, e);
+            return serve_file(frame_path).await;
+        }
+    };
+
+    // Parse the text_json
+    let text_json: Vec<HashMap<String, String>> = match serde_json::from_str(&text_json_str) {
+        Ok(json) => json,
+        Err(e) => {
+            debug!("Failed to parse OCR text_json: {}", e);
+            return serve_file(frame_path).await;
+        }
+    };
+
+    // Get image dimensions
+    let img = match image::load_from_memory(&frame_data) {
+        Ok(img) => img,
+        Err(e) => {
+            error!("Failed to load image for PII detection: {}", e);
+            return serve_file(frame_path).await;
+        }
+    };
+    let (width, height) = img.dimensions();
+
+    // Detect PII regions
+    let pii_regions = detect_pii_regions(&text_json, width, height);
+
+    if pii_regions.is_empty() {
+        debug!("No PII detected in frame {}", frame_id);
+        return serve_file(frame_path).await;
+    }
+
+    debug!(
+        "Detected {} PII regions in frame {}: {:?}",
+        pii_regions.len(),
+        frame_id,
+        pii_regions.iter().map(|r| &r.pii_type).collect::<Vec<_>>()
+    );
+
+    // Apply redaction
+    match redact_frame_pii(&frame_data, &pii_regions) {
+        Ok(redacted_data) => {
+            let body = Body::from(redacted_data);
+            Response::builder()
+                .header("content-type", "image/jpeg")
+                .header("cache-control", "no-cache") // Don't cache redacted frames
+                .header("x-pii-redacted", "true")
+                .header("x-pii-regions-count", pii_regions.len().to_string())
+                .body(body)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({"error": format!("Failed to create response: {}", e)})),
+                    )
+                })
+        }
+        Err(e) => {
+            error!("Failed to redact PII from frame {}: {}", frame_id, e);
+            serve_file(frame_path).await // Fall back to unredacted
         }
     }
 }

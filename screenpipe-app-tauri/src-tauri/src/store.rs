@@ -93,14 +93,18 @@ impl OnboardingStore {
 pub struct SettingsStore {
     #[serde(rename = "aiPresets")]
     pub ai_presets: Vec<AIPreset>,
-  
+
     #[serde(rename = "deepgramApiKey")]
     pub deepgram_api_key: String,
     #[serde(rename = "isLoading")]
     pub is_loading: bool,
-   
+
     #[serde(rename = "userId")]
     pub user_id: String,
+
+    /// Persistent analytics ID used for PostHog tracking (both frontend and backend)
+    #[serde(rename = "analyticsId")]
+    pub analytics_id: String,
   
     #[serde(rename = "devMode")]
     pub dev_mode: bool,
@@ -354,6 +358,7 @@ impl Default for SettingsStore {
             deepgram_api_key: "".to_string(),
             is_loading: false,
             user_id: "".to_string(),
+            analytics_id: uuid::Uuid::new_v4().to_string(),
          
             dev_mode: false,
             audio_transcription_engine: "whisper-large-v3-turbo".to_string(),

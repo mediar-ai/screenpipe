@@ -23,6 +23,7 @@ killport = { version = "1.1.0" }
 
 # Image processing
 image = { workspace = true }
+imageproc = "0.25"
 
 # Dates
 chrono = { version = "0.4.31", features = ["serde"] }

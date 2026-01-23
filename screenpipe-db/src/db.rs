@@ -971,6 +971,27 @@ impl DatabaseManager {
         .await
     }
 
+    /// Get the OCR text_json for a frame, which contains bounding box information
+    /// needed for PII redaction
+    pub async fn get_frame_ocr_text_json(
+        &self,
+        frame_id: i64,
+    ) -> Result<Option<String>, sqlx::Error> {
+        let result = sqlx::query_scalar::<_, Option<String>>(
+            r#"
+            SELECT text_json
+            FROM ocr_text
+            WHERE frame_id = ?1
+            LIMIT 1
+            "#,
+        )
+        .bind(frame_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.flatten())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn count_search_results(
         &self,

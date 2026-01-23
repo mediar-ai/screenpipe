@@ -352,3 +352,77 @@ pub async fn open_search_window(app_handle: tauri::AppHandle, query: Option<Stri
     ShowRewindWindow::Search { query }.show(&app_handle).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[tauri::command]
+#[specta::specta]
+pub async fn show_shortcut_reminder(
+    app_handle: tauri::AppHandle,
+    shortcut: String,
+) -> Result<(), String> {
+    use tauri::{Emitter, WebviewWindowBuilder};
+
+    let label = "shortcut-reminder";
+
+    // If window exists, just show it and update shortcut
+    if let Some(window) = app_handle.get_webview_window(label) {
+        let _ = app_handle.emit_to(label, "shortcut-reminder-update", &shortcut);
+        let _ = window.show();
+        return Ok(());
+    }
+
+    // Get primary monitor dimensions for positioning
+    let monitor = app_handle
+        .primary_monitor()
+        .map_err(|e| e.to_string())?
+        .ok_or("No primary monitor found")?;
+
+    let screen_size = monitor.size();
+    let scale_factor = monitor.scale_factor();
+
+    // Window dimensions
+    let window_width = 350.0;
+    let window_height = 60.0;
+
+    // Position at bottom center of screen
+    let x = ((screen_size.width as f64 / scale_factor) - window_width) / 2.0;
+    let y = (screen_size.height as f64 / scale_factor) - window_height - 100.0; // 100px from bottom
+
+    let _window = WebviewWindowBuilder::new(
+        &app_handle,
+        label,
+        tauri::WebviewUrl::App("shortcut-reminder".into()),
+    )
+    .title("Shortcut Reminder")
+    .inner_size(window_width, window_height)
+    .position(x, y)
+    .decorations(false)
+    .transparent(true)
+    .always_on_top(true)
+    .resizable(false)
+    .skip_taskbar(true)
+    .focused(false)
+    .visible(true)
+    .build()
+    .map_err(|e| format!("Failed to create shortcut reminder window: {}", e))?;
+
+    // Send the shortcut info to the window
+    let _ = app_handle.emit_to(label, "shortcut-reminder-update", &shortcut);
+
+    // Set up auto-hide after 10 seconds
+    let app_handle_clone = app_handle.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        let _ = app_handle_clone.emit_to("shortcut-reminder", "shortcut-reminder-hide", ());
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn hide_shortcut_reminder(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("shortcut-reminder") {
+        let _ = window.hide();
+    }
+    Ok(())
+}

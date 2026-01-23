@@ -21,6 +21,7 @@ import { ExportButton } from "../export-button";
 import Image from "next/image";
 import { AIPresetsSelector } from "../ai-presets-selector";
 import { AIPreset } from "@/lib/utils/tauri";
+import posthog from "posthog-js";
 
 const providerIcons = {
 	openai: <Image src="/images/openai.png" alt="OpenAI" width={16} height={16} />,
@@ -228,6 +229,16 @@ export function AIPanel({
 			return;
 		}
 
+		// Track AI query
+		posthog.capture("timeline_ai_query", {
+			query_length: aiInput.length,
+			agent_id: selectedAgent.id,
+			agent_name: selectedAgent.name,
+			provider: activePreset?.provider,
+			model: activePreset?.model,
+			selection_duration_ms: selectionRange.end.getTime() - selectionRange.start.getTime(),
+		});
+
 		// Create new abort controller for this request
 		abortControllerRef.current = new AbortController();
 
@@ -397,6 +408,7 @@ export function AIPanel({
 							className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
 							onClick={(e) => {
 								e.stopPropagation();
+								posthog.capture("timeline_ai_panel_expanded");
 								onExpandedChange(true);
 								setTimeout(() => {
 									inputRef.current?.focus();

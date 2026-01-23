@@ -1,12 +1,23 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Check, Monitor, Mic } from "lucide-react";
+import { Check, Monitor, Mic, Command } from "lucide-react";
 import { Button } from "../ui/button";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { usePlatform } from "@/lib/hooks/use-platform";
-import { commands, OSPermissionsCheck } from "@/lib/utils/tauri";
+import { commands, type OSPermissionsCheck } from "@/lib/utils/tauri";
 import { motion } from "framer-motion";
 import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
+
+// Format shortcut for display
+function formatShortcut(shortcut: string): string {
+  if (!shortcut) return "";
+  return shortcut
+    .replace(/Super|Command|Cmd/gi, "⌘")
+    .replace(/Ctrl|Control/gi, "⌃")
+    .replace(/Alt|Option/gi, "⌥")
+    .replace(/Shift/gi, "⇧")
+    .replace(/\+/g, " ");
+}
 
 interface OnboardingStatusProps {
   className?: string;
@@ -45,6 +56,10 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   const handleComplete = async () => {
     await ensureDefaultPreset();
+    // Show native shortcut reminder window
+    if (settings.showScreenpipeShortcut) {
+      commands.showShortcutReminder(settings.showScreenpipeShortcut);
+    }
     handleNextSlide();
   };
 
@@ -224,6 +239,17 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             </p>
             <p className="font-mono text-xs text-muted-foreground">
               find it in your menu bar anytime
+            </p>
+          </div>
+
+          {/* Shortcut reminder */}
+          <div className="bg-muted/50 border border-border px-4 py-3 rounded-lg">
+            <p className="font-mono text-xs text-center text-muted-foreground">
+              press{" "}
+              <span className="font-semibold text-foreground">
+                {formatShortcut(settings.showScreenpipeShortcut)}
+              </span>{" "}
+              anytime to open screenpipe
             </p>
           </div>
 
