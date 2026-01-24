@@ -80,12 +80,9 @@ export default function ShortcutReminderPage() {
         style={{ cursor: "grab" }}
       >
         <div className="relative">
-          {/* Subtle glow */}
-          <div className="absolute inset-0 bg-pink-500/20 rounded-full blur-md opacity-40" />
-
-          {/* Main pill */}
+          {/* Main pill - no blur/glow to avoid artifacts on transparent window */}
           <div
-            className="relative flex items-center gap-1.5 py-1 px-2.5 bg-black/80 backdrop-blur-xl rounded-full border border-white/10 shadow-xl"
+            className="relative flex items-center gap-1.5 py-1 px-2.5 bg-black/90 rounded-full border border-white/10"
           >
             {/* Pulsing dot */}
             <span className="relative flex h-1 w-1 flex-shrink-0">

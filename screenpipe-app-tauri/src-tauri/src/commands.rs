@@ -373,9 +373,9 @@ pub async fn show_shortcut_reminder(
     let screen_size = monitor.size();
     let scale_factor = monitor.scale_factor();
 
-    // Compact window dimensions
-    let window_width = 180.0;
-    let window_height = 28.0;
+    // Compact window dimensions - sized to fit content tightly
+    let window_width = 140.0;
+    let window_height = 24.0;
 
     // Position at top center of screen
     let x = ((screen_size.width as f64 / scale_factor) - window_width) / 2.0;
