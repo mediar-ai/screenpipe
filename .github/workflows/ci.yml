@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # FIX: Ignore warnings and unexpected cfgs to prevent build-breakage
+  # FIX: Ignore warnings to prevent build breakage
   RUSTFLAGS: "-A unexpected_cfgs -A warnings"
 
 jobs:
@@ -35,18 +35,31 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config libxdo-dev libssl-dev libxtst-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+          # FIX: Added libdbus-1-dev (for the Exit 101 crash), xvfb (Display), and pulseaudio (Audio)
+          sudo apt-get install -y libasound2-dev pkg-config libxdo-dev libssl-dev libxtst-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libdbus-1-dev xvfb pulseaudio
 
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
+        # FIX: Check if installed before installing to prevent Homebrew warnings
         run: |
-          brew install ffmpeg pkgconf cmake
+          brew list ffmpeg || brew install ffmpeg
+          brew list pkgconf || brew install pkgconf
+          brew list cmake || brew install cmake
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Run tests
-        # FIX: Skip the 'pipes_test' and 'video_utils' which cause the 101 panics in headless CI
+      - name: Run tests (Linux Headless)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          RUST_BACKTRACE: 1 # Shows exact line numbers on crashes
+        # FIX: Use xvfb-run to give the test a fake screen
+        run: xvfb-run --auto-servernum cargo test --workspace --exclude screenpipe-vision --exclude screenpipe-audio -- --skip pipes_test --skip video_utils_test
+
+      - name: Run tests (Mac & Windows)
+        if: matrix.os != 'ubuntu-latest'
+        env:
+          RUST_BACKTRACE: 1
         run: cargo test --workspace --exclude screenpipe-vision --exclude screenpipe-audio -- --skip pipes_test --skip video_utils_test

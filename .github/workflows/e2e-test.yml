@@ -49,19 +49,20 @@ jobs:
     - name: Install OpenSSL and FFmpeg
       shell: powershell
       run: |
-        # FIX: Native PowerShell sequence (no bash operators like ||)
-        choco install openssl ffmpeg -y
-        # Native PATH refresh
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-        openssl version
-        ffmpeg -version
+        # FIX: Native PowerShell sequence and proper GitHub PATH injection
+        choco install openssl ffmpeg --no-progress -y
+        
+        $ffmpegPath = "C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffmpeg\bin"
+        $opensslPath = "C:\Program Files\OpenSSL-Win64\bin"
+        
+        Add-Content -Path $env:GITHUB_PATH -Value $ffmpegPath
+        Add-Content -Path $env:GITHUB_PATH -Value $opensslPath
 
     - name: Install frontend dependencies
       working-directory: ./screenpipe-app-tauri
       run: bun install
 
     - name: Run pre_build.js
-      # SKIP_SCREENPIPE_SETUP is inherited from job-level env
       run: bun ./scripts/pre_build.js
       working-directory: ./screenpipe-app-tauri
 
