@@ -456,6 +456,33 @@ export function AIPanel({
 						className="p-3 border-t border-muted-foreground"
 					>
 						<div className="flex flex-col gap-2">
+							{/* Suggested questions - shown when no messages yet */}
+							{chatMessages.length === 0 && (
+								<div className="flex flex-wrap gap-1.5">
+									{[
+										"what did i work on?",
+										"summarize this period",
+										"what apps did i use?",
+									].map((suggestion) => (
+										<button
+											key={suggestion}
+											type="button"
+											onClick={() => {
+												setAiInput(suggestion);
+												// Submit after a short delay to ensure state updates
+												setTimeout(() => {
+													const form = document.querySelector('.ai-panel form') as HTMLFormElement;
+													if (form) form.requestSubmit();
+												}, 50);
+											}}
+											disabled={!isAvailable || !hasValidModel}
+											className="px-2 py-1 text-[10px] font-mono bg-muted/50 hover:bg-muted border border-border rounded-full text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+										>
+											{suggestion}
+										</button>
+									))}
+								</div>
+							)}
 							<div>
 								<AIPresetsSelector
 									onPresetChange={setActivePreset}
