@@ -388,9 +388,9 @@ fn map_generic_role_to_macos_roles(role: &str) -> Vec<String> {
 fn macos_role_to_generic_role(role: &str) -> Vec<String> {
     match role.to_lowercase().as_str() {
         "axwindow" => vec!["window".to_string()],
-        "AXButton" | "AXMenuItem" | "AXMenuBarItem" => vec!["button".to_string()],
-        "AXTextField" | "AXTextArea" | "AXTextEdit" | "AXSearchField" | "AXURIField"
-        | "AXAddressField" => vec![
+        "axbutton" | "axmenuitem" | "axmenubaritem" => vec!["button".to_string()],
+        "axtextfield" | "axtextarea" | "axtextedit" | "axsearchfield" | "axurifield"
+        | "axaddressfield" => vec![
             "textfield".to_string(),
             "input".to_string(),
             "textbox".to_string(),
@@ -398,9 +398,9 @@ fn macos_role_to_generic_role(role: &str) -> Vec<String> {
             "urlfield".to_string(),
         ],
         "axlist" => vec!["list".to_string()],
-        "AXCell" => vec!["listitem".to_string()],
-        "AXSheet" | "AXDialog" => vec!["dialog".to_string()],
-        "AXGroup" | "AXGenericElement" | "AXWebArea" => {
+        "axcell" => vec!["listitem".to_string()],
+        "axsheet" | "axdialog" => vec!["dialog".to_string()],
+        "axgroup" | "axgenericelement" | "axwebarea" => {
             vec!["group".to_string(), "genericElement".to_string()]
         }
         _ => vec![role.to_string()],

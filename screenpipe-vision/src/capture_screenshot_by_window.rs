@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
-use tracing::{debug, error};
+use tracing::debug;
 
 use xcap::{Window, XCapError};
 

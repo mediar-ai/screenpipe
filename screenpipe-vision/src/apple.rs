@@ -40,6 +40,7 @@ pub fn get_apple_languages(languages: &[Language]) -> Vec<String> {
         .collect()
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 struct OcrResultBBox {
     x: f64,
@@ -48,6 +49,7 @@ struct OcrResultBBox {
     width: f64,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 struct OcrTextElement {
     bounding_box: Vec<OcrResultBBox>,
@@ -55,6 +57,7 @@ struct OcrTextElement {
     text: String,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 struct OcrResult {
     ocr_result: String,
