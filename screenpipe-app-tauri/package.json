@@ -11,8 +11,7 @@
     "predev": "bun scripts/pre_build.js",
     "prebuild": "bun scripts/pre_build.js",
     "tauri": "tauri",
-    "tauri:build": "xattr -cr src-tauri 2>/dev/null || true && bun tauri build",
-    "tauri:build:clean": "xattr -cr . 2>/dev/null || true && xattr -cr src-tauri/target 2>/dev/null || true && bun tauri build",
+    "tauri:build": "scripts/build_macos.sh",
     "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe-*,tesseract-*,ffmpeg*,bun*,ollama*,ui_monitor*} node_modules"
   },
   "dependencies": {
