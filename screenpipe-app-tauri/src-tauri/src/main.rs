@@ -964,8 +964,9 @@ async fn main() {
                 let _ = ShowRewindWindow::Main.show(&app.handle());
             }
 
-            // Show shortcut reminder overlay on app startup if enabled
-            if store.show_shortcut_overlay {
+            // Show shortcut reminder overlay on app startup if enabled AND onboarding is completed
+            // Don't show reminder during first-time onboarding to reduce overwhelm
+            if store.show_shortcut_overlay && onboarding_store.is_completed {
                 let shortcut = store.show_screenpipe_shortcut.clone();
                 let app_handle_reminder = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
