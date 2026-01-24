@@ -22,8 +22,8 @@ use futures::future::try_join_all;
 use crate::{
     AudioChunksResponse, AudioDevice, AudioEntry, AudioResult, AudioResultRaw, ContentType,
     DeviceType, FrameData, FrameRow, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock,
-    Order, SearchMatch, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
-    TimeSeriesChunk, UiContent, VideoMetadata,
+    Order, SearchMatch, SearchResult, SessionResult, SessionResultRaw, Speaker, TagContentType,
+    TextBounds, TextPosition, TimeSeriesChunk, UiContent, VideoMetadata,
 };
 
 pub struct DatabaseManager {
@@ -631,6 +631,12 @@ impl DatabaseManager {
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
             }
+            ContentType::Session => {
+                let session_results = self
+                    .search_sessions(limit, offset, start_time, end_time, app_name, window_name)
+                    .await?;
+                results.extend(session_results.into_iter().map(SearchResult::Session));
+            }
         }
 
         // Sort results by timestamp in descending order
@@ -639,11 +645,13 @@ impl DatabaseManager {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
                 SearchResult::UI(ui) => ui.timestamp,
+                SearchResult::Session(session) => session.start_time,
             };
             let timestamp_b = match b {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
                 SearchResult::UI(ui) => ui.timestamp,
+                SearchResult::Session(session) => session.start_time,
             };
             timestamp_b.cmp(&timestamp_a)
         });
@@ -1178,6 +1186,15 @@ impl DatabaseManager {
                     "audio_transcriptions_fts MATCH ?1"
                 }
             ),
+            ContentType::Session => {
+                r#"SELECT COUNT(*)
+                   FROM sessions
+                   WHERE (?1 IS NULL OR start_time >= ?1)
+                       AND (?2 IS NULL OR (end_time <= ?2 OR end_time IS NULL))
+                       AND (?3 IS NULL OR app_name LIKE '%' || ?3 || '%')
+                       AND (?4 IS NULL OR window_name LIKE '%' || ?4 || '%')
+                "#.to_string()
+            }
             _ => return Ok(0),
         };
 
@@ -1217,6 +1234,15 @@ impl DatabaseManager {
                     .bind(min_length.map(|l| l as i64))
                     .bind(max_length.map(|l| l as i64))
                     .bind(json_array)
+                    .fetch_one(&self.pool)
+                    .await?
+            }
+            ContentType::Session => {
+                sqlx::query_scalar(&sql)
+                    .bind(start_time)
+                    .bind(end_time)
+                    .bind(app_name)
+                    .bind(window_name)
                     .fetch_one(&self.pool)
                     .await?
             }
@@ -2371,6 +2397,305 @@ LIMIT ? OFFSET ?
                 }
             })
             .collect())
+    }
+
+    // ==================== SESSION MANAGEMENT ====================
+
+    /// Create a new session for the given app/window combination
+    pub async fn create_session(
+        &self,
+        app_name: &str,
+        window_name: &str,
+        device_name: &str,
+    ) -> Result<i64, sqlx::Error> {
+        let id = sqlx::query(
+            "INSERT INTO sessions (app_name, window_name, device_name) VALUES (?1, ?2, ?3)",
+        )
+        .bind(app_name)
+        .bind(window_name)
+        .bind(device_name)
+        .execute(&self.pool)
+        .await?
+        .last_insert_rowid();
+
+        debug!("Created session {} for app={}, window={}", id, app_name, window_name);
+        Ok(id)
+    }
+
+    /// End a session by setting its end_time and calculating duration
+    pub async fn end_session(&self, session_id: i64) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE sessions
+            SET end_time = CURRENT_TIMESTAMP,
+                duration_secs = CAST((julianday(CURRENT_TIMESTAMP) - julianday(start_time)) * 86400 AS INTEGER)
+            WHERE id = ?1 AND end_time IS NULL
+            "#,
+        )
+        .bind(session_id)
+        .execute(&self.pool)
+        .await?;
+
+        debug!("Ended session {}", session_id);
+        Ok(())
+    }
+
+    /// Get active session for an app/window combination, or create one if it doesn't exist
+    pub async fn get_or_create_session(
+        &self,
+        app_name: &str,
+        window_name: &str,
+        device_name: &str,
+    ) -> Result<i64, sqlx::Error> {
+        let existing: Option<i64> = sqlx::query_scalar(
+            r#"
+            SELECT id FROM sessions
+            WHERE app_name = ?1 AND window_name = ?2 AND end_time IS NULL
+            ORDER BY start_time DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(app_name)
+        .bind(window_name)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match existing {
+            Some(id) => Ok(id),
+            None => self.create_session(app_name, window_name, device_name).await,
+        }
+    }
+
+    /// Link a frame to a session and increment the frame count
+    pub async fn link_frame_to_session(
+        &self,
+        frame_id: i64,
+        session_id: i64,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("UPDATE frames SET session_id = ?1 WHERE id = ?2")
+            .bind(session_id)
+            .bind(frame_id)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query("UPDATE sessions SET frame_count = frame_count + 1 WHERE id = ?1")
+            .bind(session_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Link an audio transcription to a session and increment the audio count
+    pub async fn link_audio_to_session(
+        &self,
+        audio_id: i64,
+        session_id: i64,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("UPDATE audio_transcriptions SET session_id = ?1 WHERE id = ?2")
+            .bind(session_id)
+            .bind(audio_id)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query("UPDATE sessions SET audio_count = audio_count + 1 WHERE id = ?1")
+            .bind(session_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Link a UI monitoring entry to a session and increment the ui count
+    pub async fn link_ui_to_session(
+        &self,
+        ui_id: i64,
+        session_id: i64,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("UPDATE ui_monitoring SET session_id = ?1 WHERE id = ?2")
+            .bind(session_id)
+            .bind(ui_id)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query("UPDATE sessions SET ui_count = ui_count + 1 WHERE id = ?1")
+            .bind(session_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Search for sessions within a time range
+    #[allow(clippy::too_many_arguments)]
+    pub async fn search_sessions(
+        &self,
+        limit: u32,
+        offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+    ) -> Result<Vec<SessionResult>, sqlx::Error> {
+        let mut conditions = Vec::new();
+
+        if start_time.is_some() {
+            conditions.push("start_time >= ?");
+        }
+        if end_time.is_some() {
+            conditions.push("(end_time <= ? OR end_time IS NULL)");
+        }
+        if app_name.is_some() {
+            conditions.push("app_name LIKE '%' || ? || '%'");
+        }
+        if window_name.is_some() {
+            conditions.push("window_name LIKE '%' || ? || '%'");
+        }
+
+        let where_clause = if conditions.is_empty() {
+            "1=1".to_string()
+        } else {
+            conditions.join(" AND ")
+        };
+
+        let sql = format!(
+            r#"
+            SELECT
+                id,
+                app_name,
+                window_name,
+                device_name,
+                start_time,
+                end_time,
+                duration_secs,
+                frame_count,
+                audio_count,
+                ui_count,
+                metadata
+            FROM sessions
+            WHERE {}
+            ORDER BY start_time DESC
+            LIMIT ? OFFSET ?
+            "#,
+            where_clause
+        );
+
+        let mut query = sqlx::query_as::<_, SessionResultRaw>(&sql);
+
+        if let Some(start) = start_time {
+            query = query.bind(start);
+        }
+        if let Some(end) = end_time {
+            query = query.bind(end);
+        }
+        if let Some(app) = app_name {
+            query = query.bind(app);
+        }
+        if let Some(window) = window_name {
+            query = query.bind(window);
+        }
+
+        query = query.bind(limit as i64).bind(offset as i64);
+
+        let results = query.fetch_all(&self.pool).await?;
+        Ok(results.into_iter().map(SessionResult::from).collect())
+    }
+
+    /// Get a single session by ID
+    pub async fn get_session_by_id(&self, session_id: i64) -> Result<Option<SessionResult>, sqlx::Error> {
+        let result: Option<SessionResultRaw> = sqlx::query_as(
+            r#"
+            SELECT
+                id, app_name, window_name, device_name, start_time, end_time,
+                duration_secs, frame_count, audio_count, ui_count, metadata
+            FROM sessions WHERE id = ?1
+            "#,
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.map(SessionResult::from))
+    }
+
+    /// End all active sessions that have been inactive for more than the timeout duration
+    pub async fn end_stale_sessions(&self, timeout_secs: i64) -> Result<u64, sqlx::Error> {
+        let result = sqlx::query(
+            r#"
+            UPDATE sessions
+            SET end_time = CURRENT_TIMESTAMP,
+                duration_secs = CAST((julianday(CURRENT_TIMESTAMP) - julianday(start_time)) * 86400 AS INTEGER)
+            WHERE end_time IS NULL
+            AND CAST((julianday(CURRENT_TIMESTAMP) - julianday(start_time)) * 86400 AS INTEGER) > ?1
+            "#,
+        )
+        .bind(timeout_secs)
+        .execute(&self.pool)
+        .await?;
+
+        let rows_affected = result.rows_affected();
+        if rows_affected > 0 {
+            debug!("Ended {} stale sessions (timeout: {}s)", rows_affected, timeout_secs);
+        }
+        Ok(rows_affected)
+    }
+
+    /// Count total sessions matching the filter criteria
+    pub async fn count_sessions(
+        &self,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+    ) -> Result<i64, sqlx::Error> {
+        let mut conditions = Vec::new();
+
+        if start_time.is_some() {
+            conditions.push("start_time >= ?");
+        }
+        if end_time.is_some() {
+            conditions.push("(end_time <= ? OR end_time IS NULL)");
+        }
+        if app_name.is_some() {
+            conditions.push("app_name LIKE '%' || ? || '%'");
+        }
+        if window_name.is_some() {
+            conditions.push("window_name LIKE '%' || ? || '%'");
+        }
+
+        let where_clause = if conditions.is_empty() {
+            "1=1".to_string()
+        } else {
+            conditions.join(" AND ")
+        };
+
+        let sql = format!("SELECT COUNT(*) FROM sessions WHERE {}", where_clause);
+
+        let mut query = sqlx::query_scalar::<_, i64>(&sql);
+
+        if let Some(start) = start_time {
+            query = query.bind(start);
+        }
+        if let Some(end) = end_time {
+            query = query.bind(end);
+        }
+        if let Some(app) = app_name {
+            query = query.bind(app);
+        }
+        if let Some(window) = window_name {
+            query = query.bind(window);
+        }
+
+        query.fetch_one(&self.pool).await
     }
 }
 

@@ -195,6 +195,22 @@ pub enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
     UI(UiContent),
+    Session(SessionContent),
+}
+
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
+pub struct SessionContent {
+    pub id: i64,
+    pub app_name: String,
+    pub window_name: String,
+    pub device_name: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub duration_secs: Option<i64>,
+    pub frame_count: i64,
+    pub audio_count: i64,
+    pub ui_count: i64,
+    pub metadata: Option<String>,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Debug)]
@@ -413,6 +429,19 @@ pub(crate) async fn search(
                 offset_index: ui.offset_index,
                 frame_name: ui.frame_name.clone(),
                 browser_url: ui.browser_url.clone(),
+            }),
+            SearchResult::Session(session) => ContentItem::Session(SessionContent {
+                id: session.id,
+                app_name: session.app_name.clone(),
+                window_name: session.window_name.clone(),
+                device_name: session.device_name.clone(),
+                start_time: session.start_time,
+                end_time: session.end_time,
+                duration_secs: session.duration_secs,
+                frame_count: session.frame_count,
+                audio_count: session.audio_count,
+                ui_count: session.ui_count,
+                metadata: session.metadata.clone(),
             }),
         })
         .collect();
