@@ -14,10 +14,8 @@ rustflags = [
 [target.x86_64-pc-windows-msvc]
 rustflags = [
     "-A", "warnings",
-    "-A", "unexpected_cfgs",
-    "-C", "target-feature=+crt-static",
-    "-C", "link-arg=/LTCG"
+    "-A", "unexpected_cfgs"
 ]
 
 [target.x86_64-unknown-linux-gnu]
-rustflags = ["-A", "warnings", "-A", "unexpected_cfgs"]"" 
+rustflags = ["-A", "warnings", "-A", "unexpected_cfgs"]
