@@ -46,24 +46,26 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # --- THE FINAL FIX ---
-      # Linux gets its own step with the correct SSL flag
+      # CRITICAL FIX: Verify the .cargo/config.toml exists for macOS
+      - name: Verify Cargo config for M1 compatibility
+        if: matrix.os == 'macos-latest'
+        run: |
+          if [ ! -f .cargo/config.toml ]; then
+            echo "ERROR: .cargo/config.toml is missing!"
+            echo "This file is required to prevent M2-specific instructions on M1 runners."
+            exit 1
+          fi
+          echo "✓ .cargo/config.toml exists"
+          cat .cargo/config.toml
+
       - name: Verify Code Compiles (Linux)
         if: matrix.os == 'ubuntu-latest'
         env:
           OPENSSL_NO_VENDOR: "1"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
 
-      # Mac gets its own step with CMake and Rust flags forcing Apple M1 hardware
       - name: Verify Code Compiles (macOS)
         if: matrix.os == 'macos-latest'
-        env:
-          WHISPER_NO_METAL: "1"
-          WHISPER_NO_COREML: "1"
-          GGML_NO_ACCELERATE: "1"
-          CMAKE_C_FLAGS: "-mcpu=apple-m1 -DGGML_DISABLE_I8MM"
-          CMAKE_CXX_FLAGS: "-mcpu=apple-m1 -DGGML_DISABLE_I8MM"
-          RUSTFLAGS: "-C target-cpu=apple-m1"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
 
       - name: Verify Code Compiles (Windows)

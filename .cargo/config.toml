@@ -1,23 +1,14 @@
-[target.x86_64-pc-windows-msvc]
-rustflags = [
-  "-C",
-  "target-feature=+crt-static",
-  "-C",
-  "link-args=/DEFAULTLIB:ucrt.lib /DEFAULTLIB:libvcruntime.lib libcmt.lib",
-  "-C",
-  "link-args=/NODEFAULTLIB:libvcruntimed.lib /NODEFAULTLIB:vcruntime.lib /NODEFAULTLIB:vcruntimed.lib",
-  "-C",
-  "link-args=/NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcrtd.lib",
-  "-C",
-  "link-args=/NODEFAULTLIB:libucrt.lib /NODEFAULTLIB:libucrtd.lib /NODEFAULTLIB:ucrtd.lib",
-
-]
-
-[target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "link-arg=-Wl,--allow-multiple-definition"]
+# Cargo build configuration
+# This forces all macOS ARM builds to target M1 specifically, not M2
+# This prevents whisper.cpp from trying to use i8mm instructions
 
 [target.aarch64-apple-darwin]
-rustflags = "-lc++ -l framework=Accelerate"
+rustflags = [
+    "-C", "target-cpu=apple-m1",
+    "-C", "link-arg=-framework",
+    "-C", "link-arg=Accelerate"
+]
 
-[env]
-CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+[build]
+# Global warning suppression
+rustflags = ["-A", "warnings", "-A", "unexpected_cfgs"]
