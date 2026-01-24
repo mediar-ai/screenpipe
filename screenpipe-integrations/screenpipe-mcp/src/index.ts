@@ -71,6 +71,10 @@ const BASE_TOOLS: Tool[] = [
       "Returns timestamped results with app context. " +
       "Call with no parameters to get recent activity. " +
       "Use the 'screenpipe://context' resource for current time when building time-based queries.",
+    annotations: {
+      title: "Search Content",
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -133,6 +137,10 @@ const BASE_TOOLS: Tool[] = [
     description:
       "Control mouse and keyboard at the pixel level. This is a cross-platform tool that works on all operating systems. " +
       "Use this to type text, press keys, move the mouse, and click buttons.",
+    annotations: {
+      title: "Pixel Control",
+      destructiveHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -183,6 +191,10 @@ const BASE_TOOLS: Tool[] = [
       "EXAMPLES:\n" +
       "- Last 30 minutes: Calculate timestamps from current time\n" +
       "- Specific meeting: Use the meeting's start and end times in UTC",
+    annotations: {
+      title: "Export Video",
+      destructiveHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -223,6 +235,10 @@ const MACOS_TOOLS: Tool[] = [
       "- Clickable items: 'AXButton', 'AXMenuItem', 'AXMenuBarItem', 'AXImage', 'AXStaticText'\n" +
       "- Web content may use: 'AXWebArea', 'AXLink', 'AXHeading', 'AXRadioButton'\n\n" +
       "Use MacOS Accessibility Inspector app to identify the exact roles in your target application.",
+    annotations: {
+      title: "Find Elements",
+      readOnlyHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -267,6 +283,10 @@ const MACOS_TOOLS: Tool[] = [
     name: "click-element",
     description:
       "Click an element in an application using its id (MacOS only)",
+    annotations: {
+      title: "Click Element",
+      destructiveHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -299,6 +319,10 @@ const MACOS_TOOLS: Tool[] = [
   {
     name: "fill-element",
     description: "Type text into an element in an application (MacOS only)",
+    annotations: {
+      title: "Fill Element",
+      destructiveHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -335,6 +359,10 @@ const MACOS_TOOLS: Tool[] = [
   {
     name: "scroll-element",
     description: "Scroll an element in a specific direction (MacOS only)",
+    annotations: {
+      title: "Scroll Element",
+      destructiveHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -376,6 +404,10 @@ const MACOS_TOOLS: Tool[] = [
   {
     name: "open-application",
     description: "Open an application by name",
+    annotations: {
+      title: "Open Application",
+      destructiveHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
@@ -390,6 +422,10 @@ const MACOS_TOOLS: Tool[] = [
   {
     name: "open-url",
     description: "Open a URL in a browser",
+    annotations: {
+      title: "Open URL",
+      destructiveHint: true,
+    },
     inputSchema: {
       type: "object",
       properties: {
