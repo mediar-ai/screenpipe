@@ -283,7 +283,7 @@ export const getStore = async () => {
 		storePromise = (async () => {
 			const dir = await localDataDir();
 			const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`, {
-				autoSave: false,
+				autoSave: false, defaults: {},
 			});
 			const activeProfile =
 				(await profilesStore.get("activeProfile")) || "default";
