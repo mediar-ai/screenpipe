@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { listen } from "@tauri-apps/api/event";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -180,18 +181,17 @@ export function GlobalChat() {
   };
   const disabledReason = getDisabledReason();
 
-  // Listen for Cmd+L / Ctrl+L shortcut (only on timeline)
+  // Listen for Rust-level open-chat event (Cmd+L / Ctrl+L global shortcut)
   useEffect(() => {
     if (!isOnTimeline) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
-        e.preventDefault();
-        setOpen((prev) => !prev);
-      }
+    const unlisten = listen("open-chat", () => {
+      setOpen((prev) => !prev);
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOnTimeline]);
 
   // Focus input when opening

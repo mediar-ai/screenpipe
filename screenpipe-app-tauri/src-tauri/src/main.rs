@@ -315,6 +315,38 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         warn!("Failed to register search shortcut: {}", e);
     }
 
+    // Register Cmd+L (macOS) / Ctrl+L (Windows/Linux) to open AI chat when main window is visible
+    #[cfg(target_os = "macos")]
+    let chat_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyL);
+    #[cfg(not(target_os = "macos"))]
+    let chat_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyL);
+
+    if let Err(e) = global_shortcut.on_shortcut(chat_shortcut, |app, _, event| {
+        if matches!(event.state, ShortcutState::Pressed) {
+            // Only open chat if main window is visible
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(window) = app.get_webview_panel("main") {
+                    if window.is_visible() {
+                        info!("Cmd+L pressed, opening AI chat");
+                        let _ = app.emit("open-chat", ());
+                    }
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        info!("Ctrl+L pressed, opening AI chat");
+                        let _ = app.emit("open-chat", ());
+                    }
+                }
+            }
+        }
+    }) {
+        warn!("Failed to register chat shortcut: {}", e);
+    }
+
     Ok(())
 }
 
