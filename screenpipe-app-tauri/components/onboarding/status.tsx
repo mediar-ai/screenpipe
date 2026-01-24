@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Check, Monitor, Mic, AlertTriangle } from "lucide-react";
+import { Check, Monitor, Mic, AlertTriangle, MessageSquare } from "lucide-react";
 import { Button } from "../ui/button";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
 import { open as openPath } from "@tauri-apps/plugin-shell";
 import { homeDir, join } from "@tauri-apps/api/path";
+import { scheduleFirstRunNotification } from "@/lib/notifications";
 
 // Format shortcut for display (platform-aware)
 function formatShortcut(shortcut: string, isMac: boolean): string {
@@ -73,6 +74,8 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     if (settings.showScreenpipeShortcut) {
       commands.showShortcutReminder(settings.showScreenpipeShortcut);
     }
+    // Schedule 2-hour reminder notification (first run only)
+    scheduleFirstRunNotification();
     handleNextSlide();
   };
 
@@ -325,6 +328,35 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
               anytime to open screenpipe
             </p>
           </div>
+
+          {/* Timeline + AI Chat animation placeholder */}
+          <motion.div
+            className="bg-muted/30 border border-border rounded-lg p-4 max-w-sm"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <div className="flex items-center space-x-2 mb-3">
+              <MessageSquare className="w-4 h-4 text-primary" />
+              <span className="font-mono text-xs font-medium text-foreground">
+                then chat with your history
+              </span>
+            </div>
+            {/* TODO: Replace with Lottie animation showing timeline selection + AI chat */}
+            <div className="bg-background/50 rounded border border-border p-3 space-y-2">
+              <div className="flex items-center space-x-2">
+                <div className="h-2 bg-muted-foreground/20 rounded flex-1">
+                  <div className="h-2 bg-primary/50 rounded w-1/4 ml-[30%]" />
+                </div>
+                <span className="font-mono text-[10px] text-muted-foreground">select</span>
+              </div>
+              <p className="font-mono text-[10px] text-muted-foreground text-center">
+                press{" "}
+                <span className="font-semibold text-foreground">⌘ L</span>{" "}
+                to ask AI about any moment
+              </p>
+            </div>
+          </motion.div>
 
           <div className="flex items-center space-x-4 text-xs font-mono text-muted-foreground">
             <div className="flex items-center space-x-2">
