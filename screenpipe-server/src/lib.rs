@@ -3,7 +3,10 @@ pub mod analytics;
 mod auto_destruct;
 pub mod chunking;
 pub mod cli;
+pub mod commands;
+pub mod config;
 pub mod core;
+pub mod display;
 pub mod filtering;
 pub mod pipe_manager;
 mod resource_monitor;
@@ -29,3 +32,9 @@ pub use server::SCServer;
 pub use server::{api_list_monitors, MonitorInfo};
 pub use video::VideoCapture;
 pub mod embedding;
+pub use config::{RecordingConfig, ServerConfig, VideoCaptureConfig, VisionConfig};
+pub use display::{StartupDisplay, StartupDisplayConfig};
+pub use commands::{
+    handle_audio_command, handle_mcp_command, handle_migrate_command, handle_pipe_command,
+    handle_vision_command,
+};
