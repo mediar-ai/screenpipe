@@ -77,8 +77,7 @@ export const settingsStoreSchema = z.object({
   enableRealtimeVision: z.boolean(),
   fps: z.number().min(0.1, "FPS must be at least 0.1").max(60, "FPS cannot exceed 60"),
   enableFrameCache: z.boolean(),
-  enableUiMonitoring: z.boolean(),
-  
+
   // System Settings
   dataDir: z.string().min(1, "Data directory is required"),
   port: z.number().int().min(1024, "Port must be at least 1024").max(65535, "Port cannot exceed 65535"),
@@ -100,6 +99,7 @@ export const settingsStoreSchema = z.object({
   startAudioShortcut: z.string(),
   stopAudioShortcut: z.string(),
   pipeShortcuts: z.record(z.string()),
+  showShortcutOverlay: z.boolean().optional(),
   
   // Other
   isLoading: z.boolean(),

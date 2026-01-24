@@ -153,8 +153,6 @@ pub struct SettingsStore {
     pub auto_start_enabled: bool,
     #[serde(rename = "enableFrameCache")]
     pub enable_frame_cache: bool,
-    #[serde(rename = "enableUiMonitoring")]
-    pub enable_ui_monitoring: bool,
     #[serde(rename = "platform")]
     pub platform: String,
     #[serde(rename = "disabledShortcuts")]
@@ -181,6 +179,12 @@ pub struct SettingsStore {
     pub use_all_monitors: bool,
     #[serde(rename = "enableRealtimeVision")]
     pub enable_realtime_vision: bool,
+    #[serde(rename = "showShortcutOverlay", default = "default_true")]
+    pub show_shortcut_overlay: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Serialize, Deserialize, Type,Clone,Default)]
@@ -389,7 +393,6 @@ impl Default for SettingsStore {
             is_first_time_user: true,
             auto_start_enabled: true,
             enable_frame_cache: true,
-            enable_ui_monitoring: false,
             platform: "unknown".to_string(),
             disabled_shortcuts: vec![],
             user: User {
@@ -419,6 +422,7 @@ impl Default for SettingsStore {
             disable_vision: false,
             use_all_monitors: false,
             enable_realtime_vision: true,
+            show_shortcut_overlay: true,
         }
     }
 }

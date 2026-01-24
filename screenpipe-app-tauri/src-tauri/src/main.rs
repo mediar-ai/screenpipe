@@ -920,14 +920,16 @@ async fn main() {
                 let _ = ShowRewindWindow::Main.show(&app.handle());
             }
 
-            // Always show shortcut reminder overlay on app startup
-            let shortcut = store.show_screenpipe_shortcut.clone();
-            let app_handle_reminder = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                // Small delay to ensure windows are ready
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                let _ = commands::show_shortcut_reminder(app_handle_reminder, shortcut).await;
-            });
+            // Show shortcut reminder overlay on app startup if enabled
+            if store.show_shortcut_overlay {
+                let shortcut = store.show_screenpipe_shortcut.clone();
+                let app_handle_reminder = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    // Small delay to ensure windows are ready
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                    let _ = commands::show_shortcut_reminder(app_handle_reminder, shortcut).await;
+                });
+            }
 
             // Get app handle once for all initializations
             let app_handle = app.handle().clone();

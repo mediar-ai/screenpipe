@@ -129,7 +129,6 @@ let DEFAULT_SETTINGS: Settings = {
 			isFirstTimeUser: true,
 			autoStartEnabled: true,
 			enableFrameCache: true,
-			enableUiMonitoring: false,
 			platform: "unknown",
 			disabledShortcuts: [],
 			user: {
@@ -159,6 +158,7 @@ let DEFAULT_SETTINGS: Settings = {
 			disableVision: false,
 			useAllMonitors: false,
 			enableRealtimeVision: true,
+			showShortcutOverlay: true,
 		};
 
 export function createDefaultSettingsObject(): Settings {
