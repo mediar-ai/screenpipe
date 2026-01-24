@@ -192,6 +192,18 @@ export function GlobalChat() {
     };
   }, []);
 
+  // Browser-level fallback for Cmd+L when window has focus
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
+        e.preventDefault();
+        setOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // Focus input when opening
   useEffect(() => {
     if (open) {
