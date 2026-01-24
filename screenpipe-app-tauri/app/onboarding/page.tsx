@@ -6,14 +6,13 @@ import OnboardingStatus from "@/components/onboarding/status";
 import OnboardingIntro from "@/components/onboarding/introduction";
 import OnboardingSelection from "@/components/onboarding/usecases-selection";
 import OnboardingLogin from "@/components/onboarding/login";
-import OnboardingShortcuts from "@/components/onboarding/shortcuts";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { scheduleFirstRunNotification } from "@/lib/notifications";
 import posthog from "posthog-js";
 import { commands } from "@/lib/utils/tauri";
 
-type SlideKey = "login" | "intro" | "usecases" | "status" | "shortcuts";
+type SlideKey = "login" | "intro" | "usecases" | "status";
 
 // Window size configurations for each slide - consistent size to avoid resizing issues
 const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = {
@@ -21,10 +20,9 @@ const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = 
   intro: { width: 900, height: 800 },
   usecases: { width: 900, height: 800 },
   status: { width: 900, height: 800 },
-  shortcuts: { width: 900, height: 800 },
 };
 
-// 5-step flow: login → intro → usecases → status → shortcuts → done
+// 4-step flow: login → intro → usecases → status → done
 const getNextSlide = (currentSlide: SlideKey): SlideKey | null => {
   switch (currentSlide) {
     case "login":
@@ -34,8 +32,6 @@ const getNextSlide = (currentSlide: SlideKey): SlideKey | null => {
     case "usecases":
       return "status";
     case "status":
-      return "shortcuts";
-    case "shortcuts":
       return null; // Complete onboarding
     default:
       return null;
@@ -52,8 +48,6 @@ const getPrevSlide = (currentSlide: SlideKey): SlideKey | null => {
       return "intro";
     case "status":
       return "usecases";
-    case "shortcuts":
-      return "status";
     default:
       return null;
   }
@@ -117,7 +111,7 @@ export default function OnboardingPage() {
       // Restore saved step if exists (e.g., after app restart during permissions)
       if (onboardingData.currentStep && !onboardingData.isCompleted) {
         const savedStep = onboardingData.currentStep as SlideKey;
-        if (["login", "intro", "usecases", "status", "shortcuts"].includes(savedStep)) {
+        if (["login", "intro", "usecases", "status"].includes(savedStep)) {
           setCurrentSlide(savedStep);
           console.log(`Restored onboarding to step: ${savedStep}`);
         }
@@ -314,14 +308,6 @@ export default function OnboardingPage() {
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
-            />
-          )}
-          {currentSlide === "shortcuts" && (
-            <OnboardingShortcuts
-              className={`transition-opacity duration-300 w-full
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handlePrevSlide={handlePrevSlide}
-              handleNextSlide={handleEnd}
             />
           )}
         </div>

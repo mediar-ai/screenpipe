@@ -209,9 +209,10 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   }, [setupState]);
 
   // Show "continue anyway" button after 5 seconds on permission screen
+  const continueAnywayTimerStarted = useRef(false);
   useEffect(() => {
-    if (setupState === "needs-permissions") {
-      setShowContinueAnyway(false);
+    if (setupState === "needs-permissions" && !continueAnywayTimerStarted.current) {
+      continueAnywayTimerStarted.current = true;
       const timer = setTimeout(() => {
         setShowContinueAnyway(true);
       }, 5000);
