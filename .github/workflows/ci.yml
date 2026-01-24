@@ -54,15 +54,16 @@ jobs:
           OPENSSL_NO_VENDOR: "1"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
 
-      # Mac gets its own step with the Apple M1 hardware flags
+      # Mac gets its own step with CMake and Rust flags forcing Apple M1 hardware
       - name: Verify Code Compiles (macOS)
         if: matrix.os == 'macos-latest'
         env:
           WHISPER_NO_METAL: "1"
           WHISPER_NO_COREML: "1"
           GGML_NO_ACCELERATE: "1"
-          CFLAGS: "-DGGML_DISABLE_I8MM -mcpu=apple-m1"
-          CXXFLAGS: "-DGGML_DISABLE_I8MM -mcpu=apple-m1"
+          CMAKE_C_FLAGS: "-mcpu=apple-m1 -DGGML_DISABLE_I8MM"
+          CMAKE_CXX_FLAGS: "-mcpu=apple-m1 -DGGML_DISABLE_I8MM"
+          RUSTFLAGS: "-C target-cpu=apple-m1"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
 
       - name: Verify Code Compiles (Windows)
