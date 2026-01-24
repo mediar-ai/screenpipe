@@ -86,12 +86,12 @@ jobs:
         echo "Build initiated" > ./screenpipe-app-tauri/e2e_output.log
 
     # --- THE FINAL FIX ---
-    # Builds the actual backend binary and places it where Tauri expects the sidecar
+    # Builds the actual backend binary using --bin instead of --package
     - name: Build and Rename Screenpipe Backend (Sidecar)
       working-directory: ./
       shell: pwsh
       run: |
-        cargo build --release --package screenpipe
+        cargo build --release --bin screenpipe
         New-Item -ItemType Directory -Force -Path "./screenpipe-app-tauri/src-tauri/bin"
         Copy-Item "./target/release/screenpipe.exe" "./screenpipe-app-tauri/src-tauri/bin/screenpipe-x86_64-pc-windows-msvc.exe"
         # Also copy to root as a fallback depending on how build.rs is configured
