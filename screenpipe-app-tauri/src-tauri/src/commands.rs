@@ -443,10 +443,14 @@ pub async fn show_shortcut_reminder(
                     // Enable hover/mouse events without requiring focus
                     unsafe {
                         use std::ops::Deref;
+                        use tauri_nspanel::cocoa::base::YES;
                         let panel_ptr = panel.deref() as *const _ as *mut objc::runtime::Object;
-                        let _: () = msg_send![panel_ptr, setFloatingPanel: true];
-                        let _: () = msg_send![panel_ptr, setAcceptsMouseMovedEvents: true];
-                        let _: () = msg_send![panel_ptr, setBecomesKeyOnlyIfNeeded: true];
+                        let _: () = msg_send![panel_ptr, setFloatingPanel: YES];
+                        let _: () = msg_send![panel_ptr, setAcceptsMouseMovedEvents: YES];
+                        let _: () = msg_send![panel_ptr, setBecomesKeyOnlyIfNeeded: YES];
+                        // Allow first click to work without activating
+                        let content_view: *mut objc::runtime::Object = msg_send![panel_ptr, contentView];
+                        let _: () = msg_send![content_view, setAcceptsFirstMouse: YES];
                     }
                     // Order front regardless to show above fullscreen
                     panel.order_front_regardless();
