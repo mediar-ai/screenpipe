@@ -1,7 +1,8 @@
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
-import React, { FC, useState, useRef } from "react";
+import React, { FC, useState, useRef, useCallback } from "react";
 import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
 import { TextOverlay } from "@/components/text-overlay";
+import { ExternalLink } from "lucide-react";
 
 interface CurrentFrameTimelineProps {
 	currentFrame: StreamTimeSeriesResponse;
@@ -39,6 +40,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	const frameId = currentFrame?.devices?.[0]?.frame_id;
+	const browserUrl = currentFrame?.devices?.[0]?.metadata?.browser_url;
 	// Simple image URL without cache busting
 	const imageUrl = `http://localhost:3030/frames/${frameId}`;
 
@@ -46,6 +48,14 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	const { textPositions } = useFrameOcrData(
 		frameId ? parseInt(frameId, 10) : null
 	);
+
+	const handleOpenInBrowser = useCallback(() => {
+		if (browserUrl) {
+			window.open(browserUrl, "_blank", "noopener,noreferrer");
+		}
+	}, [browserUrl]);
+
+	const hasValidUrl = browserUrl && browserUrl.length > 0 && browserUrl !== "null";
 
 	// Reset loading state when frame changes, but be smarter about it
 	React.useEffect(() => {
@@ -150,8 +160,20 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 						originalHeight={naturalDimensions.height}
 						displayedWidth={displayedDimensions.width}
 						displayedHeight={displayedDimensions.height}
+						clickableUrls={true}
 					/>
 				</div>
+			)}
+			{/* Open in Browser button for captured browser URLs */}
+			{hasValidUrl && !isLoading && !hasError && (
+				<button
+					onClick={handleOpenInBrowser}
+					className="absolute top-4 right-4 z-10 flex items-center gap-1.5 px-3 py-2 bg-black/70 hover:bg-black/90 text-white text-sm font-medium rounded-lg transition-colors backdrop-blur-sm"
+					title={`Open ${browserUrl}`}
+				>
+					<ExternalLink className="h-4 w-4" />
+					Open in Browser
+				</button>
 			)}
 			{hasError && !isLoading && (
 				<div className="absolute inset-0 flex items-center justify-center bg-gray-900/90 z-10">

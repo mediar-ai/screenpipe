@@ -62,6 +62,7 @@ pub struct FrameMetadata {
     pub window_name: String,
     pub transcription: String,
     pub ocr_text: String,
+    pub browser_url: Option<String>,
 }
 
 type GetFrameResponse =
@@ -243,6 +244,7 @@ impl FrameDiskCache {
                     .collect::<Vec<_>>()
                     .join(" "),
                 ocr_text: device_data.text.clone(),
+                browser_url: device_data.browser_url.clone(),
             },
             frame_size: frame_data.len() as u64,
             compression: CompressionType::Jpeg {
@@ -791,6 +793,7 @@ async fn extract_frame(
                             .collect::<Vec<_>>()
                             .join(" "),
                         ocr_text: device_data.text.clone(),
+                        browser_url: device_data.browser_url.clone(),
                     },
                     audio_entries: chunk
                         .audio_entries

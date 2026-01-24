@@ -1518,7 +1518,8 @@ impl DatabaseManager {
             COALESCE(f.app_name, ot.app_name) as app_name,
             COALESCE(f.window_name, ot.window_name) as window_name,
             vc.device_name as screen_device,
-            vc.file_path as video_path
+            vc.file_path as video_path,
+            f.browser_url
         FROM frames f
         JOIN video_chunks vc ON f.video_chunk_id = vc.id
         LEFT JOIN ocr_text ot ON f.id = ot.frame_id
@@ -1581,6 +1582,7 @@ impl DatabaseManager {
                     window_name: row.get("window_name"),
                     device_name: row.get("screen_device"),
                     video_file_path: row.get("video_path"),
+                    browser_url: row.try_get("browser_url").ok(),
                 });
             }
         }

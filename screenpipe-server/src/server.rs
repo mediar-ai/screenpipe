@@ -1716,6 +1716,7 @@ pub struct DeviceMetadata {
     pub app_name: String,
     pub window_name: String,
     pub ocr_text: String,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1745,6 +1746,7 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
                             app_name: device_frame.metadata.app_name,
                             window_name: device_frame.metadata.window_name,
                             ocr_text: device_frame.metadata.ocr_text,
+                            browser_url: device_frame.metadata.browser_url,
                         },
                         audio: device_frame
                             .audio_entries
@@ -3106,6 +3108,7 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
                         .collect::<Vec<_>>()
                         .join(" "),
                     ocr_text: device_data.text,
+                    browser_url: device_data.browser_url,
                 },
                 audio_entries: chunk
                     .audio_entries
