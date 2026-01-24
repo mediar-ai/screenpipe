@@ -159,8 +159,18 @@ export class GeminiProvider implements AIProvider {
 				}));
 		} catch (error) {
 			console.error('Failed to fetch Gemini models:', error);
-			// Updated fallback to only latest models
+			// Updated fallback to latest models (Jan 2025)
 			return [
+				{
+					id: 'gemini-2.0-flash',
+					name: 'Gemini 2.0 Flash',
+					provider: 'google',
+				},
+				{
+					id: 'gemini-2.0-flash-thinking-exp',
+					name: 'Gemini 2.0 Flash Thinking',
+					provider: 'google',
+				},
 				{
 					id: 'gemini-1.5-pro',
 					name: 'Gemini 1.5 Pro',

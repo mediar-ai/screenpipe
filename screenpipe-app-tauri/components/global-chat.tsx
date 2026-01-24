@@ -216,6 +216,13 @@ export function GlobalChat() {
     }
   }, [open]);
 
+  // Close chat when leaving timeline
+  useEffect(() => {
+    if (!isOnTimeline && open) {
+      setOpen(false);
+    }
+  }, [isOnTimeline, open]);
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

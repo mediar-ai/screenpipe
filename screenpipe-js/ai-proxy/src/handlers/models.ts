@@ -13,12 +13,14 @@ export async function handleModelListing(env: Env): Promise<Response> {
       anthropic: createProvider('claude-3-5-sonnet-latest', env),
       openai: createProvider('gpt-4', env),
       gemini: createProvider('gemini-1.5-pro', env),
+      vertex: createProvider('claude-3-5-sonnet-v2', env),
     };
 
     const results = await Promise.allSettled([
       providers.anthropic.listModels(),
       providers.openai.listModels(),
       providers.gemini.listModels(),
+      providers.vertex.listModels(),
     ]);
 
     const models = results
