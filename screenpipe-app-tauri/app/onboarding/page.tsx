@@ -51,12 +51,18 @@ const getPrevSlide = (currentSlide: SlideKey): SlideKey | null => {
   }
 };
 
+// Track each step as a distinct event for clean funnel analysis
 const trackOnboardingStep = (
   step: SlideKey | "completed",
   properties?: Record<string, any>
 ) => {
-  posthog.capture("onboarding_step", {
-    step,
+  // Fire specific event for funnel tracking
+  const eventName = step === "completed"
+    ? "onboarding_completed"
+    : `onboarding_${step}_viewed`;
+
+  posthog.capture(eventName, {
+    step, // Keep for backwards compatibility
     ...properties,
   });
 };
