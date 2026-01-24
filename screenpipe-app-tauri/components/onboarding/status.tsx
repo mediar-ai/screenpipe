@@ -166,19 +166,14 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       // Don't check if already starting or recording
       if (hasStartedRef.current) return;
 
+      // Non-macOS: skip permission check
       if (!isMacOS) {
         setSetupState("ready");
         return;
       }
 
-      // In dev mode, macOS permission APIs are unreliable because the bundle ID/code signature
-      // changes between builds. Skip permission check and proceed directly.
-      if (settings.devMode) {
-        console.log("Dev mode: skipping permission check (unreliable with unsigned builds)");
-        setSetupState("ready");
-        return;
-      }
 
+      // PRODUCTION: Do normal permission check
       try {
         const perms = await commands.doPermissionsCheck(true);
         setPermissions(perms);
@@ -202,7 +197,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     checkPermissions();
     const interval = setInterval(checkPermissions, 2000);
     return () => clearInterval(interval);
-  }, [isMacOS, settings.devMode]);
+  }, [isMacOS]);
 
   // Auto-start when ready (only once)
   useEffect(() => {
@@ -354,6 +349,32 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           <p className="font-mono text-xs text-muted-foreground text-center">
             toggle permissions in system settings, then return here
           </p>
+
+          <div className="flex flex-col items-center space-y-3 mt-4">
+            <button
+              onClick={() => {
+                posthog.capture("onboarding_permission_help_clicked");
+              }}
+              className="font-mono text-xs text-muted-foreground hover:text-foreground underline"
+              title="If permissions don't work: Open System Settings → Privacy & Security → Screen Recording, select screenpipe, click minus (-) to remove it, then add it again with plus (+)"
+            >
+              permission not working?
+            </button>
+            <p className="font-mono text-[10px] text-muted-foreground/70 text-center max-w-xs">
+              try removing screenpipe from the permission list (click −) and adding it again (click +)
+            </p>
+
+            <button
+              onClick={() => {
+                posthog.capture("onboarding_permission_skipped");
+                hasStartedRef.current = true;
+                setSetupState("ready");
+              }}
+              className="font-mono text-xs text-muted-foreground hover:text-foreground"
+            >
+              continue anyway →
+            </button>
+          </div>
         </motion.div>
       )}
 
