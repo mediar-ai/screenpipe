@@ -8,58 +8,78 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, Bot, User, X, Sparkles, LogIn } from "lucide-react";
+import { Loader2, Send, Square, Bot, User, X, Sparkles, Settings } from "lucide-react";
 import { MemoizedReactMarkdown } from "@/components/markdown";
 import { VideoComponent } from "@/components/rewind/video";
+import { AIPresetsSelector } from "@/components/rewind/ai-presets-selector";
+import { AIPreset } from "@/lib/utils/tauri";
 import remarkGfm from "remark-gfm";
+import OpenAI from "openai";
+import { ChatCompletionTool } from "openai/resources/chat/completions";
 
 const SCREENPIPE_API = "http://localhost:3030";
-const VERTEX_PROXY = "https://ai-proxy.i-f9f.workers.dev";
 
-// Tool definitions for Claude
-const TOOLS = [
+// Tool definitions for OpenAI format
+const TOOLS: ChatCompletionTool[] = [
   {
-    name: "search_content",
-    description:
-      "Search screenpipe's recorded content: screen text (OCR), audio transcriptions, and UI elements. " +
-      "Returns timestamped results with app context. " +
-      "Call with no parameters to get recent activity.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        q: {
-          type: "string",
-          description: "Search query. Optional - omit to return all recent content.",
-        },
-        content_type: {
-          type: "string",
-          enum: ["all", "ocr", "audio", "ui"],
-          description: "Content type filter. Default: 'all'",
-        },
-        limit: {
-          type: "integer",
-          description: "Max results. Default: 20",
-        },
-        start_time: {
-          type: "string",
-          description: "ISO 8601 UTC start time (e.g., 2024-01-15T10:00:00Z)",
-        },
-        end_time: {
-          type: "string",
-          description: "ISO 8601 UTC end time (e.g., 2024-01-15T18:00:00Z)",
-        },
-        app_name: {
-          type: "string",
-          description: "Filter by app (e.g., 'Google Chrome', 'Slack', 'zoom.us')",
-        },
-        window_name: {
-          type: "string",
-          description: "Filter by window title",
+    type: "function",
+    function: {
+      name: "search_content",
+      description:
+        "Search screenpipe's recorded content: screen text (OCR), audio transcriptions, and UI elements. " +
+        "Returns timestamped results with app context. " +
+        "Call with no parameters to get recent activity.",
+      parameters: {
+        type: "object",
+        properties: {
+          q: {
+            type: "string",
+            description: "Search query. Optional - omit to return all recent content.",
+          },
+          content_type: {
+            type: "string",
+            enum: ["all", "ocr", "audio", "ui"],
+            description: "Content type filter. Default: 'all'",
+          },
+          limit: {
+            type: "integer",
+            description: "Max results. Default: 20",
+          },
+          start_time: {
+            type: "string",
+            description: "ISO 8601 UTC start time (e.g., 2024-01-15T10:00:00Z)",
+          },
+          end_time: {
+            type: "string",
+            description: "ISO 8601 UTC end time (e.g., 2024-01-15T18:00:00Z)",
+          },
+          app_name: {
+            type: "string",
+            description: "Filter by app (e.g., 'Google Chrome', 'Slack', 'zoom.us')",
+          },
+          window_name: {
+            type: "string",
+            description: "Filter by window title",
+          },
         },
       },
     },
   },
 ];
+
+const SYSTEM_PROMPT = `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions.
+
+When users ask about what they did, saw, or heard, use the search_content tool to find relevant information. Be concise in your responses and cite timestamps when relevant.
+
+Rules for showing videos/audio:
+- You can show videos to the user by putting .mp4 file paths in an inline code block like this: \`/path/to/video.mp4\`
+- Use the exact, absolute file_path from search results
+- Do NOT use markdown links for videos (e.g. [video](path.mp4) won't work)
+- Do NOT use multi-line code blocks for videos
+- For audio, use the audio_file_path the same way: \`/path/to/audio.mp3\`
+- Always show relevant video/audio when answering questions about what the user saw or heard
+
+Current time: ${new Date().toISOString()}`;
 
 interface SearchResult {
   type: "OCR" | "Audio" | "UI";
@@ -84,15 +104,27 @@ interface Message {
 export function GlobalChat() {
   const [open, setOpen] = useState(false);
   const { settings } = useSettings();
-  const user = settings.user;
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [activePreset, setActivePreset] = useState<AIPreset | undefined>();
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize active preset from settings
+  useEffect(() => {
+    const defaultPreset = settings.aiPresets?.find((p) => p.defaultPreset);
+    setActivePreset(defaultPreset || settings.aiPresets?.[0]);
+  }, [settings.aiPresets]);
+
+  // Check if we have valid AI setup
+  const hasPresets = settings.aiPresets && settings.aiPresets.length > 0;
+  const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
+  const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
+  const canChat = hasPresets && hasValidModel && !needsLogin;
 
   // Listen for Cmd+L / Ctrl+L shortcut
   useEffect(() => {
@@ -169,25 +201,30 @@ export function GlobalChat() {
     }
   }
 
-  const SYSTEM_PROMPT = `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions.
+  // Get OpenAI client for current preset
+  function getOpenAIClient(): OpenAI | null {
+    if (!activePreset) return null;
 
-When users ask about what they did, saw, or heard, use the search_content tool to find relevant information. Be concise in your responses and cite timestamps when relevant.
+    const apiKey =
+      activePreset.provider === "screenpipe-cloud"
+        ? settings.user?.token || ""
+        : "apiKey" in activePreset
+          ? (activePreset.apiKey as string) || ""
+          : "";
 
-Rules for showing videos/audio:
-- You can show videos to the user by putting .mp4 file paths in an inline code block like this: \`/path/to/video.mp4\`
-- Use the exact, absolute file_path from search results
-- Do NOT use markdown links for videos (e.g. [video](path.mp4) won't work)
-- Do NOT use multi-line code blocks for videos (e.g. \`\`\`path.mp4\`\`\` won't work)
-- For audio, use the audio_file_path the same way: \`/path/to/audio.mp3\`
-- Always show relevant video/audio when answering questions about what the user saw or heard
+    return new OpenAI({
+      apiKey,
+      baseURL: activePreset.url,
+      dangerouslyAllowBrowser: true,
+    });
+  }
 
-Current time: ${new Date().toISOString()}`;
-
-  // Send message to Claude via Vertex proxy with streaming
+  // Send message using OpenAI SDK with streaming
   async function sendMessage(userMessage: string) {
-    if (!user?.token) {
-      return; // UI already handles this case
-    }
+    if (!canChat || !activePreset) return;
+
+    const openai = getOpenAIClient();
+    if (!openai) return;
 
     const newUserMessage: Message = {
       id: Date.now().toString(),
@@ -204,12 +241,14 @@ Current time: ${new Date().toISOString()}`;
     abortControllerRef.current = new AbortController();
 
     try {
-      const conversationMessages = [
+      // Build conversation history for OpenAI format
+      const conversationMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        { role: "system", content: SYSTEM_PROMPT },
         ...messages.map((m) => ({
-          role: m.role,
+          role: m.role as "user" | "assistant",
           content: m.content,
         })),
-        { role: "user" as const, content: userMessage },
+        { role: "user", content: userMessage },
       ];
 
       // Add placeholder for streaming response
@@ -218,196 +257,128 @@ Current time: ${new Date().toISOString()}`;
         { id: assistantMessageId, role: "assistant", content: "" },
       ]);
 
-      let response = await fetch(`${VERTEX_PROXY}/v1/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4@20250514",
-          max_tokens: 4096,
-          stream: true,
-          system: SYSTEM_PROMPT,
+      let accumulatedText = "";
+      let toolCalls: any[] = [];
+
+      // First request with streaming
+      const stream = await openai.chat.completions.create(
+        {
+          model: activePreset.model || "gpt-4",
           messages: conversationMessages,
           tools: TOOLS,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
+          stream: true,
+        },
+        { signal: abortControllerRef.current.signal }
+      );
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`API error: ${error}`);
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+
+        // Handle text content
+        if (delta?.content) {
+          accumulatedText += delta.content;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: accumulatedText }
+                : m
+            )
+          );
+        }
+
+        // Handle tool calls
+        if (delta?.tool_calls) {
+          for (const toolCall of delta.tool_calls) {
+            const index = toolCall.index;
+            if (!toolCalls[index]) {
+              toolCalls[index] = {
+                id: toolCall.id || "",
+                function: { name: "", arguments: "" },
+              };
+            }
+            if (toolCall.id) toolCalls[index].id = toolCall.id;
+            if (toolCall.function?.name) toolCalls[index].function.name = toolCall.function.name;
+            if (toolCall.function?.arguments) toolCalls[index].function.arguments += toolCall.function.arguments;
+          }
+        }
       }
 
-      // Handle streaming response
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No response body");
+      // Handle tool calls if any
+      if (toolCalls.length > 0) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId
+              ? { ...m, content: accumulatedText + "\n\n*Searching your data...*" }
+              : m
+          )
+        );
 
-      const decoder = new TextDecoder();
-      let accumulatedText = "";
-      let toolUseBlocks: any[] = [];
-      let currentToolUse: any = null;
+        // Execute tools
+        const toolResults: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        // Add assistant message with tool calls
+        toolResults.push({
+          role: "assistant",
+          content: accumulatedText || null,
+          tool_calls: toolCalls.map((tc) => ({
+            id: tc.id,
+            type: "function" as const,
+            function: {
+              name: tc.function.name,
+              arguments: tc.function.arguments,
+            },
+          })),
+        });
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") continue;
-
+        // Execute each tool and add results
+        for (const toolCall of toolCalls) {
+          if (toolCall.function.name === "search_content") {
             try {
-              const event = JSON.parse(data);
-
-              if (event.type === "content_block_start") {
-                if (event.content_block?.type === "tool_use") {
-                  currentToolUse = {
-                    id: event.content_block.id,
-                    name: event.content_block.name,
-                    input: "",
-                  };
-                }
-              } else if (event.type === "content_block_delta") {
-                if (event.delta?.type === "text_delta") {
-                  accumulatedText += event.delta.text;
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantMessageId
-                        ? { ...m, content: accumulatedText }
-                        : m
-                    )
-                  );
-                } else if (event.delta?.type === "input_json_delta" && currentToolUse) {
-                  currentToolUse.input += event.delta.partial_json;
-                }
-              } else if (event.type === "content_block_stop" && currentToolUse) {
-                try {
-                  currentToolUse.input = JSON.parse(currentToolUse.input);
-                } catch {
-                  currentToolUse.input = {};
-                }
-                toolUseBlocks.push(currentToolUse);
-                currentToolUse = null;
-              } else if (event.type === "message_stop") {
-                // Check if we need to handle tool use
-                if (toolUseBlocks.length > 0) {
-                  setIsLoading(true);
-
-                  // Update message to show we're searching
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantMessageId
-                        ? { ...m, content: accumulatedText + "\n\n*Searching your data...*" }
-                        : m
-                    )
-                  );
-
-                  // Execute tools
-                  const toolResults = [];
-                  for (const toolUse of toolUseBlocks) {
-                    if (toolUse.name === "search_content") {
-                      const searchResult = await executeSearchTool(toolUse.input);
-                      toolResults.push({
-                        type: "tool_result",
-                        tool_use_id: toolUse.id,
-                        content: searchResult,
-                      });
-                    }
-                  }
-
-                  // Build content array for assistant message
-                  const assistantContent: any[] = [];
-                  if (accumulatedText) {
-                    assistantContent.push({ type: "text", text: accumulatedText });
-                  }
-                  for (const tool of toolUseBlocks) {
-                    assistantContent.push({
-                      type: "tool_use",
-                      id: tool.id,
-                      name: tool.name,
-                      input: tool.input,
-                    });
-                  }
-
-                  // Continue conversation with tool results
-                  const continueResponse = await fetch(`${VERTEX_PROXY}/v1/messages`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      Authorization: `Bearer ${user.token}`,
-                    },
-                    body: JSON.stringify({
-                      model: "claude-sonnet-4@20250514",
-                      max_tokens: 4096,
-                      stream: true,
-                      system: SYSTEM_PROMPT,
-                      messages: [
-                        ...conversationMessages,
-                        { role: "assistant", content: assistantContent },
-                        { role: "user", content: toolResults },
-                      ],
-                      tools: TOOLS,
-                    }),
-                    signal: abortControllerRef.current?.signal,
-                  });
-
-                  if (!continueResponse.ok) {
-                    throw new Error(`API error: ${await continueResponse.text()}`);
-                  }
-
-                  // Stream the continuation
-                  const continueReader = continueResponse.body?.getReader();
-                  if (continueReader) {
-                    accumulatedText = ""; // Reset for new response
-                    toolUseBlocks = [];
-
-                    while (true) {
-                      const { done: contDone, value: contValue } = await continueReader.read();
-                      if (contDone) break;
-
-                      const contChunk = decoder.decode(contValue, { stream: true });
-                      const contLines = contChunk.split("\n");
-
-                      for (const contLine of contLines) {
-                        if (contLine.startsWith("data: ")) {
-                          const contData = contLine.slice(6);
-                          if (contData === "[DONE]") continue;
-
-                          try {
-                            const contEvent = JSON.parse(contData);
-                            if (contEvent.type === "content_block_delta" && contEvent.delta?.type === "text_delta") {
-                              accumulatedText += contEvent.delta.text;
-                              setMessages((prev) =>
-                                prev.map((m) =>
-                                  m.id === assistantMessageId
-                                    ? { ...m, content: accumulatedText }
-                                    : m
-                                )
-                              );
-                            }
-                          } catch {
-                            // Skip invalid JSON
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            } catch {
-              // Skip invalid JSON lines
+              const args = JSON.parse(toolCall.function.arguments || "{}");
+              const result = await executeSearchTool(args);
+              toolResults.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: result,
+              });
+            } catch (e) {
+              toolResults.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: `Error parsing tool arguments: ${e}`,
+              });
             }
+          }
+        }
+
+        // Continue conversation with tool results
+        accumulatedText = "";
+        const continueStream = await openai.chat.completions.create(
+          {
+            model: activePreset.model || "gpt-4",
+            messages: [...conversationMessages, ...toolResults],
+            stream: true,
+          },
+          { signal: abortControllerRef.current?.signal }
+        );
+
+        for await (const chunk of continueStream) {
+          const content = chunk.choices[0]?.delta?.content;
+          if (content) {
+            accumulatedText += content;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMessageId
+                  ? { ...m, content: accumulatedText }
+                  : m
+              )
+            );
           }
         }
       }
 
       // Final update if no content was streamed
-      if (!accumulatedText) {
+      if (!accumulatedText && toolCalls.length === 0) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMessageId
@@ -422,7 +393,6 @@ Current time: ${new Date().toISOString()}`;
       }
       console.error("Chat error:", error);
       setMessages((prev) => {
-        // Remove empty assistant message and add error
         const filtered = prev.filter((m) => m.id !== assistantMessageId || m.content);
         return [
           ...filtered,
@@ -481,31 +451,44 @@ Current time: ${new Date().toISOString()}`;
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && !user?.token && (
+            {messages.length === 0 && !hasPresets && (
               <div className="flex flex-col items-center justify-center py-12 space-y-4">
                 <div className="p-4 rounded-full bg-muted">
-                  <LogIn className="h-8 w-8 text-muted-foreground" />
+                  <Settings className="h-8 w-8 text-muted-foreground" />
                 </div>
                 <div className="text-center space-y-2">
-                  <h3 className="font-semibold">Login Required</h3>
+                  <h3 className="font-semibold">No AI Presets Configured</h3>
                   <p className="text-sm text-muted-foreground max-w-sm">
-                    Sign in to your Screenpipe account to use AI chat powered by Claude.
+                    Configure an AI provider (OpenAI, Ollama, Screenpipe Cloud, or custom) to use the chat.
                   </p>
                 </div>
                 <Button
                   variant="outline"
                   onClick={() => {
                     setOpen(false);
-                    window.location.href = "/settings?section=account";
+                    window.location.href = "/settings";
                   }}
                   className="gap-2"
                 >
-                  <LogIn className="h-4 w-4" />
-                  Go to Login
+                  <Settings className="h-4 w-4" />
+                  Go to Settings
                 </Button>
               </div>
             )}
-            {messages.length === 0 && user?.token && (
+            {messages.length === 0 && hasPresets && needsLogin && (
+              <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                <div className="p-4 rounded-full bg-amber-500/10">
+                  <Sparkles className="h-8 w-8 text-amber-500" />
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="font-semibold">Login Required</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm">
+                    Sign in to use Screenpipe Cloud, or select a different AI provider below.
+                  </p>
+                </div>
+              </div>
+            )}
+            {messages.length === 0 && canChat && (
               <div className="text-center text-muted-foreground py-12">
                 <Sparkles className="h-8 w-8 mx-auto mb-3 opacity-50" />
                 <p className="text-sm">Ask me anything about your screen activity!</p>
@@ -586,40 +569,51 @@ Current time: ${new Date().toISOString()}`;
                 </div>
               </div>
             ))}
-            {isLoading && (
+            {isLoading && !messages.find(m => m.content.includes("Searching")) && (
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">Searching your data...</span>
+                <span className="text-sm">Thinking...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <form onSubmit={handleSubmit} className="p-3 border-t">
-            <div className="flex gap-2">
-              <Input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={user?.token ? "Ask about your screen activity..." : "Sign in to use AI chat"}
-                disabled={isLoading || !user?.token}
-                className="flex-1"
-              />
-              <Button
-                type={isStreaming ? "button" : "submit"}
-                size="icon"
-                disabled={(!input.trim() && !isStreaming) || !user?.token}
-                onClick={isStreaming ? handleStop : undefined}
-              >
-                {isStreaming ? (
-                  <Square className="h-4 w-4" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
+          {/* AI Preset Selector & Input */}
+          <div className="border-t">
+            <div className="p-2 border-b">
+              <AIPresetsSelector onPresetChange={setActivePreset} />
             </div>
-          </form>
+            <form onSubmit={handleSubmit} className="p-3">
+              <div className="flex gap-2">
+                <Input
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={
+                    !hasPresets
+                      ? "Configure AI preset first..."
+                      : needsLogin
+                        ? "Login required for Screenpipe Cloud"
+                        : "Ask about your screen activity..."
+                  }
+                  disabled={isLoading || !canChat}
+                  className="flex-1"
+                />
+                <Button
+                  type={isStreaming ? "button" : "submit"}
+                  size="icon"
+                  disabled={(!input.trim() && !isStreaming) || !canChat}
+                  onClick={isStreaming ? handleStop : undefined}
+                >
+                  {isStreaming ? (
+                    <Square className="h-4 w-4" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
         </CustomDialogContent>
       </Dialog>
     </>
