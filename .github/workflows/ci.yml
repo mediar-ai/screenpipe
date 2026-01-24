@@ -34,7 +34,6 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          # FIX: Added 'perl' to the apt-get list to satisfy the openssl-sys build requirement
           sudo apt-get install -y libasound2-dev pkg-config libxdo-dev libssl-dev libxtst-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libdbus-1-dev perl
 
       - name: Install dependencies (macOS)
@@ -47,13 +46,18 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # --- THE FIX ---
-      - name: Verify Code Compiles (Linux & Mac)
-        if: matrix.os != 'windows-latest'
+      # --- THE FINAL FIX ---
+      # Linux gets its own step with the correct SSL flag
+      - name: Verify Code Compiles (Linux)
+        if: matrix.os == 'ubuntu-latest'
         env:
-          # FIX (Linux): Force Rust to use the Linux system SSL instead of building from scratch
           OPENSSL_NO_VENDOR: "1"
-          # FIX (Mac): Disable hardware acceleration during the CI check to bypass the 'i8mm' crash
+        run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
+
+      # Mac gets its own step with the Apple M1 hardware flags
+      - name: Verify Code Compiles (macOS)
+        if: matrix.os == 'macos-latest'
+        env:
           WHISPER_NO_METAL: "1"
           WHISPER_NO_COREML: "1"
           GGML_NO_ACCELERATE: "1"
