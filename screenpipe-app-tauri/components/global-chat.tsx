@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -128,6 +129,10 @@ interface Message {
 export function GlobalChat() {
   const [open, setOpen] = useState(false);
   const { settings } = useSettings();
+  const pathname = usePathname();
+
+  // Only show on timeline page (root path), hide on settings and other pages
+  const isOnTimeline = pathname === "/" || pathname === "/timeline";
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -175,8 +180,10 @@ export function GlobalChat() {
   };
   const disabledReason = getDisabledReason();
 
-  // Listen for Cmd+L / Ctrl+L shortcut
+  // Listen for Cmd+L / Ctrl+L shortcut (only on timeline)
   useEffect(() => {
+    if (!isOnTimeline) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "l") {
         e.preventDefault();
@@ -185,7 +192,7 @@ export function GlobalChat() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [isOnTimeline]);
 
   // Focus input when opening
   useEffect(() => {
@@ -530,6 +537,9 @@ export function GlobalChat() {
       setIsStreaming(false);
     }
   };
+
+  // Don't render on non-timeline pages (e.g., settings)
+  if (!isOnTimeline) return null;
 
   return (
     <>
