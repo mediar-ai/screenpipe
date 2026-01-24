@@ -264,7 +264,6 @@ export interface Settings {
   aiProviderType: AIProviderType;
   embeddedLLM: EmbeddedLLMConfig;
   enableFrameCache: boolean;
-  enableUiMonitoring: boolean;
   aiMaxContextChars: number;
   analyticsEnabled: boolean;
   user: User;

@@ -150,10 +150,6 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       args.push("--enable-frame-cache");
     }
 
-    if (settings.enableUiMonitoring) {
-      args.push("--enable-ui-monitoring");
-    }
-
     if (settings.enableRealtimeAudioTranscription) {
       args.push("--enable-realtime-audio-transcription");
     }

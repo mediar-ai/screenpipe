@@ -93,26 +93,20 @@ const HealthStatus = ({ className }: { className?: string }) => {
     status: string,
     frameStatus: string,
     audioStatus: string,
-    uiStatus: string,
-    audioDisabled: boolean,
-    uiMonitoringEnabled: boolean
+    audioDisabled: boolean
   ) => {
     if (status === "loading") return "bg-yellow-500";
     const isVisionOk = frameStatus === "ok" || frameStatus === "disabled";
     const isAudioOk =
       audioStatus === "ok" || audioStatus === "disabled" || audioDisabled;
-    const isUiOk =
-      uiStatus === "ok" || uiStatus === "disabled" || !uiMonitoringEnabled;
-    return isVisionOk && isAudioOk && isUiOk ? "bg-green-500" : "bg-red-500";
+    return isVisionOk && isAudioOk ? "bg-green-500" : "bg-red-500";
   };
 
   const getStatusMessage = (
     status: string,
     frameStatus: string,
     audioStatus: string,
-    uiStatus: string,
-    audioDisabled: boolean,
-    uiMonitoringEnabled: boolean
+    audioDisabled: boolean
   ) => {
     if (status === "loading")
       return "screenpipe is starting up. this may take a few minutes...";
@@ -122,8 +116,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
       issues.push("screen recording");
     if (!audioDisabled && audioStatus !== "ok" && audioStatus !== "disabled")
       issues.push("audio recording");
-    if (uiMonitoringEnabled && uiStatus !== "ok" && uiStatus !== "disabled")
-      issues.push("ui monitoring");
 
     if (issues.length === 0) return "screenpipe is running smoothly";
     return `there might be an issue with ${issues.join(" and ")}`;
@@ -137,17 +129,13 @@ const HealthStatus = ({ className }: { className?: string }) => {
     health?.status ?? "",
     health?.frame_status ?? "",
     health?.audio_status ?? "",
-    health?.ui_status ?? "",
-    settings.disableAudio,
-    settings.enableUiMonitoring
+    settings.disableAudio
   );
   const statusMessage = getStatusMessage(
     health?.status ?? "",
     health?.frame_status ?? "",
     health?.audio_status ?? "",
-    health?.ui_status ?? "",
-    settings.disableAudio ?? "",
-    settings.enableUiMonitoring
+    settings.disableAudio
   );
 
   const handleOpenStatusDialog = async () => {
@@ -378,28 +366,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     </div>
                   )}
 
-                  {/* UI Monitoring Status */}
-                  {settings.enableUiMonitoring && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            health?.ui_status === "ok"
-                              ? "bg-green-500"
-                              : "bg-red-500"
-                          }`}
-                        />
-                        <span className="text-sm">ui monitoring</span>
-                        <span className="text-sm text-muted-foreground">
-                          status: {health?.ui_status}, last update:{" "}
-                          {formatTimestamp(
-                            health ? health.last_ui_timestamp : "error"
-                          )}
-                        </span>
-                      </div>
-
-                    </div>
-                  )}
                 </div>
               </>
             )}

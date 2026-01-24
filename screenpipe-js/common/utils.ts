@@ -91,7 +91,6 @@ function getDefaultSettings(): Settings {
       port: 11434,
     },
     enableFrameCache: true,
-    enableUiMonitoring: false,
     aiMaxContextChars: 512000,
     analyticsEnabled: true,
     user: {

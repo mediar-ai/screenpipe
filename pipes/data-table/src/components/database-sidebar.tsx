@@ -13,11 +13,6 @@ interface TableItem {
 
 const allTables: TableItem[] = [
   {
-    name: "ui_monitoring",
-    displayName: "UI monitoring",
-    icon: <Database className="h-4 w-4" />,
-  },
-  {
     name: "video_chunks",
     displayName: "Video files",
     icon: <Database className="h-4 w-4" />,
@@ -46,18 +41,7 @@ export function DatabaseSidebar({
   const [tables, setTables] = useState<TableItem[]>([]);
 
   useEffect(() => {
-    // detect macos
-    const isMacOS =
-      navigator.platform.toUpperCase().indexOf("MAC") >= 0 ||
-      /Mac/.test(navigator.userAgent);
-
-    // filter tables based on os
-    if (isMacOS) {
-      setTables(allTables);
-    } else {
-      // exclude ui_monitoring on non-macos
-      setTables(allTables.filter((table) => table.name !== "ui_monitoring"));
-    }
+    setTables(allTables);
   }, []);
 
   return (

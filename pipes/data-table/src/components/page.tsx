@@ -5,7 +5,6 @@ import { DatabaseSidebar } from "./database-sidebar";
 import { OcrDataTable } from "./ocr-data-table";
 import { VideoChunksTable } from "./video-chunks-table";
 import { AudioTranscriptionsTable } from "./audio-transcriptions-table";
-import { UiMonitoringTable } from "./ui-monitoring-table";
 import { pipe } from "@screenpipe/browser";
 import { SearchCommand } from "./search-command";
 
@@ -24,12 +23,6 @@ export default function DataPage() {
         return <VideoChunksTable />;
       case "audio_transcriptions":
         return <AudioTranscriptionsTable />;
-      case "ui_monitoring":
-        return navigator.userAgent.toLowerCase().includes("mac") ? (
-          <UiMonitoringTable />
-        ) : (
-          <div></div>
-        );
       default:
         return <div>select a table</div>;
     }
