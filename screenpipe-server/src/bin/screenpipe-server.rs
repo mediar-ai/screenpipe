@@ -24,7 +24,7 @@ use screenpipe_server::{
     },
     handle_index_command,
     pipe_manager::PipeInfo,
-    start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer,
+    start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer, VisionManager,
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;
@@ -702,9 +702,51 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let handle = {
+    // Create VisionManager if use_all_monitors is enabled, otherwise use traditional recording
+    let vision_manager = if cli.use_all_monitors && !cli.disable_vision {
+        let vm = Arc::new(VisionManager::new(
+            db_clone.clone(),
+            output_path_clone.clone(),
+            fps,
+            Duration::from_secs(cli.video_chunk_duration),
+            Arc::new(cli.ocr_engine.clone().into()),
+            cli.use_pii_removal,
+            cli.ignored_windows.clone(),
+            cli.included_windows.clone(),
+            languages_clone.clone(),
+            cli.capture_unfocused_windows,
+            cli.enable_realtime_vision,
+        ));
+
+        // Start the VisionManager
+        let vm_clone = vm.clone();
+        let shutdown_tx_vm = shutdown_tx.clone();
+        let vision_handle_vm = vision_handle.clone();
+        tokio::spawn(async move {
+            let mut shutdown_rx = shutdown_tx_vm.subscribe();
+
+            // Start recording on all monitors
+            if let Err(e) = vm_clone.start(&vision_handle_vm).await {
+                error!("Failed to start VisionManager: {:?}", e);
+                return;
+            }
+            info!("VisionManager started with dynamic monitor detection");
+
+            // Wait for shutdown signal
+            let _ = shutdown_rx.recv().await;
+            info!("Shutting down VisionManager");
+            let _ = vm_clone.stop().await;
+        });
+
+        Some(vm)
+    } else {
+        None
+    };
+
+    // Only use traditional recording if use_all_monitors is not enabled
+    let handle = if vision_manager.is_none() {
         let runtime = &tokio::runtime::Handle::current();
-        runtime.spawn(async move {
+        Some(runtime.spawn(async move {
             loop {
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
                 let recording_future = start_continuous_recording(
@@ -736,7 +778,9 @@ async fn main() -> anyhow::Result<()> {
                     error!("continuous recording error: {:?}", e);
                 }
             }
-        })
+        }))
+    } else {
+        None
     };
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
@@ -799,6 +843,7 @@ async fn main() -> anyhow::Result<()> {
     );
     println!("│ audio disabled         │ {:<34} │", cli.disable_audio);
     println!("│ vision disabled        │ {:<34} │", cli.disable_vision);
+    println!("│ use all monitors       │ {:<34} │", cli.use_all_monitors);
     println!(
         "│ audio engine           │ {:<34} │",
         format!("{:?}", warning_audio_transcription_engine_clone)
@@ -1121,8 +1166,20 @@ async fn main() -> anyhow::Result<()> {
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);
 
+    // Create a future that either waits on the recording handle or never completes
+    // (when VisionManager is handling recording instead)
+    let recording_future = async {
+        if let Some(h) = handle {
+            let _ = h.await;
+        } else {
+            // VisionManager is handling recording, wait forever
+            std::future::pending::<()>().await;
+        }
+    };
+    pin_mut!(recording_future);
+
     tokio::select! {
-        _ = handle => info!("recording completed"),
+        _ = &mut recording_future => info!("recording completed"),
         result = &mut server_future => {
             match result {
                 Ok(_) => info!("server stopped normally"),

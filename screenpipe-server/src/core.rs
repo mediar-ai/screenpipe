@@ -47,16 +47,16 @@ pub async fn start_continuous_recording(
                     // Wrap in a loop with recovery logic
                     loop {
                         info!("Starting/restarting vision capture for monitor {}", monitor_id);
-                        match record_video(
+                        match record_single_monitor(
                             db_manager_video.clone(),
                             output_path_video.clone(),
                             fps,
+                            video_chunk_duration,
                             ocr_engine.clone(),
                             monitor_id,
                             use_pii_removal,
                             &ignored_windows_video,
                             &include_windows_video,
-                            video_chunk_duration,
                             languages.clone(),
                             capture_unfocused_windows,
                             realtime_vision,
@@ -64,12 +64,12 @@ pub async fn start_continuous_recording(
                         .await
                         {
                             Ok(_) => {
-                                warn!("record_video for monitor {} completed unexpectedly but without error", monitor_id);
+                                warn!("record_single_monitor for monitor {} completed unexpectedly but without error", monitor_id);
                                 // Short delay before restarting to prevent CPU spinning
                                 tokio::time::sleep(Duration::from_secs(5)).await;
                             }
                             Err(e) => {
-                                error!("record_video for monitor {} failed with error: {}", monitor_id, e);
+                                error!("record_single_monitor for monitor {} failed with error: {}", monitor_id, e);
                                 // Short delay before restarting to prevent CPU spinning
                                 tokio::time::sleep(Duration::from_secs(5)).await;
                             }
@@ -110,22 +110,25 @@ pub async fn start_continuous_recording(
     Ok(())
 }
 
+/// Record video from a single monitor. This function is used by VisionManager
+/// to record from individual monitors and can be stopped/restarted as monitors
+/// connect/disconnect.
 #[allow(clippy::too_many_arguments)]
-async fn record_video(
+pub async fn record_single_monitor(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: f64,
+    video_chunk_duration: Duration,
     ocr_engine: Arc<OcrEngine>,
     monitor_id: u32,
     use_pii_removal: bool,
     ignored_windows: &[String],
     include_windows: &[String],
-    video_chunk_duration: Duration,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
     realtime_vision: bool,
 ) -> Result<()> {
-    info!("record_video: Starting for monitor {}", monitor_id);
+    info!("record_single_monitor: Starting for monitor {}", monitor_id);
     let device_name = Arc::new(format!("monitor_{}", monitor_id));
 
     // Add heartbeat counter

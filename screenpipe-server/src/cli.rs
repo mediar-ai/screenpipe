@@ -227,6 +227,11 @@ pub struct Cli {
     #[arg(short = 'm', long)]
     pub monitor_id: Vec<u32>,
 
+    /// Use all available monitors and automatically detect when monitors are plugged/unplugged.
+    /// When enabled, screenpipe will dynamically start/stop recording as monitors connect/disconnect.
+    #[arg(long, default_value_t = false)]
+    pub use_all_monitors: bool,
+
     #[arg(short = 'l', long, value_enum)]
     pub language: Vec<Language>,
 
