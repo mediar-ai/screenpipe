@@ -860,10 +860,6 @@ async fn main() {
                         .accelerator("CmdOrCtrl+,")
                         .build(app)?)
                     .separator()
-                    .item(&PredefinedMenuItem::hide(app, Some("Hide screenpipe"))?)
-                    .item(&PredefinedMenuItem::hide_others(app, None)?)
-                    .item(&PredefinedMenuItem::show_all(app, None)?)
-                    .separator()
                     .item(&PredefinedMenuItem::quit(app, Some("Quit screenpipe"))?)
                     .build()?;
 
