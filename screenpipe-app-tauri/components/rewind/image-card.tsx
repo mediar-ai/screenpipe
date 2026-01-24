@@ -4,7 +4,7 @@ import { SearchMatch } from "@/lib/hooks/use-keyword-search-store";
 import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
 import { cn } from "@/lib/utils";
 import { throttle } from "lodash";
-import { Loader2, ImageOff } from "lucide-react";
+import { Loader2, ImageOff, ExternalLink } from "lucide-react";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
 import { TextOverlay } from "@/components/text-overlay";
@@ -269,6 +269,14 @@ export const MainImage = () => {
 
 	const { src, isLoading, hasError, handleLoad, handleError } = useImageWithRetry(currentFrame.frame_id);
 
+	const handleOpenInBrowser = useCallback(() => {
+		if (currentFrame?.url) {
+			window.open(currentFrame.url, "_blank", "noopener,noreferrer");
+		}
+	}, [currentFrame?.url]);
+
+	const hasValidUrl = currentFrame?.url && currentFrame.url.length > 0 && currentFrame.url !== "null";
+
 	return (
 		<div
 			ref={containerRef}
@@ -310,7 +318,7 @@ export const MainImage = () => {
 						}}
 						onError={handleError}
 					/>
-					{/* Text selection overlay */}
+					{/* Text selection overlay with clickable URLs */}
 					{imageRect && naturalDimensions && textPositions.length > 0 && (
 						<TextOverlay
 							textPositions={textPositions}
@@ -318,7 +326,19 @@ export const MainImage = () => {
 							originalHeight={naturalDimensions.height}
 							displayedWidth={imageRect.width}
 							displayedHeight={imageRect.height}
+							clickableUrls={true}
 						/>
+					)}
+					{/* Open in Browser button for captured browser URLs */}
+					{hasValidUrl && !isLoading && (
+						<button
+							onClick={handleOpenInBrowser}
+							className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1.5 bg-black/70 hover:bg-black/90 text-white text-xs font-medium rounded-md transition-colors backdrop-blur-sm"
+							title={`Open ${currentFrame.url}`}
+						>
+							<ExternalLink className="h-3.5 w-3.5" />
+							Open in Browser
+						</button>
 					)}
 				</div>
 			)}

@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { TextOverlay } from "../text-overlay";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { TextOverlay, isUrl, normalizeUrl } from "../text-overlay";
 import type { TextPosition } from "@/lib/hooks/use-frame-ocr-data";
 
 describe("TextOverlay", () => {
@@ -253,5 +253,133 @@ describe("TextOverlay", () => {
 		// Verify some elements rendered
 		const spans = container.querySelectorAll("span");
 		expect(spans.length).toBeGreaterThan(0);
+	});
+
+	it("should render URLs as clickable links when clickableUrls is true", () => {
+		const positions = [
+			createTextPosition("https://example.com", 100, 50, 200, 20),
+			createTextPosition("Regular text", 100, 100, 150, 20),
+		];
+
+		const { container } = render(
+			<TextOverlay
+				textPositions={positions}
+				originalWidth={1920}
+				originalHeight={1080}
+				displayedWidth={960}
+				displayedHeight={540}
+				clickableUrls={true}
+			/>
+		);
+
+		const link = container.querySelector("a");
+		const span = container.querySelector("span");
+
+		expect(link).toBeInTheDocument();
+		expect(link).toHaveAttribute("href", "https://example.com");
+		expect(span).toBeInTheDocument();
+		expect(span?.textContent).toBe("Regular text");
+	});
+
+	it("should not render URLs as links when clickableUrls is false", () => {
+		const positions = [createTextPosition("https://example.com", 100, 50, 200, 20)];
+
+		const { container } = render(
+			<TextOverlay
+				textPositions={positions}
+				originalWidth={1920}
+				originalHeight={1080}
+				displayedWidth={960}
+				displayedHeight={540}
+				clickableUrls={false}
+			/>
+		);
+
+		const link = container.querySelector("a");
+		const span = container.querySelector("span");
+
+		expect(link).not.toBeInTheDocument();
+		expect(span).toBeInTheDocument();
+	});
+
+	it("should open URL in new tab when clicked", () => {
+		const mockOpen = vi.spyOn(window, "open").mockImplementation(() => null);
+
+		const positions = [createTextPosition("https://test.com/page", 100, 50, 200, 20)];
+
+		const { container } = render(
+			<TextOverlay
+				textPositions={positions}
+				originalWidth={1920}
+				originalHeight={1080}
+				displayedWidth={960}
+				displayedHeight={540}
+				clickableUrls={true}
+			/>
+		);
+
+		const link = container.querySelector("a");
+		expect(link).toBeInTheDocument();
+
+		fireEvent.click(link!);
+
+		expect(mockOpen).toHaveBeenCalledWith(
+			"https://test.com/page",
+			"_blank",
+			"noopener,noreferrer"
+		);
+
+		mockOpen.mockRestore();
+	});
+});
+
+describe("isUrl", () => {
+	it("should detect https URLs", () => {
+		expect(isUrl("https://example.com")).toBe(true);
+		expect(isUrl("https://example.com/path")).toBe(true);
+		expect(isUrl("https://sub.example.com/path?query=1")).toBe(true);
+	});
+
+	it("should detect http URLs", () => {
+		expect(isUrl("http://example.com")).toBe(true);
+	});
+
+	it("should detect www URLs", () => {
+		expect(isUrl("www.example.com")).toBe(true);
+		expect(isUrl("www.example.com/path")).toBe(true);
+	});
+
+	it("should detect domain-like strings", () => {
+		expect(isUrl("example.com")).toBe(true);
+		expect(isUrl("example.io")).toBe(true);
+		expect(isUrl("app.example.dev")).toBe(true);
+	});
+
+	it("should not detect regular text as URLs", () => {
+		expect(isUrl("hello")).toBe(false);
+		expect(isUrl("hello world")).toBe(false);
+		expect(isUrl("email@example")).toBe(false);
+	});
+});
+
+describe("normalizeUrl", () => {
+	it("should keep https URLs unchanged", () => {
+		expect(normalizeUrl("https://example.com")).toBe("https://example.com");
+	});
+
+	it("should keep http URLs unchanged", () => {
+		expect(normalizeUrl("http://example.com")).toBe("http://example.com");
+	});
+
+	it("should add https to www URLs", () => {
+		expect(normalizeUrl("www.example.com")).toBe("https://www.example.com");
+	});
+
+	it("should add https to bare domains", () => {
+		expect(normalizeUrl("example.com")).toBe("https://example.com");
+	});
+
+	it("should trim whitespace", () => {
+		expect(normalizeUrl("  https://example.com  ")).toBe("https://example.com");
 	});
 });
