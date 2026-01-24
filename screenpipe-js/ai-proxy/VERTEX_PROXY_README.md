@@ -91,13 +91,14 @@ curl -X POST https://ai-proxy.i-f9f.workers.dev/v1/messages \
 
 ## Supported Models
 
-- `claude-3-5-sonnet-v2@20241022` (recommended)
-- `claude-3-5-haiku@20241022`
-- `claude-3-opus@20240229`
-- `claude-3-sonnet@20240229`
-- `claude-3-haiku@20240307`
-- `claude-sonnet-4@20250514`
+Models depend on what's enabled in your GCP project. Common options:
+
+- `claude-sonnet-4@20250514` (recommended, default)
 - `claude-opus-4@20250514`
+- `claude-3-5-sonnet-v2@20241022`
+- `claude-3-5-haiku@20241022`
+
+To check available models, visit the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/model-garden) in your GCP Console.
 
 ## Troubleshooting
 

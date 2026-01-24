@@ -36,7 +36,7 @@ export const subscriptionCache = new SubscriptionCache();
 /**
  * Validates if a user has an active subscription
  * @param env Environment variables
- * @param userId User ID to validate
+ * @param userId User ID to validate (can be UUID or Clerk user ID)
  * @returns Promise resolving to boolean indicating if subscription is valid
  */
 export async function validateSubscription(env: Env, userId: string): Promise<boolean> {
@@ -48,7 +48,9 @@ export async function validateSubscription(env: Env, userId: string): Promise<bo
   }
 
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const CLERK_USER_ID_REGEX = /^user_[a-zA-Z0-9]+$/;
 
+  // Check by UUID (Supabase user ID)
   if (UUID_REGEX.test(userId)) {
     try {
       const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_active_cloud_subscription`, {
@@ -73,6 +75,14 @@ export async function validateSubscription(env: Env, userId: string): Promise<bo
       console.error('Error checking subscription:', error);
       return false;
     }
+  }
+
+  // Check by Clerk user ID - allow all signed-in Clerk users for Agent SDK
+  // TODO: Add proper subscription checks for Clerk users
+  if (CLERK_USER_ID_REGEX.test(userId)) {
+    console.log('Allowing Clerk user ID for Agent SDK:', userId);
+    subscriptionCache.set(userId, true);
+    return true;
   }
 
   return false;

@@ -3,13 +3,14 @@
 import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, ExternalLink, Check, Loader2 } from "lucide-react";
+import { Download, ExternalLink, Check, Loader2, Copy, Terminal } from "lucide-react";
 import { open, Command } from "@tauri-apps/plugin-shell";
 import { message } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { platform } from "@tauri-apps/plugin-os";
 import { tempDir, join } from "@tauri-apps/api/path";
+import { useUser } from "@clerk/clerk-react";
 
 const GITHUB_RELEASES_API = "https://api.github.com/repos/mediar-ai/screenpipe/releases";
 
@@ -54,6 +55,23 @@ async function getLatestMcpbUrl(): Promise<string> {
 
 export function ConnectionsSection() {
   const [downloadState, setDownloadState] = useState<"idle" | "downloading" | "downloaded">("idle");
+  const [copiedEnv, setCopiedEnv] = useState(false);
+  const { user } = useUser();
+
+  const agentSdkEnvVars = `export CLAUDE_CODE_USE_VERTEX=1
+export ANTHROPIC_VERTEX_BASE_URL=https://ai-proxy.i-f9f.workers.dev
+export CLAUDE_CODE_SKIP_VERTEX_AUTH=1
+export ANTHROPIC_API_KEY=${user?.id || "your-user-id"}`;
+
+  const copyEnvVars = async () => {
+    try {
+      await navigator.clipboard.writeText(agentSdkEnvVars);
+      setCopiedEnv(true);
+      setTimeout(() => setCopiedEnv(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+    }
+  };
 
   const handleClaudeConnect = async () => {
     try {
@@ -239,6 +257,94 @@ export function ConnectionsSection() {
             use Claude with Screenpipe features.
           </p>
         </div>
+
+        {/* Claude Agent SDK Card */}
+        <Card className="border-border bg-card shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <div className="flex items-start p-6 gap-6">
+              {/* Terminal Icon */}
+              <div className="flex-shrink-0">
+                <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl flex items-center justify-center">
+                  <Terminal className="w-8 h-8 text-white" />
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-xl font-semibold text-foreground">
+                    Claude Agent SDK
+                  </h3>
+                  <span className="px-2 py-0.5 text-xs font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full">
+                    Developer
+                  </span>
+                </div>
+                <p className="text-muted-foreground mb-4">
+                  Use the Claude Agent SDK to build AI agents that can interact with your
+                  screen recordings programmatically. Powered by Screenpipe&apos;s Vertex AI credits.
+                </p>
+
+                {!user?.id ? (
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-4">
+                    <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                      <strong>Sign in required:</strong> Please sign in to use the Agent SDK with Screenpipe Cloud.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-muted/50 rounded-lg p-4 mb-4 font-mono text-sm overflow-x-auto">
+                      <pre className="whitespace-pre-wrap break-all">{agentSdkEnvVars}</pre>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        onClick={copyEnvVars}
+                        variant={copiedEnv ? "default" : "outline"}
+                        className="gap-2"
+                      >
+                        {copiedEnv ? (
+                          <>
+                            <Check className="h-4 w-4" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4" />
+                            Copy Environment Variables
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        onClick={() => open("https://docs.anthropic.com/en/docs/agents-and-tools/claude-agent-sdk")}
+                        className="gap-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        SDK Docs
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div className="px-6 pb-6">
+              <div className="p-4 bg-muted/30 border border-border rounded-lg">
+                <p className="text-sm text-muted-foreground mb-2">
+                  <strong>Quick Start:</strong>
+                </p>
+                <ol className="text-sm text-muted-foreground list-decimal list-inside space-y-1">
+                  <li>Install Claude Code: <code className="bg-muted px-1 rounded">curl -fsSL https://claude.ai/install.sh | bash</code></li>
+                  <li>Copy the environment variables above</li>
+                  <li>Paste them in your terminal before running your agent</li>
+                  <li>Use the SDK with Screenpipe MCP for full access to your recordings</li>
+                </ol>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

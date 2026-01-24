@@ -396,7 +396,7 @@ export async function proxyToVertex(
 		const accessToken = await (provider as any).getAccessToken();
 
 		// Map model to Vertex format
-		const model = body.model || 'claude-3-5-sonnet-v2@20241022';
+		const model = body.model || 'claude-sonnet-4@20250514';
 		const vertexModel = mapModelToVertex(model);
 		const method = isStreaming ? 'streamRawPredict' : 'rawPredict';
 		const vertexUrl = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/anthropic/models/${vertexModel}:${method}`;
