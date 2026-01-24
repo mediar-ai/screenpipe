@@ -632,7 +632,7 @@ export function GlobalChat() {
                 <Sparkles className="h-8 w-8 mx-auto mb-3 opacity-50" />
                 <p className="text-sm">Ask me anything about your screen activity!</p>
                 <p className="text-xs mt-2 opacity-70">
-                  Try: "What did I do in the last hour?" or "Find my Slack messages"
+                  Try: &quot;What did I do in the last hour?&quot; or &quot;Find my Slack messages&quot;
                 </p>
               </div>
             )}
