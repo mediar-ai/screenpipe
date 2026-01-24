@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, Bot, User, X, Sparkles, Settings } from "lucide-react";
+import { Loader2, Send, Square, Bot, User, X, Sparkles, Settings, ExternalLink } from "lucide-react";
 import { MemoizedReactMarkdown } from "@/components/markdown";
 import { VideoComponent } from "@/components/rewind/video";
 import { AIPresetsSelector } from "@/components/rewind/ai-presets-selector";
@@ -18,6 +18,8 @@ import { AIPreset } from "@/lib/utils/tauri";
 import remarkGfm from "remark-gfm";
 import OpenAI from "openai";
 import { ChatCompletionTool } from "openai/resources/chat/completions";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { usePlatform } from "@/lib/hooks/use-platform";
 
 const SCREENPIPE_API = "http://localhost:3030";
 
@@ -131,6 +133,7 @@ export function GlobalChat() {
   const [open, setOpen] = useState(false);
   const { settings } = useSettings();
   const pathname = usePathname();
+  const { isMac } = usePlatform();
 
   // Only show floating button on timeline page, but keep dialog available everywhere
   // pathname can be null during initial hydration
@@ -569,7 +572,7 @@ export function GlobalChat() {
           className="fixed bottom-4 right-4 z-50 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-background/80 backdrop-blur-sm border border-border/50 text-xs text-muted-foreground hover:text-foreground hover:bg-background transition-colors shadow-sm"
         >
           <Sparkles className="h-3 w-3" />
-          <span>⌘L</span>
+          <span>{isMac ? "⌘L" : "Ctrl+L"}</span>
         </button>
       )}
       <Dialog open={open} onOpenChange={setOpen}>
@@ -582,7 +585,7 @@ export function GlobalChat() {
           <div className="flex items-center gap-2 p-3 pr-10 border-b">
             <Sparkles className="h-5 w-5 text-primary" />
             <span className="font-medium">Ask about your screen activity</span>
-            <span className="text-xs text-muted-foreground ml-auto">⌘L to toggle</span>
+            <span className="text-xs text-muted-foreground ml-auto">{isMac ? "⌘L" : "Ctrl+L"} to toggle</span>
           </div>
 
           {/* Messages */}
@@ -591,10 +594,10 @@ export function GlobalChat() {
               <div className="flex flex-col items-center justify-center py-12 space-y-4">
                 <div className={cn(
                   "p-4 rounded-full",
-                  needsLogin ? "bg-amber-500/10" : "bg-destructive/10"
+                  needsLogin ? "bg-muted" : "bg-destructive/10"
                 )}>
                   {needsLogin ? (
-                    <Sparkles className="h-8 w-8 text-amber-500" />
+                    <Sparkles className="h-8 w-8 text-muted-foreground" />
                   ) : (
                     <Settings className="h-8 w-8 text-destructive" />
                   )}
@@ -607,6 +610,16 @@ export function GlobalChat() {
                     {disabledReason}
                   </p>
                 </div>
+                {needsLogin && (
+                  <Button
+                    variant="default"
+                    onClick={() => openUrl("https://screenpi.pe/login")}
+                    className="gap-2"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Login
+                  </Button>
+                )}
                 {!hasPresets && (
                   <Button
                     variant="outline"

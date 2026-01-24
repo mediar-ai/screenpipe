@@ -358,11 +358,11 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
           {isStuck && (
             <motion.div
-              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-yellow-500/30 bg-yellow-500/5 rounded-lg max-w-md"
+              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-border bg-muted/50 rounded-lg max-w-md"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <div className="flex items-center space-x-2 text-yellow-600 dark:text-yellow-500">
+              <div className="flex items-center space-x-2 text-muted-foreground">
                 <AlertTriangle className="w-4 h-4" />
                 <span className="font-mono text-sm">taking longer than expected</span>
               </div>
@@ -486,11 +486,11 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
           {isStuck && (
             <motion.div
-              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-yellow-500/30 bg-yellow-500/5 rounded-lg max-w-md"
+              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-border bg-muted/50 rounded-lg max-w-md"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <div className="flex items-center space-x-2 text-yellow-600 dark:text-yellow-500">
+              <div className="flex items-center space-x-2 text-muted-foreground">
                 <AlertTriangle className="w-4 h-4" />
                 <span className="font-mono text-sm">taking longer than expected</span>
               </div>
