@@ -29,7 +29,6 @@ clap = { version = "4.0", features = ["derive"] }
 
 # Integrations
 screenpipe-integrations = { path = "../screenpipe-integrations" }
-screenpipe-events = { path = "../screenpipe-events" }
 
 # Lanuage specification
 screenpipe-core = { path = "../screenpipe-core" }
@@ -37,7 +36,6 @@ screenpipe-db = { path = "../screenpipe-db" }
 
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
-which = "6.0"
 serde = "1.0.200"
 
 xcap = "0.4.1"
@@ -55,7 +53,7 @@ memory-stats = "1.2.0"
 
 # websocket example
 futures-util = "0.3"
-tokio-tungstenite = "0.20"
+tokio-tungstenite = "0.24"
 serde = "1.0.200"
 
 [package.metadata.osx]
@@ -90,7 +88,7 @@ windows = { version = "0.58", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
 cidre = { git = "https://github.com/mediar-ai/cidre.git" }
-accessibility-sys = "0.1.3"
+accessibility-sys = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
 core-foundation = "=0.10.0"
 url = "2.5.0"
 

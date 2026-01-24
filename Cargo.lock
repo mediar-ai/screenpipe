@@ -23,20 +23,11 @@ name = "accessibility"
 version = "0.2.0"
 source = "git+https://github.com/eiz/accessibility.git?branch=master#63a4a9c4ecdc143bed1d65b989aa18bbc5fd8129"
 dependencies = [
- "accessibility-sys 0.2.0",
+ "accessibility-sys",
  "cocoa",
  "core-foundation 0.10.0",
  "objc",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "accessibility-sys"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf09354dda54177da27bcb8b9b83d8cab947db1dc1538a310a5e9da1c57fd4c2"
-dependencies = [
- "core-foundation-sys",
 ]
 
 [[package]]
@@ -6388,7 +6379,7 @@ name = "screenpipe-core"
 version = "0.2.77"
 dependencies = [
  "accessibility",
- "accessibility-sys 0.2.0",
+ "accessibility-sys",
  "anyhow",
  "candle-core",
  "candle-nn",
@@ -6531,7 +6522,7 @@ dependencies = [
  "tempfile",
  "tokenizers",
  "tokio",
- "tokio-tungstenite 0.19.0",
+ "tokio-tungstenite 0.24.0",
  "tokio-util",
  "tower 0.5.2",
  "tower-http",
@@ -6548,7 +6539,7 @@ dependencies = [
 name = "screenpipe-vision"
 version = "0.2.77"
 dependencies = [
- "accessibility-sys 0.1.3",
+ "accessibility-sys",
  "anyhow",
  "atspi",
  "atspi-common",
@@ -6568,19 +6559,17 @@ dependencies = [
  "rusty-tesseract",
  "screenpipe-core",
  "screenpipe-db",
- "screenpipe-events",
  "screenpipe-integrations",
  "serde",
  "serde_json",
  "strsim 0.10.0",
  "tempfile",
  "tokio",
- "tokio-tungstenite 0.20.1",
+ "tokio-tungstenite 0.24.0",
  "tracing",
  "tracing-subscriber",
  "uiautomation",
  "url",
- "which 6.0.3",
  "windows 0.58.0",
  "xcap",
  "zbus",
@@ -8018,18 +8007,6 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec509ac96e9a0c43427c74f003127d953a265737636129424288d27cb5c4b12c"
-dependencies = [
- "futures-util",
- "log",
- "tokio",
- "tungstenite 0.19.0",
-]
-
-[[package]]
-name = "tokio-tungstenite"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212d5dcb2a1ce06d81107c3d0ffa3121fe974b73f068c8282cb1c32328113b6c"
@@ -8293,25 +8270,6 @@ name = "ttf-parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
-
-[[package]]
-name = "tungstenite"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15fba1a6d6bb030745759a9a2a588bfe8490fc8b4751a277db3a0be1c9ebbf67"
-dependencies = [
- "byteorder",
- "bytes",
- "data-encoding",
- "http 0.2.12",
- "httparse",
- "log",
- "rand 0.8.5",
- "sha1",
- "thiserror 1.0.69",
- "url",
- "utf-8",
-]
 
 [[package]]
 name = "tungstenite"
