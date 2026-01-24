@@ -689,9 +689,13 @@ async fn main() {
     // Set permanent OLLAMA_ORIGINS env var on Windows if not present
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         if env::var("OLLAMA_ORIGINS").is_err() {
             let output = std::process::Command::new("setx")
                 .args(&["OLLAMA_ORIGINS", "*"])
+                .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .expect("failed to execute process");
 
