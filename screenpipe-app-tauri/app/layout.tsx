@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { useEffect } from "react";
 import { DeeplinkHandler } from "@/components/deeplink-handler";
 import { ShortcutTracker } from "@/components/shortcut-reminder";
-import { ScreenpipeChat } from "@/components/screenpipe-chat";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -89,7 +88,6 @@ export default function RootLayout({
           <DeeplinkHandler />
           <ShortcutTracker />
           {children}
-          <ScreenpipeChat />
           <Toaster />
         </body>
       </Providers>

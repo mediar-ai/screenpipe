@@ -57,48 +57,8 @@ jobs:
             echo "should_test=${{ github.event.inputs.needs_testing }}" >> $GITHUB_OUTPUT
           fi
 
-  generate_changelog:
-    needs: check_commit
-    if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Get version from Cargo.toml if not provided
-        id: get_version
-        run: |
-          if [ -z "${{ github.event.inputs.version }}" ]; then
-            VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-            echo "VERSION=$VERSION" >> $GITHUB_ENV
-          else
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-          fi
-
-      - name: Generate Changelog
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-        run: .github/scripts/generate_changelog_md.sh ${{ env.VERSION }} ${{ github.event.inputs.commit_hash }}
-
-      - name: Commit and push changelog files
-        if: env.CHANGELOG_GENERATED == 1
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
-          git add .
-          git commit -m "docs: add changelog for ${{ env.VERSION }}"
-          git pull origin main
-          git push origin main
-
   draft:
-    needs: [check_commit, generate_changelog]
+    needs: [check_commit]
     if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:

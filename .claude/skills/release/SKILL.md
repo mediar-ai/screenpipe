@@ -1,7 +1,7 @@
 ---
 name: release
-description: "Release the screenpipe monorepo. Bumps versions, triggers GitHub Actions for app, CLI, MCP, and JS packages."
-allowed-tools: Bash, Read, Edit, Grep
+description: "Release the screenpipe monorepo. Bumps versions, generates changelog, triggers GitHub Actions for app, CLI, MCP, and JS packages."
+allowed-tools: Bash, Read, Edit, Grep, Write
 ---
 
 # Screenpipe Monorepo Release Skill
@@ -26,27 +26,64 @@ Automate releasing all components of the screenpipe monorepo.
 echo "=== App ===" && grep '^version' screenpipe-app-tauri/src-tauri/Cargo.toml | head -1
 echo "=== CLI ===" && grep '^version' Cargo.toml | head -1
 echo "=== MCP ===" && grep '"version"' screenpipe-integrations/screenpipe-mcp/package.json | head -1
-echo "=== JS Browser ===" && grep '"version"' screenpipe-js/browser-sdk/package.json | head -1
-echo "=== JS Node ===" && grep '"version"' screenpipe-js/node-sdk/package.json | head -1
-echo "=== JS CLI ===" && grep '"version"' screenpipe-js/cli/package.json | head -1
 ```
 
-### 2. Bump Version
-Use Edit tool to update version in the appropriate file.
+### 2. Generate Changelog
 
-### 3. Commit & Push
+Get commits since last release and generate a user-friendly changelog:
+
+```bash
+# Get last release tag
+LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+# Get commits since last release (or last 50 if no tag)
+if [ -n "$LAST_TAG" ]; then
+  git log $LAST_TAG..HEAD --oneline --no-merges
+else
+  git log -50 --oneline --no-merges
+fi
+```
+
+Then create changelog at `content/changelogs/vX.Y.Z.md` with format:
+
+```markdown
+## New Features
+- Feature description (from commit context)
+
+## Improvements
+- Improvement description
+
+## Bug Fixes
+- Fix description
+
+#### **Full Changelog:** [abc123..def456](https://github.com/mediar-ai/screenpipe/compare/abc123..def456)
+```
+
+Guidelines:
+- Only include changes that bring clear **customer value**
+- Skip: CI changes, refactors, dependency bumps, merge commits
+- Be concise but descriptive
+- Group related changes together
+
+Also copy to `screenpipe-app-tauri/public/CHANGELOG.md` for in-app display.
+
+### 3. Bump Version
+
+Edit `screenpipe-app-tauri/src-tauri/Cargo.toml` to update version.
+
+### 4. Commit & Push
 ```bash
 git add -A && git commit -m "Bump app to vX.Y.Z" && git pull --rebase && git push
 ```
 
-### 4. Trigger Release (Draft Only)
+### 5. Trigger Release (Draft Only)
 ```bash
 gh workflow run release-app.yml
 ```
 
 **Important**: `workflow_dispatch` creates a **draft only** - does NOT auto-publish. This allows manual testing before publishing.
 
-### 5. Monitor Build Status
+### 6. Monitor Build Status
 ```bash
 # Get latest run ID
 gh run list --workflow=release-app.yml --limit=1
@@ -55,41 +92,29 @@ gh run list --workflow=release-app.yml --limit=1
 gh run view <RUN_ID> --json status,conclusion,jobs --jq '{status: .status, conclusion: .conclusion, jobs: [.jobs[] | {name: (.name | split(",")[0]), status: .status, conclusion: .conclusion}]}'
 ```
 
-### 6. Test the Draft Release
+### 7. Test the Draft Release
 - Download from CrabNebula Cloud: https://web.crabnebula.cloud/mediar/screenpipe/releases
 - Test on macOS and Windows
 - Verify updater artifacts exist (.tar.gz, .sig files)
 
-### 7. Publish Release
+### 8. Publish Release
 After testing, publish manually via CrabNebula Cloud dashboard, OR commit with magic words:
 ```bash
 git commit --allow-empty -m "release-app-publish" && git push
 ```
 
-## Changelog Generation
-
-Changelogs are **automatically generated** during the release workflow using OpenAI GPT-4o-mini:
-
-1. Gets commits between last published release and current
-2. Sends to OpenAI to categorize into: New Features, Improvements, Fixes
-3. Saves to `content/changelogs/vX.Y.Z.md`
-4. Copies to `screenpipe-app-tauri/public/CHANGELOG.md`
-
-Script: `.github/scripts/generate_changelog_md.sh`
-
 ## Quick Release (App Only)
 
 ```bash
-# 1. Bump version
-# Edit screenpipe-app-tauri/src-tauri/Cargo.toml
-
-# 2. Commit and push
+# 1. Generate changelog (Claude does this)
+# 2. Bump version in Cargo.toml
+# 3. Commit and push
 git add -A && git commit -m "Bump app to vX.Y.Z" && git push
 
-# 3. Trigger release (draft)
+# 4. Trigger release (draft)
 gh workflow run release-app.yml
 
-# 4. Monitor
+# 5. Monitor
 sleep 5 && gh run list --workflow=release-app.yml --limit=1
 ```
 
