@@ -1,0 +1,11 @@
+[target.aarch64-apple-darwin]
+rustflags = "-lc++ -l framework=Accelerate"
+
+[target.x86_64-apple-darwin]
+rustflags = "-lc++ -l framework=Accelerate"
+
+[env]
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+
+[build]
+jobs = 16

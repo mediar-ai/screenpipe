@@ -163,3 +163,17 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Fast local release builds: cargo build --profile release-dev
+[profile.release-dev]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+incremental = true
+
+# Faster dev builds
+[profile.dev]
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 2

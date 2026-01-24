@@ -805,6 +805,49 @@ async fn main() {
         #[cfg(target_os = "macos")]
         let app = app.plugin(tauri_nspanel::init());
 
+        // Create macOS app menu with Settings
+        #[cfg(target_os = "macos")]
+        let app = {
+            use tauri::menu::{MenuBuilder, SubmenuBuilder, PredefinedMenuItem, MenuItemBuilder};
+
+            let app_submenu = SubmenuBuilder::new(&app, "screenpipe")
+                .item(&PredefinedMenuItem::about(&app, Some("About screenpipe"), None).expect("failed to create about menu"))
+                .separator()
+                .item(&MenuItemBuilder::with_id("settings", "Settings...")
+                    .accelerator("CmdOrCtrl+,")
+                    .build(&app).expect("failed to create settings menu"))
+                .separator()
+                .item(&PredefinedMenuItem::hide(&app, Some("Hide screenpipe")).expect("failed to create hide menu"))
+                .item(&PredefinedMenuItem::hide_others(&app, None).expect("failed to create hide others menu"))
+                .item(&PredefinedMenuItem::show_all(&app, None).expect("failed to create show all menu"))
+                .separator()
+                .item(&PredefinedMenuItem::quit(&app, Some("Quit screenpipe")).expect("failed to create quit menu"))
+                .build().expect("failed to build app submenu");
+
+            let edit_submenu = SubmenuBuilder::new(&app, "Edit")
+                .item(&PredefinedMenuItem::undo(&app, None).expect("failed to create undo menu"))
+                .item(&PredefinedMenuItem::redo(&app, None).expect("failed to create redo menu"))
+                .separator()
+                .item(&PredefinedMenuItem::cut(&app, None).expect("failed to create cut menu"))
+                .item(&PredefinedMenuItem::copy(&app, None).expect("failed to create copy menu"))
+                .item(&PredefinedMenuItem::paste(&app, None).expect("failed to create paste menu"))
+                .item(&PredefinedMenuItem::select_all(&app, None).expect("failed to create select all menu"))
+                .build().expect("failed to build edit submenu");
+
+            let menu = MenuBuilder::new(&app)
+                .item(&app_submenu)
+                .item(&edit_submenu)
+                .build().expect("failed to build menu");
+
+            let _ = app.set_menu(menu);
+            app.on_menu_event(|app_handle, event| {
+                if event.id().as_ref() == "settings" {
+                    let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
+                }
+            });
+            app
+        };
+
         let app = app.manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,

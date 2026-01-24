@@ -69,3 +69,18 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Fast local release builds: cargo build --profile release-dev
+# ~3-5x faster than full release, still optimized for testing
+[profile.release-dev]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+incremental = true
+
+# Faster dev builds - optimize dependencies but keep local code debuggable
+[profile.dev]
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 2  # Optimize all dependencies (faster runtime, same compile time)
