@@ -6,9 +6,18 @@
 rustflags = [
     "-C", "target-cpu=apple-m1",
     "-C", "link-arg=-framework",
-    "-C", "link-arg=Accelerate"
+    "-C", "link-arg=Accelerate",
+    "-A", "warnings",
+    "-A", "unexpected_cfgs"
 ]
 
-[build]
-# Global warning suppression
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-A", "warnings",
+    "-A", "unexpected_cfgs",
+    "-C", "target-feature=+crt-static",
+    "-C", "link-arg=/LTCG"
+]
+
+[target.x86_64-unknown-linux-gnu]
 rustflags = ["-A", "warnings", "-A", "unexpected_cfgs"]
