@@ -100,9 +100,8 @@ export default function ShortcutReminderPage() {
               {shortcut ?? "..."}
             </span>
 
-            {/* Always show text - hover unreliable on unfocused windows */}
             <span className="text-[9px] text-white/50 whitespace-nowrap">
-              open screenpipe
+              screenpipe
             </span>
           </div>
         </div>
