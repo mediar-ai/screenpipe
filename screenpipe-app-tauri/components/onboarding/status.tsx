@@ -51,6 +51,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [isStuck, setIsStuck] = useState(false);
   const [isSendingLogs, setIsSendingLogs] = useState(false);
   const [logsSent, setLogsSent] = useState(false);
+  const [showContinueAnyway, setShowContinueAnyway] = useState(false);
   const { isMac: isMacOS } = usePlatform();
   const { settings, updateSettings } = useSettings();
   const hasStartedRef = useRef(false);
@@ -204,6 +205,17 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     if (setupState === "ready" && !hasStartedRef.current) {
       hasStartedRef.current = true;
       handleStartRecording();
+    }
+  }, [setupState]);
+
+  // Show "continue anyway" button after 5 seconds on permission screen
+  useEffect(() => {
+    if (setupState === "needs-permissions") {
+      setShowContinueAnyway(false);
+      const timer = setTimeout(() => {
+        setShowContinueAnyway(true);
+      }, 5000);
+      return () => clearTimeout(timer);
     }
   }, [setupState]);
 
@@ -364,16 +376,18 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
               try removing screenpipe from the permission list (click −) and adding it again (click +)
             </p>
 
-            <button
-              onClick={() => {
-                posthog.capture("onboarding_permission_skipped");
-                hasStartedRef.current = true;
-                setSetupState("ready");
-              }}
-              className="font-mono text-xs text-muted-foreground hover:text-foreground"
-            >
-              continue anyway →
-            </button>
+            {showContinueAnyway && (
+              <button
+                onClick={() => {
+                  posthog.capture("onboarding_permission_skipped");
+                  hasStartedRef.current = true;
+                  setSetupState("ready");
+                }}
+                className="font-mono text-xs text-muted-foreground hover:text-foreground"
+              >
+                continue anyway →
+              </button>
+            )}
           </div>
         </motion.div>
       )}
