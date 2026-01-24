@@ -17,7 +17,15 @@ Query Sentry issues for Screenpipe applications.
 - `screenpipe-ai-proxy` - AI proxy service
 - Other projects may exist - list them with the projects query
 
-**Credentials:** Read `SENTRY_AUTH_TOKEN` from environment variable
+**Credentials:** Read `SENTRY_AUTH_TOKEN` from `.env.local`
+
+### Loading the Token
+
+**IMPORTANT:** Before running any Sentry query, first load the token from `.env.local`:
+
+```bash
+export SENTRY_AUTH_TOKEN=$(grep SENTRY_AUTH_TOKEN /Users/louisbeaumont/Documents/screenpipe/.env.local | cut -d'=' -f2)
+```
 
 ### Getting a Sentry Auth Token
 

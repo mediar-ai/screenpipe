@@ -28,7 +28,8 @@ impl Error for CaptureError {}
 
 impl From<XCapError> for CaptureError {
     fn from(error: XCapError) -> Self {
-        error!("XCap error occurred: {}", error);
+        // XCap errors are often expected (system windows, protected content)
+        debug!("XCap error occurred: {}", error);
         CaptureError::XCapError(error)
     }
 }
@@ -46,6 +47,9 @@ static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "WindowManager",
         "Contexts",
         "Screenshot",
+        // Apps with overlay windows that frequently fail capture
+        "TheBoringNotch",
+        "Grammarly Desktop",
     ])
 });
 
@@ -214,7 +218,8 @@ pub async fn capture_all_visible_windows(
             let title = match window.title() {
                 Ok(title) => title.to_string(),
                 Err(e) => {
-                    error!("Failed to get title for window {}: {}", app_name, e);
+                    // Expected for some system/overlay windows
+                    debug!("Failed to get title for window {}: {}", app_name, e);
                     return None;
                 }
             };
@@ -227,16 +232,16 @@ pub async fn capture_all_visible_windows(
                     }
                 }
                 Err(e) => {
-                    // Log warning and skip this window
-                    // mostly noise
-                    error!("Failed to get is_minimized for window {}: {}", app_name, e);
+                    // Expected for some system/overlay windows - not a real error
+                    debug!("Failed to get is_minimized for window {}: {}", app_name, e);
                 }
             };
 
             let is_focused = match window.is_focused() {
                 Ok(focused) => focused,
                 Err(e) => {
-                    error!(
+                    // Expected for overlay/system windows
+                    debug!(
                         "Failed to get focus state for window {} ({}): {}",
                         app_name, title, e
                     );
@@ -247,7 +252,8 @@ pub async fn capture_all_visible_windows(
             let process_id = match window.pid() {
                 Ok(pid) => pid as i32,
                 Err(e) => {
-                    error!(
+                    // Expected for some protected/system processes
+                    debug!(
                         "Failed to get process ID for window {} ({}): {}",
                         app_name, title, e
                     );
@@ -259,7 +265,8 @@ pub async fn capture_all_visible_windows(
             match window.capture_image() {
                 Ok(buffer) => Some((app_name, title, is_focused, buffer, process_id)),
                 Err(e) => {
-                    error!(
+                    // Expected for overlay windows, protected content, or transparent windows
+                    debug!(
                         "Failed to capture image for window {} ({}): {}",
                         app_name, title, e
                     );
