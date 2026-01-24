@@ -467,6 +467,27 @@ pub async fn show_shortcut_reminder(
         let _ = window.show();
     }
 
+    // Listen for display changes and reposition window to stay top-center
+    let app_handle_clone = app_handle.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::ScaleFactorChanged { .. } = event {
+            // Display configuration changed, reposition to top center of primary monitor
+            if let Ok(Some(monitor)) = app_handle_clone.primary_monitor() {
+                let screen_size = monitor.size();
+                let scale_factor = monitor.scale_factor();
+                let new_x = ((screen_size.width as f64 / scale_factor) - 180.0) / 2.0;
+                let new_y = 12.0;
+
+                if let Some(window) = app_handle_clone.get_webview_window("shortcut-reminder") {
+                    let _ = window.set_position(tauri::Position::Logical(
+                        tauri::LogicalPosition::new(new_x, new_y)
+                    ));
+                    info!("Repositioned shortcut-reminder after display change");
+                }
+            }
+        }
+    });
+
     // Send the shortcut info to the window
     let _ = app_handle.emit_to(label, "shortcut-reminder-update", &shortcut);
 
