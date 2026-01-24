@@ -37,6 +37,7 @@ export interface DeviceMetadata {
 	window_name: string;
 	ocr_text: string;
 	timestamp: string;
+	browser_url?: string;
 }
 
 export interface AudioData {

@@ -992,6 +992,24 @@ impl DatabaseManager {
         Ok(result.flatten())
     }
 
+    /// Get all OCR text positions with bounding boxes for a specific frame.
+    /// Returns parsed TextPosition objects ready for text overlay rendering.
+    pub async fn get_frame_text_positions(
+        &self,
+        frame_id: i64,
+    ) -> Result<Vec<TextPosition>, sqlx::Error> {
+        let text_json = self.get_frame_ocr_text_json(frame_id).await?;
+
+        match text_json {
+            Some(json_str) => {
+                let blocks: Vec<OcrTextBlock> =
+                    serde_json::from_str(&json_str).unwrap_or_default();
+                Ok(parse_all_text_positions(&blocks))
+            }
+            None => Ok(Vec::new()),
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn count_search_results(
         &self,
@@ -1500,7 +1518,8 @@ impl DatabaseManager {
             COALESCE(f.app_name, ot.app_name) as app_name,
             COALESCE(f.window_name, ot.window_name) as window_name,
             vc.device_name as screen_device,
-            vc.file_path as video_path
+            vc.file_path as video_path,
+            f.browser_url
         FROM frames f
         JOIN video_chunks vc ON f.video_chunk_id = vc.id
         LEFT JOIN ocr_text ot ON f.id = ot.frame_id
@@ -1563,6 +1582,7 @@ impl DatabaseManager {
                     window_name: row.get("window_name"),
                     device_name: row.get("screen_device"),
                     video_file_path: row.get("video_path"),
+                    browser_url: row.try_get("browser_url").ok(),
                 });
             }
         }
@@ -2411,4 +2431,215 @@ fn calculate_confidence(positions: &[TextPosition]) -> f32 {
     }
 
     positions.iter().map(|pos| pos.confidence).sum::<f32>() / positions.len() as f32
+}
+
+/// Parse all OCR text blocks into TextPosition objects with bounding boxes.
+/// Unlike `find_matching_positions`, this returns ALL text positions without filtering.
+pub fn parse_all_text_positions(blocks: &[OcrTextBlock]) -> Vec<TextPosition> {
+    blocks
+        .iter()
+        .filter_map(|block| {
+            // Skip empty text blocks
+            if block.text.trim().is_empty() {
+                return None;
+            }
+
+            // Parse confidence, defaulting to 0.0 if invalid
+            let confidence = block.conf.parse::<f32>().unwrap_or(0.0);
+
+            // Skip blocks with very low confidence (likely noise)
+            if confidence < 0.0 {
+                return None;
+            }
+
+            // Parse bounding box coordinates
+            let left = block.left.parse::<f32>().unwrap_or(0.0);
+            let top = block.top.parse::<f32>().unwrap_or(0.0);
+            let width = block.width.parse::<f32>().unwrap_or(0.0);
+            let height = block.height.parse::<f32>().unwrap_or(0.0);
+
+            // Skip blocks with invalid dimensions
+            if width <= 0.0 || height <= 0.0 {
+                return None;
+            }
+
+            Some(TextPosition {
+                text: block.text.clone(),
+                confidence,
+                bounds: TextBounds {
+                    left,
+                    top,
+                    width,
+                    height,
+                },
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_block(
+        text: &str,
+        conf: &str,
+        left: &str,
+        top: &str,
+        width: &str,
+        height: &str,
+    ) -> OcrTextBlock {
+        OcrTextBlock {
+            block_num: "1".to_string(),
+            conf: conf.to_string(),
+            page_num: "1".to_string(),
+            left: left.to_string(),
+            height: height.to_string(),
+            level: "5".to_string(),
+            text: text.to_string(),
+            par_num: "1".to_string(),
+            top: top.to_string(),
+            word_num: "1".to_string(),
+            width: width.to_string(),
+            line_num: "1".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_parse_all_text_positions_basic() {
+        let blocks = vec![
+            create_test_block("Hello", "95.5", "100", "50", "80", "20"),
+            create_test_block("World", "90.0", "200", "50", "100", "20"),
+        ];
+
+        let positions = parse_all_text_positions(&blocks);
+
+        assert_eq!(positions.len(), 2);
+        assert_eq!(positions[0].text, "Hello");
+        assert!((positions[0].confidence - 95.5).abs() < 0.01);
+        assert!((positions[0].bounds.left - 100.0).abs() < 0.01);
+        assert!((positions[0].bounds.top - 50.0).abs() < 0.01);
+        assert!((positions[0].bounds.width - 80.0).abs() < 0.01);
+        assert!((positions[0].bounds.height - 20.0).abs() < 0.01);
+
+        assert_eq!(positions[1].text, "World");
+        assert!((positions[1].confidence - 90.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_all_text_positions_filters_empty_text() {
+        let blocks = vec![
+            create_test_block("Hello", "95.5", "100", "50", "80", "20"),
+            create_test_block("", "90.0", "200", "50", "100", "20"),
+            create_test_block("   ", "90.0", "300", "50", "100", "20"),
+        ];
+
+        let positions = parse_all_text_positions(&blocks);
+
+        assert_eq!(positions.len(), 1);
+        assert_eq!(positions[0].text, "Hello");
+    }
+
+    #[test]
+    fn test_parse_all_text_positions_filters_invalid_dimensions() {
+        let blocks = vec![
+            create_test_block("Valid", "95.5", "100", "50", "80", "20"),
+            create_test_block("ZeroWidth", "90.0", "200", "50", "0", "20"),
+            create_test_block("ZeroHeight", "90.0", "300", "50", "100", "0"),
+            create_test_block("Negative", "90.0", "400", "50", "-10", "20"),
+        ];
+
+        let positions = parse_all_text_positions(&blocks);
+
+        assert_eq!(positions.len(), 1);
+        assert_eq!(positions[0].text, "Valid");
+    }
+
+    #[test]
+    fn test_parse_all_text_positions_handles_invalid_numbers() {
+        let blocks = vec![
+            create_test_block("Test", "invalid", "100", "50", "80", "20"),
+        ];
+
+        let positions = parse_all_text_positions(&blocks);
+
+        // Should still parse, but with default confidence of 0.0
+        assert_eq!(positions.len(), 1);
+        assert_eq!(positions[0].text, "Test");
+        assert!((positions[0].confidence - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_all_text_positions_empty_input() {
+        let blocks: Vec<OcrTextBlock> = vec![];
+        let positions = parse_all_text_positions(&blocks);
+        assert!(positions.is_empty());
+    }
+
+    #[test]
+    fn test_parse_all_text_positions_filters_negative_confidence() {
+        let blocks = vec![
+            create_test_block("Valid", "95.5", "100", "50", "80", "20"),
+            create_test_block("Invalid", "-1", "200", "50", "100", "20"),
+        ];
+
+        let positions = parse_all_text_positions(&blocks);
+
+        assert_eq!(positions.len(), 1);
+        assert_eq!(positions[0].text, "Valid");
+    }
+
+    #[test]
+    fn test_find_matching_positions_basic() {
+        let blocks = vec![
+            create_test_block("Hello", "95.5", "100", "50", "80", "20"),
+            create_test_block("World", "90.0", "200", "50", "100", "20"),
+            create_test_block("Hello", "85.0", "300", "100", "80", "20"),
+        ];
+
+        let positions = find_matching_positions(&blocks, "Hello");
+
+        assert_eq!(positions.len(), 2);
+        assert!(positions.iter().all(|p| p.text == "Hello"));
+    }
+
+    #[test]
+    fn test_find_matching_positions_case_insensitive() {
+        let blocks = vec![
+            create_test_block("HELLO", "95.5", "100", "50", "80", "20"),
+            create_test_block("hello", "90.0", "200", "50", "100", "20"),
+            create_test_block("HeLLo", "85.0", "300", "100", "80", "20"),
+        ];
+
+        let positions = find_matching_positions(&blocks, "hello");
+
+        assert_eq!(positions.len(), 3);
+    }
+
+    #[test]
+    fn test_find_matching_positions_partial_match() {
+        let blocks = vec![
+            create_test_block("HelloWorld", "95.5", "100", "50", "80", "20"),
+            create_test_block("World", "90.0", "200", "50", "100", "20"),
+        ];
+
+        let positions = find_matching_positions(&blocks, "Hello");
+
+        assert_eq!(positions.len(), 1);
+        assert_eq!(positions[0].text, "HelloWorld");
+    }
+
+    #[test]
+    fn test_find_matching_positions_multi_word_query() {
+        let blocks = vec![
+            create_test_block("Hello", "95.5", "100", "50", "80", "20"),
+            create_test_block("World", "90.0", "200", "50", "100", "20"),
+            create_test_block("Other", "85.0", "300", "100", "80", "20"),
+        ];
+
+        let positions = find_matching_positions(&blocks, "Hello World");
+
+        // Should match both "Hello" and "World" due to word-by-word matching
+        assert_eq!(positions.len(), 2);
+    }
 }

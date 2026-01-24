@@ -171,6 +171,7 @@ pub struct OCREntry {
     pub window_name: String,
     pub device_name: String,
     pub video_file_path: String,
+    pub browser_url: Option<String>,
 }
 
 #[derive(OaSchema, Debug, Clone)]

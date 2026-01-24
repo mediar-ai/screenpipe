@@ -4,8 +4,10 @@ import { SearchMatch } from "@/lib/hooks/use-keyword-search-store";
 import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
 import { cn } from "@/lib/utils";
 import { throttle } from "lodash";
-import { Loader2, ImageOff } from "lucide-react";
+import { Loader2, ImageOff, ExternalLink } from "lucide-react";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
+import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
+import { TextOverlay } from "@/components/text-overlay";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
@@ -221,29 +223,25 @@ export const ImageGrid = ({
 	);
 };
 
-interface TextBounds {
-	left: number;
-	top: number;
-	width: number;
-	height: number;
-}
-
-interface TextPosition {
-	text: string;
-	confidence: number;
-	bounds: TextBounds;
-}
-
 export const MainImage = () => {
 	const { searchResults, currentResultIndex } = useKeywordSearchStore();
 	const imageRef = useRef<HTMLImageElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [imageRect, setImageRect] = useState<DOMRect | null>(null);
+	const [naturalDimensions, setNaturalDimensions] = useState<{
+		width: number;
+		height: number;
+	} | null>(null);
 
 	const currentFrame = searchResults[currentResultIndex];
 
 	// Call hook unconditionally (React rules of hooks)
 	const { src, isLoading, hasError, handleLoad, handleError } = useImageWithRetry(currentFrame?.frame_id ?? 0);
+
+	// Fetch OCR text positions for text selection overlay
+	const { textPositions, isLoading: isOcrLoading } = useFrameOcrData(
+		currentFrame?.frame_id ?? null
+	);
 
 	useEffect(() => {
 		const updateImageRect = () => {
@@ -266,6 +264,11 @@ export const MainImage = () => {
 		};
 	}, [currentFrame]);
 
+	// Reset natural dimensions when frame changes
+	useEffect(() => {
+		setNaturalDimensions(null);
+	}, [currentFrame?.frame_id]);
+
 	if (!currentFrame) {
 		return (
 			<div className="relative col-span-3 aspect-video w-full h-full overflow-hidden rounded-lg bg-neutral-100">
@@ -274,6 +277,14 @@ export const MainImage = () => {
 			</div>
 		);
 	}
+
+	const handleOpenInBrowser = useCallback(() => {
+		if (currentFrame?.url) {
+			window.open(currentFrame.url, "_blank", "noopener,noreferrer");
+		}
+	}, [currentFrame?.url]);
+
+	const hasValidUrl = currentFrame?.url && currentFrame.url.length > 0 && currentFrame.url !== "null";
 
 	return (
 		<div
@@ -305,18 +316,38 @@ export const MainImage = () => {
 						draggable={false}
 						onLoad={(e) => {
 							handleLoad();
-							const rect = (e.target as HTMLImageElement).getBoundingClientRect();
+							const img = e.target as HTMLImageElement;
+							const rect = img.getBoundingClientRect();
 							setImageRect(rect);
+							// Store the image's natural (original) dimensions for text overlay scaling
+							setNaturalDimensions({
+								width: img.naturalWidth,
+								height: img.naturalHeight,
+							});
 						}}
 						onError={handleError}
 					/>
-					{imageRect && (
-						<div
-							className="absolute inset-0 pointer-events-none"
-							style={{
-								width: imageRect.width,
-							}}
+					{/* Text selection overlay with clickable URLs */}
+					{imageRect && naturalDimensions && textPositions.length > 0 && (
+						<TextOverlay
+							textPositions={textPositions}
+							originalWidth={naturalDimensions.width}
+							originalHeight={naturalDimensions.height}
+							displayedWidth={imageRect.width}
+							displayedHeight={imageRect.height}
+							clickableUrls={true}
 						/>
+					)}
+					{/* Open in Browser button for captured browser URLs */}
+					{hasValidUrl && !isLoading && (
+						<button
+							onClick={handleOpenInBrowser}
+							className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1.5 bg-black/70 hover:bg-black/90 text-white text-xs font-medium rounded-md transition-colors backdrop-blur-sm"
+							title={`Open ${currentFrame.url}`}
+						>
+							<ExternalLink className="h-3.5 w-3.5" />
+							Open in Browser
+						</button>
 					)}
 				</div>
 			)}
