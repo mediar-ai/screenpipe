@@ -305,7 +305,15 @@ impl ShowRewindWindow {
                             }
                         }).ok();
                     }
-                    #[cfg(not(target_os = "macos"))]
+                    #[cfg(target_os = "windows")]
+                    {
+                        window.show().ok();
+                        // Re-assert topmost position to ensure we're above the taskbar
+                        if let Err(e) = crate::windows_overlay::bring_to_front(&window) {
+                            error!("Failed to bring window to front: {}", e);
+                        }
+                    }
+                    #[cfg(target_os = "linux")]
                     {
                         window.show().ok();
                     }
