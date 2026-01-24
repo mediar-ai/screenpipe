@@ -58,7 +58,6 @@ jobs:
       run: bun install
 
     # --- THE SLEDGEHAMMER FIX ---
-    # Overwrites the JS file to do nothing, killing the 404 crash
     - name: NEUTER pre_build.js
       working-directory: ./screenpipe-app-tauri
       shell: pwsh
@@ -86,16 +85,21 @@ jobs:
         echo "Build initiated" > ./screenpipe-app-tauri/e2e_output.log
 
     # --- THE FINAL FIX ---
-    # Builds the actual backend binary using --bin instead of --package
-    - name: Build and Rename Screenpipe Backend (Sidecar)
+    # Builds Screenpipe AND copies Bun for Tauri sidecars
+    - name: Build and Rename Sidecar Binaries (Screenpipe + Bun)
       working-directory: ./
       shell: pwsh
       run: |
+        # 1. Build and copy Screenpipe
         cargo build --release --bin screenpipe
         New-Item -ItemType Directory -Force -Path "./screenpipe-app-tauri/src-tauri/bin"
         Copy-Item "./target/release/screenpipe.exe" "./screenpipe-app-tauri/src-tauri/bin/screenpipe-x86_64-pc-windows-msvc.exe"
-        # Also copy to root as a fallback depending on how build.rs is configured
         Copy-Item "./target/release/screenpipe.exe" "./screenpipe-app-tauri/src-tauri/screenpipe-x86_64-pc-windows-msvc.exe"
+
+        # 2. Find and copy Bun
+        $BunPath = (Get-Command bun).Source
+        Copy-Item $BunPath "./screenpipe-app-tauri/src-tauri/bin/bun-x86_64-pc-windows-msvc.exe"
+        Copy-Item $BunPath "./screenpipe-app-tauri/src-tauri/bun-x86_64-pc-windows-msvc.exe"
 
     - name: Build
       uses: tauri-apps/tauri-action@v0.5.17
