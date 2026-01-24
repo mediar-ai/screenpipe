@@ -70,10 +70,15 @@ jobs:
       - name: Verify Code Compiles (macOS)
         if: matrix.os == 'macos-latest'
         env:
-          # Fix for libsamplerate-sys CMake < 3.5 compatibility issue
-          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+          # Force disable i8mm for M1 compatibility
+          CFLAGS: "-mcpu=apple-a14"
+          CXXFLAGS: "-mcpu=apple-a14"
+          WHISPER_NO_ACCELERATE: "1"
+          WHISPER_NO_METAL: "1"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
 
       - name: Verify Code Compiles (Windows)
         if: matrix.os == 'windows-latest'
+        env:
+          RUSTFLAGS: "-C link-arg=/NODEFAULTLIB:libcmt"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
