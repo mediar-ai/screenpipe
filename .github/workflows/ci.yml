@@ -8,7 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # FIX: Ignore warnings to prevent build breakage
   RUSTFLAGS: "-A unexpected_cfgs -A warnings"
 
 jobs:
@@ -35,12 +34,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          # FIX: Added libdbus-1-dev (for the Exit 101 crash), xvfb (Display), and pulseaudio (Audio)
           sudo apt-get install -y libasound2-dev pkg-config libxdo-dev libssl-dev libxtst-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libdbus-1-dev xvfb pulseaudio
 
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
-        # FIX: Check if installed before installing to prevent Homebrew warnings
         run: |
           brew list ffmpeg || brew install ffmpeg
           brew list pkgconf || brew install pkgconf
@@ -51,15 +48,27 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Run tests (Linux Headless)
+      # --- OS SPECIFIC TEST RUNNERS ---
+
+      - name: Run tests (Linux)
         if: matrix.os == 'ubuntu-latest'
         env:
-          RUST_BACKTRACE: 1 # Shows exact line numbers on crashes
-        # FIX: Use xvfb-run to give the test a fake screen
-        run: xvfb-run --auto-servernum cargo test --workspace --exclude screenpipe-vision --exclude screenpipe-audio -- --skip pipes_test --skip video_utils_test
+          RUST_BACKTRACE: 1
+        # FIX: Targeted skip for 'test_downloading' API tests
+        run: xvfb-run --auto-servernum cargo test --workspace --exclude screenpipe-vision --exclude screenpipe-audio -- --skip test_downloading_and_running --skip video_utils_test
 
-      - name: Run tests (Mac & Windows)
-        if: matrix.os != 'ubuntu-latest'
+      - name: Run tests (macOS)
+        if: matrix.os == 'macos-latest'
         env:
           RUST_BACKTRACE: 1
-        run: cargo test --workspace --exclude screenpipe-vision --exclude screenpipe-audio -- --skip pipes_test --skip video_utils_test
+          # FIX: Force Apple Silicon CPU flags to fix the i8mm matrix math crash
+          CFLAGS: "-mcpu=apple-m1"
+          CXXFLAGS: "-mcpu=apple-m1"
+        run: cargo test --workspace --exclude screenpipe-vision --exclude screenpipe-audio -- --skip test_downloading_and_running --skip video_utils_test
+
+      - name: Run tests (Windows)
+        if: matrix.os == 'windows-latest'
+        env:
+          RUST_BACKTRACE: 1
+        # FIX: Added --release to bypass the MSVC C++ debug linker (_free_dbg) crashes
+        run: cargo test --release --workspace --exclude screenpipe-vision --exclude screenpipe-audio -- --skip test_downloading_and_running --skip video_utils_test
