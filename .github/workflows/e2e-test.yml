@@ -86,13 +86,16 @@ jobs:
         echo "Build initiated" > ./screenpipe-app-tauri/e2e_output.log
 
     # --- THE FINAL FIX ---
-    # Creates the dummy binary so the Tauri packager doesn't crash looking for it
-    - name: Create Dummy Backend Binary
-      working-directory: ./screenpipe-app-tauri
+    # Builds the actual backend binary and places it where Tauri expects the sidecar
+    - name: Build and Rename Screenpipe Backend (Sidecar)
+      working-directory: ./
       shell: pwsh
       run: |
-        New-Item -ItemType Directory -Force -Path "./src-tauri"
-        New-Item -ItemType File -Force -Path "./src-tauri/screenpipe-x86_64-pc-windows-msvc.exe"
+        cargo build --release --package screenpipe
+        New-Item -ItemType Directory -Force -Path "./screenpipe-app-tauri/src-tauri/bin"
+        Copy-Item "./target/release/screenpipe.exe" "./screenpipe-app-tauri/src-tauri/bin/screenpipe-x86_64-pc-windows-msvc.exe"
+        # Also copy to root as a fallback depending on how build.rs is configured
+        Copy-Item "./target/release/screenpipe.exe" "./screenpipe-app-tauri/src-tauri/screenpipe-x86_64-pc-windows-msvc.exe"
 
     - name: Build
       uses: tauri-apps/tauri-action@v0.5.17
