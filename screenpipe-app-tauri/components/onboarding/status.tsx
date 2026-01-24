@@ -9,7 +9,6 @@ import { motion } from "framer-motion";
 import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
 import { open as openPath, open as openUrl } from "@tauri-apps/plugin-shell";
 import { homeDir, join } from "@tauri-apps/api/path";
-import { scheduleFirstRunNotification } from "@/lib/notifications";
 import { TimelineAIDemo } from "./timeline-ai-demo";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { getVersion } from "@tauri-apps/api/app";
@@ -157,12 +156,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   const handleComplete = async () => {
     await ensureDefaultPreset();
-    // Show native shortcut reminder window
-    if (settings.showScreenpipeShortcut) {
-      commands.showShortcutReminder(settings.showScreenpipeShortcut);
-    }
-    // Schedule 2-hour reminder notification (first run only)
-    scheduleFirstRunNotification();
+    // Note: Shortcut reminder and notification are shown after entire onboarding completes (in page.tsx)
     handleNextSlide();
   };
 

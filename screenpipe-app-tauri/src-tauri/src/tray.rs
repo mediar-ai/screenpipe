@@ -22,6 +22,7 @@ static LAST_MENU_STATE: Lazy<Mutex<MenuState>> = Lazy::new(|| Mutex::new(MenuSta
 struct MenuState {
     shortcuts: HashMap<String, String>,
     recording_status: Option<RecordingStatus>,
+    onboarding_completed: bool,
 }
 
 pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> Result<()> {
@@ -47,6 +48,28 @@ fn create_dynamic_menu(
     let store = get_store(app, None)?;
     let mut menu_builder = MenuBuilder::new(app);
 
+    // Check if onboarding is completed
+    let onboarding_completed = OnboardingStore::get(app)
+        .ok()
+        .flatten()
+        .map(|o| o.is_completed)
+        .unwrap_or(false);
+
+    // During onboarding: show minimal menu (version + quit only)
+    if !onboarding_completed {
+        menu_builder = menu_builder
+            .item(
+                &MenuItemBuilder::with_id("version", format!("version {}", app.package_info().version))
+                    .enabled(false)
+                    .build(app)?,
+            )
+            .item(&PredefinedMenuItem::separator(app)?)
+            .item(&MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?);
+
+        return menu_builder.build().map_err(Into::into);
+    }
+
+    // Full menu after onboarding is complete
     // Get the show shortcut from store
     let show_shortcut = store
         .get("showScreenpipeShortcut")
@@ -153,10 +176,17 @@ async fn update_menu_if_needed(
     app: &AppHandle,
     update_item: &tauri::menu::MenuItem<Wry>,
 ) -> Result<()> {
-    // Get current state
+    // Get current state including onboarding status
+    let onboarding_completed = OnboardingStore::get(app)
+        .ok()
+        .flatten()
+        .map(|o| o.is_completed)
+        .unwrap_or(false);
+
     let new_state = MenuState {
         shortcuts: get_current_shortcuts(app)?,
         recording_status: Some(get_recording_status()),
+        onboarding_completed,
     };
 
     // Compare with last state

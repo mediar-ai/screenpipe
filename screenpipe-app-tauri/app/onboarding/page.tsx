@@ -8,6 +8,8 @@ import OnboardingSelection from "@/components/onboarding/usecases-selection";
 import OnboardingLogin from "@/components/onboarding/login";
 import OnboardingShortcuts from "@/components/onboarding/shortcuts";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { scheduleFirstRunNotification } from "@/lib/notifications";
 import posthog from "posthog-js";
 import { commands } from "@/lib/utils/tauri";
 
@@ -99,6 +101,7 @@ export default function OnboardingPage() {
     completeOnboarding,
     isLoading
   } = useOnboarding();
+  const { settings } = useSettings();
 
   const handleUsecaseClick = (option: string) => {
     // Single-select: clicking the same option deselects it, otherwise select the new one
@@ -242,21 +245,17 @@ export default function OnboardingPage() {
 
       // Complete onboarding in backend (only store completion status)
       await completeOnboarding();
-      
+
+      // Now that onboarding is complete, show the shortcut reminder overlay
+      if (settings.showScreenpipeShortcut && settings.showShortcutOverlay !== false) {
+        commands.showShortcutReminder(settings.showScreenpipeShortcut);
+      }
+
+      // Schedule 2-hour reminder notification (first run only)
+      scheduleFirstRunNotification();
+
       showSuccessToast("Onboarding completed successfully!");
-      
-    //   // Small delay for user to see success message
-    //   setTimeout(async () => {
-    //     try {
-    //       // Show main window and close onboarding window
-    //       await commands.closeWindow("Onboarding");
-    //       await commands.showWindow("Main");
-    //     } catch (windowError) {
-    //       console.error("Error managing windows:", windowError);
-    //       showErrorToast("Onboarding completed but failed to switch windows");
-    //     }
-    //   }, 1500);
-      
+
     } catch (error) {
       console.error("Error completing onboarding:", error);
       showErrorToast("Failed to complete onboarding");
