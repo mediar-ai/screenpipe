@@ -75,7 +75,7 @@ export default function OnboardingPage() {
   const [isVisible, setIsVisible] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<SlideKey[]>(["intro"]);
-  const [selectedUsecases, setSelectedUsecases] = useState<string[]>([]);
+  const [selectedUsecase, setSelectedUsecase] = useState<string | null>(null);
   const {
     onboardingData,
     completeOnboarding,
@@ -83,12 +83,8 @@ export default function OnboardingPage() {
   } = useOnboarding();
 
   const handleUsecaseClick = (option: string) => {
-    setSelectedUsecases((prev) => {
-      if (prev.includes(option)) {
-        return prev.filter((o) => o !== option);
-      }
-      return [...prev, option];
-    });
+    // Single-select: clicking the same option deselects it, otherwise select the new one
+    setSelectedUsecase((prev) => prev === option ? null : option);
   };
 
   // Load onboarding status on mount
@@ -267,7 +263,7 @@ export default function OnboardingPage() {
             <OnboardingSelection
               className={`transition-opacity duration-300 w-full
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              selectedOptions={selectedUsecases}
+              selectedOption={selectedUsecase}
               handleOptionClick={handleUsecaseClick}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}

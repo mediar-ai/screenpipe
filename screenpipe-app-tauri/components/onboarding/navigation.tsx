@@ -7,21 +7,23 @@ interface OnboardingNavigationProps {
   nextBtnText?: string,
   className?: string,
   isLoading?: boolean;
+  nextDisabled?: boolean;
   handlePrevSlide: () => void;
   handleNextSlide: () => void;
 }
 
-const OnboardingNavigation: React.FC<OnboardingNavigationProps> = ({ 
+const OnboardingNavigation: React.FC<OnboardingNavigationProps> = ({
   nextBtnText = "",
   prevBtnText = "",
   className = "",
   isLoading,
+  nextDisabled,
   handlePrevSlide,
   handleNextSlide,
 }) => {
   return (
     <div className={`flex justify-between items-center mx-auto ${className} w-full p-4 bg-transparent max-w-screen-lg`}>
-      <Button 
+      <Button
         className="flex items-center w-fit min-w-32 disabled:!cursor-not-allowed disabled:!pointer-events-auto"
         variant={"outline"}
         onClick={handlePrevSlide}
@@ -30,10 +32,10 @@ const OnboardingNavigation: React.FC<OnboardingNavigationProps> = ({
         <ArrowLeft className="mr-2" /> {/* Icon with margin */}
         {prevBtnText}
       </Button>
-      <Button 
-        className="flex items-center w-fit min-w-32 disabled:!cursor-not-allowed disabled:!pointer-events-auto" 
+      <Button
+        className="flex items-center w-fit min-w-32 disabled:!cursor-not-allowed disabled:!pointer-events-auto"
         onClick={handleNextSlide}
-        disabled={isLoading}
+        disabled={isLoading || nextDisabled}
       >
         {nextBtnText}
         <ArrowRight className="ml-2" /> {/* Icon with margin */}

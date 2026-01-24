@@ -36,6 +36,7 @@ onnxruntime-win-x64-gpu*/
 
 # ignore environment variables
 .env
+.env.local
 
 # JavaScript stuff
 node_modules/
