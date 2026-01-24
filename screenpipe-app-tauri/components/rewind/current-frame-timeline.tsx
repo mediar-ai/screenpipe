@@ -55,7 +55,9 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		}
 	}, [browserUrl]);
 
-	const hasValidUrl = browserUrl && browserUrl.length > 0 && browserUrl !== "null";
+	// Only show "Open in Browser" for actual HTTP/HTTPS URLs
+	const hasValidUrl = browserUrl &&
+		(browserUrl.startsWith("http://") || browserUrl.startsWith("https://"));
 
 	// Reset loading state when frame changes, but be smarter about it
 	React.useEffect(() => {

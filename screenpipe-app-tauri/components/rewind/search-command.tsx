@@ -125,7 +125,10 @@ export function SearchCommand() {
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
-			handleSearch();
+			if (options.query?.trim()) {
+				commands.openSearchWindow(querySerializer(options));
+				setOpen(false);
+			}
 		}
 	};
 
@@ -172,6 +175,7 @@ export function SearchCommand() {
 								setOptions((prev) => ({ ...prev, query: e.target.value }));
 							}}
 							onKeyDown={handleKeyDown}
+							autoFocus
 						/>
 						{isSearching && <Loader2 className="h-4 w-4 animate-spin" />}
 					</div>

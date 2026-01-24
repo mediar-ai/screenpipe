@@ -284,7 +284,9 @@ export const MainImage = () => {
 		);
 	}
 
-	const hasValidUrl = currentFrame?.url && currentFrame.url.length > 0 && currentFrame.url !== "null";
+	// Only show "Open in Browser" for actual HTTP/HTTPS URLs
+	const hasValidUrl = currentFrame?.url &&
+		(currentFrame.url.startsWith("http://") || currentFrame.url.startsWith("https://"));
 
 	return (
 		<div
