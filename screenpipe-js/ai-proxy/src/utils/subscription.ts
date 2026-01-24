@@ -85,5 +85,32 @@ export async function validateSubscription(env: Env, userId: string): Promise<bo
     return true;
   }
 
+  // Check for JWT token (from screenpipe desktop app) - validate against screenpipe API
+  if (userId.startsWith('eyJ')) {
+    try {
+      const response = await fetch('https://screenpi.pe/api/user', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${userId}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        console.log('Valid screenpipe user token, user:', userData?.email);
+        subscriptionCache.set(userId, true);
+        return true;
+      } else {
+        console.log('Invalid screenpipe user token');
+        subscriptionCache.set(userId, false);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error validating screenpipe token:', error);
+      return false;
+    }
+  }
+
   return false;
 }

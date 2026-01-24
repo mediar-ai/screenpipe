@@ -10,7 +10,7 @@ import { writeFile } from "@tauri-apps/plugin-fs";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { platform } from "@tauri-apps/plugin-os";
 import { tempDir, join } from "@tauri-apps/api/path";
-import { useUser } from "@clerk/clerk-react";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 const GITHUB_RELEASES_API = "https://api.github.com/repos/mediar-ai/screenpipe/releases";
 
@@ -56,12 +56,13 @@ async function getLatestMcpbUrl(): Promise<string> {
 export function ConnectionsSection() {
   const [downloadState, setDownloadState] = useState<"idle" | "downloading" | "downloaded">("idle");
   const [copiedEnv, setCopiedEnv] = useState(false);
-  const { user } = useUser();
+  const { settings } = useSettings();
+  const user = settings.user;
 
   const agentSdkEnvVars = `export CLAUDE_CODE_USE_VERTEX=1
 export ANTHROPIC_VERTEX_BASE_URL=https://ai-proxy.i-f9f.workers.dev
 export CLAUDE_CODE_SKIP_VERTEX_AUTH=1
-export ANTHROPIC_API_KEY=${user?.id || "your-user-id"}`;
+export ANTHROPIC_API_KEY=${user?.token || "your-user-token"}`;
 
   const copyEnvVars = async () => {
     try {
@@ -284,7 +285,7 @@ export ANTHROPIC_API_KEY=${user?.id || "your-user-id"}`;
                   screen recordings programmatically. Powered by Screenpipe&apos;s Vertex AI credits.
                 </p>
 
-                {!user?.id ? (
+                {!user?.token ? (
                   <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-4">
                     <p className="text-sm text-yellow-600 dark:text-yellow-400">
                       <strong>Sign in required:</strong> Please sign in to use the Agent SDK with Screenpipe Cloud.
