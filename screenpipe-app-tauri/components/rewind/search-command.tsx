@@ -22,47 +22,56 @@ import { CommandShortcut } from "./ui/command";
 import { commands } from "@/lib/utils/tauri";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useMcpClient } from "@/lib/hooks/use-mcp-client";
 import { Badge } from "./ui/badge";
 import ReactMarkdown from "react-markdown";
 
 const SCREENPIPE_API = "http://localhost:3030";
 const VERTEX_PROXY = "https://ai-proxy.i-f9f.workers.dev";
 
-// Tool definitions for Claude
+// Tool definitions for Claude - matches screenpipe-mcp search_content tool
 const TOOLS = [
 	{
-		name: "search_screenpipe",
+		name: "search_content",
 		description:
-			"Search through the user's screen recordings, audio transcriptions, and UI elements. " +
-			"Returns timestamped results with app context. Use this to find what the user was doing, " +
-			"what they saw on screen, what was said in meetings, etc.",
+			"Search screenpipe's recorded content: screen text (OCR), audio transcriptions, and UI elements. " +
+			"Returns timestamped results with app context. " +
+			"Call with no parameters to get recent activity.",
 		input_schema: {
 			type: "object" as const,
 			properties: {
 				q: {
 					type: "string",
-					description: "Search query text. Optional - omit to get recent activity.",
+					description: "Search query. Optional - omit to return all recent content.",
 				},
 				content_type: {
 					type: "string",
 					enum: ["all", "ocr", "audio", "ui"],
-					description: "Type of content to search. 'ocr' for screen text, 'audio' for transcriptions, 'ui' for UI elements. Default: 'all'",
+					description: "Content type filter. Default: 'all'",
 				},
 				limit: {
 					type: "integer",
-					description: "Maximum number of results to return. Default: 10",
+					description: "Max results. Default: 10",
+				},
+				offset: {
+					type: "integer",
+					description: "Skip N results for pagination. Default: 0",
 				},
 				start_time: {
 					type: "string",
-					description: "ISO 8601 UTC start time filter (e.g., 2024-01-15T10:00:00Z)",
+					description: "ISO 8601 UTC start time (e.g., 2024-01-15T10:00:00Z)",
 				},
 				end_time: {
 					type: "string",
-					description: "ISO 8601 UTC end time filter (e.g., 2024-01-15T18:00:00Z)",
+					description: "ISO 8601 UTC end time (e.g., 2024-01-15T18:00:00Z)",
 				},
 				app_name: {
 					type: "string",
-					description: "Filter by application name (e.g., 'Google Chrome', 'Slack', 'zoom.us')",
+					description: "Filter by app (e.g., 'Google Chrome', 'Slack', 'zoom.us')",
+				},
+				window_name: {
+					type: "string",
+					description: "Filter by window title",
 				},
 			},
 		},
@@ -91,6 +100,7 @@ export function SearchCommand() {
 	const [open, setOpen] = React.useState(false);
 	const { settings } = useSettings();
 	const user = settings.user;
+	const { callTool: mcpCallTool, isConnected: mcpConnected } = useMcpClient();
 
 	const [state] = useQueryStates(queryParser);
 	const [options, setOptions] = useState<QueryParser>(
@@ -190,48 +200,55 @@ export function SearchCommand() {
 		}
 	}
 
-	// Execute search tool for AI
+	// Execute search tool via MCP SDK client
 	async function executeSearchTool(args: Record<string, unknown>): Promise<string> {
 		try {
-			const params = new URLSearchParams();
-			if (args.q) params.append("q", String(args.q));
-			if (args.content_type && args.content_type !== "all") {
-				params.append("content_type", String(args.content_type));
-			}
-			if (args.limit) params.append("limit", String(args.limit));
-			else params.append("limit", "10");
-			if (args.start_time) params.append("start_time", String(args.start_time));
-			if (args.end_time) params.append("end_time", String(args.end_time));
-			if (args.app_name) params.append("app_name", String(args.app_name));
-
-			const response = await fetch(`${SCREENPIPE_API}/search?${params.toString()}`);
-			if (!response.ok) throw new Error(`Search failed: ${response.status}`);
-
-			const data = await response.json();
-			const searchResults = data.data || [];
-
-			if (searchResults.length === 0) {
-				return "No results found. Try broader search terms or a wider time range.";
-			}
-
-			const formatted = searchResults.map((result: SearchResult) => {
-				const content = result.content;
-				if (!content) return null;
-
-				if (result.type === "OCR") {
-					return `[Screen - ${content.app_name || "Unknown"}] ${content.timestamp}\n${content.text || ""}`;
-				} else if (result.type === "Audio") {
-					return `[Audio - ${content.device_name || "Unknown"}] ${content.timestamp}\n${content.transcription || ""}`;
-				} else if (result.type === "UI") {
-					return `[UI - ${content.app_name || "Unknown"}] ${content.timestamp}\n${content.text || ""}`;
-				}
-				return null;
-			}).filter(Boolean);
-
-			return `Found ${searchResults.length} results:\n\n${formatted.join("\n\n---\n\n")}`;
+			// Use MCP SDK client to call search_content tool
+			const result = await mcpCallTool("search_content", args);
+			return result || "No results found.";
 		} catch (error) {
-			console.error("Search error:", error);
-			return `Search failed: ${error instanceof Error ? error.message : "Unknown error"}`;
+			console.error("MCP search error:", error);
+			// Fallback to direct API call if MCP server is not running
+			try {
+				const params = new URLSearchParams();
+				if (args.q) params.append("q", String(args.q));
+				if (args.content_type && args.content_type !== "all") {
+					params.append("content_type", String(args.content_type));
+				}
+				if (args.limit) params.append("limit", String(args.limit));
+				else params.append("limit", "10");
+				if (args.start_time) params.append("start_time", String(args.start_time));
+				if (args.end_time) params.append("end_time", String(args.end_time));
+				if (args.app_name) params.append("app_name", String(args.app_name));
+
+				const response = await fetch(`${SCREENPIPE_API}/search?${params.toString()}`);
+				if (!response.ok) throw new Error(`Search failed: ${response.status}`);
+
+				const data = await response.json();
+				const searchResults = data.data || [];
+
+				if (searchResults.length === 0) {
+					return "No results found. Try broader search terms or a wider time range.";
+				}
+
+				const formatted = searchResults.map((result: SearchResult) => {
+					const content = result.content;
+					if (!content) return null;
+
+					if (result.type === "OCR") {
+						return `[Screen - ${content.app_name || "Unknown"}] ${content.timestamp}\n${content.text || ""}`;
+					} else if (result.type === "Audio") {
+						return `[Audio - ${content.device_name || "Unknown"}] ${content.timestamp}\n${content.transcription || ""}`;
+					} else if (result.type === "UI") {
+						return `[UI - ${content.app_name || "Unknown"}] ${content.timestamp}\n${content.text || ""}`;
+					}
+					return null;
+				}).filter(Boolean);
+
+				return `Found ${searchResults.length} results:\n\n${formatted.join("\n\n---\n\n")}`;
+			} catch (fallbackError) {
+				return `Search failed: ${fallbackError instanceof Error ? fallbackError.message : "Unknown error"}`;
+			}
 		}
 	}
 

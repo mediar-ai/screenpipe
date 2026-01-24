@@ -11,7 +11,6 @@ export default function ShortcutReminderPage() {
   const { isMac, isLoading } = usePlatform();
   const [shortcut, setShortcut] = useState<string | null>(null);
   const [rawShortcut, setRawShortcut] = useState<string | null>(null);
-  const [hovered, setHovered] = useState(false);
 
   // Load shortcut from store on mount
   useEffect(() => {
@@ -77,16 +76,12 @@ export default function ShortcutReminderPage() {
     >
       <div
         onMouseDown={handleMouseDown}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
         className="select-none"
         style={{ cursor: "grab" }}
       >
         <div className="relative">
           {/* Subtle glow */}
-          <div
-            className={`absolute inset-0 bg-pink-500/20 rounded-full blur-md transition-opacity duration-300 ${hovered ? 'opacity-100' : 'opacity-40'}`}
-          />
+          <div className="absolute inset-0 bg-pink-500/20 rounded-full blur-md opacity-40" />
 
           {/* Main pill */}
           <div
@@ -105,14 +100,8 @@ export default function ShortcutReminderPage() {
               {shortcut ?? "..."}
             </span>
 
-            {/* Expanded text on hover */}
-            <span
-              className={`
-                text-[9px] text-white/50 whitespace-nowrap overflow-hidden
-                transition-all duration-300 ease-out
-                ${hovered ? 'max-w-[100px] opacity-100' : 'max-w-0 opacity-0'}
-              `}
-            >
+            {/* Always show text - hover unreliable on unfocused windows */}
+            <span className="text-[9px] text-white/50 whitespace-nowrap">
               open screenpipe
             </span>
           </div>

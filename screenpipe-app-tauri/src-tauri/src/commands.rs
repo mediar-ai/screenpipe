@@ -429,8 +429,6 @@ pub async fn show_shortcut_reminder(
                 // Use to_panel() on window_clone directly instead of get_webview_panel
                 // This avoids race conditions with panel registration
                 if let Ok(panel) = window_clone.to_panel() {
-                    use tauri_nspanel::objc::{msg_send, sel, sel_impl};
-
                     // Level 1001 = above CGShieldingWindowLevel, shows over fullscreen
                     panel.set_level(1001);
                     panel.set_style_mask(0);
@@ -440,18 +438,6 @@ pub async fn show_shortcut_reminder(
                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
                     );
-                    // Enable hover/mouse events without requiring focus
-                    unsafe {
-                        use std::ops::Deref;
-                        use tauri_nspanel::cocoa::base::YES;
-                        let panel_ptr = panel.deref() as *const _ as *mut objc::runtime::Object;
-                        let _: () = msg_send![panel_ptr, setFloatingPanel: YES];
-                        let _: () = msg_send![panel_ptr, setAcceptsMouseMovedEvents: YES];
-                        let _: () = msg_send![panel_ptr, setBecomesKeyOnlyIfNeeded: YES];
-                        // Allow first click to work without activating
-                        let content_view: *mut objc::runtime::Object = msg_send![panel_ptr, contentView];
-                        let _: () = msg_send![content_view, setAcceptsFirstMouse: YES];
-                    }
                     // Order front regardless to show above fullscreen
                     panel.order_front_regardless();
                     info!("Panel configured for fullscreen support");
