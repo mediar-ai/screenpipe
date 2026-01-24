@@ -20,10 +20,10 @@ use zerocopy::AsBytes;
 use futures::future::try_join_all;
 
 use crate::{
-    text_normalizer::normalize_text, AudioChunksResponse, AudioDevice, AudioEntry, AudioResult,
-    AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, OCREntry, OCRResult,
-    OCRResultRaw, OcrEngine, OcrTextBlock, Order, SearchMatch, SearchResult, Speaker,
-    TagContentType, TextBounds, TextPosition, TimeSeriesChunk, UiContent, VideoMetadata,
+    AudioChunksResponse, AudioDevice, AudioEntry, AudioResult, AudioResultRaw, ContentType,
+    DeviceType, FrameData, FrameRow, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock,
+    Order, SearchMatch, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
+    TimeSeriesChunk, UiContent, VideoMetadata,
 };
 
 pub struct DatabaseManager {
@@ -370,16 +370,12 @@ impl DatabaseManager {
         text_json: &str,
         ocr_engine: Arc<OcrEngine>,
     ) -> Result<(), sqlx::Error> {
-        // Normalize text for better FTS indexing (splits camelCase, number boundaries)
-        // This improves search recall without requiring database migrations
-        let normalized_text = normalize_text(text);
-        let text_length = text.len() as i64; // Use original length for consistency
-
+        let text_length = text.len() as i64;
         let mut tx = self.pool.begin().await?;
         sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, ocr_engine, text_length) VALUES (?1, ?2, ?3, ?4, ?5)")
             .bind(frame_id)
-            .bind(&normalized_text)
-            .bind(text_json) // Keep original JSON for display with bounding boxes
+            .bind(text)
+            .bind(text_json)
             .bind(format!("{:?}", *ocr_engine))
             .bind(text_length)
             .execute(&mut *tx)
@@ -2300,11 +2296,8 @@ impl DatabaseManager {
         // Create an indexed subquery for FTS matching
         let search_condition = if !query.is_empty() {
             let fts_match = if fuzzy_match {
-                query
-                    .split_whitespace()
-                    .map(|word| format!("{}*", word))
-                    .collect::<Vec<_>>()
-                    .join(" OR ")
+                // Use intelligent query expansion for compound words
+                crate::text_normalizer::expand_search_query(query)
             } else {
                 query.to_string()
             };

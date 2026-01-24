@@ -1,7 +1,8 @@
-//! Text normalization for improved FTS indexing.
+//! Text normalization and query expansion for improved FTS search.
 //!
-//! This module handles splitting compound words (camelCase, number boundaries)
-//! to improve full-text search recall without requiring database migrations.
+//! This module provides query-side improvements to full-text search recall
+//! without requiring database migrations. It expands search queries to catch
+//! compound words that OCR may have concatenated.
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -11,25 +12,11 @@ static CAMEL_CASE: Lazy<Regex> = Lazy::new(|| Regex::new(r"([a-z])([A-Z])").unwr
 static NUM_TO_LETTER: Lazy<Regex> = Lazy::new(|| Regex::new(r"([0-9])([a-zA-Z])").unwrap());
 static LETTER_TO_NUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"([a-zA-Z])([0-9])").unwrap());
 
-/// Normalize text for better FTS indexing by splitting compound words.
+/// Split compound words on camelCase and number boundaries.
 ///
-/// Splits on:
-/// - camelCase boundaries: "ActivityPerformance" → "Activity Performance"
-/// - number-to-letter: "123abc" → "123 abc"
-/// - letter-to-number: "abc123" → "abc 123"
-///
-/// This is intentionally lightweight - just regex replacements with pre-compiled patterns.
-///
-/// # Example
-/// ```
-/// use screenpipe_db::text_normalizer::normalize_text;
-///
-/// assert_eq!(normalize_text("camelCase"), "camel Case");
-/// assert_eq!(normalize_text("test123word"), "test 123 word");
-/// assert_eq!(normalize_text("ActivityPerformance"), "Activity Performance");
-/// ```
+/// Used internally for query expansion.
 #[inline]
-pub fn normalize_text(text: &str) -> String {
+fn split_compound(text: &str) -> String {
     // Fast path: if no uppercase letters or digits, skip processing
     if !text.bytes().any(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
         return text.to_string();
@@ -41,63 +28,135 @@ pub fn normalize_text(text: &str) -> String {
     result.into_owned()
 }
 
+/// Expand a search query to improve recall on compound words.
+///
+/// Takes a user query and returns an expanded FTS5 query that searches for:
+/// 1. The original term (with prefix matching)
+/// 2. Split parts of compound words (with prefix matching)
+///
+/// This catches cases where OCR concatenated words like "ActivityPerformance"
+/// when the user searches for "activity" or "performance".
+///
+/// # Example
+/// ```
+/// use screenpipe_db::text_normalizer::expand_search_query;
+///
+/// // Single word - just adds prefix matching
+/// assert_eq!(expand_search_query("test"), "test*");
+///
+/// // Compound word - expands to catch parts
+/// assert_eq!(expand_search_query("proStart"), "(proStart* OR pro* OR Start*)");
+/// ```
+pub fn expand_search_query(query: &str) -> String {
+    let query = query.trim();
+    if query.is_empty() {
+        return String::new();
+    }
+
+    // Process each word in the query
+    let expanded_terms: Vec<String> = query
+        .split_whitespace()
+        .flat_map(|word| {
+            let split = split_compound(word);
+            let parts: Vec<&str> = split.split_whitespace().collect();
+
+            if parts.len() > 1 {
+                // Word was split - include original and parts with prefix matching
+                let mut terms = vec![format!("{}*", word)];
+                for part in parts {
+                    if part.len() >= 2 {
+                        // Only add parts with 2+ chars to avoid noise
+                        terms.push(format!("{}*", part));
+                    }
+                }
+                terms
+            } else {
+                // No split needed - just add prefix matching
+                vec![format!("{}*", word)]
+            }
+        })
+        .collect();
+
+    if expanded_terms.len() == 1 {
+        expanded_terms[0].clone()
+    } else {
+        format!("({})", expanded_terms.join(" OR "))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_camel_case_split() {
-        assert_eq!(normalize_text("camelCase"), "camel Case");
-        assert_eq!(normalize_text("CamelCase"), "Camel Case");
-        assert_eq!(normalize_text("camelCaseWord"), "camel Case Word");
-        assert_eq!(normalize_text("ActivityPerformance"), "Activity Performance");
-        assert_eq!(normalize_text("iPhone"), "i Phone");
+    fn test_split_compound_camel_case() {
+        assert_eq!(split_compound("camelCase"), "camel Case");
+        assert_eq!(split_compound("CamelCase"), "Camel Case");
+        assert_eq!(split_compound("ActivityPerformance"), "Activity Performance");
     }
 
     #[test]
-    fn test_number_boundaries() {
-        assert_eq!(normalize_text("test123"), "test 123");
-        assert_eq!(normalize_text("123test"), "123 test");
-        assert_eq!(normalize_text("test123word"), "test 123 word");
-        assert_eq!(normalize_text("abc123def456"), "abc 123 def 456");
+    fn test_split_compound_numbers() {
+        assert_eq!(split_compound("test123"), "test 123");
+        assert_eq!(split_compound("123test"), "123 test");
+        assert_eq!(split_compound("test123word"), "test 123 word");
     }
 
     #[test]
-    fn test_mixed() {
-        assert_eq!(normalize_text("myVar123Test"), "my Var 123 Test");
-        assert_eq!(normalize_text("0Activity20"), "0 Activity 20");
+    fn test_split_compound_no_change() {
+        assert_eq!(split_compound("hello"), "hello");
+        assert_eq!(split_compound("hello world"), "hello world");
     }
 
     #[test]
-    fn test_no_change_needed() {
-        assert_eq!(normalize_text("hello world"), "hello world");
-        assert_eq!(normalize_text("simple"), "simple");
-        assert_eq!(normalize_text(""), "");
+    fn test_expand_simple_query() {
+        assert_eq!(expand_search_query("test"), "test*");
+        assert_eq!(expand_search_query("hello"), "hello*");
     }
 
     #[test]
-    fn test_already_spaced() {
-        assert_eq!(normalize_text("Hello World"), "Hello World");
-        assert_eq!(normalize_text("test 123"), "test 123");
+    fn test_expand_compound_query() {
+        assert_eq!(
+            expand_search_query("proStart"),
+            "(proStart* OR pro* OR Start*)"
+        );
+        assert_eq!(
+            expand_search_query("ActivityPerformance"),
+            "(ActivityPerformance* OR Activity* OR Performance*)"
+        );
     }
 
     #[test]
-    fn test_special_characters_preserved() {
-        assert_eq!(normalize_text("hello@world.com"), "hello@world.com");
-        assert_eq!(normalize_text("path/to/file"), "path/to/file");
-        assert_eq!(normalize_text("user_name"), "user_name");
+    fn test_expand_number_boundary() {
+        assert_eq!(
+            expand_search_query("test123"),
+            "(test123* OR test* OR 123*)"
+        );
     }
 
     #[test]
-    fn test_unicode_preserved() {
-        assert_eq!(normalize_text("héllo"), "héllo");
-        assert_eq!(normalize_text("日本語"), "日本語");
+    fn test_expand_multi_word_query() {
+        // Each word gets expanded independently
+        assert_eq!(
+            expand_search_query("hello world"),
+            "(hello* OR world*)"
+        );
     }
 
     #[test]
-    fn test_fast_path_lowercase_only() {
-        // These should hit the fast path (no uppercase or digits)
-        let text = "this is all lowercase text with no numbers";
-        assert_eq!(normalize_text(text), text);
+    fn test_expand_empty_query() {
+        assert_eq!(expand_search_query(""), "");
+        assert_eq!(expand_search_query("   "), "");
+    }
+
+    #[test]
+    fn test_expand_filters_short_parts() {
+        // Single char parts should be filtered out
+        assert_eq!(expand_search_query("iPhone"), "(iPhone* OR Phone*)");
+    }
+
+    #[test]
+    fn test_expand_preserves_lowercase() {
+        assert_eq!(expand_search_query("simple"), "simple*");
     }
 }
