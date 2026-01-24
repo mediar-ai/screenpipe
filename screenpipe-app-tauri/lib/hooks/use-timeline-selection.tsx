@@ -4,6 +4,7 @@ import { ReactNode } from "react";
 interface TimelineSelection {
 	start: Date;
 	end: Date;
+	frameIds: string[];
 }
 
 interface TimelineSelectionStore {

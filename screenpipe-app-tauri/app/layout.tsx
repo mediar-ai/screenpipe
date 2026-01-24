@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { DeeplinkHandler } from "@/components/deeplink-handler";
 import { ShortcutTracker } from "@/components/shortcut-reminder";
 import { GlobalChat } from "@/components/global-chat";
+import { usePathname } from "next/navigation";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,6 +25,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const isOverlay = pathname === "/shortcut-reminder";
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -86,11 +90,11 @@ export default function RootLayout({
       </head>
       <Providers>
         <body className={`${inter.className} scrollbar-hide`}>
-          <DeeplinkHandler />
-          <ShortcutTracker />
+          {!isOverlay && <DeeplinkHandler />}
+          {!isOverlay && <ShortcutTracker />}
           {children}
-          <GlobalChat />
-          <Toaster />
+          {!isOverlay && <GlobalChat />}
+          {!isOverlay && <Toaster />}
         </body>
       </Providers>
     </html>
