@@ -38,6 +38,8 @@
   "exclude": [
     "node_modules",
     "src-tauri",
-    "scripts"
+    "scripts",
+    "vitest.config.ts",
+    "vitest.setup.ts"
   ]
 }

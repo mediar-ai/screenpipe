@@ -269,6 +269,12 @@ export const MainImage = () => {
 		setNaturalDimensions(null);
 	}, [currentFrame?.frame_id]);
 
+	const handleOpenInBrowser = useCallback(() => {
+		if (currentFrame?.url) {
+			window.open(currentFrame.url, "_blank", "noopener,noreferrer");
+		}
+	}, [currentFrame?.url]);
+
 	if (!currentFrame) {
 		return (
 			<div className="relative col-span-3 aspect-video w-full h-full overflow-hidden rounded-lg bg-neutral-100">
@@ -277,12 +283,6 @@ export const MainImage = () => {
 			</div>
 		);
 	}
-
-	const handleOpenInBrowser = useCallback(() => {
-		if (currentFrame?.url) {
-			window.open(currentFrame.url, "_blank", "noopener,noreferrer");
-		}
-	}, [currentFrame?.url]);
 
 	const hasValidUrl = currentFrame?.url && currentFrame.url.length > 0 && currentFrame.url !== "null";
 
