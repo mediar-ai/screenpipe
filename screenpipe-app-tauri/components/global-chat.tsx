@@ -205,10 +205,14 @@ export function GlobalChat() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Focus input when opening
+  // Focus input when opening, reset state when closing
   useEffect(() => {
     if (open) {
       setTimeout(() => inputRef.current?.focus(), 100);
+    } else {
+      // Reset chat state when dialog closes
+      setMessages([]);
+      setInput("");
     }
   }, [open]);
 
