@@ -5,6 +5,7 @@ import { flattenObject, FlattenObjectKeys, unflattenObject } from "../utils";
 import { createContextStore } from "easy-peasy";
 import { createDefaultSettingsObject, Settings } from "./use-settings";
 import { remove } from "@tauri-apps/plugin-fs";
+
 export interface ProfilesModel {
   activeProfile: string;
   profiles: string[];
@@ -25,17 +26,13 @@ export interface ProfilesModel {
 
 let profilesStorePromise: Promise<LazyStore> | null = null;
 
-/**
- * @warning Do not change autoSave to true, it causes race conditions
- */
 const getProfilesStore = async () => {
   if (!profilesStorePromise) {
     profilesStorePromise = (async () => {
       const dir = await localDataDir();
-      console.log(dir, "dir");
       return new LazyStore(`${dir}/screenpipe/profiles.bin`, {
         autoSave: false,
-        defaults: {}, // FIX: Added defaults to satisfy the updated Tauri StoreOptions requirement
+        defaults: {},
       });
     })();
   }
@@ -132,11 +129,12 @@ export const profilesStore = createContextStore<ProfilesModel>(
 );
 
 export const useProfiles = () => {
-  const { profiles, activeProfile, shortcuts } = profilesStore.useStoreState(
+  // FIX: Renamed 'shortcuts' to 'profileShortcuts' to match what other components expect
+  const { profiles, activeProfile, profileShortcuts } = profilesStore.useStoreState(
     (state) => ({
       activeProfile: state.activeProfile,
       profiles: state.profiles,
-      shortcuts: state.shortcuts,
+      profileShortcuts: state.shortcuts, 
     })
   );
 
@@ -149,17 +147,19 @@ export const useProfiles = () => {
   const deleteProfile = profilesStore.useStoreActions(
     (actions) => actions.deleteProfile
   );
-  const updateShortcut = profilesStore.useStoreActions(
+  
+  // FIX: Renamed to 'updateProfileShortcut' to match what other components expect
+  const updateProfileShortcut = profilesStore.useStoreActions(
     (actions) => actions.updateShortcut
   );
 
   return {
     profiles,
     activeProfile,
-    shortcuts,
+    profileShortcuts,
     setActiveProfile,
     createProfile,
     deleteProfile,
-    updateShortcut,
+    updateProfileShortcut,
   };
 };
