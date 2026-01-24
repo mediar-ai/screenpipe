@@ -63,6 +63,9 @@ jobs:
       run: bun install
 
     - name: Run pre_build.js
+      env:
+        # STRICTLY set to "true" (not "1") so the JS script actually listens
+        SKIP_SCREENPIPE_SETUP: "true"
       run: bun ./scripts/pre_build.js
       working-directory: ./screenpipe-app-tauri
 
