@@ -6323,7 +6323,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "screenpipe-audio"
-version = "0.2.77"
+version = "0.2.78"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -6376,7 +6376,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-core"
-version = "0.2.77"
+version = "0.2.78"
 dependencies = [
  "accessibility",
  "accessibility-sys",
@@ -6419,7 +6419,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-db"
-version = "0.2.77"
+version = "0.2.78"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6428,7 +6428,9 @@ dependencies = [
  "image 0.25.5",
  "libsqlite3-sys",
  "oasgen",
+ "once_cell",
  "rand 0.8.5",
+ "regex",
  "serde",
  "serde_json",
  "sqlite-vec",
@@ -6441,7 +6443,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-events"
-version = "0.2.77"
+version = "0.2.78"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6459,7 +6461,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-integrations"
-version = "0.2.77"
+version = "0.2.78"
 dependencies = [
  "anyhow",
  "image 0.25.5",
@@ -6474,7 +6476,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-server"
-version = "0.2.77"
+version = "0.2.78"
 dependencies = [
  "anyhow",
  "axum",
@@ -6537,7 +6539,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-vision"
-version = "0.2.77"
+version = "0.2.78"
 dependencies = [
  "accessibility-sys",
  "anyhow",

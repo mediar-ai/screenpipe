@@ -32,6 +32,8 @@ rand = "0.8.5"
 criterion = { workspace = true }
 oasgen = { workspace = true }
 tracing-subscriber = { workspace = true }
+regex = "1.11"
+once_cell = "1.19"
 
 [[bench]]
 name = "db_benchmarks"
