@@ -9,6 +9,8 @@ on:
 jobs:
   test-windows:
     runs-on: windows-2019
+    env:
+      RUSTFLAGS: "-C link-arg=/NODEFAULTLIB:libcmt"
     steps:
     - uses: actions/checkout@v4
 
@@ -62,6 +64,8 @@ jobs:
       timeout-minutes: 5
 
     - name: Build CLI
+      env:
+        RUSTFLAGS: "-C link-arg=/NODEFAULTLIB:libcmt"
       run: cargo build --release
 
     - name: Run CLI and generate activity

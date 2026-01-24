@@ -12,6 +12,7 @@ jobs:
     runs-on: windows-2019
     env:
       SKIP_SCREENPIPE_SETUP: "true"
+      RUSTFLAGS: "-C link-arg=/NODEFAULTLIB:libcmt"
     steps:
     - uses: actions/checkout@v4
       with:
@@ -57,7 +58,6 @@ jobs:
       working-directory: ./screenpipe-app-tauri
       run: bun install
 
-    # --- THE SLEDGEHAMMER FIX ---
     - name: NEUTER pre_build.js
       working-directory: ./screenpipe-app-tauri
       shell: pwsh
@@ -70,13 +70,6 @@ jobs:
 
     - name: Setup MSVC Dev Cmd
       uses: ilammy/msvc-dev-cmd@v1
-        
-    - name: Force Rust Warning Overrides
-      shell: bash
-      run: |
-        mkdir -p .cargo
-        echo '[build]' >> .cargo/config.toml
-        echo 'rustflags = ["-A", "warnings", "-A", "unexpected_cfgs", "-C", "target-feature=+crt-static", "-C", "link-arg=/LTCG"]' >> .cargo/config.toml
 
     - name: Pre-create Log File
       shell: bash
@@ -84,11 +77,11 @@ jobs:
         mkdir -p screenpipe-app-tauri
         echo "Build initiated" > ./screenpipe-app-tauri/e2e_output.log
 
-    # --- THE FINAL FIX ---
-    # Builds Screenpipe AND copies Bun for Tauri sidecars
     - name: Build and Rename Sidecar Binaries (Screenpipe + Bun)
       working-directory: ./
       shell: pwsh
+      env:
+        RUSTFLAGS: "-C link-arg=/NODEFAULTLIB:libcmt"
       run: |
         # 1. Build and copy Screenpipe
         cargo build --release --bin screenpipe
