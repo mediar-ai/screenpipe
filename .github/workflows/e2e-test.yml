@@ -85,6 +85,15 @@ jobs:
         mkdir -p screenpipe-app-tauri
         echo "Build initiated" > ./screenpipe-app-tauri/e2e_output.log
 
+    # --- THE FINAL FIX ---
+    # Creates the dummy binary so the Tauri packager doesn't crash looking for it
+    - name: Create Dummy Backend Binary
+      working-directory: ./screenpipe-app-tauri
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path "./src-tauri"
+        New-Item -ItemType File -Force -Path "./src-tauri/screenpipe-x86_64-pc-windows-msvc.exe"
+
     - name: Build
       uses: tauri-apps/tauri-action@v0.5.17
       env:
