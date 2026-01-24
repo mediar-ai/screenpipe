@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import posthog from "posthog-js";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { getStore } from "@/lib/hooks/use-settings";
 
 export default function ShortcutReminderPage() {
   const { isMac, isLoading } = usePlatform();
@@ -12,14 +13,31 @@ export default function ShortcutReminderPage() {
   const [rawShortcut, setRawShortcut] = useState<string | null>(null);
   const [hovered, setHovered] = useState(false);
 
-  // Set default shortcut once platform is detected
+  // Load shortcut from store on mount
   useEffect(() => {
-    if (!isLoading && shortcut === null) {
-      setShortcut(isMac ? "⌘⌃S" : "Win+Ctrl+S");
-    }
-  }, [isMac, isLoading, shortcut]);
+    const loadShortcutFromStore = async () => {
+      try {
+        const store = await getStore();
+        const settings = await store.get<{ showScreenpipeShortcut?: string }>("settings");
+        if (settings?.showScreenpipeShortcut) {
+          setRawShortcut(settings.showScreenpipeShortcut);
+        }
+      } catch (e) {
+        console.error("Failed to load shortcut from store:", e);
+      }
+    };
+    loadShortcutFromStore();
+  }, []);
 
-  // Re-format shortcut when platform is detected
+  // Set default shortcut once platform is detected (fallback if store fails)
+  useEffect(() => {
+    if (!isLoading && shortcut === null && rawShortcut === null) {
+      // Default matches Super+Alt+S from settings
+      setShortcut(isMac ? "⌘⌥S" : "Win+Alt+S");
+    }
+  }, [isMac, isLoading, shortcut, rawShortcut]);
+
+  // Re-format shortcut when platform is detected or rawShortcut changes
   useEffect(() => {
     if (!isLoading && rawShortcut) {
       setShortcut(formatShortcut(rawShortcut, isMac));
@@ -105,7 +123,8 @@ export default function ShortcutReminderPage() {
 }
 
 function formatShortcut(shortcut: string, isMac: boolean): string {
-  if (!shortcut) return isMac ? "⌘⌃S" : "Win+Ctrl+S";
+  // Default matches Super+Alt+S from settings
+  if (!shortcut) return isMac ? "⌘⌥S" : "Win+Alt+S";
   if (isMac) {
     return shortcut
       .replace(/Super|Command|Cmd/gi, "⌘")

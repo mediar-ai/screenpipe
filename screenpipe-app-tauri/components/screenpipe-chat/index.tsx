@@ -309,7 +309,7 @@ Current time: ${new Date().toISOString()}`,
       <Button
         onClick={() => setIsOpen(true)}
         className={cn(
-          "fixed bottom-4 right-4 h-14 w-14 rounded-full shadow-lg",
+          "fixed bottom-4 right-4 h-14 w-14 rounded-full shadow-lg z-50",
           className
         )}
         size="icon"
@@ -322,7 +322,7 @@ Current time: ${new Date().toISOString()}`,
   return (
     <Card
       className={cn(
-        "fixed bottom-4 right-4 flex flex-col shadow-2xl border-border bg-background",
+        "fixed bottom-4 right-4 flex flex-col shadow-2xl border-border bg-background z-50",
         isMinimized ? "w-80 h-14" : "w-96 h-[500px]",
         className
       )}
