@@ -233,16 +233,21 @@ export class AnthropicProvider implements AIProvider {
 			}));
 		} catch (error) {
 			console.error('Failed to fetch Anthropic models:', error);
-			// Fallback to known models if API fails
+			// Fallback to latest models (Jan 2026)
 			return [
 				{
-					id: 'claude-3-5-sonnet-latest',
-					name: 'Claude 3.5 Sonnet',
+					id: 'claude-opus-4-5-20250514',
+					name: 'Claude Opus 4.5',
 					provider: 'anthropic',
 				},
 				{
-					id: 'claude-3-5-haiku-latest',
-					name: 'Claude 3.5 Haiku',
+					id: 'claude-sonnet-4-5-20250514',
+					name: 'Claude Sonnet 4.5',
+					provider: 'anthropic',
+				},
+				{
+					id: 'claude-haiku-4-5-20250514',
+					name: 'Claude Haiku 4.5',
 					provider: 'anthropic',
 				},
 			];

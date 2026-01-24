@@ -159,26 +159,26 @@ export class GeminiProvider implements AIProvider {
 				}));
 		} catch (error) {
 			console.error('Failed to fetch Gemini models:', error);
-			// Updated fallback to latest models (Jan 2025)
+			// Updated fallback to latest models (Jan 2026)
 			return [
 				{
-					id: 'gemini-2.0-flash',
-					name: 'Gemini 2.0 Flash',
+					id: 'gemini-3-pro',
+					name: 'Gemini 3 Pro',
 					provider: 'google',
 				},
 				{
-					id: 'gemini-2.0-flash-thinking-exp',
-					name: 'Gemini 2.0 Flash Thinking',
+					id: 'gemini-3-flash',
+					name: 'Gemini 3 Flash',
 					provider: 'google',
 				},
 				{
-					id: 'gemini-1.5-pro',
-					name: 'Gemini 1.5 Pro',
+					id: 'gemini-2.5-pro',
+					name: 'Gemini 2.5 Pro',
 					provider: 'google',
 				},
 				{
-					id: 'gemini-1.5-flash',
-					name: 'Gemini 1.5 Flash',
+					id: 'gemini-2.5-flash',
+					name: 'Gemini 2.5 Flash',
 					provider: 'google',
 				},
 			];

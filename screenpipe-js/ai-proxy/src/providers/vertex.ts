@@ -345,15 +345,20 @@ export class VertexAIProvider implements AIProvider {
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
 		return [
-			// Claude 4.5 (latest)
-			{ id: 'claude-opus-4-20250514', name: 'Claude Opus 4.5', provider: 'vertex' },
-			{ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'vertex' },
-			// Gemini 3.0 (latest)
-			{ id: 'gemini-3.0-pro', name: 'Gemini 3.0 Pro', provider: 'vertex' },
-			{ id: 'gemini-3.0-flash', name: 'Gemini 3.0 Flash', provider: 'vertex' },
+			// Claude (latest - Jan 2026)
+			{ id: 'claude-opus-4-5', name: 'Claude Opus 4.5', provider: 'vertex' },
+			{ id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'vertex' },
+			{ id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', provider: 'vertex' },
+			{ id: 'claude-opus-4', name: 'Claude Opus 4', provider: 'vertex' },
+			{ id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'vertex' },
+			// Gemini 3 (latest - Jan 2026, preview)
+			{ id: 'gemini-3-pro', name: 'Gemini 3 Pro', provider: 'vertex' },
+			{ id: 'gemini-3-flash', name: 'Gemini 3 Flash', provider: 'vertex' },
+			// Gemini 2.5 (GA)
+			{ id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'vertex' },
+			{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'vertex' },
 			// Gemini 2.0
 			{ id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'vertex' },
-			{ id: 'gemini-2.0-flash-thinking-exp', name: 'Gemini 2.0 Flash Thinking', provider: 'vertex' },
 		];
 	}
 }
