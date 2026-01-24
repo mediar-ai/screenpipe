@@ -183,8 +183,6 @@ export function GlobalChat() {
 
   // Listen for Rust-level open-chat event (Cmd+L / Ctrl+L global shortcut)
   useEffect(() => {
-    if (!isOnTimeline) return;
-
     const unlisten = listen("open-chat", () => {
       setOpen((prev) => !prev);
     });
@@ -192,7 +190,7 @@ export function GlobalChat() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [isOnTimeline]);
+  }, []);
 
   // Focus input when opening
   useEffect(() => {
