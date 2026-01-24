@@ -262,29 +262,26 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   };
 
   const requestPermission = async (type: "screen" | "audio") => {
+    // Check if permission is already granted - don't show any popup
+    const permStatus = type === "screen"
+      ? permissions?.screenRecording
+      : permissions?.microphone;
+    const isGranted = permStatus === "granted" || permStatus === "notNeeded";
+
+    if (isGranted) {
+      return; // Already have permission, do nothing
+    }
+
     try {
-      // First try to trigger the native permission dialog
-      if (type === "screen") {
-        await commands.requestPermission("screenRecording");
-      } else {
-        await commands.requestPermission("microphone");
-      }
-      // Small delay then open settings (in case user needs to toggle manually)
-      setTimeout(async () => {
-        if (type === "screen") {
-          await commands.openPermissionSettings("screenRecording");
-        } else {
-          await commands.openPermissionSettings("microphone");
-        }
-      }, 500);
-    } catch (error) {
-      console.error("Failed to request permission:", error);
-      // Fallback to just opening settings
+      // Just open System Settings - let user toggle there
+      // Don't call commands.requestPermission() as it triggers annoying native popup
       if (type === "screen") {
         await commands.openPermissionSettings("screenRecording");
       } else {
         await commands.openPermissionSettings("microphone");
       }
+    } catch (error) {
+      console.error("Failed to open permission settings:", error);
     }
   };
 
