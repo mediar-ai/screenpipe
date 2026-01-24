@@ -63,7 +63,7 @@ export interface KeywordSearchState {
 	previousResult: () => void;
 }
 
-const fuzzy_default = false;
+const fuzzy_default = true;
 const offset_default = 0;
 
 export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
