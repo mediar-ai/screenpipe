@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Brain,
   CircleCheck,
@@ -7,14 +7,16 @@ import {
   Code,
   Shield,
   Sparkles,
+  MessageSquare,
 } from "lucide-react";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import posthog from "posthog-js";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { Input } from "@/components/ui/input";
 
 interface OnboardingSelectionProps {
   className?: string;
-  selectedOptions: string[] | null;
+  selectedOption: string | null;
   handleOptionClick: (option: string) => void;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
@@ -24,57 +26,64 @@ const OPTIONS = [
   {
     key: "memory",
     icon: Brain,
-    label: "personal memory",
-    description: "i forget things and want to search my past screen activity",
+    label: "find something i saw",
+    description: "i saw something on my screen but can't remember where or when",
   },
   {
     key: "meetings",
     icon: Calendar,
-    label: "meeting summaries",
-    description: "i need help remembering what was discussed in meetings",
+    label: "remember conversations",
+    description: "i want to recall what was said in meetings or calls",
   },
   {
     key: "productivity",
     icon: Search,
-    label: "productivity tracking",
-    description: "i want to understand how i spend my time on my computer",
+    label: "track my time",
+    description: "i want to see how i actually spend time on my computer",
   },
   {
     key: "developer",
     icon: Code,
-    label: "building/developing",
-    description: "i'm a developer and want to build on top of screenpipe",
+    label: "build with my data",
+    description: "i'm a developer and want to build automations on my screen data",
   },
   {
     key: "privacy",
     icon: Shield,
-    label: "privacy-focused alternative",
-    description: "i want a local/private alternative to cloud services",
+    label: "local ai alternative",
+    description: "i want a private, local alternative to cloud ai tools",
   },
   {
     key: "curious",
     icon: Sparkles,
-    label: "just curious",
-    description: "trying it out to see what it does",
+    label: "just exploring",
+    description: "i heard about screenpipe and want to see what it does",
+  },
+  {
+    key: "other",
+    icon: MessageSquare,
+    label: "something else",
+    description: "tell us in your own words",
   },
 ];
 
 const SelectionItem: React.FC<{
   option: (typeof OPTIONS)[number];
-  isSelected: boolean | undefined;
+  isSelected: boolean;
   onClick: () => void;
   index: number;
-}> = ({ option, isSelected, onClick, index }) => {
+  children?: React.ReactNode;
+}> = ({ option, isSelected, onClick, index, children }) => {
   const { icon: Icon, label, description } = option;
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.1 }}
+      transition={{ delay: index * 0.08 }}
       className={`w-full flex flex-col border rounded-xl p-4 hover:shadow-lg cursor-pointer transition-all duration-300
         ${
           isSelected
-            ? "bg-primary text-primary-foreground border-primary shadow-lg transform scale-105"
+            ? "bg-primary text-primary-foreground border-primary shadow-lg"
             : "bg-card hover:bg-accent"
         }`}
       onClick={onClick}
@@ -90,24 +99,31 @@ const SelectionItem: React.FC<{
       <p className={`text-sm ${isSelected ? 'text-primary-foreground/90' : 'text-muted-foreground'}`}>
         {description}
       </p>
+
+      {children}
     </motion.div>
   );
 };
 
 const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
   className,
-  selectedOptions,
+  selectedOption,
   handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
 }) => {
+  const [otherText, setOtherText] = useState("");
+
+  const isOtherSelected = selectedOption === "other";
+  const canContinue = selectedOption !== null && (selectedOption !== "other" || otherText.trim().length > 0);
+
   const handleNext = () => {
-    // Track selected options in Posthog
+    // Track selected option in Posthog
     posthog.capture("onboarding_usecases_selected", {
-      selected_options: selectedOptions,
+      selected_option: selectedOption,
+      other_text: isOtherSelected ? otherText.trim() : null,
     });
 
-    // Call the original handleNextSlide function
     handleNextSlide();
   };
 
@@ -123,10 +139,10 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
           transition={{ duration: 0.5 }}
         />
         <h2 className="text-center text-2xl font-bold">
-          what brought you to screenpipe?
+          what&apos;s your #1 goal with screenpipe?
         </h2>
         <p className="text-center text-muted-foreground mt-2">
-          help us understand what you&apos;re looking for (select all that apply)
+          pick the one that matters most to you
         </p>
       </div>
 
@@ -136,22 +152,47 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
             <SelectionItem
               key={option.key}
               option={option}
-              isSelected={selectedOptions?.includes(option.key)}
+              isSelected={selectedOption === option.key}
               onClick={() => handleOptionClick(option.key)}
               index={index}
-            />
+            >
+              {option.key === "other" && selectedOption === "other" && (
+                <AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="mt-3"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Input
+                      type="text"
+                      placeholder="what are you trying to do?"
+                      value={otherText}
+                      onChange={(e) => setOtherText(e.target.value)}
+                      className="bg-background text-foreground border-primary-foreground/30 placeholder:text-primary-foreground/50"
+                      autoFocus
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              )}
+            </SelectionItem>
           ))}
         </div>
 
-        {selectedOptions && selectedOptions.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-4 text-center text-sm text-muted-foreground"
-          >
-            Thanks! This helps us improve Screenpipe for you.
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {!selectedOption && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="mt-4 text-center text-sm text-muted-foreground"
+            >
+              this helps us build the right features for you
+            </motion.p>
+          )}
+        </AnimatePresence>
       </div>
 
       <OnboardingNavigation
@@ -159,6 +200,7 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
         handleNextSlide={handleNext}
         prevBtnText="Back"
         nextBtnText="Continue"
+        nextDisabled={!canContinue}
       />
     </div>
   );

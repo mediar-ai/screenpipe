@@ -18,6 +18,14 @@ const useImageWithRetry = (frameId: number) => {
 	const [hasError, setHasError] = useState(false);
 	const retryCount = useRef(0);
 
+	// Reset state when frameId changes
+	useEffect(() => {
+		setSrc(`http://localhost:3030/frames/${frameId}`);
+		setIsLoading(true);
+		setHasError(false);
+		retryCount.current = 0;
+	}, [frameId]);
+
 	const handleLoad = useCallback(() => {
 		setIsLoading(false);
 		setHasError(false);
@@ -227,6 +235,9 @@ export const MainImage = () => {
 
 	const currentFrame = searchResults[currentResultIndex];
 
+	// Call hook unconditionally (React rules of hooks)
+	const { src, isLoading, hasError, handleLoad, handleError } = useImageWithRetry(currentFrame?.frame_id ?? 0);
+
 	// Fetch OCR text positions for text selection overlay
 	const { textPositions, isLoading: isOcrLoading } = useFrameOcrData(
 		currentFrame?.frame_id ?? null
@@ -266,8 +277,6 @@ export const MainImage = () => {
 			</div>
 		);
 	}
-
-	const { src, isLoading, hasError, handleLoad, handleError } = useImageWithRetry(currentFrame.frame_id);
 
 	const handleOpenInBrowser = useCallback(() => {
 		if (currentFrame?.url) {

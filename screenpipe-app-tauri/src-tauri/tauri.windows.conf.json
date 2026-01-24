@@ -4,7 +4,8 @@
             "nsis": {
                 "headerImage": "assets/nsis-header.bmp",
                 "sidebarImage": "assets/nsis-sidebar.bmp",
-                "installerIcon": "icons/icon.ico"
+                "installerIcon": "icons/icon.ico",
+                "installerHooks": "windows/hooks.nsh"
             }
         },
         "externalBin": [

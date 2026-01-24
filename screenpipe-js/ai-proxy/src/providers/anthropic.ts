@@ -61,12 +61,17 @@ export class AnthropicProvider implements AIProvider {
 			stream: true,
 			max_tokens: 4096,
 			temperature: body.temperature,
+			tools: body.tools ? this.formatTools(body.tools) : undefined,
 		});
 
 		return new ReadableStream({
 			async start(controller) {
 				try {
+					let currentToolCall: { index: number; id: string; name: string; arguments: string } | null = null;
+					let toolCallIndex = 0;
+
 					for await (const chunk of stream) {
+						// Handle text content
 						if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
 							controller.enqueue(
 								new TextEncoder().encode(
@@ -75,6 +80,63 @@ export class AnthropicProvider implements AIProvider {
 									})}\n\n`
 								)
 							);
+						}
+
+						// Handle tool use start
+						if (chunk.type === 'content_block_start' && chunk.content_block?.type === 'tool_use') {
+							currentToolCall = {
+								index: toolCallIndex,
+								id: chunk.content_block.id,
+								name: chunk.content_block.name,
+								arguments: '',
+							};
+							// Send tool call start in OpenAI format
+							controller.enqueue(
+								new TextEncoder().encode(
+									`data: ${JSON.stringify({
+										choices: [{
+											delta: {
+												tool_calls: [{
+													index: toolCallIndex,
+													id: chunk.content_block.id,
+													type: 'function',
+													function: {
+														name: chunk.content_block.name,
+														arguments: '',
+													},
+												}],
+											},
+										}],
+									})}\n\n`
+								)
+							);
+						}
+
+						// Handle tool use input delta
+						if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'input_json_delta' && currentToolCall) {
+							currentToolCall.arguments += chunk.delta.partial_json;
+							controller.enqueue(
+								new TextEncoder().encode(
+									`data: ${JSON.stringify({
+										choices: [{
+											delta: {
+												tool_calls: [{
+													index: currentToolCall.index,
+													function: {
+														arguments: chunk.delta.partial_json,
+													},
+												}],
+											},
+										}],
+									})}\n\n`
+								)
+							);
+						}
+
+						// Handle tool use end
+						if (chunk.type === 'content_block_stop' && currentToolCall) {
+							toolCallIndex++;
+							currentToolCall = null;
 						}
 					}
 					controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
@@ -171,16 +233,21 @@ export class AnthropicProvider implements AIProvider {
 			}));
 		} catch (error) {
 			console.error('Failed to fetch Anthropic models:', error);
-			// Fallback to known models if API fails
+			// Fallback to latest models (Jan 2026)
 			return [
 				{
-					id: 'claude-3-5-sonnet-latest',
-					name: 'Claude 3.5 Sonnet',
+					id: 'claude-opus-4-5-20250514',
+					name: 'Claude Opus 4.5',
 					provider: 'anthropic',
 				},
 				{
-					id: 'claude-3-5-haiku-latest',
-					name: 'Claude 3.5 Haiku',
+					id: 'claude-sonnet-4-5-20250514',
+					name: 'Claude Sonnet 4.5',
+					provider: 'anthropic',
+				},
+				{
+					id: 'claude-haiku-4-5-20250514',
+					name: 'Claude Haiku 4.5',
 					provider: 'anthropic',
 				},
 			];

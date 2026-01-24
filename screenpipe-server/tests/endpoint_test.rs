@@ -46,7 +46,6 @@ mod tests {
             Arc::new(PipeManager::new(PathBuf::from(""))),
             false,
             false,
-            false,
             audio_manager,
             true,
         );

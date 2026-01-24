@@ -345,13 +345,20 @@ export class VertexAIProvider implements AIProvider {
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
 		return [
-			{ id: 'claude-3-5-sonnet-v2', name: 'Claude 3.5 Sonnet v2', provider: 'vertex-anthropic' },
-			{ id: 'claude-3-5-haiku', name: 'Claude 3.5 Haiku', provider: 'vertex-anthropic' },
-			{ id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'vertex-anthropic' },
-			{ id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'vertex-anthropic' },
-			{ id: 'claude-3-haiku', name: 'Claude 3 Haiku', provider: 'vertex-anthropic' },
-			{ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'vertex-anthropic' },
-			{ id: 'claude-opus-4-20250514', name: 'Claude Opus 4', provider: 'vertex-anthropic' },
+			// Claude (latest - Jan 2026)
+			{ id: 'claude-opus-4-5', name: 'Claude Opus 4.5', provider: 'vertex' },
+			{ id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'vertex' },
+			{ id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', provider: 'vertex' },
+			{ id: 'claude-opus-4', name: 'Claude Opus 4', provider: 'vertex' },
+			{ id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'vertex' },
+			// Gemini 3 (latest - Jan 2026, preview)
+			{ id: 'gemini-3-pro', name: 'Gemini 3 Pro', provider: 'vertex' },
+			{ id: 'gemini-3-flash', name: 'Gemini 3 Flash', provider: 'vertex' },
+			// Gemini 2.5 (GA)
+			{ id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'vertex' },
+			{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'vertex' },
+			// Gemini 2.0
+			{ id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'vertex' },
 		];
 	}
 }
@@ -396,7 +403,7 @@ export async function proxyToVertex(
 		const accessToken = await (provider as any).getAccessToken();
 
 		// Map model to Vertex format
-		const model = body.model || 'claude-3-5-sonnet-v2@20241022';
+		const model = body.model || 'claude-sonnet-4@20250514';
 		const vertexModel = mapModelToVertex(model);
 		const method = isStreaming ? 'streamRawPredict' : 'rawPredict';
 		const vertexUrl = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/anthropic/models/${vertexModel}:${method}`;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Check, Monitor, Mic } from "lucide-react";
+import { Check, Monitor, Mic, AlertTriangle, Upload, Loader, Calendar } from "lucide-react";
 import { Button } from "../ui/button";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
@@ -7,6 +7,13 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { commands, type OSPermissionsCheck } from "@/lib/utils/tauri";
 import { motion } from "framer-motion";
 import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
+import { open as openPath, open as openUrl } from "@tauri-apps/plugin-shell";
+import { homeDir, join } from "@tauri-apps/api/path";
+import { scheduleFirstRunNotification } from "@/lib/notifications";
+import { TimelineAIDemo } from "./timeline-ai-demo";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { getVersion } from "@tauri-apps/api/app";
+import { version as osVersion, platform as osPlatform } from "@tauri-apps/plugin-os";
 
 // Format shortcut for display (platform-aware)
 function formatShortcut(shortcut: string, isMac: boolean): string {
@@ -34,15 +41,102 @@ interface OnboardingStatusProps {
 
 type SetupState = "checking" | "needs-permissions" | "ready" | "starting" | "recording";
 
+const STUCK_TIMEOUT_MS = 30000; // 30 seconds
+
 const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   className = "",
   handleNextSlide,
 }) => {
   const [setupState, setSetupState] = useState<SetupState>("checking");
   const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(null);
+  const [isStuck, setIsStuck] = useState(false);
+  const [isSendingLogs, setIsSendingLogs] = useState(false);
+  const [logsSent, setLogsSent] = useState(false);
   const { isMac: isMacOS } = usePlatform();
   const { settings, updateSettings } = useSettings();
   const hasStartedRef = useRef(false);
+  const stuckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const sendLogs = async () => {
+    setIsSendingLogs(true);
+    try {
+      const BASE_URL = "https://screenpi.pe";
+      const machineId = localStorage.getItem("machineId") || crypto.randomUUID();
+      localStorage.setItem("machineId", machineId);
+
+      const identifier = settings.user?.id || machineId;
+      const type = settings.user?.id ? "user" : "machine";
+
+      // Get log files
+      const logFilesResult = await commands.getLogFiles();
+      if (logFilesResult.status !== "ok") throw new Error("Failed to get log files");
+
+      const logFiles = logFilesResult.data.slice(0, 3); // Last 3 log files
+      const MAX_LOG_SIZE = 50 * 1024; // 50KB per file for onboarding
+
+      const logContents = await Promise.all(
+        logFiles.map(async (file) => {
+          try {
+            const content = await readTextFile(file.path);
+            const truncated = content.length > MAX_LOG_SIZE
+              ? `... [truncated] ...\n` + content.slice(-MAX_LOG_SIZE)
+              : content;
+            return { name: file.name, content: truncated };
+          } catch {
+            return { name: file.name, content: "[Error reading file]" };
+          }
+        })
+      );
+
+      // Get signed URL
+      const signedRes = await fetch(`${BASE_URL}/api/logs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, type }),
+      });
+      const { data: { signedUrl, path } } = await signedRes.json();
+
+      // Upload logs
+      const combinedLogs = logContents
+        .map((log) => `\n=== ${log.name} ===\n${log.content}`)
+        .join("\n\n") + "\n\n=== Onboarding Stuck ===\nUser experienced startup issues during onboarding.";
+
+      await fetch(signedUrl, {
+        method: "PUT",
+        body: combinedLogs,
+        headers: { "Content-Type": "text/plain" },
+      });
+
+      // Confirm upload
+      const os = osPlatform();
+      const os_version = osVersion();
+      const app_version = await getVersion();
+
+      await fetch(`${BASE_URL}/api/logs/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path,
+          identifier,
+          type,
+          os,
+          os_version,
+          app_version,
+          feedback_text: "Onboarding stuck - automatic log submission",
+        }),
+      });
+
+      setLogsSent(true);
+    } catch (err) {
+      console.error("Failed to send logs:", err);
+    } finally {
+      setIsSendingLogs(false);
+    }
+  };
+
+  const openBookingLink = () => {
+    openUrl("https://cal.com/louis030195/screenpipe-onboarding");
+  };
 
   // Create default screenpipe-cloud preset if none exists
   const ensureDefaultPreset = async () => {
@@ -67,6 +161,8 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     if (settings.showScreenpipeShortcut) {
       commands.showShortcutReminder(settings.showScreenpipeShortcut);
     }
+    // Schedule 2-hour reminder notification (first run only)
+    scheduleFirstRunNotification();
     handleNextSlide();
   };
 
@@ -113,6 +209,41 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       handleStartRecording();
     }
   }, [setupState]);
+
+  // Track stuck state with timeout
+  useEffect(() => {
+    // Clear any existing timeout
+    if (stuckTimeoutRef.current) {
+      clearTimeout(stuckTimeoutRef.current);
+      stuckTimeoutRef.current = null;
+    }
+
+    // Set timeout for "ready" or "starting" states
+    if (setupState === "ready" || setupState === "starting") {
+      setIsStuck(false);
+      stuckTimeoutRef.current = setTimeout(() => {
+        setIsStuck(true);
+      }, STUCK_TIMEOUT_MS);
+    } else {
+      setIsStuck(false);
+    }
+
+    return () => {
+      if (stuckTimeoutRef.current) {
+        clearTimeout(stuckTimeoutRef.current);
+      }
+    };
+  }, [setupState]);
+
+  const openLogsFolder = async () => {
+    try {
+      const home = await homeDir();
+      const screenpipeDir = await join(home, ".screenpipe");
+      await openPath(screenpipeDir);
+    } catch (error) {
+      console.error("Failed to open logs folder:", error);
+    }
+  };
 
   const handleStartRecording = async () => {
     posthog.capture("screenpipe_setup_start");
@@ -224,6 +355,59 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             <p className="font-mono text-sm text-foreground">starting screenpipe...</p>
             <p className="font-mono text-xs text-muted-foreground">downloading AI models</p>
           </div>
+
+          {isStuck && (
+            <motion.div
+              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-border bg-muted/50 rounded-lg max-w-md"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="flex items-center space-x-2 text-muted-foreground">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="font-mono text-sm">taking longer than expected</span>
+              </div>
+              <p className="font-mono text-xs text-muted-foreground text-center">
+                this might be due to missing permissions or a startup issue.
+                {isMacOS && " try granting screen recording & microphone access in system settings."}
+              </p>
+              <div className="flex flex-col items-center space-y-2 w-full">
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={openLogsFolder}
+                    className="font-mono text-xs"
+                  >
+                    open logs folder
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={sendLogs}
+                    disabled={isSendingLogs || logsSent}
+                    className="font-mono text-xs"
+                  >
+                    {isSendingLogs ? (
+                      <><Loader className="w-3 h-3 mr-1 animate-spin" /> sending...</>
+                    ) : logsSent ? (
+                      <><Check className="w-3 h-3 mr-1" /> logs sent</>
+                    ) : (
+                      <><Upload className="w-3 h-3 mr-1" /> send logs</>
+                    )}
+                  </Button>
+                </div>
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={openBookingLink}
+                  className="font-mono text-xs text-primary"
+                >
+                  <Calendar className="w-3 h-3 mr-1" />
+                  book a call for help
+                </Button>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       )}
 
@@ -260,6 +444,15 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             </p>
           </div>
 
+          {/* Timeline + AI Chat animation */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <TimelineAIDemo />
+          </motion.div>
+
           <div className="flex items-center space-x-4 text-xs font-mono text-muted-foreground">
             <div className="flex items-center space-x-2">
               <Check className="w-4 h-4" strokeWidth={1.5} />
@@ -290,6 +483,71 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         >
           <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin" />
           <p className="font-mono text-sm text-muted-foreground">preparing...</p>
+
+          {isStuck && (
+            <motion.div
+              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-border bg-muted/50 rounded-lg max-w-md"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="flex items-center space-x-2 text-muted-foreground">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="font-mono text-sm">taking longer than expected</span>
+              </div>
+              <p className="font-mono text-xs text-muted-foreground text-center">
+                this might be due to missing permissions or a startup issue.
+                {isMacOS && " try granting screen recording & microphone access in system settings."}
+              </p>
+              <div className="flex flex-col items-center space-y-2 w-full">
+                <div className="flex items-center space-x-2">
+                  {isMacOS && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openSystemPreferences("screen")}
+                      className="font-mono text-xs"
+                    >
+                      check permissions
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={openLogsFolder}
+                    className="font-mono text-xs"
+                  >
+                    open logs folder
+                  </Button>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={sendLogs}
+                    disabled={isSendingLogs || logsSent}
+                    className="font-mono text-xs"
+                  >
+                    {isSendingLogs ? (
+                      <><Loader className="w-3 h-3 mr-1 animate-spin" /> sending...</>
+                    ) : logsSent ? (
+                      <><Check className="w-3 h-3 mr-1" /> logs sent</>
+                    ) : (
+                      <><Upload className="w-3 h-3 mr-1" /> send logs</>
+                    )}
+                  </Button>
+                </div>
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={openBookingLink}
+                  className="font-mono text-xs text-primary"
+                >
+                  <Calendar className="w-3 h-3 mr-1" />
+                  book a call for help
+                </Button>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       )}
     </div>

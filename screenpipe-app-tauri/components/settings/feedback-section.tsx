@@ -2,7 +2,8 @@
 
 import React from "react";
 import { ShareLogsButton } from "@/components/share-logs-button";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Github } from "lucide-react";
+import { open } from "@tauri-apps/plugin-shell";
 
 export function FeedbackSection() {
   return (
@@ -40,6 +41,26 @@ export function FeedbackSection() {
             (OS version, app version), and any screenshots or recordings you choose to attach.
             No personal screen content is sent unless you explicitly attach it.
           </p>
+        </div>
+
+        <div className="p-6 bg-card rounded-xl border border-border">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-primary/10 rounded-lg">
+              <Github className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold mb-1">GitHub Issues</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                For product ideas, bugs, suggestions, or feature requests, you can also open an issue on GitHub.
+              </p>
+              <button
+                onClick={() => open("https://github.com/mediar-ai/screenpipe/issues")}
+                className="text-sm text-primary hover:underline"
+              >
+                github.com/mediar-ai/screenpipe/issues →
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

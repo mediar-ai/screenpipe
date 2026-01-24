@@ -437,35 +437,6 @@ if (platform == 'macos') {
 
   console.log('FFMPEG and FFPROBE checks completed');
 	console.log('Moved and renamed ffmpeg binary for externalBin');
-
-	// Setup Swift UI monitoring
-	console.log('Setting up Swift UI monitoring...');
-	try {
-		const swiftSrc = path.join(cwd, '../../screenpipe-vision/src/ui_monitoring_macos.swift');
-		const architectures = ['arm64', 'x86_64'];
-
-		for (const arch of architectures) {
-			console.log(`Compiling Swift UI monitor for ${arch}...`);
-
-			const binaryName = `ui_monitor-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`;
-			const outputPath = path.join(cwd, binaryName);
-
-			// Compile directly to the final destination
-			await $`swiftc -O -whole-module-optimization -enforce-exclusivity=unchecked -num-threads 8 -target ${arch}-apple-macos11.0 -o ${outputPath} ${swiftSrc} -framework Cocoa -framework ApplicationServices -framework Foundation`;
-
-			// Sign with ad-hoc signature first - this ensures the binary is at least signed
-			// Tauri will re-sign it later with the proper identity
-			// await $`codesign --force --sign - ${outputPath}`;
-
-			console.log(`Swift UI monitor for ${arch} compiled successfully`);
-			await fs.chmod(outputPath, 0o755);
-		}
-	} catch (error) {
-		console.error('Error setting up Swift UI monitoring:', error);
-		console.log('Current working directory:', cwd);
-		console.log('Expected Swift source path:', path.join(cwd, '../../screenpipe-vision/src/ui_monitoring_macos.swift'));
-		throw error; // Rethrow to fail the build if Swift compilation fails
-	}
 }
 
 

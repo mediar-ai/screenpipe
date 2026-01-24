@@ -737,8 +737,8 @@ export const AIPresetDialog = ({
     const newPreset: Partial<AIPreset> = {
       ...preset,
       provider: providerData.provider,
-      url: providerData.baseUrl,
-      model: providerData.modelName,
+      url: providerData.url,      // Fixed: was providerData.baseUrl
+      model: providerData.model,  // Fixed: was providerData.modelName
       id: providerData.id,
       maxContextChars: providerData.maxContextChars,
       prompt: providerData.prompt,

@@ -13,19 +13,34 @@ Query and manage PostHog product analytics for Screenpipe applications.
 **Host:** `https://eu.i.posthog.com`
 **SDK Project Key (public):** `phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce`
 
-**Personal API Key:** Required for API operations. Read from `POSTHOG_API_KEY` environment variable.
+**Personal API Key:** Stored in `.env.local` at the repo root. Always source it before running queries.
 
-### Getting a Personal API Key
+### Loading the API Key
+
+**IMPORTANT:** Before running ANY PostHog query, always source the `.env.local` file first:
+
+```bash
+source /Users/louisbeaumont/Documents/screenpipe/.env.local
+```
+
+Or inline with commands:
+```bash
+export $(cat /Users/louisbeaumont/Documents/screenpipe/.env.local | xargs) && curl ...
+```
+
+### Getting a Personal API Key (if needed)
 
 1. Go to https://eu.posthog.com/settings/user-api-keys
 2. Click "Create personal API key"
 3. Name it (e.g., "claude-code")
 4. Select scopes: `insight:read`, `insight:write`, `dashboard:read`, `dashboard:write`, `query:read`
-5. Set env var: `export POSTHOG_API_KEY=phx_xxx...`
+5. Add to `.env.local`: `POSTHOG_API_KEY=phx_xxx...`
 
 ---
 
 ## Bash Queries (macOS/Linux)
+
+**Note:** All commands below assume you have sourced `.env.local` first.
 
 ### Get Project ID
 

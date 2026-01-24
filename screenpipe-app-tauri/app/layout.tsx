@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { useEffect } from "react";
 import { DeeplinkHandler } from "@/components/deeplink-handler";
 import { ShortcutTracker } from "@/components/shortcut-reminder";
+import { GlobalChat } from "@/components/global-chat";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -88,6 +89,7 @@ export default function RootLayout({
           <DeeplinkHandler />
           <ShortcutTracker />
           {children}
+          <GlobalChat />
           <Toaster />
         </body>
       </Providers>

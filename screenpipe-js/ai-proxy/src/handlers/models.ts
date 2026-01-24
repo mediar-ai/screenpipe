@@ -9,16 +9,10 @@ import { createSuccessResponse, createErrorResponse } from '../utils/cors';
  */
 export async function handleModelListing(env: Env): Promise<Response> {
   try {
-    const providers = {
-      anthropic: createProvider('claude-3-5-sonnet-latest', env),
-      openai: createProvider('gpt-4', env),
-      gemini: createProvider('gemini-1.5-pro', env),
-    };
-
+    // Only use Vertex AI which provides both Claude and Gemini
+    const vertex = createProvider('claude-opus-4-20250514', env);
     const results = await Promise.allSettled([
-      providers.anthropic.listModels(),
-      providers.openai.listModels(),
-      providers.gemini.listModels(),
+      vertex.listModels(),
     ]);
 
     const models = results

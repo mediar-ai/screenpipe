@@ -1,7 +1,7 @@
 ---
 name: release
-description: "Release the screenpipe monorepo. Bumps versions, triggers GitHub Actions for app, CLI, MCP, and JS packages."
-allowed-tools: Bash, Read, Edit, Grep
+description: "Release the screenpipe monorepo. Bumps versions, generates changelog, triggers GitHub Actions for app, CLI, MCP, and JS packages."
+allowed-tools: Bash, Read, Edit, Grep, Write
 ---
 
 # Screenpipe Monorepo Release Skill
@@ -19,88 +19,106 @@ Automate releasing all components of the screenpipe monorepo.
 | JS Node SDK | `screenpipe-js/node-sdk/package.json` | `"version": "X.Y.Z"` | npm publish |
 | JS CLI | `screenpipe-js/cli/package.json` | `"version": "X.Y.Z"` | npm publish |
 
-## Release Commands
+## Release Workflow
 
 ### 1. Check Current Versions
 ```bash
 echo "=== App ===" && grep '^version' screenpipe-app-tauri/src-tauri/Cargo.toml | head -1
 echo "=== CLI ===" && grep '^version' Cargo.toml | head -1
-echo "=== MCP ===" && grep '"version"' screenpipe-integrations/screenpipe-mcp/package.json
-echo "=== JS Browser ===" && grep '"version"' screenpipe-js/browser-sdk/package.json
-echo "=== JS Node ===" && grep '"version"' screenpipe-js/node-sdk/package.json
-echo "=== JS CLI ===" && grep '"version"' screenpipe-js/cli/package.json
+echo "=== MCP ===" && grep '"version"' screenpipe-integrations/screenpipe-mcp/package.json | head -1
 ```
 
-### 2. Bump Versions (edit files)
-Use Edit tool to update version strings in the files listed above.
+### 2. Generate Changelog
 
-### 3. Commit & Push
+Get commits since last release and generate a user-friendly changelog:
+
 ```bash
-git add -A
-git commit -m "Bump versions: App vX.Y.Z, CLI v0.2.X, MCP vX.Y.Z"
-git pull --rebase
-git push
+# Get last release tag
+LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+# Get commits since last release (or last 50 if no tag)
+if [ -n "$LAST_TAG" ]; then
+  git log $LAST_TAG..HEAD --oneline --no-merges
+else
+  git log -50 --oneline --no-merges
+fi
 ```
 
-### 4. Trigger Releases
+Then create changelog at `content/changelogs/vX.Y.Z.md` with format:
 
-**Desktop App (macOS + Windows):**
+```markdown
+## New Features
+- Feature description (from commit context)
+
+## Improvements
+- Improvement description
+
+## Bug Fixes
+- Fix description
+
+#### **Full Changelog:** [abc123..def456](https://github.com/mediar-ai/screenpipe/compare/abc123..def456)
+```
+
+Guidelines:
+- Only include changes that bring clear **customer value**
+- Skip: CI changes, refactors, dependency bumps, merge commits
+- Be concise but descriptive
+- Group related changes together
+
+Also copy to `screenpipe-app-tauri/public/CHANGELOG.md` for in-app display.
+
+### 3. Bump Version
+
+Edit `screenpipe-app-tauri/src-tauri/Cargo.toml` to update version.
+
+### 4. Commit & Push
+```bash
+git add -A && git commit -m "Bump app to vX.Y.Z" && git pull --rebase && git push
+```
+
+### 5. Trigger Release (Draft Only)
 ```bash
 gh workflow run release-app.yml
 ```
 
-**CLI (all platforms):**
-```bash
-gh workflow run release-cli.yml
-```
+**Important**: `workflow_dispatch` creates a **draft only** - does NOT auto-publish. This allows manual testing before publishing.
 
-**MCP:**
+### 6. Monitor Build Status
 ```bash
-gh workflow run release-mcp.yml
-```
+# Get latest run ID
+gh run list --workflow=release-app.yml --limit=1
 
-### 5. Monitor Build Status
-```bash
-# List recent runs
-gh run list --limit 5
-
-# Check specific run
+# Check status
 gh run view <RUN_ID> --json status,conclusion,jobs --jq '{status: .status, conclusion: .conclusion, jobs: [.jobs[] | {name: (.name | split(",")[0]), status: .status, conclusion: .conclusion}]}'
+```
+
+### 7. Test the Draft Release
+- Download from CrabNebula Cloud: https://web.crabnebula.cloud/mediar/screenpipe/releases
+- Test on macOS and Windows
+- Verify updater artifacts exist (.tar.gz, .sig files)
+
+### 8. Publish Release
+After testing, publish manually via CrabNebula Cloud dashboard, OR commit with magic words:
+```bash
+git commit --allow-empty -m "release-app-publish" && git push
 ```
 
 ## Quick Release (App Only)
 
-Most common release - just the desktop app:
-
 ```bash
-# 1. Bump app version (edit Cargo.toml)
-# 2. Commit and push
-git add -A && git commit -m "Bump app to vX.Y.Z" && git pull --rebase && git push
+# 1. Generate changelog (Claude does this)
+# 2. Bump version in Cargo.toml
+# 3. Commit and push
+git add -A && git commit -m "Bump app to vX.Y.Z" && git push
 
-# 3. Trigger release
+# 4. Trigger release (draft)
 gh workflow run release-app.yml
 
-# 4. Monitor
+# 5. Monitor
 sleep 5 && gh run list --workflow=release-app.yml --limit=1
 ```
 
-## Full Monorepo Release
-
-Release everything:
-
-```bash
-# Trigger all release workflows
-gh workflow run release-app.yml
-gh workflow run release-cli.yml
-gh workflow run release-mcp.yml
-
-# Monitor all
-gh run list --limit 10
-```
-
-## Build Status Table Format
-
-When reporting status, use this format:
+## Build Status Format
 
 ```
 Build <RUN_ID>:
@@ -115,11 +133,7 @@ Build <RUN_ID>:
 
 ### Build Failed
 ```bash
-# Get failed job logs
-gh run view <RUN_ID> --log-failed
-
-# Or check specific job
-gh run view --job=<JOB_ID> 2>&1 | tail -50
+gh run view <RUN_ID> --log-failed 2>&1 | tail -100
 ```
 
 ### Cancel Running Build
@@ -132,10 +146,27 @@ gh run cancel <RUN_ID>
 gh run rerun <RUN_ID> --failed
 ```
 
+### Missing Updater Artifacts (.tar.gz, .sig)
+The CI copies `tauri.prod.conf.json` to `tauri.conf.json` before building. If artifacts are missing:
+1. Check `tauri.prod.conf.json` has `"createUpdaterArtifacts": true`
+2. Check the "Use production config" step ran successfully
+
+## Configuration
+
+### Dev vs Prod Configs
+- `tauri.conf.json` - Dev config (identifier: `screenpi.pe.dev`)
+- `tauri.prod.conf.json` - Prod config (identifier: `screenpi.pe`, updater enabled)
+
+CI automatically uses prod config for releases by copying it before build.
+
+### Auto-Publish Behavior
+- `workflow_dispatch` (manual trigger) → Draft only, no publish
+- Commit with "release-app-publish" → Auto-publish after successful build
+
 ## Notes
 
 - Linux desktop app is disabled (bundling issues)
 - App builds take ~25-35 minutes
 - CLI builds take ~15-20 minutes
 - Always pull before push to avoid conflicts
-- Sentry DSNs are configured for: app, cli, ai-proxy
+- Updater artifacts: macOS uses `.tar.gz`/`.sig`, Windows uses `.nsis.zip`/`.sig`

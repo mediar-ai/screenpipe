@@ -35,7 +35,6 @@ async fn setup_test_app() -> (Router, Arc<DatabaseManager>) {
         Arc::new(PipeManager::new(PathBuf::from(""))),
         false,
         false,
-        false,
         audio_manager,
         true,
     );

@@ -1,6 +1,4 @@
 use crate::{get_data_dir, window_api::ShowRewindWindow, store::OnboardingStore};
-use serde::Serialize;
-use specta::Type;
 use tauri::Manager;
 use tracing::{error, info};
 
@@ -46,10 +44,10 @@ pub fn hide_main_window(app_handle: &tauri::AppHandle) {
 /// When enabled, mouse events pass through to windows below
 #[tauri::command]
 #[specta::specta]
-pub fn enable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(), String> {
+pub fn enable_overlay_click_through(_app_handle: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        if let Some(window) = app_handle.get_webview_window("main") {
+        if let Some(window) = _app_handle.get_webview_window("main") {
             crate::windows_overlay::enable_click_through(&window)?;
         }
     }
@@ -60,10 +58,10 @@ pub fn enable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(), 
 /// When disabled, the overlay receives mouse events normally
 #[tauri::command]
 #[specta::specta]
-pub fn disable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(), String> {
+pub fn disable_overlay_click_through(_app_handle: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        if let Some(window) = app_handle.get_webview_window("main") {
+        if let Some(window) = _app_handle.get_webview_window("main") {
             crate::windows_overlay::disable_click_through(&window)?;
         }
     }
@@ -73,10 +71,10 @@ pub fn disable_overlay_click_through(app_handle: tauri::AppHandle) -> Result<(),
 /// Check if click-through is currently enabled (Windows only)
 #[tauri::command]
 #[specta::specta]
-pub fn is_overlay_click_through(app_handle: tauri::AppHandle) -> bool {
+pub fn is_overlay_click_through(_app_handle: tauri::AppHandle) -> bool {
     #[cfg(target_os = "windows")]
     {
-        if let Some(window) = app_handle.get_webview_window("main") {
+        if let Some(window) = _app_handle.get_webview_window("main") {
             return crate::windows_overlay::is_click_through_enabled(&window);
         }
     }
@@ -151,13 +149,6 @@ pub fn update_show_screenpipe_shortcut(
     }
 
     Ok(())
-}
-
-// Add these new structs
-#[derive(Debug, Serialize, Type)]
-pub struct AuthStatus {
-    authenticated: bool,
-    message: Option<String>,
 }
 
 #[tauri::command]
@@ -397,7 +388,7 @@ pub async fn show_shortcut_reminder(
     }
 
     info!("Creating new shortcut-reminder window");
-    let window = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         &app_handle,
         label,
         tauri::WebviewUrl::App("shortcut-reminder".into()),
@@ -413,9 +404,19 @@ pub async fn show_shortcut_reminder(
     .transparent(true)
     .visible(false)
     .shadow(false)
-    .resizable(false)
-    .build()
-    .map_err(|e| format!("Failed to create shortcut reminder window: {}", e))?;
+    .resizable(false);
+
+    // Hide title bar on macOS
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .hidden_title(true)
+            .title_bar_style(tauri::TitleBarStyle::Overlay);
+    }
+
+    let window = builder
+        .build()
+        .map_err(|e| format!("Failed to create shortcut reminder window: {}", e))?;
 
     info!("shortcut-reminder window created");
 
@@ -423,16 +424,21 @@ pub async fn show_shortcut_reminder(
     #[cfg(target_os = "macos")]
     {
         use tauri_nspanel::WebviewWindowExt;
-        use tauri_nspanel::ManagerExt;
 
         if let Ok(_panel) = window.to_panel() {
             info!("Successfully converted shortcut-reminder to panel");
 
-            let app_clone = app_handle.clone();
+            // Show the window first (required - order_front_regardless doesn't make invisible windows visible)
+            let _ = window.show();
+
+            // Clone window to pass into main thread closure
+            let window_clone = window.clone();
             let _ = app_handle.run_on_main_thread(move || {
                 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
 
-                if let Ok(panel) = app_clone.get_webview_panel(label) {
+                // Use to_panel() on window_clone directly instead of get_webview_panel
+                // This avoids race conditions with panel registration
+                if let Ok(panel) = window_clone.to_panel() {
                     // Level 1001 = above CGShieldingWindowLevel, shows over fullscreen
                     panel.set_level(1001);
                     panel.set_style_mask(0);
@@ -445,10 +451,14 @@ pub async fn show_shortcut_reminder(
                     // Order front regardless to show above fullscreen
                     panel.order_front_regardless();
                     info!("Panel configured for fullscreen support");
+                } else {
+                    error!("Failed to get panel in main thread");
                 }
             });
         } else {
             error!("Failed to convert shortcut-reminder to panel");
+            // Fallback: just show the window
+            let _ = window.show();
         }
     }
 
@@ -456,6 +466,27 @@ pub async fn show_shortcut_reminder(
     {
         let _ = window.show();
     }
+
+    // Listen for display changes and reposition window to stay top-center
+    let app_handle_clone = app_handle.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::ScaleFactorChanged { .. } = event {
+            // Display configuration changed, reposition to top center of primary monitor
+            if let Ok(Some(monitor)) = app_handle_clone.primary_monitor() {
+                let screen_size = monitor.size();
+                let scale_factor = monitor.scale_factor();
+                let new_x = ((screen_size.width as f64 / scale_factor) - 180.0) / 2.0;
+                let new_y = 12.0;
+
+                if let Some(window) = app_handle_clone.get_webview_window("shortcut-reminder") {
+                    let _ = window.set_position(tauri::Position::Logical(
+                        tauri::LogicalPosition::new(new_x, new_y)
+                    ));
+                    info!("Repositioned shortcut-reminder after display change");
+                }
+            }
+        }
+    });
 
     // Send the shortcut info to the window
     let _ = app_handle.emit_to(label, "shortcut-reminder-update", &shortcut);

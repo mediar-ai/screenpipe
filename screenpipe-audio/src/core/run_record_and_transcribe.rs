@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
 
 use crate::{core::update_device_capture_time, AudioInput};
@@ -43,6 +44,15 @@ pub async fn run_record_and_transcribe(
                 Ok(chunk) => {
                     collected_audio.extend(chunk);
                     update_device_capture_time(&device_name);
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    // Channel buffer overflow - receiver fell behind producer
+                    // This is expected under heavy load, continue instead of failing
+                    warn!(
+                        "audio channel lagged by {} messages for {}, continuing",
+                        n, device_name
+                    );
+                    continue;
                 }
                 Err(e) => {
                     error!("error receiving audio data: {}", e);

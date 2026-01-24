@@ -53,37 +53,8 @@ export async function handleVertexProxy(request: Request, env: Env): Promise<Res
  * Handle Vertex AI model listing
  */
 export async function handleVertexModels(env: Env): Promise<Response> {
+	// Models available on Vertex AI - update based on what's enabled in your GCP project
 	const models = [
-		{
-			id: 'claude-3-5-sonnet-v2@20241022',
-			object: 'model',
-			created: 1729555200,
-			owned_by: 'anthropic',
-		},
-		{
-			id: 'claude-3-5-haiku@20241022',
-			object: 'model',
-			created: 1729555200,
-			owned_by: 'anthropic',
-		},
-		{
-			id: 'claude-3-opus@20240229',
-			object: 'model',
-			created: 1709164800,
-			owned_by: 'anthropic',
-		},
-		{
-			id: 'claude-3-sonnet@20240229',
-			object: 'model',
-			created: 1709164800,
-			owned_by: 'anthropic',
-		},
-		{
-			id: 'claude-3-haiku@20240307',
-			object: 'model',
-			created: 1709769600,
-			owned_by: 'anthropic',
-		},
 		{
 			id: 'claude-sonnet-4@20250514',
 			object: 'model',
@@ -94,6 +65,18 @@ export async function handleVertexModels(env: Env): Promise<Response> {
 			id: 'claude-opus-4@20250514',
 			object: 'model',
 			created: 1747180800,
+			owned_by: 'anthropic',
+		},
+		{
+			id: 'claude-3-5-sonnet-v2@20241022',
+			object: 'model',
+			created: 1729555200,
+			owned_by: 'anthropic',
+		},
+		{
+			id: 'claude-3-5-haiku@20241022',
+			object: 'model',
+			created: 1729555200,
 			owned_by: 'anthropic',
 		},
 	];

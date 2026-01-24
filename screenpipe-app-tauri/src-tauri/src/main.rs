@@ -4,7 +4,6 @@
 use analytics::AnalyticsManager;
 use commands::show_main_window;
 use serde_json::json;
-use serde_json::Value;
 #[cfg(target_os = "macos")]
 use tauri_nspanel::ManagerExt;
 use std::env;
@@ -12,7 +11,6 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use tauri::Config;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
@@ -21,7 +19,6 @@ use tauri_plugin_global_shortcut::ShortcutState;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tokio::sync::mpsc;
-use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
@@ -74,7 +71,7 @@ pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
 use std::collections::HashMap;
-use tauri::{AppHandle, WebviewUrl, WebviewWindow};
+use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 use tauri_plugin_sentry::sentry;
@@ -316,6 +313,38 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         }
     }) {
         warn!("Failed to register search shortcut: {}", e);
+    }
+
+    // Register Cmd+L (macOS) / Ctrl+L (Windows/Linux) to open AI chat when main window is visible
+    #[cfg(target_os = "macos")]
+    let chat_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyL);
+    #[cfg(not(target_os = "macos"))]
+    let chat_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyL);
+
+    if let Err(e) = global_shortcut.on_shortcut(chat_shortcut, |app, _, event| {
+        if matches!(event.state, ShortcutState::Pressed) {
+            // Only open chat if main window is visible
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(window) = app.get_webview_panel("main") {
+                    if window.is_visible() {
+                        info!("Cmd+L pressed, opening AI chat");
+                        let _ = app.emit("open-chat", ());
+                    }
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        info!("Ctrl+L pressed, opening AI chat");
+                        let _ = app.emit("open-chat", ());
+                    }
+                }
+            }
+        }
+    }) {
+        warn!("Failed to register chat shortcut: {}", e);
     }
 
     Ok(())
@@ -819,6 +848,44 @@ async fn main() {
             }
             let app_handle = app.handle();
 
+            // Create macOS app menu with Settings
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{MenuBuilder, SubmenuBuilder, PredefinedMenuItem, MenuItemBuilder};
+
+                let app_submenu = SubmenuBuilder::new(app, "screenpipe")
+                    .item(&PredefinedMenuItem::about(app, Some("About screenpipe"), None)?)
+                    .separator()
+                    .item(&MenuItemBuilder::with_id("settings", "Settings...")
+                        .accelerator("CmdOrCtrl+,")
+                        .build(app)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::quit(app, Some("Quit screenpipe"))?)
+                    .build()?;
+
+                let edit_submenu = SubmenuBuilder::new(app, "Edit")
+                    .item(&PredefinedMenuItem::undo(app, None)?)
+                    .item(&PredefinedMenuItem::redo(app, None)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::cut(app, None)?)
+                    .item(&PredefinedMenuItem::copy(app, None)?)
+                    .item(&PredefinedMenuItem::paste(app, None)?)
+                    .item(&PredefinedMenuItem::select_all(app, None)?)
+                    .build()?;
+
+                let menu = MenuBuilder::new(app)
+                    .item(&app_submenu)
+                    .item(&edit_submenu)
+                    .build()?;
+
+                app.set_menu(menu)?;
+                app.on_menu_event(|app_handle, event| {
+                    if event.id().as_ref() == "settings" {
+                        let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
+                    }
+                });
+            }
+
             // Logging setup
             let base_dir =
                 get_base_dir(app_handle, None).expect("Failed to ensure local data directory");
@@ -891,14 +958,16 @@ async fn main() {
                 let _ = ShowRewindWindow::Main.show(&app.handle());
             }
 
-            // Always show shortcut reminder overlay on app startup
-            let shortcut = store.show_screenpipe_shortcut.clone();
-            let app_handle_reminder = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                // Small delay to ensure windows are ready
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                let _ = commands::show_shortcut_reminder(app_handle_reminder, shortcut).await;
-            });
+            // Show shortcut reminder overlay on app startup if enabled
+            if store.show_shortcut_overlay {
+                let shortcut = store.show_screenpipe_shortcut.clone();
+                let app_handle_reminder = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    // Small delay to ensure windows are ready
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                    let _ = commands::show_shortcut_reminder(app_handle_reminder, shortcut).await;
+                });
+            }
 
             // Get app handle once for all initializations
             let app_handle = app.handle().clone();

@@ -216,12 +216,12 @@ export function AccountSection() {
         <div className="space-y-2">
           {settings.user?.token ? (
             <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
+              <span className="inline-flex h-2 w-2 rounded-full bg-foreground" />
               logged in as {settings.user.email}
             </p>
           ) : (
             <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <span className="inline-flex h-2 w-2 rounded-full bg-yellow-500" />
+              <span className="inline-flex h-2 w-2 rounded-full bg-muted-foreground" />
               not logged in - some features will be limited
             </p>
           )}

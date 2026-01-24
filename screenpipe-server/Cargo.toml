@@ -121,7 +121,7 @@ once_cell = { workspace = true }
 [dev-dependencies]
 env_logger = "0.10"
 tempfile = "3.3.0"
-tokio-tungstenite = "0.19.0"
+tokio-tungstenite = "0.24"
 
 # Benches
 criterion = { workspace = true }

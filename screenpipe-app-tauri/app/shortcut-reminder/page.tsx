@@ -1,18 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import posthog from "posthog-js";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { getStore } from "@/lib/hooks/use-settings";
 
 export default function ShortcutReminderPage() {
-  const { isMac } = usePlatform();
-  const [shortcut, setShortcut] = useState(isMac ? "⌘⌃S" : "Win+Ctrl+S");
-  const [hovered, setHovered] = useState(false);
+  const { isMac, isLoading } = usePlatform();
+  const [shortcut, setShortcut] = useState<string | null>(null);
+  const [rawShortcut, setRawShortcut] = useState<string | null>(null);
+
+  // Load shortcut from store on mount
+  useEffect(() => {
+    const loadShortcutFromStore = async () => {
+      try {
+        const store = await getStore();
+        const settings = await store.get<{ showScreenpipeShortcut?: string }>("settings");
+        if (settings?.showScreenpipeShortcut) {
+          setRawShortcut(settings.showScreenpipeShortcut);
+        }
+      } catch (e) {
+        console.error("Failed to load shortcut from store:", e);
+      }
+    };
+    loadShortcutFromStore();
+  }, []);
+
+  // Set default shortcut once platform is detected (fallback if store fails)
+  useEffect(() => {
+    if (!isLoading && shortcut === null && rawShortcut === null) {
+      // Default matches Super+Alt+S from settings
+      setShortcut(isMac ? "⌘⌥S" : "Win+Alt+S");
+    }
+  }, [isMac, isLoading, shortcut, rawShortcut]);
+
+  // Re-format shortcut when platform is detected or rawShortcut changes
+  useEffect(() => {
+    if (!isLoading && rawShortcut) {
+      setShortcut(formatShortcut(rawShortcut, isMac));
+    }
+  }, [isMac, isLoading, rawShortcut]);
 
   useEffect(() => {
     const unlistenShortcut = listen<string>("shortcut-reminder-update", (event) => {
-      setShortcut(formatShortcut(event.payload, isMac));
+      setRawShortcut(event.payload);
+      if (!isLoading) {
+        setShortcut(formatShortcut(event.payload, isMac));
+      }
     });
 
     posthog.capture("shortcut_reminder_shown");
@@ -20,7 +56,18 @@ export default function ShortcutReminderPage() {
     return () => {
       unlistenShortcut.then((fn) => fn());
     };
-  }, [isMac]);
+  }, [isMac, isLoading]);
+
+  // Manual drag handling to avoid Tauri tooltip
+  const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
+    if (e.button === 0) {
+      try {
+        await getCurrentWindow().startDragging();
+      } catch {
+        // Ignore drag errors
+      }
+    }
+  }, []);
 
   return (
     <div
@@ -28,48 +75,30 @@ export default function ShortcutReminderPage() {
       style={{ background: "transparent" }}
     >
       <div
-        data-tauri-drag-region
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseDown={handleMouseDown}
         className="select-none"
         style={{ cursor: "grab" }}
       >
-        <div className="relative" data-tauri-drag-region>
-          {/* Subtle glow */}
-          <div
-            data-tauri-drag-region
-            className={`absolute inset-0 bg-pink-500/20 rounded-full blur-md transition-opacity duration-300 ${hovered ? 'opacity-100' : 'opacity-40'}`}
-          />
-
+        <div className="relative">
           {/* Main pill */}
           <div
-            data-tauri-drag-region
-            className="relative flex items-center gap-1.5 py-1 px-2.5 bg-black/80 backdrop-blur-xl rounded-full border border-white/10 shadow-xl"
+            className="relative flex items-center gap-1.5 py-1 px-2.5 bg-neutral-900 rounded-full border border-white/10 shadow-lg"
           >
             {/* Pulsing dot */}
-            <span className="relative flex h-1 w-1 flex-shrink-0" data-tauri-drag-region>
+            <span className="relative flex h-1 w-1 flex-shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-1 w-1 bg-pink-500" />
             </span>
 
             {/* Shortcut */}
             <span
-              data-tauri-drag-region
               className="font-mono text-[10px] font-semibold text-white/90 tracking-wide"
             >
-              {shortcut}
+              {shortcut ?? "..."}
             </span>
 
-            {/* Expanded text on hover */}
-            <span
-              data-tauri-drag-region
-              className={`
-                text-[9px] text-white/50 whitespace-nowrap overflow-hidden
-                transition-all duration-300 ease-out
-                ${hovered ? 'max-w-[100px] opacity-100' : 'max-w-0 opacity-0'}
-              `}
-            >
-              open screenpipe
+            <span className="text-[9px] text-white/50 whitespace-nowrap">
+              screenpipe
             </span>
           </div>
         </div>
@@ -79,7 +108,8 @@ export default function ShortcutReminderPage() {
 }
 
 function formatShortcut(shortcut: string, isMac: boolean): string {
-  if (!shortcut) return isMac ? "⌘⌃S" : "Win+Ctrl+S";
+  // Default matches Super+Alt+S from settings
+  if (!shortcut) return isMac ? "⌘⌥S" : "Win+Alt+S";
   if (isMac) {
     return shortcut
       .replace(/Super|Command|Cmd/gi, "⌘")

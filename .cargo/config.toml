@@ -19,5 +19,12 @@ rustflags = ["-C", "link-arg=-Wl,--allow-multiple-definition"]
 [target.aarch64-apple-darwin]
 rustflags = "-lc++ -l framework=Accelerate"
 
+[target.x86_64-apple-darwin]
+rustflags = "-lc++ -l framework=Accelerate"
+
 [env]
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+
+# Faster builds - use more threads for codegen
+[build]
+jobs = 16  # Parallel compilation jobs (adjust to your CPU cores)

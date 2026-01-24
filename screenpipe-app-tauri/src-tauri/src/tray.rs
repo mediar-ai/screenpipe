@@ -6,7 +6,7 @@ use anyhow::Result;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::tray::{MouseButton, MouseButtonState, TrayIcon};
+use tauri::tray::TrayIcon;
 use tauri::Emitter;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},

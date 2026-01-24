@@ -1,7 +1,5 @@
 "use client";
 
-import "../globals.css";
-
 export default function ShortcutReminderLayout({
   children,
 }: {
@@ -11,15 +9,24 @@ export default function ShortcutReminderLayout({
     <html lang="en" style={{ background: "transparent" }}>
       <head>
         <style>{`
-          html, body {
+          *, *::before, *::after {
+            box-sizing: border-box;
+          }
+          html, body, #__next, main {
             background: transparent !important;
+            background-color: transparent !important;
             margin: 0;
             padding: 0;
             overflow: hidden;
+            min-height: 100%;
+            width: 100%;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
           }
         `}</style>
       </head>
-      <body style={{ background: "transparent", margin: 0, padding: 0 }}>
+      <body>
         {children}
       </body>
     </html>

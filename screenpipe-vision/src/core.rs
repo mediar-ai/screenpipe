@@ -25,8 +25,6 @@ use std::{
     collections::HashMap,
     time::{Duration, Instant, UNIX_EPOCH},
 };
-use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, warn};
 
@@ -519,7 +517,6 @@ fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RealtimeVisionEvent {
     Ocr(WindowOcr),
-    Ui(UIFrame),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -541,41 +538,6 @@ pub struct WindowOcr {
     )]
     pub timestamp: Instant,
     pub browser_url: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UIFrame {
-    pub window: String,
-    pub app: String,
-    pub text_output: String,
-    pub initial_traversal_at: String,
-}
-
-impl UIFrame {
-    pub async fn read_from_pipe(reader: &mut BufReader<File>) -> Result<Self> {
-        let window = UIFrame::read_string(reader).await?;
-        let app = UIFrame::read_string(reader).await?;
-        let text_output = UIFrame::read_string(reader).await?;
-        let initial_traversal_at = UIFrame::read_string(reader).await?;
-
-        Ok(UIFrame {
-            window,
-            app,
-            text_output,
-            initial_traversal_at,
-        })
-    }
-
-    async fn read_string(reader: &mut BufReader<File>) -> Result<String> {
-        let mut buffer = Vec::new();
-        loop {
-            let result = reader.read_until(b'\0', &mut buffer).await?;
-            if result > 0 {
-                buffer.pop(); // Remove the null terminator
-                return Ok(String::from_utf8_lossy(&buffer).to_string());
-            }
-        }
-    }
 }
 
 fn get_active_browser_url_sync(

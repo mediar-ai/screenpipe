@@ -27,8 +27,6 @@ use screenpipe_server::{
     start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer,
 };
 use screenpipe_vision::monitor::list_monitors;
-#[cfg(target_os = "macos")]
-use screenpipe_vision::run_ui;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -765,7 +763,6 @@ async fn main() -> anyhow::Result<()> {
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
-        cli.enable_ui_monitoring,
         audio_manager.clone(),
         cli.enable_pipe_manager,
     );
@@ -837,10 +834,6 @@ async fn main() -> anyhow::Result<()> {
     println!(
         "│ included windows       │ {:<34} │",
         format_cell(&format!("{:?}", &included_windows_clone), VALUE_WIDTH)
-    );
-    println!(
-        "│ ui monitoring          │ {:<34} │",
-        cli.enable_ui_monitoring
     );
     println!(
         "│ frame cache            │ {:<34} │",
@@ -1127,34 +1120,6 @@ async fn main() -> anyhow::Result<()> {
 
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);
-
-    // Start the UI monitoring task
-    #[cfg(target_os = "macos")]
-    if cli.enable_ui_monitoring {
-        let shutdown_tx_clone = shutdown_tx.clone();
-        tokio::spawn(async move {
-            let mut shutdown_rx = shutdown_tx_clone.subscribe();
-
-            loop {
-                tokio::select! {
-                    result = run_ui() => {
-                        match result {
-                            Ok(_) => break,
-                            Err(e) => {
-                                error!("ui monitoring error: {}", e);
-                                tokio::time::sleep(Duration::from_secs(5)).await;
-                                continue;
-                            }
-                        }
-                    }
-                    _ = shutdown_rx.recv() => {
-                        info!("received shutdown signal, stopping ui monitoring");
-                        break;
-                    }
-                }
-            }
-        });
-    }
 
     tokio::select! {
         _ = handle => info!("recording completed"),

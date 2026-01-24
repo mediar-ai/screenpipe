@@ -94,7 +94,6 @@ pub struct AppState {
     pub pipe_manager: Arc<PipeManager>,
     pub vision_disabled: bool,
     pub audio_disabled: bool,
-    pub ui_monitoring_enabled: bool,
     pub enable_pipe_manager: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
     pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
@@ -290,10 +289,8 @@ pub struct HealthCheckResponse {
     pub status_code: u16,
     pub last_frame_timestamp: Option<DateTime<Utc>>,
     pub last_audio_timestamp: Option<DateTime<Utc>>,
-    pub last_ui_timestamp: Option<DateTime<Utc>>,
     pub frame_status: String,
     pub audio_status: String,
-    pub ui_status: String,
     pub message: String,
     pub verbose_instructions: Option<String>,
     pub device_status_details: Option<String>,
@@ -659,7 +656,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         };
     }
 
-    let (last_frame, audio, last_ui) = match state.db.get_latest_timestamps().await {
+    let (last_frame, audio, _last_ui) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio, ui)) => (frame, audio, ui),
         Err(e) => {
             error!("failed to get latest timestamps: {}", e);
@@ -722,25 +719,9 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         None
     };
 
-    let ui_status = if !state.ui_monitoring_enabled {
-        "disabled"
-    } else {
-        match last_ui {
-            Some(timestamp)
-                if now.signed_duration_since(timestamp)
-                    < chrono::Duration::from_std(threshold).unwrap() =>
-            {
-                "ok"
-            }
-            Some(_) => "stale",
-            None => "not_started",
-        }
-    };
-
     let (overall_status, message, verbose_instructions, status_code) = if (frame_status == "ok"
         || frame_status == "disabled")
         && (audio_status == "ok" || audio_status == "disabled")
-        && (ui_status == "ok" || ui_status == "disabled")
     {
         (
             "healthy",
@@ -755,9 +736,6 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         }
         if audio_status != "ok" && audio_status != "disabled" {
             unhealthy_systems.push("audio");
-        }
-        if ui_status != "ok" && ui_status != "disabled" {
-            unhealthy_systems.push("ui");
         }
 
         let systems_str = unhealthy_systems.join(", ");
@@ -781,10 +759,8 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         } else {
             None
         },
-        last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
         audio_status,
-        ui_status: ui_status.to_string(),
         message,
         verbose_instructions,
         device_status_details,
@@ -800,10 +776,6 @@ fn get_verbose_instructions(unhealthy_systems: &[&str]) -> String {
 
     if unhealthy_systems.contains(&"audio") {
         instructions.push_str("Audio system is not working properly. Check if microphone permissions are enabled and devices are connected.\n");
-    }
-
-    if unhealthy_systems.contains(&"ui") {
-        instructions.push_str("UI monitoring is not working properly. Check if accessibility permissions are enabled.\n");
     }
 
     if instructions.is_empty() {
@@ -1136,7 +1108,6 @@ pub struct SCServer {
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
     audio_disabled: bool,
-    ui_monitoring_enabled: bool,
     enable_pipe: bool,
 }
 
@@ -1149,7 +1120,6 @@ impl SCServer {
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
         audio_disabled: bool,
-        ui_monitoring_enabled: bool,
         audio_manager: Arc<AudioManager>,
         enable_pipe: bool,
     ) -> Self {
@@ -1160,7 +1130,6 @@ impl SCServer {
             pipe_manager,
             vision_disabled,
             audio_disabled,
-            ui_monitoring_enabled,
             audio_manager,
             enable_pipe,
         }
@@ -1194,7 +1163,6 @@ impl SCServer {
             pipe_manager: self.pipe_manager.clone(),
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
-            ui_monitoring_enabled: self.ui_monitoring_enabled,
             enable_pipe_manager: self.enable_pipe,
             frame_cache: if enable_frame_cache {
                 Some(Arc::new(
@@ -2154,11 +2122,11 @@ pub struct VisionDeviceControlRequest {
 //     }
 // }
 
-#[derive(Serialize)]
-pub struct VisionDeviceControlResponse {
-    success: bool,
-    message: String,
-}
+// #[derive(Serialize)]
+// pub struct VisionDeviceControlResponse {
+//     success: bool,
+//     message: String,
+// }
 
 // async fn start_vision_device(
 //     State(state): State<Arc<AppState>>,

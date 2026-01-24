@@ -188,15 +188,6 @@ impl RewindWindowId {
         }
     }
 
-    pub fn url(&self) -> &str {
-        match self {
-            RewindWindowId::Main => "/",
-            RewindWindowId::Settings => "/settings",
-            RewindWindowId::Search => "/search",
-            RewindWindowId::Onboarding => "/onboarding",
-        }
-    }
-
     pub fn min_size(&self) -> Option<(f64, f64)> {
         Some(match self {
             RewindWindowId::Main => (1200.0, 850.0),

@@ -5,22 +5,26 @@ import { useToast } from "@/components/ui/use-toast";
 import OnboardingStatus from "@/components/onboarding/status";
 import OnboardingIntro from "@/components/onboarding/introduction";
 import OnboardingSelection from "@/components/onboarding/usecases-selection";
+import OnboardingLogin from "@/components/onboarding/login";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import posthog from "posthog-js";
 import { commands } from "@/lib/utils/tauri";
 
-type SlideKey = "intro" | "usecases" | "status";
+type SlideKey = "login" | "intro" | "usecases" | "status";
 
 // Window size configurations for each slide - consistent size to avoid resizing issues
 const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = {
+  login: { width: 900, height: 800 },
   intro: { width: 900, height: 800 },
   usecases: { width: 900, height: 800 },
   status: { width: 900, height: 800 },
 };
 
-// 3-step flow: intro → usecases → status → done
+// 4-step flow: login → intro → usecases → status → done
 const getNextSlide = (currentSlide: SlideKey): SlideKey | null => {
   switch (currentSlide) {
+    case "login":
+      return "intro";
     case "intro":
       return "usecases";
     case "usecases":
@@ -34,8 +38,10 @@ const getNextSlide = (currentSlide: SlideKey): SlideKey | null => {
 
 const getPrevSlide = (currentSlide: SlideKey): SlideKey | null => {
   switch (currentSlide) {
-    case "intro":
+    case "login":
       return null;
+    case "intro":
+      return "login";
     case "usecases":
       return "intro";
     case "status":
@@ -45,12 +51,18 @@ const getPrevSlide = (currentSlide: SlideKey): SlideKey | null => {
   }
 };
 
+// Track each step as a distinct event for clean funnel analysis
 const trackOnboardingStep = (
   step: SlideKey | "completed",
   properties?: Record<string, any>
 ) => {
-  posthog.capture("onboarding_step", {
-    step,
+  // Fire specific event for funnel tracking
+  const eventName = step === "completed"
+    ? "onboarding_completed"
+    : `onboarding_${step}_viewed`;
+
+  posthog.capture(eventName, {
+    step, // Keep for backwards compatibility
     ...properties,
   });
 };
@@ -70,12 +82,12 @@ const setWindowSizeForSlide = async (slide: SlideKey) => {
 
 export default function OnboardingPage() {
   const { toast } = useToast();
-  const [currentSlide, setCurrentSlide] = useState<SlideKey>("intro");
+  const [currentSlide, setCurrentSlide] = useState<SlideKey>("login");
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [completedSteps, setCompletedSteps] = useState<SlideKey[]>(["intro"]);
-  const [selectedUsecases, setSelectedUsecases] = useState<string[]>([]);
+  const [completedSteps, setCompletedSteps] = useState<SlideKey[]>(["login"]);
+  const [selectedUsecase, setSelectedUsecase] = useState<string | null>(null);
   const {
     onboardingData,
     completeOnboarding,
@@ -83,12 +95,8 @@ export default function OnboardingPage() {
   } = useOnboarding();
 
   const handleUsecaseClick = (option: string) => {
-    setSelectedUsecases((prev) => {
-      if (prev.includes(option)) {
-        return prev.filter((o) => o !== option);
-      }
-      return [...prev, option];
-    });
+    // Single-select: clicking the same option deselects it, otherwise select the new one
+    setSelectedUsecase((prev) => prev === option ? null : option);
   };
 
   // Load onboarding status on mount
@@ -256,6 +264,14 @@ export default function OnboardingPage() {
       {/* Main content container */}
       <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
         <div className="w-full max-w-2xl mx-auto">
+          {currentSlide === "login" && (
+            <OnboardingLogin
+              className={`transition-opacity duration-300 w-full
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
+              handlePrevSlide={handlePrevSlide}
+              handleNextSlide={handleNextSlide}
+            />
+          )}
           {currentSlide === "intro" && (
             <OnboardingIntro
               className={`transition-opacity duration-300 w-full
@@ -267,7 +283,7 @@ export default function OnboardingPage() {
             <OnboardingSelection
               className={`transition-opacity duration-300 w-full
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              selectedOptions={selectedUsecases}
+              selectedOption={selectedUsecase}
               handleOptionClick={handleUsecaseClick}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}

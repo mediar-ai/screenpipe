@@ -16,9 +16,19 @@
 
 <p align="center">
    <a href ="https://screenpi.pe">
-      <img src="https://github.com/user-attachments/assets/c88d218e-40a7-405d-b419-eec1553ea287" alt="logo" width="800">
+      <img src="https://github.com/user-attachments/assets/c88d218e-40a7-405d-b419-eec1553ea287">
    </a>
 </p>
+
+
+<p align="center">
+   <a href ="https://screenpi.pe">
+      <img src="https://github.com/user-attachments/assets/b482f71d-cccc-4b42-a9b9-bf06a67d401b" alt="logo" width="800">
+   </a>
+</p>
+
+
+
 
 <p align="center">
     <a href="https://screenpi.pe" target="_blank">
@@ -37,9 +47,6 @@
         <img alt="x" src="https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=follow%20%40screen_pipe">
     </a>
 </p>
-
-<br>
-
 
 ![image](https://github.com/user-attachments/assets/dec2e07c-b3d5-46dd-9f36-c0c26a82c9fb)
 
@@ -60,6 +67,13 @@ screenpipe records your screen and audio 24/7, stores everything locally, and le
 - **search with ai** - find anything using natural language
 - **100% local** - your data never leaves your machine
 - **open source** - inspect, modify, own
+
+<p align="center">
+   <a href ="https://screenpi.pe">
+      <img src="https://github.com/user-attachments/assets/1f0c04f6-300a-417d-8bd3-5b73435ee2e9">
+   </a>
+</p>
+
 
 ## install
 

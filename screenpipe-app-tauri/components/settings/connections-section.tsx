@@ -239,6 +239,7 @@ export function ConnectionsSection() {
             use Claude with Screenpipe features.
           </p>
         </div>
+
       </div>
     </div>
   );
