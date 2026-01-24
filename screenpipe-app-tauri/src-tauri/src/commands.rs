@@ -373,9 +373,9 @@ pub async fn show_shortcut_reminder(
     let screen_size = monitor.size();
     let scale_factor = monitor.scale_factor();
 
-    // Compact window dimensions - sized to fit content tightly
-    let window_width = 140.0;
-    let window_height = 24.0;
+    // Compact window dimensions
+    let window_width = 180.0;
+    let window_height = 28.0;
 
     // Position at top center of screen
     let x = ((screen_size.width as f64 / scale_factor) - window_width) / 2.0;
@@ -388,7 +388,7 @@ pub async fn show_shortcut_reminder(
     }
 
     info!("Creating new shortcut-reminder window");
-    let window = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         &app_handle,
         label,
         tauri::WebviewUrl::App("shortcut-reminder".into()),
@@ -404,9 +404,19 @@ pub async fn show_shortcut_reminder(
     .transparent(true)
     .visible(false)
     .shadow(false)
-    .resizable(false)
-    .build()
-    .map_err(|e| format!("Failed to create shortcut reminder window: {}", e))?;
+    .resizable(false);
+
+    // Hide title bar on macOS
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .hidden_title(true)
+            .title_bar_style(tauri::TitleBarStyle::Overlay);
+    }
+
+    let window = builder
+        .build()
+        .map_err(|e| format!("Failed to create shortcut reminder window: {}", e))?;
 
     info!("shortcut-reminder window created");
 
