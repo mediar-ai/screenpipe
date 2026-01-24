@@ -1,5 +1,5 @@
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTimelineStore } from "./use-timeline-store";
 
 export const useCurrentFrame = (setCurrentIndex: (index: number) => void) => {
@@ -7,15 +7,14 @@ export const useCurrentFrame = (setCurrentIndex: (index: number) => void) => {
 		useState<StreamTimeSeriesResponse | null>(null);
 
 	const { frames, isLoading } = useTimelineStore();
-	const lastFramesLen = useRef<number>(0);
 
+	// Select first frame (most recent) when frames load and no frame is selected
 	useEffect(() => {
-		if (!currentFrame && frames.length) {
-			setCurrentFrame(frames[lastFramesLen.current]);
-			setCurrentIndex(lastFramesLen.current);
+		if (!currentFrame && frames.length > 0) {
+			setCurrentFrame(frames[0]);
+			setCurrentIndex(0);
 		}
-		lastFramesLen.current = frames.length;
-	}, [isLoading, frames]);
+	}, [isLoading, frames, currentFrame, setCurrentIndex]);
 
 
 
