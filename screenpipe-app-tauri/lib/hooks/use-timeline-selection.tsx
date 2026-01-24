@@ -1,36 +1,22 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { create } from "zustand";
+import { ReactNode } from "react";
 
 interface TimelineSelection {
 	start: Date;
 	end: Date;
-	frameIds: string[];
 }
 
-interface TimelineContextType {
+interface TimelineSelectionStore {
 	selectionRange: TimelineSelection | null;
 	setSelectionRange: (range: TimelineSelection | null) => void;
 }
 
-const TimelineContext = createContext<TimelineContextType | null>(null);
+export const useTimelineSelection = create<TimelineSelectionStore>((set) => ({
+	selectionRange: null,
+	setSelectionRange: (range) => set({ selectionRange: range }),
+}));
 
+// Keep the provider for backwards compatibility, but it's now a no-op wrapper
 export function TimelineProvider({ children }: { children: ReactNode }) {
-	const [selectionRange, setSelectionRange] =
-		useState<TimelineSelection | null>(null);
-
-	return (
-		<TimelineContext.Provider value={{ selectionRange, setSelectionRange }}>
-			{children}
-		</TimelineContext.Provider>
-	);
+	return <>{children}</>;
 }
-
-export function useTimelineSelection() {
-	const context = useContext(TimelineContext);
-	if (!context) {
-		throw new Error(
-			"useTimelineSelection must be used within a TimelineProvider",
-		);
-	}
-	return context;
-}
-

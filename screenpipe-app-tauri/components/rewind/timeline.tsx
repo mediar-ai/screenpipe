@@ -2,10 +2,8 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Loader2, RotateCcw, AlertCircle } from "lucide-react";
 import { AudioTranscript } from "@/components/rewind/timeline/audio-transcript";
-import { AIPanel } from "@/components/rewind/timeline/ai-panel";
 import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
-import { AGENTS } from "@/components/rewind/timeline/agents";
 import { TimelineControls } from "@/components/rewind/timeline/timeline-controls";
 import { addDays, isAfter, isSameDay, subDays } from "date-fns";
 import { getStartDate } from "@/lib/actions/get-start-date";
@@ -61,10 +59,8 @@ const easeOutCubic = (x: number): number => {
 
 export default function Timeline() {
 	const [currentIndex, setCurrentIndex] = useState(0);
-	const [isAiPanelExpanded, setIsAiPanelExpanded] = useState(false);
 	const [showAudioTranscript, setShowAudioTranscript] = useState(true);
 	const containerRef = useRef<HTMLDivElement | null>(null);
-	const [aiPanelPosition, setAiPanelPosition] = useState({ x: 0, y: 0 });
 	// const [searchResults, setSearchResults] = useState<number[]>([]);
 	const [startAndEndDates, setStartAndEndDates] = useState<TimeRange>({
 		// Default to 1 year ago so navigation works even if getStartDate fails
@@ -118,13 +114,6 @@ export default function Timeline() {
 		};
 
 		getStartDateAndSet();
-	}, []);
-
-	useEffect(() => {
-		setAiPanelPosition({
-			x: window.innerWidth - 400,
-			y: window.innerHeight / 4,
-		});
 	}, []);
 
 	useEffect(() => {
@@ -526,18 +515,6 @@ export default function Timeline() {
 						</div>
 					)}
 				</div>
-
-				<AIPanel
-					position={aiPanelPosition}
-					onPositionChange={setAiPanelPosition}
-					onClose={() => {
-						setIsAiPanelExpanded(false);
-					}}
-					frames={frames}
-					agents={AGENTS}
-					isExpanded={isAiPanelExpanded}
-					onExpandedChange={setIsAiPanelExpanded}
-				/>
 
 				{/* Scroll Indicator */}
 				<div className="fixed left-6 top-1/2 -translate-y-1/2 text-xs text-foreground z-40">

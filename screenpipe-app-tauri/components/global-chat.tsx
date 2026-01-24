@@ -20,8 +20,16 @@ import OpenAI from "openai";
 import { ChatCompletionTool } from "openai/resources/chat/completions";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 
 const SCREENPIPE_API = "http://localhost:3030";
+
+// Suggestion badges for timeline selection
+const TIMELINE_SUGGESTIONS = [
+  "what did i work on?",
+  "summarize this period",
+  "what apps did i use?",
+];
 
 // Tool definitions for OpenAI format
 const TOOLS: ChatCompletionTool[] = [
@@ -134,10 +142,18 @@ export function GlobalChat() {
   const { settings } = useSettings();
   const pathname = usePathname();
   const { isMac } = usePlatform();
+  const { selectionRange, setSelectionRange } = useTimelineSelection();
 
   // Only show floating button on timeline page, but keep dialog available everywhere
   // pathname can be null during initial hydration
   const isOnTimeline = !pathname || pathname === "/" || pathname === "/timeline";
+
+  // Auto-open chat when user makes a selection on timeline
+  useEffect(() => {
+    if (selectionRange && isOnTimeline) {
+      setOpen(true);
+    }
+  }, [selectionRange, isOnTimeline]);
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -216,8 +232,10 @@ export function GlobalChat() {
       // Reset chat state when dialog closes
       setMessages([]);
       setInput("");
+      // Clear timeline selection when closing
+      setSelectionRange(null);
     }
-  }, [open]);
+  }, [open, setSelectionRange]);
 
   // Close chat when leaving timeline
   useEffect(() => {
@@ -368,9 +386,21 @@ export function GlobalChat() {
     abortControllerRef.current = new AbortController();
 
     try {
+      // Build system prompt with selection context if available
+      let systemPrompt = SYSTEM_PROMPT;
+      if (selectionRange) {
+        const startTime = selectionRange.start.toISOString();
+        const endTime = selectionRange.end.toISOString();
+        systemPrompt += `\n\nIMPORTANT: The user has selected a specific time range on their timeline. Focus your searches on this period:
+- Start time: ${startTime}
+- End time: ${endTime}
+
+Always use these exact start_time and end_time values when searching, unless the user explicitly asks about a different time period.`;
+      }
+
       // Build conversation history for OpenAI format
       const conversationMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         ...messages.map((m) => ({
           role: m.role as "user" | "assistant",
           content: m.content,
@@ -643,10 +673,40 @@ export function GlobalChat() {
             {messages.length === 0 && canChat && (
               <div className="text-center text-muted-foreground py-12">
                 <Sparkles className="h-8 w-8 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">Ask me anything about your screen activity!</p>
-                <p className="text-xs mt-2 opacity-70">
-                  Try: &quot;What did I do in the last hour?&quot; or &quot;Find my Slack messages&quot;
-                </p>
+                {selectionRange ? (
+                  <>
+                    <p className="text-sm mb-1">
+                      Selected: {selectionRange.start.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      {" - "}
+                      {selectionRange.end.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    <p className="text-xs opacity-70 mb-4">Ask about this time period</p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {TIMELINE_SUGGESTIONS.map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          onClick={() => {
+                            setInput(suggestion);
+                            setTimeout(() => {
+                              const form = document.querySelector('form') as HTMLFormElement;
+                              if (form) form.requestSubmit();
+                            }, 50);
+                          }}
+                          className="px-3 py-1.5 text-xs font-mono bg-muted/50 hover:bg-muted border border-border rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm">Ask me anything about your screen activity!</p>
+                    <p className="text-xs mt-2 opacity-70">
+                      Try: &quot;What did I do in the last hour?&quot; or &quot;Find my Slack messages&quot;
+                    </p>
+                  </>
+                )}
               </div>
             )}
             {messages.map((message) => (
