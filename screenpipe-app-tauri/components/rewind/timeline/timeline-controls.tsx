@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMemo } from "react";
+import { usePlatform } from "@/lib/hooks/use-platform";
 
 interface TimeRange {
 	start: Date;
@@ -33,6 +34,8 @@ export function TimelineControls({
 	onJumpToday,
 	className,
 }: TimelineControlsProps) {
+	const { isMac } = usePlatform();
+
 	const jumpDay = async (days: number) => {
 		const today = new Date();
 
@@ -125,7 +128,7 @@ export function TimelineControls({
 				</div>
 
 				<div className="flex items-center h-10 gap-1.5 bg-card/80 backdrop-blur-sm border border-border rounded-full px-4 shadow-lg">
-					<span className="text-xs text-muted-foreground">⌘K</span>
+					<span className="text-xs text-muted-foreground">{isMac ? "⌘K" : "Ctrl+K"}</span>
 					<span className="text-xs text-muted-foreground">search</span>
 				</div>
 			</div>

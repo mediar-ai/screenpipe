@@ -1029,25 +1029,6 @@ export const AIPresetsSelector = ({
   return (
     <>
       <div className="flex flex-col w-full gap-2">
-        {selectedPresetRequiresLogin && (
-          <div className="flex items-center gap-2 p-2 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg">
-            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-            <span className="text-amber-600 dark:text-amber-400 flex-1">
-              Login required to use Screenpipe Cloud
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 h-7 text-xs border-amber-500/30 hover:bg-amber-500/10"
-              onClick={() => {
-                window.location.href = "/settings?section=account";
-              }}
-            >
-              <LogIn className="h-3 w-3 mr-1" />
-              Login
-            </Button>
-          </div>
-        )}
         <div className="flex w-full items-center gap-2">
         <Popover open={open} onOpenChange={setOpen}>
           <TooltipProvider>
