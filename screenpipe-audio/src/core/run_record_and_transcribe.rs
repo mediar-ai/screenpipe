@@ -31,7 +31,7 @@ pub async fn run_record_and_transcribe(
 
     const OVERLAP_SECONDS: usize = 2;
     let mut collected_audio = Vec::new();
-    let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
+    let sample_rate = audio_stream.device_config.sample_rate() as usize;
     let audio_samples_len = sample_rate * duration.as_secs() as usize;
     let overlap_samples = OVERLAP_SECONDS * sample_rate;
     let max_samples = audio_samples_len + overlap_samples;
@@ -66,7 +66,7 @@ pub async fn run_record_and_transcribe(
             match whisper_sender.try_send(AudioInput {
                 data: Arc::new(collected_audio.clone()),
                 device: audio_stream.device.clone(),
-                sample_rate: audio_stream.device_config.sample_rate().0,
+                sample_rate: audio_stream.device_config.sample_rate(),
                 channels: audio_stream.device_config.channels(),
             }) {
                 Ok(_) => {

@@ -19,7 +19,7 @@ serde_json = "1.0"
 oasgen = { workspace = true }
 
 # Cross-platform audio capture
-cpal = { git = "https://github.com/Kree0/cpal.git", branch = "master" }
+cpal = "0.17.1"
 
 # Wav encoding
 hound = "3.5"
@@ -78,7 +78,7 @@ ort = "=2.0.0-rc.6"
 ort-sys = "=2.0.0-rc.6"
 knf-rs = { git = "https://github.com/Neptune650/knf-rs.git" }
 futures = "0.3.31"
-deepgram = "0.6.4"
+deepgram = "0.7.0"
 bytes = { version = "1.9.0", features = ["serde"] }
 rand = "0.9.0"
 
