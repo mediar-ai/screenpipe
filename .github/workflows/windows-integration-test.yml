@@ -64,9 +64,10 @@ jobs:
       timeout-minutes: 5
 
     - name: Build CLI
-      env:
-        RUSTFLAGS: "-C link-arg=/NODEFAULTLIB:libcmt"
-      run: cargo build --release
+      shell: pwsh
+      run: |
+        $env:RUSTFLAGS = "-C link-arg=/NODEFAULTLIB:libcmt"
+        cargo build --release
 
     - name: Run CLI and generate activity
       shell: pwsh

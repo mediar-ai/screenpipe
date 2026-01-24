@@ -80,10 +80,9 @@ jobs:
     - name: Build and Rename Sidecar Binaries (Screenpipe + Bun)
       working-directory: ./
       shell: pwsh
-      env:
-        RUSTFLAGS: "-C link-arg=/NODEFAULTLIB:libcmt"
       run: |
-        # 1. Build and copy Screenpipe
+        # 1. Build and copy Screenpipe with linker fix
+        $env:RUSTFLAGS = "-C link-arg=/NODEFAULTLIB:libcmt"
         cargo build --release --bin screenpipe
         New-Item -ItemType Directory -Force -Path "./screenpipe-app-tauri/src-tauri/bin"
         Copy-Item "./target/release/screenpipe.exe" "./screenpipe-app-tauri/src-tauri/bin/screenpipe-x86_64-pc-windows-msvc.exe"
