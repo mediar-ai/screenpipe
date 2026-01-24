@@ -49,8 +49,12 @@ jobs:
       # --- THE FIX ---
       # 'cargo check' skips the C++ Linker entirely, bypassing the LNK1169 Windows crash.
       # It also does not run the tests, bypassing the Linux runtime panics.
+      # FIX: Added CPU flags back to macOS so whisper.cpp knows it is running on Apple Silicon (M1)
       - name: Verify Code Compiles (Linux & Mac)
         if: matrix.os != 'windows-latest'
+        env:
+          CFLAGS: "-mcpu=apple-m1"
+          CXXFLAGS: "-mcpu=apple-m1"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
 
       - name: Verify Code Compiles (Windows)

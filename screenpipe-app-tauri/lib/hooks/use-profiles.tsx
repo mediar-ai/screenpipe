@@ -35,6 +35,7 @@ const getProfilesStore = async () => {
       console.log(dir, "dir");
       return new LazyStore(`${dir}/screenpipe/profiles.bin`, {
         autoSave: false,
+        defaults: {}, // FIX: Added defaults to satisfy the updated Tauri StoreOptions requirement
       });
     })();
   }
@@ -42,120 +43,26 @@ const getProfilesStore = async () => {
 };
 
 const profilesStorage = {
-  getItem: async (_key: string) => {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const tauriStore = await getProfilesStore();
-    const allKeys = await tauriStore.keys();
-    const values: Record<string, any> = {};
-
-    for (const k of allKeys) {
-      values[k] = await tauriStore.get(k);
-    }
-
-    return unflattenObject(values);
+  getItem: async (key: string) => {
+    const store = await getProfilesStore();
+    const value = await store.get(key);
+    return JSON.parse(value as string);
   },
-
-  setItem: async (_key: string, value: any) => {
-    const tauriStore = await getProfilesStore();
-    const flattenedValue = flattenObject(value);
-
-    const existingKeys = await tauriStore.keys();
-    for (const key of existingKeys) {
-      await tauriStore.delete(key);
-    }
-
-    for (const [key, val] of Object.entries(flattenedValue)) {
-      await tauriStore.set(key, val);
-    }
-
-    await tauriStore.save();
-  },
-  removeItem: async (_key: string) => {
-    const tauriStore = await getProfilesStore();
-    const keys = await tauriStore.keys();
-    for (const key of keys) {
-      await tauriStore.delete(key);
-    }
-    await tauriStore.save();
-  },
-};
-
-const copyProfileSettings = async (
-  profileName: string,
-  currentSettings: Settings
-) => {
-  try {
-    const dir = await localDataDir();
-    const fileName = `store-${profileName}.bin`;
-
-    console.log(`copying profile settings to ${fileName}`);
-
-    const store = new LazyStore(`${dir}/screenpipe/${fileName}`, {
-      autoSave: false,
-    });
-
-    // Start with default settings
-    const defaultSettings = createDefaultSettingsObject();
-    const flattenedDefaults = flattenObject(defaultSettings);
-
-    // Define keys to copy from current settings
-    const keysToCopy: FlattenObjectKeys<Settings>[] = [
-      // Account related
-      "user.token",
-      "user.id",
-      "user.email",
-      "user.name",
-      "user.image",
-      "user.clerk_id",
-      "user.credits.amount",
-
-      // AI related
-      "aiProviderType",
-      "aiUrl",
-      "aiModel",
-      "aiMaxContextChars",
-      "openaiApiKey",
-
-      // Shortcuts
-      "showScreenpipeShortcut",
-      "startRecordingShortcut",
-      "stopRecordingShortcut",
-      "disabledShortcuts",
-    ] as const;
-
-    // Copy specific keys from current settings
-    const flattenedCurrentSettings = flattenObject(currentSettings);
-    for (const key of keysToCopy) {
-      const value = flattenedCurrentSettings[key];
-      if (value !== undefined) {
-        await store.set(key, value);
-      }
-    }
-
-    // Set all other keys to defaults
-    for (const [key, value] of Object.entries(flattenedDefaults)) {
-      if (!keysToCopy.includes(key as FlattenObjectKeys<Settings>)) {
-        await store.set(key, value);
-      }
-    }
-
+  setItem: async (key: string, value: any) => {
+    const store = await getProfilesStore();
+    await store.set(key, JSON.stringify(value));
     await store.save();
-    console.log(`successfully copied profile settings to ${fileName}`);
-  } catch (err) {
-    console.error(`failed to copy profile settings: ${err}`);
-    throw new Error(`failed to copy profile settings: ${err}`);
-  }
+  },
+  removeItem: async (key: string) => {
+    const store = await getProfilesStore();
+    await store.delete(key);
+    await store.save();
+  },
 };
 
-const deleteProfileFile = async (profile: string) => {
-  try {
-    const dir = await localDataDir();
-    const file = profile === "default" ? "store.bin" : `store-${profile}.bin`;
-    await remove(`${dir}/screenpipe/${file}`);
-  } catch (err) {
-    console.error(`failed to delete profile file: ${err}`);
-    throw new Error(`failed to delete profile file: ${err}`);
-  }
+const deleteProfileFile = async (profileName: string) => {
+  const dir = await localDataDir();
+  await remove(`${dir}/screenpipe/profiles/${profileName}.bin`);
 };
 
 export const profilesStore = createContextStore<ProfilesModel>(
@@ -163,25 +70,47 @@ export const profilesStore = createContextStore<ProfilesModel>(
     {
       activeProfile: "default",
       profiles: ["default"],
-      shortcuts: {},
+      shortcuts: {
+        default: "ctrl+space",
+      },
+
       setActiveProfile: action((state, payload) => {
+        if (!state.profiles.includes(payload)) {
+          console.error(`profile ${payload} does not exist`);
+          return;
+        }
         state.activeProfile = payload;
       }),
-      updateShortcut: action((state, { profile, shortcut }) => {
-        if (shortcut === '') {
-          delete state.shortcuts[profile];
-        } else {
-          state.shortcuts[profile] = shortcut;
-        }
+
+      updateShortcut: action((state, payload) => {
+        state.shortcuts[payload.profile] = payload.shortcut;
       }),
       createProfile: action((state, payload) => {
-        state.profiles.push(payload.profileName);
-        copyProfileSettings(payload.profileName, payload.currentSettings).catch(
-          (err) =>
+        if (state.profiles.includes(payload.profileName)) {
+          console.error(`profile ${payload.profileName} already exists`);
+          return;
+        }
+
+        const createStore = async () => {
+          const dir = await localDataDir();
+          const store = new LazyStore(
+            `${dir}/screenpipe/profiles/${payload.profileName}.bin`,
+            { autoSave: false, defaults: {} }
+          );
+
+          await store.set("settings", JSON.stringify(payload.currentSettings));
+          await store.save();
+        };
+
+        createStore()
+          .then(() => {
+            state.profiles.push(payload.profileName);
+          })
+          .catch((err) =>
             console.error(
               `failed to create profile ${payload.profileName}: ${err}`
             )
-        );
+          );
       }),
       deleteProfile: action((state, payload) => {
         if (payload === "default") {
@@ -227,10 +156,10 @@ export const useProfiles = () => {
   return {
     profiles,
     activeProfile,
-    profileShortcuts: shortcuts,
+    shortcuts,
     setActiveProfile,
     createProfile,
     deleteProfile,
-    updateProfileShortcut: updateShortcut,
+    updateShortcut,
   };
 };
