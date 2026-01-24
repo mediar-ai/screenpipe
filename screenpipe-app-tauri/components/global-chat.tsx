@@ -132,8 +132,9 @@ export function GlobalChat() {
   const { settings } = useSettings();
   const pathname = usePathname();
 
-  // Only show on timeline page (root path), hide on settings and other pages
-  const isOnTimeline = pathname === "/" || pathname === "/timeline";
+  // Only show floating button on timeline page, but keep dialog available everywhere
+  // pathname can be null during initial hydration
+  const isOnTimeline = !pathname || pathname === "/" || pathname === "/timeline";
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -548,13 +549,10 @@ export function GlobalChat() {
     }
   };
 
-  // Don't render on non-timeline pages (e.g., settings)
-  if (!isOnTimeline) return null;
-
   return (
     <>
-      {/* Floating indicator when dialog is closed */}
-      {!open && (
+      {/* Floating indicator when dialog is closed - only on timeline */}
+      {!open && isOnTimeline && (
         <button
           onClick={() => setOpen(true)}
           className="fixed bottom-4 right-4 z-50 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-background/80 backdrop-blur-sm border border-border/50 text-xs text-muted-foreground hover:text-foreground hover:bg-background transition-colors shadow-sm"
