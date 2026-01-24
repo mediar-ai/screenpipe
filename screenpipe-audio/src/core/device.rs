@@ -107,63 +107,12 @@ pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
     AudioDevice::from_name(name)
 }
 
-/// Attempts an operation with exponential backoff retry
-#[cfg(target_os = "macos")]
-async fn with_retry<T, F, Fut>(operation: F, max_retries: usize) -> Result<T>
-where
-    F: Fn() -> Fut,
-    Fut: std::future::Future<Output = Result<T>>,
-{
-    let mut retries = 0;
-    let mut delay_ms = 10; // Start with 10ms delay
-
-    loop {
-        match operation().await {
-            Ok(value) => return Ok(value),
-            Err(e) => {
-                if retries >= max_retries {
-                    return Err(anyhow!("Max retries reached: {}", e));
-                }
-
-                // Add some jitter to prevent synchronized retries
-                use rand::{rng, Rng};
-                let jitter = rng().random_range(0..=10) as u64;
-                let delay = std::time::Duration::from_millis(delay_ms + jitter);
-
-                tracing::warn!(
-                    "ScreenCaptureKit host error, retrying in {}ms: {}",
-                    delay_ms + jitter,
-                    e
-                );
-                tokio::time::sleep(delay).await;
-
-                retries += 1;
-                delay_ms = std::cmp::min(delay_ms * 2, 1000); // Exponential backoff, max 1s
-            }
-        }
-    }
-}
-
-/// Gets the ScreenCaptureKit host with retry mechanism
-#[cfg(target_os = "macos")]
-async fn get_screen_capture_host() -> Result<cpal::Host> {
-    // necessary hack because this is unreliable
-    with_retry(
-        || async {
-            cpal::host_from_id(cpal::HostId::ScreenCaptureKit)
-                .map_err(|e| anyhow!("Failed to get ScreenCaptureKit host: {}", e))
-        },
-        3,
-    )
-    .await
-}
 
 pub async fn get_cpal_device_and_config(
     audio_device: &AudioDevice,
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
     let host = cpal::default_host();
     let is_output_device = audio_device.device_type == DeviceType::Output;
-    let is_display = audio_device.to_string().contains("Display");
     let device_name = audio_device
         .to_string()
         .replace(" (input)", "")
@@ -177,30 +126,26 @@ pub async fn get_cpal_device_and_config(
             DeviceType::Output => host.default_output_device(),
         }
     } else {
-        let mut devices = match audio_device.device_type {
+        let devices = match audio_device.device_type {
             DeviceType::Input => host.input_devices()?,
             DeviceType::Output => host.output_devices()?,
         };
 
-        #[cfg(target_os = "macos")]
-        if is_output_device {
-            if let Ok(screen_capture_host) = get_screen_capture_host().await {
-                devices = screen_capture_host.input_devices()?;
-            }
-        }
-
-        devices.find(|x| x.name().map(|y| y == device_name).unwrap_or(false))
+        devices.into_iter().find(|x| x.name().map(|y| y == device_name).unwrap_or(false))
     }
     .ok_or_else(|| anyhow!("Audio device not found: {}", device_name))?;
 
-    // Get the highest quality configuration based on device type
-    let config = if is_output_device && !is_display {
+    // Get the configuration based on device type
+    // For output devices on macOS 14.2+, we use loopback recording which requires
+    // getting the output config (cpal will handle the loopback internally)
+    let config = if is_output_device {
+        // For loopback recording on macOS, we need the output config
+        // cpal 0.17+ handles creating the aggregate device internally
         let configs = cpal_audio_device.supported_output_configs()?;
         let best_config = configs
             .max_by(|a, b| {
                 a.max_sample_rate()
-                    .0
-                    .cmp(&b.max_sample_rate().0)
+                    .cmp(&b.max_sample_rate())
                     .then(a.channels().cmp(&b.channels()))
             })
             .ok_or_else(|| anyhow!("No supported output configurations found"))?;
@@ -211,8 +156,7 @@ pub async fn get_cpal_device_and_config(
         let best_config = configs
             .max_by(|a, b| {
                 a.max_sample_rate()
-                    .0
-                    .cmp(&b.max_sample_rate().0)
+                    .cmp(&b.max_sample_rate())
                     .then(a.channels().cmp(&b.channels()))
             })
             .ok_or_else(|| anyhow!("No supported input configurations found"))?;
@@ -227,6 +171,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     let host = cpal::default_host();
     let mut devices = Vec::new();
 
+    // Add input devices
     for device in host.input_devices()? {
         if let Ok(name) = device.name() {
             devices.push(AudioDevice::new(name, DeviceType::Input));
@@ -247,23 +192,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
     }
 
-    // macos hack using screen capture kit for output devices - does not work well
-    #[cfg(target_os = "macos")]
-    {
-        // !HACK macos is supposed to use special macos feature "display capture"
-        // ! see https://github.com/RustAudio/cpal/pull/894
-        if let Ok(screen_capture_host) = get_screen_capture_host().await {
-            for device in screen_capture_host.input_devices()? {
-                if let Ok(name) = device.name() {
-                    if should_include_output_device(&name) {
-                        devices.push(AudioDevice::new(name, DeviceType::Output));
-                    }
-                }
-            }
-        }
-    }
-
-    // add default output device - on macos think of custom virtual devices
+    // Add output devices - on macOS 14.2+ these support loopback recording via cpal 0.17+
     for device in host.output_devices()? {
         if let Ok(name) = device.name() {
             if should_include_output_device(&name) {
@@ -272,14 +201,15 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
         }
     }
 
-    // last, add devices that are listed in .devices() which are not already in the devices vector
-    let other_devices = host.devices().unwrap();
-    for device in other_devices {
-        if !devices.iter().any(|d| d.name == device.name().unwrap())
-            && should_include_output_device(&device.name().unwrap())
-        {
-            // TODO: not sure if it can be input, usually aggregate or multi output
-            devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
+    // Add any other devices not already in the list
+    if let Ok(other_devices) = host.devices() {
+        for device in other_devices {
+            if let Ok(name) = device.name() {
+                if !devices.iter().any(|d| d.name == name) && should_include_output_device(&name) {
+                    // TODO: not sure if it can be input, usually aggregate or multi output
+                    devices.push(AudioDevice::new(name, DeviceType::Output));
+                }
+            }
         }
     }
 
@@ -295,32 +225,11 @@ pub fn default_input_device() -> Result<AudioDevice> {
 }
 
 pub async fn default_output_device() -> Result<AudioDevice> {
-    #[cfg(target_os = "macos")]
-    {
-        // ! see https://github.com/RustAudio/cpal/pull/894
-        // Try to get device from ScreenCaptureKit first
-        if let Ok(host) = get_screen_capture_host().await {
-            if let Some(device) = host.default_input_device() {
-                if let Ok(name) = device.name() {
-                    return Ok(AudioDevice::new(name, DeviceType::Output));
-                }
-            }
-        }
-
-        // Fall back to default output device
-        let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .ok_or_else(|| anyhow!("No default output device found"))?;
-        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .ok_or_else(|| anyhow!("No default output device found"))?;
-        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
-    }
+    // In cpal 0.17+, loopback recording is supported natively on macOS 14.2+
+    // Just use the default output device - cpal handles the loopback internally
+    let host = cpal::default_host();
+    let device = host
+        .default_output_device()
+        .ok_or_else(|| anyhow!("No default output device found"))?;
+    Ok(AudioDevice::new(device.name()?, DeviceType::Output))
 }

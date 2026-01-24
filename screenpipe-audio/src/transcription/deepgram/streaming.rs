@@ -59,7 +59,7 @@ pub async fn stream_transcription_deepgram(
     start_deepgram_stream(
         stream.subscribe().await,
         stream.device.clone(),
-        stream.device_config.sample_rate().0,
+        stream.device_config.sample_rate(),
         is_running,
         deepgram_api_key,
     )
