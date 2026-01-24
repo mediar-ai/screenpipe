@@ -26,6 +26,10 @@ pub struct OnboardingStore {
     pub is_completed: bool,
     #[serde(rename = "completedAt")]
     pub completed_at: Option<String>,
+    /// Current step in onboarding flow (login, intro, usecases, status)
+    /// Used to resume after app restart (e.g., after granting permissions)
+    #[serde(rename = "currentStep", default)]
+    pub current_step: Option<String>,
 }
 
 impl Default for OnboardingStore {
@@ -33,6 +37,7 @@ impl Default for OnboardingStore {
         Self {
             is_completed: false,
             completed_at: None,
+            current_step: None,
         }
     }
 }
@@ -85,6 +90,7 @@ impl OnboardingStore {
     pub fn reset(&mut self) {
         self.is_completed = false;
         self.completed_at = None;
+        self.current_step = None;
     }
 }
 

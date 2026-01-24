@@ -261,15 +261,30 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     }
   };
 
-  const openSystemPreferences = async (type: "screen" | "audio") => {
+  const requestPermission = async (type: "screen" | "audio") => {
     try {
+      // First try to trigger the native permission dialog
+      if (type === "screen") {
+        await commands.requestPermission("screenRecording");
+      } else {
+        await commands.requestPermission("microphone");
+      }
+      // Small delay then open settings (in case user needs to toggle manually)
+      setTimeout(async () => {
+        if (type === "screen") {
+          await commands.openPermissionSettings("screenRecording");
+        } else {
+          await commands.openPermissionSettings("microphone");
+        }
+      }, 500);
+    } catch (error) {
+      console.error("Failed to request permission:", error);
+      // Fallback to just opening settings
       if (type === "screen") {
         await commands.openPermissionSettings("screenRecording");
       } else {
         await commands.openPermissionSettings("microphone");
       }
-    } catch (error) {
-      console.error("Failed to open preferences:", error);
     }
   };
 
@@ -307,7 +322,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
           <div className="space-y-3 w-full">
             <button
-              onClick={() => openSystemPreferences("screen")}
+              onClick={() => requestPermission("screen")}
               className="w-full flex items-center justify-between p-4 border border-border hover:bg-foreground hover:text-background transition-all group"
             >
               <div className="flex items-center space-x-3">
@@ -322,7 +337,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             </button>
 
             <button
-              onClick={() => openSystemPreferences("audio")}
+              onClick={() => requestPermission("audio")}
               className="w-full flex items-center justify-between p-4 border border-border hover:bg-foreground hover:text-background transition-all group"
             >
               <div className="flex items-center space-x-3">
@@ -504,7 +519,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => openSystemPreferences("screen")}
+                      onClick={() => requestPermission("screen")}
                       className="font-mono text-xs"
                     >
                       check permissions

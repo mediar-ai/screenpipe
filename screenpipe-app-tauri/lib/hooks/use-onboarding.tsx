@@ -17,6 +17,7 @@ export const useOnboarding = create<OnboardingState>((set, get) => ({
   onboardingData: {
     isCompleted: false,
     completedAt: null,
+    currentStep: null,
   },
   isLoading: false,
   error: null,
@@ -80,6 +81,7 @@ export const useOnboarding = create<OnboardingState>((set, get) => ({
             ...state.onboardingData,
             isCompleted: false,
             completedAt: null,
+            currentStep: null,
           },
           isLoading: false
         }));

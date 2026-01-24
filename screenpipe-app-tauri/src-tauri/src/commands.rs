@@ -309,7 +309,7 @@ pub async fn reset_onboarding(app_handle: tauri::AppHandle) -> Result<(), String
     OnboardingStore::update(&app_handle, |onboarding| {
         onboarding.reset();
     })?;
-    
+
     // Update the managed state in memory
     if let Some(managed_store) = app_handle.try_state::<OnboardingStore>() {
         // Get the current state and create an updated version
@@ -318,7 +318,16 @@ pub async fn reset_onboarding(app_handle: tauri::AppHandle) -> Result<(), String
         // Replace the managed state with the updated version
         app_handle.manage(updated_store);
     }
-    
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_onboarding_step(app_handle: tauri::AppHandle, step: String) -> Result<(), String> {
+    OnboardingStore::update(&app_handle, |onboarding| {
+        onboarding.current_step = Some(step);
+    })?;
     Ok(())
 }
 

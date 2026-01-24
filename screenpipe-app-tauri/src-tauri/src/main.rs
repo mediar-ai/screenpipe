@@ -741,6 +741,7 @@ async fn main() {
                 commands::get_onboarding_status,
                 commands::complete_onboarding,
                 commands::reset_onboarding,
+                commands::set_onboarding_step,
                 commands::show_onboarding_window,
                 commands::open_search_window,
                 // Shortcut reminder commands
@@ -828,6 +829,7 @@ async fn main() {
             commands::get_onboarding_status,
             commands::complete_onboarding,
             commands::reset_onboarding,
+            commands::set_onboarding_step,
             commands::show_onboarding_window,
             commands::open_search_window,
             // Shortcut reminder commands

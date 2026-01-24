@@ -137,6 +137,14 @@ async resetOnboarding() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async setOnboardingStep(step: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_onboarding_step", { step }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async showOnboardingWindow() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("show_onboarding_window") };
@@ -196,7 +204,7 @@ export type LogFile = { name: string; path: string; modified_at: bigint }
 export type OSPermission = "screenRecording" | "microphone"
 export type OSPermissionStatus = "notNeeded" | "empty" | "granted" | "denied"
 export type OSPermissionsCheck = { screenRecording: OSPermissionStatus; microphone: OSPermissionStatus }
-export type OnboardingStore = { isCompleted: boolean; completedAt: string | null }
+export type OnboardingStore = { isCompleted: boolean; completedAt: string | null; currentStep: string | null }
 export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; userId: string;
 /**
  * Persistent analytics ID used for PostHog tracking (both frontend and backend)

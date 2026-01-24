@@ -99,10 +99,22 @@ export default function OnboardingPage() {
     setSelectedUsecase((prev) => prev === option ? null : option);
   };
 
-  // Load onboarding status on mount
+  // Load onboarding status and restore saved step on mount
   useEffect(() => {
-    const { loadOnboardingStatus } = useOnboarding.getState();
-    loadOnboardingStatus();
+    const init = async () => {
+      const { loadOnboardingStatus } = useOnboarding.getState();
+      await loadOnboardingStatus();
+      const { onboardingData } = useOnboarding.getState();
+      // Restore saved step if exists (e.g., after app restart during permissions)
+      if (onboardingData.currentStep && !onboardingData.isCompleted) {
+        const savedStep = onboardingData.currentStep as SlideKey;
+        if (["login", "intro", "usecases", "status"].includes(savedStep)) {
+          setCurrentSlide(savedStep);
+          console.log(`Restored onboarding to step: ${savedStep}`);
+        }
+      }
+    };
+    init();
   }, []);
 
   // Set window size when slide changes
@@ -171,6 +183,8 @@ export default function OnboardingPage() {
       }
 
       if (nextSlide) {
+        // Save the next step to persist across app restarts
+        await commands.setOnboardingStep(nextSlide);
         setIsVisible(false);
         setTimeout(async () => {
           setCurrentSlide(nextSlide);
