@@ -204,8 +204,13 @@ export type LogFile = { name: string; path: string; modified_at: bigint }
 export type OSPermission = "screenRecording" | "microphone"
 export type OSPermissionStatus = "notNeeded" | "empty" | "granted" | "denied"
 export type OSPermissionsCheck = { screenRecording: OSPermissionStatus; microphone: OSPermissionStatus }
-export type OnboardingStore = { isCompleted: boolean; completedAt: string | null; currentStep: string | null }
-export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; userId: string;
+export type OnboardingStore = { isCompleted: boolean; completedAt: string | null; 
+/**
+ * Current step in onboarding flow (login, intro, usecases, status)
+ * Used to resume after app restart (e.g., after granting permissions)
+ */
+currentStep?: string | null }
+export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; userId: string; 
 /**
  * Persistent analytics ID used for PostHog tracking (both frontend and backend)
  */

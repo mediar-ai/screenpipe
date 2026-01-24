@@ -176,6 +176,18 @@ jobs:
           echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           rustc --version # verify rust is available
 
+      # sccache for faster compilation (shared cache across CI runs)
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+        with:
+          version: "v0.8.2"
+
+      - name: Configure sccache
+        shell: bash
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
