@@ -171,6 +171,14 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         return;
       }
 
+      // In dev mode, macOS permission APIs are unreliable because the bundle ID/code signature
+      // changes between builds. Skip permission check and proceed directly.
+      if (settings.devMode) {
+        console.log("Dev mode: skipping permission check (unreliable with unsigned builds)");
+        setSetupState("ready");
+        return;
+      }
+
       try {
         const perms = await commands.doPermissionsCheck(true);
         setPermissions(perms);
@@ -194,7 +202,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     checkPermissions();
     const interval = setInterval(checkPermissions, 2000);
     return () => clearInterval(interval);
-  }, [isMacOS]);
+  }, [isMacOS, settings.devMode]);
 
   // Auto-start when ready (only once)
   useEffect(() => {

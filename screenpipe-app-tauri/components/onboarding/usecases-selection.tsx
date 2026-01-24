@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Brain,
   CircleCheck,
@@ -113,16 +113,52 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
   handlePrevSlide,
 }) => {
   const [otherText, setOtherText] = useState("");
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+
+  // Load saved selection and submission status on mount
+  useEffect(() => {
+    const savedOption = localStorage.getItem("onboarding_usecase");
+    const savedOtherText = localStorage.getItem("onboarding_usecase_other");
+    const submitted = localStorage.getItem("onboarding_usecase_submitted");
+
+    if (savedOption && !selectedOption) {
+      handleOptionClick(savedOption);
+    }
+    if (savedOtherText) {
+      setOtherText(savedOtherText);
+    }
+    if (submitted === "true") {
+      setHasSubmitted(true);
+    }
+  }, []);
+
+  // Save selection when it changes
+  useEffect(() => {
+    if (selectedOption) {
+      localStorage.setItem("onboarding_usecase", selectedOption);
+    }
+  }, [selectedOption]);
+
+  // Save other text when it changes
+  useEffect(() => {
+    if (otherText) {
+      localStorage.setItem("onboarding_usecase_other", otherText);
+    }
+  }, [otherText]);
 
   const isOtherSelected = selectedOption === "other";
   const canContinue = selectedOption !== null && (selectedOption !== "other" || otherText.trim().length > 0);
 
   const handleNext = () => {
-    // Track selected option in Posthog
-    posthog.capture("onboarding_usecases_selected", {
-      selected_option: selectedOption,
-      other_text: isOtherSelected ? otherText.trim() : null,
-    });
+    // Only track to PostHog once to avoid spam
+    if (!hasSubmitted) {
+      posthog.capture("onboarding_usecases_selected", {
+        selected_option: selectedOption,
+        other_text: isOtherSelected ? otherText.trim() : null,
+      });
+      localStorage.setItem("onboarding_usecase_submitted", "true");
+      setHasSubmitted(true);
+    }
 
     handleNextSlide();
   };
