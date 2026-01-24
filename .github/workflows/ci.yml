@@ -40,9 +40,8 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew install ffmpeg pkgconf || true
-          # Install a specific CMake version compatible with libsamplerate-sys
-          brew install cmake@3.27 || brew upgrade cmake || true
-          brew link --overwrite cmake@3.27 || true
+          # Don't try to install specific cmake version, use system default
+          brew install cmake || brew upgrade cmake || true
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -75,6 +74,8 @@ jobs:
           CXXFLAGS: "-mcpu=apple-a14"
           WHISPER_NO_ACCELERATE: "1"
           WHISPER_NO_METAL: "1"
+          # Fix libsamplerate-sys CMake compatibility
+          CMAKE_ARGS: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
 
       - name: Verify Code Compiles (Windows)
