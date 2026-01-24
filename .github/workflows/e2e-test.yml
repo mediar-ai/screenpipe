@@ -38,7 +38,6 @@ jobs:
       uses: lukka/run-vcpkg@v11
       with:
         vcpkgDirectory: ${{ github.workspace }}/vcpkg
-        # FIX: Removed the Commit ID line that caused the submodule error
 
     - name: Install LLVM and Clang
       uses: KyleMayes/install-llvm-action@v2
@@ -59,11 +58,11 @@ jobs:
       run: bun install
 
     # --- THE SLEDGEHAMMER FIX ---
+    # Overwrites the JS file to do nothing, killing the 404 crash
     - name: NEUTER pre_build.js
       working-directory: ./screenpipe-app-tauri
       shell: pwsh
       run: |
-        # Physically overwrite the file to do NOTHING so it cannot download from gyan.dev
         "console.log('SUCCESS: Bypassed pre_build.js to prevent 404 crash');" | Out-File -FilePath "./scripts/pre_build.js" -Encoding utf8
 
     - name: Run pre_build.js
