@@ -7,7 +7,13 @@
   ],
   "remote": {
     "urls": [
-      "http://localhost:*"
+      "http://localhost:*",
+      "https://api.openai.com/*",
+      "https://*.openai.com/*",
+      "https://ai-proxy.i-f9f.workers.dev/*",
+      "https://*.anthropic.com/*",
+      "https://*.ollama.ai/*",
+      "https://*"
     ]
   },
   "permissions": [

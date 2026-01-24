@@ -25,41 +25,57 @@ const TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "search_content",
-      description:
-        "Search screenpipe's recorded content: screen text (OCR), audio transcriptions, and UI elements. " +
-        "Returns timestamped results with app context. " +
-        "Call with no parameters to get recent activity.",
+      description: `Search screenpipe's recorded content: screen text (OCR), audio transcriptions, and UI elements.
+
+IMPORTANT QUERY GUIDELINES:
+- Start with SPECIFIC queries (app_name + short time range) before broad searches
+- Use time ranges of 1-2 hours max initially. If no results, expand gradually
+- For "recent" activity, use last 30-60 minutes, not hours
+- For "today", search last few hours, not the whole day
+- Always prefer app_name filter when user mentions specific apps
+- Use limit=10 for initial searches, increase only if needed
+- If results are truncated, narrow your search with more filters
+
+GOOD query examples:
+- "slack messages" → {app_name: "Slack", limit: 10, start_time: "1 hour ago"}
+- "what I did" → {limit: 10, start_time: "30 mins ago"}
+- "zoom meeting" → {app_name: "zoom.us", content_type: "audio", limit: 10}
+
+BAD query examples:
+- No filters with limit=100 (too broad, will timeout)
+- 24-hour time range (too much data)
+- Empty query with no time filter (returns everything)`,
       parameters: {
         type: "object",
         properties: {
           q: {
             type: "string",
-            description: "Search query. Optional - omit to return all recent content.",
+            description: "Search keywords. Be specific. Optional but recommended.",
           },
           content_type: {
             type: "string",
             enum: ["all", "ocr", "audio", "ui"],
-            description: "Content type filter. Default: 'all'",
+            description: "Filter by type. Use 'audio' for meetings/conversations, 'ocr' for screen text. Default: 'all'",
           },
           limit: {
             type: "integer",
-            description: "Max results. Default: 20",
+            description: "Max results (1-20). Start with 10, only increase if needed. Default: 10",
           },
           start_time: {
             type: "string",
-            description: "ISO 8601 UTC start time (e.g., 2024-01-15T10:00:00Z)",
+            description: "ISO 8601 UTC start time. IMPORTANT: Start with short ranges (30-60 mins). Example: 2024-01-15T10:00:00Z",
           },
           end_time: {
             type: "string",
-            description: "ISO 8601 UTC end time (e.g., 2024-01-15T18:00:00Z)",
+            description: "ISO 8601 UTC end time. Keep range short initially.",
           },
           app_name: {
             type: "string",
-            description: "Filter by app (e.g., 'Google Chrome', 'Slack', 'zoom.us')",
+            description: "Filter by app name. HIGHLY RECOMMENDED when user mentions an app. Examples: 'Google Chrome', 'Slack', 'zoom.us', 'Code', 'Terminal'",
           },
           window_name: {
             type: "string",
-            description: "Filter by window title",
+            description: "Filter by window title substring. Useful for specific tabs/documents.",
           },
         },
       },
@@ -69,15 +85,23 @@ const TOOLS: ChatCompletionTool[] = [
 
 const SYSTEM_PROMPT = `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions.
 
-When users ask about what they did, saw, or heard, use the search_content tool to find relevant information. Be concise in your responses and cite timestamps when relevant.
+SEARCH STRATEGY (IMPORTANT):
+1. Start with NARROW searches: specific app + short time range (30-60 mins)
+2. If no results, gradually expand: longer time range OR broader query
+3. Never search more than 2-3 hours at once initially
+4. Always use app_name filter when user mentions a specific app
+5. For "recent" = last 30-60 mins, "today" = last 2-3 hours, "yesterday" = specific date range
+6. Use limit=10 initially, only increase if user needs more
+
+If search returns "truncated" or "timed out", immediately retry with narrower parameters.
 
 Rules for showing videos/audio:
-- You can show videos to the user by putting .mp4 file paths in an inline code block like this: \`/path/to/video.mp4\`
+- Show videos by putting .mp4 file paths in inline code blocks: \`/path/to/video.mp4\`
 - Use the exact, absolute file_path from search results
-- Do NOT use markdown links for videos (e.g. [video](path.mp4) won't work)
-- Do NOT use multi-line code blocks for videos
-- For audio, use the audio_file_path the same way: \`/path/to/audio.mp3\`
-- Always show relevant video/audio when answering questions about what the user saw or heard
+- Do NOT use markdown links or multi-line code blocks for videos
+- Always show relevant video/audio when answering about what user saw/heard
+
+Be concise. Cite timestamps when relevant.
 
 Current time: ${new Date().toISOString()}`;
 
@@ -126,6 +150,31 @@ export function GlobalChat() {
   const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
   const canChat = hasPresets && hasValidModel && !needsLogin;
 
+  // Debug: log why chat might be disabled
+  useEffect(() => {
+    if (open && activePreset) {
+      console.log("[GlobalChat] Active preset:", {
+        id: activePreset.id,
+        provider: activePreset.provider,
+        model: activePreset.model,
+        url: activePreset.url,
+        hasValidModel,
+        needsLogin,
+        canChat,
+      });
+    }
+  }, [open, activePreset, hasValidModel, needsLogin, canChat]);
+
+  // Get error message for why chat is disabled
+  const getDisabledReason = (): string | null => {
+    if (!hasPresets) return "No AI presets configured";
+    if (!activePreset) return "No preset selected";
+    if (!hasValidModel) return `No model selected in "${activePreset.id}" preset - click edit to add one`;
+    if (needsLogin) return "Login required for Screenpipe Cloud";
+    return null;
+  };
+  const disabledReason = getDisabledReason();
+
   // Listen for Cmd+L / Ctrl+L shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -152,20 +201,36 @@ export function GlobalChat() {
 
   // Execute search tool by calling Screenpipe API
   async function executeSearchTool(args: Record<string, unknown>): Promise<string> {
+    const MAX_LIMIT = 15; // Cap results to prevent huge responses
+    const MAX_RESPONSE_CHARS = 8000; // Truncate if response is too large
+    const MAX_TEXT_PER_RESULT = 500; // Truncate individual result text
+
     try {
       const params = new URLSearchParams();
       if (args.q) params.append("q", String(args.q));
       if (args.content_type && args.content_type !== "all") {
         params.append("content_type", String(args.content_type));
       }
-      if (args.limit) params.append("limit", String(args.limit));
-      else params.append("limit", "20");
+
+      // Cap limit to prevent huge queries
+      const requestedLimit = args.limit ? Number(args.limit) : 10;
+      const limit = Math.min(requestedLimit, MAX_LIMIT);
+      params.append("limit", String(limit));
+
       if (args.start_time) params.append("start_time", String(args.start_time));
       if (args.end_time) params.append("end_time", String(args.end_time));
       if (args.app_name) params.append("app_name", String(args.app_name));
       if (args.window_name) params.append("window_name", String(args.window_name));
 
-      const response = await fetch(`${SCREENPIPE_API}/search?${params.toString()}`);
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+      const response = await fetch(`${SCREENPIPE_API}/search?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
       if (!response.ok) throw new Error(`Search failed: ${response.status}`);
 
       const data = await response.json();
@@ -173,30 +238,54 @@ export function GlobalChat() {
       const pagination = data.pagination || {};
 
       if (searchResults.length === 0) {
-        return "No results found. Try broader search terms or a wider time range.";
+        return "No results found. Try: broader search terms, different app_name, wider time range, or different content_type.";
       }
 
+      // Format results with truncation
       const formatted = searchResults.map((result: SearchResult) => {
         const content = result.content;
         if (!content) return null;
 
+        // Truncate text content if too long
+        const truncateText = (text: string | undefined) => {
+          if (!text) return "";
+          if (text.length > MAX_TEXT_PER_RESULT) {
+            return text.substring(0, MAX_TEXT_PER_RESULT) + "... [truncated]";
+          }
+          return text;
+        };
+
         if (result.type === "OCR") {
           const filePath = content.file_path ? `\nfile_path: ${content.file_path}` : "";
-          return `[OCR] ${content.app_name || "?"} | ${content.window_name || "?"}\n${content.timestamp}${filePath}\n${content.text || ""}`;
+          return `[OCR] ${content.app_name || "?"} | ${content.window_name || "?"}\n${content.timestamp}${filePath}\n${truncateText(content.text)}`;
         } else if (result.type === "Audio") {
           const audioPath = content.audio_file_path ? `\naudio_file_path: ${content.audio_file_path}` : "";
-          return `[Audio] ${content.device_name || "?"}\n${content.timestamp}${audioPath}\n${content.transcription || ""}`;
+          return `[Audio] ${content.device_name || "?"}\n${content.timestamp}${audioPath}\n${truncateText(content.transcription)}`;
         } else if (result.type === "UI") {
           const filePath = content.file_path ? `\nfile_path: ${content.file_path}` : "";
-          return `[UI] ${content.app_name || "?"} | ${content.window_name || "?"}\n${content.timestamp}${filePath}\n${content.text || ""}`;
+          return `[UI] ${content.app_name || "?"} | ${content.window_name || "?"}\n${content.timestamp}${filePath}\n${truncateText(content.text)}`;
         }
         return null;
       }).filter(Boolean);
 
-      const header = `Results: ${searchResults.length}/${pagination.total || "?"}`;
-      return `${header}\n\n${formatted.join("\n---\n")}`;
+      let result = formatted.join("\n---\n");
+      let truncationWarning = "";
+
+      // Check if we need to truncate the overall response
+      if (result.length > MAX_RESPONSE_CHARS) {
+        result = result.substring(0, MAX_RESPONSE_CHARS);
+        truncationWarning = "\n\n⚠️ RESPONSE TRUNCATED - Too much data. Please retry with:\n- Narrower time range (e.g., last 30 mins instead of hours)\n- Specific app_name filter\n- Lower limit (5-10)\n- More specific search query";
+      }
+
+      const totalAvailable = pagination.total || searchResults.length;
+      const header = `Results: ${searchResults.length}/${totalAvailable}${totalAvailable > searchResults.length ? " (more available - narrow search if needed)" : ""}`;
+
+      return `${header}\n\n${result}${truncationWarning}`;
     } catch (error) {
       console.error("Search error:", error);
+      if (error instanceof Error && error.name === "AbortError") {
+        return "Search timed out - query too broad. Please retry with:\n- Shorter time range\n- Specific app_name\n- Lower limit (5-10)\n- More specific query";
+      }
       return `Search failed: ${error instanceof Error ? error.message : "Unknown error"}`;
     }
   }
@@ -212,9 +301,15 @@ export function GlobalChat() {
           ? (activePreset.apiKey as string) || ""
           : "";
 
+    // Force correct URL for screenpipe-cloud (in case preset has wrong URL saved)
+    const baseURL =
+      activePreset.provider === "screenpipe-cloud"
+        ? "https://ai-proxy.i-f9f.workers.dev/v1"
+        : activePreset.url;
+
     return new OpenAI({
       apiKey,
-      baseURL: activePreset.url,
+      baseURL,
       dangerouslyAllowBrowser: true,
     });
   }
@@ -392,6 +487,18 @@ export function GlobalChat() {
         return;
       }
       console.error("Chat error:", error);
+
+      let errorMessage = error instanceof Error ? error.message : "Something went wrong";
+
+      // Check for common API errors and provide helpful messages
+      if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+        errorMessage = "Invalid API key. Please check your preset configuration.";
+      } else if (errorMessage.includes("429")) {
+        errorMessage = "Rate limit exceeded. Please wait a moment and try again.";
+      } else if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
+        errorMessage = "Network error. Please check your internet connection and that the API endpoint is correct.";
+      }
+
       setMessages((prev) => {
         const filtered = prev.filter((m) => m.id !== assistantMessageId || m.content);
         return [
@@ -399,7 +506,7 @@ export function GlobalChat() {
           {
             id: Date.now().toString(),
             role: "assistant",
-            content: `Error: ${error instanceof Error ? error.message : "Something went wrong"}`,
+            content: `Error: ${errorMessage}`,
           },
         ];
       });
@@ -451,41 +558,44 @@ export function GlobalChat() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && !hasPresets && (
+            {messages.length === 0 && disabledReason && (
               <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                <div className="p-4 rounded-full bg-muted">
-                  <Settings className="h-8 w-8 text-muted-foreground" />
+                <div className={cn(
+                  "p-4 rounded-full",
+                  needsLogin ? "bg-amber-500/10" : "bg-destructive/10"
+                )}>
+                  {needsLogin ? (
+                    <Sparkles className="h-8 w-8 text-amber-500" />
+                  ) : (
+                    <Settings className="h-8 w-8 text-destructive" />
+                  )}
                 </div>
                 <div className="text-center space-y-2">
-                  <h3 className="font-semibold">No AI Presets Configured</h3>
+                  <h3 className="font-semibold">
+                    {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : "Login Required"}
+                  </h3>
                   <p className="text-sm text-muted-foreground max-w-sm">
-                    Configure an AI provider (OpenAI, Ollama, Screenpipe Cloud, or custom) to use the chat.
+                    {disabledReason}
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setOpen(false);
-                    window.location.href = "/settings";
-                  }}
-                  className="gap-2"
-                >
-                  <Settings className="h-4 w-4" />
-                  Go to Settings
-                </Button>
-              </div>
-            )}
-            {messages.length === 0 && hasPresets && needsLogin && (
-              <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                <div className="p-4 rounded-full bg-amber-500/10">
-                  <Sparkles className="h-8 w-8 text-amber-500" />
-                </div>
-                <div className="text-center space-y-2">
-                  <h3 className="font-semibold">Login Required</h3>
-                  <p className="text-sm text-muted-foreground max-w-sm">
-                    Sign in to use Screenpipe Cloud, or select a different AI provider below.
+                {!hasPresets && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setOpen(false);
+                      window.location.href = "/settings";
+                    }}
+                    className="gap-2"
+                  >
+                    <Settings className="h-4 w-4" />
+                    Go to Settings
+                  </Button>
+                )}
+                {hasPresets && !hasValidModel && (
+                  <p className="text-xs text-muted-foreground">
+                    Use the preset selector below to edit your preset and select a model
                   </p>
-                </div>
+                )}
               </div>
             )}
             {messages.length === 0 && canChat && (
@@ -590,14 +700,12 @@ export function GlobalChat() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={
-                    !hasPresets
-                      ? "Configure AI preset first..."
-                      : needsLogin
-                        ? "Login required for Screenpipe Cloud"
-                        : "Ask about your screen activity..."
+                    disabledReason
+                      ? disabledReason
+                      : "Ask about your screen activity..."
                   }
                   disabled={isLoading || !canChat}
-                  className="flex-1"
+                  className={cn("flex-1", disabledReason && "border-destructive/50")}
                 />
                 <Button
                   type={isStreaming ? "button" : "submit"}
