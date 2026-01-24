@@ -34,7 +34,8 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config libxdo-dev libssl-dev libxtst-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libdbus-1-dev
+          # FIX: Added 'perl' to the apt-get list to satisfy the openssl-sys build requirement
+          sudo apt-get install -y libasound2-dev pkg-config libxdo-dev libssl-dev libxtst-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libdbus-1-dev perl
 
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
@@ -47,12 +48,15 @@ jobs:
           targets: ${{ matrix.target }}
 
       # --- THE FIX ---
-      # 'cargo check' skips the C++ Linker entirely, bypassing the LNK1169 Windows crash.
-      # It also does not run the tests, bypassing the Linux runtime panics.
-      # FIX: Added CPU flags back to macOS so whisper.cpp knows it is running on Apple Silicon (M1)
       - name: Verify Code Compiles (Linux & Mac)
         if: matrix.os != 'windows-latest'
         env:
+          # FIX (Linux): Force Rust to use the Linux system SSL instead of building from scratch
+          OPENSSL_NO_VENDOR: "1"
+          # FIX (Mac): Disable hardware acceleration during the CI check to bypass the 'i8mm' crash
+          WHISPER_NO_METAL: "1"
+          WHISPER_NO_COREML: "1"
+          GGML_NO_ACCELERATE: "1"
           CFLAGS: "-mcpu=apple-m1"
           CXXFLAGS: "-mcpu=apple-m1"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
