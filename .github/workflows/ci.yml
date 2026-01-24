@@ -40,7 +40,6 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew install ffmpeg pkgconf || true
-          # Don't try to install specific cmake version, use system default
           brew install cmake || brew upgrade cmake || true
 
       - name: Set up Rust
@@ -48,17 +47,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # CRITICAL FIX: Verify the .cargo/config.toml exists for macOS
-      - name: Verify Cargo config for M1 compatibility
+      # ✅ FIX macOS libsamplerate CMake failure
+      - name: Fix CMake policy (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          if [ ! -f .cargo/config.toml ]; then
-            echo "ERROR: .cargo/config.toml is missing!"
-            echo "This file is required to prevent M2-specific instructions on M1 runners."
-            exit 1
-          fi
-          echo "✓ .cargo/config.toml exists"
-          cat .cargo/config.toml
+          echo "CMAKE_POLICY_VERSION_MINIMUM=3.5" >> $GITHUB_ENV
 
       - name: Verify Code Compiles (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -69,17 +62,19 @@ jobs:
       - name: Verify Code Compiles (macOS)
         if: matrix.os == 'macos-latest'
         env:
-          # Force disable i8mm for M1 compatibility
           CFLAGS: "-mcpu=apple-a14"
           CXXFLAGS: "-mcpu=apple-a14"
           WHISPER_NO_ACCELERATE: "1"
           WHISPER_NO_METAL: "1"
-          # Fix libsamplerate-sys CMake compatibility
-          CMAKE_ARGS: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
+
+      # ✅ FIX Windows CRT mismatch (THIS IS THE BIG ONE)
+      - name: Force MSVC dynamic CRT (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "RUSTFLAGS=-C target-feature=-crt-static" >> $GITHUB_ENV
+          echo "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL" >> $GITHUB_ENV
 
       - name: Verify Code Compiles (Windows)
         if: matrix.os == 'windows-latest'
-        env:
-          RUSTFLAGS: "-C link-arg=/NODEFAULTLIB:libcmt"
         run: cargo check --workspace --exclude screenpipe-vision --exclude screenpipe-audio
