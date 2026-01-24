@@ -437,6 +437,15 @@ if (platform == 'macos') {
 
   console.log('FFMPEG and FFPROBE checks completed');
 	console.log('Moved and renamed ffmpeg binary for externalBin');
+
+	// Strip extended attributes from all binaries to prevent codesign failures
+	console.log('Stripping extended attributes from binaries...');
+	try {
+		await $`xattr -cr ${cwd}`;
+		console.log('Extended attributes stripped successfully');
+	} catch (error) {
+		console.log('Note: xattr command not available or failed (non-fatal)');
+	}
 }
 
 

@@ -41,9 +41,22 @@ pub async fn request_permission(permission: OSPermission) {
         match permission {
             OSPermission::ScreenRecording => {
                 use core_graphics_helmer_fork::access::ScreenCaptureAccess;
-                ScreenCaptureAccess.request();
+                // Only request if not already granted
+                if !ScreenCaptureAccess.preflight() {
+                    ScreenCaptureAccess.request();
+                }
             }
-            OSPermission::Microphone => request_av_permission(AVMediaType::Audio),
+            OSPermission::Microphone => {
+                // Only request if not already granted
+                use nokhwa_bindings_macos::AVAuthorizationStatus;
+                use objc::*;
+                let cls = objc::class!(AVCaptureDevice);
+                let status: AVAuthorizationStatus =
+                    unsafe { msg_send![cls, authorizationStatusForMediaType:AVMediaType::Audio.into_ns_str()] };
+                if status != AVAuthorizationStatus::Authorized {
+                    request_av_permission(AVMediaType::Audio);
+                }
+            }
         }
     }
 }

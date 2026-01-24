@@ -22,3 +22,9 @@
 ## Testing
 - `cargo test` for Rust
 - `bun test` for JS/TS
+
+## macOS Dev Builds
+- Dev builds are signed with a developer certificate for consistent permissions
+- Config: `screenpipe-app-tauri/src-tauri/tauri.conf.json` → `bundle.macOS.signingIdentity`
+- This ensures macOS TCC recognizes the app across rebuilds (permissions persist)
+- Other devs without the cert will see permission issues - onboarding has "continue anyway" button after 5s

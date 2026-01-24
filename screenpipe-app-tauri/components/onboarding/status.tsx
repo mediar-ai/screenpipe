@@ -272,26 +272,26 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   };
 
   const requestPermission = async (type: "screen" | "audio") => {
-    // Check if permission is already granted - don't show any popup
-    const permStatus = type === "screen"
-      ? permissions?.screenRecording
-      : permissions?.microphone;
-    const isGranted = permStatus === "granted" || permStatus === "notNeeded";
-
-    if (isGranted) {
-      return; // Already have permission, do nothing
-    }
-
     try {
-      // Just open System Settings - let user toggle there
-      // Don't call commands.requestPermission() as it triggers annoying native popup
+      // Always do a fresh permission check before triggering dialog
+      const freshPerms = await commands.doPermissionsCheck(false);
+      const permStatus = type === "screen"
+        ? freshPerms.screenRecording
+        : freshPerms.microphone;
+      const isGranted = permStatus === "granted" || permStatus === "notNeeded";
+
+      if (isGranted) {
+        return; // Already have permission, do nothing
+      }
+
+      // Trigger native permission dialog
       if (type === "screen") {
-        await commands.openPermissionSettings("screenRecording");
+        await commands.requestPermission("screenRecording");
       } else {
-        await commands.openPermissionSettings("microphone");
+        await commands.requestPermission("microphone");
       }
     } catch (error) {
-      console.error("Failed to open permission settings:", error);
+      console.error("Failed to request permission:", error);
     }
   };
 
@@ -532,7 +532,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           animate={{ opacity: 1 }}
         >
           <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin" />
-          <p className="font-mono text-sm text-muted-foreground">preparing...</p>
+          <p className="font-mono text-sm text-muted-foreground">starting screenpipe...</p>
 
           {isStuck && (
             <motion.div

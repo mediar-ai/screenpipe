@@ -36,7 +36,11 @@
     ],
     "resources": [
       "assets/*"
-    ]
+    ],
+    "macOS": {
+      "signingIdentity": "Apple Development: Louis Beaumont (NJ372MT773)",
+      "entitlements": null
+    }
   },
   "plugins": {
     "updater": {
