@@ -29,18 +29,26 @@ fn set_recording_status(status: RecordingStatus) {
 #[allow(dead_code)]
 struct HealthCheckResponse {
     status: String,
+    #[serde(default)]
+    status_code: Option<i32>,
     #[serde(rename = "last_frame_timestamp")]
     last_frame_timestamp: Option<String>,
     #[serde(rename = "last_audio_timestamp")]
     last_audio_timestamp: Option<String>,
-    #[serde(rename = "last_ui_timestamp")]
+    #[serde(rename = "last_ui_timestamp", default)]
     last_ui_timestamp: Option<String>,
-    frame_status: String,
-    audio_status: String,
-    ui_status: String,
-    message: String,
-    #[serde(rename = "verbose_instructions")]
+    #[serde(default)]
+    frame_status: Option<String>,
+    #[serde(default)]
+    audio_status: Option<String>,
+    #[serde(default)]
+    ui_status: Option<String>,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(rename = "verbose_instructions", default)]
     verbose_instructions: Option<String>,
+    #[serde(default)]
+    device_status_details: Option<String>,
 }
 
 /// Starts a background task that periodically checks the health of the sidecar
