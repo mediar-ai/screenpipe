@@ -45,7 +45,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
         <div className="p-6 border border-border rounded-lg bg-card space-y-4">
           {isLoggedIn ? (
             <>
-              <div className="flex items-center justify-center gap-2 text-sm text-green-600">
+              <div className="flex items-center justify-center gap-2 text-sm text-foreground">
                 <CheckCircle2 className="w-4 h-4" />
                 signed in as {settings?.user?.email}
               </div>
@@ -109,7 +109,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
         </div>
 
         <p className="text-xs text-center text-muted-foreground">
-          your data stays on your device. signing in is optional.
+          your data stays on your device.
         </p>
       </div>
     </div>
