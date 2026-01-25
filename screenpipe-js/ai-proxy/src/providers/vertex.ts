@@ -229,68 +229,44 @@ export class VertexAIProvider implements AIProvider {
 		const reader = response.body!.getReader();
 		const decoder = new TextDecoder();
 
-		let toolCallIndex = 0;
 		const toolCallsById: Record<string, { index: number; id: string; name: string; arguments: string }> = {};
+		const toolCallIndexRef = { value: 0 };
 
 		return new ReadableStream({
-			async pull(controller) {
-				const { done, value } = await reader.read();
-				if (done) {
-					controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
-					controller.close();
-					return;
-				}
+			async start(controller) {
+				try {
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) {
+							controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+							controller.close();
+							return;
+						}
 
-				const chunk = decoder.decode(value, { stream: true });
-				const lines = chunk.split('\n');
+						const chunk = decoder.decode(value, { stream: true });
+						const lines = chunk.split('\n');
 
-				for (const line of lines) {
-					if (line.startsWith('data: ')) {
-						try {
-							const data = JSON.parse(line.slice(6));
+						for (const line of lines) {
+							if (line.startsWith('data: ')) {
+								try {
+									const data = JSON.parse(line.slice(6));
+									const result = parseStreamingEvent(data, toolCallsById, toolCallIndexRef);
 
-							// Handle text content
-							if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta') {
-								controller.enqueue(
-									new TextEncoder().encode(
-										`data: ${JSON.stringify({
-											choices: [{ delta: { content: data.delta.text } }],
-										})}\n\n`
-									)
-								);
-							}
-
-							// Handle tool use start
-							if (data.type === 'content_block_start' && data.content_block?.type === 'tool_use') {
-								const tc = data.content_block;
-								toolCallsById[tc.id] = { index: toolCallIndex++, id: tc.id, name: tc.name, arguments: '' };
-								controller.enqueue(
-									new TextEncoder().encode(
-										`data: ${JSON.stringify({
-											choices: [{ delta: { tool_calls: [{ index: toolCallsById[tc.id].index, id: tc.id, function: { name: tc.name, arguments: '' } }] } }],
-										})}\n\n`
-									)
-								);
-							}
-
-							// Handle tool use input delta
-							if (data.type === 'content_block_delta' && data.delta?.type === 'input_json_delta') {
-								const lastToolId = Object.keys(toolCallsById).pop();
-								if (lastToolId && toolCallsById[lastToolId]) {
-									toolCallsById[lastToolId].arguments += data.delta.partial_json;
-									controller.enqueue(
-										new TextEncoder().encode(
-											`data: ${JSON.stringify({
-												choices: [{ delta: { tool_calls: [{ index: toolCallsById[lastToolId].index, function: { arguments: data.delta.partial_json } }] } }],
-											})}\n\n`
-										)
-									);
+									if (result.output) {
+										controller.enqueue(new TextEncoder().encode(result.output));
+									}
+									if (result.done) {
+										controller.close();
+										return;
+									}
+								} catch (e) {
+									// Skip invalid JSON
 								}
 							}
-						} catch (e) {
-							// Skip invalid JSON
 						}
 					}
+				} catch (error) {
+					controller.error(error);
 				}
 			},
 		});
@@ -393,7 +369,8 @@ export class VertexAIProvider implements AIProvider {
 						tool_calls: response.content
 							?.filter((block: any) => block.type === 'tool_use')
 							.map((block: any) => ({
-								type: 'tool_use',
+								id: block.id,
+								type: 'function',
 								function: {
 									name: block.name,
 									arguments: JSON.stringify(block.input),
@@ -524,11 +501,65 @@ export async function proxyToVertex(
 }
 
 // Convert model ID format: claude-opus-4-5-20251101 -> claude-opus-4-5@20251101
-function mapModelToVertex(model: string): string {
+export function mapModelToVertex(model: string): string {
 	// Match pattern: model-name-YYYYMMDD and convert last - to @
 	const match = model.match(/^(.+)-(\d{8})$/);
 	if (match) {
 		return `${match[1]}@${match[2]}`;
 	}
 	return model;
+}
+
+/**
+ * Parse a single Anthropic SSE event and convert to OpenAI format
+ * Exported for testing
+ */
+export function parseStreamingEvent(
+	data: any,
+	toolCallsById: Record<string, { index: number; id: string; name: string; arguments: string }>,
+	toolCallIndex: { value: number }
+): { output: string | null; done: boolean } {
+	// Handle text content
+	if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta') {
+		return {
+			output: `data: ${JSON.stringify({
+				choices: [{ delta: { content: data.delta.text } }],
+			})}\n\n`,
+			done: false,
+		};
+	}
+
+	// Handle tool use start
+	if (data.type === 'content_block_start' && data.content_block?.type === 'tool_use') {
+		const tc = data.content_block;
+		toolCallsById[tc.id] = { index: toolCallIndex.value++, id: tc.id, name: tc.name, arguments: '' };
+		return {
+			output: `data: ${JSON.stringify({
+				choices: [{ delta: { tool_calls: [{ index: toolCallsById[tc.id].index, id: tc.id, type: 'function', function: { name: tc.name, arguments: '' } }] } }],
+			})}\n\n`,
+			done: false,
+		};
+	}
+
+	// Handle tool use input delta
+	if (data.type === 'content_block_delta' && data.delta?.type === 'input_json_delta') {
+		const lastToolId = Object.keys(toolCallsById).pop();
+		if (lastToolId && toolCallsById[lastToolId]) {
+			toolCallsById[lastToolId].arguments += data.delta.partial_json;
+			return {
+				output: `data: ${JSON.stringify({
+					choices: [{ delta: { tool_calls: [{ index: toolCallsById[lastToolId].index, function: { arguments: data.delta.partial_json } }] } }],
+				})}\n\n`,
+				done: false,
+			};
+		}
+	}
+
+	// Handle message_stop
+	if (data.type === 'message_stop') {
+		return { output: 'data: [DONE]\n\n', done: true };
+	}
+
+	// Ignore other events (message_start, ping, content_block_stop, etc.)
+	return { output: null, done: false };
 }
