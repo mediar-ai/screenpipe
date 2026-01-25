@@ -77,12 +77,12 @@ export function TimelineControls({
 			
 			{/* Center section - Timeline controls */}
 			<div className="flex items-center gap-2 mt-8">
-				<div className="flex items-center h-10 bg-card/80 backdrop-blur-sm border border-border rounded-full px-1 shadow-lg">
+				<div className="flex items-center h-10 bg-background border border-border px-1">
 					<Button
 						variant="ghost"
 						size="icon"
 						onClick={() => jumpDay(-1)}
-						className="h-8 w-8 text-foreground/70 hover:text-foreground hover:bg-accent/50 rounded-full transition-colors"
+						className="h-8 w-8 text-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
 						disabled={canGoBack}
 					>
 						<ChevronLeft className="h-4 w-4" />
@@ -100,7 +100,7 @@ export function TimelineControls({
 								damping: 30,
 								duration: 0.15,
 							}}
-							className="px-2 text-sm font-medium text-foreground min-w-[100px] text-center"
+							className="px-3 text-sm font-mono text-foreground min-w-[100px] text-center"
 						>
 							{format(currentDate, "d MMM yyyy")}
 						</motion.div>
@@ -110,7 +110,7 @@ export function TimelineControls({
 						variant="ghost"
 						size="icon"
 						onClick={() => jumpDay(1)}
-						className="h-8 w-8 text-foreground/70 hover:text-foreground hover:bg-accent/50 rounded-full transition-colors"
+						className="h-8 w-8 text-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
 						disabled={isAtToday}
 					>
 						<ChevronRight className="h-4 w-4" />
@@ -120,16 +120,16 @@ export function TimelineControls({
 						variant="ghost"
 						size="icon"
 						onClick={onJumpToday}
-						className="h-8 w-8 text-foreground/70 hover:text-foreground hover:bg-accent/50 rounded-full transition-colors"
+						className="h-8 w-8 text-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
 						disabled={isAtToday}
 					>
 						<RefreshCw className="h-4 w-4" />
 					</Button>
 				</div>
 
-				<div className="flex items-center h-10 gap-1.5 bg-card/80 backdrop-blur-sm border border-border rounded-full px-4 shadow-lg">
+				<div className="flex items-center h-10 gap-1.5 bg-background border border-border px-4 font-mono">
 					<span className="text-xs text-muted-foreground">{isMac ? "⌘K" : "Ctrl+K"}</span>
-					<span className="text-xs text-muted-foreground">search</span>
+					<span className="text-xs text-foreground">search</span>
 				</div>
 			</div>
 
