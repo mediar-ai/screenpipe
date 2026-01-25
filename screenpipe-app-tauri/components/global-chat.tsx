@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, Bot, User, X, Sparkles, Settings, ExternalLink } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { PipeAIIcon } from "@/components/pipe-ai-icon";
 import { MemoizedReactMarkdown } from "@/components/markdown";
 import { VideoComponent } from "@/components/rewind/video";
 import { AIPresetsSelector } from "@/components/rewind/ai-presets-selector";
@@ -590,15 +592,20 @@ Always use these exact start_time and end_time values when searching, unless the
   return (
     <>
       {/* Floating indicator when dialog is closed - only on timeline */}
+      <AnimatePresence>
       {!open && isOnTimeline && (
-        <button
+        <motion.button
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
           onClick={() => setOpen(true)}
           className="fixed bottom-4 right-4 z-50 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-background/80 backdrop-blur-sm border border-border/50 text-xs text-muted-foreground hover:text-foreground hover:bg-background transition-colors shadow-sm"
         >
-          <Sparkles className="h-3 w-3" />
+          <PipeAIIcon size={12} animated={false} />
           <span>{isMac ? "⌘L" : "Ctrl+L"}</span>
-        </button>
+        </motion.button>
       )}
+      </AnimatePresence>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTitle className="sr-only">AI Chat</DialogTitle>
         <CustomDialogContent
@@ -607,7 +614,7 @@ Always use these exact start_time and end_time values when searching, unless the
         >
           {/* Header */}
           <div className="flex items-center gap-2 p-3 pr-10 border-b">
-            <Sparkles className="h-5 w-5 text-primary" />
+            <PipeAIIcon size={20} animated={false} className="text-primary" />
             <span className="font-medium">Ask about your screen activity</span>
             <span className="text-xs text-muted-foreground ml-auto">{isMac ? "⌘L" : "Ctrl+L"} to toggle</span>
           </div>
@@ -621,7 +628,7 @@ Always use these exact start_time and end_time values when searching, unless the
                   needsLogin ? "bg-muted" : "bg-destructive/10"
                 )}>
                   {needsLogin ? (
-                    <Sparkles className="h-8 w-8 text-muted-foreground" />
+                    <PipeAIIcon size={32} animated={false} className="text-muted-foreground" />
                   ) : (
                     <Settings className="h-8 w-8 text-destructive" />
                   )}
@@ -666,7 +673,9 @@ Always use these exact start_time and end_time values when searching, unless the
             )}
             {messages.length === 0 && canChat && (
               <div className="text-center text-muted-foreground py-12">
-                <Sparkles className="h-8 w-8 mx-auto mb-3 opacity-50" />
+                <div className="mx-auto mb-3 w-fit opacity-60">
+                  <PipeAIIcon size={32} thinking={false} />
+                </div>
                 {selectionRange ? (
                   <>
                     <p className="text-sm mb-1">
@@ -703,9 +712,14 @@ Always use these exact start_time and end_time values when searching, unless the
                 )}
               </div>
             )}
-            {messages.map((message) => (
-              <div
+            <AnimatePresence mode="popLayout">
+            {messages.map((message, index) => (
+              <motion.div
                 key={message.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2, delay: index === messages.length - 1 ? 0 : 0 }}
                 className={cn(
                   "flex gap-3",
                   message.role === "user" ? "flex-row-reverse" : "flex-row"
@@ -722,7 +736,7 @@ Always use these exact start_time and end_time values when searching, unless the
                   {message.role === "user" ? (
                     <User className="h-4 w-4" />
                   ) : (
-                    <Bot className="h-4 w-4" />
+                    <PipeAIIcon size={16} animated={false} />
                   )}
                 </div>
                 <div
@@ -773,13 +787,18 @@ Always use these exact start_time and end_time values when searching, unless the
                     {message.content}
                   </MemoizedReactMarkdown>
                 </div>
-              </div>
+              </motion.div>
             ))}
+            </AnimatePresence>
             {isLoading && !messages.find(m => m.content.includes("Searching")) && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center gap-2 text-muted-foreground"
+              >
+                <PipeAIIcon size={16} thinking={true} />
                 <span className="text-sm">Thinking...</span>
-              </div>
+              </motion.div>
             )}
             <div ref={messagesEndRef} />
           </div>
