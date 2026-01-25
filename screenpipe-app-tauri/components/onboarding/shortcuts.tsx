@@ -38,7 +38,7 @@ export default function OnboardingShortcuts({
     {
       id: "showScreenpipeShortcut",
       title: "Show/Hide screenpipe",
-      defaultShortcut: "Super+Alt+S",
+      defaultShortcut: isWindows ? "Alt+S" : "Super+Alt+S",
       description: "Quickly toggle the screenpipe interface",
       value: settings.showScreenpipeShortcut,
     },
