@@ -722,6 +722,7 @@ async fn main() {
                 permissions::open_permission_settings,
                 permissions::request_permission,
                 permissions::do_permissions_check,
+                permissions::check_microphone_permission,
                 // Commands from main.rs
                 get_env,
                 get_log_files,
@@ -817,6 +818,7 @@ async fn main() {
             permissions::open_permission_settings,
             permissions::request_permission,
             permissions::do_permissions_check,
+            permissions::check_microphone_permission,
             set_tray_unhealth_icon,
             set_tray_health_icon,
             commands::update_show_screenpipe_shortcut,

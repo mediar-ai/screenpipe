@@ -166,8 +166,8 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					/>
 				</div>
 			)}
-			{/* Open in Browser button for captured browser URLs */}
-			{hasValidUrl && !isLoading && !hasError && (
+			{/* Open in Browser button for captured browser URLs - temporarily disabled */}
+			{/* {hasValidUrl && !isLoading && !hasError && (
 				<button
 					onClick={handleOpenInBrowser}
 					className="absolute top-4 right-4 z-10 flex items-center gap-1.5 px-3 py-2 bg-black/70 hover:bg-black/90 text-white text-sm font-medium rounded-lg transition-colors backdrop-blur-sm"
@@ -176,7 +176,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					<ExternalLink className="h-4 w-4" />
 					Open in Browser
 				</button>
-			)}
+			)} */}
 			{hasError && !isLoading && (
 				<div className="absolute inset-0 flex items-center justify-center bg-gray-900/90 z-10">
 					<div className="text-center text-muted-foreground">

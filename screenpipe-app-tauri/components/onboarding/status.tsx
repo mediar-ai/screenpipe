@@ -161,22 +161,16 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     handleNextSlide();
   };
 
-  // Check permissions
+  // Check screen permission once on mount (no polling - requires app restart)
+  const screenPermissionRef = useRef<string | null>(null);
+
   useEffect(() => {
-    const checkPermissions = async () => {
-      // Don't check if already starting or recording
-      if (hasStartedRef.current) return;
+    const checkScreenPermissionOnce = async () => {
+      if (!isMacOS || hasStartedRef.current) return;
 
-      // Non-macOS: skip permission check
-      if (!isMacOS) {
-        setSetupState("ready");
-        return;
-      }
-
-
-      // PRODUCTION: Do normal permission check
       try {
         const perms = await commands.doPermissionsCheck(true);
+        screenPermissionRef.current = perms.screenRecording;
         setPermissions(perms);
 
         const screenOk = perms.screenRecording === "granted" || perms.screenRecording === "notNeeded";
@@ -195,10 +189,40 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       }
     };
 
-    checkPermissions();
-    const interval = setInterval(checkPermissions, 2000);
-    return () => clearInterval(interval);
+    if (!isMacOS) {
+      setSetupState("ready");
+      return;
+    }
+
+    checkScreenPermissionOnce();
   }, [isMacOS]);
+
+  // Poll microphone permission only (screen permission requires app restart)
+  useEffect(() => {
+    if (!isMacOS || screenPermissionRef.current === null) return;
+
+    const checkMicPermission = async () => {
+      if (hasStartedRef.current) return;
+
+      try {
+        // Use mic-only check to avoid triggering screen capture permission dialogs
+        const micStatus = await commands.checkMicrophonePermission();
+        setPermissions(prev => prev ? { ...prev, microphone: micStatus } : null);
+
+        const screenOk = screenPermissionRef.current === "granted" || screenPermissionRef.current === "notNeeded";
+        const audioOk = micStatus === "granted" || micStatus === "notNeeded";
+
+        if (screenOk && audioOk && !hasStartedRef.current) {
+          setSetupState("ready");
+        }
+      } catch (error) {
+        console.error("Failed to check mic permission:", error);
+      }
+    };
+
+    const interval = setInterval(checkMicPermission, 2000);
+    return () => clearInterval(interval);
+  }, [isMacOS, screenPermissionRef.current]);
 
   // Auto-start when ready (only once)
   useEffect(() => {

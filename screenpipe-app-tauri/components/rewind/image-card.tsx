@@ -340,8 +340,8 @@ export const MainImage = () => {
 							clickableUrls={true}
 						/>
 					)}
-					{/* Open in Browser button for captured browser URLs */}
-					{hasValidUrl && !isLoading && (
+					{/* Open in Browser button for captured browser URLs - temporarily disabled */}
+					{/* {hasValidUrl && !isLoading && (
 						<button
 							onClick={handleOpenInBrowser}
 							className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1.5 bg-black/70 hover:bg-black/90 text-white text-xs font-medium rounded-md transition-colors backdrop-blur-sm"
@@ -350,7 +350,7 @@ export const MainImage = () => {
 							<ExternalLink className="h-3.5 w-3.5" />
 							Open in Browser
 						</button>
-					)}
+					)} */}
 				</div>
 			)}
 		</div>

@@ -20,6 +20,7 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
   );
   const { isMac: isMacOS } = usePlatform();
 
+  // Initial permission check (once)
   useEffect(() => {
     const checkPermissions = async () => {
       if (isMacOS) {
@@ -32,17 +33,25 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
       }
     };
 
-    // Poll permissions every 1 second
-    const intervalId = setInterval(() => {
-      checkPermissions();
-    }, 1000);
-
-    // Initial check
     checkPermissions();
-
-    // Cleanup interval on unmount
-    return () => clearInterval(intervalId);
   }, [isMacOS]);
+
+  // Poll microphone permission only (screen requires app restart)
+  useEffect(() => {
+    if (!isMacOS || type !== "audio") return;
+
+    const checkMicPermission = async () => {
+      try {
+        const micStatus = await commands.checkMicrophonePermission();
+        setPermissions(prev => prev ? { ...prev, microphone: micStatus } : null);
+      } catch (error) {
+        console.error("Failed to check mic permission:", error);
+      }
+    };
+
+    const intervalId = setInterval(checkMicPermission, 1000);
+    return () => clearInterval(intervalId);
+  }, [isMacOS, type]);
 
   const handlePermissionButton = async () => {
     try {

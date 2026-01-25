@@ -14,6 +14,9 @@ async requestPermission(permission: OSPermission) : Promise<void> {
 async doPermissionsCheck(initialCheck: boolean) : Promise<OSPermissionsCheck> {
     return await TAURI_INVOKE("do_permissions_check", { initialCheck });
 },
+async checkMicrophonePermission() : Promise<OSPermissionStatus> {
+    return await TAURI_INVOKE("check_microphone_permission");
+},
 async getEnv(name: string) : Promise<string> {
     return await TAURI_INVOKE("get_env", { name });
 },

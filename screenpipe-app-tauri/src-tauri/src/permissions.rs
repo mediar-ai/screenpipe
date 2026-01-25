@@ -107,6 +107,33 @@ impl OSPermissionsCheck {
     }
 }
 
+/// Check only microphone permission (no screen recording check)
+/// Use this for polling to avoid triggering macOS screen capture permission dialogs
+#[tauri::command(async)]
+#[specta::specta]
+pub fn check_microphone_permission() -> OSPermissionStatus {
+    #[cfg(target_os = "macos")]
+    {
+        use nokhwa_bindings_macos::AVMediaType;
+        use nokhwa_bindings_macos::AVAuthorizationStatus;
+        use objc::*;
+
+        let cls = objc::class!(AVCaptureDevice);
+        let status: AVAuthorizationStatus =
+            unsafe { msg_send![cls, authorizationStatusForMediaType:AVMediaType::Audio.into_ns_str()] };
+        match status {
+            AVAuthorizationStatus::NotDetermined => OSPermissionStatus::Empty,
+            AVAuthorizationStatus::Authorized => OSPermissionStatus::Granted,
+            _ => OSPermissionStatus::Denied,
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        OSPermissionStatus::NotNeeded
+    }
+}
+
 #[tauri::command(async)]
 #[specta::specta]
 pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
