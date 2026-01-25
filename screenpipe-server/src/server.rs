@@ -3376,7 +3376,10 @@ async fn fetch_and_process_frames_with_tracking(
         }
 
         let frame = create_time_series_frame(chunk);
-        frame_tx.send(frame).await?;
+        // Skip frames with empty frame_data (all entries filtered out, e.g., screenpipe-only frames)
+        if !frame.frame_data.is_empty() {
+            frame_tx.send(frame).await?;
+        }
     }
 
     Ok(latest_timestamp)
@@ -3407,7 +3410,10 @@ async fn fetch_new_frames_since(
         }
 
         let frame = create_time_series_frame(chunk);
-        new_frames.push(StreamTimeSeriesResponse::from(frame));
+        // Skip frames with empty frame_data (all entries filtered out, e.g., screenpipe-only frames)
+        if !frame.frame_data.is_empty() {
+            new_frames.push(StreamTimeSeriesResponse::from(frame));
+        }
     }
 
     drop(sent);

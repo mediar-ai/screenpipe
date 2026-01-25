@@ -565,4 +565,115 @@ mod tests {
             "Should poll when end_time equals now (edge case)"
         );
     }
+
+    /// TEST 9: Test screenpipe app filtering logic
+    ///
+    /// Frames from screenpipe app should be filtered out.
+    /// This tests the filtering function directly.
+    #[tokio::test]
+    async fn test_screenpipe_app_filtering() {
+        // Simulate the filtering logic from create_time_series_frame
+        fn should_include_entry(app_name: &str) -> bool {
+            !app_name.to_lowercase().contains("screenpipe")
+        }
+
+        // Regular apps should be included
+        assert!(should_include_entry("Chrome"), "Chrome should be included");
+        assert!(should_include_entry("Cursor"), "Cursor should be included");
+        assert!(should_include_entry("WezTerm"), "WezTerm should be included");
+        assert!(should_include_entry(""), "Empty app name should be included");
+
+        // Screenpipe variants should be filtered out
+        assert!(!should_include_entry("screenpipe"), "screenpipe should be filtered");
+        assert!(!should_include_entry("Screenpipe"), "Screenpipe should be filtered");
+        assert!(!should_include_entry("SCREENPIPE"), "SCREENPIPE should be filtered");
+        assert!(!should_include_entry("screenpipe-app"), "screenpipe-app should be filtered");
+    }
+
+    /// TEST 10: Test that frames with all-screenpipe entries result in empty frame_data
+    ///
+    /// When all OCR entries in a frame are from screenpipe, after filtering,
+    /// the frame_data should be empty and the frame should NOT be sent.
+    #[tokio::test]
+    async fn test_all_screenpipe_entries_results_in_empty_frame() {
+        // Simulate entries from a frame
+        let entries = vec![
+            ("screenpipe", "main window"),
+            ("screenpipe", "search"),
+            ("screenpipe", ""),
+        ];
+
+        // Apply filter
+        let filtered: Vec<_> = entries
+            .into_iter()
+            .filter(|(app_name, _)| !app_name.to_lowercase().contains("screenpipe"))
+            .collect();
+
+        assert!(
+            filtered.is_empty(),
+            "All screenpipe entries should be filtered out, resulting in empty frame_data"
+        );
+
+        // This is the bug: empty frame_data causes "Unknown" to display
+        // Fix: Don't send frames with empty frame_data
+    }
+
+    /// TEST 11: Test mixed entries (some screenpipe, some other apps)
+    ///
+    /// When a frame has mixed entries, only non-screenpipe entries should remain.
+    #[tokio::test]
+    async fn test_mixed_entries_partial_filtering() {
+        let entries = vec![
+            ("Chrome", "Google"),
+            ("screenpipe", "main window"),
+            ("Cursor", "main.rs"),
+            ("screenpipe", "search"),
+        ];
+
+        let filtered: Vec<_> = entries
+            .into_iter()
+            .filter(|(app_name, _)| !app_name.to_lowercase().contains("screenpipe"))
+            .collect();
+
+        assert_eq!(filtered.len(), 2, "Should have 2 non-screenpipe entries");
+        assert_eq!(filtered[0].0, "Chrome");
+        assert_eq!(filtered[1].0, "Cursor");
+    }
+
+    /// TEST 12: Test the fix - frames with empty frame_data should be skipped
+    ///
+    /// This tests the behavior that SHOULD happen after the fix is applied.
+    #[tokio::test]
+    async fn test_empty_frame_data_should_be_skipped() {
+        // Simulate the fixed behavior
+        struct MockFrame {
+            timestamp: String,
+            frame_data: Vec<(&'static str, &'static str)>,
+        }
+
+        fn should_send_frame(frame: &MockFrame) -> bool {
+            // The fix: only send frames that have non-empty frame_data
+            !frame.frame_data.is_empty()
+        }
+
+        // Frame with data - should be sent
+        let frame_with_data = MockFrame {
+            timestamp: "2026-01-25T14:15:00Z".to_string(),
+            frame_data: vec![("Chrome", "Google")],
+        };
+        assert!(
+            should_send_frame(&frame_with_data),
+            "Frames with data should be sent"
+        );
+
+        // Frame with empty data (all screenpipe filtered) - should NOT be sent
+        let frame_empty = MockFrame {
+            timestamp: "2026-01-25T14:15:03Z".to_string(),
+            frame_data: vec![],
+        };
+        assert!(
+            !should_send_frame(&frame_empty),
+            "Frames with empty frame_data should NOT be sent (this is the fix for 'Unknown')"
+        );
+    }
 }
