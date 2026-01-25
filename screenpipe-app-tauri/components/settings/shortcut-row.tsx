@@ -6,6 +6,7 @@ import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { Pencil } from "lucide-react";
 import { commands } from "@/lib/utils/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import hotkeys from "hotkeys-js";
 
 interface ShortcutRowProps {
@@ -128,13 +129,24 @@ const ShortcutRow = ({
       switch (type) {
         case "global":
           updateSettings({ [shortcut]: keys });
-          await syncShortcuts({
-            showScreenpipeShortcut: settings.showScreenpipeShortcut,
-            startRecordingShortcut: settings.startRecordingShortcut,
-            stopRecordingShortcut: settings.stopRecordingShortcut,
-            startAudioShortcut: settings.startAudioShortcut,
-            stopAudioShortcut: settings.stopAudioShortcut,
-          } as any);
+          // Build updated shortcuts with the NEW value for the changed shortcut
+          const updatedShortcuts = {
+            showScreenpipeShortcut: shortcut === "showScreenpipeShortcut" ? keys : settings.showScreenpipeShortcut,
+            startRecordingShortcut: shortcut === "startRecordingShortcut" ? keys : settings.startRecordingShortcut,
+            stopRecordingShortcut: shortcut === "stopRecordingShortcut" ? keys : settings.stopRecordingShortcut,
+            startAudioShortcut: shortcut === "startAudioShortcut" ? keys : settings.startAudioShortcut,
+            stopAudioShortcut: shortcut === "stopAudioShortcut" ? keys : settings.stopAudioShortcut,
+          };
+          await syncShortcuts(updatedShortcuts);
+
+          // Update the shortcut reminder overlay if this is the show shortcut
+          if (shortcut === "showScreenpipeShortcut") {
+            try {
+              await invoke("show_shortcut_reminder", { shortcut: keys });
+            } catch (e) {
+              // Window may not exist, that's ok
+            }
+          }
           break;
         default:
           throw new Error(`Invalid shortcut type: ${type}`);
