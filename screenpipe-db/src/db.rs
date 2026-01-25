@@ -2446,14 +2446,20 @@ pub fn find_matching_positions(blocks: &[OcrTextBlock], query: &str) -> Vec<Text
                 || query_words.iter().any(|&word| text_lower.contains(word));
 
             if matches {
+                let vision_top = block.top.parse::<f32>().unwrap_or(0.0);
+                let height = block.height.parse::<f32>().unwrap_or(0.0);
+                // Convert from Apple Vision coordinates (bottom-left origin, Y up)
+                // to screen coordinates (top-left origin, Y down)
+                let screen_top = 1.0 - vision_top - height;
+
                 Some(TextPosition {
                     text: block.text.clone(),
                     confidence: block.conf.parse::<f32>().unwrap_or(0.0),
                     bounds: TextBounds {
                         left: block.left.parse::<f32>().unwrap_or(0.0),
-                        top: block.top.parse::<f32>().unwrap_or(0.0),
+                        top: screen_top,
                         width: block.width.parse::<f32>().unwrap_or(0.0),
-                        height: block.height.parse::<f32>().unwrap_or(0.0),
+                        height,
                     },
                 })
             } else {
@@ -2473,6 +2479,10 @@ fn calculate_confidence(positions: &[TextPosition]) -> f32 {
 
 /// Parse all OCR text blocks into TextPosition objects with bounding boxes.
 /// Unlike `find_matching_positions`, this returns ALL text positions without filtering.
+///
+/// Note: Apple Vision framework uses a coordinate system with origin at bottom-left,
+/// where Y increases upward. We convert to standard screen coordinates (origin at
+/// top-left, Y increases downward) by flipping the Y axis: screen_top = 1 - vision_top - height
 pub fn parse_all_text_positions(blocks: &[OcrTextBlock]) -> Vec<TextPosition> {
     blocks
         .iter()
@@ -2490,9 +2500,9 @@ pub fn parse_all_text_positions(blocks: &[OcrTextBlock]) -> Vec<TextPosition> {
                 return None;
             }
 
-            // Parse bounding box coordinates
+            // Parse bounding box coordinates (Apple Vision uses bottom-left origin)
             let left = block.left.parse::<f32>().unwrap_or(0.0);
-            let top = block.top.parse::<f32>().unwrap_or(0.0);
+            let vision_top = block.top.parse::<f32>().unwrap_or(0.0);
             let width = block.width.parse::<f32>().unwrap_or(0.0);
             let height = block.height.parse::<f32>().unwrap_or(0.0);
 
@@ -2501,12 +2511,16 @@ pub fn parse_all_text_positions(blocks: &[OcrTextBlock]) -> Vec<TextPosition> {
                 return None;
             }
 
+            // Convert from Apple Vision coordinates (bottom-left origin, Y up)
+            // to screen coordinates (top-left origin, Y down)
+            let screen_top = 1.0 - vision_top - height;
+
             Some(TextPosition {
                 text: block.text.clone(),
                 confidence,
                 bounds: TextBounds {
                     left,
-                    top,
+                    top: screen_top,
                     width,
                     height,
                 },
@@ -2545,9 +2559,12 @@ mod tests {
 
     #[test]
     fn test_parse_all_text_positions_basic() {
+        // Using normalized coordinates (0-1 range) like Apple Vision returns
+        // vision_top=0.9 means 90% up from bottom, with height=0.02
+        // screen_top = 1 - 0.9 - 0.02 = 0.08 (8% from top)
         let blocks = vec![
-            create_test_block("Hello", "95.5", "100", "50", "80", "20"),
-            create_test_block("World", "90.0", "200", "50", "100", "20"),
+            create_test_block("Hello", "95.5", "0.1", "0.9", "0.08", "0.02"),
+            create_test_block("World", "90.0", "0.2", "0.7", "0.1", "0.02"),
         ];
 
         let positions = parse_all_text_positions(&blocks);
@@ -2555,21 +2572,24 @@ mod tests {
         assert_eq!(positions.len(), 2);
         assert_eq!(positions[0].text, "Hello");
         assert!((positions[0].confidence - 95.5).abs() < 0.01);
-        assert!((positions[0].bounds.left - 100.0).abs() < 0.01);
-        assert!((positions[0].bounds.top - 50.0).abs() < 0.01);
-        assert!((positions[0].bounds.width - 80.0).abs() < 0.01);
-        assert!((positions[0].bounds.height - 20.0).abs() < 0.01);
+        assert!((positions[0].bounds.left - 0.1).abs() < 0.01);
+        // Y-flip: screen_top = 1 - 0.9 - 0.02 = 0.08
+        assert!((positions[0].bounds.top - 0.08).abs() < 0.01);
+        assert!((positions[0].bounds.width - 0.08).abs() < 0.01);
+        assert!((positions[0].bounds.height - 0.02).abs() < 0.01);
 
         assert_eq!(positions[1].text, "World");
         assert!((positions[1].confidence - 90.0).abs() < 0.01);
+        // Y-flip: screen_top = 1 - 0.7 - 0.02 = 0.28
+        assert!((positions[1].bounds.top - 0.28).abs() < 0.01);
     }
 
     #[test]
     fn test_parse_all_text_positions_filters_empty_text() {
         let blocks = vec![
-            create_test_block("Hello", "95.5", "100", "50", "80", "20"),
-            create_test_block("", "90.0", "200", "50", "100", "20"),
-            create_test_block("   ", "90.0", "300", "50", "100", "20"),
+            create_test_block("Hello", "95.5", "0.1", "0.9", "0.08", "0.02"),
+            create_test_block("", "90.0", "0.2", "0.5", "0.1", "0.02"),
+            create_test_block("   ", "90.0", "0.3", "0.5", "0.1", "0.02"),
         ];
 
         let positions = parse_all_text_positions(&blocks);
@@ -2581,10 +2601,10 @@ mod tests {
     #[test]
     fn test_parse_all_text_positions_filters_invalid_dimensions() {
         let blocks = vec![
-            create_test_block("Valid", "95.5", "100", "50", "80", "20"),
-            create_test_block("ZeroWidth", "90.0", "200", "50", "0", "20"),
-            create_test_block("ZeroHeight", "90.0", "300", "50", "100", "0"),
-            create_test_block("Negative", "90.0", "400", "50", "-10", "20"),
+            create_test_block("Valid", "95.5", "0.1", "0.5", "0.08", "0.02"),
+            create_test_block("ZeroWidth", "90.0", "0.2", "0.5", "0", "0.02"),
+            create_test_block("ZeroHeight", "90.0", "0.3", "0.5", "0.1", "0"),
+            create_test_block("Negative", "90.0", "0.4", "0.5", "-0.1", "0.02"),
         ];
 
         let positions = parse_all_text_positions(&blocks);
@@ -2596,7 +2616,7 @@ mod tests {
     #[test]
     fn test_parse_all_text_positions_handles_invalid_numbers() {
         let blocks = vec![
-            create_test_block("Test", "invalid", "100", "50", "80", "20"),
+            create_test_block("Test", "invalid", "0.1", "0.5", "0.08", "0.02"),
         ];
 
         let positions = parse_all_text_positions(&blocks);
@@ -2617,8 +2637,8 @@ mod tests {
     #[test]
     fn test_parse_all_text_positions_filters_negative_confidence() {
         let blocks = vec![
-            create_test_block("Valid", "95.5", "100", "50", "80", "20"),
-            create_test_block("Invalid", "-1", "200", "50", "100", "20"),
+            create_test_block("Valid", "95.5", "0.1", "0.5", "0.08", "0.02"),
+            create_test_block("Invalid", "-1", "0.2", "0.5", "0.1", "0.02"),
         ];
 
         let positions = parse_all_text_positions(&blocks);
