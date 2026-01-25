@@ -685,14 +685,24 @@ async fn is_server_running(app: AppHandle) -> Result<bool, String> {
 async fn main() {
     let _ = fix_path_env::fix();
 
-    // Initialize Sentry early
-    let sentry_guard = sentry::init((
-        "https://ee250955c0511823f71188e7cd64cf5f@o4505591122886656.ingest.us.sentry.io/4510761352364032",
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            ..Default::default()
-        },
-    ));
+    // Initialize Sentry only if telemetry is not disabled via env var
+    // Users can set SCREENPIPE_DISABLE_TELEMETRY=1 to opt out
+    let telemetry_disabled = env::var("SCREENPIPE_DISABLE_TELEMETRY")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false);
+
+    let sentry_guard = if !telemetry_disabled {
+        Some(sentry::init((
+            "https://ee250955c0511823f71188e7cd64cf5f@o4505591122886656.ingest.us.sentry.io/4510761352364032",
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                ..Default::default()
+            },
+        )))
+    } else {
+        info!("Sentry telemetry disabled via SCREENPIPE_DISABLE_TELEMETRY env var");
+        None
+    };
 
     // Set permanent OLLAMA_ORIGINS env var on Windows if not present
     #[cfg(target_os = "windows")]
@@ -813,8 +823,14 @@ async fn main() {
                 .expect("Can't focus window!");
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_sentry::init(&sentry_guard));
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+
+        // Only add Sentry plugin if telemetry is enabled
+        let app = if let Some(ref guard) = sentry_guard {
+            app.plugin(tauri_plugin_sentry::init(guard))
+        } else {
+            app
+        };
 
         #[cfg(target_os = "macos")]
         let app = app.plugin(tauri_nspanel::init());

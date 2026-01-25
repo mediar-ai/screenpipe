@@ -1529,7 +1529,8 @@ export function RecordingSettings() {
             <div className="space-y-1">
               <Label htmlFor="analyticsEnabled">Enable analytics</Label>
               <p className="text-sm text-muted-foreground">
-                Help improve Screenpipe by sharing anonymous usage data
+                Help improve Screenpipe by sharing anonymous usage data and error reports.
+                You can also set SCREENPIPE_DISABLE_TELEMETRY=1 env var to fully disable.
               </p>
             </div>
             <Switch
