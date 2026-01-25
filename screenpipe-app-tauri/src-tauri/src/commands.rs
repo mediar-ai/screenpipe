@@ -27,11 +27,21 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle) {
 #[tauri::command]
 #[specta::specta]
 pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
-   let _window = ShowRewindWindow::Main.show(app_handle).unwrap();
-   // Don't call set_focus() on macOS as it causes space switching
-   // The panel's order_front_regardless() already handles visibility
-   #[cfg(not(target_os = "macos"))]
-   _window.set_focus().unwrap();
+   info!("show_main_window called, attempting to show Main window");
+   match ShowRewindWindow::Main.show(app_handle) {
+       Ok(window) => {
+           info!("ShowRewindWindow::Main.show succeeded, window label: {}", window.label());
+           // Don't call set_focus() on macOS as it causes space switching
+           // The panel's order_front_regardless() already handles visibility
+           #[cfg(not(target_os = "macos"))]
+           if let Err(e) = window.set_focus() {
+               error!("Failed to set focus on main window: {}", e);
+           }
+       }
+       Err(e) => {
+           error!("ShowRewindWindow::Main.show failed: {}", e);
+       }
+   }
 }
 
 #[tauri::command]

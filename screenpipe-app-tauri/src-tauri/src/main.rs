@@ -174,7 +174,7 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
 
     // Register show shortcut
     register_shortcut(app, &config.show, config.is_disabled("show"), |app| {
-        info!("show shortcut triggered");
+        info!("show shortcut triggered - attempting to show/hide main overlay");
         let _ = app.emit("shortcut-show", ());
         #[cfg(target_os = "macos")]
         {
@@ -198,21 +198,29 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         }
         #[cfg(not(target_os = "macos"))]
         {
+            // Debug: list all existing windows
+            for (label, _) in app.webview_windows() {
+                info!("existing window: {}", label);
+            }
+
             if let Some(window) = app.get_webview_window("main") {
+                info!("found main window, checking visibility");
                 match window.is_visible() {
                     Ok(true) => {
-                        info!("window is visible, hiding main window");
+                        info!("main window is visible, hiding it");
                         hide_main_window(app)
                     }
-                    _ => {
-                        info!(
-                            "window is not visible or error checking visibility, showing main window"
-                        );
+                    Ok(false) => {
+                        info!("main window exists but not visible, showing it");
+                        show_main_window(app, false)
+                    }
+                    Err(e) => {
+                        info!("error checking visibility: {}, showing main window anyway", e);
                         show_main_window(app, false)
                     }
                 }
             } else {
-                debug!("main window not found, creating it");
+                info!("main window not found, creating it");
                 show_main_window(app, false)
             }
         }
