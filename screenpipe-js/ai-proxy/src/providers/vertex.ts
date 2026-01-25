@@ -30,6 +30,11 @@ interface TokenCache {
 
 let tokenCache: TokenCache | null = null;
 
+// Export for testing purposes
+export function resetTokenCache() {
+	tokenCache = null;
+}
+
 export class VertexAIProvider implements AIProvider {
 	supportsTools = true;
 	supportsVision = true;
@@ -158,16 +163,23 @@ export class VertexAIProvider implements AIProvider {
 	private getEndpointUrl(model: string, streaming: boolean = false): string {
 		// Map common model names to Vertex AI model IDs
 		const modelMapping: Record<string, string> = {
-			'claude-3-opus': 'claude-3-opus@20240229',
-			'claude-3-sonnet': 'claude-3-sonnet@20240229',
-			'claude-3-haiku': 'claude-3-haiku@20240307',
-			'claude-3-5-sonnet': 'claude-3-5-sonnet@20240620',
-			'claude-3-5-sonnet-20240620': 'claude-3-5-sonnet@20240620',
+			// Claude 4.5 (latest)
+			'claude-opus-4-5-20251101': 'claude-opus-4-5@20251101',
+			'claude-opus-4.5': 'claude-opus-4-5@20251101',
+			'claude-opus-4-5': 'claude-opus-4-5@20251101',
+			'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5@20250929',
+			'claude-sonnet-4.5': 'claude-sonnet-4-5@20250929',
+			'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
+			// Claude 4
+			'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
+			'claude-sonnet-4': 'claude-sonnet-4@20250514',
+			'claude-opus-4-20250514': 'claude-opus-4@20250514',
+			'claude-opus-4': 'claude-opus-4@20250514',
+			// Claude 3.5 (legacy but still available)
 			'claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-v2@20241022',
 			'claude-3-5-sonnet-v2': 'claude-3-5-sonnet-v2@20241022',
 			'claude-3-5-haiku': 'claude-3-5-haiku@20241022',
-			'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
-			'claude-opus-4-20250514': 'claude-opus-4@20250514',
+			'claude-3-5-haiku-20241022': 'claude-3-5-haiku@20241022',
 		};
 
 		const vertexModel = modelMapping[model] || model;
@@ -238,6 +250,9 @@ export class VertexAIProvider implements AIProvider {
 		const reader = response.body!.getReader();
 		const decoder = new TextDecoder();
 
+		let toolCallIndex = 0;
+		const toolCallsById: Record<string, { index: number; id: string; name: string; arguments: string }> = {};
+
 		return new ReadableStream({
 			async pull(controller) {
 				const { done, value } = await reader.read();
@@ -254,6 +269,8 @@ export class VertexAIProvider implements AIProvider {
 					if (line.startsWith('data: ')) {
 						try {
 							const data = JSON.parse(line.slice(6));
+
+							// Handle text content
 							if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta') {
 								controller.enqueue(
 									new TextEncoder().encode(
@@ -262,6 +279,34 @@ export class VertexAIProvider implements AIProvider {
 										})}\n\n`
 									)
 								);
+							}
+
+							// Handle tool use start
+							if (data.type === 'content_block_start' && data.content_block?.type === 'tool_use') {
+								const tc = data.content_block;
+								toolCallsById[tc.id] = { index: toolCallIndex++, id: tc.id, name: tc.name, arguments: '' };
+								controller.enqueue(
+									new TextEncoder().encode(
+										`data: ${JSON.stringify({
+											choices: [{ delta: { tool_calls: [{ index: toolCallsById[tc.id].index, id: tc.id, function: { name: tc.name, arguments: '' } }] } }],
+										})}\n\n`
+									)
+								);
+							}
+
+							// Handle tool use input delta
+							if (data.type === 'content_block_delta' && data.delta?.type === 'input_json_delta') {
+								const lastToolId = Object.keys(toolCallsById).pop();
+								if (lastToolId && toolCallsById[lastToolId]) {
+									toolCallsById[lastToolId].arguments += data.delta.partial_json;
+									controller.enqueue(
+										new TextEncoder().encode(
+											`data: ${JSON.stringify({
+												choices: [{ delta: { tool_calls: [{ index: toolCallsById[lastToolId].index, function: { arguments: data.delta.partial_json } }] } }],
+											})}\n\n`
+										)
+									);
+								}
 							}
 						} catch (e) {
 							// Skip invalid JSON
@@ -279,13 +324,54 @@ export class VertexAIProvider implements AIProvider {
 		const systemMessage = body.messages.find((m) => m.role === 'system');
 		const otherMessages = body.messages.filter((m) => m.role !== 'system');
 
+		// Convert messages handling tool calls and tool results
+		const convertedMessages: any[] = [];
+		for (const msg of otherMessages) {
+			if (msg.role === 'assistant') {
+				// Handle assistant messages with potential tool calls
+				const content: any[] = [];
+				if (msg.content) {
+					content.push({ type: 'text', text: msg.content });
+				}
+				if (msg.tool_calls) {
+					for (const tc of msg.tool_calls) {
+						content.push({
+							type: 'tool_use',
+							id: tc.id,
+							name: tc.function?.name || tc.name,
+							input: typeof tc.function?.arguments === 'string'
+								? JSON.parse(tc.function.arguments)
+								: tc.function?.arguments || tc.input || {},
+						});
+					}
+				}
+				convertedMessages.push({
+					role: 'assistant',
+					content: content.length === 1 && content[0].type === 'text' ? content[0].text : content,
+				});
+			} else if (msg.role === 'tool') {
+				// Convert tool results to Anthropic format (as user message with tool_result)
+				convertedMessages.push({
+					role: 'user',
+					content: [{
+						type: 'tool_result',
+						tool_use_id: msg.tool_call_id,
+						content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+					}],
+				});
+			} else {
+				// Regular user message
+				convertedMessages.push({
+					role: 'user',
+					content: typeof msg.content === 'string' ? msg.content : msg.content,
+				});
+			}
+		}
+
 		return {
 			anthropic_version: 'vertex-2023-10-16',
-			max_tokens: 4096,
-			messages: otherMessages.map((m) => ({
-				role: m.role === 'assistant' ? 'assistant' : 'user',
-				content: typeof m.content === 'string' ? m.content : m.content,
-			})),
+			max_tokens: body.max_tokens || 4096,
+			messages: convertedMessages,
 			...(systemMessage && { system: typeof systemMessage.content === 'string' ? systemMessage.content : '' }),
 			...(body.temperature !== undefined && { temperature: body.temperature }),
 			...(body.tools && { tools: this.formatTools(body.tools) }),
@@ -462,19 +548,21 @@ export async function proxyToVertex(
 
 function mapModelToVertex(model: string): string {
 	const mapping: Record<string, string> = {
-		'claude-3-opus-20240229': 'claude-3-opus@20240229',
-		'claude-3-sonnet-20240229': 'claude-3-sonnet@20240229',
-		'claude-3-haiku-20240307': 'claude-3-haiku@20240307',
-		'claude-3-5-sonnet-20240620': 'claude-3-5-sonnet@20240620',
+		// Claude 4.5 (latest)
+		'claude-opus-4-5-20251101': 'claude-opus-4-5@20251101',
+		'claude-opus-4.5': 'claude-opus-4-5@20251101',
+		'claude-opus-4-5': 'claude-opus-4-5@20251101',
+		'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5@20250929',
+		'claude-sonnet-4.5': 'claude-sonnet-4-5@20250929',
+		'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
+		// Claude 4
+		'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
+		'claude-sonnet-4': 'claude-sonnet-4@20250514',
+		'claude-opus-4-20250514': 'claude-opus-4@20250514',
+		'claude-opus-4': 'claude-opus-4@20250514',
+		// Claude 3.5 (legacy)
 		'claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-v2@20241022',
 		'claude-3-5-haiku-20241022': 'claude-3-5-haiku@20241022',
-		'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
-		'claude-opus-4-20250514': 'claude-opus-4@20250514',
-		'claude-opus-4-5-20251101': 'claude-opus-4-5@20251101',
-		// Short names
-		'claude-3-opus': 'claude-3-opus@20240229',
-		'claude-3-sonnet': 'claude-3-sonnet@20240229',
-		'claude-3-haiku': 'claude-3-haiku@20240307',
 		'claude-3-5-sonnet': 'claude-3-5-sonnet-v2@20241022',
 		'claude-3-5-haiku': 'claude-3-5-haiku@20241022',
 	};
