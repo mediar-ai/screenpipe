@@ -32,9 +32,12 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		width: number;
 		height: number;
 	} | null>(null);
-	const [displayedDimensions, setDisplayedDimensions] = useState<{
+	// For object-cover, track the full rendered size and crop offset
+	const [renderedImageInfo, setRenderedImageInfo] = useState<{
 		width: number;
 		height: number;
+		offsetX: number;
+		offsetY: number;
 	} | null>(null);
 	const imageRef = useRef<HTMLImageElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -69,30 +72,38 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		}
 	}, [frameId]);
 
-	// Update displayed dimensions on resize
+	// Update rendered image info on resize
+	// For object-cover: image fills container, may be cropped, centered
 	React.useEffect(() => {
 		const updateDimensions = () => {
 			if (containerRef.current && naturalDimensions) {
 				const containerRect = containerRef.current.getBoundingClientRect();
-				// For object-cover, we need to calculate the actual displayed size
-				// The image fills the container while maintaining aspect ratio
 				const containerAspect = containerRect.width / containerRect.height;
 				const imageAspect = naturalDimensions.width / naturalDimensions.height;
 
-				let displayedWidth: number;
-				let displayedHeight: number;
+				let renderedWidth: number;
+				let renderedHeight: number;
 
 				if (containerAspect > imageAspect) {
-					// Container is wider, image height fills container
-					displayedWidth = containerRect.width;
-					displayedHeight = containerRect.width / imageAspect;
+					// Container is wider than image aspect - width fills, height overflows
+					renderedWidth = containerRect.width;
+					renderedHeight = containerRect.width / imageAspect;
 				} else {
-					// Container is taller, image width fills container
-					displayedHeight = containerRect.height;
-					displayedWidth = containerRect.height * imageAspect;
+					// Container is taller than image aspect - height fills, width overflows
+					renderedHeight = containerRect.height;
+					renderedWidth = containerRect.height * imageAspect;
 				}
 
-				setDisplayedDimensions({ width: displayedWidth, height: displayedHeight });
+				// Calculate crop offset (image is centered with object-cover)
+				const offsetX = (containerRect.width - renderedWidth) / 2;
+				const offsetY = (containerRect.height - renderedHeight) / 2;
+
+				setRenderedImageInfo({
+					width: renderedWidth,
+					height: renderedHeight,
+					offsetX,
+					offsetY,
+				});
 			}
 		};
 
@@ -151,19 +162,39 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 				}}
 			/>
 			{/* Text selection overlay for timeline view */}
-			{!isLoading && !hasError && naturalDimensions && displayedDimensions && textPositions.length > 0 && (
+			{/* Position overlay to match the actual rendered image (accounting for object-cover cropping) */}
+			{!isLoading && !hasError && naturalDimensions && renderedImageInfo && textPositions.length > 0 && (
 				<div
-					className="absolute inset-0 flex items-center justify-center overflow-hidden"
-					style={{ zIndex: 2 }}
+					className="absolute overflow-hidden"
+					style={{
+						zIndex: 2,
+						// Clip to container bounds
+						top: 0,
+						left: 0,
+						right: 0,
+						bottom: 0,
+					}}
 				>
-					<TextOverlay
-						textPositions={textPositions}
-						originalWidth={naturalDimensions.width}
-						originalHeight={naturalDimensions.height}
-						displayedWidth={displayedDimensions.width}
-						displayedHeight={displayedDimensions.height}
-						clickableUrls={true}
-					/>
+					<div
+						style={{
+							// Position the overlay to match where the image actually renders
+							// For object-cover, offsets are negative when image overflows
+							position: 'absolute',
+							left: renderedImageInfo.offsetX,
+							top: renderedImageInfo.offsetY,
+							width: renderedImageInfo.width,
+							height: renderedImageInfo.height,
+						}}
+					>
+						<TextOverlay
+							textPositions={textPositions}
+							originalWidth={naturalDimensions.width}
+							originalHeight={naturalDimensions.height}
+							displayedWidth={renderedImageInfo.width}
+							displayedHeight={renderedImageInfo.height}
+							clickableUrls={true}
+						/>
+					</div>
 				</div>
 			)}
 			{/* Open in Browser button for captured browser URLs - temporarily disabled */}
