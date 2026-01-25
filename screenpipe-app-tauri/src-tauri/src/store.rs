@@ -479,10 +479,11 @@ pub fn init_store(app: &AppHandle) -> Result<SettingsStore, String> {
     let store = match SettingsStore::get(app) {
         Ok(Some(store)) => store,
         Ok(None) => SettingsStore::default(),
-
         Err(e) => {
-            error!("Failed to get settings store: {}", e);
-            return Err(e);
+            // Fallback to defaults when deserialization fails (e.g., corrupted store)
+            // This prevents crashes from invalid values like negative integers in u32 fields
+            error!("Failed to deserialize settings, using defaults: {}", e);
+            SettingsStore::default()
         }
     };
 
@@ -496,10 +497,10 @@ pub fn init_onboarding_store(app: &AppHandle) -> Result<OnboardingStore, String>
     let onboarding = match OnboardingStore::get(app) {
         Ok(Some(onboarding)) => onboarding,
         Ok(None) => OnboardingStore::default(),
-
         Err(e) => {
-            error!("Failed to get onboarding store: {}", e);
-            return Err(e);
+            // Fallback to defaults when deserialization fails
+            error!("Failed to deserialize onboarding, using defaults: {}", e);
+            OnboardingStore::default()
         }
     };
 
