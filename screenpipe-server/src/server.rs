@@ -3029,33 +3029,6 @@ async fn serve_file(path: &str) -> Result<Response, (StatusCode, JsonResponse<Va
     }
 }
 
-// Add these new functions before stream_frames_handler
-async fn fetch_and_process_frames(
-    db: Arc<DatabaseManager>,
-    start_time: DateTime<Utc>,
-    end_time: DateTime<Utc>,
-    frame_tx: mpsc::Sender<TimeSeriesFrame>,
-    is_descending: bool,
-) -> Result<(), anyhow::Error> {
-    let mut chunks = db.find_video_chunks(start_time, end_time).await?;
-
-    // Sort chunks based on order
-    if is_descending {
-        chunks
-            .frames
-            .sort_by_key(|a| std::cmp::Reverse((a.timestamp, a.offset_index)));
-    } else {
-        chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
-    }
-
-    for chunk in chunks.frames {
-        let frame = create_time_series_frame(chunk);
-        frame_tx.send(frame).await?;
-    }
-
-    Ok(())
-}
-
 fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
     TimeSeriesFrame {
         timestamp: chunk.timestamp,
@@ -3101,9 +3074,25 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
     let db = state.db.clone();
 
+    // Shared state for live frame polling
+    // Stores (start_time, end_time, is_descending, last_polled_timestamp)
+    let active_request: Arc<Mutex<Option<(DateTime<Utc>, DateTime<Utc>, bool, DateTime<Utc>)>>> =
+        Arc::new(Mutex::new(None));
+    // Track sent frame IDs to avoid duplicates
+    let sent_frame_ids: Arc<Mutex<std::collections::HashSet<i64>>> =
+        Arc::new(Mutex::new(std::collections::HashSet::new()));
+
     // Create a buffer for batching frames
     let mut frame_buffer = Vec::with_capacity(100);
     let mut buffer_timer = tokio::time::interval(Duration::from_millis(100));
+
+    // Timer for polling new frames (every 2 seconds)
+    let mut poll_timer = tokio::time::interval(Duration::from_secs(2));
+    poll_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    let active_request_clone = active_request.clone();
+    let sent_frame_ids_clone = sent_frame_ids.clone();
+    let db_clone = db.clone();
 
     // Handle incoming messages for time range requests
     let receive_handle = tokio::spawn(async move {
@@ -3118,18 +3107,49 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
 
                         let frame_tx = frame_tx.clone();
                         let db = db.clone();
+                        let is_descending = request.order == Order::Descending;
+                        let start_time = request.start_time;
+                        let end_time = request.end_time;
+
+                        // Store the active request for live polling
+                        // Set last_polled_timestamp to start_time so we poll from the beginning
+                        {
+                            let mut req = active_request_clone.lock().await;
+                            *req = Some((start_time, end_time, is_descending, start_time));
+                        }
+
+                        // Clear sent frame IDs for new request
+                        {
+                            let mut sent = sent_frame_ids_clone.lock().await;
+                            sent.clear();
+                        }
+
+                        let sent_frame_ids_inner = sent_frame_ids_clone.clone();
+                        let active_request_inner = active_request_clone.clone();
 
                         tokio::spawn(async move {
-                            if let Err(e) = fetch_and_process_frames(
+                            match fetch_and_process_frames_with_tracking(
                                 db,
-                                request.start_time,
-                                request.end_time,
+                                start_time,
+                                end_time,
                                 frame_tx,
-                                request.order == Order::Descending,
+                                is_descending,
+                                sent_frame_ids_inner,
                             )
                             .await
                             {
-                                error!("frame fetching failed: {}", e);
+                                Ok(latest_timestamp) => {
+                                    // Update last_polled_timestamp to the most recent frame
+                                    if let Some(ts) = latest_timestamp {
+                                        let mut req = active_request_inner.lock().await;
+                                        if let Some((s, e, d, _)) = *req {
+                                            *req = Some((s, e, d, ts));
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("frame fetching failed: {}", e);
+                                }
                             }
                         });
                     }
@@ -3141,11 +3161,14 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
         }
     });
 
+    let active_request_for_poll = active_request.clone();
+    let sent_frame_ids_for_poll = sent_frame_ids.clone();
+
     // Send frames to the client with batching
     let send_handle = tokio::spawn(async move {
         loop {
             tokio::select! {
-                // Check for new frames
+                // Check for new frames from initial fetch
                 frame = frame_rx.recv() => {
                     match frame {
                         Some(timeseries_frame) => {
@@ -3171,7 +3194,10 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
                                 }
                             }
                         }
-                        None => break,
+                        None => {
+                            // Channel closed but we keep running for live polling
+                            debug!("frame channel closed, continuing with live polling only");
+                        }
                     }
                 }
                 // Timer for flushing partial batches
@@ -3180,6 +3206,81 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
                         if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
                             error!("failed to send batch: {}", e);
                             break;
+                        }
+                    }
+                }
+                // Poll for new frames periodically
+                _ = poll_timer.tick() => {
+                    let request_info = {
+                        let req = active_request_for_poll.lock().await;
+                        req.clone()
+                    };
+
+                    if let Some((_start_time, end_time, is_descending, last_polled)) = request_info {
+                        let now = Utc::now();
+                        // Only poll if we're still within the requested time range
+                        // and there's potential for new frames (end_time hasn't passed)
+                        if now <= end_time {
+                            // Poll for frames newer than our last polled timestamp
+                            let poll_start = last_polled;
+                            let poll_end = std::cmp::min(now, end_time);
+
+                            if poll_start < poll_end {
+                                match fetch_new_frames_since(
+                                    db_clone.clone(),
+                                    poll_start,
+                                    poll_end,
+                                    sent_frame_ids_for_poll.clone(),
+                                )
+                                .await
+                                {
+                                    Ok((new_frames, latest_ts)) => {
+                                        if !new_frames.is_empty() {
+                                            debug!(
+                                                "Live push: sending {} new frames to client",
+                                                new_frames.len()
+                                            );
+
+                                            // Sort frames based on client's preference
+                                            let mut sorted_frames = new_frames;
+                                            if is_descending {
+                                                sorted_frames.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+                                            } else {
+                                                sorted_frames.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+                                            }
+
+                                            // Send the new frames
+                                            for frame in sorted_frames {
+                                                frame_buffer.push(frame);
+                                                if frame_buffer.len() >= 100 {
+                                                    if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
+                                                        error!("failed to send live batch: {}", e);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+
+                                            // Flush remaining frames
+                                            if !frame_buffer.is_empty() {
+                                                if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
+                                                    error!("failed to flush live batch: {}", e);
+                                                }
+                                            }
+                                        }
+
+                                        // Update last polled timestamp
+                                        if let Some(ts) = latest_ts {
+                                            let mut req = active_request_for_poll.lock().await;
+                                            if let Some((s, e, d, _)) = *req {
+                                                *req = Some((s, e, d, ts));
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        debug!("Error polling for new frames: {}", e);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -3192,6 +3293,91 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
         _ = receive_handle => debug!("receive handle completed"),
         _ = send_handle => debug!("send handle completed"),
     }
+}
+
+/// Fetch frames and track which ones have been sent
+async fn fetch_and_process_frames_with_tracking(
+    db: Arc<DatabaseManager>,
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    frame_tx: mpsc::Sender<TimeSeriesFrame>,
+    is_descending: bool,
+    sent_frame_ids: Arc<Mutex<std::collections::HashSet<i64>>>,
+) -> Result<Option<DateTime<Utc>>, anyhow::Error> {
+    let mut chunks = db.find_video_chunks(start_time, end_time).await?;
+    let mut latest_timestamp: Option<DateTime<Utc>> = None;
+
+    // Sort chunks based on order
+    if is_descending {
+        chunks
+            .frames
+            .sort_by_key(|a| std::cmp::Reverse((a.timestamp, a.offset_index)));
+    } else {
+        chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
+    }
+
+    for chunk in chunks.frames {
+        // Track this frame as sent
+        {
+            let mut sent = sent_frame_ids.lock().await;
+            sent.insert(chunk.frame_id);
+        }
+
+        // Track latest timestamp
+        if latest_timestamp.is_none() || chunk.timestamp > latest_timestamp.unwrap() {
+            latest_timestamp = Some(chunk.timestamp);
+        }
+
+        let frame = create_time_series_frame(chunk);
+        frame_tx.send(frame).await?;
+    }
+
+    Ok(latest_timestamp)
+}
+
+/// Fetch only new frames since a given timestamp, excluding already-sent frames
+async fn fetch_new_frames_since(
+    db: Arc<DatabaseManager>,
+    since: DateTime<Utc>,
+    until: DateTime<Utc>,
+    sent_frame_ids: Arc<Mutex<std::collections::HashSet<i64>>>,
+) -> Result<(Vec<StreamTimeSeriesResponse>, Option<DateTime<Utc>>), anyhow::Error> {
+    let chunks = db.find_video_chunks(since, until).await?;
+    let mut new_frames = Vec::new();
+    let mut latest_timestamp: Option<DateTime<Utc>> = None;
+
+    let sent = sent_frame_ids.lock().await;
+
+    for chunk in chunks.frames {
+        // Skip frames we've already sent
+        if sent.contains(&chunk.frame_id) {
+            continue;
+        }
+
+        // Track latest timestamp
+        if latest_timestamp.is_none() || chunk.timestamp > latest_timestamp.unwrap() {
+            latest_timestamp = Some(chunk.timestamp);
+        }
+
+        let frame = create_time_series_frame(chunk);
+        new_frames.push(StreamTimeSeriesResponse::from(frame));
+    }
+
+    drop(sent);
+
+    // Mark new frames as sent
+    if !new_frames.is_empty() {
+        let mut sent = sent_frame_ids.lock().await;
+        for frame in &new_frames {
+            // We need frame_id but StreamTimeSeriesResponse doesn't have it directly
+            // We'll track by timestamp+device instead
+            for device in &frame.devices {
+                sent.insert(device.frame_id);
+            }
+        }
+    }
+
+    Ok((new_frames, latest_timestamp))
 }
 
 // Helper function to send batched frames

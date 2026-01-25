@@ -161,9 +161,10 @@ export class VertexAIProvider implements AIProvider {
 	 * Get the Vertex AI endpoint URL for a model
 	 */
 	private getEndpointUrl(model: string, streaming: boolean = false): string {
-		// No mapping - pass model directly. User picks exact model ID from /v1/models.
+		// Convert model ID format: claude-opus-4-5-20251101 -> claude-opus-4-5@20251101
+		const vertexModel = mapModelToVertex(model);
 		const method = streaming ? 'streamRawPredict' : 'rawPredict';
-		return `https://${this.region}-aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${this.region}/publishers/anthropic/models/${model}:${method}`;
+		return `https://${this.region}-aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${this.region}/publishers/anthropic/models/${vertexModel}:${method}`;
 	}
 
 	/**
@@ -522,7 +523,12 @@ export async function proxyToVertex(
 	}
 }
 
-// No mapping - pass through directly. User picks from /v1/models list.
+// Convert model ID format: claude-opus-4-5-20251101 -> claude-opus-4-5@20251101
 function mapModelToVertex(model: string): string {
+	// Match pattern: model-name-YYYYMMDD and convert last - to @
+	const match = model.match(/^(.+)-(\d{8})$/);
+	if (match) {
+		return `${match[1]}@${match[2]}`;
+	}
 	return model;
 }
