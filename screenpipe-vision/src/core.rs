@@ -14,6 +14,7 @@ use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
 use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
+use image::GenericImageView;
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde::Deserialize;
@@ -503,6 +504,67 @@ fn parse_json_output(json_output: &str) -> Vec<HashMap<String, String>> {
         });
 
     parsed_output
+}
+
+/// Transform OCR coordinates from window-relative (normalized 0-1) to screen-relative (normalized 0-1).
+///
+/// OCR engines return coordinates normalized to the window image dimensions.
+/// This function transforms them to be normalized to the full screen dimensions,
+/// which is necessary because the video frames store the full screen capture.
+fn transform_ocr_coordinates_to_screen(
+    ocr_blocks: Vec<HashMap<String, String>>,
+    window_x: i32,
+    window_y: i32,
+    window_width: u32,
+    window_height: u32,
+    screen_width: u32,
+    screen_height: u32,
+) -> Vec<HashMap<String, String>> {
+    // Skip transformation if dimensions are invalid
+    if screen_width == 0 || screen_height == 0 || window_width == 0 || window_height == 0 {
+        return ocr_blocks;
+    }
+
+    let screen_w = screen_width as f64;
+    let screen_h = screen_height as f64;
+    let win_x = window_x as f64;
+    let win_y = window_y as f64;
+    let win_w = window_width as f64;
+    let win_h = window_height as f64;
+
+    ocr_blocks
+        .into_iter()
+        .map(|mut block| {
+            // Parse the normalized window coordinates (0-1 range)
+            if let (Some(left_str), Some(top_str), Some(width_str), Some(height_str)) = (
+                block.get("left").cloned(),
+                block.get("top").cloned(),
+                block.get("width").cloned(),
+                block.get("height").cloned(),
+            ) {
+                if let (Ok(left), Ok(top), Ok(width), Ok(height)) = (
+                    left_str.parse::<f64>(),
+                    top_str.parse::<f64>(),
+                    width_str.parse::<f64>(),
+                    height_str.parse::<f64>(),
+                ) {
+                    // Transform from window-relative normalized coords to screen-relative normalized coords
+                    // screen_coord = (window_offset + window_coord_normalized * window_size) / screen_size
+                    let screen_left = (win_x + left * win_w) / screen_w;
+                    let screen_top = (win_y + top * win_h) / screen_h;
+                    let screen_width_normalized = (width * win_w) / screen_w;
+                    let screen_height_normalized = (height * win_h) / screen_h;
+
+                    // Update the block with screen-relative coordinates
+                    block.insert("left".to_string(), screen_left.to_string());
+                    block.insert("top".to_string(), screen_top.to_string());
+                    block.insert("width".to_string(), screen_width_normalized.to_string());
+                    block.insert("height".to_string(), screen_height_normalized.to_string());
+                }
+            }
+            block
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

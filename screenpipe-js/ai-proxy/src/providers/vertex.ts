@@ -388,18 +388,45 @@ export class VertexAIProvider implements AIProvider {
 	}
 
 	/**
-	 * List available models - exact Vertex AI model IDs
+	 * List available models by querying Vertex AI Model Garden
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
+		try {
+			const accessToken = await this.getAccessToken();
+			// Query Vertex AI for Anthropic publisher models
+			const url = `https://${this.region}-aiplatform.googleapis.com/v1/publishers/anthropic/models`;
+			const response = await fetch(url, {
+				headers: {
+					Authorization: `Bearer ${accessToken}`,
+				},
+			});
+
+			if (!response.ok) {
+				console.error('Failed to list models from Vertex:', response.status);
+				// Fallback to known models if API fails
+				return this.getFallbackModels();
+			}
+
+			const data = await response.json();
+			const models = data.models || data.publisherModels || [];
+
+			return models.map((m: any) => ({
+				id: m.name?.split('/').pop() || m.modelId || m.id,
+				name: m.displayName || m.name || m.id,
+				provider: 'vertex',
+			}));
+		} catch (error) {
+			console.error('Error listing models:', error);
+			return this.getFallbackModels();
+		}
+	}
+
+	private getFallbackModels(): { id: string; name: string; provider: string }[] {
+		// Fallback only if API fails - these may be outdated
 		return [
-			// Claude 4.x (latest)
-			{ id: 'claude-opus-4-5@20250915', name: 'Claude Opus 4.5', provider: 'vertex' },
 			{ id: 'claude-sonnet-4@20250514', name: 'Claude Sonnet 4', provider: 'vertex' },
 			{ id: 'claude-opus-4@20250514', name: 'Claude Opus 4', provider: 'vertex' },
-			// Claude 3.x
-			{ id: 'claude-3-5-haiku@20241022', name: 'Claude 3.5 Haiku (fast)', provider: 'vertex' },
-			{ id: 'claude-3-7-sonnet@20250219', name: 'Claude 3.7 Sonnet', provider: 'vertex' },
-			{ id: 'claude-3-5-sonnet-v2@20241022', name: 'Claude 3.5 Sonnet v2', provider: 'vertex' },
+			{ id: 'claude-3-5-haiku@20241022', name: 'Claude 3.5 Haiku', provider: 'vertex' },
 		];
 	}
 }
@@ -506,45 +533,29 @@ export async function proxyToVertex(
 	}
 }
 
-// Model aliases - map common/invalid names to valid Vertex AI model IDs
+// Model aliases - map common names to Vertex AI format
+// Only used for simple aliases, not format conversion
 const MODEL_ALIASES: Record<string, string> = {
-	// Haiku aliases
-	'claude-haiku-4-5': 'claude-3-5-haiku@20241022',
-	'claude-haiku-4-5-20251001': 'claude-3-5-haiku@20241022',
-	'claude-3-5-haiku': 'claude-3-5-haiku@20241022',
-	'claude-haiku': 'claude-3-5-haiku@20241022',
-	// Sonnet aliases
-	'claude-sonnet-4': 'claude-sonnet-4@20250514',
-	'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
-	'claude-4-sonnet': 'claude-sonnet-4@20250514',
+	// Simple aliases without dates -> latest version
+	'claude-haiku': 'claude-haiku-4-5@20251001',
 	'claude-sonnet': 'claude-sonnet-4@20250514',
-	// Opus aliases
-	'claude-opus-4': 'claude-opus-4@20250514',
-	'claude-opus-4-20250514': 'claude-opus-4@20250514',
-	'claude-4-opus': 'claude-opus-4@20250514',
-	'claude-opus-4-5': 'claude-opus-4-5@20250915',
-	'claude-opus-4-5-20250915': 'claude-opus-4-5@20250915',
 	'claude-opus': 'claude-opus-4@20250514',
 };
 
-// Convert model ID format and apply aliases
+// Convert model ID format: claude-haiku-4-5-20251001 -> claude-haiku-4-5@20251001
 export function mapModelToVertex(model: string): string {
-	// Check for known aliases first
+	// Check for simple aliases (no date)
 	const lowerModel = model.toLowerCase();
 	if (MODEL_ALIASES[lowerModel]) {
 		return MODEL_ALIASES[lowerModel];
 	}
 
-	// Match pattern: model-name-YYYYMMDD and convert last - to @
+	// Convert date suffix: model-YYYYMMDD -> model@YYYYMMDD
 	const match = model.match(/^(.+)-(\d{8})$/);
 	if (match) {
-		const converted = `${match[1]}@${match[2]}`;
-		// Check if converted form has an alias
-		if (MODEL_ALIASES[converted.toLowerCase()]) {
-			return MODEL_ALIASES[converted.toLowerCase()];
-		}
-		return converted;
+		return `${match[1]}@${match[2]}`;
 	}
+
 	return model;
 }
 
