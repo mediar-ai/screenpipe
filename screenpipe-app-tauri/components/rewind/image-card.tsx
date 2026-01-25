@@ -232,6 +232,13 @@ export const MainImage = () => {
 		width: number;
 		height: number;
 	} | null>(null);
+	// For object-contain, we need to track the actual rendered image size and offset
+	const [renderedImageDimensions, setRenderedImageDimensions] = useState<{
+		width: number;
+		height: number;
+		offsetX: number;
+		offsetY: number;
+	} | null>(null);
 
 	const currentFrame = searchResults[currentResultIndex];
 
@@ -264,10 +271,49 @@ export const MainImage = () => {
 		};
 	}, [currentFrame]);
 
-	// Reset natural dimensions when frame changes
+	// Reset dimensions when frame changes
 	useEffect(() => {
 		setNaturalDimensions(null);
+		setRenderedImageDimensions(null);
 	}, [currentFrame?.frame_id]);
+
+	// Calculate actual rendered image dimensions for object-contain
+	// The image is scaled to fit while maintaining aspect ratio, centered in container
+	useEffect(() => {
+		if (!naturalDimensions || !imageRect) {
+			setRenderedImageDimensions(null);
+			return;
+		}
+
+		const containerWidth = imageRect.width;
+		const containerHeight = imageRect.height;
+		const imageAspect = naturalDimensions.width / naturalDimensions.height;
+		const containerAspect = containerWidth / containerHeight;
+
+		let renderedWidth: number;
+		let renderedHeight: number;
+
+		if (imageAspect > containerAspect) {
+			// Image is wider than container - width fills, height is letterboxed
+			renderedWidth = containerWidth;
+			renderedHeight = containerWidth / imageAspect;
+		} else {
+			// Image is taller than container - height fills, width is letterboxed
+			renderedHeight = containerHeight;
+			renderedWidth = containerHeight * imageAspect;
+		}
+
+		// Calculate offset (image is centered in container with object-contain)
+		const offsetX = (containerWidth - renderedWidth) / 2;
+		const offsetY = (containerHeight - renderedHeight) / 2;
+
+		setRenderedImageDimensions({
+			width: renderedWidth,
+			height: renderedHeight,
+			offsetX,
+			offsetY,
+		});
+	}, [naturalDimensions, imageRect]);
 
 	const handleOpenInBrowser = useCallback(() => {
 		if (currentFrame?.url) {
@@ -330,15 +376,26 @@ export const MainImage = () => {
 						onError={handleError}
 					/>
 					{/* Text selection overlay with clickable URLs */}
-					{imageRect && naturalDimensions && textPositions.length > 0 && (
-						<TextOverlay
-							textPositions={textPositions}
-							originalWidth={naturalDimensions.width}
-							originalHeight={naturalDimensions.height}
-							displayedWidth={imageRect.width}
-							displayedHeight={imageRect.height}
-							clickableUrls={true}
-						/>
+					{/* Position overlay to match actual rendered image (accounting for object-contain letterboxing) */}
+					{renderedImageDimensions && textPositions.length > 0 && (
+						<div
+							className="absolute"
+							style={{
+								left: renderedImageDimensions.offsetX,
+								top: renderedImageDimensions.offsetY,
+								width: renderedImageDimensions.width,
+								height: renderedImageDimensions.height,
+							}}
+						>
+							<TextOverlay
+								textPositions={textPositions}
+								originalWidth={naturalDimensions!.width}
+								originalHeight={naturalDimensions!.height}
+								displayedWidth={renderedImageDimensions.width}
+								displayedHeight={renderedImageDimensions.height}
+								clickableUrls={true}
+							/>
+						</div>
 					)}
 					{/* Open in Browser button for captured browser URLs - temporarily disabled */}
 					{/* {hasValidUrl && !isLoading && (
