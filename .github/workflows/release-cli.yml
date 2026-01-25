@@ -31,15 +31,16 @@ jobs:
           target: ${{ matrix.target }}
           rustflags: ""
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.7
-        with:
-          version: "v0.8.2"
+      # sccache disabled temporarily due to GitHub Actions cache outage
+      # - name: Setup sccache
+      #   uses: mozilla-actions/sccache-action@v0.0.7
+      #   with:
+      #     version: "v0.8.2"
 
-      - name: Configure sccache
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+      # - name: Configure sccache
+      #   run: |
+      #     echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+      #     echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
 
       - name: Cache Homebrew packages
         uses: actions/cache@v4
@@ -135,16 +136,17 @@ jobs:
         with:
           version: "10.0"
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.7
-        with:
-          version: "v0.8.2"
+      # sccache disabled temporarily due to GitHub Actions cache outage
+      # - name: Setup sccache
+      #   uses: mozilla-actions/sccache-action@v0.0.7
+      #   with:
+      #     version: "v0.8.2"
 
-      - name: Configure sccache
-        shell: bash
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+      # - name: Configure sccache
+      #   shell: bash
+      #   run: |
+      #     echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+      #     echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
 
       - uses: actions/cache@v4
         with:
@@ -218,15 +220,16 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.7
-        with:
-          version: "v0.8.2"
+      # sccache disabled temporarily due to GitHub Actions cache outage
+      # - name: Setup sccache
+      #   uses: mozilla-actions/sccache-action@v0.0.7
+      #   with:
+      #     version: "v0.8.2"
 
-      - name: Configure sccache
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+      # - name: Configure sccache
+      #   run: |
+      #     echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+      #     echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
