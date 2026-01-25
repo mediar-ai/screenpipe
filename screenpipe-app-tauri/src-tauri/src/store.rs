@@ -232,7 +232,7 @@ impl Default for AIPreset {
             prompt: String::new(),
             provider: AIProviderType::ScreenpipeCloud,
             url: "https://ai-proxy.i-f9f.workers.dev/v1".to_string(),
-            model: "claude-3-5-haiku-latest".to_string(),
+            model: "claude-haiku-4-5@20251001".to_string(),
             default_preset: false,
             api_key: None,
             max_context_chars: 512000,

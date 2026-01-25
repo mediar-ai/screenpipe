@@ -360,6 +360,10 @@ const AISection = ({
         break;
       case "screenpipe-cloud":
         newUrl = "https://ai-proxy.i-f9f.workers.dev/v1";
+        // Set default model for screenpipe-cloud if not already set
+        if (!newModel) {
+          newModel = "claude-haiku-4-5@20251001";
+        }
         break;
       case "custom":
         newUrl = settingsPreset?.url || "";
