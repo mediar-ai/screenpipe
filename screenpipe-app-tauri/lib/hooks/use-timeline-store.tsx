@@ -10,6 +10,12 @@ let progressUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 const FLUSH_INTERVAL_MS = 150; // Flush every 150ms for smooth progressive loading
 const PROGRESS_UPDATE_INTERVAL_MS = 500; // Only update progress indicator every 500ms to prevent flickering
 
+// Connection retry logic - don't show error immediately, server might be starting
+let connectionAttempts = 0;
+let errorGraceTimer: ReturnType<typeof setTimeout> | null = null;
+const MAX_SILENT_RETRIES = 3; // Retry 3 times before showing error
+const RETRY_DELAY_MS = 2000; // Wait 2 seconds between retries
+
 interface TimelineState {
 	frames: StreamTimeSeriesResponse[];
 	frameTimestamps: Set<string>; // For O(1) deduplication lookups
@@ -137,6 +143,13 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		const ws = new WebSocket("ws://localhost:3030/stream/frames");
 
 		ws.onopen = () => {
+			// Reset retry counter on successful connection
+			connectionAttempts = 0;
+			if (errorGraceTimer) {
+				clearTimeout(errorGraceTimer);
+				errorGraceTimer = null;
+			}
+
 			set({
 				websocket: ws,
 				error: null,
@@ -225,7 +238,25 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 
 		ws.onerror = (error) => {
 			console.error("WebSocket error:", error);
-			set({ error: "Connection error occurred", isLoading: false });
+			connectionAttempts++;
+
+			// Silent retry if under max attempts (server might be starting)
+			if (connectionAttempts < MAX_SILENT_RETRIES) {
+				console.log(`Connection attempt ${connectionAttempts}/${MAX_SILENT_RETRIES}, retrying...`);
+				// Keep showing loading state, not error
+				set({ isLoading: true, message: "connecting to screenpipe..." });
+
+				// Schedule retry
+				if (!errorGraceTimer) {
+					errorGraceTimer = setTimeout(() => {
+						errorGraceTimer = null;
+						get().connectWebSocket();
+					}, RETRY_DELAY_MS);
+				}
+			} else {
+				// Max retries exceeded, show error
+				set({ error: "Connection error occurred", isLoading: false });
+			}
 		};
 
 		ws.onclose = () => {
@@ -240,13 +271,20 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			}
 			get().flushFrameBuffer();
 
-			set({
-				message: "Connection closed",
-				isLoading: false,
-				loadingProgress: { loaded: get().frames.length, isStreaming: false }
-			});
-			// Attempt to reconnect after a delay
-			setTimeout(() => get().connectWebSocket(), 5000);
+			// Only show "Connection closed" if we had a successful connection before
+			if (connectionAttempts === 0) {
+				set({
+					message: "Connection closed",
+					isLoading: false,
+					loadingProgress: { loaded: get().frames.length, isStreaming: false }
+				});
+			}
+
+			// Reset attempts and reconnect after delay
+			setTimeout(() => {
+				connectionAttempts = 0; // Fresh start for reconnection
+				get().connectWebSocket();
+			}, 5000);
 		};
 	},
 

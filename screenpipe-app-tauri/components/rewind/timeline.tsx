@@ -423,7 +423,9 @@ export default function Timeline() {
 				{!error && message && (
 					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
 						<div className="bg-card text-foreground p-6 border border-border rounded-2xl shadow-2xl text-center space-y-3 max-w-md mx-4">
-							<h3 className="font-medium">Processing</h3>
+							<h3 className="font-medium">
+								{message.includes("connecting") ? "Starting Up" : "Processing"}
+							</h3>
 							<p className="text-sm text-foreground">
 								{message}
 							</p>
