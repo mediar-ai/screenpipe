@@ -21,6 +21,7 @@ import { ChatCompletionTool } from "openai/resources/chat/completions";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
+import { commands } from "@/lib/utils/tauri";
 
 const SCREENPIPE_API = "http://localhost:3030";
 
@@ -646,9 +647,9 @@ Always use these exact start_time and end_time values when searching, unless the
                 {!hasPresets && (
                   <Button
                     variant="outline"
-                    onClick={() => {
+                    onClick={async () => {
                       setOpen(false);
-                      window.location.href = "/settings";
+                      await commands.showWindow({ Settings: { page: null } });
                     }}
                     className="gap-2"
                   >

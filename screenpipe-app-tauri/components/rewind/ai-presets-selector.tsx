@@ -53,7 +53,7 @@ import {
 } from "./ui/select";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
-import { AIPreset } from "@/lib/utils/tauri";
+import { AIPreset, commands } from "@/lib/utils/tauri";
 
 // Helper to detect UUID-like strings and format preset names nicely
 const formatPresetName = (name: string): string => {
@@ -291,9 +291,9 @@ export function AIProviderConfig({
             </p>
           </div>
           <Button
-            onClick={() => {
-              // Navigate to account settings
-              window.location.href = "/settings?section=account";
+            onClick={async () => {
+              // Open settings window at account section
+              await commands.showWindow({ Settings: { page: "account" } });
             }}
             className="gap-2"
           >
@@ -1039,8 +1039,8 @@ export const AIPresetsSelector = ({
               variant="outline"
               size="sm"
               className="shrink-0 h-7 text-xs border-amber-500/30 hover:bg-amber-500/10"
-              onClick={() => {
-                window.location.href = "/settings?section=account";
+              onClick={async () => {
+                await commands.showWindow({ Settings: { page: "account" } });
               }}
             >
               <LogIn className="h-3 w-3 mr-1" />
