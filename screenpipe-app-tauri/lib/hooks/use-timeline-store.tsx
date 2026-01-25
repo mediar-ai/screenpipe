@@ -131,9 +131,9 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 	},
 
 	connectWebSocket: () => {
-		// Close existing websocket if any
+		// Close existing websocket if any (including CONNECTING state to handle React Strict Mode double-render)
 		const existingWs = get().websocket;
-		if (existingWs && existingWs.readyState === WebSocket.OPEN) {
+		if (existingWs && (existingWs.readyState === WebSocket.OPEN || existingWs.readyState === WebSocket.CONNECTING)) {
 			existingWs.close();
 		}
 

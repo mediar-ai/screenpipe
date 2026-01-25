@@ -1,6 +1,6 @@
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import { useTimelineStore } from "./use-timeline-store";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export function useTimelineData(
 	currentDate: Date,
@@ -16,7 +16,16 @@ export function useTimelineData(
 		websocket,
 	} = useTimelineStore();
 
+	// Ref to track if we've already initiated connection (handles React Strict Mode double-render)
+	const connectionInitiatedRef = useRef(false);
+
 	useEffect(() => {
+		// Only connect once, even in React Strict Mode
+		if (connectionInitiatedRef.current) {
+			return;
+		}
+		connectionInitiatedRef.current = true;
+
 		// First establish WebSocket connection
 		connectWebSocket();
 	}, []); // Only connect once when component mounts
