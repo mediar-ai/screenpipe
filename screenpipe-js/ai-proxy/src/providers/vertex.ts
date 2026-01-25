@@ -391,43 +391,27 @@ export class VertexAIProvider implements AIProvider {
 	 * List available models by querying Vertex AI Model Garden
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
-		try {
-			const accessToken = await this.getAccessToken();
-			// Query Vertex AI for Anthropic publisher models
-			const url = `https://${this.region}-aiplatform.googleapis.com/v1/publishers/anthropic/models`;
-			const response = await fetch(url, {
-				headers: {
-					Authorization: `Bearer ${accessToken}`,
-				},
-			});
+		const accessToken = await this.getAccessToken();
+		const url = `https://${this.region}-aiplatform.googleapis.com/v1/publishers/anthropic/models`;
+		const response = await fetch(url, {
+			headers: {
+				Authorization: `Bearer ${accessToken}`,
+			},
+		});
 
-			if (!response.ok) {
-				console.error('Failed to list models from Vertex:', response.status);
-				// Fallback to known models if API fails
-				return this.getFallbackModels();
-			}
-
-			const data = await response.json();
-			const models = data.models || data.publisherModels || [];
-
-			return models.map((m: any) => ({
-				id: m.name?.split('/').pop() || m.modelId || m.id,
-				name: m.displayName || m.name || m.id,
-				provider: 'vertex',
-			}));
-		} catch (error) {
-			console.error('Error listing models:', error);
-			return this.getFallbackModels();
+		if (!response.ok) {
+			const error = await response.text();
+			throw new Error(`Failed to list models: ${response.status} ${error}`);
 		}
-	}
 
-	private getFallbackModels(): { id: string; name: string; provider: string }[] {
-		// Fallback only if API fails - these may be outdated
-		return [
-			{ id: 'claude-sonnet-4@20250514', name: 'Claude Sonnet 4', provider: 'vertex' },
-			{ id: 'claude-opus-4@20250514', name: 'Claude Opus 4', provider: 'vertex' },
-			{ id: 'claude-3-5-haiku@20241022', name: 'Claude 3.5 Haiku', provider: 'vertex' },
-		];
+		const data = await response.json();
+		const models = data.models || data.publisherModels || [];
+
+		return models.map((m: any) => ({
+			id: m.name?.split('/').pop() || m.modelId || m.id,
+			name: m.displayName || m.name || m.id,
+			provider: 'vertex',
+		}));
 	}
 }
 
