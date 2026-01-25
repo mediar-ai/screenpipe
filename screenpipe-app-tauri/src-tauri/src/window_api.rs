@@ -241,8 +241,8 @@ impl ShowRewindWindow {
 
         #[cfg(target_os = "windows")]
         {
-            // builder = builder.decorations(false);
-            builder = builder
+            // Windows needs explicit decorations for non-overlay windows
+            builder = builder.decorations(true);
         }
 
         builder
