@@ -21,6 +21,7 @@ pub fn get_store(
 }
 
 #[derive(Serialize, Deserialize, Type, Clone)]
+#[serde(default)]
 pub struct OnboardingStore {
     #[serde(rename = "isCompleted")]
     pub is_completed: bool,
