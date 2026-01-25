@@ -208,11 +208,11 @@ export default function Home() {
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium">Screen Recording</span>
-                            <PermissionButtons type="screen" />
+                            <PermissionButtons type="screen" hideWindowOnClick />
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium">Audio Recording</span>
-                            <PermissionButtons type="audio" />
+                            <PermissionButtons type="audio" hideWindowOnClick />
                           </div>
 
                         </div>

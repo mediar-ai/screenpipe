@@ -9,10 +9,12 @@ import localforage from "localforage";
 
 interface PermissionButtonsProps {
   type: "screen" | "audio";
+  hideWindowOnClick?: boolean;
 }
 
 export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
   type,
+  hideWindowOnClick = false,
 }) => {
   const { settings } = useSettings();
   const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(
@@ -61,7 +63,9 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
           : "microphone";
 
       // Hide the main window so user can see the system settings
-      await commands.closeWindow("Main");
+      if (hideWindowOnClick) {
+        await commands.closeWindow("Main");
+      }
 
       await commands.requestPermission(permissionType);
 
@@ -99,7 +103,9 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
           : "microphone";
 
       // Hide the main window so user can see the system settings
-      await commands.closeWindow("Main");
+      if (hideWindowOnClick) {
+        await commands.closeWindow("Main");
+      }
 
       await commands.openPermissionSettings(permissionType);
     } catch (error) {
