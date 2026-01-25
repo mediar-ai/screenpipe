@@ -91,6 +91,9 @@ pub fn is_overlay_click_through(_app_handle: tauri::AppHandle) -> bool {
     false
 }
 
+#[cfg(target_os = "windows")]
+const DEFAULT_SHORTCUT: &str = "Alt+S";
+#[cfg(not(target_os = "windows"))]
 const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 
 #[tauri::command(rename_all = "snake_case")]
