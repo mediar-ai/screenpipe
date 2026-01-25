@@ -611,11 +611,22 @@ export default function Timeline() {
 				</div>
 
 				{/* Scroll Indicator */}
-				<div className="fixed left-6 top-1/2 -translate-y-1/2 text-xs text-foreground z-40">
-					<div className="flex flex-col items-center gap-1 bg-card rounded-full p-2 border border-border">
-						<span>▲</span>
-						<span className="text-[10px]">scroll</span>
-						<span>▼</span>
+				<div className="fixed left-6 top-1/2 -translate-y-1/2 z-40 font-mono">
+					<div className="flex flex-col border border-border bg-background">
+						<button
+							className="flex items-center justify-center w-8 h-8 border-b border-border text-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
+							onClick={() => window.scrollBy({ top: -200, behavior: 'smooth' })}
+							aria-label="Scroll up"
+						>
+							▲
+						</button>
+						<button
+							className="flex items-center justify-center w-8 h-8 text-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
+							onClick={() => window.scrollBy({ top: 200, behavior: 'smooth' })}
+							aria-label="Scroll down"
+						>
+							▼
+						</button>
 					</div>
 				</div>
 			</div>
