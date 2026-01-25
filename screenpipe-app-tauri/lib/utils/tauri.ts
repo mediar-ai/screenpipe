@@ -14,6 +14,10 @@ async requestPermission(permission: OSPermission) : Promise<void> {
 async doPermissionsCheck(initialCheck: boolean) : Promise<OSPermissionsCheck> {
     return await TAURI_INVOKE("do_permissions_check", { initialCheck });
 },
+/**
+ * Check only microphone permission (no screen recording check)
+ * Use this for polling to avoid triggering macOS screen capture permission dialogs
+ */
 async checkMicrophonePermission() : Promise<OSPermissionStatus> {
     return await TAURI_INVOKE("check_microphone_permission");
 },

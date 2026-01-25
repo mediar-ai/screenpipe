@@ -3192,10 +3192,19 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
 
     // Send frames to the client with batching
     let send_handle = tokio::spawn(async move {
+        // Track if the initial fetch channel is closed to prevent select! starvation
+        let mut frame_rx = Some(frame_rx);
+
         loop {
             tokio::select! {
                 // Check for new frames from initial fetch
-                frame = frame_rx.recv() => {
+                // Only select this branch if the channel is still open
+                frame = async {
+                    match &mut frame_rx {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
                     match frame {
                         Some(timeseries_frame) => {
                             if let Some(error) = timeseries_frame.error {
@@ -3221,8 +3230,10 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
                             }
                         }
                         None => {
-                            // Channel closed but we keep running for live polling
-                            debug!("frame channel closed, continuing with live polling only");
+                            // Channel closed - set to None so we don't select this branch anymore
+                            // This prevents the select! from being starved by the closed channel
+                            debug!("frame channel closed, switching to live polling only");
+                            frame_rx = None;
                         }
                     }
                 }

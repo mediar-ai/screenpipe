@@ -42,24 +42,19 @@ const TOOLS: ChatCompletionTool[] = [
       name: "search_content",
       description: `Search screenpipe's recorded content: screen text (OCR), audio transcriptions, and UI elements.
 
-IMPORTANT QUERY GUIDELINES:
-- Start with SPECIFIC queries (app_name + short time range) before broad searches
-- Use time ranges of 1-2 hours max initially. If no results, expand gradually
-- For "recent" activity, use last 30-60 minutes, not hours
-- For "today", search last few hours, not the whole day
-- Always prefer app_name filter when user mentions specific apps
-- Use limit=10 for initial searches, increase only if needed
-- If results are truncated, narrow your search with more filters
+**MANDATORY**: start_time is REQUIRED for every search. Database has 600k+ entries - searches without time bounds WILL timeout.
 
-GOOD query examples:
-- "slack messages" → {app_name: "Slack", limit: 10, start_time: "1 hour ago"}
-- "what I did" → {limit: 10, start_time: "30 mins ago"}
-- "zoom meeting" → {app_name: "zoom.us", content_type: "audio", limit: 10}
+RULES:
+- ALWAYS include start_time (required) - default to 1-2 hours ago
+- Use app_name filter whenever user mentions an app
+- Keep limit=5-10, never higher initially
+- If query times out, retry with shorter time range (30 mins)
 
-BAD query examples:
-- No filters with limit=100 (too broad, will timeout)
-- 24-hour time range (too much data)
-- Empty query with no time filter (returns everything)`,
+EXAMPLES:
+✓ {start_time: "1 hour ago", limit: 10}
+✓ {app_name: "Slack", start_time: "2 hours ago", limit: 5}
+✗ {limit: 100} - NO start_time = WILL TIMEOUT
+✗ {start_time: "24 hours ago"} - too broad, will timeout`,
       parameters: {
         type: "object",
         properties: {
@@ -100,15 +95,15 @@ BAD query examples:
 
 const SYSTEM_PROMPT = `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions.
 
-SEARCH STRATEGY (IMPORTANT):
-1. Start with NARROW searches: specific app + short time range (30-60 mins)
-2. If no results, gradually expand: longer time range OR broader query
-3. Never search more than 2-3 hours at once initially
-4. Always use app_name filter when user mentions a specific app
-5. For "recent" = last 30-60 mins, "today" = last 2-3 hours, "yesterday" = specific date range
-6. Use limit=10 initially, only increase if user needs more
+CRITICAL SEARCH RULES (database has 600k+ entries - ALWAYS use time filters):
+1. ALWAYS include start_time in EVERY search - NEVER search without a time range
+2. Default time range: last 1-2 hours. Expand ONLY if no results found
+3. ALWAYS use app_name filter when user mentions ANY app
+4. Keep limit=5-10 initially, never higher unless user explicitly needs more
+5. "recent" = last 30 mins, "today" = last 2 hours, "yesterday" = yesterday's date range
+6. If search times out, IMMEDIATELY retry with narrower time range (e.g., 30 mins instead of 2 hours)
 
-If search returns "truncated" or "timed out", immediately retry with narrower parameters.
+NEVER search without start_time - queries without time bounds will timeout on large databases.
 
 Rules for showing videos/audio:
 - Show videos by putting .mp4 file paths in inline code blocks: \`/path/to/video.mp4\`
@@ -268,9 +263,9 @@ export function GlobalChat() {
       if (args.app_name) params.append("app_name", String(args.app_name));
       if (args.window_name) params.append("window_name", String(args.window_name));
 
-      // Add timeout to prevent hanging
+      // Add timeout to prevent hanging - 30s to handle large datasets
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
       const response = await fetch(`${SCREENPIPE_API}/search?${params.toString()}`, {
         signal: controller.signal,
@@ -330,7 +325,7 @@ export function GlobalChat() {
     } catch (error) {
       console.error("Search error:", error);
       if (error instanceof Error && error.name === "AbortError") {
-        return "Search timed out - query too broad. Please retry with:\n- Shorter time range\n- Specific app_name\n- Lower limit (5-10)\n- More specific query";
+        return "Search timed out (30s limit exceeded). The database has 600k+ entries. RETRY with:\n- start_time within last 30-60 minutes (REQUIRED)\n- Specific app_name filter\n- limit=5\nNEVER search without a time range.";
       }
       return `Search failed: ${error instanceof Error ? error.message : "Unknown error"}`;
     }

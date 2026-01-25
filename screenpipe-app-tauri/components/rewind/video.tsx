@@ -112,21 +112,23 @@ export const VideoComponent = memo(function VideoComponent({
   }
 
   return (
-    <div className={cn("w-full max-w-2xl text-center", className)}>
+    <div className={cn("w-full max-w-2xl text-center isolate", className)}>
       {isAudio ? (
-        <div className="bg-gray-100 p-4 rounded-md">
-          <audio controls className="w-full">
+        <div className="relative z-10 bg-gray-100 p-4 rounded-md">
+          <audio controls className="w-full pointer-events-auto">
             <source src={mediaSrc} type="audio/mpeg" />
             Your browser does not support the audio element.
           </audio>
         </div>
       ) : (
-        <video controls className="w-full rounded-md">
-          <source src={mediaSrc} type='video/mp4; codecs="hvc1"' />
-          <source src={mediaSrc} type='video/mp4; codecs="hvec"' />
-          <source src={mediaSrc} type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
+        <div className="relative z-10">
+          <video controls className="w-full rounded-md pointer-events-auto">
+            <source src={mediaSrc} type='video/mp4; codecs="hvc1"' />
+            <source src={mediaSrc} type='video/mp4; codecs="hvec"' />
+            <source src={mediaSrc} type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
       )}
       {renderFileLink()}
     </div>
