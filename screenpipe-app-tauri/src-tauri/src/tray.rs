@@ -71,10 +71,15 @@ fn create_dynamic_menu(
 
     // Full menu after onboarding is complete
     // Get the show shortcut from store
+    let default_shortcut = if cfg!(target_os = "windows") {
+        "Alt+S"
+    } else {
+        "Super+Ctrl+S"
+    };
     let show_shortcut = store
         .get("showScreenpipeShortcut")
         .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or_else(|| "Super+Ctrl+S".to_string());
+        .unwrap_or_else(|| default_shortcut.to_string());
 
     // Show item with formatted shortcut in label
     menu_builder = menu_builder.item(

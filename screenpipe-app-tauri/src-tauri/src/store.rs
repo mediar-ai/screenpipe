@@ -419,6 +419,9 @@ impl Default for SettingsStore {
                 contact: None,
                 cloud_subscribed: None,
             },
+            #[cfg(target_os = "windows")]
+            show_screenpipe_shortcut: "Alt+S".to_string(),
+            #[cfg(not(target_os = "windows"))]
             show_screenpipe_shortcut: "Super+Ctrl+S".to_string(),
             start_recording_shortcut: "Super+Ctrl+U".to_string(),
             stop_recording_shortcut: "Super+Ctrl+X".to_string(),
