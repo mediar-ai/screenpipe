@@ -110,6 +110,24 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 	},
 
 	connectWebSocket: () => {
+		// Close existing websocket if any
+		const existingWs = get().websocket;
+		if (existingWs && existingWs.readyState === WebSocket.OPEN) {
+			existingWs.close();
+		}
+
+		// Reset state for fresh data when reconnecting
+		set({
+			frames: [],
+			frameTimestamps: new Set<string>(),
+			sentRequests: new Set<string>(),
+			isLoading: true,
+			loadingProgress: { loaded: 0, isStreaming: false },
+			error: null,
+			message: null,
+		});
+		frameBuffer = [];
+
 		const ws = new WebSocket("ws://localhost:3030/stream/frames");
 
 		ws.onopen = () => {
