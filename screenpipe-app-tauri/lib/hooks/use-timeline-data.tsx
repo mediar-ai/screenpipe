@@ -12,7 +12,6 @@ export function useTimelineData(
 		error,
 		message,
 		connectWebSocket,
-		fetchTimeRange,
 		fetchNextDayData,
 		websocket,
 	} = useTimelineStore();
@@ -22,27 +21,12 @@ export function useTimelineData(
 		connectWebSocket();
 	}, []); // Only connect once when component mounts
 
+	// Set initial frame when frames arrive and no frame is selected yet
 	useEffect(() => {
-		// Only fetch data when WebSocket is connected
-		if (websocket && websocket.readyState === WebSocket.OPEN) {
-			const startTime = new Date(currentDate);
-			startTime.setHours(0, 0, 0, 0);
-
-			const endTime = new Date(currentDate);
-			if (endTime.getDate() === new Date().getDate()) {
-				endTime.setMinutes(endTime.getMinutes() - 5);
-			} else {
-				endTime.setHours(23, 59, 59, 999);
-			}
-
-			fetchTimeRange(startTime, endTime);
-
-			// Set initial frame if available
-			if (frames.length > 0) {
-				setCurFrame(frames[0]);
-			}
+		if (frames.length > 0) {
+			setCurFrame(frames[0]);
 		}
-	}, [websocket?.readyState]); // Depend on WebSocket connection state
+	}, [frames.length > 0]); // Only trigger when we go from 0 to some frames
 
 	return {
 		frames,
@@ -50,6 +34,7 @@ export function useTimelineData(
 		error,
 		message,
 		fetchNextDayData,
+		websocket, // Expose websocket so timeline.tsx can depend on it
 	};
 }
 

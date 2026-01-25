@@ -3116,6 +3116,9 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
     let mut poll_timer = tokio::time::interval(Duration::from_secs(2));
     poll_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+    // Timer for keep-alive messages (every 30 seconds)
+    let mut keepalive_timer = tokio::time::interval(Duration::from_secs(30));
+
     let active_request_clone = active_request.clone();
     let sent_frame_ids_clone = sent_frame_ids.clone();
     let db_clone = db.clone();
@@ -3319,6 +3322,13 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
                                 }
                             }
                         }
+                    }
+                }
+                // Send keep-alive message to prevent connection timeout
+                _ = keepalive_timer.tick() => {
+                    if let Err(e) = sender.send(Message::Text("\"keep-alive-text\"".to_string())).await {
+                        error!("failed to send keepalive: {}", e);
+                        break;
                     }
                 }
             }

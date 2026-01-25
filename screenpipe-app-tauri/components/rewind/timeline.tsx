@@ -80,7 +80,7 @@ export default function Timeline() {
 	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress } =
 		useTimelineStore();
 
-	const { frames, isLoading, error, message, fetchNextDayData } =
+	const { frames, isLoading, error, message, fetchNextDayData, websocket } =
 		useTimelineData(currentDate, (frame) => {
 			setCurrentFrame(frame);
 		});
@@ -117,6 +117,11 @@ export default function Timeline() {
 	}, []);
 
 	useEffect(() => {
+		// Wait for websocket to be ready before fetching
+		if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+			return;
+		}
+
 		let currentDateEffect = new Date(currentDate);
 		const checkIfThereAreFrames = async () => {
 			const checkFramesForDate = await hasFramesForDate(currentDateEffect);
@@ -130,14 +135,16 @@ export default function Timeline() {
 
 			const endTime = new Date(currentDateEffect);
 			if (endTime.getDate() === new Date().getDate()) {
-			endTime.setMinutes(endTime.getMinutes() - 5);
+				// For today: use current time so server can poll for real-time frames
+				// Don't subtract 5 minutes - this was breaking live polling
+				// (server checks if now <= end_time, which was always false)
 			} else {
 				endTime.setHours(23, 59, 59, 999);
 			}
 			fetchTimeRange(startTime, endTime);
 		}
 		checkIfThereAreFrames();
-	}, [currentDate]);
+	}, [currentDate, websocket]); // Re-run when websocket connects or date changes
 
 	useEffect(() => {
 		if (currentFrame) {

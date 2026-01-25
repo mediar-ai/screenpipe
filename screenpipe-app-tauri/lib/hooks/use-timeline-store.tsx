@@ -158,6 +158,21 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				loadingProgress: { loaded: 0, isStreaming: true }
 			});
 			console.log("WebSocket connection established");
+
+			// After successful connection/reconnection, trigger a fetch for current date
+			// This ensures data is requested even after reconnection
+			setTimeout(() => {
+				const { currentDate, fetchTimeRange } = get();
+				const startTime = new Date(currentDate);
+				startTime.setHours(0, 0, 0, 0);
+				const endTime = new Date(currentDate);
+				if (endTime.getDate() === new Date().getDate()) {
+					// For today: use current time for real-time polling
+				} else {
+					endTime.setHours(23, 59, 59, 999);
+				}
+				fetchTimeRange(startTime, endTime);
+			}, 100);
 		};
 
 		ws.onmessage = (event) => {
