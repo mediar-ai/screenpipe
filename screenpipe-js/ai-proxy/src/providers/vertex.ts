@@ -392,13 +392,14 @@ export class VertexAIProvider implements AIProvider {
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
 		return [
-			// Claude 4.5
-			{ id: 'claude-opus-4-5@20251101', name: 'Claude Opus 4.5', provider: 'vertex' },
-			{ id: 'claude-sonnet-4-5@20250929', name: 'Claude Sonnet 4.5', provider: 'vertex' },
-			{ id: 'claude-haiku-4-5@20251001', name: 'Claude Haiku 4.5', provider: 'vertex' },
-			// Claude 4
-			{ id: 'claude-opus-4@20250514', name: 'Claude Opus 4', provider: 'vertex' },
+			// Claude 4.x (latest)
+			{ id: 'claude-opus-4-5@20250915', name: 'Claude Opus 4.5', provider: 'vertex' },
 			{ id: 'claude-sonnet-4@20250514', name: 'Claude Sonnet 4', provider: 'vertex' },
+			{ id: 'claude-opus-4@20250514', name: 'Claude Opus 4', provider: 'vertex' },
+			// Claude 3.x
+			{ id: 'claude-3-5-haiku@20241022', name: 'Claude 3.5 Haiku (fast)', provider: 'vertex' },
+			{ id: 'claude-3-7-sonnet@20250219', name: 'Claude 3.7 Sonnet', provider: 'vertex' },
+			{ id: 'claude-3-5-sonnet-v2@20241022', name: 'Claude 3.5 Sonnet v2', provider: 'vertex' },
 		];
 	}
 }
@@ -505,12 +506,44 @@ export async function proxyToVertex(
 	}
 }
 
-// Convert model ID format: claude-opus-4-5-20251101 -> claude-opus-4-5@20251101
+// Model aliases - map common/invalid names to valid Vertex AI model IDs
+const MODEL_ALIASES: Record<string, string> = {
+	// Haiku aliases
+	'claude-haiku-4-5': 'claude-3-5-haiku@20241022',
+	'claude-haiku-4-5-20251001': 'claude-3-5-haiku@20241022',
+	'claude-3-5-haiku': 'claude-3-5-haiku@20241022',
+	'claude-haiku': 'claude-3-5-haiku@20241022',
+	// Sonnet aliases
+	'claude-sonnet-4': 'claude-sonnet-4@20250514',
+	'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
+	'claude-4-sonnet': 'claude-sonnet-4@20250514',
+	'claude-sonnet': 'claude-sonnet-4@20250514',
+	// Opus aliases
+	'claude-opus-4': 'claude-opus-4@20250514',
+	'claude-opus-4-20250514': 'claude-opus-4@20250514',
+	'claude-4-opus': 'claude-opus-4@20250514',
+	'claude-opus-4-5': 'claude-opus-4-5@20250915',
+	'claude-opus-4-5-20250915': 'claude-opus-4-5@20250915',
+	'claude-opus': 'claude-opus-4@20250514',
+};
+
+// Convert model ID format and apply aliases
 export function mapModelToVertex(model: string): string {
+	// Check for known aliases first
+	const lowerModel = model.toLowerCase();
+	if (MODEL_ALIASES[lowerModel]) {
+		return MODEL_ALIASES[lowerModel];
+	}
+
 	// Match pattern: model-name-YYYYMMDD and convert last - to @
 	const match = model.match(/^(.+)-(\d{8})$/);
 	if (match) {
-		return `${match[1]}@${match[2]}`;
+		const converted = `${match[1]}@${match[2]}`;
+		// Check if converted form has an alias
+		if (MODEL_ALIASES[converted.toLowerCase()]) {
+			return MODEL_ALIASES[converted.toLowerCase()];
+		}
+		return converted;
 	}
 	return model;
 }
