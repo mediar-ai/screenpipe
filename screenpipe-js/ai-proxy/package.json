@@ -12,6 +12,7 @@
     "@cloudflare/workers-types": "^4.20250124.3",
     "@types/node": "^22.7.5",
     "typescript": "^5.5.2",
+    "vitest": "^4.0.18",
     "wrangler": "^3.60.3"
   },
   "dependencies": {

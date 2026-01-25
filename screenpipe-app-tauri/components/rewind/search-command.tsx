@@ -39,6 +39,7 @@ interface SearchResult {
 export function SearchCommand() {
 	const [open, setOpen] = React.useState(false);
 	const { isMac } = usePlatform();
+	const inputRef = React.useRef<HTMLInputElement>(null);
 
 	const [state] = useQueryStates(queryParser);
 	const [options, setOptions] = useState<QueryParser>(
@@ -66,6 +67,15 @@ export function SearchCommand() {
 			unlisten.then((fn) => fn());
 		};
 	}, []);
+
+	// Focus input when dialog opens
+	React.useEffect(() => {
+		if (open) {
+			requestAnimationFrame(() => {
+				inputRef.current?.focus();
+			});
+		}
+	}, [open]);
 
 	// Close dialog when Tauri window loses focus
 	React.useEffect(() => {
@@ -168,6 +178,7 @@ export function SearchCommand() {
 					<div className="flex items-center gap-2">
 						<Search className="h-4 w-4 text-muted-foreground shrink-0" />
 						<Input
+							ref={inputRef}
 							value={options?.query || ""}
 							className="focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ring-0 outline-none border-0 h-10"
 							placeholder="Search your screen activity..."
