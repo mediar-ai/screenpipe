@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMemo } from "react";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
+import { ExportButton } from "@/components/rewind/export-button";
 
 interface TimeRange {
 	start: Date;
@@ -35,6 +37,8 @@ export function TimelineControls({
 	className,
 }: TimelineControlsProps) {
 	const { isMac } = usePlatform();
+	const { selectionRange } = useTimelineSelection();
+	const hasSelection = selectionRange && selectionRange.frameIds.length > 0;
 
 	const jumpDay = async (days: number) => {
 		const today = new Date();
@@ -126,6 +130,19 @@ export function TimelineControls({
 						<RefreshCw className="h-4 w-4" />
 					</Button>
 				</div>
+
+				<AnimatePresence>
+					{hasSelection && (
+						<motion.div
+							initial={{ opacity: 0, scale: 0.9 }}
+							animate={{ opacity: 1, scale: 1 }}
+							exit={{ opacity: 0, scale: 0.9 }}
+							transition={{ duration: 0.15 }}
+						>
+							<ExportButton />
+						</motion.div>
+					)}
+				</AnimatePresence>
 
 				<div className="flex items-center h-10 gap-1.5 bg-card/80 backdrop-blur-sm border border-border rounded-full px-4 shadow-lg">
 					<span className="text-xs text-muted-foreground">{isMac ? "⌘K" : "Ctrl+K"}</span>
