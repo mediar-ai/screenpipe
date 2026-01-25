@@ -170,19 +170,18 @@ export class VertexAIProvider implements AIProvider {
 			'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5@20250929',
 			'claude-sonnet-4.5': 'claude-sonnet-4-5@20250929',
 			'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
-			'claude-haiku-4-5': 'claude-haiku-4-5@20251023',
+			'claude-haiku-4-5': 'claude-haiku-4-5@20251001',
+			'claude-haiku-4.5': 'claude-haiku-4-5@20251001',
 			// Claude 4
 			'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
 			'claude-sonnet-4': 'claude-sonnet-4@20250514',
 			'claude-opus-4-20250514': 'claude-opus-4@20250514',
 			'claude-opus-4': 'claude-opus-4@20250514',
-			// Claude 3.5 (legacy but still available)
-			'claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-v2@20241022',
-			'claude-3-5-sonnet-v2': 'claude-3-5-sonnet-v2@20241022',
-			'claude-3-5-haiku': 'claude-3-5-haiku@20241022',
-			'claude-3-5-haiku-20241022': 'claude-3-5-haiku@20241022',
-			'claude-3-5-haiku-latest': 'claude-3-5-haiku@20241022',
-			'claude-3-5-sonnet-latest': 'claude-3-5-sonnet-v2@20241022',
+			// Legacy model names -> map to Claude 4.5 Haiku
+			'claude-3-5-haiku-latest': 'claude-haiku-4-5@20251001',
+			'claude-3-5-haiku': 'claude-haiku-4-5@20251001',
+			'claude-3-5-sonnet-latest': 'claude-sonnet-4@20250514',
+			'claude-3-5-sonnet': 'claude-sonnet-4@20250514',
 		};
 
 		const vertexModel = modelMapping[model] || model;
@@ -563,19 +562,18 @@ function mapModelToVertex(model: string): string {
 		'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5@20250929',
 		'claude-sonnet-4.5': 'claude-sonnet-4-5@20250929',
 		'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
-		'claude-haiku-4-5': 'claude-haiku-4-5@20251023',
+		'claude-haiku-4-5': 'claude-haiku-4-5@20251001',
+		'claude-haiku-4.5': 'claude-haiku-4-5@20251001',
 		// Claude 4
 		'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
 		'claude-sonnet-4': 'claude-sonnet-4@20250514',
 		'claude-opus-4-20250514': 'claude-opus-4@20250514',
 		'claude-opus-4': 'claude-opus-4@20250514',
-		// Claude 3.5 (legacy)
-		'claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-v2@20241022',
-		'claude-3-5-haiku-20241022': 'claude-3-5-haiku@20241022',
-		'claude-3-5-sonnet': 'claude-3-5-sonnet-v2@20241022',
-		'claude-3-5-haiku': 'claude-3-5-haiku@20241022',
-		'claude-3-5-haiku-latest': 'claude-3-5-haiku@20241022',
-		'claude-3-5-sonnet-latest': 'claude-3-5-sonnet-v2@20241022',
+		// Legacy model names -> map to Claude 4.5 Haiku (fast/cheap)
+		'claude-3-5-haiku-latest': 'claude-haiku-4-5@20251001',
+		'claude-3-5-haiku': 'claude-haiku-4-5@20251001',
+		'claude-3-5-sonnet-latest': 'claude-sonnet-4@20250514',
+		'claude-3-5-sonnet': 'claude-sonnet-4@20250514',
 	};
 
 	return mapping[model] || model;
