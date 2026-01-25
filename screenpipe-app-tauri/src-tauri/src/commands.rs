@@ -28,6 +28,11 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle) {
 #[specta::specta]
 pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
    info!("show_main_window called, attempting to show Main window");
+
+   // Close Settings window if open to avoid confusion (Main overlay is transparent
+   // and Settings would show through, making it look like Settings is being toggled)
+   let _ = ShowRewindWindow::Settings { page: None }.close(app_handle);
+
    match ShowRewindWindow::Main.show(app_handle) {
        Ok(window) => {
            info!("ShowRewindWindow::Main.show succeeded, window label: {}", window.label());
