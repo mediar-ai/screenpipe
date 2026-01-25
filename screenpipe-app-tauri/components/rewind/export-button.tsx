@@ -238,18 +238,20 @@ export function ExportButton() {
 		<Button
 			variant="outline"
 			onClick={handleExport}
-			className="h-auto px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
+			className="w-full h-auto px-3 py-1.5 bg-background hover:bg-foreground hover:text-background border border-border text-foreground text-xs uppercase tracking-wide font-mono flex items-center justify-center gap-2 transition-colors duration-150"
 			disabled={isExporting || !selectionRange?.frameIds.length}
 		>
 			{isExporting ? (
-				<div className="flex items-center">
-					<Loader2 className="h-4 w-4 animate-spin mr-2" />
+				<>
+					<Loader2 className="h-4 w-4 animate-spin" />
 					{progress > 0 && `${Math.round(progress)}%`}
-				</div>
+				</>
 			) : (
-				<Video className="h-4 w-4 mr-2" />
+				<>
+					<Video className="h-4 w-4" />
+					EXPORT VIDEO
+				</>
 			)}
-			Export Video
 		</Button>
 	);
 }

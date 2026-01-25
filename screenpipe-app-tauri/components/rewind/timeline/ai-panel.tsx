@@ -359,7 +359,7 @@ export function AIPanel({
 	return (
 		<div
 			ref={aiPanelRef}
-			className="ai-panel bg-card border border-border rounded-lg shadow-lg transition-all duration-300 ease-in-out z-10"
+			className="ai-panel bg-card border border-border transition-all duration-150 ease-in-out z-10"
 			style={{
 				position: "fixed",
 				left: position.x,
@@ -406,7 +406,7 @@ export function AIPanel({
 					<div className="p-4 space-y-2">
 						<ExportButton />
 						<button
-							className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
+							className="w-full px-3 py-1.5 bg-background hover:bg-foreground hover:text-background border border-border text-foreground text-xs uppercase tracking-wide font-mono flex items-center justify-center gap-2 transition-colors duration-150"
 							onClick={(e) => {
 								e.stopPropagation();
 								posthog.capture("timeline_ai_panel_expanded");
@@ -416,8 +416,8 @@ export function AIPanel({
 								}, 100);
 							}}
 						>
-							<span>ask ai</span>
-							<span className="text-muted-foreground text-[10px]">
+							<span>ASK AI</span>
+							<span className="text-muted-foreground text-[10px] normal-case">
 								{osType === "macos" ? "⌘L" : "Ctrl+L"}
 							</span>
 						</button>
