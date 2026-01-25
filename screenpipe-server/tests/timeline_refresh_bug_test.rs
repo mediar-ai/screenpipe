@@ -276,36 +276,43 @@ mod tests {
         );
     }
 
-    /// TEST 4: Test the critical bug scenario - channel closure causing select! branch starvation
+    /// TEST 4: Verify the fix pattern - using Option to disable closed channel branch
     ///
-    /// The suspected bug: When frame_rx channel closes, tokio::select! keeps selecting
-    /// that branch (returning None immediately), starving the poll_timer branch.
-    ///
-    /// This test verifies the behavior.
+    /// This test verifies that our fix pattern works: when we wrap the channel
+    /// in Option and set it to None when closed, the select! properly handles
+    /// other branches without starvation.
     #[tokio::test]
-    async fn test_channel_closure_does_not_starve_other_branches() {
+    async fn test_fixed_channel_pattern_prevents_starvation() {
         use tokio::time::{interval, timeout, Duration as TokioDuration};
 
         // Create a channel and immediately close it (drop the sender)
-        let (tx, mut rx) = mpsc::channel::<i32>(10);
+        let (tx, rx) = mpsc::channel::<i32>(10);
         drop(tx);
 
         let mut poll_count = 0;
-        let mut closed_recv_count = 0;
+        let mut channel_closed_detected = false;
         let mut poll_timer = interval(TokioDuration::from_millis(50));
 
+        // Wrap channel in Option - THIS IS THE FIX
+        let mut rx_option = Some(rx);
+
         // Run the select loop for a limited time
-        let result = timeout(TokioDuration::from_millis(500), async {
+        let _ = timeout(TokioDuration::from_millis(500), async {
             loop {
-                // Simulates the bug pattern in handle_stream_frames_socket
+                // This is the FIXED pattern used in handle_stream_frames_socket
                 tokio::select! {
-                    result = rx.recv() => {
+                    result = async {
+                        match &mut rx_option {
+                            Some(rx) => rx.recv().await,
+                            None => std::future::pending().await,
+                        }
+                    } => {
                         match result {
                             Some(_) => {}
                             None => {
-                                closed_recv_count += 1;
-                                // Bug: This branch runs continuously when channel is closed!
-                                // Should we track this and disable the branch?
+                                // Channel closed - set to None so we don't select this branch anymore
+                                channel_closed_detected = true;
+                                rx_option = None;
                             }
                         }
                     }
@@ -316,34 +323,23 @@ mod tests {
                         }
                     }
                 }
-
-                // Safety: prevent infinite loop in test
-                if closed_recv_count > 1000 {
-                    break;
-                }
             }
         })
         .await;
 
-        // This test documents the current behavior
-        // If closed_recv_count is very high, the bug is confirmed
         println!("Poll timer ran {} times", poll_count);
-        println!("Closed channel recv ran {} times", closed_recv_count);
+        println!("Channel closed detected: {}", channel_closed_detected);
 
-        // BUG CHECK: If channel closure causes starvation, poll_count will be very low
-        // while closed_recv_count will be very high
-        if closed_recv_count > 100 && poll_count < 3 {
-            panic!(
-                "BUG CONFIRMED: Channel closure is starving the poll_timer branch! \
-                 closed_recv_count={}, poll_count={}. \
-                 This is why new frames are not being pushed to the client.",
-                closed_recv_count, poll_count
-            );
-        }
-
-        // Note: tokio::select! is biased, but a closed channel returning None
-        // immediately doesn't necessarily cause complete starvation in all cases.
-        // The test documents current behavior.
+        // VERIFY FIX: Poll timer should run normally even after channel closes
+        assert!(
+            poll_count >= 5,
+            "FIX VERIFICATION: Poll timer should run at least 5 times, got {}",
+            poll_count
+        );
+        assert!(
+            channel_closed_detected,
+            "Channel closure should be detected"
+        );
     }
 
     /// TEST 5: Verify the polling condition logic

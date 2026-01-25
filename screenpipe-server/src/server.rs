@@ -3097,7 +3097,7 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
 
 async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = socket.split();
-    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
+    let (frame_tx, frame_rx) = tokio::sync::mpsc::channel(100);
     let db = state.db.clone();
 
     // Shared state for live frame polling
