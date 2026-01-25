@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Loader2, Video } from "lucide-react";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { toast } from "@/components/ui/use-toast";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { parseInt } from "lodash";
 import posthog from "posthog-js";
+import { cn } from "@/lib/utils";
 
 export function ExportButton() {
 	const [isExporting, setIsExporting] = useState(false);
@@ -234,24 +234,30 @@ export function ExportButton() {
 		}
 	};
 
+	const isDisabled = isExporting || !selectionRange?.frameIds.length;
+
 	return (
-		<Button
-			variant="outline"
+		<button
 			onClick={handleExport}
-			className="w-full h-auto px-3 py-1.5 bg-background hover:bg-foreground hover:text-background border border-border text-foreground text-xs uppercase tracking-wide font-mono flex items-center justify-center gap-2 transition-colors duration-150"
-			disabled={isExporting || !selectionRange?.frameIds.length}
+			disabled={isDisabled}
+			className={cn(
+				"w-full px-3 py-1.5 border border-border text-xs uppercase tracking-wide font-mono flex items-center justify-center gap-2 transition-colors duration-150",
+				isDisabled
+					? "bg-muted text-muted-foreground cursor-not-allowed"
+					: "bg-background text-foreground hover:bg-foreground hover:text-background"
+			)}
 		>
 			{isExporting ? (
 				<>
 					<Loader2 className="h-4 w-4 animate-spin" />
-					{progress > 0 && `${Math.round(progress)}%`}
+					<span>{progress > 0 ? `${Math.round(progress)}%` : "EXPORTING..."}</span>
 				</>
 			) : (
 				<>
 					<Video className="h-4 w-4" />
-					EXPORT VIDEO
+					<span>EXPORT VIDEO</span>
 				</>
 			)}
-		</Button>
+		</button>
 	);
 }
