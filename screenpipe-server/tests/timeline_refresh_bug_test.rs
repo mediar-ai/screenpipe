@@ -676,4 +676,188 @@ mod tests {
             "Frames with empty frame_data should NOT be sent (this is the fix for 'Unknown')"
         );
     }
+
+    /// TEST 13: Orphaned frame detection - video file missing
+    ///
+    /// When a frame references a video file that doesn't exist on disk,
+    /// the frame extraction should return a graceful error that the client can handle.
+    #[tokio::test]
+    async fn test_orphaned_frame_graceful_handling() {
+        use std::path::Path;
+
+        // Simulate checking if video file exists
+        fn check_video_file_availability(file_path: &str) -> Result<bool, String> {
+            let path = Path::new(file_path);
+            if path.exists() {
+                Ok(true)
+            } else {
+                Err(format!("Video file not found: {}", file_path))
+            }
+        }
+
+        // Test with non-existent file
+        let result = check_video_file_availability("/nonexistent/path/video.mp4");
+        assert!(result.is_err(), "Missing file should return error");
+        assert!(
+            result.unwrap_err().contains("not found"),
+            "Error should indicate file not found"
+        );
+    }
+
+    /// TEST 14: Frame extraction error classification
+    ///
+    /// Different error types should be classified for appropriate client handling:
+    /// - not_found: Video file missing
+    /// - server_error: FFmpeg or processing error
+    /// - network: Connection issues
+    #[tokio::test]
+    async fn test_frame_extraction_error_classification() {
+        #[derive(Debug, PartialEq)]
+        enum FrameErrorType {
+            NotFound,
+            ServerError,
+            Network,
+            Unknown,
+        }
+
+        fn classify_frame_error(error_msg: &str) -> FrameErrorType {
+            let lower = error_msg.to_lowercase();
+            if lower.contains("no such file") || lower.contains("not found") {
+                FrameErrorType::NotFound
+            } else if lower.contains("ffmpeg") || lower.contains("failed to extract") {
+                FrameErrorType::ServerError
+            } else if lower.contains("connection") || lower.contains("network") {
+                FrameErrorType::Network
+            } else {
+                FrameErrorType::Unknown
+            }
+        }
+
+        // Test classification
+        assert_eq!(
+            classify_frame_error("No such file or directory"),
+            FrameErrorType::NotFound
+        );
+        assert_eq!(
+            classify_frame_error("Video file not found: /path/to/video.mp4"),
+            FrameErrorType::NotFound
+        );
+        assert_eq!(
+            classify_frame_error("FFmpeg process failed: exit code 1"),
+            FrameErrorType::ServerError
+        );
+        assert_eq!(
+            classify_frame_error("Failed to extract frame: timeout"),
+            FrameErrorType::ServerError
+        );
+        assert_eq!(
+            classify_frame_error("Connection refused"),
+            FrameErrorType::Network
+        );
+    }
+
+    /// TEST 15: Frame availability response structure
+    ///
+    /// When requesting a frame, the response should indicate availability
+    /// and provide helpful context for unavailable frames.
+    #[tokio::test]
+    async fn test_frame_availability_response() {
+        #[derive(Debug)]
+        struct FrameResponse {
+            frame_id: i64,
+            available: bool,
+            error_type: Option<String>,
+            error_message: Option<String>,
+            suggestion: Option<String>,
+        }
+
+        fn create_error_response(frame_id: i64, error: &str) -> FrameResponse {
+            let (error_type, suggestion) = if error.contains("not found") {
+                (
+                    "not_found",
+                    "This frame may have been deleted or the recording is incomplete.",
+                )
+            } else if error.contains("ffmpeg") {
+                (
+                    "server_error",
+                    "The recording may be corrupted. Try restarting the server.",
+                )
+            } else {
+                ("unknown", "Please try again later.")
+            };
+
+            FrameResponse {
+                frame_id,
+                available: false,
+                error_type: Some(error_type.to_string()),
+                error_message: Some(error.to_string()),
+                suggestion: Some(suggestion.to_string()),
+            }
+        }
+
+        // Test not_found response
+        let response = create_error_response(12345, "Video file not found");
+        assert!(!response.available);
+        assert_eq!(response.error_type, Some("not_found".to_string()));
+        assert!(response.suggestion.unwrap().contains("deleted"));
+
+        // Test server_error response
+        let response = create_error_response(12346, "ffmpeg process failed");
+        assert!(!response.available);
+        assert_eq!(response.error_type, Some("server_error".to_string()));
+        assert!(response.suggestion.unwrap().contains("corrupted"));
+    }
+
+    /// TEST 16: Graceful degradation - skip unavailable frames in timeline
+    ///
+    /// When serving a timeline range, unavailable frames should be skipped
+    /// rather than causing the entire request to fail.
+    #[tokio::test]
+    async fn test_timeline_graceful_degradation() {
+        #[derive(Debug, Clone)]
+        struct TimelineFrame {
+            id: i64,
+            timestamp: String,
+            video_path: String,
+        }
+
+        // Simulate checking video files and filtering available frames
+        fn filter_available_frames(
+            frames: Vec<TimelineFrame>,
+            existing_files: &[&str],
+        ) -> Vec<TimelineFrame> {
+            frames
+                .into_iter()
+                .filter(|f| existing_files.contains(&f.video_path.as_str()))
+                .collect()
+        }
+
+        let frames = vec![
+            TimelineFrame {
+                id: 1,
+                timestamp: "2026-01-25T10:00:00Z".to_string(),
+                video_path: "/data/video1.mp4".to_string(),
+            },
+            TimelineFrame {
+                id: 2,
+                timestamp: "2026-01-25T10:01:00Z".to_string(),
+                video_path: "/data/video2.mp4".to_string(), // This one is missing
+            },
+            TimelineFrame {
+                id: 3,
+                timestamp: "2026-01-25T10:02:00Z".to_string(),
+                video_path: "/data/video3.mp4".to_string(),
+            },
+        ];
+
+        // Only video1 and video3 exist
+        let existing_files = vec!["/data/video1.mp4", "/data/video3.mp4"];
+
+        let available = filter_available_frames(frames.clone(), &existing_files);
+
+        assert_eq!(available.len(), 2, "Only 2 frames should be available");
+        assert_eq!(available[0].id, 1);
+        assert_eq!(available[1].id, 3);
+        // Frame 2 is skipped because video2.mp4 doesn't exist
+    }
 }
