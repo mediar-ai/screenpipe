@@ -16,6 +16,12 @@ let errorGraceTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_SILENT_RETRIES = 3; // Retry 3 times before showing error
 const RETRY_DELAY_MS = 2000; // Wait 2 seconds between retries
 
+// Request timeout logic - retry if no frames arrive
+let requestTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+let requestRetryCount = 0;
+const REQUEST_TIMEOUT_MS = 5000; // 5 seconds to receive frames
+const MAX_REQUEST_RETRIES = 3; // Retry request 3 times before giving up
+
 interface TimelineState {
 	frames: StreamTimeSeriesResponse[];
 	frameTimestamps: Set<string>; // For O(1) deduplication lookups
@@ -88,6 +94,13 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				};
 			}
 
+			// Frames received - clear the request timeout (no need to retry)
+			if (requestTimeoutTimer) {
+				clearTimeout(requestTimeoutTimer);
+				requestTimeoutTimer = null;
+			}
+			requestRetryCount = 0; // Reset retry count on success
+
 			// Add new timestamps to the Set
 			const updatedTimestamps = new Set(state.frameTimestamps);
 			newUniqueFrames.forEach((frame) => {
@@ -135,9 +148,14 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			message: null,
 		});
 		frameBuffer = [];
+		requestRetryCount = 0; // Reset retry counter on reconnection
 		if (progressUpdateTimer) {
 			clearTimeout(progressUpdateTimer);
 			progressUpdateTimer = null;
+		}
+		if (requestTimeoutTimer) {
+			clearTimeout(requestTimeoutTimer);
+			requestTimeoutTimer = null;
 		}
 
 		const ws = new WebSocket("ws://localhost:3030/stream/frames");
@@ -284,6 +302,10 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				clearTimeout(progressUpdateTimer);
 				progressUpdateTimer = null;
 			}
+			if (requestTimeoutTimer) {
+				clearTimeout(requestTimeoutTimer);
+				requestTimeoutTimer = null;
+			}
 			get().flushFrameBuffer();
 
 			// Only show "Connection closed" if we had a successful connection before
@@ -313,7 +335,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		}
 
 		if (websocket && websocket.readyState === WebSocket.OPEN) {
-			console.log("sending");
+			console.log("sending request for", requestKey);
 			websocket.send(
 				JSON.stringify({
 					start_time: startTime.toISOString(),
@@ -325,6 +347,37 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			set((state) => ({
 				sentRequests: new Set(state.sentRequests).add(requestKey),
 			}));
+
+			// Start timeout - if no frames arrive, retry
+			if (requestTimeoutTimer) {
+				clearTimeout(requestTimeoutTimer);
+			}
+			requestTimeoutTimer = setTimeout(() => {
+				requestTimeoutTimer = null;
+				const currentFrames = get().frames;
+
+				// If still no frames and we haven't exceeded retries, retry
+				if (currentFrames.length === 0 && requestRetryCount < MAX_REQUEST_RETRIES) {
+					requestRetryCount++;
+					console.log(`No frames received, retrying (${requestRetryCount}/${MAX_REQUEST_RETRIES})...`);
+
+					// Clear this date from sentRequests to allow retry
+					set((state) => {
+						const newSentRequests = new Set(state.sentRequests);
+						newSentRequests.delete(requestKey);
+						return { sentRequests: newSentRequests };
+					});
+
+					// Retry the request
+					get().fetchTimeRange(startTime, endTime);
+				} else if (currentFrames.length === 0 && requestRetryCount >= MAX_REQUEST_RETRIES) {
+					console.log("Max retries reached, no frames available");
+					set({
+						isLoading: false,
+						message: "No data available for this time range"
+					});
+				}
+			}, REQUEST_TIMEOUT_MS);
 		}
 	},
 
