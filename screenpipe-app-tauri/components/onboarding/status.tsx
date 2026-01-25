@@ -273,18 +273,6 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   const requestPermission = async (type: "screen" | "audio") => {
     try {
-      // Always do a fresh permission check before triggering dialog
-      const freshPerms = await commands.doPermissionsCheck(false);
-      const permStatus = type === "screen"
-        ? freshPerms.screenRecording
-        : freshPerms.microphone;
-      const isGranted = permStatus === "granted" || permStatus === "notNeeded";
-
-      if (isGranted) {
-        return; // Already have permission, do nothing
-      }
-
-      // Trigger native permission dialog
       if (type === "screen") {
         await commands.requestPermission("screenRecording");
       } else {
@@ -359,37 +347,18 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             </button>
           </div>
 
-          <p className="font-mono text-xs text-muted-foreground text-center">
-            toggle permissions in system settings, then return here
-          </p>
-
-          <div className="flex flex-col items-center space-y-3 mt-4">
+          {showContinueAnyway && (
             <button
               onClick={() => {
-                posthog.capture("onboarding_permission_help_clicked");
+                posthog.capture("onboarding_permission_skipped");
+                hasStartedRef.current = true;
+                setSetupState("ready");
               }}
-              className="font-mono text-xs text-muted-foreground hover:text-foreground underline"
-              title="If permissions don't work: Open System Settings → Privacy & Security → Screen Recording, select screenpipe, click minus (-) to remove it, then add it again with plus (+)"
+              className="font-mono text-xs text-muted-foreground hover:text-foreground"
             >
-              permission not working?
+              continue anyway →
             </button>
-            <p className="font-mono text-[10px] text-muted-foreground/70 text-center max-w-xs">
-              try removing screenpipe from the permission list (click −) and adding it again (click +)
-            </p>
-
-            {showContinueAnyway && (
-              <button
-                onClick={() => {
-                  posthog.capture("onboarding_permission_skipped");
-                  hasStartedRef.current = true;
-                  setSetupState("ready");
-                }}
-                className="font-mono text-xs text-muted-foreground hover:text-foreground"
-              >
-                continue anyway →
-              </button>
-            )}
-          </div>
+          )}
         </motion.div>
       )}
 
