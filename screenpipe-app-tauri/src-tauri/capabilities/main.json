@@ -325,6 +325,7 @@
       ]
     },
     "deep-link:default",
+    "log:default",
     "fs:allow-write-text-file",
     {
       "identifier": "fs:scope",

@@ -19,6 +19,7 @@ All logs are stored in `~/.screenpipe/`:
 |----------|---------|-------------|
 | CLI/Backend | `~/.screenpipe/screenpipe.YYYY-MM-DD.log` | Core recording engine logs (OCR, audio, frames) |
 | Desktop App | `~/.screenpipe/screenpipe-app.YYYY-MM-DD.log` | Tauri app logs (UI, settings, pipes) |
+| Browser/Webview | `~/.screenpipe/webview.log` | Frontend JavaScript console logs (React/Next.js) |
 
 ## Common Commands
 
@@ -37,6 +38,9 @@ tail -100 ~/.screenpipe/screenpipe.$TODAY.log
 
 # App logs (last 100 lines)
 tail -100 ~/.screenpipe/screenpipe-app.$TODAY.log
+
+# Webview/browser logs (last 100 lines)
+tail -100 ~/.screenpipe/webview.log
 ```
 
 ### Find Errors
@@ -46,6 +50,9 @@ grep -i "error\|failed\|panic" ~/.screenpipe/screenpipe.$(date +%Y-%m-%d).log | 
 
 # Errors in app logs
 grep -i "error\|failed\|panic" ~/.screenpipe/screenpipe-app.$(date +%Y-%m-%d).log | tail -50
+
+# Errors in webview/browser logs
+grep -i "error\|failed\|exception" ~/.screenpipe/webview.log | tail -50
 ```
 
 ### Search for Specific Issues
@@ -122,6 +129,18 @@ grep -i "memory\|oom\|killed\|slow" ~/.screenpipe/screenpipe.$(date +%Y-%m-%d).l
 ### Pipe Issues
 ```bash
 grep -i "pipe\|plugin" ~/.screenpipe/screenpipe-app.$(date +%Y-%m-%d).log | grep -i "error\|fail"
+```
+
+### UI/Frontend Issues (Webview)
+```bash
+# React/Next.js errors
+grep -i "error\|exception\|uncaught" ~/.screenpipe/webview.log | tail -50
+
+# API/fetch errors
+grep -i "fetch\|api\|request\|response" ~/.screenpipe/webview.log | grep -i "error\|fail" | tail -30
+
+# State/store issues
+grep -i "state\|store\|zustand\|settings" ~/.screenpipe/webview.log | grep -i "error\|fail" | tail -30
 ```
 
 ## Response Guidelines

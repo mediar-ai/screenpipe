@@ -23,6 +23,7 @@ use tracing::{debug, error, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
+use tauri_plugin_log::{Target, TargetKind, RotationStrategy, TimezoneStrategy};
 use updates::start_update_check;
 use window_api::ShowRewindWindow;
 
@@ -785,6 +786,21 @@ async fn main() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin({
+            // Write webview logs to ~/.screenpipe/ so they're picked up by get_log_files and share button
+            let log_dir = dirs::home_dir()
+                .unwrap_or_default()
+                .join(".screenpipe");
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::Folder { path: log_dir, file_name: Some("webview".into()) }),
+                ])
+                .rotation_strategy(RotationStrategy::KeepOne)
+                .timezone_strategy(TimezoneStrategy::UseLocal)
+                .level(log::LevelFilter::Info)
+                .build()
+        })
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())

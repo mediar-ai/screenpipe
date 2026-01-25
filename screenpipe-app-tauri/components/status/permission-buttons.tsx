@@ -32,16 +32,9 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
       }
     };
 
-    // Poll permissions every 1 second
-    const intervalId = setInterval(() => {
-      checkPermissions();
-    }, 1000);
-
-    // Initial check
+    // Check once on mount - no polling needed
+    // macOS screen recording permission requires app restart to take effect
     checkPermissions();
-
-    // Cleanup interval on unmount
-    return () => clearInterval(intervalId);
   }, [isMacOS]);
 
   const handlePermissionButton = async () => {

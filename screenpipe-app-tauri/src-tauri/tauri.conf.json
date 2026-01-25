@@ -39,7 +39,8 @@
     ],
     "macOS": {
       "signingIdentity": "Apple Development: Louis Beaumont (NJ372MT773)",
-      "entitlements": null
+      "entitlements": "entitlements.plist",
+      "hardenedRuntime": true
     }
   },
   "plugins": {
