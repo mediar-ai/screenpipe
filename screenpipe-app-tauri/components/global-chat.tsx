@@ -148,13 +148,6 @@ export function GlobalChat() {
   // pathname can be null during initial hydration
   const isOnTimeline = !pathname || pathname === "/" || pathname === "/timeline";
 
-  // Auto-open chat when user makes a selection on timeline
-  useEffect(() => {
-    if (selectionRange && isOnTimeline) {
-      setOpen(true);
-    }
-  }, [selectionRange, isOnTimeline]);
-
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
