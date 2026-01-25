@@ -161,33 +161,9 @@ export class VertexAIProvider implements AIProvider {
 	 * Get the Vertex AI endpoint URL for a model
 	 */
 	private getEndpointUrl(model: string, streaming: boolean = false): string {
-		// Map common model names to Vertex AI model IDs
-		const modelMapping: Record<string, string> = {
-			// Claude 4.5 (latest)
-			'claude-opus-4-5-20251101': 'claude-opus-4-5@20251101',
-			'claude-opus-4.5': 'claude-opus-4-5@20251101',
-			'claude-opus-4-5': 'claude-opus-4-5@20251101',
-			'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5@20250929',
-			'claude-sonnet-4.5': 'claude-sonnet-4-5@20250929',
-			'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
-			'claude-haiku-4-5': 'claude-haiku-4-5@20251001',
-			'claude-haiku-4.5': 'claude-haiku-4-5@20251001',
-			// Claude 4
-			'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
-			'claude-sonnet-4': 'claude-sonnet-4@20250514',
-			'claude-opus-4-20250514': 'claude-opus-4@20250514',
-			'claude-opus-4': 'claude-opus-4@20250514',
-			// Legacy model names -> map to Claude 4.5 Haiku
-			'claude-3-5-haiku-latest': 'claude-haiku-4-5@20251001',
-			'claude-3-5-haiku': 'claude-haiku-4-5@20251001',
-			'claude-3-5-sonnet-latest': 'claude-sonnet-4@20250514',
-			'claude-3-5-sonnet': 'claude-sonnet-4@20250514',
-		};
-
-		const vertexModel = modelMapping[model] || model;
+		// No mapping - pass model directly. User picks exact model ID from /v1/models.
 		const method = streaming ? 'streamRawPredict' : 'rawPredict';
-
-		return `https://${this.region}-aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${this.region}/publishers/anthropic/models/${vertexModel}:${method}`;
+		return `https://${this.region}-aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${this.region}/publishers/anthropic/models/${model}:${method}`;
 	}
 
 	/**
@@ -429,24 +405,17 @@ export class VertexAIProvider implements AIProvider {
 	}
 
 	/**
-	 * List available models
+	 * List available models - exact Vertex AI model IDs
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
 		return [
-			// Claude (latest - Jan 2026)
-			{ id: 'claude-opus-4-5', name: 'Claude Opus 4.5', provider: 'vertex' },
-			{ id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', provider: 'vertex' },
-			{ id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', provider: 'vertex' },
-			{ id: 'claude-opus-4', name: 'Claude Opus 4', provider: 'vertex' },
-			{ id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'vertex' },
-			// Gemini 3 (latest - Jan 2026, preview)
-			{ id: 'gemini-3-pro', name: 'Gemini 3 Pro', provider: 'vertex' },
-			{ id: 'gemini-3-flash', name: 'Gemini 3 Flash', provider: 'vertex' },
-			// Gemini 2.5 (GA)
-			{ id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'vertex' },
-			{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'vertex' },
-			// Gemini 2.0
-			{ id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'vertex' },
+			// Claude 4.5
+			{ id: 'claude-opus-4-5@20251101', name: 'Claude Opus 4.5', provider: 'vertex' },
+			{ id: 'claude-sonnet-4-5@20250929', name: 'Claude Sonnet 4.5', provider: 'vertex' },
+			{ id: 'claude-haiku-4-5@20251001', name: 'Claude Haiku 4.5', provider: 'vertex' },
+			// Claude 4
+			{ id: 'claude-opus-4@20250514', name: 'Claude Opus 4', provider: 'vertex' },
+			{ id: 'claude-sonnet-4@20250514', name: 'Claude Sonnet 4', provider: 'vertex' },
 		];
 	}
 }
@@ -553,28 +522,7 @@ export async function proxyToVertex(
 	}
 }
 
+// No mapping - pass through directly. User picks from /v1/models list.
 function mapModelToVertex(model: string): string {
-	const mapping: Record<string, string> = {
-		// Claude 4.5 (latest)
-		'claude-opus-4-5-20251101': 'claude-opus-4-5@20251101',
-		'claude-opus-4.5': 'claude-opus-4-5@20251101',
-		'claude-opus-4-5': 'claude-opus-4-5@20251101',
-		'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5@20250929',
-		'claude-sonnet-4.5': 'claude-sonnet-4-5@20250929',
-		'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
-		'claude-haiku-4-5': 'claude-haiku-4-5@20251001',
-		'claude-haiku-4.5': 'claude-haiku-4-5@20251001',
-		// Claude 4
-		'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
-		'claude-sonnet-4': 'claude-sonnet-4@20250514',
-		'claude-opus-4-20250514': 'claude-opus-4@20250514',
-		'claude-opus-4': 'claude-opus-4@20250514',
-		// Legacy model names -> map to Claude 4.5 Haiku (fast/cheap)
-		'claude-3-5-haiku-latest': 'claude-haiku-4-5@20251001',
-		'claude-3-5-haiku': 'claude-haiku-4-5@20251001',
-		'claude-3-5-sonnet-latest': 'claude-sonnet-4@20250514',
-		'claude-3-5-sonnet': 'claude-sonnet-4@20250514',
-	};
-
-	return mapping[model] || model;
+	return model;
 }

@@ -50,6 +50,8 @@ export function useHealthCheck() {
   const previousHealthStatus = useRef<string | null>(null);
   const unhealthyTransitionsRef = useRef<number>(0);
   const retryIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const serverDownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const SERVER_DOWN_GRACE_PERIOD_MS = 5000; // Wait 5 seconds before showing "server down"
 
   const fetchHealth = useCallback(async () => {
     // Clean up existing WebSocket connection
@@ -70,6 +72,11 @@ export function useHealthCheck() {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        // Clear the grace period timer - server is up
+        if (serverDownTimerRef.current) {
+          clearTimeout(serverDownTimerRef.current);
+          serverDownTimerRef.current = null;
+        }
         setIsServerDown(false);
         setIsLoading(false);
         if (retryIntervalRef.current) {
@@ -114,9 +121,16 @@ export function useHealthCheck() {
           message: "Connection error",
         };
         setHealth(errorHealth);
-        setIsServerDown(true);
         setIsLoading(false);
-        
+
+        // Only show "server down" after grace period (server might be starting)
+        if (!serverDownTimerRef.current && !isServerDown) {
+          serverDownTimerRef.current = setTimeout(() => {
+            setIsServerDown(true);
+            serverDownTimerRef.current = null;
+          }, SERVER_DOWN_GRACE_PERIOD_MS);
+        }
+
         // Start retry interval if not already running
         if (!retryIntervalRef.current) {
           retryIntervalRef.current = setInterval(fetchHealth, 3000);
@@ -137,8 +151,15 @@ export function useHealthCheck() {
           message: "WebSocket connection closed",
         };
         setHealth(errorHealth);
-        setIsServerDown(true);
-        
+
+        // Only show "server down" after grace period (server might be starting)
+        if (!serverDownTimerRef.current && !isServerDown && event.code !== 1000) {
+          serverDownTimerRef.current = setTimeout(() => {
+            setIsServerDown(true);
+            serverDownTimerRef.current = null;
+          }, SERVER_DOWN_GRACE_PERIOD_MS);
+        }
+
         // Only start retry if this wasn't a manual close
         if (!retryIntervalRef.current && event.code !== 1000) {
           retryIntervalRef.current = setInterval(fetchHealth, 3000);
@@ -146,14 +167,21 @@ export function useHealthCheck() {
       };
     } catch (error) {
       console.error("Error creating WebSocket:", error);
-      setIsServerDown(true);
       setIsLoading(false);
-      
+
+      // Only show "server down" after grace period
+      if (!serverDownTimerRef.current && !isServerDown) {
+        serverDownTimerRef.current = setTimeout(() => {
+          setIsServerDown(true);
+          serverDownTimerRef.current = null;
+        }, SERVER_DOWN_GRACE_PERIOD_MS);
+      }
+
       if (!retryIntervalRef.current) {
         retryIntervalRef.current = setInterval(fetchHealth, 3000);
       }
     }
-  }, []);
+  }, [isServerDown]);
 
   const debouncedFetchHealth = useCallback(() => {
     return new Promise<void>((resolve) => {
@@ -173,7 +201,7 @@ export function useHealthCheck() {
       // Clean up WebSocket connection
       if (wsRef.current) {
         try {
-          if (wsRef.current.readyState === WebSocket.OPEN || 
+          if (wsRef.current.readyState === WebSocket.OPEN ||
               wsRef.current.readyState === WebSocket.CONNECTING) {
             wsRef.current.close(1000, "Component unmounting");
           }
@@ -182,11 +210,17 @@ export function useHealthCheck() {
         }
         wsRef.current = null;
       }
-      
+
       // Clear retry interval
       if (retryIntervalRef.current) {
         clearInterval(retryIntervalRef.current);
         retryIntervalRef.current = null;
+      }
+
+      // Clear server down grace period timer
+      if (serverDownTimerRef.current) {
+        clearTimeout(serverDownTimerRef.current);
+        serverDownTimerRef.current = null;
       }
     };
   }, [fetchHealth]);

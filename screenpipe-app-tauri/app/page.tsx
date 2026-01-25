@@ -27,7 +27,7 @@ export default function Home() {
   const { settings, updateSettings, loadUser, reloadStore, isSettingsLoaded, loadingError } = useSettings();
   const { toast } = useToast();
   const { onboardingData } = useOnboarding();
-  const { isServerDown } = useHealthCheck();
+  const { isServerDown, isLoading: isHealthLoading } = useHealthCheck();
   const { isMac } = usePlatform();
   const [isRestarting, setIsRestarting] = useState(false);
   const isProcessingRef = useRef(false);
@@ -142,6 +142,15 @@ export default function Home() {
           <ModelDownloadTracker />
           {!isServerDown ? (
             <div className="w-full scrollbar-hide bg-background relative">
+              {/* Show connecting overlay while health check is loading */}
+              {isHealthLoading && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+                  <div className="flex flex-col items-center gap-3">
+                    <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">connecting to screenpipe...</p>
+                  </div>
+                </div>
+              )}
               <Timeline />
               <SearchCommand />
             </div>

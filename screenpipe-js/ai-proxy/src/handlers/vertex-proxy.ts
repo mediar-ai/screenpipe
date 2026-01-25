@@ -51,34 +51,17 @@ export async function handleVertexProxy(request: Request, env: Env): Promise<Res
 
 /**
  * Handle Vertex AI model listing
+ * These are the exact model IDs to use - no mapping, pass directly
  */
 export async function handleVertexModels(env: Env): Promise<Response> {
-	// Models available on Vertex AI - update based on what's enabled in your GCP project
 	const models = [
-		{
-			id: 'claude-sonnet-4@20250514',
-			object: 'model',
-			created: 1747180800,
-			owned_by: 'anthropic',
-		},
-		{
-			id: 'claude-opus-4@20250514',
-			object: 'model',
-			created: 1747180800,
-			owned_by: 'anthropic',
-		},
-		{
-			id: 'claude-3-5-sonnet-v2@20241022',
-			object: 'model',
-			created: 1729555200,
-			owned_by: 'anthropic',
-		},
-		{
-			id: 'claude-3-5-haiku@20241022',
-			object: 'model',
-			created: 1729555200,
-			owned_by: 'anthropic',
-		},
+		// Claude 4.5
+		{ id: 'claude-opus-4-5@20251101', object: 'model', created: 1730419200, owned_by: 'anthropic' },
+		{ id: 'claude-sonnet-4-5@20250929', object: 'model', created: 1727568000, owned_by: 'anthropic' },
+		{ id: 'claude-haiku-4-5@20251001', object: 'model', created: 1727740800, owned_by: 'anthropic' },
+		// Claude 4
+		{ id: 'claude-opus-4@20250514', object: 'model', created: 1747180800, owned_by: 'anthropic' },
+		{ id: 'claude-sonnet-4@20250514', object: 'model', created: 1747180800, owned_by: 'anthropic' },
 	];
 
 	return addCorsHeaders(

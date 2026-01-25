@@ -6,7 +6,9 @@ import { subDays } from "date-fns";
 // Frame buffer for batching updates - reduces 68 re-renders to ~3-5
 let frameBuffer: StreamTimeSeriesResponse[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let progressUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 const FLUSH_INTERVAL_MS = 150; // Flush every 150ms for smooth progressive loading
+const PROGRESS_UPDATE_INTERVAL_MS = 500; // Only update progress indicator every 500ms to prevent flickering
 
 interface TimelineState {
 	frames: StreamTimeSeriesResponse[];
@@ -127,6 +129,10 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			message: null,
 		});
 		frameBuffer = [];
+		if (progressUpdateTimer) {
+			clearTimeout(progressUpdateTimer);
+			progressUpdateTimer = null;
+		}
 
 		const ws = new WebSocket("ws://localhost:3030/stream/frames");
 
@@ -180,14 +186,20 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 						}, FLUSH_INTERVAL_MS);
 					}
 
-					// Update loading progress without full state update
-					const currentTotal = get().frames.length + frameBuffer.length;
-					set({
-						loadingProgress: {
-							loaded: currentTotal,
-							isStreaming: true
-						}
-					});
+					// Debounce progress updates to prevent timeline flickering
+					// Only update every 500ms instead of on every message
+					if (!progressUpdateTimer) {
+						progressUpdateTimer = setTimeout(() => {
+							progressUpdateTimer = null;
+							const currentTotal = get().frames.length + frameBuffer.length;
+							set({
+								loadingProgress: {
+									loaded: currentTotal,
+									isStreaming: true
+								}
+							});
+						}, PROGRESS_UPDATE_INTERVAL_MS);
+					}
 					return;
 				}
 
@@ -221,6 +233,10 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			if (flushTimer) {
 				clearTimeout(flushTimer);
 				flushTimer = null;
+			}
+			if (progressUpdateTimer) {
+				clearTimeout(progressUpdateTimer);
+				progressUpdateTimer = null;
 			}
 			get().flushFrameBuffer();
 
