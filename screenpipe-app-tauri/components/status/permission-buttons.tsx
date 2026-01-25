@@ -60,6 +60,9 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
           ? "screenRecording"
           : "microphone";
 
+      // Hide the main window so user can see the system settings
+      await commands.closeWindow("Main");
+
       await commands.requestPermission(permissionType);
 
       // Refresh permissions after request
@@ -94,6 +97,9 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
         type === "screen"
           ? "screenRecording"
           : "microphone";
+
+      // Hide the main window so user can see the system settings
+      await commands.closeWindow("Main");
 
       await commands.openPermissionSettings(permissionType);
     } catch (error) {
