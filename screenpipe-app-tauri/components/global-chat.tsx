@@ -12,7 +12,7 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
 import { Loader2, Send, Square, User, X, Settings, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PipeAIIcon } from "@/components/pipe-ai-icon";
+import { PipeAIIcon, PipeAIIconLarge } from "@/components/pipe-ai-icon";
 import { MemoizedReactMarkdown } from "@/components/markdown";
 import { VideoComponent } from "@/components/rewind/video";
 import { AIPresetsSelector } from "@/components/rewind/ai-presets-selector";
@@ -599,42 +599,67 @@ Always use these exact start_time and end_time values when searching, unless the
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.9 }}
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-50 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-background/80 backdrop-blur-sm border border-border/50 text-xs text-muted-foreground hover:text-foreground hover:bg-background transition-colors shadow-sm"
+          className="fixed bottom-4 right-4 z-50 group flex items-center gap-2 px-3 py-2 rounded-lg bg-background/90 backdrop-blur-md border border-border/50 hover:border-foreground/20 text-xs text-muted-foreground hover:text-foreground transition-all duration-200 shadow-lg shadow-black/5"
         >
-          <PipeAIIcon size={12} animated={false} />
-          <span>{isMac ? "⌘L" : "Ctrl+L"}</span>
+          <div className="p-1 rounded bg-foreground/5 group-hover:bg-foreground/10 transition-colors">
+            <PipeAIIcon size={14} animated={false} />
+          </div>
+          <span className="font-mono text-[10px] uppercase tracking-wider">{isMac ? "⌘L" : "Ctrl+L"}</span>
         </motion.button>
       )}
       </AnimatePresence>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTitle className="sr-only">AI Chat</DialogTitle>
         <CustomDialogContent
-          className="p-0 max-w-2xl h-[70vh] flex flex-col"
+          className="p-0 max-w-2xl h-[70vh] flex flex-col overflow-hidden bg-background/95 backdrop-blur-xl border-border/50"
           customClose={<X className="w-4 h-4" />}
         >
-          {/* Header */}
-          <div className="flex items-center gap-2 p-3 pr-10 border-b">
-            <PipeAIIcon size={20} animated={false} className="text-primary" />
-            <span className="font-medium">Ask about your screen activity</span>
-            <span className="text-xs text-muted-foreground ml-auto">{isMac ? "⌘L" : "Ctrl+L"} to toggle</span>
+          {/* Header - sleek geometric style */}
+          <div className="relative flex items-center gap-3 px-4 py-3 pr-12 border-b border-border/50 bg-gradient-to-r from-background to-muted/30">
+            {/* Geometric corner accent */}
+            <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg" />
+
+            <div className="relative z-10 p-1.5 rounded-lg bg-foreground/5 border border-border/50">
+              <PipeAIIcon size={18} animated={false} className="text-foreground" />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-semibold text-sm tracking-tight">Pipe AI</h2>
+              <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
+            </div>
+            <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
+              {isMac ? "⌘" : "Ctrl"}+L
+            </kbd>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Messages - with subtle pattern background */}
+          <div className="relative flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Subtle geometric background pattern */}
+            <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/svg%3E")`,
+            }} />
+
             {messages.length === 0 && disabledReason && (
-              <div className="flex flex-col items-center justify-center py-12 space-y-4">
+              <div className="relative flex flex-col items-center justify-center py-12 space-y-4">
                 <div className={cn(
-                  "p-4 rounded-full",
-                  needsLogin ? "bg-muted" : "bg-destructive/10"
+                  "relative p-6 rounded-2xl border",
+                  needsLogin
+                    ? "bg-muted/50 border-border/50"
+                    : "bg-destructive/5 border-destructive/20"
                 )}>
+                  {/* Corner accents */}
+                  <div className="absolute top-0 left-0 w-4 h-4 border-l-2 border-t-2 border-current opacity-20 rounded-tl" />
+                  <div className="absolute top-0 right-0 w-4 h-4 border-r-2 border-t-2 border-current opacity-20 rounded-tr" />
+                  <div className="absolute bottom-0 left-0 w-4 h-4 border-l-2 border-b-2 border-current opacity-20 rounded-bl" />
+                  <div className="absolute bottom-0 right-0 w-4 h-4 border-r-2 border-b-2 border-current opacity-20 rounded-br" />
+
                   {needsLogin ? (
-                    <PipeAIIcon size={32} animated={false} className="text-muted-foreground" />
+                    <PipeAIIconLarge size={48} className="text-muted-foreground" />
                   ) : (
-                    <Settings className="h-8 w-8 text-destructive" />
+                    <Settings className="h-12 w-12 text-destructive/70" />
                   )}
                 </div>
                 <div className="text-center space-y-2">
-                  <h3 className="font-semibold">
+                  <h3 className="font-semibold tracking-tight">
                     {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : "Login Required"}
                   </h3>
                   <p className="text-sm text-muted-foreground max-w-sm">
@@ -645,7 +670,7 @@ Always use these exact start_time and end_time values when searching, unless the
                   <Button
                     variant="default"
                     onClick={() => openUrl("https://screenpi.pe/login")}
-                    className="gap-2"
+                    className="gap-2 font-medium"
                   >
                     <ExternalLink className="h-4 w-4" />
                     Login
@@ -665,26 +690,33 @@ Always use these exact start_time and end_time values when searching, unless the
                   </Button>
                 )}
                 {hasPresets && !hasValidModel && (
-                  <p className="text-xs text-muted-foreground">
-                    Use the preset selector below to edit your preset and select a model
+                  <p className="text-xs text-muted-foreground font-mono">
+                    Use the preset selector below to configure a model
                   </p>
                 )}
               </div>
             )}
             {messages.length === 0 && canChat && (
-              <div className="text-center text-muted-foreground py-12">
-                <div className="mx-auto mb-3 w-fit opacity-60">
-                  <PipeAIIcon size={32} thinking={false} />
+              <div className="relative text-center py-12">
+                {/* Geometric frame around icon */}
+                <div className="relative mx-auto mb-6 w-fit">
+                  <div className="absolute -inset-4 border border-dashed border-border/50 rounded-xl" />
+                  <div className="absolute -inset-2 border border-border/30 rounded-lg" />
+                  <PipeAIIconLarge size={56} thinking={false} className="relative text-foreground/80" />
                 </div>
+
                 {selectionRange ? (
                   <>
-                    <p className="text-sm mb-1">
-                      Selected: {selectionRange.start.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                      {" - "}
-                      {selectionRange.end.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                    <p className="text-xs opacity-70 mb-4">Ask about this time period</p>
-                    <div className="flex flex-wrap gap-2 justify-center">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-4 bg-muted/50 border border-border/50 rounded-full">
+                      <div className="w-1.5 h-1.5 bg-foreground/50 rounded-full" />
+                      <span className="text-xs font-mono text-foreground/70">
+                        {selectionRange.start.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {" → "}
+                        {selectionRange.end.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-5 uppercase tracking-wider font-medium">Ask about this time period</p>
+                    <div className="flex flex-wrap gap-2 justify-center max-w-md mx-auto">
                       {TIMELINE_SUGGESTIONS.map((suggestion) => (
                         <button
                           key={suggestion}
@@ -695,8 +727,9 @@ Always use these exact start_time and end_time values when searching, unless the
                               if (form) form.requestSubmit();
                             }, 50);
                           }}
-                          className="px-3 py-1.5 text-xs font-mono bg-muted/50 hover:bg-muted border border-border rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                          className="group px-4 py-2 text-xs bg-background hover:bg-muted border border-border/50 hover:border-border rounded-lg text-muted-foreground hover:text-foreground transition-all duration-200"
                         >
+                          <span className="opacity-50 group-hover:opacity-100 transition-opacity mr-1">→</span>
                           {suggestion}
                         </button>
                       ))}
@@ -704,10 +737,14 @@ Always use these exact start_time and end_time values when searching, unless the
                   </>
                 ) : (
                   <>
-                    <p className="text-sm">Ask me anything about your screen activity!</p>
-                    <p className="text-xs mt-2 opacity-70">
-                      Try: &quot;What did I do in the last hour?&quot; or &quot;Find my Slack messages&quot;
+                    <h3 className="text-base font-medium mb-2 text-foreground">Ask about your screen activity</h3>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Search your recordings, transcriptions, and interactions
                     </p>
+                    <div className="flex flex-wrap gap-2 justify-center max-w-sm mx-auto text-xs text-muted-foreground">
+                      <span className="px-2 py-1 bg-muted/30 rounded border border-border/30 font-mono">&quot;What did I do in the last hour?&quot;</span>
+                      <span className="px-2 py-1 bg-muted/30 rounded border border-border/30 font-mono">&quot;Find my Slack messages&quot;</span>
+                    </div>
                   </>
                 )}
               </div>
@@ -719,18 +756,18 @@ Always use these exact start_time and end_time values when searching, unless the
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2, delay: index === messages.length - 1 ? 0 : 0 }}
+                transition={{ duration: 0.2 }}
                 className={cn(
-                  "flex gap-3",
+                  "relative flex gap-3",
                   message.role === "user" ? "flex-row-reverse" : "flex-row"
                 )}
               >
                 <div
                   className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors",
                     message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
+                      ? "bg-foreground text-background border-foreground"
+                      : "bg-muted/50 text-foreground border-border/50"
                   )}
                 >
                   {message.role === "user" ? (
@@ -741,12 +778,16 @@ Always use these exact start_time and end_time values when searching, unless the
                 </div>
                 <div
                   className={cn(
-                    "flex-1 rounded-lg px-4 py-3 text-sm",
+                    "relative flex-1 rounded-xl px-4 py-3 text-sm border",
                     message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                      ? "bg-foreground text-background border-foreground"
+                      : "bg-muted/30 border-border/50"
                   )}
                 >
+                  {/* Subtle corner accent on AI messages */}
+                  {message.role === "assistant" && (
+                    <div className="absolute top-0 left-0 w-3 h-3 border-l border-t border-foreground/10 rounded-tl-xl" />
+                  )}
                   <MemoizedReactMarkdown
                     className={cn(
                       "prose prose-sm max-w-none",
@@ -755,7 +796,7 @@ Always use these exact start_time and end_time values when searching, unless the
                     remarkPlugins={[remarkGfm]}
                     components={{
                       p({ children }) {
-                        return <p className="mb-2 last:mb-0">{children}</p>;
+                        return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>;
                       },
                       a({ href, children, ...props }) {
                         const isMediaLink = href?.toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
@@ -763,7 +804,7 @@ Always use these exact start_time and end_time values when searching, unless the
                           return <VideoComponent filePath={href} className="my-2" />;
                         }
                         return (
-                          <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                          <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" {...props}>
                             {children}
                           </a>
                         );
@@ -777,7 +818,7 @@ Always use these exact start_time and end_time values when searching, unless the
                         }
 
                         return (
-                          <code className="px-1 py-0.5 rounded-sm bg-muted font-mono text-xs" {...props}>
+                          <code className="px-1.5 py-0.5 rounded bg-background/50 border border-border/50 font-mono text-xs" {...props}>
                             {content}
                           </code>
                         );
@@ -792,41 +833,55 @@ Always use these exact start_time and end_time values when searching, unless the
             </AnimatePresence>
             {isLoading && !messages.find(m => m.content.includes("Searching")) && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex items-center gap-2 text-muted-foreground"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-3 px-4 py-3 bg-muted/30 rounded-xl border border-border/50 w-fit"
               >
-                <PipeAIIcon size={16} thinking={true} />
-                <span className="text-sm">Thinking...</span>
+                <PipeAIIcon size={18} thinking={true} className="text-foreground/70" />
+                <span className="text-sm text-muted-foreground font-medium">Processing...</span>
               </motion.div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* AI Preset Selector & Input */}
-          <div className="border-t">
-            <div className="p-2 border-b">
+          {/* AI Preset Selector & Input - refined styling */}
+          <div className="relative border-t border-border/50 bg-gradient-to-t from-muted/20 to-transparent">
+            {/* Geometric accent line */}
+            <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
+
+            <div className="p-2 border-b border-border/30">
               <AIPresetsSelector onPresetChange={setActivePreset} />
             </div>
             <form onSubmit={handleSubmit} className="p-3">
               <div className="flex gap-2">
-                <Input
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder={
-                    disabledReason
-                      ? disabledReason
-                      : "Ask about your screen activity..."
-                  }
-                  disabled={isLoading || !canChat}
-                  className={cn("flex-1", disabledReason && "border-destructive/50")}
-                />
+                <div className="relative flex-1">
+                  <Input
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={
+                      disabledReason
+                        ? disabledReason
+                        : "Ask about your screen activity..."
+                    }
+                    disabled={isLoading || !canChat}
+                    className={cn(
+                      "flex-1 bg-background/50 border-border/50 focus:border-foreground/30 focus:ring-foreground/10 transition-colors",
+                      disabledReason && "border-destructive/50"
+                    )}
+                  />
+                </div>
                 <Button
                   type={isStreaming ? "button" : "submit"}
                   size="icon"
                   disabled={(!input.trim() && !isStreaming) || !canChat}
                   onClick={isStreaming ? handleStop : undefined}
+                  className={cn(
+                    "shrink-0 transition-all duration-200",
+                    isStreaming
+                      ? "bg-destructive hover:bg-destructive/90"
+                      : "bg-foreground hover:bg-foreground/90 text-background"
+                  )}
                 >
                   {isStreaming ? (
                     <Square className="h-4 w-4" />
