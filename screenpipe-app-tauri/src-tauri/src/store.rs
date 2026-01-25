@@ -126,7 +126,7 @@ pub struct SettingsStore {
     #[serde(rename = "usePiiRemoval")]
     pub use_pii_removal: bool,
     #[serde(rename = "restartInterval")]
-    pub restart_interval: u32,
+    pub restart_interval: i32,
     #[serde(rename = "port")]
     pub port: u16,
     #[serde(rename = "dataDir")]
@@ -145,7 +145,7 @@ pub struct SettingsStore {
     #[serde(rename = "analyticsEnabled")]
     pub analytics_enabled: bool,
     #[serde(rename = "audioChunkDuration")]
-    pub audio_chunk_duration: u32,
+    pub audio_chunk_duration: i32,
     #[serde(rename = "useChineseMirror")]
     pub use_chinese_mirror: bool,
     #[serde(rename = "languages")]
@@ -222,7 +222,7 @@ pub struct AIPreset {
     #[serde(rename = "apiKey")]
     pub api_key: Option<String>,
     #[serde(rename = "maxContextChars")]
-    pub max_context_chars: u32,
+    pub max_context_chars: i32,
 }
 
 impl Default for AIPreset {
@@ -285,7 +285,7 @@ impl Default for User {
 #[derive(Serialize, Deserialize,Type,Clone)]
 #[serde(default)]
 pub struct Credits {
-    pub amount: u32,
+    pub amount: i32,
 }
 
 impl Default for Credits {
@@ -480,34 +480,40 @@ impl SettingsStore {
 pub fn init_store(app: &AppHandle) -> Result<SettingsStore, String> {
     println!("Initializing settings store");
 
-    let store = match SettingsStore::get(app) {
-        Ok(Some(store)) => store,
-        Ok(None) => SettingsStore::default(),
+    let (store, should_save) = match SettingsStore::get(app) {
+        Ok(Some(store)) => (store, false), // Loaded successfully, don't overwrite
+        Ok(None) => (SettingsStore::default(), true), // New store, save defaults
         Err(e) => {
             // Fallback to defaults when deserialization fails (e.g., corrupted store)
+            // DON'T save - preserve original store in case it can be manually recovered
             // This prevents crashes from invalid values like negative integers in u32 fields
-            error!("Failed to deserialize settings, using defaults: {}", e);
-            SettingsStore::default()
+            error!("Failed to deserialize settings, using defaults (store not overwritten): {}", e);
+            (SettingsStore::default(), false)
         }
     };
 
-    store.save(app).unwrap();
+    if should_save {
+        store.save(app).unwrap();
+    }
     Ok(store)
 }
 
 pub fn init_onboarding_store(app: &AppHandle) -> Result<OnboardingStore, String> {
     println!("Initializing onboarding store");
 
-    let onboarding = match OnboardingStore::get(app) {
-        Ok(Some(onboarding)) => onboarding,
-        Ok(None) => OnboardingStore::default(),
+    let (onboarding, should_save) = match OnboardingStore::get(app) {
+        Ok(Some(onboarding)) => (onboarding, false),
+        Ok(None) => (OnboardingStore::default(), true),
         Err(e) => {
             // Fallback to defaults when deserialization fails
-            error!("Failed to deserialize onboarding, using defaults: {}", e);
-            OnboardingStore::default()
+            // DON'T save - preserve original store
+            error!("Failed to deserialize onboarding, using defaults (store not overwritten): {}", e);
+            (OnboardingStore::default(), false)
         }
     };
 
-    onboarding.save(app).unwrap();
+    if should_save {
+        onboarding.save(app).unwrap();
+    }
     Ok(onboarding)
 }
