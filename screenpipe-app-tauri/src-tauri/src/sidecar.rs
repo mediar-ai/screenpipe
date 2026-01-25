@@ -473,6 +473,10 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
 
     if cfg!(windows) {
         let mut c = app.shell().sidecar("screenpipe").unwrap();
+
+        // Set file descriptor limit to prevent "Too many open files" errors
+        c = c.env("SCREENPIPE_FD_LIMIT", "8192");
+
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
@@ -509,6 +513,10 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
     }
 
     let mut c = app.shell().sidecar("screenpipe").unwrap();
+
+    // Set file descriptor limit to prevent "Too many open files" errors
+    // This is especially important for WebSocket connections and video processing
+    c = c.env("SCREENPIPE_FD_LIMIT", "8192");
 
     if use_chinese_mirror {
         c = c.env("HF_ENDPOINT", "https://hf-mirror.com");

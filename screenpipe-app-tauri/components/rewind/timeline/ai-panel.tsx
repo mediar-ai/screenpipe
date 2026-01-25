@@ -404,6 +404,7 @@ export function AIPanel({
 
 				{!isExpanded && (
 					<div className="p-4 space-y-2">
+						<ExportButton />
 						<button
 							className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
 							onClick={(e) => {
@@ -420,7 +421,6 @@ export function AIPanel({
 								{osType === "macos" ? "⌘L" : "Ctrl+L"}
 							</span>
 						</button>
-						<ExportButton />
 					</div>
 				)}
 			</div>

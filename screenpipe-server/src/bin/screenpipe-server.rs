@@ -48,6 +48,65 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, Layer};
 
+/// Set the file descriptor limit for the process.
+/// This helps prevent "Too many open files" errors during heavy WebSocket/video usage.
+#[cfg(unix)]
+fn set_fd_limit() {
+    use nix::libc;
+    use std::env;
+
+    // Check if a custom limit was set via environment variable
+    let desired_limit: u64 = env::var("SCREENPIPE_FD_LIMIT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8192); // Default to 8192 if not set
+
+    // Get current limits
+    let mut rlim = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+
+    unsafe {
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlim) == 0 {
+            let current_soft = rlim.rlim_cur;
+            let current_hard = rlim.rlim_max;
+
+            // Only increase if current limit is lower than desired
+            if current_soft < desired_limit {
+                // Set new soft limit (capped by hard limit)
+                let new_soft = std::cmp::min(desired_limit, current_hard);
+                rlim.rlim_cur = new_soft;
+
+                if libc::setrlimit(libc::RLIMIT_NOFILE, &rlim) == 0 {
+                    eprintln!(
+                        "increased file descriptor limit from {} to {} (hard limit: {})",
+                        current_soft, new_soft, current_hard
+                    );
+                } else {
+                    eprintln!(
+                        "warning: failed to increase file descriptor limit (current: {}, requested: {})",
+                        current_soft, new_soft
+                    );
+                }
+            } else {
+                eprintln!(
+                    "file descriptor limit already sufficient: {} (requested: {})",
+                    current_soft, desired_limit
+                );
+            }
+        } else {
+            eprintln!("warning: failed to get current file descriptor limits");
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn set_fd_limit() {
+    // On Windows, file handle limits work differently and are generally not an issue
+    // No action needed
+}
+
 const DISPLAY: &str = r"
                                             _          
    __________________  ___  ____     ____  (_____  ___ 
@@ -175,6 +234,9 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 #[tokio::main]
 #[tracing::instrument]
 async fn main() -> anyhow::Result<()> {
+    // Set file descriptor limit early, before any resources are allocated
+    set_fd_limit();
+
     debug!("starting screenpipe server");
     let cli = Cli::parse();
 

@@ -60,9 +60,16 @@ use std::{
     net::SocketAddr,
     num::NonZeroUsize,
     path::PathBuf,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
+
+/// Maximum number of concurrent WebSocket connections allowed.
+/// This prevents file descriptor exhaustion from too many open connections.
+const MAX_WEBSOCKET_CONNECTIONS: usize = 100;
 
 use lru::LruCache;
 
@@ -98,6 +105,8 @@ pub struct AppState {
     pub frame_cache: Option<Arc<FrameCache>>,
     pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
     pub element_cache: Arc<Mutex<Option<(Vec<UIElement>, Instant, String)>>>,
+    /// Counter for active WebSocket connections to prevent resource exhaustion
+    pub ws_connection_count: Arc<AtomicUsize>,
 }
 
 // Update the SearchQuery struct
@@ -1192,6 +1201,7 @@ impl SCServer {
                 None
             },
             element_cache: Arc::new(Mutex::new(None)),
+            ws_connection_count: Arc::new(AtomicUsize::new(0)),
         });
 
         let cors = CorsLayer::new()
@@ -2212,12 +2222,69 @@ pub struct VisionDeviceControlRequest {
 //     }))
 // }
 
-// websocket events handler
-async fn ws_events_handler(ws: WebSocketUpgrade, query: Query<EventsQuery>) -> Response {
-    ws.on_upgrade(|socket| handle_socket(socket, query))
+/// Guard that decrements the WebSocket connection counter when dropped.
+/// This ensures the counter is always decremented, even on panics or early returns.
+struct WsConnectionGuard {
+    counter: Arc<AtomicUsize>,
 }
 
-async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
+impl Drop for WsConnectionGuard {
+    fn drop(&mut self) {
+        let prev = self.counter.fetch_sub(1, Ordering::SeqCst);
+        debug!("WebSocket connection closed, count: {} -> {}", prev, prev - 1);
+    }
+}
+
+/// Try to acquire a WebSocket connection slot.
+/// Returns Some(guard) if successful, None if the limit is reached.
+fn try_acquire_ws_connection(counter: &Arc<AtomicUsize>) -> Option<WsConnectionGuard> {
+    loop {
+        let current = counter.load(Ordering::SeqCst);
+        if current >= MAX_WEBSOCKET_CONNECTIONS {
+            error!(
+                "WebSocket connection limit reached ({}/{}), rejecting new connection",
+                current, MAX_WEBSOCKET_CONNECTIONS
+            );
+            return None;
+        }
+
+        // Try to atomically increment the counter
+        match counter.compare_exchange(current, current + 1, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => {
+                debug!(
+                    "WebSocket connection acquired, count: {} -> {}",
+                    current,
+                    current + 1
+                );
+                return Some(WsConnectionGuard {
+                    counter: counter.clone(),
+                });
+            }
+            Err(_) => {
+                // Another thread changed the counter, retry
+                continue;
+            }
+        }
+    }
+}
+
+// websocket events handler
+async fn ws_events_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+    query: Query<EventsQuery>,
+) -> Response {
+    // Check connection limit before upgrading
+    match try_acquire_ws_connection(&state.ws_connection_count) {
+        Some(guard) => ws.on_upgrade(|socket| handle_socket(socket, query, guard)),
+        None => Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Body::from("Too many WebSocket connections"))
+            .unwrap(),
+    }
+}
+
+async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>, _guard: WsConnectionGuard) {
     let (mut sender, mut receiver) = socket.split();
 
     let incoming = tokio::spawn(async move {
@@ -2268,13 +2335,21 @@ async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
     }
 
     debug!("WebSocket connection closed");
+    // _guard is dropped here, decrementing the connection counter
 }
 
 async fn ws_health_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
-    ws.on_upgrade(move |socket| handle_health_socket(socket, state))
+    // Check connection limit before upgrading
+    match try_acquire_ws_connection(&state.ws_connection_count) {
+        Some(guard) => ws.on_upgrade(move |socket| handle_health_socket(socket, state, guard)),
+        None => Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Body::from("Too many WebSocket connections"))
+            .unwrap(),
+    }
 }
 
-async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>) {
+async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>, _guard: WsConnectionGuard) {
     let mut interval = tokio::time::interval(Duration::from_secs(5));
 
     loop {
@@ -2296,6 +2371,7 @@ async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>) {
     }
 
     debug!("WebSocket connection closed gracefully");
+    // _guard is dropped here, decrementing the connection counter
 }
 
 #[derive(Debug, Deserialize)]
@@ -2423,7 +2499,7 @@ pub async fn handle_video_export_ws(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
     Query(payload): Query<VideoExportRequest>,
-) -> impl IntoResponse {
+) -> Response {
     if payload.frame_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -2432,13 +2508,25 @@ pub async fn handle_video_export_ws(
             .into_response();
     }
 
-    ws.on_upgrade(move |socket| async move { handle_video_export(socket, state, payload).await })
+    // Check connection limit before upgrading
+    match try_acquire_ws_connection(&state.ws_connection_count) {
+        Some(guard) => ws
+            .on_upgrade(move |socket| async move {
+                handle_video_export(socket, state, payload, guard).await
+            })
+            .into_response(),
+        None => Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Body::from("Too many WebSocket connections"))
+            .unwrap(),
+    }
 }
 
 async fn handle_video_export(
     mut socket: WebSocket,
     state: Arc<AppState>,
     payload: VideoExportRequest,
+    _guard: WsConnectionGuard,
 ) {
     let temp_dir = match tempfile::tempdir() {
         Ok(dir) => dir,
@@ -3095,7 +3183,7 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
     }
 }
 
-async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
+async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>, _guard: WsConnectionGuard) {
     let (mut sender, mut receiver) = socket.split();
     let (frame_tx, frame_rx) = tokio::sync::mpsc::channel(100);
     let db = state.db.clone();
@@ -3451,8 +3539,17 @@ async fn send_batch(
 async fn stream_frames_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_stream_frames_socket(socket, state))
+) -> Response {
+    // Check connection limit before upgrading
+    match try_acquire_ws_connection(&state.ws_connection_count) {
+        Some(guard) => ws
+            .on_upgrade(move |socket| handle_stream_frames_socket(socket, state, guard))
+            .into_response(),
+        None => Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Body::from("Too many WebSocket connections"))
+            .unwrap(),
+    }
 }
 
 #[oasgen]
