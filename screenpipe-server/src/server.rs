@@ -371,19 +371,18 @@ pub(crate) async fn search(
         )
     })?;
 
-    // Helper to check if app/window name contains "screenpipe" (case insensitive)
-    let is_screenpipe = |app_name: &str, window_name: &str| -> bool {
+    // Helper to check if app name contains "screenpipe" (case insensitive)
+    let is_screenpipe_app = |app_name: &str| -> bool {
         app_name.to_lowercase().contains("screenpipe")
-            || window_name.to_lowercase().contains("screenpipe")
     };
 
     let mut content_items: Vec<ContentItem> = results
         .iter()
         // Filter out screenpipe results at display time
         .filter(|result| match result {
-            SearchResult::OCR(ocr) => !is_screenpipe(&ocr.app_name, &ocr.window_name),
+            SearchResult::OCR(ocr) => !is_screenpipe_app(&ocr.app_name),
             SearchResult::Audio(_) => true, // Audio doesn't have app_name
-            SearchResult::UI(ui) => !is_screenpipe(&ui.app_name, &ui.window_name),
+            SearchResult::UI(ui) => !is_screenpipe_app(&ui.app_name),
         })
         .map(|result| match result {
             SearchResult::OCR(ocr) => ContentItem::OCR(OCRContent {
@@ -2114,10 +2113,7 @@ async fn semantic_search_handler(
             // Filter out screenpipe results at display time
             let filtered: Vec<_> = results
                 .into_iter()
-                .filter(|r| {
-                    !r.app_name.to_lowercase().contains("screenpipe")
-                        && !r.window_name.to_lowercase().contains("screenpipe")
-                })
+                .filter(|r| !r.app_name.to_lowercase().contains("screenpipe"))
                 .collect();
             debug!("found {} similar results (after filtering)", filtered.len());
             Ok(JsonResponse(filtered))
@@ -2769,10 +2765,7 @@ async fn keyword_search_handler(
     // Filter out screenpipe results at display time
     let filtered: Vec<_> = matches
         .into_iter()
-        .filter(|m| {
-            !m.app_name.to_lowercase().contains("screenpipe")
-                && !m.window_name.to_lowercase().contains("screenpipe")
-        })
+        .filter(|m| !m.app_name.to_lowercase().contains("screenpipe"))
         .collect();
 
     Ok(JsonResponse(filtered))
@@ -3067,7 +3060,6 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
             // Filter out screenpipe frames at display time
             .filter(|device_data| {
                 !device_data.app_name.to_lowercase().contains("screenpipe")
-                    && !device_data.window_name.to_lowercase().contains("screenpipe")
             })
             .map(|device_data| DeviceFrame {
                 device_id: device_data.device_name,
