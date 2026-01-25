@@ -388,30 +388,14 @@ export class VertexAIProvider implements AIProvider {
 	}
 
 	/**
-	 * List available models by querying Vertex AI Model Garden
+	 * List available models - Vertex AI doesn't have a public API for this
+	 * Users should check Model Garden: https://console.cloud.google.com/vertex-ai/model-garden
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
-		const accessToken = await this.getAccessToken();
-		const url = `https://${this.region}-aiplatform.googleapis.com/v1/publishers/anthropic/models`;
-		const response = await fetch(url, {
-			headers: {
-				Authorization: `Bearer ${accessToken}`,
-			},
-		});
-
-		if (!response.ok) {
-			const error = await response.text();
-			throw new Error(`Failed to list models: ${response.status} ${error}`);
-		}
-
-		const data = await response.json();
-		const models = data.models || data.publisherModels || [];
-
-		return models.map((m: any) => ({
-			id: m.name?.split('/').pop() || m.modelId || m.id,
-			name: m.displayName || m.name || m.id,
-			provider: 'vertex',
-		}));
+		// Vertex AI doesn't expose an API to list Anthropic models
+		// Return empty - the app should let users input any model ID
+		// Invalid models will get a clear error from Vertex when used
+		return [];
 	}
 }
 
