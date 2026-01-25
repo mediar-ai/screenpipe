@@ -241,10 +241,11 @@ export function GlobalChat() {
   }, [messages]);
 
   // Execute search tool by calling Screenpipe API
+  // Keep responses small to avoid exceeding model context window
   async function executeSearchTool(args: Record<string, unknown>): Promise<string> {
-    const MAX_LIMIT = 15; // Cap results to prevent huge responses
-    const MAX_RESPONSE_CHARS = 8000; // Truncate if response is too large
-    const MAX_TEXT_PER_RESULT = 500; // Truncate individual result text
+    const MAX_LIMIT = 10; // Cap results to prevent huge responses
+    const MAX_RESPONSE_CHARS = 4000; // ~1000 tokens - keep small to fit in context
+    const MAX_TEXT_PER_RESULT = 300; // Truncate individual result text aggressively
 
     try {
       const params = new URLSearchParams();
@@ -390,9 +391,12 @@ Always use these exact start_time and end_time values when searching, unless the
       }
 
       // Build conversation history for OpenAI format
+      // Limit to last 10 messages to prevent context overflow
+      const MAX_HISTORY = 10;
+      const recentMessages = messages.slice(-MAX_HISTORY);
       const conversationMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
-        ...messages.map((m) => ({
+        ...recentMessages.map((m) => ({
           role: m.role as "user" | "assistant",
           content: m.content,
         })),
@@ -550,6 +554,16 @@ Always use these exact start_time and end_time values when searching, unless the
         errorMessage = "Rate limit exceeded. Please wait a moment and try again.";
       } else if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
         errorMessage = "Network error. Please check your internet connection and that the API endpoint is correct.";
+      } else if (
+        errorMessage.includes("context") ||
+        errorMessage.includes("token") ||
+        errorMessage.includes("too large") ||
+        errorMessage.includes("exceed") ||
+        errorMessage.includes("maximum")
+      ) {
+        errorMessage = "Response too large for model context. Try a more specific search with shorter time range.";
+        // Clear old messages to free up context for next query
+        setMessages([]);
       }
 
       setMessages((prev) => {
