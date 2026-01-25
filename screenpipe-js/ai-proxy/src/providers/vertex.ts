@@ -231,6 +231,7 @@ export class VertexAIProvider implements AIProvider {
 
 		const toolCallsById: Record<string, { index: number; id: string; name: string; arguments: string }> = {};
 		const toolCallIndexRef = { value: 0 };
+		let buffer = ''; // Buffer for incomplete lines
 
 		return new ReadableStream({
 			async start(controller) {
@@ -243,8 +244,12 @@ export class VertexAIProvider implements AIProvider {
 							return;
 						}
 
-						const chunk = decoder.decode(value, { stream: true });
-						const lines = chunk.split('\n');
+						// Append chunk to buffer and split by newlines
+						buffer += decoder.decode(value, { stream: true });
+						const lines = buffer.split('\n');
+
+						// Keep the last potentially incomplete line in buffer
+						buffer = lines.pop() || '';
 
 						for (const line of lines) {
 							if (line.startsWith('data: ')) {
@@ -260,7 +265,7 @@ export class VertexAIProvider implements AIProvider {
 										return;
 									}
 								} catch (e) {
-									// Skip invalid JSON
+									// Skip invalid JSON (might be incomplete)
 								}
 							}
 						}

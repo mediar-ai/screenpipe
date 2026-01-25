@@ -503,6 +503,81 @@ describe('Full streaming scenarios', () => {
 });
 
 // ============================================================================
+// SSE Buffer Parsing Tests
+// ============================================================================
+describe('SSE buffer parsing', () => {
+	it('should handle events split across chunks', () => {
+		// Simulate SSE events that might be split across network chunks
+		const chunk1 = 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hel';
+		const chunk2 = 'lo"}}\n\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":" World"}}\n\n';
+
+		let buffer = '';
+		const results: any[] = [];
+
+		// Process chunk1
+		buffer += chunk1;
+		let lines = buffer.split('\n');
+		buffer = lines.pop() || '';
+		for (const line of lines) {
+			if (line.startsWith('data: ')) {
+				try {
+					results.push(JSON.parse(line.slice(6)));
+				} catch (e) {
+					// incomplete JSON
+				}
+			}
+		}
+
+		// After chunk1, buffer should have incomplete data
+		expect(results.length).toBe(0);
+		expect(buffer).toContain('Hel');
+
+		// Process chunk2
+		buffer += chunk2;
+		lines = buffer.split('\n');
+		buffer = lines.pop() || '';
+		for (const line of lines) {
+			if (line.startsWith('data: ')) {
+				try {
+					results.push(JSON.parse(line.slice(6)));
+				} catch (e) {
+					// incomplete JSON
+				}
+			}
+		}
+
+		// After chunk2, should have both complete events
+		expect(results.length).toBe(2);
+		expect(results[0].delta.text).toBe('Hello');
+		expect(results[1].delta.text).toBe(' World');
+	});
+
+	it('should handle complete events in single chunk', () => {
+		const chunk = 'data: {"type":"message_start"}\n\ndata: {"type":"ping"}\n\n';
+
+		let buffer = '';
+		const results: any[] = [];
+
+		buffer += chunk;
+		const lines = buffer.split('\n');
+		buffer = lines.pop() || '';
+		for (const line of lines) {
+			if (line.startsWith('data: ')) {
+				try {
+					results.push(JSON.parse(line.slice(6)));
+				} catch (e) {
+					// skip
+				}
+			}
+		}
+
+		expect(results.length).toBe(2);
+		expect(results[0].type).toBe('message_start');
+		expect(results[1].type).toBe('ping');
+	});
+});
+
+// ============================================================================
 // Request Conversion Tests (convertToAnthropicFormat)
 // ============================================================================
 describe('Request conversion edge cases', () => {

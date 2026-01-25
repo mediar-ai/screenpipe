@@ -107,9 +107,9 @@ export default Sentry.withSentry(
 				}
 
 				return createErrorResponse(404, 'not found');
-			} catch (error) {
-				console.error('error in fetch:', error);
-				return createErrorResponse(500, 'an error occurred');
+			} catch (error: any) {
+				console.error('error in fetch:', error?.message, error?.stack);
+				return createErrorResponse(500, error?.message || 'an error occurred');
 			} finally {
 				await langfuse.shutdownAsync();
 			}
