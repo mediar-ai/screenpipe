@@ -94,13 +94,10 @@ export const TextOverlay = memo(function TextOverlay({
 	debug = false,
 	clickableUrls = true,
 }: TextOverlayProps) {
-	// Calculate scale factors between original and displayed image
-	const scaleX = displayedWidth / originalWidth;
-	const scaleY = displayedHeight / originalHeight;
-
 	// Scale and filter text positions, detect URLs
+	// Note: OCR bounds are normalized (0-1 range), so we multiply directly by displayed dimensions
 	const scaledPositions = useMemo<ScaledTextPositionWithUrl[]>(() => {
-		if (!originalWidth || !originalHeight || !displayedWidth || !displayedHeight) {
+		if (!displayedWidth || !displayedHeight) {
 			return [];
 		}
 
@@ -111,10 +108,10 @@ export const TextOverlay = memo(function TextOverlay({
 				return {
 					...pos,
 					scaledBounds: {
-						left: pos.bounds.left * scaleX,
-						top: pos.bounds.top * scaleY,
-						width: pos.bounds.width * scaleX,
-						height: pos.bounds.height * scaleY,
+						left: pos.bounds.left * displayedWidth,
+						top: pos.bounds.top * displayedHeight,
+						width: pos.bounds.width * displayedWidth,
+						height: pos.bounds.height * displayedHeight,
 					},
 					isUrl: textIsUrl,
 					normalizedUrl: textIsUrl ? normalizeUrl(pos.text) : undefined,
@@ -131,12 +128,8 @@ export const TextOverlay = memo(function TextOverlay({
 			);
 	}, [
 		textPositions,
-		originalWidth,
-		originalHeight,
 		displayedWidth,
 		displayedHeight,
-		scaleX,
-		scaleY,
 		minConfidence,
 	]);
 
