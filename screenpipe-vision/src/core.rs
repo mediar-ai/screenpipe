@@ -11,6 +11,7 @@ use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
+use chrono::{DateTime, Utc};
 use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
 use screenpipe_core::Language;
@@ -27,8 +28,6 @@ use std::{
 };
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, warn};
-
-use crate::browser_utils::create_url_detector;
 
 fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -102,6 +101,8 @@ pub struct CaptureResult {
     pub image: DynamicImage,
     pub frame_number: u64,
     pub timestamp: Instant,
+    /// Wall-clock timestamp captured atomically with the screenshot
+    pub captured_at: DateTime<Utc>,
     pub window_ocr_results: Vec<WindowOcrResult>,
 }
 
@@ -121,12 +122,11 @@ pub struct OcrTaskData {
     pub window_images: Vec<CapturedWindow>,
     pub frame_number: u64,
     pub timestamp: Instant,
+    /// Wall-clock timestamp captured atomically with the screenshot
+    pub captured_at: DateTime<Utc>,
     pub result_tx: Sender<CaptureResult>,
 }
 
-const BROWSER_NAMES: [&str; 9] = [
-    "chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera",
-];
 
 #[derive(Debug)]
 pub enum ContinuousCaptureError {
@@ -170,7 +170,8 @@ pub async fn continuous_capture(
     };
 
     loop {
-        // 3. Capture screenshot
+        // 3. Capture screenshot and wall-clock time atomically
+        let captured_at = Utc::now();
         let capture_result =
             match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
                 Ok(result) => result,
@@ -194,6 +195,7 @@ pub async fn continuous_capture(
             &window_images,
             image_hash,
             result_tx.clone(),
+            captured_at,
         )
         .await;
 
@@ -230,6 +232,7 @@ async fn should_skip_frame(
     window_images: &Vec<CapturedWindow>,
     image_hash: u64,
     result_tx: Sender<CaptureResult>,
+    captured_at: DateTime<Utc>,
 ) -> bool {
     let current_average = match compare_with_previous_image(
         previous_image.as_ref(),
@@ -267,6 +270,7 @@ async fn should_skip_frame(
                 image_hash,
                 frame_number: frame_counter,
                 timestamp: Instant::now(),
+                captured_at,
                 result_tx: result_tx.clone(),
                 average: current_average,
             });
@@ -286,6 +290,7 @@ async fn process_max_average_frame(
         window_images: max_avg_frame.window_images,
         frame_number: max_avg_frame.frame_number,
         timestamp: max_avg_frame.timestamp,
+        captured_at: max_avg_frame.captured_at,
         result_tx: max_avg_frame.result_tx,
     };
 
@@ -303,6 +308,8 @@ pub struct MaxAverageFrame {
     pub image_hash: u64,
     pub frame_number: u64,
     pub timestamp: Instant,
+    /// Wall-clock timestamp captured atomically with the screenshot
+    pub captured_at: DateTime<Utc>,
     pub result_tx: Sender<CaptureResult>,
     pub average: f64,
 }
@@ -317,6 +324,7 @@ pub async fn process_ocr_task(
         window_images,
         frame_number,
         timestamp,
+        captured_at,
         result_tx,
     } = ocr_task_data;
 
@@ -349,6 +357,7 @@ pub async fn process_ocr_task(
         image,
         frame_number,
         timestamp,
+        captured_at,
         window_ocr_results,
     };
 
@@ -369,16 +378,9 @@ async fn process_window_ocr(
     total_confidence: &mut f64,
     window_count: &mut u32,
 ) -> Result<WindowOcrResult, ContinuousCaptureError> {
-    let app_name = captured_window.app_name.clone();
-
-    // Get browser URL if applicable
-    let browser_url = get_browser_url_if_needed(
-        &app_name,
-        captured_window.is_focused,
-        captured_window.process_id,
-        &captured_window.window_name,
-    )
-    .await;
+    // Use the browser URL that was captured atomically with the screenshot
+    // This prevents timing mismatches where URL is fetched after browser navigation
+    let browser_url = captured_window.browser_url.clone();
 
     // Perform OCR based on the selected engine
     let (window_text, window_json_output, confidence) =
@@ -402,36 +404,6 @@ async fn process_window_ocr(
         confidence: confidence.unwrap_or(0.0),
         browser_url,
     })
-}
-
-async fn get_browser_url_if_needed(
-    app_name: &str,
-    is_focused: bool,
-    process_id: i32,
-    window_title: &str,
-) -> Option<String> {
-    if is_focused
-        && BROWSER_NAMES
-            .iter()
-            .any(|&browser| app_name.to_lowercase().contains(browser))
-    {
-        let app_name = app_name.to_string(); // Clone to move into the closure
-        let window_title = window_title.to_string(); // Clone to move into the closure
-        match tokio::task::spawn_blocking(move || {
-            get_active_browser_url_sync(&app_name, process_id, &window_title)
-        })
-        .await
-        {
-            Ok(Ok(url)) => Some(url),
-            Ok(Err(_)) => None,
-            Err(e) => {
-                error!("Failed to spawn blocking task: {}", e);
-                None
-            }
-        }
-    } else {
-        None
-    }
 }
 
 async fn perform_ocr_with_engine(
@@ -538,23 +510,4 @@ pub struct WindowOcr {
     )]
     pub timestamp: Instant,
     pub browser_url: Option<String>,
-}
-
-fn get_active_browser_url_sync(
-    app_name: &str,
-    process_id: i32,
-    window_title: &str,
-) -> Result<String, std::io::Error> {
-    let detector = create_url_detector();
-    match detector.get_active_url(app_name, process_id, window_title) {
-        Ok(Some(url)) => Ok(url),
-        Ok(None) => Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "No active URL found",
-        )),
-        Err(e) => Err(std::io::Error::other(format!(
-            "Failed to get active URL: {}",
-            e
-        ))),
-    }
 }

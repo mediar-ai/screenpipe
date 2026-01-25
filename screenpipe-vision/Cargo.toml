@@ -12,6 +12,7 @@ edition = { workspace = true }
 
 [dependencies]
 serde_json = "1.0"
+chrono = { version = "0.4.31", features = ["serde"] }
 
 # async
 tokio = { workspace = true }

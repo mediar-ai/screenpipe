@@ -6791,6 +6791,7 @@ dependencies = [
  "atspi-common",
  "atspi-proxies",
  "base64 0.22.1",
+ "chrono",
  "cidre 0.7.0",
  "clap",
  "core-foundation 0.10.0",

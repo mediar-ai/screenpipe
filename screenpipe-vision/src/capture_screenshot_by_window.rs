@@ -7,7 +7,12 @@ use tracing::debug;
 
 use xcap::{Window, XCapError};
 
+use crate::browser_utils::create_url_detector;
 use crate::monitor::SafeMonitor;
+
+const BROWSER_NAMES: [&str; 9] = [
+    "chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera",
+];
 
 #[derive(Debug)]
 enum CaptureError {
@@ -145,6 +150,8 @@ pub struct CapturedWindow {
     pub window_name: String,
     pub process_id: i32,
     pub is_focused: bool,
+    /// Browser URL captured atomically with the screenshot to prevent timing mismatches
+    pub browser_url: Option<String>,
 }
 
 pub struct WindowFilters {
@@ -295,12 +302,32 @@ pub async fn capture_all_visible_windows(
             && window_filters.is_valid(&app_name, &window_name);
 
         if is_valid {
+            // Fetch browser URL atomically with screenshot for focused browser windows
+            // This prevents timing mismatches where URL is fetched after navigation
+            let browser_url = if is_focused
+                && BROWSER_NAMES
+                    .iter()
+                    .any(|&browser| app_name.to_lowercase().contains(browser))
+            {
+                let detector = create_url_detector();
+                match detector.get_active_url(&app_name, process_id, &window_name) {
+                    Ok(url) => url,
+                    Err(e) => {
+                        debug!("Failed to get browser URL for {}: {}", app_name, e);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
             all_captured_images.push(CapturedWindow {
                 image,
                 app_name,
                 window_name,
-                process_id: process_id,
+                process_id,
                 is_focused,
+                browser_url,
             });
         }
     }

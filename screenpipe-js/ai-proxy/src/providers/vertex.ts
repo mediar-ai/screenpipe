@@ -170,6 +170,7 @@ export class VertexAIProvider implements AIProvider {
 			'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5@20250929',
 			'claude-sonnet-4.5': 'claude-sonnet-4-5@20250929',
 			'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
+			'claude-haiku-4-5': 'claude-haiku-4-5@20251023',
 			// Claude 4
 			'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
 			'claude-sonnet-4': 'claude-sonnet-4@20250514',
@@ -180,6 +181,8 @@ export class VertexAIProvider implements AIProvider {
 			'claude-3-5-sonnet-v2': 'claude-3-5-sonnet-v2@20241022',
 			'claude-3-5-haiku': 'claude-3-5-haiku@20241022',
 			'claude-3-5-haiku-20241022': 'claude-3-5-haiku@20241022',
+			'claude-3-5-haiku-latest': 'claude-3-5-haiku@20241022',
+			'claude-3-5-sonnet-latest': 'claude-3-5-sonnet-v2@20241022',
 		};
 
 		const vertexModel = modelMapping[model] || model;
@@ -474,6 +477,7 @@ export async function proxyToVertex(
 	}
 
 	try {
+		console.log('proxyToVertex: parsing request body');
 		const body = (await request.json()) as {
 			model?: string;
 			stream?: boolean;
@@ -483,14 +487,18 @@ export async function proxyToVertex(
 			temperature?: number;
 			[key: string]: any;
 		};
+		console.log('proxyToVertex: model=', body.model, 'stream=', body.stream, 'messages count=', body.messages?.length);
 		const isStreaming = body.stream === true;
 
 		// Get access token
+		console.log('proxyToVertex: getting access token');
 		const accessToken = await (provider as any).getAccessToken();
+		console.log('proxyToVertex: got access token');
 
 		// Map model to Vertex format
 		const model = body.model || 'claude-sonnet-4@20250514';
 		const vertexModel = mapModelToVertex(model);
+		console.log('proxyToVertex: mapped model', model, '->', vertexModel);
 		const method = isStreaming ? 'streamRawPredict' : 'rawPredict';
 		const vertexUrl = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/anthropic/models/${vertexModel}:${method}`;
 
@@ -501,7 +509,7 @@ export async function proxyToVertex(
 		};
 		delete vertexBody.model; // Vertex doesn't use model in body
 
-		console.log('Proxying to Vertex AI:', vertexUrl);
+		console.log('proxyToVertex: calling Vertex AI:', vertexUrl);
 
 		const response = await fetch(vertexUrl, {
 			method: 'POST',
@@ -538,8 +546,8 @@ export async function proxyToVertex(
 			headers: { 'Content-Type': 'application/json' },
 		});
 	} catch (error: any) {
-		console.error('Proxy error:', error);
-		return new Response(JSON.stringify({ error: error.message }), {
+		console.error('proxyToVertex error:', error.message, error.stack);
+		return new Response(JSON.stringify({ error: error.message, stack: error.stack }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' },
 		});
@@ -555,6 +563,7 @@ function mapModelToVertex(model: string): string {
 		'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5@20250929',
 		'claude-sonnet-4.5': 'claude-sonnet-4-5@20250929',
 		'claude-sonnet-4-5': 'claude-sonnet-4-5@20250929',
+		'claude-haiku-4-5': 'claude-haiku-4-5@20251023',
 		// Claude 4
 		'claude-sonnet-4-20250514': 'claude-sonnet-4@20250514',
 		'claude-sonnet-4': 'claude-sonnet-4@20250514',
@@ -565,6 +574,8 @@ function mapModelToVertex(model: string): string {
 		'claude-3-5-haiku-20241022': 'claude-3-5-haiku@20241022',
 		'claude-3-5-sonnet': 'claude-3-5-sonnet-v2@20241022',
 		'claude-3-5-haiku': 'claude-3-5-haiku@20241022',
+		'claude-3-5-haiku-latest': 'claude-3-5-haiku@20241022',
+		'claude-3-5-sonnet-latest': 'claude-3-5-sonnet-v2@20241022',
 	};
 
 	return mapping[model] || model;

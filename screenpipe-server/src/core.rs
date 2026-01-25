@@ -235,16 +235,21 @@ async fn record_video(
                 time_since_last_frame.as_millis()
             );
 
+            // Get the current video frame offset for this capture cycle
+            // All window results from this capture share the same video frame
+            let video_frame_offset = db.get_next_frame_offset(&device_name).await.unwrap_or(0);
+
             for window_result in &frame.window_ocr_results {
                 let insert_frame_start = std::time::Instant::now();
                 let result = db
                     .insert_frame(
                         &device_name,
-                        None,
+                        Some(frame.captured_at),
                         window_result.browser_url.as_deref(),
                         Some(window_result.app_name.as_str()),
                         Some(window_result.window_name.as_str()),
                         window_result.focused,
+                        Some(video_frame_offset), // All windows share the same video frame offset
                     )
                     .await;
 

@@ -297,6 +297,12 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    /// Insert a frame record into the database.
+    ///
+    /// # Arguments
+    /// * `offset_index` - The video frame index. Multiple window records from the same capture cycle
+    ///                    should share the same offset_index to correctly reference the video frame.
+    ///                    If None, auto-calculates based on DB records (legacy behavior, may cause mismatches).
     pub async fn insert_frame(
         &self,
         device_name: &str,
@@ -305,6 +311,7 @@ impl DatabaseManager {
         app_name: Option<&str>,
         window_name: Option<&str>,
         focused: bool,
+        offset_index: Option<i64>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
@@ -328,14 +335,21 @@ impl DatabaseManager {
             }
         };
 
-        // Calculate the offset_index
-        let offset_index: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(offset_index), -1) + 1 FROM frames WHERE video_chunk_id = ?1",
-        )
-        .bind(video_chunk_id)
-        .fetch_one(&mut *tx)
-        .await?;
-        debug!("insert_frame Calculated offset_index: {}", offset_index);
+        // Use provided offset_index or calculate from DB (legacy fallback)
+        let offset_index: i64 = match offset_index {
+            Some(idx) => idx,
+            None => {
+                // Legacy behavior: calculate from DB records
+                // NOTE: This can cause mismatches when multiple windows are captured per cycle
+                sqlx::query_scalar(
+                    "SELECT COALESCE(MAX(offset_index), -1) + 1 FROM frames WHERE video_chunk_id = ?1",
+                )
+                .bind(video_chunk_id)
+                .fetch_one(&mut *tx)
+                .await?
+            }
+        };
+        debug!("insert_frame Using offset_index: {}", offset_index);
 
         let timestamp = timestamp.unwrap_or_else(Utc::now);
 
@@ -361,6 +375,33 @@ impl DatabaseManager {
         tx.commit().await?;
 
         Ok(id)
+    }
+
+    /// Get the next frame offset for a device.
+    /// This should be called ONCE per capture cycle and shared by all window results.
+    pub async fn get_next_frame_offset(&self, device_name: &str) -> Result<i64, sqlx::Error> {
+        // Get the most recent video_chunk_id
+        let video_chunk_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1",
+        )
+        .bind(device_name)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let video_chunk_id = match video_chunk_id {
+            Some(id) => id,
+            None => return Ok(0),
+        };
+
+        // Get the next offset for this video chunk
+        let offset: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(offset_index), -1) + 1 FROM frames WHERE video_chunk_id = ?1",
+        )
+        .bind(video_chunk_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(offset)
     }
 
     pub async fn insert_ocr_text(

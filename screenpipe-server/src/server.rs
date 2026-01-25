@@ -1394,6 +1394,7 @@ async fn add_frame_to_db(
             frame.app_name.as_deref(),
             frame.window_name.as_deref(),
             false,
+            None, // Use legacy auto-calculation for API-added frames
         )
         .await?;
 

@@ -305,7 +305,11 @@ jobs:
             fonts-dejavu \
             alsa-utils \
             pulseaudio \
-            pulseaudio-utils
+            pulseaudio-utils \
+            libpipewire-0.3-dev \
+            libgbm-dev \
+            libwayland-dev \
+            libegl-dev
 
     - name: Set up Rust
       uses: actions-rust-lang/setup-rust-toolchain@v1
