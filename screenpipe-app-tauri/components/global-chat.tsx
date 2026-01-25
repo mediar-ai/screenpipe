@@ -283,16 +283,15 @@ export function GlobalChat() {
         return "No results found. Try: broader search terms, different app_name, wider time range, or different content_type.";
       }
 
-      // Format results with truncation
+      // Format results
       const formatted = searchResults.map((result: SearchResult) => {
         const content = result.content;
         if (!content) return null;
 
-        // Truncate text content if too long
         const truncateText = (text: string | undefined) => {
           if (!text) return "";
           if (text.length > MAX_TEXT_PER_RESULT) {
-            return text.substring(0, MAX_TEXT_PER_RESULT) + "... [truncated]";
+            return text.substring(0, MAX_TEXT_PER_RESULT) + "...";
           }
           return text;
         };
@@ -310,19 +309,15 @@ export function GlobalChat() {
         return null;
       }).filter(Boolean);
 
-      let result = formatted.join("\n---\n");
-      let truncationWarning = "";
+      const result = formatted.join("\n---\n");
+      const totalAvailable = pagination.total || searchResults.length;
 
-      // Check if we need to truncate the overall response
+      // If results too large, return NO data - just tell model to retry with narrower params
       if (result.length > MAX_RESPONSE_CHARS) {
-        result = result.substring(0, MAX_RESPONSE_CHARS);
-        truncationWarning = "\n\n⚠️ RESPONSE TRUNCATED - Too much data. Please retry with:\n- Narrower time range (e.g., last 30 mins instead of hours)\n- Specific app_name filter\n- Lower limit (5-10)\n- More specific search query";
+        return `Search returned too much data (${searchResults.length} results, ~${Math.round(result.length / 1000)}k chars). Try again with a narrower time range or more specific filters.`;
       }
 
-      const totalAvailable = pagination.total || searchResults.length;
-      const header = `Results: ${searchResults.length}/${totalAvailable}${totalAvailable > searchResults.length ? " (more available - narrow search if needed)" : ""}`;
-
-      return `${header}\n\n${result}${truncationWarning}`;
+      return `Found ${searchResults.length} results:\n\n${result}`;
     } catch (error) {
       console.error("Search error:", error);
       if (error instanceof Error && error.name === "AbortError") {
@@ -457,10 +452,22 @@ Always use these exact start_time and end_time values when searching, unless the
 
       // Handle tool calls if any
       if (toolCalls.length > 0) {
+        // Show what we're searching for
+        const searchArgs = toolCalls[0]?.function?.arguments;
+        let searchInfo = "Searching...";
+        try {
+          const args = JSON.parse(searchArgs || "{}");
+          const parts = [];
+          if (args.app_name) parts.push(args.app_name);
+          if (args.start_time) parts.push(`from ${args.start_time}`);
+          if (args.q) parts.push(`"${args.q}"`);
+          if (parts.length > 0) searchInfo = `Searching ${parts.join(", ")}...`;
+        } catch {}
+
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMessageId
-              ? { ...m, content: accumulatedText + "\n\n*Searching your data...*" }
+              ? { ...m, content: accumulatedText + `\n\n*${searchInfo}*` }
               : m
           )
         );
