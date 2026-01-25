@@ -184,11 +184,9 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				const startTime = new Date(currentDate);
 				startTime.setHours(0, 0, 0, 0);
 				const endTime = new Date(currentDate);
-				if (endTime.getDate() === new Date().getDate()) {
-					// For today: use current time for real-time polling
-				} else {
-					endTime.setHours(23, 59, 59, 999);
-				}
+				// Always use end of day so server keeps polling for new frames
+				// Server checks `now <= end_time` to decide whether to poll
+				endTime.setHours(23, 59, 59, 999);
 				fetchTimeRange(startTime, endTime);
 			}, 100);
 		};
