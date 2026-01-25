@@ -1,8 +1,8 @@
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
-import React, { FC, useState, useRef, useCallback } from "react";
+import React, { FC, useState, useRef } from "react";
 import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
 import { TextOverlay } from "@/components/text-overlay";
-import { ExternalLink, FileX, AlertTriangle, WifiOff, ImageOff, RefreshCw, SkipForward, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileX, ImageOff, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface CurrentFrameTimelineProps {
 	currentFrame: StreamTimeSeriesResponse;
@@ -49,24 +49,12 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	const frameId = currentFrame?.devices?.[0]?.frame_id;
-	const browserUrl = currentFrame?.devices?.[0]?.metadata?.browser_url;
-	// Simple image URL without cache busting
 	const imageUrl = `http://localhost:3030/frames/${frameId}`;
 
 	// Fetch OCR text positions for text selection overlay
 	const { textPositions } = useFrameOcrData(
 		frameId ? parseInt(frameId, 10) : null
 	);
-
-	const handleOpenInBrowser = useCallback(() => {
-		if (browserUrl) {
-			window.open(browserUrl, "_blank", "noopener,noreferrer");
-		}
-	}, [browserUrl]);
-
-	// Only show "Open in Browser" for actual HTTP/HTTPS URLs
-	const hasValidUrl = browserUrl &&
-		(browserUrl.startsWith("http://") || browserUrl.startsWith("https://"));
 
 	// Reset loading state when frame changes, but be smarter about it
 	React.useEffect(() => {
@@ -128,38 +116,31 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 
 	if (!frameId) {
 		return (
-			<div className="absolute inset-0 overflow-hidden">
-				{/* Elegant gradient background */}
-				<div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-
-				{/* Content */}
+			<div className="absolute inset-0 overflow-hidden bg-background">
 				<div className="absolute inset-0 flex items-center justify-center">
 					<div className="max-w-sm w-full mx-4">
-						<div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
-							{/* Icon */}
+						<div className="bg-card border border-border p-8">
 							<div className="flex justify-center mb-6">
-								<div className="w-16 h-16 rounded-full bg-slate-500/20 border border-slate-500/30 flex items-center justify-center">
-									<ImageOff className="w-8 h-8 text-slate-400" />
+								<div className="w-16 h-16 border border-border flex items-center justify-center">
+									<ImageOff className="w-8 h-8 text-muted-foreground" />
 								</div>
 							</div>
 
-							{/* Text content */}
 							<div className="text-center space-y-3">
-								<h3 className="text-xl font-semibold text-white">
+								<h3 className="text-xl font-mono font-semibold text-foreground uppercase tracking-wide">
 									No Frame Selected
 								</h3>
-								<p className="text-sm text-slate-300 leading-relaxed">
+								<p className="text-sm font-mono text-muted-foreground leading-relaxed">
 									Select a point on the timeline to view a recorded frame.
 								</p>
 							</div>
 
-							{/* Navigation hint */}
 							{onNavigate && (
 								<div className="mt-8 flex gap-2">
 									<button
 										onClick={() => onNavigate("prev")}
 										disabled={!canNavigatePrev}
-										className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-800/50 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700/50 rounded-xl text-slate-300 text-sm font-medium transition-all duration-200"
+										className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors"
 									>
 										<ChevronLeft className="w-4 h-4" />
 										Previous
@@ -167,7 +148,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 									<button
 										onClick={() => onNavigate("next")}
 										disabled={!canNavigateNext}
-										className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-800/50 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700/50 rounded-xl text-slate-300 text-sm font-medium transition-all duration-200"
+										className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors"
 									>
 										Next
 										<ChevronRight className="w-4 h-4" />
@@ -247,83 +228,53 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					</div>
 				</div>
 			)}
-			{/* Open in Browser button for captured browser URLs - temporarily disabled */}
-			{/* {hasValidUrl && !isLoading && !hasError && (
-				<button
-					onClick={handleOpenInBrowser}
-					className="absolute top-4 right-4 z-10 flex items-center gap-1.5 px-3 py-2 bg-black/70 hover:bg-black/90 text-white text-sm font-medium rounded-lg transition-colors backdrop-blur-sm"
-					title={`Open ${browserUrl}`}
-				>
-					<ExternalLink className="h-4 w-4" />
-					Open in Browser
-				</button>
-			)} */}
 			{hasError && !isLoading && (
-				<div className="absolute inset-0 z-10 overflow-hidden">
-					{/* Elegant gradient background */}
-					<div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-
-					{/* Subtle pattern overlay */}
-					<div
-						className="absolute inset-0 opacity-5"
-						style={{
-							backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-						}}
-					/>
-
-					{/* Content */}
+				<div className="absolute inset-0 z-10 overflow-hidden bg-background">
 					<div className="absolute inset-0 flex items-center justify-center">
 						<div className="max-w-sm w-full mx-4">
-							{/* Main card */}
-							<div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
-								{/* Icon */}
+							<div className="bg-card border border-border p-8">
 								<div className="flex justify-center mb-6">
-									<div className="w-16 h-16 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
-										<FileX className="w-8 h-8 text-amber-400" />
+									<div className="w-16 h-16 border border-destructive/50 flex items-center justify-center">
+										<FileX className="w-8 h-8 text-destructive" />
 									</div>
 								</div>
 
-								{/* Text content */}
 								<div className="text-center space-y-3">
-									<h3 className="text-xl font-semibold text-white">
+									<h3 className="text-xl font-mono font-semibold text-foreground uppercase tracking-wide">
 										Frame Unavailable
 									</h3>
-									<p className="text-sm text-slate-300 leading-relaxed">
+									<p className="text-sm font-mono text-muted-foreground leading-relaxed">
 										This recording could not be loaded. The video file may be temporarily unavailable or still processing.
 									</p>
 
-									{/* Frame ID badge */}
-									<div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 rounded-full border border-slate-700/50">
-										<span className="text-xs text-slate-400">Frame</span>
-										<span className="text-xs font-mono text-slate-300">{frameId}</span>
+									<div className="inline-flex items-center gap-2 px-3 py-1.5 bg-muted border border-border">
+										<span className="text-xs font-mono text-muted-foreground uppercase">Frame</span>
+										<span className="text-xs font-mono text-foreground">{frameId}</span>
 									</div>
 								</div>
 
-								{/* Actions */}
 								<div className="mt-8 space-y-3">
-									{/* Primary action: Retry or Navigate */}
 									{retryCount < 3 ? (
 										<button
 											onClick={handleRetry}
-											className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-xl text-white text-sm font-medium transition-all duration-200"
+											className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent border border-border text-foreground text-sm font-mono uppercase transition-colors"
 										>
 											<RefreshCw className="w-4 h-4" />
 											Try Again
-											<span className="text-white/50 text-xs">({3 - retryCount} left)</span>
+											<span className="text-muted-foreground text-xs">({3 - retryCount} left)</span>
 										</button>
 									) : (
-										<div className="text-center text-sm text-slate-400 py-2">
+										<div className="text-center text-sm font-mono text-muted-foreground py-2 uppercase">
 											Retries exhausted
 										</div>
 									)}
 
-									{/* Navigation buttons */}
 									{onNavigate && (
 										<div className="flex gap-2">
 											<button
 												onClick={() => onNavigate("prev")}
 												disabled={!canNavigatePrev}
-												className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-800/50 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700/50 rounded-xl text-slate-300 text-sm font-medium transition-all duration-200"
+												className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors"
 											>
 												<ChevronLeft className="w-4 h-4" />
 												Previous
@@ -331,7 +282,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 											<button
 												onClick={() => onNavigate("next")}
 												disabled={!canNavigateNext}
-												className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-800/50 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700/50 rounded-xl text-slate-300 text-sm font-medium transition-all duration-200"
+												className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors"
 											>
 												Next
 												<ChevronRight className="w-4 h-4" />
@@ -341,8 +292,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 								</div>
 							</div>
 
-							{/* Help text */}
-							<p className="text-center text-xs text-slate-500 mt-4">
+							<p className="text-center text-xs font-mono text-muted-foreground mt-4">
 								If this persists, try restarting the screenpipe server
 							</p>
 						</div>
