@@ -685,10 +685,13 @@ async fn is_server_running(app: AppHandle) -> Result<bool, String> {
 async fn main() {
     let _ = fix_path_env::fix();
 
-    // Initialize Sentry only if telemetry is not disabled via env var
-    // Users can set SCREENPIPE_DISABLE_TELEMETRY=1 to opt out
-    let telemetry_disabled = env::var("SCREENPIPE_DISABLE_TELEMETRY")
-        .map(|v| v == "1" || v.to_lowercase() == "true")
+    // Check if telemetry is disabled via store setting (analyticsEnabled)
+    let telemetry_disabled = dirs::data_local_dir()
+        .map(|dir| dir.join("screenpipe").join("store.bin"))
+        .and_then(|path| std::fs::read_to_string(&path).ok())
+        .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
+        .and_then(|data| data.get("analyticsEnabled").and_then(|v| v.as_bool()))
+        .map(|enabled| !enabled)
         .unwrap_or(false);
 
     let sentry_guard = if !telemetry_disabled {
@@ -700,7 +703,6 @@ async fn main() {
             },
         )))
     } else {
-        info!("Sentry telemetry disabled via SCREENPIPE_DISABLE_TELEMETRY env var");
         None
     };
 
