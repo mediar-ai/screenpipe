@@ -19,6 +19,29 @@ Automate releasing all components of the screenpipe monorepo.
 | JS Node SDK | `screenpipe-js/node-sdk/package.json` | `"version": "X.Y.Z"` | npm publish |
 | JS CLI | `screenpipe-js/cli/package.json` | `"version": "X.Y.Z"` | npm publish |
 
+## When to Release What
+
+**Always release CLI** when there are changes to core screenpipe code:
+- `screenpipe-core/`
+- `screenpipe-vision/`
+- `screenpipe-audio/`
+- `screenpipe-server/`
+- `screenpipe-db/`
+- `screenpipe-events/`
+- `screenpipe-integrations/`
+
+**App-only release** is fine when changes are only in:
+- `screenpipe-app-tauri/` (UI/frontend changes)
+
+To check what changed since last CLI release:
+```bash
+# Find last CLI release commit
+git log --oneline --all | grep -E "CLI to v" | head -1
+
+# Check if core code changed since then
+git diff <COMMIT>..HEAD --stat -- screenpipe-core screenpipe-vision screenpipe-audio screenpipe-server screenpipe-db screenpipe-events screenpipe-integrations
+```
+
 ## Release Workflow
 
 ### 1. Check Current Versions
