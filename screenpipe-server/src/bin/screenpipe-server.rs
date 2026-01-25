@@ -15,7 +15,7 @@ use screenpipe_server::{
     cli::{Cli, Command},
     commands::{handle_audio_command, handle_mcp_command, handle_migrate_command, handle_pipe_command, handle_vision_command},
     display::{print_startup, DisplayConfig},
-    handle_index_command, start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer,
+    handle_index_command, start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer, VisionManager,
 };
 use screenpipe_vision::monitor::list_monitors;
 use std::{
@@ -247,7 +247,7 @@ async fn main() -> anyhow::Result<()> {
             .await?
     );
 
-    // Start recording
+    // Start recording - use VisionManager if --use-all-monitors is enabled
     let db_clone = db.clone();
     let output_path_clone = output_path.clone();
     let shutdown_tx_clone = shutdown_tx.clone();
@@ -257,23 +257,63 @@ async fn main() -> anyhow::Result<()> {
     let ignored_windows = cli.ignored_windows.clone();
     let included_windows = cli.included_windows.clone();
 
-    let handle = tokio::spawn(async move {
-        loop {
-            let mut shutdown_rx = shutdown_tx_clone.subscribe();
-            let recording = start_continuous_recording(
-                db_clone.clone(), output_path_clone.clone(), fps,
-                Duration::from_secs(cli.video_chunk_duration), ocr_engine.clone(),
-                monitor_ids_clone.clone(), cli.use_pii_removal, cli.disable_vision,
-                &vision_handle, &ignored_windows, &included_windows,
-                languages_clone.clone(), cli.capture_unfocused_windows,
-                cli.enable_realtime_audio_transcription,
-            );
+    // Create VisionManager if use_all_monitors is enabled
+    let vision_manager = if cli.use_all_monitors && !cli.disable_vision {
+        let vm = Arc::new(VisionManager::new(
+            db_clone.clone(),
+            output_path_clone.clone(),
+            fps,
+            Duration::from_secs(cli.video_chunk_duration),
+            ocr_engine.clone(),
+            cli.use_pii_removal,
+            ignored_windows.clone(),
+            included_windows.clone(),
+            languages_clone.clone(),
+            cli.capture_unfocused_windows,
+            false, // realtime_vision
+        ));
+
+        let vm_clone = vm.clone();
+        let shutdown_tx_vm = shutdown_tx.clone();
+        let vision_handle_vm = vision_handle.clone();
+        tokio::spawn(async move {
+            let mut shutdown_rx = shutdown_tx_vm.subscribe();
             tokio::select! {
-                result = recording => { if let Err(e) = result { error!("recording error: {:?}", e); } }
-                _ = shutdown_rx.recv() => { info!("shutdown signal received"); break; }
+                result = vm_clone.start(&vision_handle_vm) => {
+                    if let Err(e) = result { error!("VisionManager error: {:?}", e); }
+                }
+                _ = shutdown_rx.recv() => { info!("VisionManager shutdown signal received"); }
             }
-        }
-    });
+            let _ = vm_clone.stop().await;
+        });
+
+        Some(vm)
+    } else {
+        None
+    };
+
+    // Only use traditional recording if use_all_monitors is not enabled
+    let handle = if vision_manager.is_none() {
+        Some(tokio::spawn(async move {
+            loop {
+                let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                let recording = start_continuous_recording(
+                    db_clone.clone(), output_path_clone.clone(), fps,
+                    Duration::from_secs(cli.video_chunk_duration), ocr_engine.clone(),
+                    monitor_ids_clone.clone(), cli.use_pii_removal, cli.disable_vision,
+                    &vision_handle, &ignored_windows, &included_windows,
+                    languages_clone.clone(), cli.capture_unfocused_windows,
+                    cli.enable_realtime_audio_transcription,
+                );
+                tokio::select! {
+                    result = recording => { if let Err(e) = result { error!("recording error: {:?}", e); } }
+                    _ = shutdown_rx.recv() => { info!("shutdown signal received"); break; }
+                }
+            }
+        }))
+    } else {
+        None
+    };
 
     #[cfg(feature = "llm")]
     let _llm = if cli.enable_llm { Some(screenpipe_core::LLM::new(screenpipe_core::ModelName::Llama)?) } else { None };
@@ -314,6 +354,7 @@ async fn main() -> anyhow::Result<()> {
         unfocused_windows: cli.capture_unfocused_windows,
         auto_destruct_pid: cli.auto_destruct_pid,
         deepgram_key_set: cli.deepgram_api_key.is_some(),
+        use_all_monitors: cli.use_all_monitors,
         languages: languages.iter().map(|l| format!("{}", l)).collect(),
         monitor_ids: monitor_ids.clone(),
         audio_devices: audio_devices.clone(),
@@ -372,8 +413,20 @@ async fn main() -> anyhow::Result<()> {
     let ctrl_c = signal::ctrl_c();
     pin_mut!(ctrl_c);
 
+    // Use async block for optional handle
+    let recording_future = async {
+        if let Some(h) = handle {
+            let _ = h.await;
+            info!("recording completed");
+        } else {
+            // VisionManager is running, just wait forever (will be cancelled by shutdown)
+            std::future::pending::<()>().await;
+        }
+    };
+    pin_mut!(recording_future);
+
     tokio::select! {
-        _ = handle => info!("recording completed"),
+        _ = &mut recording_future => {},
         result = &mut server_future => match result {
             Ok(_) => info!("server stopped"),
             Err(e) => error!("server error: {:?}", e),

@@ -35,6 +35,7 @@ pub struct DisplayConfig {
     pub unfocused_windows: bool,
     pub auto_destruct_pid: Option<u32>,
     pub deepgram_key_set: bool,
+    pub use_all_monitors: bool,
     pub languages: Vec<String>,
     pub monitor_ids: Vec<u32>,
     pub audio_devices: Vec<String>,
@@ -74,6 +75,7 @@ pub fn print_startup(cfg: DisplayConfig) {
     row("capture unfocused wins", &cfg.unfocused_windows.to_string());
     row("auto-destruct pid", &cfg.auto_destruct_pid.unwrap_or(0).to_string());
     row("deepgram key", if cfg.deepgram_key_set { "set (masked)" } else { "not set" });
+    row("use all monitors", &cfg.use_all_monitors.to_string());
 
     section("languages", if cfg.languages.is_empty() {
         vec!["all languages".to_string()]
