@@ -152,6 +152,11 @@ pub struct CapturedWindow {
     pub is_focused: bool,
     /// Browser URL captured atomically with the screenshot to prevent timing mismatches
     pub browser_url: Option<String>,
+    /// Window position and size on screen for coordinate transformation
+    pub window_x: i32,
+    pub window_y: i32,
+    pub window_width: u32,
+    pub window_height: u32,
 }
 
 pub struct WindowFilters {
@@ -268,9 +273,17 @@ pub async fn capture_all_visible_windows(
                 }
             };
 
+            // Get window position and size for coordinate transformation
+            let (window_x, window_y, window_width, window_height) = (
+                window.x().unwrap_or(0),
+                window.y().unwrap_or(0),
+                window.width().unwrap_or(0),
+                window.height().unwrap_or(0),
+            );
+
             // Capture image immediately while we have access to the window
             match window.capture_image() {
-                Ok(buffer) => Some((app_name, title, is_focused, buffer, process_id)),
+                Ok(buffer) => Some((app_name, title, is_focused, buffer, process_id, window_x, window_y, window_width, window_height)),
                 Err(e) => {
                     // Expected for overlay windows, protected content, or transparent windows
                     debug!(
@@ -288,7 +301,7 @@ pub async fn capture_all_visible_windows(
     }
 
     // Process the captured data
-    for (app_name, window_name, is_focused, buffer, process_id) in windows_data {
+    for (app_name, window_name, is_focused, buffer, process_id, window_x, window_y, window_width, window_height) in windows_data {
         // Convert to DynamicImage
         let image = DynamicImage::ImageRgba8(
             image::ImageBuffer::from_raw(buffer.width(), buffer.height(), buffer.into_raw())
@@ -328,6 +341,10 @@ pub async fn capture_all_visible_windows(
                 process_id,
                 is_focused,
                 browser_url,
+                window_x,
+                window_y,
+                window_width,
+                window_height,
             });
         }
     }

@@ -338,6 +338,9 @@ pub async fn process_ocr_task(
     let mut total_confidence = 0.0;
     let mut window_count = 0;
 
+    // Get screen dimensions for coordinate transformation
+    let (screen_width, screen_height) = image.dimensions();
+
     for captured_window in window_images {
         let ocr_result = process_window_ocr(
             captured_window,
@@ -345,6 +348,8 @@ pub async fn process_ocr_task(
             &languages,
             &mut total_confidence,
             &mut window_count,
+            screen_width,
+            screen_height,
         )
         .await
         .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string()))?;
@@ -377,6 +382,8 @@ async fn process_window_ocr(
     languages: &[Language],
     total_confidence: &mut f64,
     window_count: &mut u32,
+    screen_width: u32,
+    screen_height: u32,
 ) -> Result<WindowOcrResult, ContinuousCaptureError> {
     // Use the browser URL that was captured atomically with the screenshot
     // This prevents timing mismatches where URL is fetched after browser navigation
@@ -394,12 +401,24 @@ async fn process_window_ocr(
         *window_count += 1;
     }
 
+    // Parse the OCR JSON and transform coordinates from window-relative to screen-relative
+    let parsed_json = parse_json_output(&window_json_output);
+    let transformed_json = transform_ocr_coordinates_to_screen(
+        parsed_json,
+        captured_window.window_x,
+        captured_window.window_y,
+        captured_window.window_width,
+        captured_window.window_height,
+        screen_width,
+        screen_height,
+    );
+
     Ok(WindowOcrResult {
         image: captured_window.image,
         window_name: captured_window.window_name,
         app_name: captured_window.app_name,
         text: window_text,
-        text_json: parse_json_output(&window_json_output),
+        text_json: transformed_json,
         focused: captured_window.is_focused,
         confidence: confidence.unwrap_or(0.0),
         browser_url,
