@@ -2,9 +2,15 @@ import { useState, useRef, useMemo, useCallback } from "react";
 import { AudioData, StreamTimeSeriesResponse, TimeRange } from "@/components/rewind/timeline";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Play, Pause, Volume2, GripHorizontal, X } from "lucide-react";
+import { Play, Pause, Volume2, GripHorizontal, X, MessageSquare, Layers } from "lucide-react";
 import { VideoComponent } from "@/components/rewind/video";
 import { SpeakerAssignPopover } from "@/components/speaker-assign-popover";
+import {
+	ConversationBubble,
+	TimeGapDivider,
+	ParticipantsSummary,
+} from "@/components/conversation-bubble";
+import { cn } from "@/lib/utils";
 
 interface AudioGroup {
 	deviceName: string;
@@ -14,10 +20,24 @@ interface AudioGroup {
 	endTime: Date;
 }
 
+// Extended audio item with timestamp for conversation view
+interface AudioItemWithTimestamp extends AudioData {
+	timestamp: Date;
+}
+
+interface ConversationItem {
+	audio: AudioItemWithTimestamp;
+	side: "left" | "right";
+	isFirstInGroup: boolean;
+	gapMinutesBefore?: number;
+}
+
+type ViewMode = "device" | "thread";
+
 interface AudioTranscriptProps {
 	frames: StreamTimeSeriesResponse[];
 	currentIndex: number;
-	groupingWindowMs?: number; // how many ms to group audio files together
+	groupingWindowMs?: number;
 	onClose?: () => void;
 }
 
@@ -31,19 +51,12 @@ function formatDurationHuman(durationInSeconds: number): string {
 	if (minutes > 0) parts.push(`${minutes}m`);
 	if (seconds > 0) parts.push(`${seconds}s`);
 
-	return parts.join(" ");
+	return parts.join(" ") || "0s";
 }
 
-function calculateTimeRange(
-	startTime: Date,
-	durationInSeconds: number,
-): TimeRange {
+function calculateTimeRange(startTime: Date, durationInSeconds: number): TimeRange {
 	const endTime = new Date(startTime.getTime() + durationInSeconds * 1000);
-
-	return {
-		start: startTime,
-		end: endTime,
-	};
+	return { start: startTime, end: endTime };
 }
 
 function formatTimeRange(range: TimeRange): string {
@@ -51,9 +64,7 @@ function formatTimeRange(range: TimeRange): string {
 		hour: "2-digit",
 		minute: "2-digit",
 		second: "2-digit",
-		// fractionalSecondDigits: 3,
 	};
-
 	return `${range.start.toLocaleTimeString([], formatOptions)} - ${range.end.toLocaleTimeString([], formatOptions)}`;
 }
 
@@ -64,17 +75,18 @@ export function AudioTranscript({
 	onClose,
 }: AudioTranscriptProps) {
 	const [playing, setPlaying] = useState<string | null>(null);
+	const [viewMode, setViewMode] = useState<ViewMode>("thread"); // Default to thread view
 	const [position, setPosition] = useState(() => ({
-		x: window.innerWidth - 320,
+		x: window.innerWidth - 380,
 		y: 100,
 	}));
 	const [isDragging, setIsDragging] = useState(false);
 	const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-	const [windowSize, setWindowSize] = useState({ width: 300, height: 500 });
+	const [windowSize, setWindowSize] = useState({ width: 360, height: 500 });
 	const resizerRef = useRef<HTMLDivElement | null>(null);
 	const panelRef = useRef<HTMLDivElement | null>(null);
 
-	// Track speaker assignments (audio_chunk_id -> {speaker_id, speaker_name})
+	// Track speaker assignments
 	const [speakerOverrides, setSpeakerOverrides] = useState<
 		Map<number, { speakerId: number; speakerName: string }>
 	>(new Map());
@@ -90,27 +102,34 @@ export function AudioTranscript({
 		[]
 	);
 
-	// 2. Memoize the audio grouping logic
+	// Get speaker info with overrides
+	const getSpeakerInfo = useCallback(
+		(audio: AudioData) => {
+			const override = speakerOverrides.get(audio.audio_chunk_id);
+			return {
+				speakerId: override?.speakerId ?? audio.speaker_id,
+				speakerName: override?.speakerName ?? audio.speaker_name,
+			};
+		},
+		[speakerOverrides]
+	);
+
+	// Compute audio groups (device view)
 	const audioGroups = useMemo(() => {
 		if (!frames.length) return [];
 
 		const currentFrame = frames[currentIndex];
-		const currentTime = new Date(currentFrame?.timestamp);
+		if (!currentFrame) return [];
+
+		const currentTime = new Date(currentFrame.timestamp);
 		const windowStart = new Date(currentTime.getTime() - groupingWindowMs);
 		const windowEnd = new Date(currentTime.getTime() + groupingWindowMs);
 
-		// Get frames within our time window
 		const nearbyFrames = frames.filter((frame) => {
 			const frameTime = new Date(frame.timestamp);
 			return frameTime >= windowStart && frameTime <= windowEnd;
 		});
 
-		// Check if any nearby frames have audio
-		const hasNearbyAudio = nearbyFrames.some((frame) =>
-			frame.devices.some((device) => device.audio.length > 0),
-		);
-
-		// Group audio by device
 		const groups = new Map<string, AudioGroup>();
 
 		nearbyFrames.forEach((frame) => {
@@ -131,7 +150,6 @@ export function AudioTranscript({
 					const group = groups.get(key)!;
 					group.audioItems.push(audio);
 
-					// Update time range
 					const frameTime = new Date(frame.timestamp);
 					if (frameTime < group.startTime) group.startTime = frameTime;
 					if (frameTime > group.endTime) group.endTime = frameTime;
@@ -142,12 +160,111 @@ export function AudioTranscript({
 		return Array.from(groups.values());
 	}, [frames, currentIndex, groupingWindowMs]);
 
-	// 3. Memoize visibility based on audio groups
+	// Compute conversation items (thread view)
+	const conversationData = useMemo(() => {
+		if (!frames.length) return { items: [], participants: [], timeRange: null, totalDuration: 0 };
+
+		const currentFrame = frames[currentIndex];
+		if (!currentFrame) return { items: [], participants: [], timeRange: null, totalDuration: 0 };
+
+		const currentTime = new Date(currentFrame.timestamp);
+		const windowStart = new Date(currentTime.getTime() - groupingWindowMs);
+		const windowEnd = new Date(currentTime.getTime() + groupingWindowMs);
+
+		// Flatten all audio with timestamps
+		const allAudio: AudioItemWithTimestamp[] = [];
+
+		frames.forEach((frame) => {
+			const frameTime = new Date(frame.timestamp);
+			if (frameTime >= windowStart && frameTime <= windowEnd) {
+				frame.devices.forEach((device) => {
+					device.audio.forEach((audio) => {
+						allAudio.push({
+							...audio,
+							timestamp: frameTime,
+						});
+					});
+				});
+			}
+		});
+
+		// Sort by timestamp
+		allAudio.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+		// Build conversation items with grouping and gap detection
+		const items: ConversationItem[] = [];
+		let lastSpeakerId: number | undefined = undefined;
+		let lastTimestamp: Date | null = null;
+
+		allAudio.forEach((audio) => {
+			const { speakerId } = getSpeakerInfo(audio);
+			const isFirstInGroup = speakerId !== lastSpeakerId;
+
+			// Detect time gaps > 2 minutes
+			let gapMinutesBefore: number | undefined;
+			if (lastTimestamp) {
+				const gapMs = audio.timestamp.getTime() - lastTimestamp.getTime();
+				const gapMinutes = gapMs / 60000;
+				if (gapMinutes > 2) {
+					gapMinutesBefore = Math.round(gapMinutes);
+				}
+			}
+
+			// Determine side: input (your mic) on right, output (remote) on left
+			const side: "left" | "right" = audio.is_input ? "right" : "left";
+
+			items.push({
+				audio,
+				side,
+				isFirstInGroup: isFirstInGroup || gapMinutesBefore !== undefined,
+				gapMinutesBefore,
+			});
+
+			lastSpeakerId = speakerId;
+			lastTimestamp = audio.timestamp;
+		});
+
+		// Compute participants
+		const participantMap = new Map<number, { name: string; duration: number }>();
+		allAudio.forEach((audio) => {
+			const { speakerId, speakerName } = getSpeakerInfo(audio);
+			const id = speakerId ?? -1;
+			const existing = participantMap.get(id);
+			if (existing) {
+				existing.duration += audio.duration_secs;
+			} else {
+				participantMap.set(id, {
+					name: speakerName || "",
+					duration: audio.duration_secs,
+				});
+			}
+		});
+
+		const participants = Array.from(participantMap.entries())
+			.map(([id, data]) => ({ id, name: data.name, duration: data.duration }))
+			.sort((a, b) => b.duration - a.duration);
+
+		const totalDuration = participants.reduce((sum, p) => sum + p.duration, 0);
+
+		// Time range
+		const timeRange =
+			allAudio.length > 0
+				? {
+						start: allAudio[0].timestamp,
+						end: allAudio[allAudio.length - 1].timestamp,
+				  }
+				: null;
+
+		return { items, participants, timeRange, totalDuration };
+	}, [frames, currentIndex, groupingWindowMs, getSpeakerInfo]);
+
+	// Auto-switch to thread view if multiple speakers detected
+	const hasMultipleSpeakers = conversationData.participants.length > 1;
+
 	const isVisible = useMemo(() => {
 		return audioGroups.length > 0;
 	}, [audioGroups]);
 
-	// 4. Memoize handlers
 	const handlePanelMouseMove = useCallback(
 		(e: React.MouseEvent) => {
 			if (isDragging) {
@@ -157,7 +274,7 @@ export function AudioTranscript({
 				});
 			}
 		},
-		[isDragging, dragOffset],
+		[isDragging, dragOffset]
 	);
 
 	const handlePlay = useCallback((audioPath: string) => {
@@ -186,7 +303,7 @@ export function AudioTranscript({
 		const startHeight = windowSize.height;
 
 		const handleMouseMove = (moveEvent: MouseEvent) => {
-			const newWidth = Math.max(200, startWidth + moveEvent.clientX - startX);
+			const newWidth = Math.max(280, startWidth + moveEvent.clientX - startX);
 			const newHeight = Math.max(200, startHeight + moveEvent.clientY - startY);
 			setWindowSize({ width: newWidth, height: newHeight });
 		};
@@ -219,6 +336,7 @@ export function AudioTranscript({
 			}}
 			className="audio-transcript-panel bg-popover border border-border rounded-2xl shadow-2xl z-[100] overflow-hidden"
 		>
+			{/* Header */}
 			<div
 				className="select-none cursor-grab active:cursor-grabbing p-3 border-b border-border"
 				onMouseDown={handlePanelMouseDown}
@@ -226,106 +344,198 @@ export function AudioTranscript({
 				onMouseUp={handlePanelMouseUp}
 				onMouseLeave={handlePanelMouseUp}
 			>
-				<div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-					<div className="flex items-center gap-2">
+				<div className="flex items-center justify-between gap-2">
+					<div className="flex items-center gap-2 text-xs text-muted-foreground">
 						<GripHorizontal className="w-4 h-4" />
 						<span>audio transcripts</span>
 					</div>
-					<Button
-						variant="ghost"
-						size="sm"
-						className="h-6 w-6 p-0 text-foreground hover:text-accent-foreground hover:bg-accent"
-						onClick={handleClose}
-					>
-						<X className="h-3 w-3" />
-					</Button>
+
+					{/* View mode toggle */}
+					<div className="flex items-center gap-1">
+						<Button
+							variant={viewMode === "device" ? "secondary" : "ghost"}
+							size="sm"
+							className="h-6 px-2 text-xs gap-1"
+							onClick={() => setViewMode("device")}
+							title="Group by device"
+						>
+							<Layers className="h-3 w-3" />
+						</Button>
+						<Button
+							variant={viewMode === "thread" ? "secondary" : "ghost"}
+							size="sm"
+							className="h-6 px-2 text-xs gap-1"
+							onClick={() => setViewMode("thread")}
+							title="Conversation thread"
+						>
+							<MessageSquare className="h-3 w-3" />
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-6 w-6 p-0 ml-1"
+							onClick={handleClose}
+						>
+							<X className="h-3 w-3" />
+						</Button>
+					</div>
 				</div>
 			</div>
 
+			{/* Participants summary (thread view only) */}
+			{viewMode === "thread" &&
+				conversationData.participants.length > 0 &&
+				conversationData.timeRange && (
+					<ParticipantsSummary
+						participants={conversationData.participants}
+						totalDuration={conversationData.totalDuration}
+						timeRange={conversationData.timeRange}
+					/>
+				)}
+
+			{/* Content */}
 			<div
-				className="space-y-2 p-3 overflow-y-auto"
+				className="overflow-y-auto"
 				style={{
-					height: "calc(100% - 45px)",
-					overscrollBehavior: "contain", // Prevent scroll chaining
-					WebkitOverflowScrolling: "touch", // Smooth scrolling on iOS
+					height: `calc(100% - ${viewMode === "thread" && conversationData.participants.length > 0 ? "90px" : "45px"})`,
+					overscrollBehavior: "contain",
+					WebkitOverflowScrolling: "touch",
 				}}
 			>
-				{audioGroups.map((group, groupIndex) => (
-					<Card key={groupIndex} className="p-4 bg-card border border-border rounded-xl">
-						<div className="text-xs text-muted-foreground mb-2">
-							{group.deviceName} ({group.isInput ? "input" : "output"})
-							<div className="text-[10px] text-muted-foreground">
-								{formatTimeRange(
-									calculateTimeRange(
-										group.startTime,
-										group.audioItems.reduce(
-											(value, item) => value + item.duration_secs,
-											0,
-										),
-									),
-								)}
-							</div>
-						</div>
+				{viewMode === "device" ? (
+					// Device view (original)
+					<div className="space-y-2 p-3">
+						{audioGroups.map((group, groupIndex) => (
+							<Card
+								key={groupIndex}
+								className="p-4 bg-card border border-border rounded-xl"
+							>
+								<div className="text-xs text-muted-foreground mb-2">
+									{group.deviceName} ({group.isInput ? "input" : "output"})
+									<div className="text-[10px] text-muted-foreground">
+										{formatTimeRange(
+											calculateTimeRange(
+												group.startTime,
+												group.audioItems.reduce(
+													(value, item) => value + item.duration_secs,
+													0
+												)
+											)
+										)}
+									</div>
+								</div>
 
-						{group.audioItems.map((audio, index) => {
-							// Get speaker info (use override if available, otherwise from audio data)
-							const override = speakerOverrides.get(audio.audio_chunk_id);
-							const speakerId = override?.speakerId ?? audio.speaker_id;
-							const speakerName = override?.speakerName ?? audio.speaker_name;
+								{group.audioItems.map((audio, index) => {
+									const { speakerId, speakerName } = getSpeakerInfo(audio);
 
-							return (
-								<div key={index} className="space-y-2 mb-3 last:mb-0 pb-3 last:pb-0 border-b last:border-b-0 border-border/50">
-									<div className="flex items-center gap-2 flex-wrap">
-										<Button
-											variant="ghost"
-											size="sm"
-											className="h-6 w-6 p-0 text-foreground hover:text-accent-foreground hover:bg-accent"
-											onClick={() => handlePlay(audio.audio_file_path)}
+									return (
+										<div
+											key={index}
+											className="space-y-2 mb-3 last:mb-0 pb-3 last:pb-0 border-b last:border-b-0 border-border/50"
 										>
-											{playing === audio.audio_file_path ? (
-												<Pause className="h-3 w-3" />
-											) : (
-												<Play className="h-3 w-3" />
-											)}
-										</Button>
+											<div className="flex items-center gap-2 flex-wrap">
+												<Button
+													variant="ghost"
+													size="sm"
+													className="h-6 w-6 p-0"
+													onClick={() => handlePlay(audio.audio_file_path)}
+												>
+													{playing === audio.audio_file_path ? (
+														<Pause className="h-3 w-3" />
+													) : (
+														<Play className="h-3 w-3" />
+													)}
+												</Button>
 
-										{/* Speaker badge with assignment popover */}
-										<SpeakerAssignPopover
-											audioChunkId={audio.audio_chunk_id}
+												<SpeakerAssignPopover
+													audioChunkId={audio.audio_chunk_id}
+													speakerId={speakerId}
+													speakerName={speakerName}
+													audioFilePath={audio.audio_file_path}
+													onAssigned={(newId, newName) =>
+														handleSpeakerAssigned(
+															audio.audio_chunk_id,
+															newId,
+															newName
+														)
+													}
+												/>
+
+												<div className="flex items-center gap-1 text-xs text-muted-foreground">
+													<Volume2 className="h-3 w-3" />
+													<span>
+														{formatDurationHuman(
+															Math.round(audio.duration_secs)
+														)}
+													</span>
+												</div>
+											</div>
+
+											{audio.transcription && (
+												<div className="text-xs pl-8 text-muted-foreground">
+													{audio.transcription}
+												</div>
+											)}
+
+											{playing === audio.audio_file_path && (
+												<div className="pl-8">
+													<VideoComponent filePath={audio.audio_file_path} />
+												</div>
+											)}
+										</div>
+									);
+								})}
+							</Card>
+						))}
+					</div>
+				) : (
+					// Conversation thread view
+					<div className="p-3 space-y-0">
+						{conversationData.items.length === 0 ? (
+							<div className="text-center text-sm text-muted-foreground py-8">
+								No audio in this time window
+							</div>
+						) : (
+							conversationData.items.map((item, index) => {
+								const { speakerId, speakerName } = getSpeakerInfo(item.audio);
+
+								return (
+									<div key={index}>
+										{/* Time gap divider */}
+										{item.gapMinutesBefore && (
+											<TimeGapDivider minutes={item.gapMinutesBefore} />
+										)}
+
+										<ConversationBubble
+											audioChunkId={item.audio.audio_chunk_id}
 											speakerId={speakerId}
 											speakerName={speakerName}
-											audioFilePath={audio.audio_file_path}
-											onAssigned={(newId, newName) =>
-												handleSpeakerAssigned(audio.audio_chunk_id, newId, newName)
+											transcription={item.audio.transcription}
+											audioFilePath={item.audio.audio_file_path}
+											durationSecs={item.audio.duration_secs}
+											timestamp={item.audio.timestamp}
+											isInput={item.audio.is_input}
+											side={item.side}
+											isFirstInGroup={item.isFirstInGroup}
+											isPlaying={playing === item.audio.audio_file_path}
+											onPlay={() => handlePlay(item.audio.audio_file_path)}
+											onSpeakerAssigned={(newId, newName) =>
+												handleSpeakerAssigned(
+													item.audio.audio_chunk_id,
+													newId,
+													newName
+												)
 											}
 										/>
-
-										<div className="flex items-center gap-1 text-xs text-muted-foreground">
-											<Volume2 className="h-3 w-3" />
-											<span>
-												{formatDurationHuman(Math.round(audio.duration_secs))}
-											</span>
-										</div>
 									</div>
-
-									{audio.transcription && (
-										<div className="text-xs pl-8 text-muted-foreground">
-											{audio.transcription}
-										</div>
-									)}
-
-									{playing === audio.audio_file_path && (
-										<div className="pl-8">
-											<VideoComponent filePath={audio.audio_file_path} />
-										</div>
-									)}
-								</div>
-							);
-						})}
-					</Card>
-				))}
+								);
+							})
+						)}
+					</div>
+				)}
 			</div>
 
+			{/* Resize handle */}
 			<div
 				ref={resizerRef}
 				onMouseDown={handleResizeMouseDown}
@@ -333,7 +543,6 @@ export function AudioTranscript({
 				style={{
 					borderTopLeftRadius: "4px",
 					borderBottomRightRadius: "12px",
-					cursor: "se-resize",
 				}}
 			/>
 		</div>
