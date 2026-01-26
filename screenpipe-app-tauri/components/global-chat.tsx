@@ -27,6 +27,199 @@ import { commands } from "@/lib/utils/tauri";
 
 const SCREENPIPE_API = "http://localhost:3030";
 
+// ============================================================================
+// @MENTION SYSTEM - Time, Content Type, and App filters
+// ============================================================================
+
+interface TimeRange {
+  start: Date;
+  end: Date;
+  label: string;
+}
+
+interface ParsedMentions {
+  cleanedInput: string;
+  timeRanges: TimeRange[];
+  contentType: "all" | "ocr" | "audio" | null;
+  appName: string | null;
+  usedSelection: boolean;
+}
+
+interface ParseMentionsOptions {
+  selectionRange?: { start: Date; end: Date } | null;
+}
+
+// Common app name mappings (user-friendly -> actual app name patterns)
+const APP_MAPPINGS: Record<string, string[]> = {
+  "chrome": ["Google Chrome", "Chrome"],
+  "slack": ["Slack"],
+  "vscode": ["Code", "Visual Studio Code"],
+  "code": ["Code", "Visual Studio Code"],
+  "terminal": ["Terminal", "iTerm", "iTerm2", "Warp", "Alacritty", "kitty"],
+  "zoom": ["zoom.us", "Zoom"],
+  "teams": ["Microsoft Teams", "Teams"],
+  "discord": ["Discord"],
+  "figma": ["Figma"],
+  "notion": ["Notion"],
+  "obsidian": ["Obsidian"],
+  "safari": ["Safari"],
+  "firefox": ["Firefox"],
+  "arc": ["Arc"],
+  "cursor": ["Cursor"],
+  "finder": ["Finder"],
+  "mail": ["Mail"],
+  "messages": ["Messages"],
+  "spotify": ["Spotify"],
+  "twitter": ["Twitter", "X"],
+  "x": ["Twitter", "X"],
+  "linear": ["Linear"],
+  "github": ["GitHub Desktop"],
+  "postman": ["Postman"],
+  "iterm": ["iTerm", "iTerm2"],
+  "warp": ["Warp"],
+};
+
+function parseMentions(input: string, options?: ParseMentionsOptions): ParsedMentions {
+  const now = new Date();
+  const timeRanges: TimeRange[] = [];
+  let cleanedInput = input;
+  let contentType: "all" | "ocr" | "audio" | null = null;
+  let appName: string | null = null;
+  let usedSelection = false;
+
+  // === TIME MENTIONS ===
+
+  // @selection - timeline selection
+  const selectionPattern = /@selection\b/gi;
+  if (selectionPattern.test(cleanedInput) && options?.selectionRange) {
+    timeRanges.push({
+      start: options.selectionRange.start,
+      end: options.selectionRange.end,
+      label: "selected range",
+    });
+    cleanedInput = cleanedInput.replace(selectionPattern, "").trim();
+    usedSelection = true;
+  }
+
+  const timePatterns: { pattern: RegExp; getRange: () => TimeRange }[] = [
+    {
+      pattern: /@today\b/gi,
+      getRange: () => {
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        return { start, end: now, label: "today" };
+      },
+    },
+    {
+      pattern: /@yesterday\b/gi,
+      getRange: () => {
+        const start = new Date(now);
+        start.setDate(start.getDate() - 1);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start);
+        end.setHours(23, 59, 59, 999);
+        return { start, end, label: "yesterday" };
+      },
+    },
+    {
+      pattern: /@last[- ]?week\b/gi,
+      getRange: () => {
+        const start = new Date(now);
+        start.setDate(start.getDate() - 7);
+        start.setHours(0, 0, 0, 0);
+        return { start, end: now, label: "last week" };
+      },
+    },
+    {
+      pattern: /@this[- ]?morning\b/gi,
+      getRange: () => {
+        const start = new Date(now);
+        start.setHours(6, 0, 0, 0);
+        const end = new Date(now);
+        end.setHours(12, 0, 0, 0);
+        return { start, end: now < end ? now : end, label: "this morning" };
+      },
+    },
+    {
+      pattern: /@last[- ]?hour\b/gi,
+      getRange: () => {
+        const start = new Date(now.getTime() - 60 * 60 * 1000);
+        return { start, end: now, label: "last hour" };
+      },
+    },
+  ];
+
+  for (const { pattern, getRange } of timePatterns) {
+    if (pattern.test(cleanedInput)) {
+      timeRanges.push(getRange());
+      cleanedInput = cleanedInput.replace(pattern, "").trim();
+    }
+  }
+
+  // === CONTENT TYPE MENTIONS ===
+
+  // @audio - audio transcriptions only
+  const audioPattern = /@audio\b/gi;
+  if (audioPattern.test(cleanedInput)) {
+    contentType = "audio";
+    cleanedInput = cleanedInput.replace(audioPattern, "").trim();
+  }
+
+  // @screen or @ocr - screen text only
+  const screenPattern = /@(screen|ocr)\b/gi;
+  if (screenPattern.test(cleanedInput)) {
+    contentType = "ocr";
+    cleanedInput = cleanedInput.replace(screenPattern, "").trim();
+  }
+
+  // === APP MENTIONS ===
+
+  // Check for @appname patterns
+  for (const [shortName, actualNames] of Object.entries(APP_MAPPINGS)) {
+    const appPattern = new RegExp(`@${shortName}\\b`, "gi");
+    if (appPattern.test(cleanedInput)) {
+      appName = actualNames[0]; // Use first (primary) name
+      cleanedInput = cleanedInput.replace(appPattern, "").trim();
+      break; // Only match first app
+    }
+  }
+
+  return { cleanedInput, timeRanges, contentType, appName, usedSelection };
+}
+
+// ============================================================================
+// MENTION SUGGESTIONS for autocomplete dropdown
+// ============================================================================
+
+interface MentionSuggestion {
+  tag: string;
+  description: string;
+  category: "time" | "content" | "app";
+}
+
+const MENTION_SUGGESTIONS: MentionSuggestion[] = [
+  // Time
+  { tag: "@today", description: "today's activity", category: "time" },
+  { tag: "@yesterday", description: "yesterday", category: "time" },
+  { tag: "@last-week", description: "past 7 days", category: "time" },
+  { tag: "@last-hour", description: "past hour", category: "time" },
+  { tag: "@selection", description: "timeline selection", category: "time" },
+  // Content type
+  { tag: "@audio", description: "audio/meetings only", category: "content" },
+  { tag: "@screen", description: "screen text only", category: "content" },
+  // Apps (common ones)
+  { tag: "@chrome", description: "Google Chrome", category: "app" },
+  { tag: "@slack", description: "Slack", category: "app" },
+  { tag: "@vscode", description: "VS Code", category: "app" },
+  { tag: "@zoom", description: "Zoom meetings", category: "app" },
+  { tag: "@terminal", description: "Terminal", category: "app" },
+  { tag: "@discord", description: "Discord", category: "app" },
+  { tag: "@figma", description: "Figma", category: "app" },
+  { tag: "@notion", description: "Notion", category: "app" },
+  { tag: "@arc", description: "Arc browser", category: "app" },
+  { tag: "@cursor", description: "Cursor", category: "app" },
+];
+
 // Suggestion badges for timeline selection
 const TIMELINE_SUGGESTIONS = [
   "what did i work on?",
@@ -151,9 +344,81 @@ export function GlobalChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activePreset, setActivePreset] = useState<AIPreset | undefined>();
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Filter suggestions based on what user is typing after @
+  const filteredMentions = React.useMemo(() => {
+    if (!mentionFilter) return MENTION_SUGGESTIONS;
+    const filter = mentionFilter.toLowerCase();
+    return MENTION_SUGGESTIONS.filter(
+      s => s.tag.toLowerCase().includes(filter) || s.description.toLowerCase().includes(filter)
+    );
+  }, [mentionFilter]);
+
+  // Handle input changes and detect @ mentions
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInput(value);
+
+    // Check if user is typing an @mention
+    const cursorPos = e.target.selectionStart || 0;
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+
+    if (atMatch) {
+      setShowMentionDropdown(true);
+      setMentionFilter(atMatch[1]);
+      setSelectedMentionIndex(0);
+    } else {
+      setShowMentionDropdown(false);
+      setMentionFilter("");
+    }
+  };
+
+  // Insert selected mention into input
+  const insertMention = (tag: string) => {
+    const cursorPos = inputRef.current?.selectionStart || input.length;
+    const textBeforeCursor = input.slice(0, cursorPos);
+    const textAfterCursor = input.slice(cursorPos);
+
+    // Find where the @ starts
+    const atIndex = textBeforeCursor.lastIndexOf("@");
+    if (atIndex !== -1) {
+      const newValue = textBeforeCursor.slice(0, atIndex) + tag + " " + textAfterCursor;
+      setInput(newValue);
+    }
+
+    setShowMentionDropdown(false);
+    setMentionFilter("");
+    inputRef.current?.focus();
+  };
+
+  // Handle keyboard navigation in dropdown
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showMentionDropdown) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedMentionIndex(i => Math.min(i + 1, filteredMentions.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedMentionIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === "Enter" && filteredMentions.length > 0) {
+      e.preventDefault();
+      insertMention(filteredMentions[selectedMentionIndex].tag);
+    } else if (e.key === "Escape") {
+      setShowMentionDropdown(false);
+    } else if (e.key === "Tab" && filteredMentions.length > 0) {
+      e.preventDefault();
+      insertMention(filteredMentions[selectedMentionIndex].tag);
+    }
+  };
 
   // Initialize active preset from settings
   useEffect(() => {
@@ -358,10 +623,15 @@ export function GlobalChat() {
     const openai = getOpenAIClient();
     if (!openai) return;
 
+    // Parse @mentions from input (time, content type, apps)
+    const mentions = parseMentions(userMessage, { selectionRange });
+    const displayMessage = userMessage; // Show original message with tags to user
+    const processedMessage = mentions.cleanedInput || userMessage; // Use cleaned version for AI
+
     const newUserMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: userMessage,
+      content: displayMessage,
     };
 
     const assistantMessageId = (Date.now() + 1).toString();
@@ -375,14 +645,33 @@ export function GlobalChat() {
     try {
       // Build system prompt with selection context if available
       let systemPrompt = SYSTEM_PROMPT;
-      if (selectionRange) {
-        const startTime = selectionRange.start.toISOString();
-        const endTime = selectionRange.end.toISOString();
-        systemPrompt += `\n\nIMPORTANT: The user has selected a specific time range on their timeline. Focus your searches on this period:
-- Start time: ${startTime}
-- End time: ${endTime}
 
-Always use these exact start_time and end_time values when searching, unless the user explicitly asks about a different time period.`;
+      // Add @mention context to system prompt
+      const mentionContext: string[] = [];
+
+      // Time ranges from @mentions
+      if (mentions.timeRanges.length > 0) {
+        const timeContext = mentions.timeRanges.map(t =>
+          `- ${t.label}: from ${t.start.toISOString()} to ${t.end.toISOString()}`
+        ).join("\n");
+        mentionContext.push(`TIME FILTER (use these exact values for start_time/end_time):\n${timeContext}`);
+      } else if (selectionRange) {
+        // Fall back to timeline selection if no explicit @time tags
+        mentionContext.push(`TIME FILTER (timeline selection):\n- from ${selectionRange.start.toISOString()} to ${selectionRange.end.toISOString()}`);
+      }
+
+      // Content type from @audio or @screen
+      if (mentions.contentType) {
+        mentionContext.push(`CONTENT TYPE FILTER: ${mentions.contentType} (use content_type: "${mentions.contentType}")`);
+      }
+
+      // App filter from @appname
+      if (mentions.appName) {
+        mentionContext.push(`APP FILTER: ${mentions.appName} (use app_name: "${mentions.appName}")`);
+      }
+
+      if (mentionContext.length > 0) {
+        systemPrompt += `\n\nIMPORTANT - User specified filters via @mentions. ALWAYS use these in your search_content call:\n${mentionContext.join("\n\n")}`;
       }
 
       // Build conversation history for OpenAI format
@@ -395,7 +684,7 @@ Always use these exact start_time and end_time values when searching, unless the
           role: m.role as "user" | "assistant",
           content: m.content,
         })),
-        { role: "user", content: userMessage },
+        { role: "user", content: processedMessage },
       ];
 
       // Add placeholder for streaming response
@@ -869,16 +1158,34 @@ Always use these exact start_time and end_time values when searching, unless the
               <AIPresetsSelector onPresetChange={setActivePreset} />
             </div>
             <form onSubmit={handleSubmit} className="p-3">
+              {/* Time context indicator */}
+              {selectionRange && !isLoading && (
+                <div className="flex items-center gap-2 mb-2 text-[10px]">
+                  <span className="text-muted-foreground uppercase tracking-wider">time context:</span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted/50 border border-border/50 rounded font-mono text-foreground/70">
+                    <span className="w-1 h-1 rounded-full bg-foreground/40" />
+                    {selectionRange.start.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    {" → "}
+                    {selectionRange.end.toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <span className="text-muted-foreground/60">
+                    use <code className="px-1 bg-muted/30 rounded">@today</code> <code className="px-1 bg-muted/30 rounded">@yesterday</code> to override
+                  </span>
+                </div>
+              )}
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Input
                     ref={inputRef}
                     value={input}
-                    onChange={(e) => setInput(e.target.value)}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
                     placeholder={
                       disabledReason
                         ? disabledReason
-                        : "Ask about your screen activity..."
+                        : selectionRange
+                          ? "Ask about selected time... (type @ for filters)"
+                          : "Ask about your screen... (type @ for filters)"
                     }
                     disabled={isLoading || !canChat}
                     className={cn(
@@ -886,6 +1193,57 @@ Always use these exact start_time and end_time values when searching, unless the
                       disabledReason && "border-destructive/50"
                     )}
                   />
+
+                  {/* @mention autocomplete dropdown */}
+                  <AnimatePresence>
+                    {showMentionDropdown && filteredMentions.length > 0 && (
+                      <motion.div
+                        ref={dropdownRef}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 4 }}
+                        transition={{ duration: 0.1 }}
+                        className="absolute bottom-full left-0 right-0 mb-1 bg-background border border-border rounded-lg shadow-lg overflow-hidden z-50 max-h-[240px] overflow-y-auto"
+                      >
+                        {/* Group by category */}
+                        {["time", "content", "app"].map(category => {
+                          const items = filteredMentions.filter(m => m.category === category);
+                          if (items.length === 0) return null;
+                          return (
+                            <div key={category}>
+                              <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground bg-muted/30 border-b border-border/50">
+                                {category === "time" ? "time" : category === "content" ? "content type" : "apps"}
+                              </div>
+                              {items.map((suggestion) => {
+                                const globalIndex = filteredMentions.indexOf(suggestion);
+                                return (
+                                  <button
+                                    key={suggestion.tag}
+                                    type="button"
+                                    onClick={() => insertMention(suggestion.tag)}
+                                    className={cn(
+                                      "w-full px-3 py-1.5 text-left text-sm flex items-center justify-between gap-2 transition-colors",
+                                      globalIndex === selectedMentionIndex
+                                        ? "bg-muted text-foreground"
+                                        : "hover:bg-muted/50"
+                                    )}
+                                  >
+                                    <span className="font-mono text-xs">{suggestion.tag}</span>
+                                    <span className="text-[10px] text-muted-foreground truncate">{suggestion.description}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                        <div className="px-2 py-1 text-[10px] text-muted-foreground border-t border-border/50 bg-muted/20">
+                          <kbd className="px-1 bg-muted rounded text-[9px]">↑↓</kbd> navigate
+                          <kbd className="px-1 bg-muted rounded text-[9px] ml-2">tab</kbd> select
+                          <kbd className="px-1 bg-muted rounded text-[9px] ml-2">esc</kbd> close
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
                 <Button
                   type={isStreaming ? "button" : "submit"}
