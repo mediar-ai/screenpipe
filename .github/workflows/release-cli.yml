@@ -351,7 +351,7 @@ jobs:
 
       - name: Create or update Release
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create v${{ env.VERSION }} --title ${{ env.VERSION }} --generate-notes || true
           for file in artifacts/screenpipe-macos-*/screenpipe-*.tar.gz; do
