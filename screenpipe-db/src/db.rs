@@ -20,11 +20,19 @@ use zerocopy::AsBytes;
 use futures::future::try_join_all;
 
 use crate::{
-    AudioChunksResponse, AudioDevice, AudioEntry, AudioResult, AudioResultRaw, ContentType,
-    DeviceType, FrameData, FrameRow, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock,
-    Order, SearchMatch, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
-    TimeSeriesChunk, UiContent, VideoMetadata,
+    text_similarity::is_similar_transcription, AudioChunksResponse, AudioDevice, AudioEntry,
+    AudioResult, AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, OCREntry, OCRResult,
+    OCRResultRaw, OcrEngine, OcrTextBlock, Order, SearchMatch, SearchResult, Speaker,
+    TagContentType, TextBounds, TextPosition, TimeSeriesChunk, UiContent, VideoMetadata,
 };
+
+/// Time window (in seconds) to check for similar transcriptions across devices.
+/// Transcriptions within this window are checked for cross-device duplicates.
+const DEDUP_TIME_WINDOW_SECS: i64 = 45;
+
+/// Similarity threshold for cross-device deduplication (0.0 to 1.0).
+/// Higher = stricter matching, lower = more aggressive deduplication.
+const DEDUP_SIMILARITY_THRESHOLD: f64 = 0.85;
 
 pub struct DatabaseManager {
     pub pool: SqlitePool,
@@ -143,11 +151,32 @@ impl DatabaseManager {
         start_time: Option<f64>,
         end_time: Option<f64>,
     ) -> Result<i64, sqlx::Error> {
+        // Skip empty transcriptions
+        let trimmed = transcription.trim();
+        if trimmed.is_empty() {
+            return Ok(0);
+        }
+
+        // CROSS-DEVICE DEDUPLICATION CHECK
+        // Check if similar transcription exists in the last N seconds from ANY device.
+        // This prevents the same audio content from being stored twice when captured
+        // by both system output and microphone.
+        if self
+            .has_similar_recent_transcription(trimmed, DEDUP_TIME_WINDOW_SECS)
+            .await?
+        {
+            debug!(
+                "Skipping duplicate transcription (cross-device): {:?}",
+                &trimmed[..trimmed.len().min(50)]
+            );
+            return Ok(0);
+        }
+
         let text_length = transcription.len() as i64;
         let mut tx = self.pool.begin().await?;
 
         // Insert the transcription, ignoring duplicates (same audio_chunk_id + transcription)
-        // This prevents duplicates from VAD segment overlap issues
+        // This prevents duplicates from VAD segment overlap issues within the same device
         let result = sqlx::query(
             "INSERT OR IGNORE INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         )
@@ -176,6 +205,34 @@ impl DatabaseManager {
         } else {
             Ok(result.last_insert_rowid())
         }
+    }
+
+    /// Check if a similar transcription exists in the recent time window.
+    /// Used for cross-device deduplication.
+    async fn has_similar_recent_transcription(
+        &self,
+        transcription: &str,
+        time_window_secs: i64,
+    ) -> Result<bool, sqlx::Error> {
+        // Fetch recent transcriptions from ALL devices
+        let recent: Vec<(String,)> = sqlx::query_as(
+            "SELECT transcription FROM audio_transcriptions
+             WHERE timestamp > datetime('now', ?1)
+             ORDER BY timestamp DESC
+             LIMIT 50",
+        )
+        .bind(format!("-{} seconds", time_window_secs))
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Check similarity against each recent transcription
+        for (existing,) in recent {
+            if is_similar_transcription(transcription, &existing, DEDUP_SIMILARITY_THRESHOLD) {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
     }
 
     pub async fn update_audio_transcription(

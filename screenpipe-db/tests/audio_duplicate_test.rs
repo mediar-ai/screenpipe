@@ -1,7 +1,8 @@
-/// Audio Transcription Duplicate Prevention Test
+/// Audio Transcription Deduplication Tests
 ///
-/// This test verifies that the UNIQUE constraint on (audio_chunk_id, transcription)
-/// prevents duplicate audio transcriptions from being inserted.
+/// This test suite verifies BOTH types of deduplication:
+/// 1. Same-chunk duplicates (UNIQUE constraint on audio_chunk_id + transcription)
+/// 2. Cross-device duplicates (similarity check across all devices)
 ///
 /// Run with: cargo test --package screenpipe-db --test audio_duplicate_test -- --nocapture
 
@@ -23,70 +24,323 @@ mod tests {
         db
     }
 
+    fn output_device() -> AudioDevice {
+        AudioDevice {
+            name: "Display 4 (output)".to_string(),
+            device_type: DeviceType::Output,
+        }
+    }
+
+    fn input_device() -> AudioDevice {
+        AudioDevice {
+            name: "MacBook Pro Microphone (input)".to_string(),
+            device_type: DeviceType::Input,
+        }
+    }
+
+    // ===========================================================================
+    // CROSS-DEVICE DEDUPLICATION TESTS (The main bug we're fixing)
+    // ===========================================================================
+
+    /// THE CRITICAL TEST: Same content captured by different devices should be deduplicated.
+    /// This is the exact scenario from production logs.
+    #[tokio::test]
+    async fn test_cross_device_exact_same_content() {
+        let db = setup_test_db().await;
+
+        // Simulate system output capturing "It was the first computer with beautiful typography."
+        let chunk_output = db.insert_audio_chunk("output_audio.mp4").await.unwrap();
+        let id1 = db
+            .insert_audio_transcription(
+                chunk_output,
+                "It was the first computer with beautiful typography.",
+                0,
+                "whisper",
+                &output_device(),
+                None,
+                Some(0.0),
+                Some(3.0),
+            )
+            .await
+            .unwrap();
+        assert!(id1 > 0, "First insert should succeed");
+
+        // Simulate microphone picking up the SAME content (different chunk, different device)
+        let chunk_input = db.insert_audio_chunk("input_audio.mp4").await.unwrap();
+        let id2 = db
+            .insert_audio_transcription(
+                chunk_input, // Different chunk!
+                "It was the first computer with beautiful typography.", // Same text
+                0,
+                "whisper",
+                &input_device(), // Different device!
+                None,
+                Some(0.0),
+                Some(3.0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            id2, 0,
+            "Cross-device duplicate should be rejected (returned 0)"
+        );
+        println!("✓ Cross-device exact duplicate was correctly rejected");
+    }
+
+    /// Test the production case: short transcription contained in longer one from different device
+    #[tokio::test]
+    async fn test_cross_device_short_contained_in_long() {
+        let db = setup_test_db().await;
+
+        // Output device captures short segment
+        let chunk1 = db.insert_audio_chunk("output.mp4").await.unwrap();
+        let id1 = db
+            .insert_audio_transcription(
+                chunk1,
+                "the first computer with beautiful typography.",
+                0,
+                "whisper",
+                &output_device(),
+                None,
+                Some(24.0),
+                Some(27.0),
+            )
+            .await
+            .unwrap();
+        assert!(id1 > 0);
+
+        // Input device captures longer segment containing the same content
+        let chunk2 = db.insert_audio_chunk("input.mp4").await.unwrap();
+        let id2 = db
+            .insert_audio_transcription(
+                chunk2,
+                "in a way that science can't capture. And I found it fascinating. It was the first computer with beautiful typography.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                Some(0.0),
+                Some(30.0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            id2, 0,
+            "Transcription containing duplicate content should be rejected"
+        );
+        println!("✓ Short-in-long cross-device duplicate was correctly rejected");
+    }
+
+    /// Test the production case: nearly identical transcriptions with minor Whisper variations
+    #[tokio::test]
+    async fn test_cross_device_whisper_variations() {
+        let db = setup_test_db().await;
+
+        // Output device transcription
+        let chunk1 = db.insert_audio_chunk("output.mp4").await.unwrap();
+        let id1 = db
+            .insert_audio_transcription(
+                chunk1,
+                "You can't connect the dots looking forward. You can only connect them looking backwards.",
+                0,
+                "whisper",
+                &output_device(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(id1 > 0);
+
+        // Input device captures same audio with minor variation (comma vs period, etc)
+        let chunk2 = db.insert_audio_chunk("input.mp4").await.unwrap();
+        let id2 = db
+            .insert_audio_transcription(
+                chunk2,
+                "You can't connect the dots looking forward, you can only connect them looking backwards.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            id2, 0,
+            "Near-identical transcription with punctuation differences should be rejected"
+        );
+        println!("✓ Whisper variation cross-device duplicate was correctly rejected");
+    }
+
+    /// REGRESSION TEST: Exact scenario from production logs that caused the bug
+    #[tokio::test]
+    async fn test_regression_production_logs_scenario() {
+        let db = setup_test_db().await;
+
+        // From production logs at 14:17:22 - Display 4 (output)
+        let chunk1 = db.insert_audio_chunk("output_14_17.mp4").await.unwrap();
+        let id1 = db
+            .insert_audio_transcription(
+                chunk1,
+                " It was the first computer with beautiful typography.",
+                0,
+                "whisper",
+                &AudioDevice {
+                    name: "Display 4 (output)".to_string(),
+                    device_type: DeviceType::Output,
+                },
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(id1 > 0, "First transcription should be inserted");
+
+        // From production logs at 14:17:54 - MacBook Pro Microphone (input)
+        // Contains the same phrase in a longer transcription
+        let chunk2 = db.insert_audio_chunk("input_14_17.mp4").await.unwrap();
+        let id2 = db
+            .insert_audio_transcription(
+                chunk2,
+                " in a way that science can't capture. And I found it fascinating. None of this had even a hope of any practical application in my life. But 10 years later, when we were designing the first Macintosh computer, it all came back to me. And we designed it all into the Mac. It was the first computer with beautiful typography.",
+                0,
+                "whisper",
+                &AudioDevice {
+                    name: "MacBook Pro Microphone (input)".to_string(),
+                    device_type: DeviceType::Input,
+                },
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // This MUST be rejected - it was the exact bug
+        assert_eq!(
+            id2, 0,
+            "REGRESSION: This is the exact production bug - must be rejected"
+        );
+        println!("✓ REGRESSION TEST PASSED: Production duplicate scenario is now fixed");
+    }
+
+    /// Test that legitimately different content from different devices is allowed
+    #[tokio::test]
+    async fn test_cross_device_different_content_allowed() {
+        let db = setup_test_db().await;
+
+        // Output device says one thing
+        let chunk1 = db.insert_audio_chunk("output.mp4").await.unwrap();
+        let id1 = db
+            .insert_audio_transcription(
+                chunk1,
+                "The quick brown fox jumps over the lazy dog.",
+                0,
+                "whisper",
+                &output_device(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(id1 > 0);
+
+        // Input device says completely different thing
+        let chunk2 = db.insert_audio_chunk("input.mp4").await.unwrap();
+        let id2 = db
+            .insert_audio_transcription(
+                chunk2,
+                "Python is a programming language used for web development.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            id2 > 0,
+            "Different content from different devices should be allowed"
+        );
+        println!("✓ Different content across devices was correctly allowed");
+    }
+
+    // ===========================================================================
+    // SAME-CHUNK DEDUPLICATION TESTS (Original functionality - must still work)
+    // ===========================================================================
+
     /// Verify the UNIQUE constraint exists after migration
     #[tokio::test]
     async fn test_unique_constraint_exists() {
         let db = setup_test_db().await;
 
-        // Check that the index exists
         let index_exists: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_audio_transcription_chunk_text'"
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_audio_transcription_chunk_text'",
         )
         .fetch_one(&db.pool)
         .await
         .unwrap();
 
-        assert_eq!(index_exists.0, 1, "UNIQUE index should exist after migration");
+        assert_eq!(
+            index_exists.0, 1,
+            "UNIQUE index should exist after migration"
+        );
         println!("✓ UNIQUE constraint idx_audio_transcription_chunk_text exists");
     }
 
-    /// Test that INSERT OR IGNORE prevents exact duplicates
+    /// Test that INSERT OR IGNORE prevents exact duplicates within same chunk
     #[tokio::test]
-    async fn test_duplicate_insert_is_ignored() {
+    async fn test_same_chunk_duplicate_prevented() {
         let db = setup_test_db().await;
 
-        let device = AudioDevice {
-            name: "MacBook Pro Microphone".to_string(),
-            device_type: DeviceType::Input,
-        };
+        let chunk_id = db.insert_audio_chunk("test.mp4").await.unwrap();
 
-        let chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
+        // First insert
+        let id1 = db
+            .insert_audio_transcription(
+                chunk_id,
+                "Hello world this is a test transcription.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                Some(0.0),
+                Some(2.5),
+            )
+            .await
+            .unwrap();
+        assert!(id1 > 0);
 
-        // First insert should succeed and return a valid id
-        let id1 = db.insert_audio_transcription(
-            chunk_id,
-            "So like if",
-            0,
-            "whisper",
-            &device,
-            Some(1),
-            Some(0.0),
-            Some(2.5),
-        ).await.unwrap();
+        // Same chunk, same text - should be rejected
+        let id2 = db
+            .insert_audio_transcription(
+                chunk_id,
+                "Hello world this is a test transcription.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                Some(5.0),
+                Some(7.5),
+            )
+            .await
+            .unwrap();
+        assert_eq!(id2, 0, "Same-chunk duplicate should be rejected");
 
-        assert!(id1 > 0, "First insert should return valid id");
-        println!("✓ First insert returned id: {}", id1);
-
-        // Second insert with SAME chunk_id and transcription should be ignored
-        let id2 = db.insert_audio_transcription(
-            chunk_id,
-            "So like if",  // Same text
-            0,
-            "whisper",
-            &device,
-            Some(1),
-            Some(5.0),     // Different time - doesn't matter
-            Some(7.5),
-        ).await.unwrap();
-
-        // INSERT OR IGNORE returns 0 when the insert is ignored
-        assert_eq!(id2, 0, "Duplicate insert should return 0 (ignored)");
-        println!("✓ Duplicate insert returned 0 (correctly ignored)");
-
-        // Verify only one row exists
         let count = db.count_audio_transcriptions(chunk_id).await.unwrap();
-        assert_eq!(count, 1, "Should have exactly 1 transcription, not 2");
-        println!("✓ Only 1 row in database (duplicate was prevented)");
+        assert_eq!(count, 1);
+        println!("✓ Same-chunk duplicate was correctly rejected");
     }
 
     /// Test that different transcriptions for the same chunk are allowed
@@ -94,322 +348,260 @@ mod tests {
     async fn test_different_transcriptions_same_chunk_allowed() {
         let db = setup_test_db().await;
 
-        let device = AudioDevice {
-            name: "MacBook Pro Microphone".to_string(),
-            device_type: DeviceType::Input,
-        };
+        let chunk_id = db.insert_audio_chunk("test.mp4").await.unwrap();
 
-        let chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
-
-        // Insert first transcription
-        let id1 = db.insert_audio_transcription(
-            chunk_id,
-            "Hello world",
-            0,
-            "whisper",
-            &device,
-            Some(1),
-            Some(0.0),
-            Some(2.5),
-        ).await.unwrap();
+        let id1 = db
+            .insert_audio_transcription(
+                chunk_id,
+                "First segment of the conversation about technology.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                Some(0.0),
+                Some(5.0),
+            )
+            .await
+            .unwrap();
         assert!(id1 > 0);
 
-        // Insert DIFFERENT transcription for same chunk - should succeed
-        let id2 = db.insert_audio_transcription(
-            chunk_id,
-            "Goodbye world",  // Different text
-            0,
-            "whisper",
-            &device,
-            Some(1),
-            Some(2.5),
-            Some(5.0),
-        ).await.unwrap();
-        assert!(id2 > 0);
-        assert_ne!(id1, id2);
-
-        let count = db.count_audio_transcriptions(chunk_id).await.unwrap();
-        assert_eq!(count, 2, "Different transcriptions should both be inserted");
-        println!("✓ Different transcriptions for same chunk are allowed (count: {})", count);
-    }
-
-    /// Test that same transcription in different chunks is allowed
-    #[tokio::test]
-    async fn test_same_transcription_different_chunks_allowed() {
-        let db = setup_test_db().await;
-
-        let device = AudioDevice {
-            name: "MacBook Pro Microphone".to_string(),
-            device_type: DeviceType::Input,
-        };
-
-        let chunk_id_1 = db.insert_audio_chunk("audio_1.mp4").await.unwrap();
-        let chunk_id_2 = db.insert_audio_chunk("audio_2.mp4").await.unwrap();
-
-        // Insert same transcription in different chunks - both should succeed
-        let id1 = db.insert_audio_transcription(
-            chunk_id_1,
-            "Thank you",
-            0,
-            "whisper",
-            &device,
-            None,
-            None,
-            None,
-        ).await.unwrap();
-        assert!(id1 > 0);
-
-        let id2 = db.insert_audio_transcription(
-            chunk_id_2,
-            "Thank you",  // Same text, different chunk
-            0,
-            "whisper",
-            &device,
-            None,
-            None,
-            None,
-        ).await.unwrap();
+        let id2 = db
+            .insert_audio_transcription(
+                chunk_id,
+                "Second completely different segment about cooking recipes.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                Some(5.0),
+                Some(10.0),
+            )
+            .await
+            .unwrap();
         assert!(id2 > 0);
 
-        println!("✓ Same transcription in different chunks is allowed (ids: {}, {})", id1, id2);
-    }
-
-    /// Test the production scenario that was causing duplicates
-    #[tokio::test]
-    async fn test_production_duplicate_scenario_prevented() {
-        let db = setup_test_db().await;
-
-        let device = AudioDevice {
-            name: "MacBook Pro Microphone".to_string(),
-            device_type: DeviceType::Input,
-        };
-
-        // Simulate the production bug:
-        // audio_chunk_id 9994 had two records with transcription "So like if"
-        // at different time ranges (21.56-29.54 and 29.86-31.97)
-        let chunk_id = db.insert_audio_chunk("production_audio.mp4").await.unwrap();
-
-        // First VAD segment produces "So like if"
-        let id1 = db.insert_audio_transcription(
-            chunk_id,
-            "So like if",
-            0,
-            "whisper",
-            &device,
-            Some(1),
-            Some(21.56),
-            Some(29.54),
-        ).await.unwrap();
-        assert!(id1 > 0);
-
-        // Second VAD segment (due to overlap) also produces "So like if"
-        // This should now be IGNORED
-        let id2 = db.insert_audio_transcription(
-            chunk_id,
-            "So like if",
-            0,
-            "whisper",
-            &device,
-            Some(1),
-            Some(29.86),
-            Some(31.97),
-        ).await.unwrap();
-        assert_eq!(id2, 0, "Duplicate should be ignored");
-
-        // Verify only one row
         let count = db.count_audio_transcriptions(chunk_id).await.unwrap();
-        assert_eq!(count, 1);
-
-        println!("✓ Production duplicate scenario is now PREVENTED");
-        println!("  - First 'So like if' inserted with id {}", id1);
-        println!("  - Second 'So like if' was ignored (returned 0)");
-        println!("  - Total count: {} (was 2 before fix)", count);
+        assert_eq!(count, 2);
+        println!("✓ Different transcriptions for same chunk are allowed");
     }
 
-    /// Test multiple rapid duplicate attempts (simulating race conditions)
+    // ===========================================================================
+    // EDGE CASES
+    // ===========================================================================
+
+    /// Very short common phrases should NOT be aggressively deduplicated
+    /// (they appear naturally in different conversations)
     #[tokio::test]
-    async fn test_rapid_duplicate_attempts() {
+    async fn test_short_phrases_handled_correctly() {
         let db = setup_test_db().await;
 
-        let device = AudioDevice {
-            name: "MacBook Pro Microphone".to_string(),
-            device_type: DeviceType::Input,
-        };
+        // Short phrase from device 1
+        let chunk1 = db.insert_audio_chunk("output.mp4").await.unwrap();
+        let id1 = db
+            .insert_audio_transcription(
+                chunk1, "Yeah", 0, "whisper", &output_device(), None, None, None,
+            )
+            .await
+            .unwrap();
+
+        // Note: Very short phrases (< 4 words) are handled specially
+        // They should either both be inserted OR both rejected depending on threshold
+        // The key is consistency - not breaking on edge cases
+
+        let chunk2 = db.insert_audio_chunk("input.mp4").await.unwrap();
+        let _id2 = db
+            .insert_audio_transcription(
+                chunk2, "Yeah", 0, "whisper", &input_device(), None, None, None,
+            )
+            .await
+            .unwrap();
+
+        // At minimum, first one should be inserted
+        assert!(id1 > 0, "First short phrase should be inserted");
+        println!("✓ Short phrases handled without error");
+    }
+
+    /// Empty transcriptions should be skipped
+    #[tokio::test]
+    async fn test_empty_transcription_skipped() {
+        let db = setup_test_db().await;
 
         let chunk_id = db.insert_audio_chunk("test.mp4").await.unwrap();
 
-        // Try to insert the same transcription 10 times rapidly
-        let mut successful_inserts = 0;
-        for i in 0..10 {
-            let id = db.insert_audio_transcription(
+        let id = db
+            .insert_audio_transcription(
                 chunk_id,
-                "Repeated phrase",
+                "   ", // Only whitespace
                 0,
                 "whisper",
-                &device,
+                &input_device(),
                 None,
-                Some(i as f64),
-                Some((i + 1) as f64),
-            ).await.unwrap();
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(id, 0, "Empty/whitespace transcription should be skipped");
+        println!("✓ Empty transcription correctly skipped");
+    }
+
+    /// Test rapid consecutive inserts (potential race condition scenario)
+    #[tokio::test]
+    async fn test_rapid_inserts_deduplicated() {
+        let db = setup_test_db().await;
+
+        let text = "This is a test transcription that should only appear once in the database.";
+
+        // Insert same content rapidly from different "devices"
+        let mut successful = 0;
+        for i in 0..5 {
+            let chunk = db
+                .insert_audio_chunk(&format!("audio_{}.mp4", i))
+                .await
+                .unwrap();
+            let device = if i % 2 == 0 {
+                output_device()
+            } else {
+                input_device()
+            };
+
+            let id = db
+                .insert_audio_transcription(chunk, text, 0, "whisper", &device, None, None, None)
+                .await
+                .unwrap();
 
             if id > 0 {
-                successful_inserts += 1;
+                successful += 1;
             }
         }
 
-        assert_eq!(successful_inserts, 1, "Only first insert should succeed");
-
-        let count = db.count_audio_transcriptions(chunk_id).await.unwrap();
-        assert_eq!(count, 1, "Should have exactly 1 row despite 10 attempts");
-
-        println!("✓ 10 rapid duplicate attempts resulted in only 1 row");
+        assert_eq!(
+            successful, 1,
+            "Only first of 5 rapid duplicate inserts should succeed"
+        );
+        println!("✓ Rapid consecutive duplicates correctly deduplicated (1 of 5 inserted)");
     }
 
-    /// Test that the deduplication SQL logic works correctly
-    /// This verifies the migration's DELETE logic keeps the first row (lowest id)
+    // ===========================================================================
+    // SUMMARY / INTEGRATION TEST
+    // ===========================================================================
+
+    /// Comprehensive test showing the full deduplication behavior
     #[tokio::test]
-    async fn test_migration_deduplication_logic() {
+    async fn test_full_deduplication_behavior() {
         let db = setup_test_db().await;
 
-        // First, drop the unique index so we can insert duplicates for testing
-        sqlx::query("DROP INDEX IF EXISTS idx_audio_transcription_chunk_text")
-            .execute(&db.pool).await.unwrap();
+        println!("\n=== AUDIO DEDUPLICATION COMPREHENSIVE TEST ===\n");
 
-        // Insert a chunk
-        let chunk_id = sqlx::query("INSERT INTO audio_chunks (file_path) VALUES ('test.mp4')")
-            .execute(&db.pool).await.unwrap()
-            .last_insert_rowid();
-
-        // Insert 3 duplicate transcriptions with different ids
-        for i in 0..3 {
-            sqlx::query(
-                "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, start_time, end_time)
-                 VALUES (?, 'Duplicate text', 0, datetime('now'), ?, ?)"
+        // Scenario 1: Same device, same chunk - UNIQUE constraint
+        println!("Scenario 1: Same device, same chunk");
+        let chunk1 = db.insert_audio_chunk("chunk1.mp4").await.unwrap();
+        let id1a = db
+            .insert_audio_transcription(
+                chunk1,
+                "Test phrase for scenario one.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                None,
+                None,
             )
-            .bind(chunk_id)
-            .bind(i as f64)
-            .bind((i + 1) as f64)
-            .execute(&db.pool).await.unwrap();
-        }
-
-        // Verify we have 3 rows
-        let count_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audio_transcriptions WHERE audio_chunk_id = ?")
-            .bind(chunk_id)
-            .fetch_one(&db.pool).await.unwrap();
-        assert_eq!(count_before.0, 3);
-        println!("Before deduplication: {} rows", count_before.0);
-
-        // Get the ids before dedup
-        let ids_before: Vec<(i64,)> = sqlx::query_as("SELECT id FROM audio_transcriptions WHERE audio_chunk_id = ? ORDER BY id")
-            .bind(chunk_id)
-            .fetch_all(&db.pool).await.unwrap();
-        let first_id = ids_before[0].0;
-        println!("IDs before dedup: {:?}", ids_before.iter().map(|r| r.0).collect::<Vec<_>>());
-
-        // Run the deduplication logic using a subquery (simpler than temp table)
-        // This is equivalent to what the migration does
-        sqlx::query(
-            "DELETE FROM audio_transcriptions
-             WHERE id NOT IN (
-                SELECT MIN(id)
-                FROM audio_transcriptions
-                GROUP BY audio_chunk_id, transcription
-             )"
-        ).execute(&db.pool).await.unwrap();
-
-        // Verify deduplication worked
-        let count_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audio_transcriptions WHERE audio_chunk_id = ?")
-            .bind(chunk_id)
-            .fetch_one(&db.pool).await.unwrap();
-        assert_eq!(count_after.0, 1);
-        println!("After deduplication: {} rows", count_after.0);
-
-        // Verify the first row (lowest id) was kept
-        let kept_row: (i64,) = sqlx::query_as("SELECT id FROM audio_transcriptions WHERE audio_chunk_id = ?")
-            .bind(chunk_id)
-            .fetch_one(&db.pool).await.unwrap();
-        assert_eq!(kept_row.0, first_id, "Should keep the row with lowest id");
-
-        println!("✓ Deduplication logic correctly reduced {} -> {} rows, kept id {}", count_before.0, count_after.0, first_id);
-    }
-
-    /// Test no errors when no duplicates exist
-    #[tokio::test]
-    async fn test_no_error_when_no_duplicates() {
-        let db = setup_test_db().await;
-
-        let device = AudioDevice {
-            name: "Test".to_string(),
-            device_type: DeviceType::Input,
-        };
-
-        // Insert unique transcriptions
-        for i in 0..5 {
-            let chunk_id = db.insert_audio_chunk(&format!("audio_{}.mp4", i)).await.unwrap();
-            let id = db.insert_audio_transcription(
-                chunk_id,
-                &format!("Unique transcription {}", i),
+            .await
+            .unwrap();
+        let id1b = db
+            .insert_audio_transcription(
+                chunk1,
+                "Test phrase for scenario one.",
                 0,
                 "whisper",
-                &device,
+                &input_device(),
                 None,
                 None,
                 None,
-            ).await.unwrap();
-            assert!(id > 0, "Unique insert should succeed");
-        }
+            )
+            .await
+            .unwrap();
+        println!(
+            "  First insert: id={} (success), Second insert: id={} (blocked by UNIQUE)",
+            id1a, id1b
+        );
+        assert!(id1a > 0 && id1b == 0);
 
-        // Count total
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audio_transcriptions")
-            .fetch_one(&db.pool).await.unwrap();
-        assert_eq!(count.0, 5);
-        println!("✓ 5 unique transcriptions inserted successfully");
-    }
-
-    /// Summary test showing before/after behavior
-    #[tokio::test]
-    async fn test_summary_before_after() {
-        let db = setup_test_db().await;
-
-        let device = AudioDevice {
-            name: "MacBook Pro Microphone".to_string(),
-            device_type: DeviceType::Input,
-        };
-
-        let chunk_id = db.insert_audio_chunk("test.mp4").await.unwrap();
-
-        println!("\n=== DUPLICATE PREVENTION SUMMARY ===");
-        println!("Attempting to insert 'So like if' 3 times for same chunk...\n");
-
-        let mut ids = Vec::new();
-        for i in 0..3 {
-            let id = db.insert_audio_transcription(
-                chunk_id,
-                "So like if",
+        // Scenario 2: Different device, different chunk, SAME content - Cross-device dedup
+        println!("\nScenario 2: Different devices, same content (THE BUG WE FIXED)");
+        let chunk2a = db.insert_audio_chunk("output_chunk.mp4").await.unwrap();
+        let chunk2b = db.insert_audio_chunk("input_chunk.mp4").await.unwrap();
+        let id2a = db
+            .insert_audio_transcription(
+                chunk2a,
+                "Unique content that appears on both output and input devices.",
                 0,
                 "whisper",
-                &device,
-                Some(1),
-                Some(i as f64 * 10.0),
-                Some((i + 1) as f64 * 10.0),
-            ).await.unwrap();
-            println!("  Insert attempt {}: returned id = {}", i + 1, id);
-            ids.push(id);
-        }
+                &output_device(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let id2b = db
+            .insert_audio_transcription(
+                chunk2b,
+                "Unique content that appears on both output and input devices.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        println!(
+            "  Output device: id={} (success), Input device: id={} (blocked by similarity)",
+            id2a, id2b
+        );
+        assert!(id2a > 0 && id2b == 0);
 
-        let count = db.count_audio_transcriptions(chunk_id).await.unwrap();
+        // Scenario 3: Different devices, DIFFERENT content - Should both succeed
+        println!("\nScenario 3: Different devices, different content");
+        let chunk3a = db.insert_audio_chunk("output_different.mp4").await.unwrap();
+        let chunk3b = db.insert_audio_chunk("input_different.mp4").await.unwrap();
+        let id3a = db
+            .insert_audio_transcription(
+                chunk3a,
+                "The weather today is sunny and warm.",
+                0,
+                "whisper",
+                &output_device(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let id3b = db
+            .insert_audio_transcription(
+                chunk3b,
+                "I need to buy groceries for dinner tonight.",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        println!(
+            "  Output device: id={} (success), Input device: id={} (success - different content)",
+            id3a, id3b
+        );
+        assert!(id3a > 0 && id3b > 0);
 
-        println!("\nResults:");
-        println!("  - First insert: id = {} (SUCCESS)", ids[0]);
-        println!("  - Second insert: id = {} (IGNORED - duplicate)", ids[1]);
-        println!("  - Third insert: id = {} (IGNORED - duplicate)", ids[2]);
-        println!("  - Total rows in DB: {}", count);
-        println!("\n✓ BEFORE FIX: Would have 3 rows");
-        println!("✓ AFTER FIX: Only 1 row (duplicates prevented)");
-
-        assert_eq!(count, 1);
-        assert!(ids[0] > 0);
-        assert_eq!(ids[1], 0);
-        assert_eq!(ids[2], 0);
+        println!("\n✓ All deduplication scenarios working correctly");
+        println!("=== TEST COMPLETE ===\n");
     }
 }

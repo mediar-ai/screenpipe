@@ -1,6 +1,7 @@
 mod db;
 mod migration_worker;
 pub mod text_normalizer;
+pub mod text_similarity;
 mod types;
 mod video_db;
 
