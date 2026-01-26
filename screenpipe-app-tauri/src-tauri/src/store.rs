@@ -186,12 +186,8 @@ pub struct SettingsStore {
     pub use_all_monitors: bool,
     #[serde(rename = "enableRealtimeVision")]
     pub enable_realtime_vision: bool,
-    #[serde(rename = "showShortcutOverlay", default = "default_true")]
+    #[serde(rename = "showShortcutOverlay")]
     pub show_shortcut_overlay: bool,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 #[derive(Serialize, Deserialize, Type,Clone,Default)]
@@ -432,7 +428,7 @@ impl Default for SettingsStore {
             disable_vision: false,
             use_all_monitors: false,
             enable_realtime_vision: true,
-            show_shortcut_overlay: true,
+            show_shortcut_overlay: false,
         }
     }
 }
