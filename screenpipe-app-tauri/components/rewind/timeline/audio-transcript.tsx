@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Play, Pause, Volume2, GripHorizontal, X } from "lucide-react";
 import { VideoComponent } from "@/components/rewind/video";
+import { SpeakerAssignPopover } from "@/components/speaker-assign-popover";
 
 interface AudioGroup {
 	deviceName: string;
@@ -72,6 +73,22 @@ export function AudioTranscript({
 	const [windowSize, setWindowSize] = useState({ width: 300, height: 500 });
 	const resizerRef = useRef<HTMLDivElement | null>(null);
 	const panelRef = useRef<HTMLDivElement | null>(null);
+
+	// Track speaker assignments (audio_chunk_id -> {speaker_id, speaker_name})
+	const [speakerOverrides, setSpeakerOverrides] = useState<
+		Map<number, { speakerId: number; speakerName: string }>
+	>(new Map());
+
+	const handleSpeakerAssigned = useCallback(
+		(audioChunkId: number, newSpeakerId: number, newSpeakerName: string) => {
+			setSpeakerOverrides((prev) => {
+				const next = new Map(prev);
+				next.set(audioChunkId, { speakerId: newSpeakerId, speakerName: newSpeakerName });
+				return next;
+			});
+		},
+		[]
+	);
 
 	// 2. Memoize the audio grouping logic
 	const audioGroups = useMemo(() => {
@@ -250,42 +267,61 @@ export function AudioTranscript({
 							</div>
 						</div>
 
-						{group.audioItems.map((audio, index) => (
-							<div key={index} className="space-y-2 mb-2 last:mb-0">
-								<div className="flex items-center gap-2">
-									<Button
-										variant="ghost"
-										size="sm"
-										className="h-6 w-6 p-0 text-foreground hover:text-accent-foreground hover:bg-accent"
-										onClick={() => handlePlay(audio.audio_file_path)}
-									>
-										{playing === audio.audio_file_path ? (
-											<Pause className="h-3 w-3" />
-										) : (
-											<Play className="h-3 w-3" />
-										)}
-									</Button>
-									<div className="flex items-center gap-1 text-xs text-muted-foreground">
-										<Volume2 className="h-3 w-3" />
-										<span>
-											{formatDurationHuman(Math.round(audio.duration_secs))}
-										</span>
+						{group.audioItems.map((audio, index) => {
+							// Get speaker info (use override if available, otherwise from audio data)
+							const override = speakerOverrides.get(audio.audio_chunk_id);
+							const speakerId = override?.speakerId ?? audio.speaker_id;
+							const speakerName = override?.speakerName ?? audio.speaker_name;
+
+							return (
+								<div key={index} className="space-y-2 mb-3 last:mb-0 pb-3 last:pb-0 border-b last:border-b-0 border-border/50">
+									<div className="flex items-center gap-2 flex-wrap">
+										<Button
+											variant="ghost"
+											size="sm"
+											className="h-6 w-6 p-0 text-foreground hover:text-accent-foreground hover:bg-accent"
+											onClick={() => handlePlay(audio.audio_file_path)}
+										>
+											{playing === audio.audio_file_path ? (
+												<Pause className="h-3 w-3" />
+											) : (
+												<Play className="h-3 w-3" />
+											)}
+										</Button>
+
+										{/* Speaker badge with assignment popover */}
+										<SpeakerAssignPopover
+											audioChunkId={audio.audio_chunk_id}
+											speakerId={speakerId}
+											speakerName={speakerName}
+											audioFilePath={audio.audio_file_path}
+											onAssigned={(newId, newName) =>
+												handleSpeakerAssigned(audio.audio_chunk_id, newId, newName)
+											}
+										/>
+
+										<div className="flex items-center gap-1 text-xs text-muted-foreground">
+											<Volume2 className="h-3 w-3" />
+											<span>
+												{formatDurationHuman(Math.round(audio.duration_secs))}
+											</span>
+										</div>
 									</div>
+
+									{audio.transcription && (
+										<div className="text-xs pl-8 text-muted-foreground">
+											{audio.transcription}
+										</div>
+									)}
+
+									{playing === audio.audio_file_path && (
+										<div className="pl-8">
+											<VideoComponent filePath={audio.audio_file_path} />
+										</div>
+									)}
 								</div>
-
-								{audio.transcription && (
-									<div className="text-xs pl-8 text-muted-foreground">
-										{audio.transcription}
-									</div>
-								)}
-
-								{playing === audio.audio_file_path && (
-									<div className="pl-8">
-										<VideoComponent filePath={audio.audio_file_path} />
-									</div>
-								)}
-							</div>
-						))}
+							);
+						})}
 					</Card>
 				))}
 			</div>

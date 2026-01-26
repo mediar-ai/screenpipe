@@ -41,6 +41,9 @@ pub struct AudioEntry {
     pub is_input: bool,
     pub audio_file_path: String,
     pub duration_secs: f64,
+    pub audio_chunk_id: i64,
+    pub speaker_id: Option<i64>,
+    pub speaker_name: Option<String>,
 }
 
 impl From<screenpipe_db::AudioEntry> for AudioEntry {
@@ -51,6 +54,9 @@ impl From<screenpipe_db::AudioEntry> for AudioEntry {
             is_input: db_entry.is_input,
             audio_file_path: db_entry.audio_file_path,
             duration_secs: db_entry.duration_secs,
+            audio_chunk_id: db_entry.audio_chunk_id,
+            speaker_id: db_entry.speaker_id,
+            speaker_name: db_entry.speaker_name,
         }
     }
 }
@@ -522,6 +528,9 @@ impl FrameCache {
                                     is_input: a.is_input,
                                     audio_file_path: a.audio_file_path.clone(),
                                     duration_secs: a.duration_secs,
+                                    audio_chunk_id: a.audio_chunk_id,
+                                    speaker_id: a.speaker_id,
+                                    speaker_name: a.speaker_name.clone(),
                                 })
                                 .collect(),
                         });
@@ -804,6 +813,9 @@ async fn extract_frame(
                             is_input: a.is_input,
                             audio_file_path: a.audio_file_path.clone(),
                             duration_secs: a.duration_secs,
+                            audio_chunk_id: a.audio_chunk_id,
+                            speaker_id: a.speaker_id,
+                            speaker_name: a.speaker_name.clone(),
                         })
                         .collect(),
                 }],

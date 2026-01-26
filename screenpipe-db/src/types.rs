@@ -181,6 +181,9 @@ pub struct AudioEntry {
     pub is_input: bool,
     pub audio_file_path: String,
     pub duration_secs: f64,
+    pub audio_chunk_id: i64,
+    pub speaker_id: Option<i64>,
+    pub speaker_name: Option<String>,
 }
 
 #[derive(OaSchema, Debug, Clone)]

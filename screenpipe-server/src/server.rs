@@ -189,6 +189,26 @@ pub struct SearchSpeakersRequest {
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Debug)]
+pub struct ReassignSpeakerRequest {
+    pub audio_chunk_id: i64,
+    pub new_speaker_name: String,
+    #[serde(default = "default_propagate_similar")]
+    pub propagate_similar: bool,
+}
+
+fn default_propagate_similar() -> bool {
+    true
+}
+
+#[derive(OaSchema, Serialize, Debug)]
+pub struct ReassignSpeakerResponse {
+    pub new_speaker_id: i64,
+    pub new_speaker_name: String,
+    pub transcriptions_updated: u64,
+    pub embeddings_moved: u64,
+}
+
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct DeleteSpeakerRequest {
     pub id: i64,
 }
@@ -1240,6 +1260,7 @@ impl SCServer {
             .post("/speakers/hallucination", mark_as_hallucination_handler)
             .post("/speakers/merge", merge_speakers_handler)
             .get("/speakers/similar", get_similar_speakers_handler)
+            .post("/speakers/reassign", reassign_speaker_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
             .post("/experimental/operator", find_elements_handler)
@@ -1717,6 +1738,9 @@ pub struct AudioData {
     pub audio_file_path: String,
     pub duration_secs: f64,
     pub start_offset: f64, // offset from frame timestamp
+    pub audio_chunk_id: i64,
+    pub speaker_id: Option<i64>,
+    pub speaker_name: Option<String>,
 }
 
 impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
@@ -1749,6 +1773,9 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
                                     audio_file_path: audio.audio_file_path,
                                     duration_secs: audio.duration_secs,
                                     start_offset: 0.0, // calculate based on audio timestamp vs frame timestamp
+                                    audio_chunk_id: audio.audio_chunk_id,
+                                    speaker_id: audio.speaker_id,
+                                    speaker_name: audio.speaker_name,
                                 }
                             })
                             .collect(),
@@ -1973,6 +2000,35 @@ async fn get_similar_speakers_handler(
 
     Ok(JsonResponse(similar_speakers))
 }
+
+#[oasgen]
+async fn reassign_speaker_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<ReassignSpeakerRequest>,
+) -> Result<JsonResponse<ReassignSpeakerResponse>, (StatusCode, JsonResponse<Value>)> {
+    let (new_speaker_id, transcriptions_updated, embeddings_moved) = state
+        .db
+        .reassign_speaker(
+            payload.audio_chunk_id,
+            &payload.new_speaker_name,
+            payload.propagate_similar,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    Ok(JsonResponse(ReassignSpeakerResponse {
+        new_speaker_id,
+        new_speaker_name: payload.new_speaker_name,
+        transcriptions_updated,
+        embeddings_moved,
+    }))
+}
+
 // #[derive(OaSchema, Deserialize)]
 // pub struct AudioDeviceControlRequest {
 //     device_name: String,
@@ -3175,6 +3231,9 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
                         is_input: a.is_input,
                         audio_file_path: a.audio_file_path.clone(),
                         duration_secs: a.duration_secs,
+                        audio_chunk_id: a.audio_chunk_id,
+                        speaker_id: a.speaker_id,
+                        speaker_name: a.speaker_name.clone(),
                     })
                     .collect(),
             })

@@ -47,6 +47,9 @@ export interface AudioData {
 	audio_file_path: string;
 	duration_secs: number;
 	start_offset: number;
+	audio_chunk_id: number;
+	speaker_id?: number;
+	speaker_name?: string;
 }
 
 export interface TimeRange {
