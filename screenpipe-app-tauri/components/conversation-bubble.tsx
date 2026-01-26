@@ -2,28 +2,9 @@
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Volume2 } from "lucide-react";
+import { Play, Pause, Mic, Speaker } from "lucide-react";
 import { SpeakerAssignPopover } from "@/components/speaker-assign-popover";
 import { VideoComponent } from "@/components/rewind/video";
-
-// Consistent color palette for speakers
-const SPEAKER_COLORS = [
-	{ bg: "bg-blue-500/10", border: "border-l-blue-500", text: "text-blue-600 dark:text-blue-400" },
-	{ bg: "bg-emerald-500/10", border: "border-l-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
-	{ bg: "bg-violet-500/10", border: "border-l-violet-500", text: "text-violet-600 dark:text-violet-400" },
-	{ bg: "bg-amber-500/10", border: "border-l-amber-500", text: "text-amber-600 dark:text-amber-400" },
-	{ bg: "bg-rose-500/10", border: "border-l-rose-500", text: "text-rose-600 dark:text-rose-400" },
-	{ bg: "bg-cyan-500/10", border: "border-l-cyan-500", text: "text-cyan-600 dark:text-cyan-400" },
-	{ bg: "bg-fuchsia-500/10", border: "border-l-fuchsia-500", text: "text-fuchsia-600 dark:text-fuchsia-400" },
-	{ bg: "bg-lime-500/10", border: "border-l-lime-500", text: "text-lime-600 dark:text-lime-400" },
-];
-
-function getSpeakerColor(speakerId: number | undefined) {
-	if (speakerId === undefined) {
-		return { bg: "bg-muted/50", border: "border-l-muted-foreground/30", text: "text-muted-foreground" };
-	}
-	return SPEAKER_COLORS[speakerId % SPEAKER_COLORS.length];
-}
 
 function formatTime(date: Date): string {
 	return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -67,10 +48,6 @@ export function ConversationBubble({
 	onPlay,
 	onSpeakerAssigned,
 }: ConversationBubbleProps) {
-	const colors = getSpeakerColor(speakerId);
-	const isUnknown = !speakerName;
-	const displayName = speakerName || `Unknown #${speakerId ?? "?"}`;
-
 	return (
 		<div
 			className={cn(
@@ -80,17 +57,15 @@ export function ConversationBubble({
 		>
 			<div
 				className={cn(
-					"max-w-[85%] rounded-2xl border-l-4 transition-all",
-					colors.bg,
-					colors.border,
+					"max-w-[85%] border border-border bg-background transition-all",
 					isFirstInGroup ? "mt-3" : "mt-1",
-					// Subtle animation on mount
-					"animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
+					// Brand style: sharp corners, 150ms transitions
+					"animate-in fade-in-0 slide-in-from-bottom-2 duration-150"
 				)}
 			>
-				{/* Header - only show for first in group or if different speaker */}
+				{/* Header - only show for first in group */}
 				{isFirstInGroup && (
-					<div className="flex items-center gap-2 px-3 pt-2 pb-1">
+					<div className="flex items-center gap-2 px-3 pt-2 pb-1 border-b border-border">
 						<SpeakerAssignPopover
 							audioChunkId={audioChunkId}
 							speakerId={speakerId}
@@ -101,16 +76,25 @@ export function ConversationBubble({
 						<span className="text-[10px] text-muted-foreground">
 							{formatTime(timestamp)}
 						</span>
-						{!isInput && (
-							<span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-								remote
-							</span>
-						)}
+						{/* Audio source indicator: mic = your voice, speaker = system audio */}
+						<span className="text-[10px] px-1.5 py-0.5 border border-border text-muted-foreground inline-flex items-center gap-1">
+							{isInput ? (
+								<>
+									<Mic className="h-2.5 w-2.5" />
+									mic
+								</>
+							) : (
+								<>
+									<Speaker className="h-2.5 w-2.5" />
+									output
+								</>
+							)}
+						</span>
 					</div>
 				)}
 
 				{/* Content */}
-				<div className="px-3 pb-2">
+				<div className="px-3 pb-2 pt-2">
 					{transcription ? (
 						<p className="text-sm leading-relaxed text-foreground">
 							{transcription}
@@ -124,11 +108,11 @@ export function ConversationBubble({
 					{/* Audio controls */}
 					<div className="flex items-center gap-2 mt-2">
 						<Button
-							variant="ghost"
+							variant="outline"
 							size="sm"
 							className={cn(
-								"h-7 px-2 gap-1.5 text-xs",
-								isPlaying && "bg-accent"
+								"h-7 px-2 gap-1.5 text-xs border-border",
+								isPlaying && "bg-foreground text-background"
 							)}
 							onClick={onPlay}
 						>
@@ -143,7 +127,7 @@ export function ConversationBubble({
 
 					{/* Audio player */}
 					{isPlaying && (
-						<div className="mt-2 rounded-lg overflow-hidden">
+						<div className="mt-2 overflow-hidden border border-border">
 							<VideoComponent filePath={audioFilePath} />
 						</div>
 					)}
@@ -177,21 +161,17 @@ export function ParticipantsSummary({
 	timeRange: { start: Date; end: Date };
 }) {
 	return (
-		<div className="px-3 py-2 border-b border-border bg-muted/30">
+		<div className="px-3 py-2 border-b border-border">
 			<div className="flex items-center justify-between text-xs">
 				<div className="flex items-center gap-2 flex-wrap">
 					{participants.map((p) => {
-						const colors = getSpeakerColor(p.id);
 						const percentage = Math.round((p.duration / totalDuration) * 100);
 						return (
 							<div
 								key={p.id}
-								className={cn(
-									"flex items-center gap-1 px-2 py-0.5 rounded-full",
-									colors.bg
-								)}
+								className="flex items-center gap-1 px-2 py-0.5 border border-border"
 							>
-								<span className={cn("font-medium", colors.text)}>
+								<span className="font-medium text-foreground">
 									{p.name || `Unknown #${p.id}`}
 								</span>
 								<span className="text-muted-foreground text-[10px]">

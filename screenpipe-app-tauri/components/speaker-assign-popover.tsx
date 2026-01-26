@@ -168,9 +168,9 @@ export function SpeakerAssignPopover({
 					/>
 				</span>
 			</PopoverTrigger>
-			<PopoverContent className="w-80 p-3" align="start">
+			<PopoverContent className="w-80 p-3 z-[9999] border border-border rounded-none shadow-none" align="start">
 				<div className="space-y-3">
-					<div className="text-sm font-medium">Assign speaker</div>
+					<div className="text-sm font-medium lowercase">assign speaker</div>
 
 					{/* Search input */}
 					<div className="relative">
@@ -194,7 +194,7 @@ export function SpeakerAssignPopover({
 
 					{/* Suggestions list */}
 					{(speakers.length > 0 || showCreateOption) && (
-						<div className="max-h-[150px] overflow-y-auto border rounded-md">
+						<div className="max-h-[150px] overflow-y-auto border border-border">
 							{/* Existing speakers */}
 							{speakers.map((speaker) => (
 								<button
