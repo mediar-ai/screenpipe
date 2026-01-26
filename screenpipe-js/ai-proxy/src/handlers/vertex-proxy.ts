@@ -55,6 +55,8 @@ export async function handleVertexProxy(request: Request, env: Env): Promise<Res
  */
 export async function handleVertexModels(env: Env): Promise<Response> {
 	const models = [
+		{ id: 'gemini-3-pro-preview', object: 'model', created: 1747180800, owned_by: 'google' },
+		{ id: 'gemini-3-flash-preview', object: 'model', created: 1747180800, owned_by: 'google' },
 		{ id: 'claude-opus-4-5@20251101', object: 'model', created: 1747180800, owned_by: 'anthropic' },
 		{ id: 'claude-haiku-4-5@20251001', object: 'model', created: 1747180800, owned_by: 'anthropic' },
 	];

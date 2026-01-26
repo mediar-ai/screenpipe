@@ -146,9 +146,10 @@ impl DatabaseManager {
         let text_length = transcription.len() as i64;
         let mut tx = self.pool.begin().await?;
 
-        // Insert the full transcription
-        let id = sqlx::query(
-            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        // Insert the transcription, ignoring duplicates (same audio_chunk_id + transcription)
+        // This prevents duplicates from VAD segment overlap issues
+        let result = sqlx::query(
+            "INSERT OR IGNORE INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         )
         .bind(audio_chunk_id)
         .bind(transcription)
@@ -162,13 +163,19 @@ impl DatabaseManager {
         .bind(end_time)
         .bind(text_length)
         .execute(&mut *tx)
-        .await?
-        .last_insert_rowid();
+        .await?;
 
-        // Commit the transaction for the full transcription
+        // Commit the transaction
         tx.commit().await?;
 
-        Ok(id)
+        // Returns 0 if the insert was ignored (duplicate), otherwise returns the new id
+        // Note: last_insert_rowid() returns the previous successful insert's id when ignored,
+        // so we check rows_affected() to detect ignored inserts
+        if result.rows_affected() == 0 {
+            Ok(0)
+        } else {
+            Ok(result.last_insert_rowid())
+        }
     }
 
     pub async fn update_audio_transcription(
