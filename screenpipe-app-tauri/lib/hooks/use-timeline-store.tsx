@@ -25,6 +25,9 @@ const MAX_REQUEST_RETRIES = 3; // Retry request 3 times before giving up
 // Reconnect timeout - must be tracked to prevent cascade
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
+// Track the current WebSocket instance to ignore events from old connections
+let currentWsId = 0;
+
 interface TimelineState {
 	frames: StreamTimeSeriesResponse[];
 	frameTimestamps: Set<string>; // For O(1) deduplication lookups
@@ -140,6 +143,10 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			reconnectTimeout = null;
 		}
 
+		// Increment WebSocket ID to invalidate old connection handlers
+		currentWsId++;
+		const thisWsId = currentWsId;
+
 		// Close existing websocket if any (including CONNECTING state to handle React Strict Mode double-render)
 		const existingWs = get().websocket;
 		if (existingWs && (existingWs.readyState === WebSocket.OPEN || existingWs.readyState === WebSocket.CONNECTING)) {
@@ -170,6 +177,9 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		const ws = new WebSocket("ws://localhost:3030/stream/frames");
 
 		ws.onopen = () => {
+			// Ignore events from old WebSocket instances
+			if (thisWsId !== currentWsId) return;
+
 			// Reset retry counter on successful connection
 			connectionAttempts = 0;
 			if (errorGraceTimer) {
@@ -201,6 +211,9 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		};
 
 		ws.onmessage = (event) => {
+			// Ignore events from old WebSocket instances
+			if (thisWsId !== currentWsId) return;
+
 			try {
 				const data = JSON.parse(event.data);
 
@@ -277,6 +290,9 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		};
 
 		ws.onerror = (error) => {
+			// Ignore events from old WebSocket instances
+			if (thisWsId !== currentWsId) return;
+
 			console.error("WebSocket error:", error);
 			connectionAttempts++;
 
@@ -300,6 +316,12 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		};
 
 		ws.onclose = () => {
+			// Ignore events from old WebSocket instances (e.g., when refresh button is clicked)
+			if (thisWsId !== currentWsId) {
+				console.log("Ignoring onclose from old WebSocket instance");
+				return;
+			}
+
 			// Flush any remaining frames before closing
 			if (flushTimer) {
 				clearTimeout(flushTimer);
