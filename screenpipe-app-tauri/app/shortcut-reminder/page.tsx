@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalPosition } from "@tauri-apps/api/window";
 import posthog from "posthog-js";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { getStore } from "@/lib/hooks/use-settings";
@@ -58,16 +58,40 @@ export default function ShortcutReminderPage() {
     };
   }, [isMac, isLoading]);
 
-  // Manual drag handling to avoid Tauri tooltip
-  const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
-    if (e.button === 0) {
-      try {
-        await getCurrentWindow().startDragging();
-      } catch {
-        // Ignore drag errors
-      }
-    }
+  // Custom drag handling to avoid macOS Space switching when dragging over fullscreen apps
+  // Using manual position updates instead of Tauri's startDragging() which triggers native drag
+  const isDragging = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const windowStart = useRef({ x: 0, y: 0 });
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging.current) return;
+    const deltaX = e.screenX - dragStart.current.x;
+    const deltaY = e.screenY - dragStart.current.y;
+    getCurrentWindow().setPosition(
+      new LogicalPosition(windowStart.current.x + deltaX, windowStart.current.y + deltaY)
+    );
   }, []);
+
+  const handleMouseUp = useCallback(() => {
+    isDragging.current = false;
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  }, [handleMouseMove]);
+
+  const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    try {
+      const pos = await getCurrentWindow().outerPosition();
+      windowStart.current = { x: pos.x, y: pos.y };
+      dragStart.current = { x: e.screenX, y: e.screenY };
+      isDragging.current = true;
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    } catch {
+      // Ignore errors
+    }
+  }, [handleMouseMove, handleMouseUp]);
 
   return (
     <div
