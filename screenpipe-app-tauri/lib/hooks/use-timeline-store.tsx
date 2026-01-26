@@ -22,6 +22,9 @@ let requestRetryCount = 0;
 const REQUEST_TIMEOUT_MS = 5000; // 5 seconds to receive frames
 const MAX_REQUEST_RETRIES = 3; // Retry request 3 times before giving up
 
+// Reconnect timeout - must be tracked to prevent cascade
+let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+
 interface TimelineState {
 	frames: StreamTimeSeriesResponse[];
 	frameTimestamps: Set<string>; // For O(1) deduplication lookups
@@ -131,6 +134,12 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 	},
 
 	connectWebSocket: () => {
+		// Cancel any pending reconnect timeout to prevent cascade
+		if (reconnectTimeout) {
+			clearTimeout(reconnectTimeout);
+			reconnectTimeout = null;
+		}
+
 		// Close existing websocket if any (including CONNECTING state to handle React Strict Mode double-render)
 		const existingWs = get().websocket;
 		if (existingWs && (existingWs.readyState === WebSocket.OPEN || existingWs.readyState === WebSocket.CONNECTING)) {
@@ -315,8 +324,9 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				});
 			}
 
-			// Reset attempts and reconnect after delay
-			setTimeout(() => {
+			// Reset attempts and reconnect after delay (tracked to prevent cascade)
+			reconnectTimeout = setTimeout(() => {
+				reconnectTimeout = null;
 				connectionAttempts = 0; // Fresh start for reconnection
 				get().connectWebSocket();
 			}, 5000);

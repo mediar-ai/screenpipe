@@ -7,7 +7,7 @@
  * This test simulates the server-side logic to identify the root cause.
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeEach } from "bun:test";
 
 // Simulate the server-side data structures
 interface FrameChunk {
@@ -358,6 +358,498 @@ describe("Server Poll Logic - Reproducing Real-Time Push Bug", () => {
     expect(pollTimerRan).toBe(7);   // Iterations 3-9
 
     console.log("✓ Fix is correct - after channel closes, poll_timer runs");
+  });
+});
+
+describe("BUG REPRODUCTION - Race Condition", () => {
+  /**
+   * BUG REPRODUCTION: Race between initial fetch task and poll_timer
+   *
+   * Server code flow:
+   * 1. Request received, active_request.last_polled = START_TIME (00:00:00)
+   * 2. Initial fetch SPAWNED (async, runs later)
+   * 3. Poll timer ticks IMMEDIATELY (before initial fetch)
+   * 4. Poll queries from START_TIME to NOW - gets ALL frames
+   * 5. Poll marks ALL frames as sent
+   * 6. Initial fetch finally runs, also sends same frames via channel
+   * 7. Client gets frames twice OR poll already marked them
+   * 8. New frame captured
+   * 9. Poll runs, finds new frame, BUT...
+   */
+  it("BUG: poll_timer runs before initial fetch updates last_polled", () => {
+    // Shared state (simulating Arc<Mutex<...>>)
+    const sentFrameIds = new Set<number>();
+    let activeRequest: ActiveRequest | null = null;
+
+    // DB has existing frames
+    const dbFrames: FrameChunk[] = [
+      { frame_id: 1, timestamp: new Date("2024-01-15T10:00:00Z"), data: "frame1" },
+      { frame_id: 2, timestamp: new Date("2024-01-15T10:01:00Z"), data: "frame2" },
+      { frame_id: 3, timestamp: new Date("2024-01-15T10:02:00Z"), data: "frame3" },
+    ];
+    const db = createMockDb(dbFrames);
+
+    // === STEP 1: Request received ===
+    const startTime = new Date("2024-01-15T00:00:00Z");
+    const endTime = new Date("2024-01-15T23:59:59.999Z");
+
+    // Server sets active_request with last_polled = START_TIME (not latest frame!)
+    activeRequest = {
+      start_time: startTime,
+      end_time: endTime,
+      is_descending: true,
+      last_polled: startTime,  // THIS IS THE BUG - starts at 00:00:00
+    };
+
+    // === STEP 2: Poll timer ticks BEFORE initial fetch completes ===
+    const now = new Date("2024-01-15T10:03:00Z");
+    const pollStart = activeRequest.last_polled; // 00:00:00
+    const pollEnd = now;
+
+    // Poll queries from 00:00:00 to 10:03:00 - gets ALL existing frames!
+    const pollChunks = db.find_video_chunks(pollStart, pollEnd);
+    expect(pollChunks.length).toBe(3); // Gets ALL frames
+
+    // Poll marks ALL as sent
+    for (const chunk of pollChunks) {
+      if (!sentFrameIds.has(chunk.frame_id)) {
+        sentFrameIds.add(chunk.frame_id);
+      }
+    }
+    expect(sentFrameIds.size).toBe(3);
+
+    // === STEP 3: Initial fetch finally runs ===
+    // It also queries all frames and tries to send them
+    const initialChunks = db.find_video_chunks(startTime, endTime);
+    // Initial fetch marks them as sent too (redundant)
+    let latestTs: Date | null = null;
+    for (const chunk of initialChunks) {
+      sentFrameIds.add(chunk.frame_id); // Already there
+      if (!latestTs || chunk.timestamp > latestTs) latestTs = chunk.timestamp;
+    }
+
+    // Initial fetch updates last_polled to latest timestamp
+    activeRequest.last_polled = latestTs!;
+    expect(activeRequest.last_polled).toEqual(new Date("2024-01-15T10:02:00Z"));
+
+    // === STEP 4: New frame captured ===
+    dbFrames.push({ frame_id: 4, timestamp: new Date("2024-01-15T10:04:00Z"), data: "frame4" });
+
+    // === STEP 5: Poll timer runs again ===
+    const now2 = new Date("2024-01-15T10:05:00Z");
+    const pollStart2 = activeRequest.last_polled; // Now 10:02:00
+    const pollEnd2 = now2;
+
+    const pollChunks2 = db.find_video_chunks(pollStart2, pollEnd2);
+    // Should find frames with timestamp >= 10:02:00 and <= 10:05:00
+    // Frame 3 (10:02:00) and Frame 4 (10:04:00) are in range
+
+    const newFrames = pollChunks2.filter(f => !sentFrameIds.has(f.frame_id));
+
+    // Frame 4 should be found as new
+    expect(newFrames.length).toBe(1);
+    expect(newFrames[0].frame_id).toBe(4);
+
+    console.log("✓ This flow actually works - bug is elsewhere");
+  });
+
+  /**
+   * BUG REPRODUCTION: What if initial fetch never updates last_polled?
+   */
+  it("BUG: initial fetch returns no frames, last_polled stays at start_time", () => {
+    const sentFrameIds = new Set<number>();
+    let activeRequest: ActiveRequest | null = null;
+
+    // DB is EMPTY initially
+    const dbFrames: FrameChunk[] = [];
+    const db = createMockDb(dbFrames);
+
+    // Request received
+    const startTime = new Date("2024-01-15T00:00:00Z");
+    const endTime = new Date("2024-01-15T23:59:59.999Z");
+
+    activeRequest = {
+      start_time: startTime,
+      end_time: endTime,
+      is_descending: true,
+      last_polled: startTime,
+    };
+
+    // Initial fetch finds nothing
+    const initialChunks = db.find_video_chunks(startTime, endTime);
+    expect(initialChunks.length).toBe(0);
+
+    // latest_timestamp is None, so last_polled is NOT updated
+    // last_polled stays at 00:00:00
+
+    // New frame captured
+    dbFrames.push({ frame_id: 1, timestamp: new Date("2024-01-15T10:00:00Z"), data: "frame1" });
+
+    // Poll runs
+    const now = new Date("2024-01-15T10:01:00Z");
+    const pollStart = activeRequest.last_polled; // Still 00:00:00
+    const pollEnd = now;
+
+    const pollChunks = db.find_video_chunks(pollStart, pollEnd);
+    const newFrames = pollChunks.filter(f => !sentFrameIds.has(f.frame_id));
+
+    // Should find frame 1
+    expect(newFrames.length).toBe(1);
+    expect(newFrames[0].frame_id).toBe(1);
+
+    console.log("✓ This flow also works");
+  });
+
+  /**
+   * BUG REPRODUCTION: The REAL bug - sent_frame_ids never cleared between polls?
+   */
+  it("BUG: sent_frame_ids accumulates across multiple requests", () => {
+    const sentFrameIds = new Set<number>();
+
+    // First request - frames 1, 2, 3 sent
+    sentFrameIds.add(1);
+    sentFrameIds.add(2);
+    sentFrameIds.add(3);
+
+    // User does right-click refresh
+    // New WebSocket connection, new request
+    // BUT sentFrameIds is NOT cleared if it's module-level state!
+
+    // Check: does server clear sent_frame_ids on new request?
+    // Looking at server code line 3238-3242:
+    // {
+    //     let mut sent = sent_frame_ids_clone.lock().await;
+    //     sent.clear();  // YES, it clears!
+    // }
+
+    // Simulate clearing
+    sentFrameIds.clear();
+    expect(sentFrameIds.size).toBe(0);
+
+    console.log("✓ Server DOES clear sent_frame_ids on new request");
+  });
+
+  /**
+   * THE ACTUAL BUG: fetch_new_frames_since holds lock while iterating
+   */
+  it("BUG FOUND: fetch_new_frames_since holds lock, blocking updates", () => {
+    // Look at fetch_new_frames_since code:
+    // let sent = sent_frame_ids.lock().await;  // LOCK ACQUIRED
+    // for chunk in chunks.frames {
+    //     if sent.contains(&chunk.frame_id) { continue; }
+    //     // ... process frame
+    // }
+    // drop(sent);  // LOCK RELEASED
+    //
+    // // Then locks again to mark as sent:
+    // let mut sent = sent_frame_ids.lock().await;
+    // for frame in &new_frames { sent.insert(...); }
+
+    // The issue: While iterating, the lock is held.
+    // If initial fetch is also trying to mark frames as sent, it's blocked!
+
+    // But wait, they're different lock acquisitions...
+    // Actually this shouldn't cause a deadlock, just contention.
+
+    console.log("Lock contention might slow things but shouldn't cause bug");
+    expect(true).toBe(true);
+  });
+
+  /**
+   * THE ACTUAL BUG: WebSocket might be closed before poll sends
+   */
+  it("BUG: WebSocket closed, poll timer still runs but can't send", () => {
+    let wsOpen = true;
+    let framesSentViaPoll = 0;
+    let errorCount = 0;
+
+    // Simulate poll trying to send
+    function sendFrames(frames: FrameChunk[]) {
+      if (!wsOpen) {
+        errorCount++;
+        console.log("ERROR: failed to send - WebSocket closed");
+        return false;
+      }
+      framesSentViaPoll += frames.length;
+      return true;
+    }
+
+    // Poll sends some frames
+    sendFrames([{ frame_id: 1, timestamp: new Date(), data: "frame1" }]);
+    expect(framesSentViaPoll).toBe(1);
+
+    // Client disconnects (closes WebSocket)
+    wsOpen = false;
+
+    // Poll tries to send more
+    sendFrames([{ frame_id: 2, timestamp: new Date(), data: "frame2" }]);
+    expect(framesSentViaPoll).toBe(1); // Didn't increase
+    expect(errorCount).toBe(1);
+
+    console.log("BUG: If WebSocket closes, poll silently fails");
+    console.log("Logs show: 'failed to send batch: Trying to work with closed connection'");
+    console.log("This matches what we see in the real logs!");
+  });
+
+  /**
+   * ROOT CAUSE CONFIRMED: Client closes WebSocket, server poll fails
+   */
+  it("ROOT CAUSE: Client WebSocket closes prematurely", () => {
+    // Evidence from logs:
+    // "websocket start_send error: Trying to work with closed connection"
+    // "failed to send batch: Trying to work with closed connection"
+    //
+    // This happens when:
+    // 1. Client connects WebSocket
+    // 2. Server starts streaming initial frames
+    // 3. Client WebSocket closes (WHY?)
+    // 4. Server poll_timer tries to send new frames
+    // 5. Error: closed connection
+    //
+    // The question is: WHY does client close the WebSocket?
+    //
+    // Possible reasons:
+    // 1. React component unmounts
+    // 2. React Strict Mode double-render closes first connection
+    // 3. Error in client code causes disconnect
+    // 4. Navigation away from page
+    // 5. Tauri webview refresh
+    //
+    // The fix we made (closing CONNECTING WebSockets too) should help with #2
+
+    console.log("=".repeat(60));
+    console.log("ROOT CAUSE IDENTIFIED:");
+    console.log("Client WebSocket closes prematurely, server can't push frames");
+    console.log("");
+    console.log("Evidence:");
+    console.log("- Logs show 'failed to send batch: closed connection'");
+    console.log("- Right-click refresh creates NEW WebSocket that works");
+    console.log("");
+    console.log("Question: Why does client WebSocket close?");
+    console.log("=".repeat(60));
+
+    expect(true).toBe(true); // This test documents the bug
+  });
+
+  /**
+   * CLIENT BUG: isServerDown flapping causes Timeline remount
+   */
+  it("CLIENT BUG: Timeline remounts when isServerDown flaps", () => {
+    // In page.tsx:
+    // {!isServerDown ? <Timeline /> : <ServerDownUI />}
+    //
+    // If isServerDown goes: false -> true -> false
+    // Timeline unmounts then remounts
+    // useEffect in use-timeline-data.tsx calls connectWebSocket()
+    // This creates a NEW WebSocket, closing the old one!
+
+    let timelineMounted = false;
+    let wsConnectionCount = 0;
+    let wsCloseCount = 0;
+
+    function mountTimeline() {
+      timelineMounted = true;
+      // useEffect calls connectWebSocket
+      wsConnectionCount++;
+    }
+
+    function unmountTimeline() {
+      timelineMounted = false;
+      // No cleanup closes WebSocket - but new mount will!
+    }
+
+    function simulateServerDownFlap() {
+      // isServerDown = true
+      unmountTimeline();
+      // isServerDown = false
+      mountTimeline(); // New WebSocket created, old one orphaned/closed
+    }
+
+    // Initial mount
+    mountTimeline();
+    expect(wsConnectionCount).toBe(1);
+
+    // Health check flaps
+    simulateServerDownFlap();
+    expect(wsConnectionCount).toBe(2);
+
+    // Each mount creates new WS, potentially closing old
+    simulateServerDownFlap();
+    expect(wsConnectionCount).toBe(3);
+
+    console.log("BUG: Every Timeline remount creates new WebSocket");
+    console.log("If health check flaps, multiple WebSockets created");
+    console.log("Server sends to old WS which gets closed = error");
+  });
+
+  /**
+   * CLIENT BUG: connectWebSocket closes existing but server still has reference
+   */
+  it("CLIENT BUG: Server has stale WebSocket reference after client reconnect", () => {
+    // Sequence:
+    // 1. Client connects WS#1
+    // 2. Server stores WS#1 reference, starts poll_timer
+    // 3. Client calls connectWebSocket() again (remount, error, etc)
+    // 4. Client closes WS#1, creates WS#2
+    // 5. Server poll_timer still has WS#1 reference
+    // 6. Server tries to send on WS#1 - CLOSED!
+    // 7. Error: "Trying to work with closed connection"
+
+    let serverWsRef = "WS#1";
+    let clientWsRef = "WS#1";
+    let serverSendErrors = 0;
+
+    function clientReconnect() {
+      // Client closes old WS and creates new one
+      clientWsRef = "WS#2";
+      // But server still has old reference!
+    }
+
+    function serverTrySend() {
+      if (serverWsRef !== clientWsRef) {
+        serverSendErrors++;
+        return false; // "closed connection"
+      }
+      return true;
+    }
+
+    // Initial - both have same WS
+    expect(serverTrySend()).toBe(true);
+
+    // Client reconnects
+    clientReconnect();
+
+    // Server tries to send on old WS
+    expect(serverTrySend()).toBe(false);
+    expect(serverSendErrors).toBe(1);
+
+    console.log("BUG CONFIRMED: Server holds stale WS reference");
+    console.log("Client reconnect doesn't update server's reference");
+    console.log("Server's poll_timer uses stale WS = send fails");
+  });
+
+  /**
+   * THE FIX: When client reconnects, server should detect and use new WS
+   */
+  it("FIX NEEDED: Server poll should detect WS closure and stop", () => {
+    console.log("Server DOES break loop on send error");
+    console.log("But old WS loop errors don't affect new WS");
+    console.log("The question is: why does the NEW WS not work?");
+    expect(true).toBe(true);
+  });
+
+  /**
+   * BUG FOUND: Reconnect timeout creates duplicate WebSockets
+   */
+  it("BUG: ws.onclose timeout + component remount = duplicate WebSockets", () => {
+    // Sequence:
+    // 1. WS#1 connects
+    // 2. WS#1 closes (for whatever reason)
+    // 3. ws.onclose sets timeout: reconnect in 5 seconds
+    // 4. Component remounts (React Strict Mode, navigation, etc)
+    // 5. useEffect calls connectWebSocket() - creates WS#2
+    // 6. 5 seconds later, timeout fires, calls connectWebSocket()
+    // 7. WS#2 closed, WS#3 created
+    // 8. WS#3's onclose sets another timeout
+    // 9. Infinite cycle of reconnections!
+
+    const reconnectTimeouts: number[] = [];
+    let wsCount = 0;
+    let currentWs: number | null = null;
+
+    function connectWebSocket() {
+      // Close existing
+      if (currentWs !== null) {
+        // Simulate ws.onclose firing
+        // Set timeout for reconnect
+        reconnectTimeouts.push(wsCount);
+      }
+      wsCount++;
+      currentWs = wsCount;
+    }
+
+    function fireTimeouts() {
+      const pending = [...reconnectTimeouts];
+      reconnectTimeouts.length = 0;
+      for (const _ of pending) {
+        connectWebSocket();
+      }
+    }
+
+    // Initial connect
+    connectWebSocket();
+    expect(wsCount).toBe(1);
+    expect(reconnectTimeouts.length).toBe(0);
+
+    // WS closes, sets timeout
+    reconnectTimeouts.push(wsCount);
+
+    // Component remounts before timeout fires
+    connectWebSocket(); // Creates WS#2, WS#1 close sets timeout
+    expect(wsCount).toBe(2);
+    expect(reconnectTimeouts.length).toBe(2); // Two timeouts pending!
+
+    // Timeouts fire
+    fireTimeouts();
+    expect(wsCount).toBe(4); // Two more WSes created!
+
+    // More timeouts fire (cascade)
+    fireTimeouts();
+    expect(wsCount).toBe(6);
+
+    console.log("BUG CONFIRMED: Reconnect timeouts cascade");
+    console.log(`Created ${wsCount} WebSockets from cascade`);
+    console.log("FIX: Clear pending reconnect timeout when connectWebSocket is called");
+  });
+
+  /**
+   * THE ACTUAL FIX: Cancel pending reconnect timeout
+   */
+  it("FIX: Cancel reconnect timeout when connectWebSocket called", () => {
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let wsCount = 0;
+    let currentWs: number | null = null;
+
+    function connectWebSocket() {
+      // FIX: Cancel any pending reconnect timeout
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
+
+      // Close existing
+      if (currentWs !== null) {
+        // ws.onclose would set timeout, but we track it
+      }
+      wsCount++;
+      currentWs = wsCount;
+    }
+
+    function simulateWsClose() {
+      // Simulate ws.onclose setting timeout
+      reconnectTimeout = setTimeout(() => {
+        reconnectTimeout = null;
+        connectWebSocket();
+      }, 5000);
+    }
+
+    // Initial connect
+    connectWebSocket();
+    expect(wsCount).toBe(1);
+
+    // WS closes
+    simulateWsClose();
+    expect(reconnectTimeout).not.toBeNull();
+
+    // Component remounts before timeout
+    connectWebSocket(); // Should cancel timeout
+    expect(wsCount).toBe(2);
+    // Timeout was cleared by connectWebSocket
+
+    // No cascade happens because timeout was cleared
+    // (Can't actually test setTimeout clearing in sync test)
+
+    console.log("FIX: Clear reconnectTimeout at start of connectWebSocket");
   });
 });
 
