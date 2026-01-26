@@ -176,6 +176,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					transition: 'opacity 0.2s ease-in-out',
 				}}
 				alt="Current frame"
+				draggable={false}
 				onLoad={(e) => {
 					const img = e.target as HTMLImageElement;
 					console.log('Image loaded successfully for frame:', frameId);
