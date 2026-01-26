@@ -38,7 +38,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
         <div className="text-center space-y-2 mb-8">
           <h1 className="text-3xl font-bold tracking-tight">welcome to screenpipe</h1>
           <p className="text-sm text-muted-foreground">
-            sign in to get the most out of your experience
+            100% local. your data never leaves your device.
           </p>
         </div>
 
@@ -70,38 +70,27 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
           ) : (
             <>
               <div className="space-y-3 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">why sign in?</p>
-                <ul className="space-y-2 ml-4">
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary">-</span>
-                    <span>get help faster if something breaks</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary">-</span>
-                    <span>access cloud AI features</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-primary">-</span>
-                    <span>sync settings across devices</span>
-                  </li>
-                </ul>
+                <p className="font-medium text-foreground">no account needed to use screenpipe</p>
+                <p className="text-xs">
+                  optional sign in unlocks: cloud AI, settings sync, priority support
+                </p>
               </div>
 
               <div className="flex flex-col gap-2 pt-2">
                 <Button
                   variant="default"
-                  onClick={() => open("https://screenpi.pe/login")}
+                  onClick={handleSkip}
                   className="w-full"
                 >
-                  sign in <ExternalLinkIcon className="w-4 h-4 ml-2" />
+                  continue without account
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleSkip}
+                  onClick={() => open("https://screenpi.pe/login")}
                   className="w-full text-muted-foreground"
                 >
-                  skip for now
+                  sign in (optional) <ExternalLinkIcon className="w-4 h-4 ml-2" />
                 </Button>
               </div>
             </>
