@@ -31,7 +31,7 @@
           },
           {
             "group": "reference",
-            "pages": ["cli-reference", "sdk-reference", "operator-api"]
+            "pages": ["cli-reference", "sdk-reference"]
           },
           {
             "group": "compare",
