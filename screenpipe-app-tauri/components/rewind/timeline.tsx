@@ -82,13 +82,32 @@ export default function Timeline() {
 		setShowAudioTranscript(true);
 	}, [currentIndex]);
 
-	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus } =
+	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus, newFramesCount, lastFlushTimestamp, clearNewFramesCount } =
 		useTimelineStore();
 
 	const { frames, isLoading, error, message, fetchNextDayData, websocket } =
 		useTimelineData(currentDate, (frame) => {
 			setCurrentFrame(frame);
 		});
+
+	// Track if user is at "live edge" (viewing newest frame, index 0)
+	const isAtLiveEdge = currentIndex === 0;
+	const prevFramesLengthRef = useRef(frames.length);
+
+	// When new frames arrive and user is NOT at live edge, adjust index to stay on same frame
+	useEffect(() => {
+		if (newFramesCount > 0 && !isAtLiveEdge && frames.length > prevFramesLengthRef.current) {
+			// New frames were added at the front, shift our index to compensate
+			setCurrentIndex(prev => prev + newFramesCount);
+			console.log(`Adjusted index by +${newFramesCount} to stay on same frame (live edge: ${isAtLiveEdge})`);
+		}
+		prevFramesLengthRef.current = frames.length;
+
+		// Clear the count after handling
+		if (newFramesCount > 0) {
+			clearNewFramesCount();
+		}
+	}, [lastFlushTimestamp, newFramesCount, isAtLiveEdge, frames.length, clearNewFramesCount]);
 
 	// Listen for window focus events to refresh timeline data
 	useEffect(() => {
@@ -634,6 +653,8 @@ export default function Timeline() {
 							fetchNextDayData={fetchNextDayData}
 							currentDate={currentDate}
 							startAndEndDates={startAndEndDates}
+							newFramesCount={newFramesCount}
+							lastFlushTimestamp={lastFlushTimestamp}
 						/>
 					) : (
 						<div className="bg-card/80 backdrop-blur-sm p-4 border-t border-border">

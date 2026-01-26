@@ -14,6 +14,8 @@ interface TimelineSliderProps {
 	fetchNextDayData: (date: Date) => void;
 	currentDate: Date;
 	onSelectionChange?: (selectedFrames: StreamTimeSeriesResponse[]) => void;
+	newFramesCount?: number; // Number of new frames added (for animation)
+	lastFlushTimestamp?: number; // When frames were last added (to trigger animation)
 }
 
 interface AppGroup {
@@ -44,6 +46,8 @@ export const TimelineSlider = ({
 	startAndEndDates,
 	currentDate,
 	onSelectionChange,
+	newFramesCount = 0,
+	lastFlushTimestamp = 0,
 }: TimelineSliderProps) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const observerTargetRef = useRef<HTMLDivElement>(null);
@@ -60,6 +64,21 @@ export const TimelineSlider = ({
 		new Set(),
 	);
 	const { setSelectionRange, selectionRange } = useTimelineSelection();
+
+	// Animation state for new frames pulse
+	const [showNewFramesPulse, setShowNewFramesPulse] = useState(false);
+	const prevFlushTimestampRef = useRef(lastFlushTimestamp);
+
+	// Trigger pulse animation when new frames arrive
+	useEffect(() => {
+		if (lastFlushTimestamp > prevFlushTimestampRef.current && newFramesCount > 0) {
+			setShowNewFramesPulse(true);
+			const timer = setTimeout(() => setShowNewFramesPulse(false), 1500);
+			prevFlushTimestampRef.current = lastFlushTimestamp;
+			return () => clearTimeout(timer);
+		}
+		prevFlushTimestampRef.current = lastFlushTimestamp;
+	}, [lastFlushTimestamp, newFramesCount]);
 
 	// Pre-compute frame index map for O(1) lookups instead of O(n) indexOf
 	// This reduces 2.68M comparisons per render to just 400 Map lookups
@@ -224,6 +243,26 @@ export const TimelineSlider = ({
 				className="absolute top-0 h-1 bg-blue-500/50"
 				style={{ width: lineWidth }}
 			/>
+			{/* New frames pulse indicator - appears on right side (newest) */}
+			{showNewFramesPulse && (
+				<motion.div
+					className="absolute right-0 top-0 bottom-0 w-24 pointer-events-none z-20"
+					initial={{ opacity: 0 }}
+					animate={{ opacity: [0, 1, 0] }}
+					transition={{ duration: 1.5, ease: "easeOut" }}
+				>
+					<div className="h-full w-full bg-gradient-to-l from-green-400/40 via-green-400/20 to-transparent" />
+					<motion.div
+						className="absolute right-2 top-1/2 -translate-y-1/2 bg-green-500 text-white text-xs font-medium px-2 py-1 rounded-full shadow-lg"
+						initial={{ scale: 0, x: 20 }}
+						animate={{ scale: 1, x: 0 }}
+						exit={{ scale: 0, x: 20 }}
+						transition={{ type: "spring", damping: 15 }}
+					>
+						+{newFramesCount} new
+					</motion.div>
+				</motion.div>
+			)}
 			<div
 				ref={containerRef}
 				className="w-full overflow-x-auto overflow-y-visible scroll-smooth scrollbar-hide bg-gradient-to-t from-black/50 to-black/0"

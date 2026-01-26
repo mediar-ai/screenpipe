@@ -38,6 +38,9 @@ interface TimelineState {
 	currentDate: Date;
 	websocket: WebSocket | null;
 	sentRequests: Set<string>;
+	// Track new frames for animation and position adjustment
+	newFramesCount: number; // How many new frames were added at the front (for animation)
+	lastFlushTimestamp: number; // Timestamp of last flush (to trigger effects)
 
 	// Actions
 	setFrames: (frames: StreamTimeSeriesResponse[]) => void;
@@ -51,6 +54,7 @@ interface TimelineState {
 	hasDateBeenFetched: (date: Date) => boolean;
 	flushFrameBuffer: () => void;
 	onWindowFocus: () => void;
+	clearNewFramesCount: () => void;
 }
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
@@ -63,12 +67,15 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 	currentDate: new Date(),
 	websocket: null,
 	sentRequests: new Set<string>(),
+	newFramesCount: 0,
+	lastFlushTimestamp: 0,
 
 	setFrames: (frames) => set({ frames }),
 	setIsLoading: (isLoading) => set({ isLoading }),
 	setError: (error) => set({ error }),
 	setMessage: (message) => set({ message }),
 	setCurrentDate: (date) => set({ currentDate: date }),
+	clearNewFramesCount: () => set({ newFramesCount: 0 }),
 
 	hasDateBeenFetched: (date: Date) => {
 		const { sentRequests } = get();
@@ -123,6 +130,20 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				}
 			);
 
+			// Count how many new frames ended up at the front (newer than previous newest)
+			// This is used for: 1) animation pulse, 2) adjusting currentIndex when not at live edge
+			const previousNewest = state.frames[0]?.timestamp;
+			let newAtFront = 0;
+			if (previousNewest) {
+				for (const frame of mergedFrames) {
+					if (frame.timestamp.localeCompare(previousNewest) > 0) {
+						newAtFront++;
+					} else {
+						break; // Sorted descending, so once we hit older frames, stop
+					}
+				}
+			}
+
 			return {
 				frames: mergedFrames,
 				frameTimestamps: updatedTimestamps,
@@ -133,6 +154,8 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				},
 				message: null,
 				error: null,
+				newFramesCount: newAtFront,
+				lastFlushTimestamp: Date.now(),
 			};
 		});
 	},
