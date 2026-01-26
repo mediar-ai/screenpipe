@@ -3217,8 +3217,8 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>, _g
             if let Message::Text(text) = msg {
                 match serde_json::from_str::<StreamFramesRequest>(&text) {
                     Ok(request) => {
-                        debug!(
-                            "streaming frames from {} to {}",
+                        info!(
+                            "WebSocket stream request: {} to {} (live polling enabled)",
                             request.start_time, request.end_time
                         );
 
@@ -3364,9 +3364,9 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>, _g
                                 {
                                     Ok((new_frames, latest_ts)) => {
                                         if !new_frames.is_empty() {
-                                            debug!(
-                                                "Live push: sending {} new frames to client",
-                                                new_frames.len()
+                                            info!(
+                                                "Live push: sending {} new frames (poll_start={}, poll_end={})",
+                                                new_frames.len(), poll_start, poll_end
                                             );
 
                                             // Sort frames based on client's preference
@@ -3405,11 +3405,17 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>, _g
                                         }
                                     }
                                     Err(e) => {
-                                        debug!("Error polling for new frames: {}", e);
+                                        info!("Poll error: {}", e);
                                     }
                                 }
+                            } else {
+                                debug!("Poll skipped: poll_start >= poll_end ({} >= {})", poll_start, poll_end);
                             }
+                        } else {
+                            debug!("Poll skipped: now > end_time ({} > {})", now, end_time);
                         }
+                    } else {
+                        debug!("Poll skipped: no active request");
                     }
                 }
                 // Send keep-alive message to prevent connection timeout
