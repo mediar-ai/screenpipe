@@ -43,6 +43,7 @@ interface ParsedMentions {
   contentType: "all" | "ocr" | "audio" | null;
   appName: string | null;
   usedSelection: boolean;
+  speakerName: string | null;
 }
 
 interface ParseMentionsOptions {
@@ -86,6 +87,7 @@ function parseMentions(input: string, options?: ParseMentionsOptions): ParsedMen
   let contentType: "all" | "ocr" | "audio" | null = null;
   let appName: string | null = null;
   let usedSelection = false;
+  let speakerName: string | null = null;
 
   // === TIME MENTIONS ===
 
@@ -184,7 +186,33 @@ function parseMentions(input: string, options?: ParseMentionsOptions): ParsedMen
     }
   }
 
-  return { cleanedInput, timeRanges, contentType, appName, usedSelection };
+  // === SPEAKER MENTIONS ===
+  // Match @speaker:Name or just a capitalized name after @ that isn't a known tag
+  // Pattern: @Name or @"Full Name" (quoted for multi-word names)
+  const quotedSpeakerPattern = /@"([^"]+)"/g;
+  const quotedMatch = quotedSpeakerPattern.exec(cleanedInput);
+  if (quotedMatch) {
+    speakerName = quotedMatch[1].trim();
+    cleanedInput = cleanedInput.replace(quotedMatch[0], "").trim();
+  } else {
+    // Match @CapitalizedName (single word, must start with capital to distinguish from app tags)
+    const simpleSpeakerPattern = /@([A-Z][a-zA-Z]+)(?:\s|$|,)/;
+    const simpleMatch = simpleSpeakerPattern.exec(cleanedInput);
+    if (simpleMatch) {
+      const potentialName = simpleMatch[1];
+      // Check if it's not a known app or time tag
+      const knownTags = [
+        "today", "yesterday", "selection", "audio", "screen", "ocr",
+        ...Object.keys(APP_MAPPINGS).map(k => k.toLowerCase())
+      ];
+      if (!knownTags.includes(potentialName.toLowerCase())) {
+        speakerName = potentialName;
+        cleanedInput = cleanedInput.replace(`@${potentialName}`, "").trim();
+      }
+    }
+  }
+
+  return { cleanedInput, timeRanges, contentType, appName, usedSelection, speakerName };
 }
 
 // ============================================================================
@@ -194,10 +222,11 @@ function parseMentions(input: string, options?: ParseMentionsOptions): ParsedMen
 interface MentionSuggestion {
   tag: string;
   description: string;
-  category: "time" | "content" | "app";
+  category: "time" | "content" | "app" | "speaker";
 }
 
-const MENTION_SUGGESTIONS: MentionSuggestion[] = [
+// Static suggestions - speakers are loaded dynamically
+const STATIC_MENTION_SUGGESTIONS: MentionSuggestion[] = [
   // Time
   { tag: "@today", description: "today's activity", category: "time" },
   { tag: "@yesterday", description: "yesterday", category: "time" },
@@ -219,6 +248,13 @@ const MENTION_SUGGESTIONS: MentionSuggestion[] = [
   { tag: "@arc", description: "Arc browser", category: "app" },
   { tag: "@cursor", description: "Cursor", category: "app" },
 ];
+
+// Speaker interface for dynamic suggestions
+interface Speaker {
+  id: number;
+  name: string;
+  metadata?: string;
+}
 
 // Suggestion badges for timeline selection
 const TIMELINE_SUGGESTIONS = [
@@ -279,6 +315,10 @@ EXAMPLES:
           window_name: {
             type: "string",
             description: "Filter by window title substring. Useful for specific tabs/documents.",
+          },
+          speaker_name: {
+            type: "string",
+            description: "Filter audio transcriptions by speaker name. Use when user asks about what a specific person said. Case-insensitive partial match.",
           },
         },
       },
@@ -347,19 +387,70 @@ export function GlobalChat() {
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const [speakerSuggestions, setSpeakerSuggestions] = useState<MentionSuggestion[]>([]);
+  const [isLoadingSpeakers, setIsLoadingSpeakers] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Fetch speakers dynamically when filter changes
+  useEffect(() => {
+    if (!mentionFilter || mentionFilter.length < 1) {
+      setSpeakerSuggestions([]);
+      return;
+    }
+
+    // Check if filter matches any static suggestion - if so, don't search speakers
+    const matchesStatic = STATIC_MENTION_SUGGESTIONS.some(
+      s => s.tag.toLowerCase().includes(`@${mentionFilter.toLowerCase()}`)
+    );
+    if (matchesStatic && mentionFilter.length < 3) {
+      setSpeakerSuggestions([]);
+      return;
+    }
+
+    const searchSpeakers = async () => {
+      setIsLoadingSpeakers(true);
+      try {
+        const response = await fetch(
+          `${SCREENPIPE_API}/speakers/search?name=${encodeURIComponent(mentionFilter)}`
+        );
+        if (response.ok) {
+          const speakers: Speaker[] = await response.json();
+          const suggestions: MentionSuggestion[] = speakers
+            .filter(s => s.name) // Only include speakers with names
+            .slice(0, 5) // Limit to 5 speakers
+            .map(s => ({
+              tag: s.name.includes(" ") ? `@"${s.name}"` : `@${s.name}`,
+              description: `speaker`,
+              category: "speaker" as const,
+            }));
+          setSpeakerSuggestions(suggestions);
+        }
+      } catch (error) {
+        console.error("Error searching speakers:", error);
+      } finally {
+        setIsLoadingSpeakers(false);
+      }
+    };
+
+    const debounceTimeout = setTimeout(searchSpeakers, 300);
+    return () => clearTimeout(debounceTimeout);
+  }, [mentionFilter]);
+
   // Filter suggestions based on what user is typing after @
   const filteredMentions = React.useMemo(() => {
-    if (!mentionFilter) return MENTION_SUGGESTIONS;
-    const filter = mentionFilter.toLowerCase();
-    return MENTION_SUGGESTIONS.filter(
-      s => s.tag.toLowerCase().includes(filter) || s.description.toLowerCase().includes(filter)
-    );
-  }, [mentionFilter]);
+    const staticSuggestions = !mentionFilter
+      ? STATIC_MENTION_SUGGESTIONS
+      : STATIC_MENTION_SUGGESTIONS.filter(
+          s => s.tag.toLowerCase().includes(mentionFilter.toLowerCase()) ||
+               s.description.toLowerCase().includes(mentionFilter.toLowerCase())
+        );
+
+    // Combine static and dynamic speaker suggestions
+    return [...staticSuggestions, ...speakerSuggestions];
+  }, [mentionFilter, speakerSuggestions]);
 
   // Handle input changes and detect @ mentions
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -528,6 +619,7 @@ export function GlobalChat() {
       if (args.end_time) params.append("end_time", String(args.end_time));
       if (args.app_name) params.append("app_name", String(args.app_name));
       if (args.window_name) params.append("window_name", String(args.window_name));
+      if (args.speaker_name) params.append("speaker_name", String(args.speaker_name));
 
       // Add timeout to prevent hanging - 30s to handle large datasets
       const controller = new AbortController();
@@ -668,6 +760,11 @@ export function GlobalChat() {
       // App filter from @appname
       if (mentions.appName) {
         mentionContext.push(`APP FILTER: ${mentions.appName} (use app_name: "${mentions.appName}")`);
+      }
+
+      // Speaker filter from @SpeakerName
+      if (mentions.speakerName) {
+        mentionContext.push(`SPEAKER FILTER: ${mentions.speakerName} (use speaker_name: "${mentions.speakerName}" and content_type: "audio")`);
       }
 
       if (mentionContext.length > 0) {
@@ -1206,13 +1303,13 @@ export function GlobalChat() {
                         className="absolute bottom-full left-0 right-0 mb-1 bg-background border border-border rounded-lg shadow-lg overflow-hidden z-50 max-h-[240px] overflow-y-auto"
                       >
                         {/* Group by category */}
-                        {["time", "content", "app"].map(category => {
+                        {["time", "content", "app", "speaker"].map(category => {
                           const items = filteredMentions.filter(m => m.category === category);
                           if (items.length === 0) return null;
                           return (
                             <div key={category}>
                               <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground bg-muted/30 border-b border-border/50">
-                                {category === "time" ? "time" : category === "content" ? "content type" : "apps"}
+                                {category === "time" ? "time" : category === "content" ? "content type" : category === "speaker" ? "speakers" : "apps"}
                               </div>
                               {items.map((suggestion) => {
                                 const globalIndex = filteredMentions.indexOf(suggestion);
@@ -1236,6 +1333,13 @@ export function GlobalChat() {
                             </div>
                           );
                         })}
+                        {/* Loading indicator for speaker search */}
+                        {isLoadingSpeakers && (
+                          <div className="px-3 py-2 text-[10px] text-muted-foreground flex items-center gap-2">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <span>Searching speakers...</span>
+                          </div>
+                        )}
                         <div className="px-2 py-1 text-[10px] text-muted-foreground border-t border-border/50 bg-muted/20">
                           <kbd className="px-1 bg-muted rounded text-[9px]">↑↓</kbd> navigate
                           <kbd className="px-1 bg-muted rounded text-[9px] ml-2">tab</kbd> select

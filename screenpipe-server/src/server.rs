@@ -142,6 +142,9 @@ pub(crate) struct SearchQuery {
     focused: Option<bool>,
     #[serde(default)]
     browser_url: Option<String>,
+    /// Filter audio transcriptions by speaker name (case-insensitive partial match)
+    #[serde(default)]
+    speaker_name: Option<String>,
 }
 
 #[derive(OaSchema, Deserialize)]
@@ -338,7 +341,7 @@ pub(crate) async fn search(
     State(state): State<Arc<AppState>>,
 ) -> Result<JsonResponse<SearchResponse>, (StatusCode, JsonResponse<serde_json::Value>)> {
     info!(
-        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}, browser_url={:?}, focused={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}, browser_url={:?}, focused={:?}, speaker_name={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -353,6 +356,7 @@ pub(crate) async fn search(
         query.frame_name,
         query.browser_url,
         query.focused,
+        query.speaker_name,
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -375,6 +379,7 @@ pub(crate) async fn search(
             query.frame_name.as_deref(),
             query.browser_url.as_deref(),
             query.focused,
+            query.speaker_name.as_deref(),
         ),
         state.db.count_search_results(
             query_str,
@@ -389,6 +394,7 @@ pub(crate) async fn search(
             query.frame_name.as_deref(),
             query.browser_url.as_deref(),
             query.focused,
+            query.speaker_name.as_deref(),
         ),
     )
     .await

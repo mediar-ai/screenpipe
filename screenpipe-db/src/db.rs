@@ -451,6 +451,7 @@ impl DatabaseManager {
         frame_name: Option<&str>,
         browser_url: Option<&str>,
         focused: Option<bool>,
+        speaker_name: Option<&str>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
@@ -487,7 +488,8 @@ impl DatabaseManager {
                                 end_time,
                                 min_length,
                                 max_length,
-                                speaker_ids
+                                speaker_ids,
+                                speaker_name,
                             ),
                             self.search_ui_monitoring(
                                 query,
@@ -567,6 +569,7 @@ impl DatabaseManager {
                             min_length,
                             max_length,
                             speaker_ids,
+                            speaker_name,
                         )
                         .await?;
                     results.extend(audio_results.into_iter().map(SearchResult::Audio));
@@ -597,6 +600,7 @@ impl DatabaseManager {
                         min_length,
                         max_length,
                         speaker_ids,
+                        speaker_name,
                     )
                     .await?;
                 let ui_results = self
@@ -657,6 +661,7 @@ impl DatabaseManager {
                         min_length,
                         max_length,
                         speaker_ids,
+                        speaker_name,
                     )
                     .await?;
                 let ocr_results = self
@@ -870,6 +875,7 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
         speaker_ids: Option<Vec<i64>>,
+        speaker_name: Option<&str>,
     ) -> Result<Vec<AudioResult>, sqlx::Error> {
         // base query for audio search
         let mut base_sql = String::from(
@@ -918,6 +924,9 @@ impl DatabaseManager {
         if speaker_ids.is_some() {
             conditions.push("(json_array_length(?) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?)))");
         }
+        if speaker_name.is_some() {
+            conditions.push("speakers.name LIKE '%' || ? || '%' COLLATE NOCASE");
+        }
 
         let where_clause = if conditions.is_empty() {
             "WHERE 1=1".to_owned()
@@ -959,6 +968,9 @@ impl DatabaseManager {
             query_builder = query_builder
                 .bind(&speaker_ids_json)
                 .bind(&speaker_ids_json);
+        }
+        if let Some(name) = speaker_name {
+            query_builder = query_builder.bind(name);
         }
         query_builder = query_builder.bind(limit as i64).bind(offset as i64);
 
@@ -1073,6 +1085,7 @@ impl DatabaseManager {
         frame_name: Option<&str>,
         browser_url: Option<&str>,
         focused: Option<bool>,
+        speaker_name: Option<&str>,
     ) -> Result<usize, sqlx::Error> {
         // if focused or browser_url is present, we run only on OCR
         if focused.is_some() || browser_url.is_some() {
@@ -1094,6 +1107,7 @@ impl DatabaseManager {
                 frame_name,
                 browser_url,
                 focused,
+                None,
             ));
 
             let ui_future = Box::pin(self.count_search_results(
@@ -1105,6 +1119,7 @@ impl DatabaseManager {
                 window_name,
                 min_length,
                 max_length,
+                None,
                 None,
                 None,
                 None,
@@ -1125,6 +1140,7 @@ impl DatabaseManager {
                     None,
                     None,
                     None,
+                    speaker_name,
                 ));
 
                 let (ocr_count, audio_count, ui_count) =
@@ -1226,17 +1242,24 @@ impl DatabaseManager {
             ContentType::Audio => format!(
                 r#"SELECT COUNT(DISTINCT audio_transcriptions.id)
                    FROM {table}
+                   {speaker_join}
                    WHERE {match_condition}
                        AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                        AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
                        AND (?4 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?4)
                        AND (?5 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?5)
                        AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
+                       AND (?7 IS NULL OR speakers.name LIKE '%' || ?7 || '%' COLLATE NOCASE)
                 "#,
                 table = if query.is_empty() {
                     "audio_transcriptions"
                 } else {
                     "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
+                },
+                speaker_join = if speaker_name.is_some() {
+                    "LEFT JOIN speakers ON audio_transcriptions.speaker_id = speakers.id"
+                } else {
+                    ""
                 },
                 match_condition = if query.is_empty() {
                     "1=1"
@@ -1282,7 +1305,8 @@ impl DatabaseManager {
                     .bind(end_time)
                     .bind(min_length.map(|l| l as i64))
                     .bind(max_length.map(|l| l as i64))
-                    .bind(json_array)
+                    .bind(&json_array)
+                    .bind(speaker_name)
                     .fetch_one(&self.pool)
                     .await?
             }
