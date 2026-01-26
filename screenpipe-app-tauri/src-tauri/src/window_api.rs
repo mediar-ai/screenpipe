@@ -288,9 +288,14 @@ impl ShowRewindWindow {
                             use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
 
                             if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
+                                use objc::{msg_send, sel, sel_impl};
+
                                 // Re-apply window level each time we show to ensure it stays above fullscreen
                                 // CGShieldingWindowLevel (1000) + 1 ensures it appears above everything
                                 panel.set_level(1001);
+
+                                // Disable window dragging by clicking on background
+                                let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
 
                                 // Re-apply collection behaviors
                                 panel.set_collection_behaviour(
@@ -428,6 +433,8 @@ impl ShowRewindWindow {
                             use tauri_nspanel::cocoa::appkit::{NSWindowCollectionBehavior};
                             
                             if let Ok(panel) = window_clone.to_panel() {
+                                use objc::{msg_send, sel, sel_impl};
+
                                 // Use a very high window level to appear above fullscreen apps
                                 // CGShieldingWindowLevel (1000) + 1 ensures it appears above everything including fullscreen
                                 panel.set_level(1001);
@@ -435,6 +442,9 @@ impl ShowRewindWindow {
                                 panel.released_when_closed(true);
 
                                 panel.set_style_mask(0);
+
+                                // Disable window dragging by clicking on background
+                                let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
 
                                 panel.set_collection_behaviour(
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |

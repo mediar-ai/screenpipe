@@ -1,0 +1,110 @@
+---
+title: "automatic meeting transcription - local & private"
+sidebarTitle: "meeting transcription"
+description: "Automatically transcribe meetings with screenpipe. Local speech-to-text using Whisper, speaker identification, and AI-powered summaries. No cloud required."
+icon: "microphone"
+---
+
+screenpipe automatically transcribes all audio from your meetings, calls, and conversations. everything runs locally using Whisper for maximum privacy.
+
+## how it works
+
+1. **audio capture**: screenpipe records from your microphone and system audio
+2. **speech-to-text**: audio is transcribed using Whisper (runs locally)
+3. **speaker identification**: different speakers are automatically labeled
+4. **searchable storage**: transcripts are indexed and searchable
+
+## setup
+
+### basic setup
+
+```bash
+# start screenpipe with audio enabled (default)
+screenpipe
+```
+
+### capture both mic and system audio
+
+```bash
+# list available audio devices
+screenpipe --list-audio-devices
+
+# capture specific devices
+screenpipe --audio-device "MacBook Pro Microphone" --audio-device "BlackHole 2ch"
+```
+
+### choose transcription engine
+
+```bash
+# local (default) - most private
+screenpipe --audio-transcription-engine whisper-large-v3-turbo
+
+# cloud - faster, requires API key
+screenpipe --audio-transcription-engine deepgram
+```
+
+## query transcriptions
+
+```typescript
+import { pipe } from "@screenpipe/js";
+
+// find discussions about a topic
+const results = await pipe.queryScreenpipe({
+  q: "budget review",
+  contentType: "audio",
+  limit: 10
+});
+
+// get transcripts from today's meetings
+const today = new Date().toISOString().split('T')[0];
+const meetings = await pipe.queryScreenpipe({
+  startTime: today,
+  contentType: "audio"
+});
+```
+
+## using the meeting pipe
+
+for automatic meeting summaries:
+
+1. install the **meeting** pipe from the store
+2. it automatically detects when meetings start
+3. generates summaries with action items
+4. can sync to Notion, Obsidian, or other tools
+
+## transcription quality tips
+
+- use a good microphone
+- reduce background noise
+- `whisper-large-v3-turbo` gives best accuracy
+- add `--language en` if you only speak English (faster)
+
+## speaker identification
+
+screenpipe automatically identifies different speakers:
+
+```typescript
+const results = await pipe.queryScreenpipe({
+  contentType: "audio"
+});
+
+for (const item of results.data) {
+  if (item.type === "Audio") {
+    console.log(`Speaker: ${item.content.speaker_id}`);
+    console.log(`Text: ${item.content.transcription}`);
+  }
+}
+```
+
+## privacy
+
+- all transcription runs locally on your device
+- audio files stored in `~/.screenpipe/data/`
+- no audio is sent to the cloud (unless you choose deepgram)
+- you can disable audio recording with `--disable-audio`
+
+## next steps
+
+- [install screenpipe](/getting-started)
+- [CLI audio options](/cli-reference#audio-options)
+- [build a meeting notes plugin](/plugins)

@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "screenpipe documentation",
+  "name": "screenpipe docs",
   "colors": {
     "primary": "#000000",
     "light": "#333333",
@@ -15,11 +15,32 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "getting started",
-        "pages": [
-          "home",
-          "getting-started",
-          "faq"
+        "tab": "documentation",
+        "groups": [
+          {
+            "group": "get started",
+            "pages": ["home", "getting-started", "architecture"]
+          },
+          {
+            "group": "use cases",
+            "pages": ["search-screen-history", "meeting-transcription", "ai-memory"]
+          },
+          {
+            "group": "guides",
+            "pages": ["plugins", "mcp-server"]
+          },
+          {
+            "group": "reference",
+            "pages": ["cli-reference", "sdk-reference", "operator-api"]
+          },
+          {
+            "group": "compare",
+            "pages": ["vs-rewind", "vs-recall", "vs-limitless"]
+          },
+          {
+            "group": "resources",
+            "pages": ["faq", "contributing"]
+          }
         ]
       },
       {
@@ -27,6 +48,9 @@
         "openapi": "openapi.yaml"
       }
     ]
+  },
+  "seo": {
+    "indexHiddenPages": false
   },
   "api": {
     "playground": {
@@ -36,7 +60,7 @@
   "navbar": {
     "links": [
       {
-        "label": "support",
+        "label": "discord",
         "href": "https://discord.gg/dU9EBuw7Uq"
       },
       {
@@ -46,17 +70,24 @@
     ],
     "primary": {
       "type": "button",
-      "label": "get app",
+      "label": "download",
       "href": "https://screenpi.pe/onboarding"
     }
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/mediar-ai/screenpipe"
+      "github": "https://github.com/mediar-ai/screenpipe",
+      "x": "https://x.com/screen_pipe",
+      "discord": "https://discord.gg/dU9EBuw7Uq"
     }
   },
   "search": {
-    "prompt": "search documentation..."
+    "prompt": "search screenpipe docs..."
+  },
+  "metadata": {
+    "og:site_name": "screenpipe docs",
+    "og:image": "https://screenpi.pe/og-image.png",
+    "twitter:site": "@screen_pipe"
   },
   "integrations": {
     "posthog": {

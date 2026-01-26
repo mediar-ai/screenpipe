@@ -1,0 +1,126 @@
+---
+title: "give AI memory of your screen - context for LLMs"
+sidebarTitle: "ai memory"
+description: "Give your AI assistant memory of everything on your screen. Use screenpipe to provide context to ChatGPT, Claude, Ollama, and other LLMs."
+icon: "brain"
+---
+
+screenpipe acts as a memory layer for AI, giving large language models context about what you've been doing on your computer.
+
+## why AI needs memory
+
+LLMs are powerful but stateless - they don't know what you were working on 5 minutes ago. screenpipe bridges this gap by:
+
+- capturing everything on your screen
+- extracting text via OCR
+- transcribing audio
+- making it all searchable and retrievable
+
+## connect to AI providers
+
+### ollama (local)
+
+```bash
+# start ollama
+ollama run phi4:14b-q4_K_M
+
+# configure in screenpipe settings
+# model: phi4:14b-q4_K_M
+# url: http://localhost:11434
+```
+
+### openai
+
+set your API key in screenpipe settings under AI configuration.
+
+### claude via MCP
+
+screenpipe can act as an MCP server, giving Claude direct access to your screen history:
+
+```json
+{
+  "mcpServers": {
+    "screenpipe": {
+      "command": "screenpipe-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+see [MCP server setup](/mcp-server) for details.
+
+## build AI-powered apps
+
+### context-aware chatbot
+
+```typescript
+import { pipe } from "@screenpipe/js";
+import { generateText } from "ai";
+
+async function chatWithContext(userMessage: string) {
+  // get recent screen context
+  const context = await pipe.queryScreenpipe({
+    limit: 20,
+    contentType: "all"
+  });
+
+  // format context for LLM
+  const screenContext = context.data
+    .map(item => {
+      if (item.type === "OCR") {
+        return `[Screen - ${item.content.app_name}]: ${item.content.text}`;
+      } else {
+        return `[Audio]: ${item.content.transcription}`;
+      }
+    })
+    .join("\n");
+
+  // generate response with context
+  const response = await generateText({
+    model: yourModel,
+    prompt: `Based on the user's recent activity:\n${screenContext}\n\nUser question: ${userMessage}`
+  });
+
+  return response;
+}
+```
+
+### automatic note-taking
+
+```typescript
+// obsidian pipe example - syncs screen activity to notes
+import { pipe } from "@screenpipe/js";
+
+async function logToObsidian() {
+  const recentActivity = await pipe.queryScreenpipe({
+    startTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // last hour
+    contentType: "all"
+  });
+
+  // summarize with AI and write to Obsidian
+  // ... see obsidian pipe for full implementation
+}
+```
+
+## use cases
+
+| use case | how screenpipe helps |
+|----------|---------------------|
+| "what was I working on?" | search screen history by time |
+| "summarize today's meetings" | query audio transcriptions |
+| "find that code snippet" | search OCR text by content |
+| "what did john say about X?" | search transcriptions by keyword |
+
+## privacy-first AI
+
+- all data stays on your device
+- use local LLMs (Ollama, LMStudio) for complete privacy
+- no data sent to cloud unless you explicitly choose cloud providers
+- filter what gets captured with window inclusion/exclusion
+
+## next steps
+
+- [install screenpipe](/getting-started)
+- [set up MCP server](/mcp-server)
+- [build a plugin](/plugins)
