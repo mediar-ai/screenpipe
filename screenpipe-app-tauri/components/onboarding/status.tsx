@@ -96,10 +96,15 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       });
       const { data: { signedUrl, path } } = await signedRes.json();
 
+      // Get browser console logs (same as share-logs-button.tsx)
+      const consoleLog = (localStorage.getItem("console_logs") || "").slice(-50000); // Last 50KB
+
       // Upload logs
       const combinedLogs = logContents
         .map((log) => `\n=== ${log.name} ===\n${log.content}`)
-        .join("\n\n") + "\n\n=== Onboarding Stuck ===\nUser experienced startup issues during onboarding.";
+        .join("\n\n") +
+        "\n\n=== Browser Console Logs ===\n" + consoleLog +
+        "\n\n=== Onboarding Stuck ===\nUser experienced startup issues during onboarding.";
 
       await fetch(signedUrl, {
         method: "PUT",
