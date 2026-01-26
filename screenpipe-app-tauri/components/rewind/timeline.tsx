@@ -4,9 +4,7 @@ import { Loader2, RotateCcw, AlertCircle, X } from "lucide-react";
 import { commands } from "@/lib/utils/tauri";
 import { listen } from "@tauri-apps/api/event";
 import { AudioTranscript } from "@/components/rewind/timeline/audio-transcript";
-import { TimelineProvider, useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
-import { ExportButton } from "@/components/rewind/export-button";
-import { usePlatform } from "@/lib/hooks/use-platform";
+import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
 import { TimelineControls } from "@/components/rewind/timeline/timeline-controls";
 import { addDays, isAfter, isSameDay, subDays } from "date-fns";
@@ -16,7 +14,6 @@ import { useCurrentFrame } from "@/lib/hooks/use-current-frame";
 import { TimelineSlider } from "@/components/rewind/timeline/timeline";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { hasFramesForDate } from "@/lib/actions/has-frames-date";
-import { CommandShortcut } from "@/components/ui/command";
 import { CurrentFrameTimeline } from "@/components/rewind/current-frame-timeline";
 import posthog from "posthog-js";
 
@@ -86,9 +83,6 @@ export default function Timeline() {
 
 	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus, newFramesCount, lastFlushTimestamp, clearNewFramesCount } =
 		useTimelineStore();
-
-	const { selectionRange } = useTimelineSelection();
-	const { isMac } = usePlatform();
 
 	const { frames, isLoading, error, message, fetchNextDayData, websocket } =
 		useTimelineData(currentDate, (frame) => {
@@ -643,21 +637,7 @@ export default function Timeline() {
 					</div>
 				)}
 
-				{/* Selection Actions - Export Button + AI Chat Shortcut */}
-				{(selectionRange?.frameIds?.length ?? 0) > 0 && (
-					<div className="absolute bottom-28 right-4 z-40 pointer-events-auto">
-						<div className="flex flex-col items-end gap-2">
-							<div className="w-48">
-								<ExportButton />
-							</div>
-							<div className="text-xs text-muted-foreground font-mono bg-background/80 backdrop-blur-sm px-2 py-1 border border-border">
-								{isMac ? "⌘L" : "Ctrl+L"} for AI chat
-							</div>
-						</div>
-					</div>
-				)}
-
-				{/* Bottom Timeline - Overlay that doesn't cut off image */}
+					{/* Bottom Timeline - Overlay that doesn't cut off image */}
 				<div className="absolute bottom-0 left-0 right-0 z-40 pointer-events-auto">
 					{frames.length > 0 ? (
 						<TimelineSlider

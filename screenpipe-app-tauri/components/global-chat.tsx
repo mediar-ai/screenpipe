@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, X, Settings, ExternalLink } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { parseInt } from "lodash";
 import { motion, AnimatePresence } from "framer-motion";
 import { PipeAIIcon, PipeAIIconLarge } from "@/components/pipe-ai-icon";
 import { MemoizedReactMarkdown } from "@/components/markdown";
@@ -393,6 +395,170 @@ export function GlobalChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Export state
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+
+  // Handle video export
+  const handleExport = async () => {
+    if (!selectionRange?.frameIds?.length) {
+      toast({
+        title: "no frames selected",
+        description: "drag on the timeline to select frames to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsExporting(true);
+    setExportProgress(0);
+
+    const startTime = selectionRange.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const endTime = selectionRange.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    toast({
+      title: "exporting video",
+      description: `${startTime} - ${endTime} (${selectionRange.frameIds.length} frames)`,
+    });
+
+    try {
+      let isClosingManually = false;
+      let ws: WebSocket | null = null;
+
+      const sortedFrameIds = selectionRange.frameIds.sort(
+        (a, b) => parseInt(a) - parseInt(b),
+      );
+
+      const closeWebSocket = () => {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+          isClosingManually = true;
+          try { ws.close(); } catch (e) { console.error("Error closing WebSocket:", e); }
+        }
+        ws = null;
+      };
+
+      ws = new WebSocket(
+        `ws://localhost:3030/frames/export?frame_ids=${sortedFrameIds.join(",")}&fps=${settings.fps ?? 0.5}`,
+      );
+
+      const connectionTimeout = setTimeout(() => {
+        if (ws && ws.readyState !== WebSocket.OPEN) {
+          toast({ title: "connection timeout", description: "failed to connect to server", variant: "destructive" });
+          closeWebSocket();
+          setIsExporting(false);
+          setExportProgress(0);
+        }
+      }, 10000);
+
+      ws.onopen = () => clearTimeout(connectionTimeout);
+
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          switch (data.status) {
+            case "extracting":
+              setExportProgress(data.progress * 100);
+              break;
+            case "encoding":
+              setExportProgress(50 + data.progress * 50);
+              break;
+            case "completed":
+              if (data.video_data) {
+                closeWebSocket();
+                const filename = `screenpipe_export_${new Date().toISOString().replace(/[:.]/g, "-")}.mp4`;
+
+                try {
+                  if ("__TAURI__" in window) {
+                    const tauri = window.__TAURI__ as any;
+                    const { save } = tauri.dialog;
+                    const { writeFile } = tauri.fs;
+                    const filePath = await save({
+                      filters: [{ name: "Video", extensions: ["mp4"] }],
+                      defaultPath: filename,
+                    });
+                    if (filePath) {
+                      await writeFile(filePath, new Uint8Array(data.video_data));
+                      toast({ title: "video exported", description: filePath });
+                    }
+                  } else {
+                    const blob = new Blob([new Uint8Array(data.video_data)], { type: "video/mp4" });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                    toast({ title: "video exported", description: filename });
+                  }
+                } catch (downloadError) {
+                  console.error("Download error:", downloadError);
+                  toast({ title: "download failed", description: "failed to save video", variant: "destructive" });
+                }
+              }
+              setIsExporting(false);
+              setExportProgress(0);
+              break;
+            case "error":
+              toast({ title: "export failed", description: data.error || "failed to export video", variant: "destructive" });
+              setIsExporting(false);
+              setExportProgress(0);
+              closeWebSocket();
+              break;
+          }
+        } catch (parseError) {
+          console.error("Error parsing message:", parseError);
+          toast({ title: "export failed", description: "failed to process server response", variant: "destructive" });
+          setIsExporting(false);
+          setExportProgress(0);
+          closeWebSocket();
+        }
+      };
+
+      ws.onclose = (event) => {
+        clearTimeout(connectionTimeout);
+        if (isExporting && !isClosingManually) {
+          toast({ title: "connection closed", description: "server connection closed unexpectedly", variant: "destructive" });
+          setIsExporting(false);
+          setExportProgress(0);
+        }
+      };
+
+      ws.onerror = (event) => {
+        clearTimeout(connectionTimeout);
+        if (isClosingManually) return;
+        console.error("WebSocket error:", event);
+        toast({ title: "export failed", description: "connection error", variant: "destructive" });
+        setIsExporting(false);
+        setExportProgress(0);
+        closeWebSocket();
+      };
+    } catch (error) {
+      console.error("Export setup error:", error);
+      toast({ title: "export failed", description: "failed to start export", variant: "destructive" });
+      setIsExporting(false);
+      setExportProgress(0);
+    }
+  };
+
+  // Export shortcut handler (Cmd+E / Ctrl+E)
+  useEffect(() => {
+    if (!isOnTimeline) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "e" && !isExporting) {
+        e.preventDefault();
+        if (selectionRange?.frameIds?.length) {
+          handleExport();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOnTimeline, isExporting, selectionRange]);
 
   // Fetch speakers dynamically when filter changes
   useEffect(() => {
@@ -993,21 +1159,49 @@ export function GlobalChat() {
 
   return (
     <>
-      {/* Floating indicator when dialog is closed - only on timeline */}
+      {/* Floating buttons when dialog is closed - only on timeline */}
       <AnimatePresence>
       {!open && isOnTimeline && (
-        <motion.button
+        <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.9 }}
-          onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-50 group flex items-center gap-2 px-3 py-2 rounded-lg bg-background/90 backdrop-blur-md border border-border/50 hover:border-foreground/20 text-xs text-muted-foreground hover:text-foreground transition-all duration-200 shadow-lg shadow-black/5"
+          className="fixed bottom-4 right-4 z-50 flex flex-col gap-2"
         >
-          <div className="p-1 rounded bg-foreground/5 group-hover:bg-foreground/10 transition-colors">
-            <PipeAIIcon size={14} animated={false} />
-          </div>
-          <span className="font-mono text-[10px] uppercase tracking-wider">{isMac ? "⌘L" : "Ctrl+L"}</span>
-        </motion.button>
+          {/* Export button - only when frames selected */}
+          {(selectionRange?.frameIds?.length ?? 0) > 0 && (
+            <motion.button
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              onClick={handleExport}
+              disabled={isExporting}
+              className="group flex items-center gap-2 px-3 py-2 rounded-lg bg-background/90 backdrop-blur-md border border-border/50 hover:border-foreground/20 text-xs text-muted-foreground hover:text-foreground transition-all duration-200 shadow-lg shadow-black/5 disabled:opacity-50"
+            >
+              <div className="p-1 rounded bg-foreground/5 group-hover:bg-foreground/10 transition-colors">
+                {isExporting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Video size={14} />
+                )}
+              </div>
+              <span className="font-mono text-[10px] uppercase tracking-wider">
+                {isExporting ? `${Math.round(exportProgress)}%` : (isMac ? "⌘E" : "Ctrl+E")}
+              </span>
+            </motion.button>
+          )}
+
+          {/* AI Chat button */}
+          <button
+            onClick={() => setOpen(true)}
+            className="group flex items-center gap-2 px-3 py-2 rounded-lg bg-background/90 backdrop-blur-md border border-border/50 hover:border-foreground/20 text-xs text-muted-foreground hover:text-foreground transition-all duration-200 shadow-lg shadow-black/5"
+          >
+            <div className="p-1 rounded bg-foreground/5 group-hover:bg-foreground/10 transition-colors">
+              <PipeAIIcon size={14} animated={false} />
+            </div>
+            <span className="font-mono text-[10px] uppercase tracking-wider">{isMac ? "⌘L" : "Ctrl+L"}</span>
+          </button>
+        </motion.div>
       )}
       </AnimatePresence>
       <Dialog open={open} onOpenChange={setOpen}>
