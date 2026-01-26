@@ -43,9 +43,15 @@ pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
                error!("Failed to set focus on main window: {}", e);
            }
 
-           // Register window-specific shortcuts (Escape, Cmd+K, Cmd+L)
-           // These are only active while the overlay is visible
-           let _ = register_window_shortcuts(app_handle.clone());
+           // Register window-specific shortcuts (Escape, Cmd+K, Cmd+L) on a separate task
+           // IMPORTANT: This MUST be spawned async to avoid deadlock when called from
+           // within a global shortcut callback (the callback holds the shortcut manager lock)
+           let app_clone = app_handle.clone();
+           std::thread::spawn(move || {
+               // Small delay to ensure we're outside the shortcut callback context
+               std::thread::sleep(std::time::Duration::from_millis(10));
+               let _ = register_window_shortcuts(app_clone);
+           });
        }
        Err(e) => {
            error!("ShowRewindWindow::Main.show failed: {}", e);
@@ -56,9 +62,15 @@ pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
 #[tauri::command]
 #[specta::specta]
 pub fn hide_main_window(app_handle: &tauri::AppHandle) {
-    // Unregister window-specific shortcuts first (Escape, Cmd+K, Cmd+L)
-    // This allows these keys to work normally in other apps
-    let _ = unregister_window_shortcuts(app_handle.clone());
+    // Unregister window-specific shortcuts (Escape, Cmd+K, Cmd+L) on a separate task
+    // IMPORTANT: This MUST be spawned async to avoid deadlock when called from
+    // within a global shortcut callback (e.g., Escape key handler)
+    let app_clone = app_handle.clone();
+    std::thread::spawn(move || {
+        // Small delay to ensure we're outside the shortcut callback context
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let _ = unregister_window_shortcuts(app_clone);
+    });
 
     ShowRewindWindow::Main.close(app_handle).unwrap();
 }
