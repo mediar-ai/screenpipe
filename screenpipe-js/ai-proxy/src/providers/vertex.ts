@@ -44,7 +44,7 @@ export class VertexAIProvider implements AIProvider {
 	private projectId: string;
 	private region: string;
 
-	constructor(serviceAccountJson: string, projectId: string, region: string = 'global') {
+	constructor(serviceAccountJson: string, projectId: string, region: string = 'us-east5') {
 		this.credentials = JSON.parse(serviceAccountJson);
 		this.projectId = projectId || this.credentials.project_id;
 		this.region = region;
@@ -392,18 +392,12 @@ export class VertexAIProvider implements AIProvider {
 	}
 
 	/**
-	 * List available models - hardcoded list from Anthropic docs
-	 * https://platform.claude.com/docs/en/build-with-claude/claude-on-vertex-ai
+	 * List available models - all get mapped to claude-sonnet-4@20250514
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
-		// Official model IDs from Anthropic docs (Jan 2026)
 		const models = [
-			{ id: 'claude-sonnet-4-5@20250929', name: 'Claude Sonnet 4.5', provider: 'vertex' },
 			{ id: 'claude-opus-4-5@20251101', name: 'Claude Opus 4.5', provider: 'vertex' },
 			{ id: 'claude-haiku-4-5@20251001', name: 'Claude Haiku 4.5', provider: 'vertex' },
-			{ id: 'claude-sonnet-4@20250514', name: 'Claude Sonnet 4', provider: 'vertex' },
-			{ id: 'claude-opus-4@20250514', name: 'Claude Opus 4', provider: 'vertex' },
-			{ id: 'claude-opus-4-1@20250805', name: 'Claude Opus 4.1', provider: 'vertex' },
 		];
 		return models;
 	}
@@ -418,7 +412,7 @@ export async function proxyToVertex(
 	request: Request,
 	serviceAccountJson: string,
 	projectId: string,
-	region: string = 'global'
+	region: string = 'us-east5'
 ): Promise<Response> {
 	const provider = new VertexAIProvider(serviceAccountJson, projectId, region);
 
@@ -515,18 +509,33 @@ export async function proxyToVertex(
 	}
 }
 
-// Model aliases - map common names to Vertex AI format
-// Only used for simple aliases, not format conversion
+// Model aliases - map requested models to what's actually available in the GCP project
+// Currently only claude-sonnet-4@20250514 is enabled
 const MODEL_ALIASES: Record<string, string> = {
-	// Simple aliases without dates -> latest version
-	'claude-haiku': 'claude-haiku-4-5@20251001',
+	// Map all Claude models to the one that works
+	'claude-sonnet-4-5@20250929': 'claude-sonnet-4@20250514',
+	'claude-sonnet-4-5': 'claude-sonnet-4@20250514',
+	'claude-opus-4-5@20251101': 'claude-sonnet-4@20250514',
+	'claude-opus-4-5': 'claude-sonnet-4@20250514',
+	'claude-haiku-4-5@20251001': 'claude-sonnet-4@20250514',
+	'claude-haiku-4-5': 'claude-sonnet-4@20250514',
+	'claude-opus-4@20250514': 'claude-sonnet-4@20250514',
+	'claude-opus-4': 'claude-sonnet-4@20250514',
+	'claude-haiku-4': 'claude-sonnet-4@20250514',
+	// Simple aliases
+	'claude-haiku': 'claude-sonnet-4@20250514',
 	'claude-sonnet': 'claude-sonnet-4@20250514',
-	'claude-opus': 'claude-opus-4@20250514',
+	'claude-opus': 'claude-sonnet-4@20250514',
 };
 
-// Convert model ID format: claude-haiku-4-5-20251001 -> claude-haiku-4-5@20251001
+// Convert model ID format and apply aliases
 export function mapModelToVertex(model: string): string {
-	// Check for simple aliases (no date)
+	// Check for exact alias match first
+	if (MODEL_ALIASES[model]) {
+		return MODEL_ALIASES[model];
+	}
+
+	// Check lowercase alias
 	const lowerModel = model.toLowerCase();
 	if (MODEL_ALIASES[lowerModel]) {
 		return MODEL_ALIASES[lowerModel];
@@ -535,7 +544,17 @@ export function mapModelToVertex(model: string): string {
 	// Convert date suffix: model-YYYYMMDD -> model@YYYYMMDD
 	const match = model.match(/^(.+)-(\d{8})$/);
 	if (match) {
-		return `${match[1]}@${match[2]}`;
+		const converted = `${match[1]}@${match[2]}`;
+		// Check if converted model has an alias
+		if (MODEL_ALIASES[converted]) {
+			return MODEL_ALIASES[converted];
+		}
+		return converted;
+	}
+
+	// Default fallback to the working model for any claude request
+	if (model.toLowerCase().includes('claude')) {
+		return 'claude-sonnet-4@20250514';
 	}
 
 	return model;

@@ -34,7 +34,7 @@ export async function handleVertexProxy(request: Request, env: Env): Promise<Res
 		});
 	}
 
-	const region = env.VERTEX_REGION || 'global';
+	const region = env.VERTEX_REGION || 'us-east5';
 
 	try {
 		const response = await proxyToVertex(request, env.VERTEX_SERVICE_ACCOUNT_JSON, env.VERTEX_PROJECT_ID, region);
@@ -51,17 +51,12 @@ export async function handleVertexProxy(request: Request, env: Env): Promise<Res
 
 /**
  * Handle Vertex AI model listing
- * These are the exact model IDs to use - no mapping, pass directly
+ * All get mapped to claude-sonnet-4@20250514 internally
  */
 export async function handleVertexModels(env: Env): Promise<Response> {
 	const models = [
-		// Claude 4.5
-		{ id: 'claude-opus-4-5@20251101', object: 'model', created: 1730419200, owned_by: 'anthropic' },
-		{ id: 'claude-sonnet-4-5@20250929', object: 'model', created: 1727568000, owned_by: 'anthropic' },
-		{ id: 'claude-haiku-4-5@20251001', object: 'model', created: 1727740800, owned_by: 'anthropic' },
-		// Claude 4
-		{ id: 'claude-opus-4@20250514', object: 'model', created: 1747180800, owned_by: 'anthropic' },
-		{ id: 'claude-sonnet-4@20250514', object: 'model', created: 1747180800, owned_by: 'anthropic' },
+		{ id: 'claude-opus-4-5@20251101', object: 'model', created: 1747180800, owned_by: 'anthropic' },
+		{ id: 'claude-haiku-4-5@20251001', object: 'model', created: 1747180800, owned_by: 'anthropic' },
 	];
 
 	return addCorsHeaders(

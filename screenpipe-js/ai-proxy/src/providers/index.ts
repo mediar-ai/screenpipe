@@ -13,7 +13,7 @@ export function createProvider(model: string, env: Env): AIProvider {
 		return new VertexAIProvider(
 			env.VERTEX_SERVICE_ACCOUNT_JSON,
 			env.VERTEX_PROJECT_ID,
-			env.VERTEX_REGION || 'global'
+			env.VERTEX_REGION || 'us-east5'
 		);
 	}
 	if (model.toLowerCase().includes('gemini')) {
