@@ -52,6 +52,11 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
         <p className="text-center text-sm font-mono text-muted-foreground mt-2">
           memory infrastructure for your computer
         </p>
+        <div className="mt-3 px-3 py-1.5 border border-border bg-card">
+          <span className="text-xs font-mono text-muted-foreground tracking-wide">
+            100% local • open source
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 max-w-2xl">
