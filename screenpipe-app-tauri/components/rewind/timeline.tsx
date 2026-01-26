@@ -293,9 +293,11 @@ export default function Timeline() {
 		return () => document.removeEventListener("wheel", preventScroll);
 	}, []);
 
-	const handleRefresh = () => {
-		window.location.reload();
-	};
+	const { connectWebSocket } = useTimelineStore();
+
+	const handleRefresh = useCallback(() => {
+		connectWebSocket();
+	}, [connectWebSocket]);
 
 	useEffect(() => {
 		const container = containerRef.current;
@@ -469,6 +471,14 @@ export default function Timeline() {
 						onDateChange={handleDateChange}
 						onJumpToday={handleJumpToday}
 					/>
+					{/* Refresh button - top right */}
+					<button
+						onClick={handleRefresh}
+						className="absolute top-4 right-4 p-2 bg-background/80 hover:bg-background border border-border rounded-md transition-colors"
+						title="Refresh timeline"
+					>
+						<RotateCcw className="w-4 h-4 text-muted-foreground" />
+					</button>
 				</div>
 
 				{/* Loading/Error States - Progressive loading: only block when no frames yet */}
