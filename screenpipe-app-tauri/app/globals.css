@@ -219,6 +219,7 @@
   button {
     /* cursor: default; */
     user-select: none;
+    -webkit-user-drag: none; /* Prevent element dragging */
   }
   :not(input):not(textarea),
   :not(input):not(textarea)::after,
@@ -227,7 +228,19 @@
     -moz-user-select: none;    /* Firefox */
    -ms-user-select: none;     /* Internet Explorer/Edge */
     user-select: none;
+    -webkit-user-drag: none; /* Prevent element dragging */
     /* cursor: default; */
+  }
+
+  /* Prevent all image and element dragging globally */
+  img, a, [draggable] {
+    -webkit-user-drag: none;
+    user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    -ms-user-drag: none;
+    draggable: false;
   }
 
   .scrollbar-hide {

@@ -389,6 +389,7 @@ impl ShowRewindWindow {
                         .focused(true)
                         .transparent(true)
                         .visible(false)
+                        .drag_and_drop(false)
                         .inner_size(logical_size.width, logical_size.height)
                         .max_inner_size(logical_size.width, logical_size.height)
                         .position(0.0, 0.0);
