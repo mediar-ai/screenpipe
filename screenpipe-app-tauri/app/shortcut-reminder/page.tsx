@@ -61,39 +61,57 @@ export default function ShortcutReminderPage() {
   // Custom drag handling to avoid macOS Space switching when dragging over fullscreen apps
   // Using manual position updates instead of Tauri's startDragging() which triggers native drag
   const isDragging = useRef(false);
+  const isInitialized = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const windowStart = useRef({ x: 0, y: 0 });
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging.current) return;
-    const deltaX = e.screenX - dragStart.current.x;
-    const deltaY = e.screenY - dragStart.current.y;
-    getCurrentWindow().setPosition(
-      new LogicalPosition(windowStart.current.x + deltaX, windowStart.current.y + deltaY)
-    );
-  }, []);
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current || !isInitialized.current) return;
+      const deltaX = e.screenX - dragStart.current.x;
+      const deltaY = e.screenY - dragStart.current.y;
+      getCurrentWindow().setPosition(
+        new LogicalPosition(windowStart.current.x + deltaX, windowStart.current.y + deltaY)
+      );
+    };
 
-  const handleMouseUp = useCallback(() => {
-    isDragging.current = false;
-    document.removeEventListener("mousemove", handleMouseMove);
-    document.removeEventListener("mouseup", handleMouseUp);
-  }, [handleMouseMove]);
+    const handleMouseUp = () => {
+      isDragging.current = false;
+      isInitialized.current = false;
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
 
   const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    e.preventDefault();
+
+    // Set dragging immediately, capture mouse position
+    isDragging.current = true;
+    isInitialized.current = false;
+    dragStart.current = { x: e.screenX, y: e.screenY };
+
     try {
-      const pos = await getCurrentWindow().outerPosition();
-      const scaleFactor = await getCurrentWindow().scaleFactor();
+      const win = getCurrentWindow();
+      const [pos, scaleFactor] = await Promise.all([
+        win.outerPosition(),
+        win.scaleFactor()
+      ]);
       // Convert physical pixels to logical pixels to match mouse event coordinates
       windowStart.current = { x: pos.x / scaleFactor, y: pos.y / scaleFactor };
-      dragStart.current = { x: e.screenX, y: e.screenY };
-      isDragging.current = true;
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-    } catch {
-      // Ignore errors
+      isInitialized.current = true;
+    } catch (err) {
+      console.error("Failed to get window position:", err);
+      isDragging.current = false;
     }
-  }, [handleMouseMove, handleMouseUp]);
+  }, []);
 
   return (
     <div
