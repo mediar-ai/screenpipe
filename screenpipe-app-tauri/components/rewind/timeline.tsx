@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Loader2, RotateCcw, AlertCircle, X } from "lucide-react";
+import { commands } from "@/lib/utils/tauri";
 import { AudioTranscript } from "@/components/rewind/timeline/audio-transcript";
 import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
@@ -484,12 +485,23 @@ export default function Timeline() {
 				{/* Loading/Error States - Progressive loading: only block when no frames yet */}
 				{showBlockingLoader && (
 					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
+						{/* Close button - always visible to prevent being stuck */}
+						<button
+							onClick={() => commands.closeWindow("Main")}
+							className="absolute top-4 right-4 p-2 bg-card hover:bg-muted border border-border rounded-md transition-colors z-50"
+							title="Close (Esc)"
+						>
+							<X className="w-4 h-4 text-muted-foreground" />
+						</button>
 						<div className="bg-card text-foreground p-6 rounded-2xl text-center space-y-3 max-w-md mx-4">
 							<h3 className="font-medium">Loading Timeline</h3>
 							<p className="text-sm text-foreground">
 								Fetching your recorded frames...
 							</p>
 							<Loader2 className="h-5 w-5 animate-spin mx-auto mt-2" />
+							<p className="text-xs text-muted-foreground mt-4">
+								Press Esc or click X to close
+							</p>
 						</div>
 					</div>
 				)}
@@ -506,13 +518,21 @@ export default function Timeline() {
 
 				{!error && shouldShowMessage && (
 					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
+						{/* Close window button - always visible to prevent being stuck */}
+						<button
+							onClick={() => commands.closeWindow("Main")}
+							className="absolute top-4 right-4 p-2 bg-card hover:bg-muted border border-border rounded-md transition-colors z-50"
+							title="Close (Esc)"
+						>
+							<X className="w-4 h-4 text-muted-foreground" />
+						</button>
 						<div className="bg-card text-foreground p-6 border border-border rounded-2xl shadow-2xl text-center space-y-3 max-w-md mx-4 relative">
-							{/* Dismiss button - appears after delay */}
+							{/* Dismiss message button - appears after delay */}
 							{canDismissMessage && (
 								<button
 									onClick={handleDismissMessage}
 									className="absolute top-3 right-3 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200"
-									title="Dismiss"
+									title="Dismiss message"
 								>
 									<X className="h-4 w-4" />
 								</button>
@@ -538,6 +558,14 @@ export default function Timeline() {
 
 				{error && (
 					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
+						{/* Close button - always visible to prevent being stuck */}
+						<button
+							onClick={() => commands.closeWindow("Main")}
+							className="absolute top-4 right-4 p-2 bg-card hover:bg-muted border border-border rounded-md transition-colors z-50"
+							title="Close (Esc)"
+						>
+							<X className="w-4 h-4 text-muted-foreground" />
+						</button>
 						<div className="bg-destructive/20 border border-destructive/30 text-foreground p-6 rounded-2xl text-center space-y-4 max-w-md mx-4">
 							<div className="flex flex-col items-center gap-2">
 								<AlertCircle className="h-6 w-6 text-destructive" />
@@ -554,6 +582,9 @@ export default function Timeline() {
 								<RotateCcw className="h-4 w-4" />
 								<span>Reload Timeline</span>
 							</button>
+							<p className="text-xs text-muted-foreground">
+								Press Esc or click X to close
+							</p>
 						</div>
 					</div>
 				)}
