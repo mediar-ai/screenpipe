@@ -42,6 +42,10 @@ pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
            if let Err(e) = window.set_focus() {
                error!("Failed to set focus on main window: {}", e);
            }
+
+           // Register window-specific shortcuts (Escape, Cmd+K, Cmd+L)
+           // These are only active while the overlay is visible
+           let _ = register_window_shortcuts(app_handle.clone());
        }
        Err(e) => {
            error!("ShowRewindWindow::Main.show failed: {}", e);
@@ -52,6 +56,10 @@ pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
 #[tauri::command]
 #[specta::specta]
 pub fn hide_main_window(app_handle: &tauri::AppHandle) {
+    // Unregister window-specific shortcuts first (Escape, Cmd+K, Cmd+L)
+    // This allows these keys to work normally in other apps
+    let _ = unregister_window_shortcuts(app_handle.clone());
+
     ShowRewindWindow::Main.close(app_handle).unwrap();
 }
 
@@ -527,5 +535,98 @@ pub async fn hide_shortcut_reminder(app_handle: tauri::AppHandle) -> Result<(), 
     if let Some(window) = app_handle.get_webview_window("shortcut-reminder") {
         let _ = window.hide();
     }
+    Ok(())
+}
+
+/// Register window-specific shortcuts (Escape, Cmd+K, Cmd+L) when main window is visible
+/// These should only be active when the overlay is open to avoid blocking other apps
+#[tauri::command]
+#[specta::specta]
+pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+    use tauri::Emitter;
+
+    let global_shortcut = app_handle.global_shortcut();
+
+    // Register Escape shortcut to hide the main timeline window
+    let escape_shortcut = Shortcut::new(None, Code::Escape);
+    if let Err(e) = global_shortcut.on_shortcut(escape_shortcut, |app, _, event| {
+        if matches!(event.state, ShortcutState::Pressed) {
+            info!("Escape pressed, hiding main window");
+            hide_main_window(app);
+        }
+    }) {
+        // Ignore "already registered" errors - shortcut may already be active
+        if !e.to_string().contains("already registered") {
+            error!("Failed to register Escape shortcut: {}", e);
+        }
+    }
+
+    // Register Cmd+K (macOS) / Ctrl+K (Windows/Linux) to open search
+    #[cfg(target_os = "macos")]
+    let search_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyK);
+    #[cfg(not(target_os = "macos"))]
+    let search_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyK);
+
+    if let Err(e) = global_shortcut.on_shortcut(search_shortcut, |app, _, event| {
+        if matches!(event.state, ShortcutState::Pressed) {
+            info!("Search shortcut triggered (Cmd+K / Ctrl+K)");
+            let _ = app.emit("open-search", ());
+        }
+    }) {
+        if !e.to_string().contains("already registered") {
+            error!("Failed to register search shortcut: {}", e);
+        }
+    }
+
+    // Register Cmd+L (macOS) / Ctrl+L (Windows/Linux) to open AI chat
+    #[cfg(target_os = "macos")]
+    let chat_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyL);
+    #[cfg(not(target_os = "macos"))]
+    let chat_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyL);
+
+    if let Err(e) = global_shortcut.on_shortcut(chat_shortcut, |app, _, event| {
+        if matches!(event.state, ShortcutState::Pressed) {
+            info!("Chat shortcut triggered (Cmd+L / Ctrl+L)");
+            let _ = app.emit("open-chat", ());
+        }
+    }) {
+        if !e.to_string().contains("already registered") {
+            error!("Failed to register chat shortcut: {}", e);
+        }
+    }
+
+    info!("Window-specific shortcuts registered (Escape, Cmd+K, Cmd+L)");
+    Ok(())
+}
+
+/// Unregister window-specific shortcuts when main window is hidden
+/// This allows Escape, Cmd+K, Cmd+L to work normally in other apps
+#[tauri::command]
+#[specta::specta]
+pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+
+    let global_shortcut = app_handle.global_shortcut();
+
+    // Unregister Escape
+    let escape_shortcut = Shortcut::new(None, Code::Escape);
+    let _ = global_shortcut.unregister(escape_shortcut);
+
+    // Unregister Cmd+K / Ctrl+K
+    #[cfg(target_os = "macos")]
+    let search_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyK);
+    #[cfg(not(target_os = "macos"))]
+    let search_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyK);
+    let _ = global_shortcut.unregister(search_shortcut);
+
+    // Unregister Cmd+L / Ctrl+L
+    #[cfg(target_os = "macos")]
+    let chat_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyL);
+    #[cfg(not(target_os = "macos"))]
+    let chat_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyL);
+    let _ = global_shortcut.unregister(chat_shortcut);
+
+    info!("Window-specific shortcuts unregistered");
     Ok(())
 }

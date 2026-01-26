@@ -280,80 +280,9 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     )
     .await?;
 
-    // Register Escape shortcut to hide the main timeline window
-    let escape_shortcut = Shortcut::new(None, Code::Escape);
-    if let Err(e) = global_shortcut.on_shortcut(escape_shortcut, |app, _, event| {
-        if matches!(event.state, ShortcutState::Pressed) {
-            info!("Escape pressed, hiding main window");
-            hide_main_window(app);
-        }
-    }) {
-        warn!("Failed to register Escape shortcut: {}", e);
-    }
-
-    // Register Cmd+K (macOS) / Ctrl+K (Windows/Linux) to open search when main window is visible
-    #[cfg(target_os = "macos")]
-    let search_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyK);
-    #[cfg(not(target_os = "macos"))]
-    let search_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyK);
-
-    if let Err(e) = global_shortcut.on_shortcut(search_shortcut, |app, _, event| {
-        if matches!(event.state, ShortcutState::Pressed) {
-            // Only open search if main window is visible
-            #[cfg(target_os = "macos")]
-            {
-                if let Ok(window) = app.get_webview_panel("main") {
-                    if window.is_visible() {
-                        info!("Cmd+K pressed, opening search");
-                        let _ = app.emit("open-search", ());
-                    }
-                }
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                if let Some(window) = app.get_webview_window("main") {
-                    if window.is_visible().unwrap_or(false) {
-                        info!("Ctrl+K pressed, opening search");
-                        let _ = app.emit("open-search", ());
-                    }
-                }
-            }
-        }
-    }) {
-        warn!("Failed to register search shortcut: {}", e);
-    }
-
-    // Register Cmd+L (macOS) / Ctrl+L (Windows/Linux) to open AI chat when main window is visible
-    #[cfg(target_os = "macos")]
-    let chat_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyL);
-    #[cfg(not(target_os = "macos"))]
-    let chat_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyL);
-
-    if let Err(e) = global_shortcut.on_shortcut(chat_shortcut, |app, _, event| {
-        if matches!(event.state, ShortcutState::Pressed) {
-            // Only open chat if main window is visible
-            #[cfg(target_os = "macos")]
-            {
-                if let Ok(window) = app.get_webview_panel("main") {
-                    if window.is_visible() {
-                        info!("Cmd+L pressed, opening AI chat");
-                        let _ = app.emit("open-chat", ());
-                    }
-                }
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                if let Some(window) = app.get_webview_window("main") {
-                    if window.is_visible().unwrap_or(false) {
-                        info!("Ctrl+L pressed, opening AI chat");
-                        let _ = app.emit("open-chat", ());
-                    }
-                }
-            }
-        }
-    }) {
-        warn!("Failed to register chat shortcut: {}", e);
-    }
+    // NOTE: Escape, Cmd+K, Cmd+L shortcuts are now registered dynamically
+    // via register_window_shortcuts/unregister_window_shortcuts commands
+    // This prevents them from blocking other apps when the overlay is closed
 
     Ok(())
 }
@@ -768,6 +697,9 @@ async fn main() {
                 // Shortcut reminder commands
                 commands::show_shortcut_reminder,
                 commands::hide_shortcut_reminder,
+                // Window-specific shortcut commands (dynamic registration)
+                commands::register_window_shortcuts,
+                commands::unregister_window_shortcuts,
                 // Commands from tray.rs
                 set_tray_unhealth_icon,
                 set_tray_health_icon,
@@ -863,6 +795,9 @@ async fn main() {
             // Shortcut reminder commands
             commands::show_shortcut_reminder,
             commands::hide_shortcut_reminder,
+            // Window-specific shortcut commands (dynamic registration)
+            commands::register_window_shortcuts,
+            commands::unregister_window_shortcuts,
             // Overlay commands (Windows)
             commands::enable_overlay_click_through,
             commands::disable_overlay_click_through,
