@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Loader2, RotateCcw, AlertCircle, X } from "lucide-react";
 import { commands } from "@/lib/utils/tauri";
+import { listen } from "@tauri-apps/api/event";
 import { AudioTranscript } from "@/components/rewind/timeline/audio-transcript";
 import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
@@ -78,13 +79,28 @@ export default function Timeline() {
 		setShowAudioTranscript(true);
 	}, [currentIndex]);
 
-	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress } =
+	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus } =
 		useTimelineStore();
 
 	const { frames, isLoading, error, message, fetchNextDayData, websocket } =
 		useTimelineData(currentDate, (frame) => {
 			setCurrentFrame(frame);
 		});
+
+	// Listen for window focus events to refresh timeline data
+	useEffect(() => {
+		const unlisten = listen<boolean>("window-focused", (event) => {
+			if (event.payload) {
+				// Window gained focus - refresh timeline data
+				console.log("Window focused, refreshing timeline...");
+				onWindowFocus();
+			}
+		});
+
+		return () => {
+			unlisten.then((fn) => fn());
+		};
+	}, [onWindowFocus]);
 
 	// Progressive loading: show UI immediately once we have any frames
 	const hasInitialFrames = frames.length > 0;

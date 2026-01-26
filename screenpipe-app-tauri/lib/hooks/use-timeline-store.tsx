@@ -50,6 +50,7 @@ interface TimelineState {
 	fetchNextDayData: (date: Date) => void;
 	hasDateBeenFetched: (date: Date) => boolean;
 	flushFrameBuffer: () => void;
+	onWindowFocus: () => void;
 }
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
@@ -448,6 +449,33 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			set((state) => ({
 				sentRequests: new Set(state.sentRequests).add(requestKey),
 			}));
+		}
+	},
+
+	onWindowFocus: () => {
+		const { currentDate, websocket, fetchTimeRange, connectWebSocket } = get();
+
+		// Clear current date from sentRequests to allow re-fetch
+		const dateKey = `${currentDate.getDate()}-${currentDate.getMonth()}-${currentDate.getFullYear()}`;
+		set((state) => {
+			const newSentRequests = new Set(state.sentRequests);
+			newSentRequests.delete(dateKey);
+			return { sentRequests: newSentRequests };
+		});
+
+		console.log("Window focused, cleared sentRequests for:", dateKey);
+
+		// If WebSocket is open, fetch fresh data
+		if (websocket && websocket.readyState === WebSocket.OPEN) {
+			const startTime = new Date(currentDate);
+			startTime.setHours(0, 0, 0, 0);
+			const endTime = new Date(currentDate);
+			endTime.setHours(23, 59, 59, 999);
+			fetchTimeRange(startTime, endTime);
+		} else {
+			// WebSocket is closed, reconnect (which will fetch on open)
+			console.log("WebSocket not open, reconnecting...");
+			connectWebSocket();
 		}
 	},
 }));
