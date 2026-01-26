@@ -34,7 +34,7 @@ export async function handleVertexProxy(request: Request, env: Env): Promise<Res
 		});
 	}
 
-	const region = env.VERTEX_REGION || 'us-east5';
+	const region = env.VERTEX_REGION || 'global';
 
 	try {
 		const response = await proxyToVertex(request, env.VERTEX_SERVICE_ACCOUNT_JSON, env.VERTEX_PROJECT_ID, region);

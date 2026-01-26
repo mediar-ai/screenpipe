@@ -44,7 +44,7 @@ export class VertexAIProvider implements AIProvider {
 	private projectId: string;
 	private region: string;
 
-	constructor(serviceAccountJson: string, projectId: string, region: string = 'us-east5') {
+	constructor(serviceAccountJson: string, projectId: string, region: string = 'global') {
 		this.credentials = JSON.parse(serviceAccountJson);
 		this.projectId = projectId || this.credentials.project_id;
 		this.region = region;
@@ -164,7 +164,11 @@ export class VertexAIProvider implements AIProvider {
 		// Convert model ID format: claude-opus-4-5-20251101 -> claude-opus-4-5@20251101
 		const vertexModel = mapModelToVertex(model);
 		const method = streaming ? 'streamRawPredict' : 'rawPredict';
-		return `https://${this.region}-aiplatform.googleapis.com/v1/projects/${this.projectId}/locations/${this.region}/publishers/anthropic/models/${vertexModel}:${method}`;
+		// Global endpoint uses different hostname format
+		const hostname = this.region === 'global'
+			? 'aiplatform.googleapis.com'
+			: `${this.region}-aiplatform.googleapis.com`;
+		return `https://${hostname}/v1/projects/${this.projectId}/locations/${this.region}/publishers/anthropic/models/${vertexModel}:${method}`;
 	}
 
 	/**
@@ -388,14 +392,20 @@ export class VertexAIProvider implements AIProvider {
 	}
 
 	/**
-	 * List available models - Vertex AI doesn't have a public API for this
-	 * Users should check Model Garden: https://console.cloud.google.com/vertex-ai/model-garden
+	 * List available models - hardcoded list from Anthropic docs
+	 * https://platform.claude.com/docs/en/build-with-claude/claude-on-vertex-ai
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
-		// Vertex AI doesn't expose an API to list Anthropic models
-		// Return empty - the app should let users input any model ID
-		// Invalid models will get a clear error from Vertex when used
-		return [];
+		// Official model IDs from Anthropic docs (Jan 2026)
+		const models = [
+			{ id: 'claude-sonnet-4-5@20250929', name: 'Claude Sonnet 4.5', provider: 'vertex' },
+			{ id: 'claude-opus-4-5@20251101', name: 'Claude Opus 4.5', provider: 'vertex' },
+			{ id: 'claude-haiku-4-5@20251001', name: 'Claude Haiku 4.5', provider: 'vertex' },
+			{ id: 'claude-sonnet-4@20250514', name: 'Claude Sonnet 4', provider: 'vertex' },
+			{ id: 'claude-opus-4@20250514', name: 'Claude Opus 4', provider: 'vertex' },
+			{ id: 'claude-opus-4-1@20250805', name: 'Claude Opus 4.1', provider: 'vertex' },
+		];
+		return models;
 	}
 }
 
@@ -408,7 +418,7 @@ export async function proxyToVertex(
 	request: Request,
 	serviceAccountJson: string,
 	projectId: string,
-	region: string = 'us-east5'
+	region: string = 'global'
 ): Promise<Response> {
 	const provider = new VertexAIProvider(serviceAccountJson, projectId, region);
 
@@ -447,7 +457,11 @@ export async function proxyToVertex(
 		const vertexModel = mapModelToVertex(model);
 		console.log('proxyToVertex: mapped model', model, '->', vertexModel);
 		const method = isStreaming ? 'streamRawPredict' : 'rawPredict';
-		const vertexUrl = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/anthropic/models/${vertexModel}:${method}`;
+		// Global endpoint uses different hostname format
+		const hostname = region === 'global'
+			? 'aiplatform.googleapis.com'
+			: `${region}-aiplatform.googleapis.com`;
+		const vertexUrl = `https://${hostname}/v1/projects/${projectId}/locations/${region}/publishers/anthropic/models/${vertexModel}:${method}`;
 
 		// Prepare the body for Vertex AI
 		const vertexBody = {
