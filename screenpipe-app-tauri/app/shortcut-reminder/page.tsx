@@ -83,7 +83,9 @@ export default function ShortcutReminderPage() {
     if (e.button !== 0) return;
     try {
       const pos = await getCurrentWindow().outerPosition();
-      windowStart.current = { x: pos.x, y: pos.y };
+      const scaleFactor = await getCurrentWindow().scaleFactor();
+      // Convert physical pixels to logical pixels to match mouse event coordinates
+      windowStart.current = { x: pos.x / scaleFactor, y: pos.y / scaleFactor };
       dragStart.current = { x: e.screenX, y: e.screenY };
       isDragging.current = true;
       document.addEventListener("mousemove", handleMouseMove);
