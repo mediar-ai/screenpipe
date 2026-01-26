@@ -294,11 +294,10 @@ export default function Timeline() {
 		return () => document.removeEventListener("wheel", preventScroll);
 	}, []);
 
-	const { connectWebSocket } = useTimelineStore();
-
 	const handleRefresh = useCallback(() => {
-		connectWebSocket();
-	}, [connectWebSocket]);
+		// Full page reload - simpler and more reliable than WebSocket reconnection
+		window.location.reload();
+	}, []);
 
 	useEffect(() => {
 		const container = containerRef.current;
