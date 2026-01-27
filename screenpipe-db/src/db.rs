@@ -1119,8 +1119,7 @@ impl DatabaseManager {
 
         match text_json {
             Some(json_str) => {
-                let blocks: Vec<OcrTextBlock> =
-                    serde_json::from_str(&json_str).unwrap_or_default();
+                let blocks: Vec<OcrTextBlock> = serde_json::from_str(&json_str).unwrap_or_default();
                 Ok(parse_all_text_positions(&blocks))
             }
             None => Ok(Vec::new()),
@@ -2721,12 +2720,11 @@ LIMIT ? OFFSET ?
                 .rows_affected();
 
         // 4. Move the embedding from old speaker to new speaker
-        let embedding_id: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM speaker_embeddings WHERE speaker_id = ? LIMIT 1",
-        )
-        .bind(current_speaker_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+        let embedding_id: Option<i64> =
+            sqlx::query_scalar("SELECT id FROM speaker_embeddings WHERE speaker_id = ? LIMIT 1")
+                .bind(current_speaker_id)
+                .fetch_optional(&mut *tx)
+                .await?;
 
         let mut embeddings_moved = 0u64;
         if let Some(emb_id) = embedding_id {
@@ -2998,9 +2996,9 @@ mod tests {
 
     #[test]
     fn test_parse_all_text_positions_handles_invalid_numbers() {
-        let blocks = vec![
-            create_test_block("Test", "invalid", "0.1", "0.5", "0.08", "0.02"),
-        ];
+        let blocks = vec![create_test_block(
+            "Test", "invalid", "0.1", "0.5", "0.08", "0.02",
+        )];
 
         let positions = parse_all_text_positions(&blocks);
 

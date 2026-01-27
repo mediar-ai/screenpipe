@@ -173,7 +173,11 @@ async fn test_complete_mp4_extraction_succeeds() {
     let frame_path = temp_dir.path().join("frame.jpg");
     let result = extract_frame(video_path_str, frame_path.to_str().unwrap()).await;
 
-    assert!(result.is_ok(), "Should succeed on complete MP4: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Should succeed on complete MP4: {:?}",
+        result
+    );
     assert!(frame_path.exists(), "Frame file should exist");
 }
 
@@ -263,10 +267,14 @@ async fn test_regular_vs_fragmented_mp4() {
     let regular_path = temp_dir.path().join("regular.mp4");
     let regular_output = Command::new(&ffmpeg)
         .args([
-            "-f", "lavfi",
-            "-i", "testsrc=duration=2:size=320x240:rate=1",
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=2:size=320x240:rate=1",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
             "-y",
             regular_path.to_str().unwrap(),
         ])
@@ -279,11 +287,16 @@ async fn test_regular_vs_fragmented_mp4() {
     let frag_path = temp_dir.path().join("fragmented.mp4");
     let frag_output = Command::new(&ffmpeg)
         .args([
-            "-f", "lavfi",
-            "-i", "testsrc=duration=2:size=320x240:rate=1",
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=2:size=320x240:rate=1",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-movflags",
+            "frag_keyframe+empty_moov+default_base_moof",
             "-y",
             frag_path.to_str().unwrap(),
         ])
@@ -299,8 +312,16 @@ async fn test_regular_vs_fragmented_mp4() {
     let result1 = extract_frame(regular_path.to_str().unwrap(), frame1.to_str().unwrap()).await;
     let result2 = extract_frame(frag_path.to_str().unwrap(), frame2.to_str().unwrap()).await;
 
-    assert!(result1.is_ok(), "Regular MP4 extraction should work: {:?}", result1);
-    assert!(result2.is_ok(), "Fragmented MP4 extraction should work: {:?}", result2);
+    assert!(
+        result1.is_ok(),
+        "Regular MP4 extraction should work: {:?}",
+        result1
+    );
+    assert!(
+        result2.is_ok(),
+        "Fragmented MP4 extraction should work: {:?}",
+        result2
+    );
 
     // Check file sizes - fragmented may be slightly larger
     let regular_size = std::fs::metadata(&regular_path).unwrap().len();
@@ -333,12 +354,18 @@ async fn test_fragmented_mp4_is_valid() {
     // Create fragmented MP4 with H.265 (same as production)
     let output = Command::new(&ffmpeg)
         .args([
-            "-f", "lavfi",
-            "-i", "testsrc=duration=3:size=320x240:rate=10",
-            "-c:v", "libx265",
-            "-preset", "ultrafast",
-            "-tag:v", "hvc1",
-            "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=3:size=320x240:rate=10",
+            "-c:v",
+            "libx265",
+            "-preset",
+            "ultrafast",
+            "-tag:v",
+            "hvc1",
+            "-movflags",
+            "frag_keyframe+empty_moov+default_base_moof",
             "-y",
             video_path_str,
         ])
@@ -361,10 +388,14 @@ async fn test_fragmented_mp4_is_valid() {
 
     let probe_output = Command::new(&ffprobe)
         .args([
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=codec_name,width,height,duration",
-            "-of", "json",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,width,height,duration",
+            "-of",
+            "json",
             video_path_str,
         ])
         .output()
@@ -392,9 +423,12 @@ async fn test_fragmented_mp4_is_valid() {
 
         let extract_output = Command::new(&ffmpeg)
             .args([
-                "-ss", &seek_time,
-                "-i", video_path_str,
-                "-vframes", "1",
+                "-ss",
+                &seek_time,
+                "-i",
+                video_path_str,
+                "-vframes",
+                "1",
                 "-y",
                 frame_path.to_str().unwrap(),
             ])

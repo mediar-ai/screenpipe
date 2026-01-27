@@ -49,7 +49,10 @@ impl MockBrowser {
 async fn capture_frame_current_buggy_behavior(browser: Arc<MockBrowser>) -> (String, String) {
     // Step 1: Capture screenshot - this is what the user SEES in the frame
     let url_visible_in_screenshot = browser.get_current_url();
-    let screenshot_content = format!("Screenshot showing content from: {}", url_visible_in_screenshot);
+    let screenshot_content = format!(
+        "Screenshot showing content from: {}",
+        url_visible_in_screenshot
+    );
 
     // Step 2: Simulate the async delay that exists in current code:
     // - OCR processing happens
@@ -132,8 +135,7 @@ async fn test_bug_url_mismatch_when_browser_navigates_during_capture() {
          Associated URL: {}\n\n\
          The screenshot shows content from a different URL than what's stored in metadata.\n\
          This is the root cause of the 'wrong URL associated with frame' bug.\n",
-        screenshot,
-        associated_url
+        screenshot, associated_url
     );
 }
 

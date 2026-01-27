@@ -99,12 +99,11 @@ async fn fts_prefix_search(pool: &sqlx::SqlitePool, query: &str) -> HashSet<i64>
 
 async fn like_search(pool: &sqlx::SqlitePool, query: &str) -> HashSet<i64> {
     let pattern = format!("%{}%", query.to_lowercase());
-    let rows =
-        sqlx::query("SELECT frame_id FROM ocr_text WHERE LOWER(text) LIKE ?")
-            .bind(&pattern)
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default();
+    let rows = sqlx::query("SELECT frame_id FROM ocr_text WHERE LOWER(text) LIKE ?")
+        .bind(&pattern)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
 
     rows.iter().map(|r| r.get::<i64, _>("frame_id")).collect()
 }
@@ -118,13 +117,11 @@ async fn simulated_split_search(pool: &sqlx::SqlitePool, query: &str) -> HashSet
     let pattern = format!("%{}%", query.to_lowercase());
 
     // Get all LIKE matches
-    let rows = sqlx::query(
-        "SELECT frame_id, text FROM ocr_text WHERE LOWER(text) LIKE ?",
-    )
-    .bind(&pattern)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
+    let rows = sqlx::query("SELECT frame_id, text FROM ocr_text WHERE LOWER(text) LIKE ?")
+        .bind(&pattern)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
 
     let query_lower = query.to_lowercase();
 
@@ -165,7 +162,10 @@ fn bench_search_accuracy(c: &mut Criterion) {
     });
 
     let test_words = rt.block_on(get_test_words(&pool));
-    println!("\n📊 Testing with {} words from your database\n", test_words.len());
+    println!(
+        "\n📊 Testing with {} words from your database\n",
+        test_words.len()
+    );
 
     // Collect accuracy metrics
     let mut total_fts = 0usize;

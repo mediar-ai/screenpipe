@@ -69,7 +69,7 @@ mod tests {
         let chunk_input = db.insert_audio_chunk("input_audio.mp4").await.unwrap();
         let id2 = db
             .insert_audio_transcription(
-                chunk_input, // Different chunk!
+                chunk_input,                                            // Different chunk!
                 "It was the first computer with beautiful typography.", // Same text
                 0,
                 "whisper",
@@ -399,7 +399,14 @@ mod tests {
         let chunk1 = db.insert_audio_chunk("output.mp4").await.unwrap();
         let id1 = db
             .insert_audio_transcription(
-                chunk1, "Yeah", 0, "whisper", &output_device(), None, None, None,
+                chunk1,
+                "Yeah",
+                0,
+                "whisper",
+                &output_device(),
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -411,7 +418,14 @@ mod tests {
         let chunk2 = db.insert_audio_chunk("input.mp4").await.unwrap();
         let _id2 = db
             .insert_audio_transcription(
-                chunk2, "Yeah", 0, "whisper", &input_device(), None, None, None,
+                chunk2,
+                "Yeah",
+                0,
+                "whisper",
+                &input_device(),
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();

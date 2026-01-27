@@ -57,7 +57,7 @@ fn test_problematic_apps_should_be_skipped() {
     let problematic_apps = vec![
         "TheBoringNotch",    // macOS notch overlay app
         "Grammarly Desktop", // Overlay/tooltip windows
-        "Omi录屏专家",         // Chinese screen recorder with overlay
+        "Omi录屏专家",       // Chinese screen recorder with overlay
     ];
 
     #[cfg(target_os = "macos")]
@@ -157,19 +157,31 @@ fn test_window_filter_logic() {
 fn test_error_scenarios_are_expected() {
     // These error scenarios are EXPECTED and should not be logged at error level:
     let expected_failure_scenarios = vec![
-        ("Failed to get title for window", "Some windows don't expose titles"),
-        ("Failed to get is_minimized", "Some windows don't report state"),
-        ("Failed to get focus state", "Focus tracking can fail for overlays"),
-        ("Failed to capture image", "Protected/overlay windows can't be captured"),
-        ("GetFileVersionInfoSizeW", "System DLLs may lack version info"),
+        (
+            "Failed to get title for window",
+            "Some windows don't expose titles",
+        ),
+        (
+            "Failed to get is_minimized",
+            "Some windows don't report state",
+        ),
+        (
+            "Failed to get focus state",
+            "Focus tracking can fail for overlays",
+        ),
+        (
+            "Failed to capture image",
+            "Protected/overlay windows can't be captured",
+        ),
+        (
+            "GetFileVersionInfoSizeW",
+            "System DLLs may lack version info",
+        ),
         ("GetModuleBaseNameW", "Protected processes deny access"),
     ];
 
     for (error_pattern, reason) in &expected_failure_scenarios {
-        println!(
-            "Expected failure: '{}' - Reason: {}",
-            error_pattern, reason
-        );
+        println!("Expected failure: '{}' - Reason: {}", error_pattern, reason);
         println!("  -> Should be logged at DEBUG level, not ERROR");
     }
 

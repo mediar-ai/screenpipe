@@ -18,7 +18,10 @@ static LETTER_TO_NUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"([a-zA-Z])([0-9])"
 #[inline]
 fn split_compound(text: &str) -> String {
     // Fast path: if no uppercase letters or digits, skip processing
-    if !text.bytes().any(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
+    if !text
+        .bytes()
+        .any(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+    {
         return text.to_string();
     }
 
@@ -92,7 +95,10 @@ mod tests {
     fn test_split_compound_camel_case() {
         assert_eq!(split_compound("camelCase"), "camel Case");
         assert_eq!(split_compound("CamelCase"), "Camel Case");
-        assert_eq!(split_compound("ActivityPerformance"), "Activity Performance");
+        assert_eq!(
+            split_compound("ActivityPerformance"),
+            "Activity Performance"
+        );
     }
 
     #[test]
@@ -137,10 +143,7 @@ mod tests {
     #[test]
     fn test_expand_multi_word_query() {
         // Each word gets expanded independently
-        assert_eq!(
-            expand_search_query("hello world"),
-            "(hello* OR world*)"
-        );
+        assert_eq!(expand_search_query("hello world"), "(hello* OR world*)");
     }
 
     #[test]

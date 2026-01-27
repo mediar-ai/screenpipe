@@ -283,7 +283,17 @@ pub async fn capture_all_visible_windows(
 
             // Capture image immediately while we have access to the window
             match window.capture_image() {
-                Ok(buffer) => Some((app_name, title, is_focused, buffer, process_id, window_x, window_y, window_width, window_height)),
+                Ok(buffer) => Some((
+                    app_name,
+                    title,
+                    is_focused,
+                    buffer,
+                    process_id,
+                    window_x,
+                    window_y,
+                    window_width,
+                    window_height,
+                )),
                 Err(e) => {
                     // Expected for overlay windows, protected content, or transparent windows
                     debug!(
@@ -301,7 +311,18 @@ pub async fn capture_all_visible_windows(
     }
 
     // Process the captured data
-    for (app_name, window_name, is_focused, buffer, process_id, window_x, window_y, window_width, window_height) in windows_data {
+    for (
+        app_name,
+        window_name,
+        is_focused,
+        buffer,
+        process_id,
+        window_x,
+        window_y,
+        window_width,
+        window_height,
+    ) in windows_data
+    {
         // Convert to DynamicImage
         let image = DynamicImage::ImageRgba8(
             image::ImageBuffer::from_raw(buffer.width(), buffer.height(), buffer.into_raw())

@@ -407,9 +407,8 @@ pub(crate) async fn search(
     })?;
 
     // Helper to check if app name contains "screenpipe" (case insensitive)
-    let is_screenpipe_app = |app_name: &str| -> bool {
-        app_name.to_lowercase().contains("screenpipe")
-    };
+    let is_screenpipe_app =
+        |app_name: &str| -> bool { app_name.to_lowercase().contains("screenpipe") };
 
     let mut content_items: Vec<ContentItem> = results
         .iter()
@@ -2293,7 +2292,11 @@ struct WsConnectionGuard {
 impl Drop for WsConnectionGuard {
     fn drop(&mut self) {
         let prev = self.counter.fetch_sub(1, Ordering::SeqCst);
-        debug!("WebSocket connection closed, count: {} -> {}", prev, prev - 1);
+        debug!(
+            "WebSocket connection closed, count: {} -> {}",
+            prev,
+            prev - 1
+        );
     }
 }
 
@@ -2411,7 +2414,11 @@ async fn ws_health_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppStat
     }
 }
 
-async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>, _guard: WsConnectionGuard) {
+async fn handle_health_socket(
+    mut socket: WebSocket,
+    state: Arc<AppState>,
+    _guard: WsConnectionGuard,
+) {
     let mut interval = tokio::time::interval(Duration::from_secs(5));
 
     loop {
@@ -3208,9 +3215,7 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
             .ocr_entries
             .into_iter()
             // Filter out screenpipe frames at display time
-            .filter(|device_data| {
-                !device_data.app_name.to_lowercase().contains("screenpipe")
-            })
+            .filter(|device_data| !device_data.app_name.to_lowercase().contains("screenpipe"))
             .map(|device_data| DeviceFrame {
                 device_id: device_data.device_name,
                 frame_id: chunk.frame_id,
@@ -3248,7 +3253,11 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
     }
 }
 
-async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>, _guard: WsConnectionGuard) {
+async fn handle_stream_frames_socket(
+    socket: WebSocket,
+    state: Arc<AppState>,
+    _guard: WsConnectionGuard,
+) {
     let (mut sender, mut receiver) = socket.split();
     let (frame_tx, frame_rx) = tokio::sync::mpsc::channel(100);
     let db = state.db.clone();

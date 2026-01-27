@@ -83,7 +83,11 @@ async fn test_first_frames_loading() -> Result<()> {
                 truncate_str(timestamp, 18)
             );
             failure_count += 1;
-            failures.push((*frame_id, file_path.clone(), "File does not exist".to_string()));
+            failures.push((
+                *frame_id,
+                file_path.clone(),
+                "File does not exist".to_string(),
+            ));
             continue;
         }
 
@@ -119,7 +123,11 @@ async fn test_first_frames_loading() -> Result<()> {
                             truncate_str(timestamp, 18)
                         );
                         failure_count += 1;
-                        failures.push((*frame_id, file_path.clone(), format!("Empty file: {} bytes", meta.len())));
+                        failures.push((
+                            *frame_id,
+                            file_path.clone(),
+                            format!("Empty file: {} bytes", meta.len()),
+                        ));
                     }
                     Err(e) => {
                         println!(
@@ -130,7 +138,11 @@ async fn test_first_frames_loading() -> Result<()> {
                             truncate_str(timestamp, 18)
                         );
                         failure_count += 1;
-                        failures.push((*frame_id, file_path.clone(), format!("Output file error: {}", e)));
+                        failures.push((
+                            *frame_id,
+                            file_path.clone(),
+                            format!("Output file error: {}", e),
+                        ));
                     }
                 }
             }
@@ -145,7 +157,11 @@ async fn test_first_frames_loading() -> Result<()> {
                     elapsed.as_millis()
                 );
                 failure_count += 1;
-                failures.push((*frame_id, file_path.clone(), format!("Extraction failed: {}", e)));
+                failures.push((
+                    *frame_id,
+                    file_path.clone(),
+                    format!("Extraction failed: {}", e),
+                ));
             }
             Err(_) => {
                 println!(
@@ -156,7 +172,11 @@ async fn test_first_frames_loading() -> Result<()> {
                     truncate_str(timestamp, 18)
                 );
                 failure_count += 1;
-                failures.push((*frame_id, file_path.clone(), "Timeout after 10s".to_string()));
+                failures.push((
+                    *frame_id,
+                    file_path.clone(),
+                    "Timeout after 10s".to_string(),
+                ));
             }
         }
     }
@@ -292,11 +312,10 @@ async fn test_frame_endpoint_response_times() -> Result<()> {
     println!("\n=== Frame Endpoint Response Time Test ===\n");
 
     // Get 5 recent frame IDs
-    let frame_ids: Vec<i64> = sqlx::query_scalar(
-        "SELECT id FROM frames ORDER BY timestamp DESC LIMIT 5",
-    )
-    .fetch_all(&db.pool)
-    .await?;
+    let frame_ids: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM frames ORDER BY timestamp DESC LIMIT 5")
+            .fetch_all(&db.pool)
+            .await?;
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -367,7 +386,10 @@ async fn test_video_file_write_status() -> Result<()> {
     .fetch_all(&db.pool)
     .await?;
 
-    println!("Checking {} video files from last 5 minutes\n", video_files.len());
+    println!(
+        "Checking {} video files from last 5 minutes\n",
+        video_files.len()
+    );
     println!(
         "{:<70} {:<15} {:<20}",
         "Video Path", "Size (MB)", "Last Modified"

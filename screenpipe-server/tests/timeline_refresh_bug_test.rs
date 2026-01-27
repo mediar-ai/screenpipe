@@ -154,10 +154,7 @@ mod tests {
             1,
             "Should only find the new frame, not duplicates"
         );
-        assert!(
-            latest_ts.is_some(),
-            "Latest timestamp should be updated"
-        );
+        assert!(latest_ts.is_some(), "Latest timestamp should be updated");
     }
 
     /// TEST 2: Verify that already-sent frames are correctly excluded
@@ -256,14 +253,10 @@ mod tests {
         let sent_frame_ids: Arc<Mutex<HashSet<i64>>> = Arc::new(Mutex::new(HashSet::new()));
 
         // Poll only for the last hour
-        let (new_frames, _) = simulate_fetch_new_frames(
-            db.clone(),
-            one_hour_ago,
-            now,
-            sent_frame_ids.clone(),
-        )
-        .await
-        .expect("Poll should succeed");
+        let (new_frames, _) =
+            simulate_fetch_new_frames(db.clone(), one_hour_ago, now, sent_frame_ids.clone())
+                .await
+                .expect("Poll should succeed");
 
         assert!(
             new_frames.contains(&new_frame_id),
@@ -374,7 +367,8 @@ mod tests {
         assert!(
             poll_start < poll_end,
             "Poll range should be valid: poll_start={}, poll_end={}",
-            poll_start, poll_end
+            poll_start,
+            poll_end
         );
     }
 
@@ -546,10 +540,7 @@ mod tests {
 
         // Scenario 1: end_time is in the future (today's request) - should poll
         let future_end = now + Duration::hours(5);
-        assert!(
-            now <= future_end,
-            "Should poll when end_time is in future"
-        );
+        assert!(now <= future_end, "Should poll when end_time is in future");
 
         // Scenario 2: end_time is in the past (historical request) - should NOT poll
         let past_end = now - Duration::hours(1);
@@ -580,14 +571,32 @@ mod tests {
         // Regular apps should be included
         assert!(should_include_entry("Chrome"), "Chrome should be included");
         assert!(should_include_entry("Cursor"), "Cursor should be included");
-        assert!(should_include_entry("WezTerm"), "WezTerm should be included");
-        assert!(should_include_entry(""), "Empty app name should be included");
+        assert!(
+            should_include_entry("WezTerm"),
+            "WezTerm should be included"
+        );
+        assert!(
+            should_include_entry(""),
+            "Empty app name should be included"
+        );
 
         // Screenpipe variants should be filtered out
-        assert!(!should_include_entry("screenpipe"), "screenpipe should be filtered");
-        assert!(!should_include_entry("Screenpipe"), "Screenpipe should be filtered");
-        assert!(!should_include_entry("SCREENPIPE"), "SCREENPIPE should be filtered");
-        assert!(!should_include_entry("screenpipe-app"), "screenpipe-app should be filtered");
+        assert!(
+            !should_include_entry("screenpipe"),
+            "screenpipe should be filtered"
+        );
+        assert!(
+            !should_include_entry("Screenpipe"),
+            "Screenpipe should be filtered"
+        );
+        assert!(
+            !should_include_entry("SCREENPIPE"),
+            "SCREENPIPE should be filtered"
+        );
+        assert!(
+            !should_include_entry("screenpipe-app"),
+            "screenpipe-app should be filtered"
+        );
     }
 
     /// TEST 10: Test that frames with all-screenpipe entries result in empty frame_data

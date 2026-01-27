@@ -35,18 +35,10 @@ fn is_window_valid_fixed(
 }
 
 fn create_skip_sets() -> (HashSet<&'static str>, HashSet<&'static str>) {
-    let skip_apps: HashSet<&str> = HashSet::from([
-        "Window Server",
-        "SystemUIServer",
-        "Dock",
-    ]);
+    let skip_apps: HashSet<&str> = HashSet::from(["Window Server", "SystemUIServer", "Dock"]);
 
-    let skip_titles: HashSet<&str> = HashSet::from([
-        "Item-0",
-        "App Icon Window",
-        "Menu Bar",
-        "Control Center",
-    ]);
+    let skip_titles: HashSet<&str> =
+        HashSet::from(["Item-0", "App Icon Window", "Menu Bar", "Control Center"]);
 
     (skip_apps, skip_titles)
 }
@@ -76,10 +68,7 @@ fn test_fix_empty_window_name_filtered() {
     // With the fix, empty window_name should be filtered out
     let result = is_window_valid_fixed("Arc", "", &skip_apps, &skip_titles);
 
-    assert!(
-        !result,
-        "FIX: Empty window_name should be filtered out"
-    );
+    assert!(!result, "FIX: Empty window_name should be filtered out");
 
     println!("FIX WORKS: Empty window_name is now filtered out");
 }
@@ -96,7 +85,7 @@ fn test_production_scenario_arc_browser() {
     // 2. Internal overlay/helper window with empty title
 
     let windows = vec![
-        ("Arc", ""),                                    // Internal window (empty title)
+        ("Arc", ""),                                   // Internal window (empty title)
         ("Arc", "Reddit - The heart of the internet"), // Actual browser tab
     ];
 
@@ -126,11 +115,20 @@ fn test_production_scenario_arc_browser() {
         );
     }
 
-    println!("\nCurrent behavior: {} windows captured (creates duplicate DB records)", valid_current);
+    println!(
+        "\nCurrent behavior: {} windows captured (creates duplicate DB records)",
+        valid_current
+    );
     println!("Fixed behavior: {} window captured (correct)", valid_fixed);
 
-    assert_eq!(valid_current, 2, "Current behavior captures both windows (bug)");
-    assert_eq!(valid_fixed, 1, "Fixed behavior captures only the valid window");
+    assert_eq!(
+        valid_current, 2,
+        "Current behavior captures both windows (bug)"
+    );
+    assert_eq!(
+        valid_fixed, 1,
+        "Fixed behavior captures only the valid window"
+    );
 }
 
 #[test]
@@ -139,12 +137,12 @@ fn test_production_scenario_multiple_apps() {
 
     // Simulates a typical capture cycle with multiple apps
     let windows = vec![
-        ("Arc", ""),                           // Arc internal (empty)
-        ("Arc", "GitHub - screenpipe"),        // Arc tab
-        ("WezTerm", ""),                       // Terminal internal? (empty)
-        ("WezTerm", "~/code/screenpipe"),      // Terminal window
-        ("Finder", "Documents"),               // Finder window
-        ("Dock", "Dock"),                      // Should be skipped (SKIP_APPS)
+        ("Arc", ""),                      // Arc internal (empty)
+        ("Arc", "GitHub - screenpipe"),   // Arc tab
+        ("WezTerm", ""),                  // Terminal internal? (empty)
+        ("WezTerm", "~/code/screenpipe"), // Terminal window
+        ("Finder", "Documents"),          // Finder window
+        ("Dock", "Dock"),                 // Should be skipped (SKIP_APPS)
     ];
 
     println!("\n=== Production Scenario: Multiple Apps ===\n");
@@ -164,9 +162,16 @@ fn test_production_scenario_multiple_apps() {
         }
     }
 
-    println!("Current behavior captures {} windows:", current_results.len());
+    println!(
+        "Current behavior captures {} windows:",
+        current_results.len()
+    );
     for (app, title) in &current_results {
-        println!("  - {}: '{}'", app, if title.is_empty() { "<empty>" } else { title });
+        println!(
+            "  - {}: '{}'",
+            app,
+            if title.is_empty() { "<empty>" } else { title }
+        );
     }
 
     println!("\nFixed behavior captures {} windows:", fixed_results.len());
@@ -176,8 +181,16 @@ fn test_production_scenario_multiple_apps() {
 
     // Current behavior: 5 windows (includes 2 empty titles, excludes Dock)
     // Fixed behavior: 3 windows (excludes empty titles and Dock)
-    assert_eq!(current_results.len(), 5, "Current captures empty window names");
-    assert_eq!(fixed_results.len(), 3, "Fixed filters out empty window names");
+    assert_eq!(
+        current_results.len(),
+        5,
+        "Current captures empty window names"
+    );
+    assert_eq!(
+        fixed_results.len(),
+        3,
+        "Fixed filters out empty window names"
+    );
 }
 
 // ==================== DB RECORD COUNT SIMULATION ====================
@@ -209,22 +222,37 @@ fn test_db_record_vs_video_frame_mismatch() {
 
             if passes_current {
                 db_records_current += 1;
-                println!("  [CURRENT] DB record: offset={}, window='{}'", cycle_idx, title);
+                println!(
+                    "  [CURRENT] DB record: offset={}, window='{}'",
+                    cycle_idx, title
+                );
             }
             if passes_fixed {
                 db_records_fixed += 1;
-                println!("  [FIXED]   DB record: offset={}, window='{}'", cycle_idx, title);
+                println!(
+                    "  [FIXED]   DB record: offset={}, window='{}'",
+                    cycle_idx, title
+                );
             }
         }
     }
 
     println!("\n=== Summary ===");
     println!("Video frames: {}", video_frames);
-    println!("DB records (current): {} <- DOUBLE the video frames!", db_records_current);
-    println!("DB records (fixed): {} <- Matches video frames!", db_records_fixed);
+    println!(
+        "DB records (current): {} <- DOUBLE the video frames!",
+        db_records_current
+    );
+    println!(
+        "DB records (fixed): {} <- Matches video frames!",
+        db_records_fixed
+    );
 
     assert_eq!(video_frames, 3);
-    assert_eq!(db_records_current, 6, "Current: 2x DB records vs video frames");
+    assert_eq!(
+        db_records_current, 6,
+        "Current: 2x DB records vs video frames"
+    );
     assert_eq!(db_records_fixed, 3, "Fixed: 1:1 DB records to video frames");
 }
 
@@ -276,8 +304,16 @@ fn test_normal_windows_not_affected() {
         let passes_current = is_window_valid_current(app, title, &skip_apps, &skip_titles);
         let passes_fixed = is_window_valid_fixed(app, title, &skip_apps, &skip_titles);
 
-        assert!(passes_current, "Normal window should pass current: {} - {}", app, title);
-        assert!(passes_fixed, "Normal window should pass fixed: {} - {}", app, title);
+        assert!(
+            passes_current,
+            "Normal window should pass current: {} - {}",
+            app, title
+        );
+        assert!(
+            passes_fixed,
+            "Normal window should pass fixed: {} - {}",
+            app, title
+        );
 
         println!("  {}: '{}' -> PASS (both)", app, title);
     }

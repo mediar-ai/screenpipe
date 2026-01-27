@@ -374,10 +374,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
     // This writes the moov atom at the start instead of the end, enabling:
     // - Frame extraction from incomplete/in-progress recordings
     // - Streaming playback before recording finishes
-    args.extend_from_slice(&[
-        "-movflags",
-        "frag_keyframe+empty_moov+default_base_moof",
-    ]);
+    args.extend_from_slice(&["-movflags", "frag_keyframe+empty_moov+default_base_moof"]);
 
     args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
 

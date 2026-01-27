@@ -105,7 +105,8 @@ fn process_capture_cycle_buggy(
     // This is the bug - offset_index will be out of sync!
     let mut frame_ids = Vec::new();
     for window in &capture.windows {
-        let frame_id = db.insert_frame_buggy(&window.app_name, &window.window_name, &window.ocr_text);
+        let frame_id =
+            db.insert_frame_buggy(&window.app_name, &window.window_name, &window.ocr_text);
         frame_ids.push(frame_id);
     }
 
@@ -121,7 +122,8 @@ fn test_bug_frame_window_mismatch() {
 
     // Capture cycle 1: User has WezTerm and Arc visible
     let capture1 = CaptureResult {
-        full_screen_content: "Screen showing: WezTerm terminal with code, Arc browser with GitHub".to_string(),
+        full_screen_content: "Screen showing: WezTerm terminal with code, Arc browser with GitHub"
+            .to_string(),
         windows: vec![
             WindowResult {
                 app_name: "WezTerm".to_string(),
@@ -139,41 +141,49 @@ fn test_bug_frame_window_mismatch() {
     println!("Capture cycle 1: WezTerm + Arc visible");
     let frame_ids_1 = process_capture_cycle_buggy(&capture1, &mut video, &mut db);
     println!("  Video frames written: {}", video.frame_count());
-    println!("  DB records created: {} (frame_ids: {:?})", frame_ids_1.len(), frame_ids_1);
+    println!(
+        "  DB records created: {} (frame_ids: {:?})",
+        frame_ids_1.len(),
+        frame_ids_1
+    );
 
     // Capture cycle 2: User switches to Finder
     let capture2 = CaptureResult {
         full_screen_content: "Screen showing: Finder window with Documents folder".to_string(),
-        windows: vec![
-            WindowResult {
-                app_name: "Finder".to_string(),
-                window_name: "Documents".to_string(),
-                ocr_text: "Desktop Documents Downloads".to_string(),
-            },
-        ],
+        windows: vec![WindowResult {
+            app_name: "Finder".to_string(),
+            window_name: "Documents".to_string(),
+            ocr_text: "Desktop Documents Downloads".to_string(),
+        }],
     };
 
     println!("\nCapture cycle 2: Finder visible");
     let frame_ids_2 = process_capture_cycle_buggy(&capture2, &mut video, &mut db);
     println!("  Video frames written: {}", video.frame_count());
-    println!("  DB records created: {} (frame_ids: {:?})", frame_ids_2.len(), frame_ids_2);
+    println!(
+        "  DB records created: {} (frame_ids: {:?})",
+        frame_ids_2.len(),
+        frame_ids_2
+    );
 
     // Capture cycle 3: User has Safari open
     let capture3 = CaptureResult {
         full_screen_content: "Screen showing: Safari with Google Maps".to_string(),
-        windows: vec![
-            WindowResult {
-                app_name: "Safari".to_string(),
-                window_name: "Google Maps".to_string(),
-                ocr_text: "San Francisco CA directions".to_string(),
-            },
-        ],
+        windows: vec![WindowResult {
+            app_name: "Safari".to_string(),
+            window_name: "Google Maps".to_string(),
+            ocr_text: "San Francisco CA directions".to_string(),
+        }],
     };
 
     println!("\nCapture cycle 3: Safari visible");
     let frame_ids_3 = process_capture_cycle_buggy(&capture3, &mut video, &mut db);
     println!("  Video frames written: {}", video.frame_count());
-    println!("  DB records created: {} (frame_ids: {:?})", frame_ids_3.len(), frame_ids_3);
+    println!(
+        "  DB records created: {} (frame_ids: {:?})",
+        frame_ids_3.len(),
+        frame_ids_3
+    );
 
     // Now let's see the mismatch
     println!("\n=== Checking for mismatches ===\n");
@@ -199,11 +209,17 @@ fn test_bug_frame_window_mismatch() {
 
         if let Some(content) = video_frame {
             if !matches {
-                println!("  MISMATCH! DB says '{}' but video shows: '{}'", record.app_name, content);
+                println!(
+                    "  MISMATCH! DB says '{}' but video shows: '{}'",
+                    record.app_name, content
+                );
                 mismatches += 1;
             }
         } else {
-            println!("  MISMATCH! No video frame at offset {}", record.offset_index);
+            println!(
+                "  MISMATCH! No video frame at offset {}",
+                record.offset_index
+            );
             mismatches += 1;
         }
     }
@@ -259,16 +275,26 @@ fn test_fix_one_db_record_per_capture_cycle() {
     let capture1 = CaptureResult {
         full_screen_content: "Screen: WezTerm + Arc".to_string(),
         windows: vec![
-            WindowResult { app_name: "WezTerm".to_string(), window_name: "code".to_string(), ocr_text: "code".to_string() },
-            WindowResult { app_name: "Arc".to_string(), window_name: "GitHub".to_string(), ocr_text: "github".to_string() },
+            WindowResult {
+                app_name: "WezTerm".to_string(),
+                window_name: "code".to_string(),
+                ocr_text: "code".to_string(),
+            },
+            WindowResult {
+                app_name: "Arc".to_string(),
+                window_name: "GitHub".to_string(),
+                ocr_text: "github".to_string(),
+            },
         ],
     };
 
     let capture2 = CaptureResult {
         full_screen_content: "Screen: Finder".to_string(),
-        windows: vec![
-            WindowResult { app_name: "Finder".to_string(), window_name: "Documents".to_string(), ocr_text: "docs".to_string() },
-        ],
+        windows: vec![WindowResult {
+            app_name: "Finder".to_string(),
+            window_name: "Documents".to_string(),
+            ocr_text: "docs".to_string(),
+        }],
     };
 
     process_capture_fixed(&capture1);

@@ -48,11 +48,11 @@ async fn create_test_db_with_frames(num_frames: i64) -> Arc<DatabaseManager> {
         db.insert_frame(
             "test_device",
             Some(timestamp),
-            None,               // browser_url
+            None, // browser_url
             Some("test_app"),
             Some("test_window"),
-            false,              // focused (not Option)
-            Some(i),            // offset_index
+            false,   // focused (not Option)
+            Some(i), // offset_index
         )
         .await
         .expect("Failed to insert frame");
@@ -118,10 +118,7 @@ mod tests {
         })
         .await;
 
-        println!(
-            "Received {} frames in initial fetch",
-            received_frames.len()
-        );
+        println!("Received {} frames in initial fetch", received_frames.len());
 
         // Now wait for any new frames (this should timeout with current bug)
         let wait_for_new = timeout(std::time::Duration::from_secs(10), async {
@@ -226,7 +223,10 @@ mod tests {
         println!("Client 2 received {} frames", client2_frames);
 
         // Both clients should receive the same data
-        assert!(client1_frames > 0 || client2_frames > 0, "At least one client should receive frames");
+        assert!(
+            client1_frames > 0 || client2_frames > 0,
+            "At least one client should receive frames"
+        );
     }
 
     /// TEST 3: Client should only receive frames within requested time range
@@ -263,7 +263,8 @@ mod tests {
                     if text == "\"keep-alive-text\"" {
                         break;
                     }
-                    if let Ok(batch) = serde_json::from_str::<Vec<StreamTimeSeriesResponse>>(&text) {
+                    if let Ok(batch) = serde_json::from_str::<Vec<StreamTimeSeriesResponse>>(&text)
+                    {
                         for frame in batch {
                             // Verify each frame is within the requested time range
                             let timestamp = chrono::DateTime::parse_from_rfc3339(&frame.timestamp)
@@ -409,7 +410,8 @@ mod tests {
                     if text == "\"keep-alive-text\"" {
                         break;
                     }
-                    if let Ok(batch) = serde_json::from_str::<Vec<StreamTimeSeriesResponse>>(&text) {
+                    if let Ok(batch) = serde_json::from_str::<Vec<StreamTimeSeriesResponse>>(&text)
+                    {
                         frames.extend(batch);
                     }
                 }

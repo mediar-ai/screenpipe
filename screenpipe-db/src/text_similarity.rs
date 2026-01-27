@@ -5,7 +5,6 @@
 /// independently, resulting in duplicate entries with slightly different text.
 ///
 /// This module provides similarity functions to detect these cross-device duplicates.
-
 use std::collections::HashSet;
 
 /// Calculate word-level Jaccard similarity between two strings.
@@ -54,10 +53,7 @@ pub fn containment_similarity(shorter: &str, longer: &str) -> f64 {
     }
 
     let set_long: HashSet<_> = words_long.iter().collect();
-    let contained = words_short
-        .iter()
-        .filter(|w| set_long.contains(w))
-        .count();
+    let contained = words_short.iter().filter(|w| set_long.contains(w)).count();
 
     contained as f64 / words_short.len() as f64
 }
@@ -122,26 +118,17 @@ mod tests {
 
     #[test]
     fn test_jaccard_exact_match() {
-        assert_eq!(
-            word_jaccard_similarity("hello world", "hello world"),
-            1.0
-        );
+        assert_eq!(word_jaccard_similarity("hello world", "hello world"), 1.0);
     }
 
     #[test]
     fn test_jaccard_case_insensitive() {
-        assert_eq!(
-            word_jaccard_similarity("Hello World", "hello world"),
-            1.0
-        );
+        assert_eq!(word_jaccard_similarity("Hello World", "hello world"), 1.0);
     }
 
     #[test]
     fn test_jaccard_punctuation_ignored() {
-        assert_eq!(
-            word_jaccard_similarity("Hello, world!", "hello world"),
-            1.0
-        );
+        assert_eq!(word_jaccard_similarity("Hello, world!", "hello world"), 1.0);
     }
 
     #[test]

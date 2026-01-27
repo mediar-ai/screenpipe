@@ -575,13 +575,14 @@ pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Res
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
     // Get video FPS and duration
-    let (source_fps, video_duration) = match get_video_fps_and_duration(&ffmpeg_path, file_path).await {
-        Ok((fps, duration)) => (fps, duration),
-        Err(e) => {
-            error!("failed to get video metadata, using defaults: {}", e);
-            (1.0, f64::MAX) // Use MAX duration to disable validation on error
-        }
-    };
+    let (source_fps, video_duration) =
+        match get_video_fps_and_duration(&ffmpeg_path, file_path).await {
+            Ok((fps, duration)) => (fps, duration),
+            Err(e) => {
+                error!("failed to get video metadata, using defaults: {}", e);
+                (1.0, f64::MAX) // Use MAX duration to disable validation on error
+            }
+        };
 
     // Convert frame index to seconds: frame_time = frame_index / fps
     let mut offset_seconds = offset_index as f64 / source_fps;

@@ -128,7 +128,6 @@ pub struct OcrTaskData {
     pub result_tx: Sender<CaptureResult>,
 }
 
-
 #[derive(Debug)]
 pub enum ContinuousCaptureError {
     MonitorNotFound,
