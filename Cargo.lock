@@ -628,7 +628,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
  "log",
@@ -3932,7 +3932,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -6554,6 +6554,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sck-rs"
+version = "0.1.0"
+source = "git+https://github.com/louis030195/sck-rs#e09225902d7ea977ca0ebda336bb01fbac3e7948"
+dependencies = [
+ "cidre 0.7.0",
+ "image",
+ "once_cell",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "scoped-tls"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6804,6 +6817,7 @@ dependencies = [
  "once_cell",
  "reqwest 0.12.12",
  "rusty-tesseract",
+ "sck-rs",
  "screenpipe-core",
  "screenpipe-db",
  "screenpipe-integrations",

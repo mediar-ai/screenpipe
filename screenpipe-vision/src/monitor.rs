@@ -2,6 +2,11 @@ use anyhow::{Error, Result};
 use image::DynamicImage;
 use std::sync::Arc;
 use tracing;
+
+#[cfg(target_os = "macos")]
+use sck_rs::Monitor;
+
+#[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
 
 #[derive(Clone)]
@@ -19,7 +24,26 @@ pub struct MonitorData {
 }
 
 impl SafeMonitor {
+    #[cfg(target_os = "macos")]
     pub fn new(monitor: Monitor) -> Self {
+        // sck-rs API: id(), name(), is_primary() return values directly
+        let monitor_id = monitor.id();
+        let monitor_data = Arc::new(MonitorData {
+            width: monitor.width().unwrap_or(0),
+            height: monitor.height().unwrap_or(0),
+            name: monitor.name().to_string(),
+            is_primary: monitor.is_primary(),
+        });
+
+        Self {
+            monitor_id,
+            monitor_data,
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn new(monitor: Monitor) -> Self {
+        // xcap API: id(), name(), is_primary() return Result
         let monitor_id = monitor.id().unwrap();
         let monitor_data = Arc::new(MonitorData {
             width: monitor.width().unwrap(),
@@ -34,6 +58,33 @@ impl SafeMonitor {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    pub async fn capture_image(&self) -> Result<DynamicImage> {
+        let monitor_id = self.monitor_id;
+
+        let image = std::thread::spawn(move || -> Result<DynamicImage> {
+            let monitor = Monitor::all()
+                .map_err(Error::from)?
+                .into_iter()
+                .find(|m| m.id() == monitor_id)
+                .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?;
+
+            if monitor.width().unwrap_or(0) == 0 || monitor.height().unwrap_or(0) == 0 {
+                return Err(anyhow::anyhow!("Invalid monitor dimensions"));
+            }
+
+            monitor
+                .capture_image()
+                .map_err(|e| anyhow::anyhow!("{}", e))
+                .map(DynamicImage::ImageRgba8)
+        })
+        .join()
+        .unwrap()?;
+
+        Ok(image)
+    }
+
+    #[cfg(not(target_os = "macos"))]
     pub async fn capture_image(&self) -> Result<DynamicImage> {
         let monitor_id = self.monitor_id;
 
@@ -108,6 +159,37 @@ pub async fn get_default_monitor() -> SafeMonitor {
     .unwrap()
 }
 
+#[cfg(target_os = "macos")]
+pub async fn get_monitor_by_id(id: u32) -> Option<SafeMonitor> {
+    tokio::task::spawn_blocking(move || match Monitor::all() {
+        Ok(monitors) => {
+            let monitor_count = monitors.len();
+            let monitor_ids: Vec<u32> = monitors.iter().map(|m| m.id()).collect();
+
+            tracing::debug!(
+                "Found {} monitors with IDs: {:?}",
+                monitor_count,
+                monitor_ids
+            );
+
+            monitors
+                .into_iter()
+                .find(|m| m.id() == id)
+                .map(SafeMonitor::new)
+        }
+        Err(e) => {
+            tracing::error!("Failed to list monitors: {}", e);
+            None
+        }
+    })
+    .await
+    .unwrap_or_else(|e| {
+        tracing::error!("Task to get monitor by ID {} panicked: {}", id, e);
+        None
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
 pub async fn get_monitor_by_id(id: u32) -> Option<SafeMonitor> {
     tokio::task::spawn_blocking(move || match Monitor::all() {
         Ok(monitors) => {

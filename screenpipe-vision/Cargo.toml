@@ -39,12 +39,16 @@ tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 serde = "1.0.200"
 
-xcap = "0.8.1"
-
 once_cell = { workspace = true }
 base64 = "0.22.1"
-
 reqwest = { workspace = true }
+
+# Screen capture - platform specific
+[target.'cfg(target_os = "macos")'.dependencies.sck-rs]
+git = "https://github.com/louis030195/sck-rs"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+xcap = "0.8.1"
 
 [dev-dependencies]
 tempfile = "3.3.0"
