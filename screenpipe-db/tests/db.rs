@@ -37,7 +37,15 @@ mod tests {
             .await
             .unwrap();
         let frame_id = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("test"),
+                Some(""),
+                false,
+                None,
+            )
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -58,6 +66,7 @@ mod tests {
                 None,
                 None,
                 Some("test"),
+                None,
                 None,
                 None,
                 None,
@@ -113,6 +122,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -124,6 +134,7 @@ mod tests {
                 ContentType::Audio,
                 100,
                 0,
+                None,
                 None,
                 None,
                 None,
@@ -189,6 +200,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -200,6 +212,7 @@ mod tests {
                 ContentType::Audio,
                 100,
                 0,
+                None,
                 None,
                 None,
                 None,
@@ -232,7 +245,15 @@ mod tests {
             .await
             .unwrap();
         let frame_id = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("test"),
+                Some(""),
+                false,
+                None,
+            )
             .await
             .unwrap();
 
@@ -297,6 +318,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -308,6 +330,7 @@ mod tests {
                 ContentType::All,
                 100,
                 0,
+                None,
                 None,
                 None,
                 None,
@@ -348,7 +371,15 @@ mod tests {
             .await
             .unwrap();
         let frame_id1 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("test"),
+                Some(""),
+                false,
+                None,
+            )
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -388,7 +419,15 @@ mod tests {
 
         // Insert remaining data
         let frame_id2 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("test"),
+                Some(""),
+                false,
+                None,
+            )
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -458,14 +497,14 @@ mod tests {
 
         // After inserting both audio transcriptions, let's check all audio entries
         let all_audio = db
-            .search_audio("", 100, 0, None, None, None, None, None)
+            .search_audio("", 100, 0, None, None, None, None, None, None)
             .await
             .unwrap();
         println!("All audio entries: {:?}", all_audio);
 
         // Then try specific search
         let audio_results = db
-            .search_audio("2", 100, 0, None, None, None, None, None)
+            .search_audio("2", 100, 0, None, None, None, None, None, None)
             .await
             .unwrap();
         println!("Audio results for '2': {:?}", audio_results);
@@ -481,6 +520,7 @@ mod tests {
                 0,
                 Some(start_time),
                 Some(end_time),
+                None,
                 None,
                 None,
                 None,
@@ -513,6 +553,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -528,6 +569,7 @@ mod tests {
                 0,
                 Some(mid_time),
                 Some(end_time),
+                None,
                 None,
                 None,
                 None,
@@ -563,6 +605,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -577,6 +620,7 @@ mod tests {
                 0,
                 Some(start_time),
                 Some(end_time),
+                None,
                 None,
                 None,
                 None,
@@ -603,7 +647,15 @@ mod tests {
             .await
             .unwrap();
         let frame_id1 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("test"),
+                Some(""),
+                false,
+                None,
+            )
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -641,7 +693,15 @@ mod tests {
 
         // Insert remaining data
         let frame_id2 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("test"),
+                Some(""),
+                false,
+                None,
+            )
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -690,6 +750,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -708,6 +769,7 @@ mod tests {
                 ContentType::Audio,
                 Some(start_time),
                 Some(end_time),
+                None,
                 None,
                 None,
                 None,
@@ -1074,7 +1136,15 @@ mod tests {
 
         // Insert first frame with OCR
         let frame_id1 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("test"),
+                Some(""),
+                false,
+                None,
+            )
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -1088,7 +1158,15 @@ mod tests {
 
         // Insert second frame with OCR
         let frame_id2 = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("test"),
+                Some(""),
+                false,
+                None,
+            )
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -1115,6 +1193,7 @@ mod tests {
                 None,
                 None,
                 Some("test_video"),
+                None,
                 None,
                 None,
             )
@@ -1144,6 +1223,7 @@ mod tests {
                 Some("non_existent"),
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -1171,6 +1251,7 @@ mod tests {
                 Some("test_video"),
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -1186,6 +1267,7 @@ mod tests {
             .count_search_results(
                 "Hello",
                 ContentType::OCR,
+                None,
                 None,
                 None,
                 None,
@@ -1245,6 +1327,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -1274,6 +1357,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -1286,6 +1370,7 @@ mod tests {
                 ContentType::UI,
                 100,
                 0,
+                None,
                 None,
                 None,
                 None,
@@ -1318,6 +1403,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -1334,7 +1420,15 @@ mod tests {
             .await
             .unwrap();
         let frame_id = db
-            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("test"),
+                Some(""),
+                false,
+                None,
+            )
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -1400,6 +1494,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -1420,6 +1515,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -1430,6 +1526,7 @@ mod tests {
             .count_search_results(
                 "nonexistent",
                 ContentType::All,
+                None,
                 None,
                 None,
                 None,

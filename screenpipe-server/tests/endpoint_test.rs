@@ -180,11 +180,11 @@ mod tests {
             .await
             .unwrap();
         let frame_id1 = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
         let frame_id2 = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
         db.insert_ocr_text(
@@ -254,6 +254,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -264,6 +265,7 @@ mod tests {
             .count_search_results(
                 "OCR",
                 ContentType::OCR,
+                None,
                 None,
                 None,
                 None,
@@ -294,6 +296,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -307,6 +310,7 @@ mod tests {
                 None,
                 None,
                 Some("TestApp"),
+                None,
                 None,
                 None,
                 None,
@@ -334,6 +338,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -349,6 +354,7 @@ mod tests {
                 None,
                 None,
                 Some(30),
+                None,
                 None,
                 None,
                 None,
@@ -374,6 +380,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -391,7 +398,7 @@ mod tests {
             .await
             .unwrap();
         let frame_id1 = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
@@ -459,6 +466,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -471,6 +479,7 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::minutes(1)),
+                None,
                 None,
                 None,
                 None,
@@ -494,6 +503,7 @@ mod tests {
                 0,
                 None,
                 Some(now - Duration::minutes(10)),
+                None,
                 None,
                 None,
                 None,
@@ -528,6 +538,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -553,6 +564,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -563,6 +575,7 @@ mod tests {
                 "audio",
                 ContentType::Audio,
                 Some(two_hours_ago - Duration::minutes(100)),
+                None,
                 None,
                 None,
                 None,
@@ -594,7 +607,7 @@ mod tests {
             .await
             .unwrap();
         let old_frame_id = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
 
@@ -604,7 +617,7 @@ mod tests {
             .await
             .unwrap();
         let recent_frame_id = db
-            .insert_frame("test_device", None, None, None, None, true)
+            .insert_frame("test_device", None, None, None, None, true, None)
             .await
             .unwrap();
 
@@ -658,6 +671,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -680,6 +694,7 @@ mod tests {
                 0,
                 Some(old_timestamp - Duration::seconds(1)),
                 Some(old_timestamp + Duration::seconds(1)),
+                None,
                 None,
                 None,
                 None,
@@ -734,6 +749,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -749,6 +765,7 @@ mod tests {
                 0,
                 Some(four_hours_ago - Duration::minutes(5)),
                 Some(four_hours_ago + Duration::minutes(5)),
+                None,
                 None,
                 None,
                 None,

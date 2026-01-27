@@ -132,6 +132,11 @@ async fn test_extract_frames_and_ocr() -> Result<()> {
         app_name: "test_app".to_string(),
         is_focused: true,
         process_id: 1234,
+        browser_url: None,
+        window_x: 0,
+        window_y: 0,
+        window_width: first_frame.width(),
+        window_height: first_frame.height(),
     };
 
     // perform ocr using apple native (macos only)

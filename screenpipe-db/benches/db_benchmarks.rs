@@ -16,7 +16,7 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             .await
             .unwrap();
         let frame_id = db
-            .insert_frame("test_device", None, None, None, None, false)
+            .insert_frame("test_device", None, None, None, None, false, None)
             .await
             .unwrap();
         let ocr_text = format!("OCR text {}", rng.gen::<u32>());
@@ -76,6 +76,7 @@ fn bench_search(c: &mut Criterion) {
                                 content_type.clone(),
                                 100,
                                 0,
+                                None,
                                 None,
                                 None,
                                 None,

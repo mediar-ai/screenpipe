@@ -44,6 +44,7 @@ mod timeline_performance_tests {
                     Some(&format!("App{}", i % 10)), // Rotate through 10 apps
                     Some(&format!("Window {}", i)),
                     false,
+                    None,
                 )
                 .await
                 .unwrap();
