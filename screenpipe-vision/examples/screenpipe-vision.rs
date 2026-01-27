@@ -1,4 +1,6 @@
 use clap::Parser;
+#[cfg(target_os = "macos")]
+use sck_rs::Monitor;
 use screenpipe_core::Language;
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, OcrEngine,
@@ -6,8 +8,6 @@ use screenpipe_vision::{
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::channel;
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
-#[cfg(target_os = "macos")]
-use sck_rs::Monitor;
 
 #[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
@@ -45,9 +45,10 @@ async fn main() {
         .unwrap();
 
     #[cfg(not(target_os = "macos"))]
-    let monitor_id = tokio::task::spawn_blocking(|| Monitor::all().unwrap().first().unwrap().id().unwrap())
-        .await
-        .unwrap();
+    let monitor_id =
+        tokio::task::spawn_blocking(|| Monitor::all().unwrap().first().unwrap().id().unwrap())
+            .await
+            .unwrap();
 
     let window_filters = Arc::new(WindowFilters::new(&[], &[]));
 
