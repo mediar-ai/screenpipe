@@ -64,6 +64,7 @@ async function handleGoogleTranscription(request: Request, env: Env): Promise<Re
   try {
     const audioBuffer = await request.arrayBuffer();
     const languages = request.headers.get('detect_language')?.split(',') || ['en-US'];
+    const sampleRate = parseInt(request.headers.get('sample_rate') || '16000', 10);
 
     // Get access token using Vertex AI credentials
     const vertexProvider = new VertexAIProvider(
@@ -95,8 +96,9 @@ async function handleGoogleTranscription(request: Request, env: Env): Promise<Re
       return mappings[lang] || `${lang}-${lang.toUpperCase()}`;
     });
 
-    // Use Speech-to-Text v1 API with latest model
-    // v1 API is more widely available
+    // Use Speech-to-Text v1 API
+    // Note: Chirp 2 requires v2 API which needs separate enablement
+    // Using 'latest_long' - Google's best v1 model for long-form audio
     const url = `https://speech.googleapis.com/v1/speech:recognize`;
 
     const response = await fetch(url, {
@@ -107,12 +109,11 @@ async function handleGoogleTranscription(request: Request, env: Env): Promise<Re
       },
       body: JSON.stringify({
         config: {
-          encoding: 'LINEAR16',
-          sampleRateHertz: 16000,
           languageCode: languageCodes[0] || 'en-US',
           model: 'latest_long',
           enableAutomaticPunctuation: true,
           enableWordTimeOffsets: true,
+          useEnhanced: true, // Use enhanced model for better accuracy
         },
         audio: {
           content: audioBase64,
