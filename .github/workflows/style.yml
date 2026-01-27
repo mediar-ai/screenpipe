@@ -2,6 +2,10 @@ name: Code Quality & Optimization
 
 on: [push, pull_request]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -35,41 +39,16 @@ jobs:
 
   optimize:
     name: Dependency & Performance Checks
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Check for unused dependencies
-        if: matrix.os != 'windows-latest'
         uses: bnjbvr/cargo-machete@main
 
       - name: Install dependencies
-        if: matrix.os == 'ubuntu-latest'
         run: .github/scripts/install_dependencies.sh
-
-      - name: Install cargo-udeps
-        if: matrix.os == 'macos-latest'
-        run: |
-          rustup install nightly
-          cargo +nightly install cargo-udeps --locked
-
-      - name: Run cargo-udeps
-        if: matrix.os == 'macos-latest'
-        continue-on-error: true
-        run: cargo +nightly udeps
-
-      - name: Install cargo-bloat
-        if: matrix.os == 'macos-latest'
-        run: cargo install cargo-bloat
-
-      - name: Analyze binary size
-        if: matrix.os == 'macos-latest'
-        continue-on-error: true
-        run: cargo bloat --release
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
