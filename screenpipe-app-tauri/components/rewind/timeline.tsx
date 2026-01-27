@@ -126,6 +126,30 @@ export default function Timeline() {
 		};
 	}, [onWindowFocus]);
 
+	// Listen for navigate-to-timestamp events from search window
+	useEffect(() => {
+		const unlisten = listen<string>("navigate-to-timestamp", async (event) => {
+			const targetTimestamp = event.payload;
+			console.log("Navigating to timestamp:", targetTimestamp);
+
+			const targetDate = new Date(targetTimestamp);
+
+			// First, navigate to the correct date if needed
+			if (!isSameDay(targetDate, currentDate)) {
+				await handleDateChange(targetDate);
+			}
+
+			// Then jump to the specific time (after a short delay to let frames load)
+			setTimeout(() => {
+				jumpToTime(targetDate);
+			}, 500);
+		});
+
+		return () => {
+			unlisten.then((fn) => fn());
+		};
+	}, [currentDate]);
+
 	// Progressive loading: show UI immediately once we have any frames
 	const hasInitialFrames = frames.length > 0;
 	const showBlockingLoader = isLoading && !hasInitialFrames;

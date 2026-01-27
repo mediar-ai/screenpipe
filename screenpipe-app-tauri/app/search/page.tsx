@@ -12,7 +12,9 @@ import { parser } from "@/lib/keyword-parser";
 import { CurrentFrame } from "@/components/rewind/current-frame-search";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 import { AppSelect } from "@/components/rewind/search-command";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Clock } from "lucide-react";
+import { emit } from "@tauri-apps/api/event";
+import { commands } from "@/lib/utils/tauri";
 
 function SearchPage() {
 	const [querys, setQuerys] = useKeywordParams();
@@ -106,7 +108,28 @@ function SearchPage() {
 						/>
 					</div>
 				</div>
-				<CurrentFrame />
+				<div className="relative">
+					<CurrentFrame />
+					{currentResultIndex >= 0 && searchResults[currentResultIndex] && (
+						<Button
+							variant="secondary"
+							size="sm"
+							className="absolute bottom-2 right-2 gap-1.5"
+							onClick={async () => {
+								const timestamp = searchResults[currentResultIndex].timestamp;
+								// Show main timeline window
+								await commands.showWindow("Main");
+								// Emit event to navigate to the timestamp
+								await emit("navigate-to-timestamp", timestamp);
+								// Close search window
+								await commands.closeWindow({ Search: { query: null } });
+							}}
+						>
+							<Clock className="h-3.5 w-3.5" />
+							view in timeline
+						</Button>
+					)}
+				</div>
 			</div>
 			{!querys.query && (
 				<div className="h-64 w-96 flex mx-auto items-center justify-center">
