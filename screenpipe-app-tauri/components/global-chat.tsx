@@ -27,6 +27,7 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { commands } from "@/lib/utils/tauri";
+import { UpgradeDialog } from "@/components/upgrade-dialog";
 
 const SCREENPIPE_API = "http://localhost:3030";
 
@@ -443,6 +444,11 @@ export function GlobalChat() {
   // Export state
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+
+  // Upgrade dialog state
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<"daily_limit" | "model_not_allowed">("daily_limit");
+  const [upgradeResetsAt, setUpgradeResetsAt] = useState<string | undefined>();
 
   const appMentionSuggestions = React.useMemo(
     () => buildAppMentionSuggestions(appItems, APP_SUGGESTION_LIMIT),
@@ -1184,8 +1190,23 @@ export function GlobalChat() {
 
       let errorMessage = error instanceof Error ? error.message : "Something went wrong";
 
+      // Check for screenpipe-cloud free tier limits
+      if (errorMessage.includes("daily_limit_exceeded")) {
+        // Parse resets_at from error if available
+        try {
+          const match = errorMessage.match(/"resets_at":\s*"([^"]+)"/);
+          if (match) setUpgradeResetsAt(match[1]);
+        } catch {}
+        setUpgradeReason("daily_limit");
+        setShowUpgradeDialog(true);
+        errorMessage = "You've used all your free queries for today.";
+      } else if (errorMessage.includes("model_not_allowed")) {
+        setUpgradeReason("model_not_allowed");
+        setShowUpgradeDialog(true);
+        errorMessage = "This model requires an upgrade.";
+      }
       // Check for common API errors and provide helpful messages
-      if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+      else if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
         errorMessage = "Invalid API key. Please check your preset configuration.";
       } else if (errorMessage.includes("429")) {
         errorMessage = "Rate limit exceeded. Please wait a moment and try again.";
@@ -1647,6 +1668,13 @@ export function GlobalChat() {
           </div>
         </CustomDialogContent>
       </Dialog>
+
+      <UpgradeDialog
+        open={showUpgradeDialog}
+        onOpenChange={setShowUpgradeDialog}
+        reason={upgradeReason}
+        resetsAt={upgradeResetsAt}
+      />
     </>
   );
 }

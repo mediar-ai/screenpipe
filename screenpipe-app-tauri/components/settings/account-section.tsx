@@ -8,6 +8,9 @@ import {
   RefreshCw,
   UserCog,
   ExternalLinkIcon,
+  Sparkles,
+  Zap,
+  Brain,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
@@ -264,6 +267,31 @@ export function AccountSection() {
           )}
         </div>
       </div>
+
+      {/* AI tier info - only show for non-subscribers */}
+      {!settings.user?.cloud_subscribed && (
+        <Card className="p-4 space-y-3 bg-secondary/5">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <h4 className="font-medium">screenpipe cloud ai</h4>
+          </div>
+          <div className="grid gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+              {settings.user?.token ? "50 free ai queries per day" : "25 free ai queries per day"}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+              {settings.user?.token ? "access to claude haiku & sonnet" : "access to claude haiku"}
+            </div>
+          </div>
+          <Separator className="my-2" />
+          <div className="text-sm">
+            <span className="text-muted-foreground">upgrade benefits: </span>
+            <span className="text-foreground">unlimited queries, all models (gpt-4, claude opus), priority support</span>
+          </div>
+        </Card>
+      )}
 
       <div className="space-y-8">
         <div className="space-y-6">
