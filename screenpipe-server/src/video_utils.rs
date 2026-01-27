@@ -18,6 +18,30 @@ use tokio::process::Command;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
+/// Get ffprobe path from ffmpeg path, handling Windows .exe extension
+/// Tries with .exe first on Windows, falls back to without
+fn get_ffprobe_path(ffmpeg_path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        // Try with .exe first (standard Windows executable)
+        let with_exe = ffmpeg_path.with_file_name("ffprobe.exe");
+        if with_exe.exists() {
+            return with_exe;
+        }
+        // Fall back to without .exe (some Windows configs find it anyway)
+        let without_exe = ffmpeg_path.with_file_name("ffprobe");
+        if without_exe.exists() {
+            return without_exe;
+        }
+        // Default to .exe version even if not found (let the error happen later)
+        with_exe
+    }
+    #[cfg(not(windows))]
+    {
+        ffmpeg_path.with_file_name("ffprobe")
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct FFprobeOutput {
     format: Format,
@@ -317,7 +341,7 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
 }
 
 async fn get_video_fps_and_duration(ffmpeg_path: &PathBuf, video_path: &str) -> Result<(f64, f64)> {
-    let ffprobe_path = ffmpeg_path.with_file_name("ffprobe");
+    let ffprobe_path = get_ffprobe_path(&ffmpeg_path);
 
     let output = Command::new(&ffprobe_path)
         .args([
@@ -396,7 +420,7 @@ fn parse_time_from_filename(path: &str) -> Option<DateTime<Utc>> {
 
 pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
-    let ffprobe_path = ffmpeg_path.with_file_name("ffprobe");
+    let ffprobe_path = get_ffprobe_path(&ffmpeg_path);
 
     // Try ffprobe first
     let creation_time = match Command::new(&ffprobe_path)
