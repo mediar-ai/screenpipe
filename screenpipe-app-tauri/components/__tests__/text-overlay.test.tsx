@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import "../../vitest.setup";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { TextOverlay, isUrl, normalizeUrl } from "../text-overlay";
 import type { TextPosition } from "@/lib/hooks/use-frame-ocr-data";
@@ -38,7 +39,7 @@ describe("TextOverlay", () => {
 			createTextPosition("World", 0.2, 0.05, 0.1, 0.02),
 		];
 
-		render(
+		const { getByText } = render(
 			<TextOverlay
 				textPositions={positions}
 				originalWidth={1920}
@@ -48,8 +49,8 @@ describe("TextOverlay", () => {
 			/>
 		);
 
-		expect(screen.getByText("Hello")).toBeInTheDocument();
-		expect(screen.getByText("World")).toBeInTheDocument();
+		expect(getByText("Hello")).toBeInTheDocument();
+		expect(getByText("World")).toBeInTheDocument();
 	});
 
 	it("should scale normalized coordinates correctly", () => {
@@ -81,7 +82,7 @@ describe("TextOverlay", () => {
 			createTextPosition("LowConf", 0.2, 0.05, 0.08, 0.02, 0.3),
 		];
 
-		render(
+		const { getByText, queryByText } = render(
 			<TextOverlay
 				textPositions={positions}
 				originalWidth={1920}
@@ -92,8 +93,8 @@ describe("TextOverlay", () => {
 			/>
 		);
 
-		expect(screen.getByText("HighConf")).toBeInTheDocument();
-		expect(screen.queryByText("LowConf")).not.toBeInTheDocument();
+		expect(getByText("HighConf")).toBeInTheDocument();
+		expect(queryByText("LowConf")).not.toBeInTheDocument();
 	});
 
 	it("should render nothing when displayed dimensions are invalid", () => {
@@ -119,7 +120,7 @@ describe("TextOverlay", () => {
 			createTextPosition("ZeroHeight", 0.3, 0.05, 0.08, 0),
 		];
 
-		render(
+		const { getByText, queryByText } = render(
 			<TextOverlay
 				textPositions={positions}
 				originalWidth={1920}
@@ -129,9 +130,9 @@ describe("TextOverlay", () => {
 			/>
 		);
 
-		expect(screen.getByText("Valid")).toBeInTheDocument();
-		expect(screen.queryByText("ZeroWidth")).not.toBeInTheDocument();
-		expect(screen.queryByText("ZeroHeight")).not.toBeInTheDocument();
+		expect(getByText("Valid")).toBeInTheDocument();
+		expect(queryByText("ZeroWidth")).not.toBeInTheDocument();
+		expect(queryByText("ZeroHeight")).not.toBeInTheDocument();
 	});
 
 	it("should filter out positions outside the display bounds", () => {
@@ -140,7 +141,7 @@ describe("TextOverlay", () => {
 			createTextPosition("Outside", 1.5, 0.05, 0.08, 0.02), // Beyond normalized 1.0
 		];
 
-		render(
+		const { getByText, queryByText } = render(
 			<TextOverlay
 				textPositions={positions}
 				originalWidth={1920}
@@ -150,8 +151,8 @@ describe("TextOverlay", () => {
 			/>
 		);
 
-		expect(screen.getByText("Inside")).toBeInTheDocument();
-		expect(screen.queryByText("Outside")).not.toBeInTheDocument();
+		expect(getByText("Inside")).toBeInTheDocument();
+		expect(queryByText("Outside")).not.toBeInTheDocument();
 	});
 
 	it("should apply debug styles when debug prop is true", () => {

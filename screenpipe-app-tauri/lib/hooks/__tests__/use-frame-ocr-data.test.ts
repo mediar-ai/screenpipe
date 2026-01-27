@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import "../../../vitest.setup";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { useFrameOcrData, clearOcrCache } from "../use-frame-ocr-data";
 

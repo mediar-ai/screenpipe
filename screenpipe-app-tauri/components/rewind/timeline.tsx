@@ -501,7 +501,7 @@ export default function Timeline() {
 				<div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/10 via-black/2 to-transparent z-30 pointer-events-none" />
 
 				{/* Top Controls */}
-				<div className="absolute top-0 left-0 right-0 z-40 p-4">
+				<div className="absolute top-0 left-0 right-0 z-40 px-4 pb-4 pt-[calc(env(safe-area-inset-top)+16px)]">
 					<TimelineControls
 						currentDate={currentDate}
 						startAndEndDates={startAndEndDates}
@@ -511,7 +511,7 @@ export default function Timeline() {
 					{/* Refresh button - top right */}
 					<button
 						onClick={handleRefresh}
-						className="absolute top-4 right-4 p-2 bg-background/80 hover:bg-background border border-border rounded-md transition-colors"
+						className="absolute top-[calc(env(safe-area-inset-top)+16px)] right-4 p-2 bg-background/80 hover:bg-background border border-border rounded-md transition-colors"
 						title="Refresh timeline"
 					>
 						<RotateCcw className="w-4 h-4 text-muted-foreground" />
@@ -712,4 +712,3 @@ export default function Timeline() {
 		</TimelineProvider>
 	);
 }
-

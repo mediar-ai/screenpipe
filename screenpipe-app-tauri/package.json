@@ -3,10 +3,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "test": "bunx vitest run",
-    "test:watch": "bunx vitest",
+    "test": "bunx vitest run --config vitest.config.ts",
+    "test:watch": "bunx vitest --config vitest.config.ts",
     "test:e2e": "wdio run wdio.conf.js",
-    "test:e2e:terminator": "mocha",
     "build": "next build",
     "predev": "bun scripts/pre_build.js",
     "prebuild": "bun scripts/pre_build.js",

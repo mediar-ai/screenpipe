@@ -25,6 +25,7 @@ import { ChatCompletionTool } from "openai/resources/chat/completions";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
+import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { commands } from "@/lib/utils/tauri";
 
 const SCREENPIPE_API = "http://localhost:3030";
@@ -50,6 +51,7 @@ interface ParsedMentions {
 
 interface ParseMentionsOptions {
   selectionRange?: { start: Date; end: Date } | null;
+  appTagMap?: Record<string, string>;
 }
 
 // Common app name mappings (user-friendly -> actual app name patterns)
@@ -82,7 +84,7 @@ const APP_MAPPINGS: Record<string, string[]> = {
   "warp": ["Warp"],
 };
 
-function parseMentions(input: string, options?: ParseMentionsOptions): ParsedMentions {
+export function parseMentions(input: string, options?: ParseMentionsOptions): ParsedMentions {
   const now = new Date();
   const timeRanges: TimeRange[] = [];
   let cleanedInput = input;
@@ -178,13 +180,28 @@ function parseMentions(input: string, options?: ParseMentionsOptions): ParsedMen
 
   // === APP MENTIONS ===
 
-  // Check for @appname patterns
-  for (const [shortName, actualNames] of Object.entries(APP_MAPPINGS)) {
-    const appPattern = new RegExp(`@${shortName}\\b`, "gi");
+  const appTagMap = options?.appTagMap || {};
+  const appTagEntries = Object.entries(appTagMap);
+
+  // Check for dynamic @appname patterns from autocomplete
+  for (const [tag, actualName] of appTagEntries) {
+    const appPattern = new RegExp(`@${tag.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "gi");
     if (appPattern.test(cleanedInput)) {
-      appName = actualNames[0]; // Use first (primary) name
+      appName = actualName;
       cleanedInput = cleanedInput.replace(appPattern, "").trim();
-      break; // Only match first app
+      break;
+    }
+  }
+
+  // Check for @appname patterns (common aliases)
+  if (!appName) {
+    for (const [shortName, actualNames] of Object.entries(APP_MAPPINGS)) {
+      const appPattern = new RegExp(`@${shortName}\\b`, "gi");
+      if (appPattern.test(cleanedInput)) {
+        appName = actualNames[0]; // Use first (primary) name
+        cleanedInput = cleanedInput.replace(appPattern, "").trim();
+        break; // Only match first app
+      }
     }
   }
 
@@ -205,7 +222,8 @@ function parseMentions(input: string, options?: ParseMentionsOptions): ParsedMen
       // Check if it's not a known app or time tag
       const knownTags = [
         "today", "yesterday", "selection", "audio", "screen", "ocr",
-        ...Object.keys(APP_MAPPINGS).map(k => k.toLowerCase())
+        ...Object.keys(APP_MAPPINGS).map(k => k.toLowerCase()),
+        ...Object.keys(appTagMap).map(k => k.toLowerCase()),
       ];
       if (!knownTags.includes(potentialName.toLowerCase())) {
         speakerName = potentialName;
@@ -225,6 +243,42 @@ interface MentionSuggestion {
   tag: string;
   description: string;
   category: "time" | "content" | "app" | "speaker";
+  appName?: string;
+}
+
+const APP_SUGGESTION_LIMIT = 10;
+
+type AppAutocompleteItem = {
+  name: string;
+  count: number;
+};
+
+export function normalizeAppTag(name: string) {
+  const base = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return base || "app";
+}
+
+export function buildAppMentionSuggestions(
+  items: AppAutocompleteItem[],
+  limit: number
+): MentionSuggestion[] {
+  const usedTags = new Set<string>();
+  return items.slice(0, limit).map((item) => {
+    const baseTag = normalizeAppTag(item.name);
+    let tag = baseTag;
+    let suffix = 2;
+    while (usedTags.has(tag)) {
+      tag = `${baseTag}${suffix}`;
+      suffix += 1;
+    }
+    usedTags.add(tag);
+    return {
+      tag: `@${tag}`,
+      description: item.name,
+      category: "app" as const,
+      appName: item.name,
+    };
+  });
 }
 
 // Static suggestions - speakers are loaded dynamically
@@ -238,17 +292,6 @@ const STATIC_MENTION_SUGGESTIONS: MentionSuggestion[] = [
   // Content type
   { tag: "@audio", description: "audio/meetings only", category: "content" },
   { tag: "@screen", description: "screen text only", category: "content" },
-  // Apps (common ones)
-  { tag: "@chrome", description: "Google Chrome", category: "app" },
-  { tag: "@slack", description: "Slack", category: "app" },
-  { tag: "@vscode", description: "VS Code", category: "app" },
-  { tag: "@zoom", description: "Zoom meetings", category: "app" },
-  { tag: "@terminal", description: "Terminal", category: "app" },
-  { tag: "@discord", description: "Discord", category: "app" },
-  { tag: "@figma", description: "Figma", category: "app" },
-  { tag: "@notion", description: "Notion", category: "app" },
-  { tag: "@arc", description: "Arc browser", category: "app" },
-  { tag: "@cursor", description: "Cursor", category: "app" },
 ];
 
 // Speaker interface for dynamic suggestions
@@ -376,6 +419,7 @@ export function GlobalChat() {
   const pathname = usePathname();
   const { isMac } = usePlatform();
   const { selectionRange, setSelectionRange } = useTimelineSelection();
+  const { items: appItems } = useSqlAutocomplete("app");
 
   // Only show floating button on timeline page, but keep dialog available everywhere
   // pathname can be null during initial hydration
@@ -399,6 +443,26 @@ export function GlobalChat() {
   // Export state
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+
+  const appMentionSuggestions = React.useMemo(
+    () => buildAppMentionSuggestions(appItems, APP_SUGGESTION_LIMIT),
+    [appItems]
+  );
+
+  const appTagMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const suggestion of appMentionSuggestions) {
+      if (suggestion.appName) {
+        map[suggestion.tag.slice(1).toLowerCase()] = suggestion.appName;
+      }
+    }
+    return map;
+  }, [appMentionSuggestions]);
+
+  const baseMentionSuggestions = React.useMemo(
+    () => [...STATIC_MENTION_SUGGESTIONS, ...appMentionSuggestions],
+    [appMentionSuggestions]
+  );
 
   // Handle video export
   const handleExport = async () => {
@@ -568,10 +632,10 @@ export function GlobalChat() {
     }
 
     // Check if filter matches any static suggestion - if so, don't search speakers
-    const matchesStatic = STATIC_MENTION_SUGGESTIONS.some(
+    const matchesBase = baseMentionSuggestions.some(
       s => s.tag.toLowerCase().includes(`@${mentionFilter.toLowerCase()}`)
     );
-    if (matchesStatic && mentionFilter.length < 3) {
+    if (matchesBase && mentionFilter.length < 3) {
       setSpeakerSuggestions([]);
       return;
     }
@@ -603,20 +667,20 @@ export function GlobalChat() {
 
     const debounceTimeout = setTimeout(searchSpeakers, 300);
     return () => clearTimeout(debounceTimeout);
-  }, [mentionFilter]);
+  }, [mentionFilter, baseMentionSuggestions]);
 
   // Filter suggestions based on what user is typing after @
   const filteredMentions = React.useMemo(() => {
-    const staticSuggestions = !mentionFilter
-      ? STATIC_MENTION_SUGGESTIONS
-      : STATIC_MENTION_SUGGESTIONS.filter(
+    const suggestions = !mentionFilter
+      ? baseMentionSuggestions
+      : baseMentionSuggestions.filter(
           s => s.tag.toLowerCase().includes(mentionFilter.toLowerCase()) ||
                s.description.toLowerCase().includes(mentionFilter.toLowerCase())
         );
 
-    // Combine static and dynamic speaker suggestions
-    return [...staticSuggestions, ...speakerSuggestions];
-  }, [mentionFilter, speakerSuggestions]);
+    // Combine base suggestions and dynamic speaker suggestions
+    return [...suggestions, ...speakerSuggestions];
+  }, [mentionFilter, speakerSuggestions, baseMentionSuggestions]);
 
   // Handle input changes and detect @ mentions
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -888,7 +952,7 @@ export function GlobalChat() {
     if (!openai) return;
 
     // Parse @mentions from input (time, content type, apps)
-    const mentions = parseMentions(userMessage, { selectionRange });
+    const mentions = parseMentions(userMessage, { selectionRange, appTagMap });
     const displayMessage = userMessage; // Show original message with tags to user
     const processedMessage = mentions.cleanedInput || userMessage; // Use cleaned version for AI
 
