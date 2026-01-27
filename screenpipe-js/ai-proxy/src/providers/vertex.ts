@@ -120,8 +120,9 @@ export class VertexAIProvider implements AIProvider {
 
 	/**
 	 * Get an access token, using cache if valid
+	 * Public for use by other Google Cloud APIs (Speech-to-Text, etc.)
 	 */
-	private async getAccessToken(): Promise<string> {
+	public async getAccessToken(): Promise<string> {
 		// Check cache
 		if (tokenCache && tokenCache.expiresAt > Date.now() + 60000) {
 			return tokenCache.accessToken;

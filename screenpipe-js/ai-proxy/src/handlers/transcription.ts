@@ -1,19 +1,34 @@
 import { Env } from '../types';
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 import { createSuccessResponse, createErrorResponse } from '../utils/cors';
+import { VertexAIProvider } from '../providers/vertex';
 
 /**
  * Handles audio file transcription requests
+ * Supports both Deepgram (default) and Google Speech-to-Text with Chirp 2
  * @param request The HTTP request containing audio data
  * @param env Environment variables
  * @returns Response with transcription results
  */
 export async function handleFileTranscription(request: Request, env: Env): Promise<Response> {
+  const provider = request.headers.get('x-transcription-provider')?.toLowerCase() || 'deepgram';
+
+  if (provider === 'google' || provider === 'chirp') {
+    return handleGoogleTranscription(request, env);
+  }
+
+  return handleDeepgramTranscription(request, env);
+}
+
+/**
+ * Handles transcription using Deepgram Nova-3
+ */
+async function handleDeepgramTranscription(request: Request, env: Env): Promise<Response> {
   try {
     const audioBuffer = await request.arrayBuffer();
     const languages = request.headers.get('detect_language')?.split(',') || [];
     const sampleRate = request.headers.get('sample_rate') || '16000';
-    
+
     const deepgramResponse = await fetch(
       'https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&sample_rate=' +
         sampleRate +
@@ -22,7 +37,7 @@ export async function handleFileTranscription(request: Request, env: Env): Promi
         method: 'POST',
         headers: {
           Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
-          'Content-Type': 'audio/wav', 
+          'Content-Type': 'audio/wav',
         },
         body: audioBuffer,
       }
@@ -37,6 +52,126 @@ export async function handleFileTranscription(request: Request, env: Env): Promi
     return createSuccessResponse(data);
   } catch (error: any) {
     console.error('Error in Deepgram request:', error);
+    return createErrorResponse(500, error.message);
+  }
+}
+
+/**
+ * Handles transcription using Google Speech-to-Text v2 with Chirp 2 model
+ * Chirp 2 is Google's latest SOTA speech recognition model
+ */
+async function handleGoogleTranscription(request: Request, env: Env): Promise<Response> {
+  try {
+    const audioBuffer = await request.arrayBuffer();
+    const languages = request.headers.get('detect_language')?.split(',') || ['en-US'];
+
+    // Get access token using Vertex AI credentials
+    const vertexProvider = new VertexAIProvider(
+      env.VERTEX_SERVICE_ACCOUNT_JSON,
+      env.VERTEX_PROJECT_ID,
+      env.VERTEX_REGION
+    );
+    const accessToken = await vertexProvider.getAccessToken();
+
+    // Convert audio to base64 (chunked to avoid stack overflow)
+    const uint8Array = new Uint8Array(audioBuffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+    }
+    const audioBase64 = btoa(binary);
+
+    // Map language codes to Google format (e.g., 'en' -> 'en-US')
+    const languageCodes = languages.map(lang => {
+      if (lang.includes('-')) return lang;
+      // Common mappings
+      const mappings: Record<string, string> = {
+        'en': 'en-US', 'es': 'es-ES', 'fr': 'fr-FR', 'de': 'de-DE',
+        'it': 'it-IT', 'pt': 'pt-BR', 'ja': 'ja-JP', 'ko': 'ko-KR',
+        'zh': 'zh-CN', 'ru': 'ru-RU', 'ar': 'ar-SA', 'hi': 'hi-IN',
+      };
+      return mappings[lang] || `${lang}-${lang.toUpperCase()}`;
+    });
+
+    // Use Speech-to-Text v1 API with latest model
+    // v1 API is more widely available
+    const url = `https://speech.googleapis.com/v1/speech:recognize`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        config: {
+          encoding: 'LINEAR16',
+          sampleRateHertz: 16000,
+          languageCode: languageCodes[0] || 'en-US',
+          model: 'latest_long',
+          enableAutomaticPunctuation: true,
+          enableWordTimeOffsets: true,
+        },
+        audio: {
+          content: audioBase64,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('Google Speech-to-Text error:', response.status, response.statusText, errorData);
+      throw new Error(`Google Speech-to-Text API error (${response.status}): ${errorData || response.statusText}`);
+    }
+
+    const data = await response.json() as {
+      results?: Array<{
+        alternatives?: Array<{
+          transcript?: string;
+          confidence?: number;
+          words?: Array<{
+            word?: string;
+            startOffset?: string;
+            endOffset?: string;
+          }>;
+        }>;
+        languageCode?: string;
+      }>;
+    };
+
+    // Transform to Deepgram-compatible format for easy integration
+    const transcript = data.results?.map(r => r.alternatives?.[0]?.transcript || '').join(' ') || '';
+    const confidence = data.results?.[0]?.alternatives?.[0]?.confidence || 0;
+    const detectedLanguage = data.results?.[0]?.languageCode || languageCodes[0];
+
+    const deepgramFormat = {
+      results: {
+        channels: [{
+          alternatives: [{
+            transcript,
+            confidence,
+            words: data.results?.flatMap(r =>
+              r.alternatives?.[0]?.words?.map(w => ({
+                word: w.word || '',
+                start: parseFloat(w.startOffset?.replace('s', '') || '0'),
+                end: parseFloat(w.endOffset?.replace('s', '') || '0'),
+                confidence: confidence,
+              })) || []
+            ) || [],
+          }],
+        }],
+        metadata: {
+          model_info: { name: 'chirp_2' },
+          detected_language: detectedLanguage,
+        },
+      },
+    };
+
+    return createSuccessResponse(deepgramFormat);
+  } catch (error: any) {
+    console.error('Error in Google Speech-to-Text request:', error);
     return createErrorResponse(500, error.message);
   }
 }
