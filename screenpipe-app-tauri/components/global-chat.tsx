@@ -799,6 +799,12 @@ export function GlobalChat() {
       if (!response.ok) throw new Error(`Search failed: ${response.status}`);
 
       const data = await response.json();
+
+      // Check for API error response
+      if (data.error) {
+        return `Search failed: ${data.error}. Please inform the user about this error and suggest they restart Screenpipe or check logs.`;
+      }
+
       const searchResults = data.data || [];
       const pagination = data.pagination || {};
 
