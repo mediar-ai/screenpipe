@@ -286,9 +286,46 @@ impl ShowRewindWindow {
                         let app_clone = app.clone();
                         app.run_on_main_thread(move || {
                             use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                            use tauri_nspanel::cocoa::appkit::{NSEvent, NSScreen};
+                            use tauri_nspanel::cocoa::base::{id, nil};
+                            use tauri_nspanel::cocoa::foundation::{NSArray, NSPoint, NSRect};
 
                             if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
                                 use objc::{msg_send, sel, sel_impl};
+
+                                // Get mouse cursor position and find the screen it's on
+                                unsafe {
+                                    let mouse_location: NSPoint = NSEvent::mouseLocation(nil);
+                                    let screens: id = NSScreen::screens(nil);
+                                    let screen_count: u64 = NSArray::count(screens);
+
+                                    let mut target_screen: id = nil;
+                                    for i in 0..screen_count {
+                                        let screen: id = NSArray::objectAtIndex(screens, i);
+                                        let frame: NSRect = NSScreen::frame(screen);
+
+                                        // Check if mouse is within this screen's bounds
+                                        // Note: macOS uses bottom-left origin, so we check accordingly
+                                        if mouse_location.x >= frame.origin.x
+                                            && mouse_location.x < frame.origin.x + frame.size.width
+                                            && mouse_location.y >= frame.origin.y
+                                            && mouse_location.y < frame.origin.y + frame.size.height
+                                        {
+                                            target_screen = screen;
+                                            break;
+                                        }
+                                    }
+
+                                    // If we found the screen with cursor, resize and reposition panel to it
+                                    if target_screen != nil {
+                                        let frame: NSRect = NSScreen::frame(target_screen);
+                                        info!("Moving panel to screen at ({}, {}), size {}x{}",
+                                            frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
+
+                                        // Resize and reposition the panel to cover the target screen
+                                        let _: () = msg_send![&*panel, setFrame:frame display:true];
+                                    }
+                                }
 
                                 // Re-apply window level each time we show to ensure it stays above fullscreen
                                 // CGShieldingWindowLevel (1000) + 1 ensures it appears above everything
