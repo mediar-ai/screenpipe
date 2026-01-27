@@ -52,7 +52,11 @@ export type AIPreset = {
 	  }
 );
 
-export type Settings = SettingsStore
+// Extend SettingsStore with deviceId (for AI free tier tracking)
+// This is added here until the Rust types are regenerated
+export type Settings = SettingsStore & {
+	deviceId?: string;
+}
 
 export const DEFAULT_PROMPT = `Rules:
 - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
@@ -94,8 +98,21 @@ const DEFAULT_IGNORED_WINDOWS_PER_OS: Record<string, string[]> = {
 	linux: ["Info center", "Discover", "Parted"],
 };
 
+// Default free AI preset that works without login
+// Note: screenpipe-cloud provider doesn't require apiKey
+const DEFAULT_FREE_PRESET: AIPreset = {
+	id: "screenpipe-free",
+	provider: "screenpipe-cloud",
+	url: "https://ai-proxy.i-f9f.workers.dev/v1",
+	model: "claude-haiku-4-5@20251001",
+	maxContextChars: 128000,
+	defaultPreset: true,
+	prompt: DEFAULT_PROMPT,
+};
+
 let DEFAULT_SETTINGS: Settings = {
-			aiPresets: [],
+			aiPresets: [DEFAULT_FREE_PRESET as any],
+			deviceId: crypto.randomUUID(),
 			deepgramApiKey: "",
 			isLoading: false,
 			userId: "",

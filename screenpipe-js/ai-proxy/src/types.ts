@@ -128,6 +128,50 @@ export interface Env {
 	VERTEX_SERVICE_ACCOUNT_JSON: string;
 	VERTEX_PROJECT_ID: string;
 	VERTEX_REGION: string;
+	// D1 database for usage tracking
+	DB: D1Database;
+}
+
+// User tier for rate limiting and model access
+export type UserTier = 'anonymous' | 'logged_in' | 'subscribed';
+
+// Auth result with tier information
+export interface AuthResult {
+	isValid: boolean;
+	tier: UserTier;
+	deviceId: string;
+	userId?: string;
+	error?: string;
+}
+
+// Tier limits configuration
+export interface TierLimits {
+	dailyQueries: number;
+	rpm: number;
+	allowedModels: string[];
+}
+
+// Usage tracking result
+export interface UsageResult {
+	used: number;
+	limit: number;
+	remaining: number;
+	allowed: boolean;
+	resetsAt: string;
+}
+
+// Usage status response
+export interface UsageStatus {
+	tier: UserTier;
+	used_today: number;
+	limit_today: number;
+	remaining: number;
+	resets_at: string;
+	model_access: string[];
+	upgrade_options?: {
+		login?: { benefit: string };
+		subscribe?: { benefit: string };
+	};
 }
 
 export interface ResponseUtils {

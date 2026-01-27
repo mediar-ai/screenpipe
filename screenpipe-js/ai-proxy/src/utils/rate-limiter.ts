@@ -1,5 +1,6 @@
 import { createErrorResponse } from './cors';
-import { Env } from '../types';
+import { Env, UserTier, AuthResult } from '../types';
+import { TIER_CONFIG } from '../services/usage-tracker';
 
 export class RateLimiter {
   private state: DurableObjectState;
@@ -16,38 +17,47 @@ export class RateLimiter {
    * @returns Response with rate limit status
    */
   async fetch(request: Request) {
-    const ip = request.headers.get('cf-connecting-ip') || 'unknown';
     const url = new URL(request.url);
     const now = Date.now();
 
-    // idk much about limits loius wanted to have 
-    const limits: Record<string, { rpm: number; window: number }> = {
-      '/v1/chat/completions': { rpm: 20, window: 60000 }, // 20 requests per minute for openai
-      '/v1/voice/transcribe': { rpm: 15, window: 60000 }, // 15 requests per minute for voice transcription
-      '/v1/voice/query': { rpm: 10, window: 60000 },      // 10 requests per minute for voice queries
-      '/v1/text-to-speech': { rpm: 15, window: 60000 },   // 15 requests per minute for text-to-speech
-      '/v1/voice/chat': { rpm: 8, window: 60000 },        // 8 requests per minute for voice chat
-      default: { rpm: 60, window: 60000 }, // 60 rpm for other endpoints
+    // Get identifier and tier from URL params (passed by checkRateLimit)
+    const identifier = url.searchParams.get('id') || 'unknown';
+    const tier = (url.searchParams.get('tier') || 'anonymous') as UserTier;
+
+    // Get tier-specific RPM limit
+    const tierRpm = TIER_CONFIG[tier]?.rpm || 5;
+
+    // Endpoint-specific limits (as multipliers of base RPM)
+    const endpointMultipliers: Record<string, number> = {
+      '/v1/chat/completions': 1,
+      '/v1/voice/transcribe': 0.75,
+      '/v1/voice/query': 0.5,
+      '/v1/text-to-speech': 0.75,
+      '/v1/voice/chat': 0.4,
     };
 
-    const limit = limits[url.pathname] || limits.default;
+    const multiplier = endpointMultipliers[url.pathname] || 1;
+    const effectiveRpm = Math.max(1, Math.floor(tierRpm * multiplier));
+    const window = 60000; // 1 minute
 
-    let tracking = this.requests.get(ip) || { count: 0, lastReset: now };
+    let tracking = this.requests.get(identifier) || { count: 0, lastReset: now };
 
-    if (now - tracking.lastReset > limit.window) {
+    if (now - tracking.lastReset > window) {
       tracking = { count: 0, lastReset: now };
     }
 
     tracking.count++;
-    this.requests.set(ip, tracking);
+    this.requests.set(identifier, tracking);
 
-    const isAllowed = tracking.count <= limit.rpm;
+    const isAllowed = tracking.count <= effectiveRpm;
 
     return new Response(
       JSON.stringify({
         allowed: isAllowed,
-        remaining: Math.max(0, limit.rpm - tracking.count),
-        reset_in: Math.ceil((tracking.lastReset + limit.window - now) / 1000),
+        remaining: Math.max(0, effectiveRpm - tracking.count),
+        reset_in: Math.ceil((tracking.lastReset + window - now) / 1000),
+        tier,
+        rpm_limit: effectiveRpm,
       })
     );
   }
@@ -57,20 +67,48 @@ export class RateLimiter {
  * Checks if the request exceeds rate limits
  * @param request The HTTP request
  * @param env Environment variables
+ * @param authResult Optional auth result with tier info
  * @returns Object indicating if request is allowed and optional error response
  */
-export async function checkRateLimit(request: Request, env: Env): Promise<{ allowed: boolean; response?: Response }> {
-  const ip = request.headers.get('cf-connecting-ip') || 'unknown';
-  const rateLimiterId = env.RATE_LIMITER.idFromName(ip);
+export async function checkRateLimit(
+  request: Request,
+  env: Env,
+  authResult?: AuthResult
+): Promise<{ allowed: boolean; response?: Response }> {
+  // Use device ID if available, fall back to IP
+  const identifier = authResult?.deviceId ||
+    request.headers.get('X-Device-Id') ||
+    request.headers.get('cf-connecting-ip') ||
+    'unknown';
+
+  const tier = authResult?.tier || 'anonymous';
+
+  const rateLimiterId = env.RATE_LIMITER.idFromName(identifier);
   const rateLimiter = env.RATE_LIMITER.get(rateLimiterId);
 
-  const rateLimitResponse = await rateLimiter.fetch(request.url);
-  const rateLimitData = (await rateLimitResponse.json()) as { allowed: boolean; remaining: number; reset_in: number };
+  // Pass tier info to the rate limiter
+  const url = new URL(request.url);
+  url.searchParams.set('id', identifier);
+  url.searchParams.set('tier', tier);
+
+  const rateLimitResponse = await rateLimiter.fetch(url.toString());
+  const rateLimitData = (await rateLimitResponse.json()) as {
+    allowed: boolean;
+    remaining: number;
+    reset_in: number;
+    tier: string;
+    rpm_limit: number;
+  };
 
   if (!rateLimitData.allowed) {
-    return { 
-      allowed: false, 
-      response: createErrorResponse(429, 'rate limit exceeded')
+    return {
+      allowed: false,
+      response: createErrorResponse(429, JSON.stringify({
+        error: 'rate limit exceeded',
+        message: `You've exceeded ${rateLimitData.rpm_limit} requests per minute. Please wait ${rateLimitData.reset_in} seconds.`,
+        tier: rateLimitData.tier,
+        reset_in: rateLimitData.reset_in,
+      }))
     };
   }
 

@@ -537,17 +537,17 @@ const AISection = ({
           <AIProviderCard
             type="screenpipe-cloud"
             title="Screenpipe Cloud"
-            description="Use OpenAI, Anthropic and Google models without worrying about API keys or usage"
+            description="Use AI models instantly. Free: 25 queries/day. Login for 50/day. Subscribe for unlimited."
             imageSrc="/images/screenpipe.png"
             selected={settingsPreset?.provider === "screenpipe-cloud"}
             onClick={() => handleAiProviderChange("screenpipe-cloud")}
-            disabled={!settings.user}
+            disabled={false}
             warningText={
               !settings.user
-                ? "Login required"
-                : !settings.user?.credits?.amount
-                ? "Requires credits"
-                : undefined
+                ? "Free: 25/day"
+                : settings.user?.cloud_subscribed
+                ? "Unlimited"
+                : "50/day"
             }
           />
 
@@ -653,19 +653,13 @@ const AISection = ({
                   !settingsPreset?.model && "text-muted-foreground"
                 )}
                 disabled={
-                  (settingsPreset?.provider === "openai" &&
-                    !settingsPreset?.apiKey) ||
-                  (settingsPreset?.provider === "screenpipe-cloud" &&
-                    (!settings.user ||
-                      settings.user.cloud_subscribed === false))
+                  settingsPreset?.provider === "openai" &&
+                  !settingsPreset?.apiKey
                 }
               >
                 {settingsPreset?.provider === "openai" &&
                 !settingsPreset?.apiKey
                   ? "API key required to fetch models"
-                  : settingsPreset?.provider === "screenpipe-cloud" &&
-                    (!settings.user || settings.user.cloud_subscribed === false)
-                  ? "Subscription required to access models"
                   : settingsPreset?.model || "Select model..."}
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>

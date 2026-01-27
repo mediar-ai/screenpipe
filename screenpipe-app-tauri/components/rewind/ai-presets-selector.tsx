@@ -105,6 +105,7 @@ type RecommendedPreset = BaseRecommendedPreset &
 interface AIProviderConfigProps {
   onSubmit: (data: AIPreset) => void;
   defaultPreset?: AIPreset;
+  showLoginCta?: boolean;
 }
 interface OpenAIModel {
   id: string;
@@ -122,6 +123,7 @@ export const DEFAULT_PROMPT = `Rules:
 export function AIProviderConfig({
   onSubmit,
   defaultPreset,
+  showLoginCta = true,
 }: AIProviderConfigProps) {
   const [selectedProvider, setSelectedProvider] = useState<
     AIPreset["provider"]
@@ -290,16 +292,18 @@ export function AIProviderConfig({
               This preset uses Screenpipe Cloud. Please log in to your Screenpipe account to edit it.
             </p>
           </div>
-          <Button
-            onClick={async () => {
-              // Open settings window at account section
-              await commands.showWindow({ Settings: { page: "account" } });
-            }}
-            className="gap-2"
-          >
-            <LogIn className="h-4 w-4" />
-            Go to Login
-          </Button>
+          {showLoginCta && (
+            <Button
+              onClick={async () => {
+                // Open settings window at account section
+                await commands.showWindow({ Settings: { page: "account" } });
+              }}
+              className="gap-2"
+            >
+              <LogIn className="h-4 w-4" />
+              Go to Login
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -719,12 +723,14 @@ interface AIPresetDialogProps {
   onOpenChange: (open: boolean) => void;
   onSave: (preset: Partial<AIPreset>) => void;
   preset?: AIPreset;
+  showLoginCta?: boolean;
 }
 
 interface AIPresetsSelectorProps {
   recommendedPresets?: RecommendedPreset[];
   shortcutKey?: string;
   onPresetChange?: (preset: AIPreset) => void;
+  showLoginCta?: boolean;
 }
 
 export const AIPresetDialog = ({
@@ -732,6 +738,7 @@ export const AIPresetDialog = ({
   onOpenChange,
   onSave,
   preset,
+  showLoginCta = true,
 }: AIPresetDialogProps) => {
   const handleProviderSubmit = (providerData: any) => {
     const newPreset: Partial<AIPreset> = {
@@ -784,6 +791,7 @@ export const AIPresetDialog = ({
         <AIProviderConfig
           onSubmit={handleProviderSubmit}
           defaultPreset={defaultPreset}
+          showLoginCta={showLoginCta}
         />
       </DialogContent>
     </Dialog>
@@ -794,6 +802,7 @@ export const AIPresetsSelector = ({
   recommendedPresets,
   shortcutKey = "/",
   onPresetChange,
+  showLoginCta = true,
 }: AIPresetsSelectorProps) => {
   const { settings, updateSettings } = useSettings();
   const [open, setOpen] = useState(false);
@@ -1035,17 +1044,19 @@ export const AIPresetsSelector = ({
             <span className="text-amber-600 dark:text-amber-400 flex-1">
               Login required to use Screenpipe Cloud
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 h-7 text-xs border-amber-500/30 hover:bg-amber-500/10"
-              onClick={async () => {
-                await commands.showWindow({ Settings: { page: "account" } });
-              }}
-            >
-              <LogIn className="h-3 w-3 mr-1" />
-              Login
-            </Button>
+            {showLoginCta && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 h-7 text-xs border-amber-500/30 hover:bg-amber-500/10"
+                onClick={async () => {
+                  await commands.showWindow({ Settings: { page: "account" } });
+                }}
+              >
+                <LogIn className="h-3 w-3 mr-1" />
+                Login
+              </Button>
+            )}
           </div>
         )}
         <div className="flex w-full items-center gap-2">
@@ -1335,6 +1346,7 @@ export const AIPresetsSelector = ({
         onOpenChange={setDialogOpen}
         onSave={handleSavePreset}
         preset={selectedPresetToEdit}
+        showLoginCta={showLoginCta}
       />
     </>
   );

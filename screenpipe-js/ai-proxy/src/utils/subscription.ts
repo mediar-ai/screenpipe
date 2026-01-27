@@ -97,7 +97,7 @@ export async function validateSubscription(env: Env, userId: string): Promise<bo
       });
 
       if (response.ok) {
-        const userData = await response.json();
+        const userData = await response.json() as { email?: string };
         console.log('Valid screenpipe user token, user:', userData?.email);
         subscriptionCache.set(userId, true);
         return true;

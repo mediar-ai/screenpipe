@@ -1,9 +1,10 @@
 import * as Sentry from '@sentry/cloudflare';
-import { Env, RequestBody } from './types';
-import { handleOptions, createSuccessResponse, createErrorResponse } from './utils/cors';
+import { Env, RequestBody, AuthResult } from './types';
+import { handleOptions, createSuccessResponse, createErrorResponse, addCorsHeaders } from './utils/cors';
 import { validateAuth } from './utils/auth';
 import { RateLimiter, checkRateLimit } from './utils/rate-limiter';
 import { setupAnalytics } from './services/analytics';
+import { trackUsage, getUsageStatus, isModelAllowed, TIER_CONFIG } from './services/usage-tracker';
 import { handleChatCompletions } from './handlers/chat';
 import { handleModelListing } from './handlers/models';
 import { handleFileTranscription, handleWebSocketUpgrade } from './handlers/transcription';
@@ -38,35 +39,69 @@ export default Sentry.withSentry(
 					return handleOptions(request);
 				}
 
-				const rateLimit = await checkRateLimit(request, env);
-				if (!rateLimit.allowed && rateLimit.response) {
-					return rateLimit.response;
-				}
-
 				const url = new URL(request.url);
 				const path = url.pathname;
 				console.log('path', path);
 
-				// Handle WebSocket upgrade for real-time transcription
+				// Handle WebSocket upgrade for real-time transcription (no auth required)
 				const upgradeHeader = request.headers.get('upgrade')?.toLowerCase();
 				if (path === '/v1/listen' && upgradeHeader === 'websocket') {
 					console.log('websocket request to /v1/listen detected, bypassing auth');
 					return await handleWebSocketUpgrade(request, env);
 				}
 
-				if (path !== '/test') {
-				  const authResult = await validateAuth(request, env);
-				  if (!authResult.isValid) {
-				    return createErrorResponse(401, authResult.error || 'unauthorized');
-				  }
-				}
-
+				// Test endpoint - no auth required
 				if (path === '/test') {
 					return createSuccessResponse('ai proxy is working!');
 				}
 
+				// Authenticate and get tier info for all other endpoints
+				const authResult = await validateAuth(request, env);
+				console.log('auth result:', { tier: authResult.tier, deviceId: authResult.deviceId });
+
+				// Check rate limit with tier info
+				const rateLimit = await checkRateLimit(request, env, authResult);
+				if (!rateLimit.allowed && rateLimit.response) {
+					return rateLimit.response;
+				}
+
+				// Usage status endpoint - returns current usage without incrementing
+				if (path === '/v1/usage' && request.method === 'GET') {
+					const status = await getUsageStatus(env, authResult.deviceId, authResult.tier);
+					return addCorsHeaders(createSuccessResponse(status));
+				}
+
+				// Chat completions - main AI endpoint
 				if (path === '/v1/chat/completions' && request.method === 'POST') {
 					const body = (await request.json()) as RequestBody;
+
+					// Check if model is allowed for this tier
+					if (!isModelAllowed(body.model, authResult.tier)) {
+						const allowedModels = TIER_CONFIG[authResult.tier].allowedModels;
+						return addCorsHeaders(createErrorResponse(403, JSON.stringify({
+							error: 'model_not_allowed',
+							message: `Model "${body.model}" is not available for your tier (${authResult.tier}). Available models: ${allowedModels.join(', ')}`,
+							tier: authResult.tier,
+							allowed_models: allowedModels,
+						})));
+					}
+
+					// Track usage and check daily limit
+					const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId);
+					if (!usage.allowed) {
+						return addCorsHeaders(createErrorResponse(429, JSON.stringify({
+							error: 'daily_limit_exceeded',
+							message: `You've used all ${usage.limit} free AI queries for today. Resets at ${usage.resetsAt}`,
+							used_today: usage.used,
+							limit_today: usage.limit,
+							resets_at: usage.resetsAt,
+							tier: authResult.tier,
+							upgrade_options: authResult.tier === 'anonymous'
+								? { login: { benefit: '+25 daily queries, more models' }, subscribe: { benefit: 'Unlimited queries, all models' } }
+								: { subscribe: { benefit: 'Unlimited queries, all models' } },
+						})));
+					}
+
 					return await handleChatCompletions(body, env, langfuse);
 				}
 
@@ -75,7 +110,8 @@ export default Sentry.withSentry(
 				}
 
 				if (path === '/v1/models' && request.method === 'GET') {
-					return await handleModelListing(env);
+					// Return tier-filtered models for non-subscribed users
+					return await handleModelListing(env, authResult.tier);
 				}
 
 				if (path === '/v1/voice/transcribe' && request.method === 'POST') {
@@ -128,7 +164,7 @@ terminal 2
 HOST=https://ai-proxy.i-f9f.workers.dev
 HOST=http://localhost:8787
 TOKEN=foobar (check app settings)
-in 
+in
 less "$HOME/Library/Application Support/screenpipe/store.bin"
 
 
@@ -140,6 +176,26 @@ curl -X POST $HOST/v1/listen \
   -H "detect_language: en" \
   -H "Authorization: Bearer $TOKEN" \
   --data-binary "@./screenpipe-audio/test_data/poetic_kapil_gupta.wav"
+
+# Test free tier (no auth)
+curl -X POST $HOST/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "X-Device-Id: test-device-123" \
+-d '{
+"model": "claude-haiku-4-5@20251001",
+"messages": [
+	{
+	"role": "user",
+	"content": "Tell me a short joke."
+	}
+],
+"stream": true
+}' | while read -r line; do
+echo "$line" | sed 's/^data: //g' | jq -r '.choices[0].delta.content // empty' 2>/dev/null
+done | tr -d '\n'
+
+# Check usage
+curl "$HOST/v1/usage" -H "X-Device-Id: test-device-123"
 
 curl -X POST $HOST/v1/chat/completions \
 -H "Content-Type: application/json" \

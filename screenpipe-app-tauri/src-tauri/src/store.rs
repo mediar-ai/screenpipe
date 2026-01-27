@@ -188,6 +188,13 @@ pub struct SettingsStore {
     pub enable_realtime_vision: bool,
     #[serde(rename = "showShortcutOverlay", default = "default_true")]
     pub show_shortcut_overlay: bool,
+    /// Unique device ID for AI usage tracking (generated on first launch)
+    #[serde(rename = "deviceId", default = "generate_device_id")]
+    pub device_id: String,
+}
+
+fn generate_device_id() -> String {
+    uuid::Uuid::new_v4().to_string()
 }
 
 fn default_true() -> bool {
@@ -364,8 +371,25 @@ impl Default for SettingsStore {
             "Parted".to_string(),
         ]);
 
+        // Default free AI preset - works without login
+        let default_free_preset = AIPreset {
+            id: "screenpipe-free".to_string(),
+            prompt: r#"Rules:
+- You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: `/users/video.mp4`, use the exact, absolute, file path from file_path property
+- Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
+- Do not put video in multiline code block it will not render the video (e.g. ```bash\n.mp4```) instead using inline code block with single backtick
+- Always answer my question/intent, do not make up things
+"#.to_string(),
+            provider: AIProviderType::ScreenpipeCloud,
+            url: "https://ai-proxy.i-f9f.workers.dev/v1".to_string(),
+            model: "claude-haiku-4-5@20251001".to_string(),
+            default_preset: true,
+            api_key: None,
+            max_context_chars: 128000,
+        };
+
         Self {
-            ai_presets: vec![],
+            ai_presets: vec![default_free_preset],
             deepgram_api_key: "".to_string(),
             is_loading: false,
             user_id: "".to_string(),
@@ -433,6 +457,7 @@ impl Default for SettingsStore {
             use_all_monitors: false,
             enable_realtime_vision: true,
             show_shortcut_overlay: true,
+            device_id: uuid::Uuid::new_v4().to_string(),
         }
     }
 }

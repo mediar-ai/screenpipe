@@ -1,5 +1,5 @@
 import { verifyToken } from '@clerk/backend';
-import { Env } from '../types';
+import { Env, AuthResult, UserTier } from '../types';
 import { validateSubscription } from './subscription';
 
 /**
@@ -22,16 +22,35 @@ export async function verifyClerkToken(env: Env, token: string): Promise<boolean
 }
 
 /**
- * Validates user authentication from request headers
+ * Extracts device ID from request headers
+ * Falls back to IP address if no device ID is provided
+ */
+function getDeviceId(request: Request): string {
+  const deviceId = request.headers.get('X-Device-Id');
+  if (deviceId && deviceId.length > 0) {
+    return deviceId;
+  }
+  // Fall back to IP address for backwards compatibility
+  return request.headers.get('cf-connecting-ip') || 'unknown';
+}
+
+/**
+ * Validates user authentication from request headers and determines tier
  * @param request HTTP request
  * @param env Environment variables
- * @returns Object with validation result and optional error message
+ * @returns AuthResult with tier information
  */
-export async function validateAuth(request: Request, env: Env): Promise<{ isValid: boolean; error?: string }> {
+export async function validateAuth(request: Request, env: Env): Promise<AuthResult> {
+  const deviceId = getDeviceId(request);
   const authHeader = request.headers.get('Authorization');
 
+  // No auth header = anonymous tier (free usage)
   if (!authHeader || !(authHeader.startsWith('Bearer ') || authHeader.startsWith('Token '))) {
-    return { isValid: false, error: 'unauthorized' };
+    return {
+      isValid: true,
+      tier: 'anonymous',
+      deviceId,
+    };
   }
 
   const token = authHeader.split(' ')[1];
@@ -39,20 +58,160 @@ export async function validateAuth(request: Request, env: Env): Promise<{ isVali
   // Allow test token in development mode
   if (env.NODE_ENV === 'development' && token === 'test-token') {
     console.log('using test token in development mode');
-    return { isValid: true };
+    return {
+      isValid: true,
+      tier: 'subscribed',
+      deviceId,
+      userId: 'test-user',
+    };
   }
 
-  let isValid = await validateSubscription(env, token);
+  // Check if user has active subscription
+  const { isValid: hasSubscription, userId } = await validateSubscriptionWithId(env, token);
 
-  // If not valid, try to verify as a clerk token
-  if (!isValid) {
-    isValid = await verifyClerkToken(env, token);
+  if (hasSubscription) {
+    return {
+      isValid: true,
+      tier: 'subscribed',
+      deviceId,
+      userId,
+    };
   }
 
-  if (!isValid) {
-    console.log('all validation attempts failed');
-    return { isValid: false, error: 'invalid subscription' };
+  // Check if it's a valid Clerk token (logged in but no subscription)
+  const isClerkValid = await verifyClerkToken(env, token);
+  if (isClerkValid) {
+    return {
+      isValid: true,
+      tier: 'logged_in',
+      deviceId,
+      userId: token, // Use token as identifier
+    };
   }
 
-  return { isValid: true };
+  // Check if it's a valid screenpipe JWT token
+  const screenpipeUser = await validateScreenpipeToken(token);
+  if (screenpipeUser.isValid) {
+    // Check if the user has subscription
+    if (screenpipeUser.hasSubscription) {
+      return {
+        isValid: true,
+        tier: 'subscribed',
+        deviceId,
+        userId: screenpipeUser.userId,
+      };
+    }
+    // Logged in but no subscription
+    return {
+      isValid: true,
+      tier: 'logged_in',
+      deviceId,
+      userId: screenpipeUser.userId,
+    };
+  }
+
+  // Invalid token provided = still allow as anonymous
+  // This is a design choice: we don't want to block users with expired tokens
+  console.log('Token validation failed, falling back to anonymous tier');
+  return {
+    isValid: true,
+    tier: 'anonymous',
+    deviceId,
+  };
+}
+
+/**
+ * Legacy validateAuth for backwards compatibility
+ * Returns simple isValid/error format
+ */
+export async function validateAuthLegacy(request: Request, env: Env): Promise<{ isValid: boolean; error?: string }> {
+  const result = await validateAuth(request, env);
+  return {
+    isValid: result.isValid,
+    error: result.error,
+  };
+}
+
+/**
+ * Validates subscription and returns user ID
+ */
+async function validateSubscriptionWithId(env: Env, token: string): Promise<{ isValid: boolean; userId?: string }> {
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const CLERK_USER_ID_REGEX = /^user_[a-zA-Z0-9]+$/;
+
+  // Check by UUID (Supabase user ID)
+  if (UUID_REGEX.test(token)) {
+    try {
+      const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_active_cloud_subscription`, {
+        method: 'POST',
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ input_user_id: token }),
+      });
+
+      if (!response.ok) {
+        console.error('Supabase error:', await response.text());
+        return { isValid: false };
+      }
+
+      const hasSubscription: boolean = await response.json();
+      return { isValid: hasSubscription, userId: token };
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+      return { isValid: false };
+    }
+  }
+
+  // Clerk user IDs - for now allow all as subscribed (Agent SDK)
+  // TODO: Add proper subscription checks for Clerk users
+  if (CLERK_USER_ID_REGEX.test(token)) {
+    console.log('Allowing Clerk user ID for Agent SDK:', token);
+    return { isValid: true, userId: token };
+  }
+
+  return { isValid: false };
+}
+
+/**
+ * Validates a screenpipe JWT token
+ */
+interface ScreenpipeUserData {
+  id?: string;
+  email?: string;
+  cloud_subscribed?: boolean;
+}
+
+async function validateScreenpipeToken(token: string): Promise<{ isValid: boolean; userId?: string; hasSubscription?: boolean }> {
+  if (!token.startsWith('eyJ')) {
+    return { isValid: false };
+  }
+
+  try {
+    const response = await fetch('https://screenpi.pe/api/user', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      const userData = await response.json() as ScreenpipeUserData;
+      console.log('Valid screenpipe user token, user:', userData?.email);
+      return {
+        isValid: true,
+        userId: userData?.id || userData?.email,
+        hasSubscription: userData?.cloud_subscribed === true,
+      };
+    } else {
+      console.log('Invalid screenpipe user token');
+      return { isValid: false };
+    }
+  } catch (error) {
+    console.error('Error validating screenpipe token:', error);
+    return { isValid: false };
+  }
 }

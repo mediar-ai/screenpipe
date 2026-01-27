@@ -924,9 +924,10 @@ export function GlobalChat() {
   function getOpenAIClient(): OpenAI | null {
     if (!activePreset) return null;
 
+    // For screenpipe-cloud, use token if available, otherwise "anonymous" for free tier
     const apiKey =
       activePreset.provider === "screenpipe-cloud"
-        ? settings.user?.token || ""
+        ? settings.user?.token || "anonymous"
         : "apiKey" in activePreset
           ? (activePreset.apiKey as string) || ""
           : "";
@@ -937,10 +938,17 @@ export function GlobalChat() {
         ? "https://ai-proxy.i-f9f.workers.dev/v1"
         : activePreset.url;
 
+    // Add device ID header for usage tracking (free tier)
+    const defaultHeaders: Record<string, string> = {};
+    if (activePreset.provider === "screenpipe-cloud" && settings.deviceId) {
+      defaultHeaders["X-Device-Id"] = settings.deviceId;
+    }
+
     return new OpenAI({
       apiKey,
       baseURL,
       dangerouslyAllowBrowser: true,
+      defaultHeaders,
     });
   }
 
@@ -1336,7 +1344,7 @@ export function GlobalChat() {
                   <Button
                     variant="default"
                     onClick={() => openUrl("https://screenpi.pe/login")}
-                    className="gap-2 font-medium"
+                    className="gap-2 font-medium bg-foreground text-background hover:bg-foreground/90"
                   >
                     <ExternalLink className="h-4 w-4" />
                     Login
@@ -1516,7 +1524,10 @@ export function GlobalChat() {
             <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
 
             <div className="p-2 border-b border-border/30">
-              <AIPresetsSelector onPresetChange={setActivePreset} />
+              <AIPresetsSelector
+                onPresetChange={setActivePreset}
+                showLoginCta={false}
+              />
             </div>
             <form onSubmit={handleSubmit} className="p-3">
               {/* Time context indicator */}
