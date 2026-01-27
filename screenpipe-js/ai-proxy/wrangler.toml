@@ -2,11 +2,11 @@
 name = "ai-proxy"
 main = "src/index.ts"
 compatibility_date = "2024-10-11"
+workers_dev = true
 compatibility_flags = ["nodejs_compat"]
 upload_source_maps = true
 
-# Custom domain - requires screenpi.pe to be on this Cloudflare account
-# After deploying, add DNS record: api.screenpi.pe -> CNAME to this worker
+# Custom domain
 routes = [
   { pattern = "api.screenpi.pe/*", zone_name = "screenpi.pe" }
 ]
@@ -62,7 +62,7 @@ VERTEX_REGION = "us-east5"
 [[d1_databases]]
 binding = "DB"
 database_name = "screenpipe-usage"
-database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+database_id = "5496f4b2-03c9-496f-b8ca-675961c0622a"
 
 # Bind a dispatch namespace. Use Workers for Platforms to deploy serverless functions programmatically on behalf of your customers.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#dispatch-namespace-bindings-workers-for-platforms
@@ -136,6 +136,6 @@ bindings = [
 ]
 
 [[migrations]]
-tag = "v1"
-new_classes = ["RateLimiter"]
+tag = "v2"
+new_sqlite_classes = ["RateLimiter"]
 

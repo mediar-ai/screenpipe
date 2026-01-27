@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/cloudflare';
+// import * as Sentry from '@sentry/cloudflare';
 import { Env, RequestBody, AuthResult } from './types';
 import { handleOptions, createSuccessResponse, createErrorResponse, addCorsHeaders } from './utils/cors';
 import { validateAuth } from './utils/auth';
@@ -14,24 +14,17 @@ import { handleVertexProxy, handleVertexModels } from './handlers/vertex-proxy';
 
 export { RateLimiter };
 
-export default Sentry.withSentry(
-	(env) => ({
-		dsn: 'https://55adeb65aab5b833e7bb21a98bf4735f@o4505591122886656.ingest.us.sentry.io/4510755394224128',
-		tracesSampleRate: 0.1,
-		sampleRate: 0.1,
-		environment: env.NODE_ENV || 'development',
-		enabled: (env.NODE_ENV || 'development') === 'production',
-	}),
-	{
-		/**
-		 * This is the standard fetch handler for a Cloudflare Worker
-		 * @param request The HTTP request
-		 * @param env Environment variables
-		 * @param ctx Execution context
-		 * @returns HTTP response
-		 */
-		// @ts-ignore
-		async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+// Temporarily disabled Sentry to debug production issues
+export default {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+			const url = new URL(request.url);
+			const path = url.pathname;
+
+			// Early test endpoint - before any initialization
+			if (path === '/test') {
+				return new Response('ai proxy is working!', { status: 200 });
+			}
+
 			const langfuse = setupAnalytics(env);
 
 			try {
@@ -39,8 +32,6 @@ export default Sentry.withSentry(
 					return handleOptions(request);
 				}
 
-				const url = new URL(request.url);
-				const path = url.pathname;
 				console.log('path', path);
 
 				// Handle WebSocket upgrade for real-time transcription (no auth required)
@@ -48,11 +39,6 @@ export default Sentry.withSentry(
 				if (path === '/v1/listen' && upgradeHeader === 'websocket') {
 					console.log('websocket request to /v1/listen detected, bypassing auth');
 					return await handleWebSocketUpgrade(request, env);
-				}
-
-				// Test endpoint - no auth required
-				if (path === '/test') {
-					return createSuccessResponse('ai proxy is working!');
 				}
 
 				// Authenticate and get tier info for all other endpoints
@@ -150,9 +136,8 @@ export default Sentry.withSentry(
 			} finally {
 				await langfuse.shutdownAsync();
 			}
-		},
-	} satisfies ExportedHandler<Env>
-);
+	},
+} satisfies ExportedHandler<Env>;
 
 /*
 terminal 1
