@@ -309,7 +309,10 @@ pub async fn capture_all_visible_windows(
         );
 
         // Apply filters
+        // Note: Empty window_name check fixes frame-window mismatch bug where apps like Arc
+        // have internal windows with empty titles that create duplicate DB records
         let is_valid = !SKIP_APPS.contains(app_name.as_str())
+            && !window_name.is_empty()
             && !SKIP_TITLES.contains(window_name.as_str())
             && (capture_unfocused_windows || (is_focused && monitor.id() == monitor.id()))
             && window_filters.is_valid(&app_name, &window_name);
