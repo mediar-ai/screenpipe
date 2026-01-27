@@ -658,6 +658,14 @@ async fn extract_frame(
     frame_tx: FrameChannel,
     cache_tx: mpsc::Sender<CacheMessage>,
 ) -> Result<usize> {
+    // Skip empty/corrupted video files early to avoid pointless ffmpeg calls
+    if let Ok(metadata) = tokio::fs::metadata(&video_file_path).await {
+        if metadata.len() == 0 {
+            debug!("skipping empty video file (0 bytes): {}", video_file_path);
+            return Ok(0);
+        }
+    }
+
     if !is_video_file_complete(&ffmpeg, &video_file_path).await? {
         debug!("skipping incomplete video file: {}", video_file_path);
         return Ok(0);

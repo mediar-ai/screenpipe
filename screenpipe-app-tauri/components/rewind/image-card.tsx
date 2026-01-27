@@ -57,8 +57,9 @@ const FrameImage = ({ frameId, alt }: { frameId: number; alt: string }) => {
 				</div>
 			)}
 			{hasError ? (
-				<div className="absolute inset-0 flex items-center justify-center bg-muted">
+				<div className="absolute inset-0 flex flex-col items-center justify-center bg-muted gap-1">
 					<ImageOff className="h-5 w-5 text-muted-foreground" />
+					<span className="text-xs text-muted-foreground">frame unavailable</span>
 				</div>
 			) : (
 				<img
