@@ -76,6 +76,9 @@ export default function Timeline() {
 		setCurrentIndex(index);
 	});
 
+	// Flag to prevent frame-date sync from fighting with intentional navigation
+	const isNavigatingRef = useRef(false);
+
 	// Re-show audio transcript when navigating timeline
 	useEffect(() => {
 		setShowAudioTranscript(true);
@@ -238,7 +241,14 @@ export default function Timeline() {
 		checkIfThereAreFrames();
 	}, [currentDate, websocket]); // Re-run when websocket connects or date changes
 
+	// Sync currentDate to frame's date - but NOT during intentional navigation
+	// This effect helps when scrolling across day boundaries, but must not fight
+	// with explicit day changes from the controls
 	useEffect(() => {
+		// Skip if we're in the middle of intentional navigation
+		if (isNavigatingRef.current) {
+			return;
+		}
 		if (currentFrame) {
 			const frameDate = new Date(currentFrame.timestamp);
 			if (!isSameDay(frameDate, currentDate)) {
@@ -375,31 +385,35 @@ export default function Timeline() {
 	};
 
 	const handleDateChange = async (newDate: Date) => {
-		const checkFramesForDate = await hasFramesForDate(newDate);
+		// Set navigation flag to prevent frame-date sync from fighting
+		isNavigatingRef.current = true;
 
-		if (!checkFramesForDate) {
-			let subDate;
-			if (isAfter(currentDate, newDate)) {
-				subDate = subDays(newDate, 1);
-			} else {
-				subDate = addDays(newDate, 1);
+		try {
+			const checkFramesForDate = await hasFramesForDate(newDate);
+
+			if (!checkFramesForDate) {
+				let subDate;
+				if (isAfter(currentDate, newDate)) {
+					subDate = subDays(newDate, 1);
+				} else {
+					subDate = addDays(newDate, 1);
+				}
+
+				// Limit recursion - don't go past start date
+				if (isAfter(startAndEndDates.start, subDate)) {
+					console.log("Reached start date boundary, stopping navigation");
+					return;
+				}
+
+				return await handleDateChange(subDate);
 			}
 
-			return await handleDateChange(subDate);
-		}
-
-		if (!hasDateBeenFetched(newDate)) {
-			setCurrentFrame(null);
-			const frameTimeStamp = new Date(newDate);
-			console.log(
-				frameTimeStamp.getDate() === new Date(currentDate).getDate(),
-				startAndEndDates.start.getDate(),
-				newDate.getDate(),
-			);
-			if (isSameDay(frameTimeStamp, new Date(currentDate))) {
+			// Already on this day
+			if (isSameDay(newDate, currentDate)) {
 				return;
 			}
 
+			// Don't go before start date
 			if (isAfter(startAndEndDates.start, newDate)) {
 				return;
 			}
@@ -410,15 +424,36 @@ export default function Timeline() {
 				to_date: newDate.toISOString(),
 			});
 
+			// Clear frame first to prevent sync effect from reverting
+			setCurrentFrame(null);
+			setCurrentIndex(0);
 			setCurrentDate(newDate);
-		} else {
-			jumpToTime(newDate);
+		} finally {
+			// Clear navigation flag after a short delay to let state settle
+			setTimeout(() => {
+				isNavigatingRef.current = false;
+			}, 500);
 		}
 	};
 
-	const handleJumpToday = () => {
-		window.location.reload();
-	};
+	const handleJumpToday = useCallback(async () => {
+		const today = new Date();
+
+		// Set navigation flag to prevent frame-date sync from fighting
+		isNavigatingRef.current = true;
+
+		try {
+			// Clear current state
+			setCurrentFrame(null);
+			setCurrentIndex(0);
+			setCurrentDate(today);
+		} finally {
+			// Clear navigation flag after state settles
+			setTimeout(() => {
+				isNavigatingRef.current = false;
+			}, 500);
+		}
+	}, [setCurrentFrame, setCurrentDate]);
 
 	const animateToIndex = (targetIndex: number, duration: number = 1000) => {
 		const startIndex = currentIndex;

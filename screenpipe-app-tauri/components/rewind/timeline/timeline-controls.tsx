@@ -6,6 +6,7 @@ import {
 	endOfDay,
 	format,
 	isAfter,
+	isSameDay,
 	startOfDay,
 	subDays,
 } from "date-fns";
@@ -51,20 +52,18 @@ export function TimelineControls({
 		await onDateChange(newDate);
 	};
 
-	// Disable forward button if we're at today
+	// Disable forward button and jump-to-today if we're already at today
 	const isAtToday = useMemo(
-		() => !isAfter(startOfDay(new Date()), startOfDay(currentDate)),
+		() => isSameDay(new Date(), currentDate),
 		[currentDate],
 	);
 
-	const canGoBack = useMemo(
-		() =>
-			isAfter(
-				startOfDay(startAndEndDates.start),
-				startOfDay(subDays(currentDate, 1)),
-			),
-		[startAndEndDates.start, currentDate],
-	);
+	// Disable back button if we're at or before the earliest recorded date
+	const isAtEarliestDate = useMemo(() => {
+		const previousDay = subDays(currentDate, 1);
+		// Disabled if previous day would be before the start date
+		return isAfter(startOfDay(startAndEndDates.start), startOfDay(previousDay));
+	}, [startAndEndDates.start, currentDate]);
 
 	return (
 		<div
@@ -83,7 +82,7 @@ export function TimelineControls({
 						size="icon"
 						onClick={() => jumpDay(-1)}
 						className="h-8 w-8 text-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
-						disabled={canGoBack}
+						disabled={isAtEarliestDate}
 					>
 						<ChevronLeft className="h-4 w-4" />
 					</Button>
