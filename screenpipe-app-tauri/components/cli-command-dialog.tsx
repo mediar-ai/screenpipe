@@ -57,26 +57,26 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
     ) {
       if (shell === "cmd") {
         envVars.push(
-          `SET DEEPGRAM_API_URL=https://ai-proxy.i-f9f.workers.dev/v1/listen`
+          `SET DEEPGRAM_API_URL=https://api.screenpi.pe/v1/listen`
         );
         envVars.push(
-          `SET DEEPGRAM_WEBSOCKET_URL=wss://ai-proxy.i-f9f.workers.dev`
+          `SET DEEPGRAM_WEBSOCKET_URL=wss://api.screenpi.pe`
         );
         envVars.push(`SET CUSTOM_DEEPGRAM_API_TOKEN=${settings.userId}`);
       } else if (shell === "powershell") {
         envVars.push(
-          `$env:DEEPGRAM_API_URL="https://ai-proxy.i-f9f.workers.dev/v1/listen"`
+          `$env:DEEPGRAM_API_URL="https://api.screenpi.pe/v1/listen"`
         );
         envVars.push(
-          `$env:DEEPGRAM_WEBSOCKET_URL="wss://ai-proxy.i-f9f.workers.dev"`
+          `$env:DEEPGRAM_WEBSOCKET_URL="wss://api.screenpi.pe"`
         );
         envVars.push(`$env:CUSTOM_DEEPGRAM_API_TOKEN="${settings.userId}"`);
       } else {
         envVars.push(
-          `DEEPGRAM_API_URL="https://ai-proxy.i-f9f.workers.dev/v1/listen"`
+          `DEEPGRAM_API_URL="https://api.screenpi.pe/v1/listen"`
         );
         envVars.push(
-          `DEEPGRAM_WEBSOCKET_URL="wss://ai-proxy.i-f9f.workers.dev"`
+          `DEEPGRAM_WEBSOCKET_URL="wss://api.screenpi.pe"`
         );
         envVars.push(`CUSTOM_DEEPGRAM_API_TOKEN="${settings.userId}"`);
       }

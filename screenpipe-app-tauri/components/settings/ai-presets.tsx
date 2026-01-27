@@ -359,7 +359,7 @@ const AISection = ({
         newUrl = "http://localhost:11434/v1";
         break;
       case "screenpipe-cloud":
-        newUrl = "https://ai-proxy.i-f9f.workers.dev/v1";
+        newUrl = "https://api.screenpi.pe/v1";
         // Set default model for screenpipe-cloud if not already set
         if (!newModel) {
           newModel = "claude-haiku-4-5@20251001";
@@ -378,7 +378,7 @@ const AISection = ({
   }, [settingsPreset?.url, settingsPreset?.model, updateSettingsPreset]);
 
   const isApiKeyRequired =
-    settingsPreset?.url !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
+    settingsPreset?.url !== "https://api.screenpi.pe/v1" &&
     settingsPreset?.url !== "http://localhost:11434/v1" &&
     settingsPreset?.url !== "embedded";
 
@@ -391,7 +391,7 @@ const AISection = ({
       switch (settingsPreset?.provider) {
         case "screenpipe-cloud":
           const response = await fetch(
-            "https://ai-proxy.i-f9f.workers.dev/v1/models",
+            "https://api.screenpi.pe/v1/models",
             {
               headers: {
                 Authorization: `Bearer ${settings.user?.id || ""}`,

@@ -103,7 +103,7 @@ const DEFAULT_IGNORED_WINDOWS_PER_OS: Record<string, string[]> = {
 const DEFAULT_FREE_PRESET: AIPreset = {
 	id: "screenpipe-free",
 	provider: "screenpipe-cloud",
-	url: "https://ai-proxy.i-f9f.workers.dev/v1",
+	url: "https://api.screenpi.pe/v1",
 	model: "claude-haiku-4-5@20251001",
 	maxContextChars: 128000,
 	defaultPreset: true,
@@ -214,7 +214,30 @@ function createSettingsStore() {
 	const get = async (): Promise<Settings> => {
 		const store = await getStore();
 		const settings = await store.get<Settings>("settings");
-		return settings || createDefaultSettingsObject();
+		if (!settings) {
+			return createDefaultSettingsObject();
+		}
+
+		// Migration: Ensure existing users have deviceId for free tier tracking
+		let needsUpdate = false;
+		if (!settings.deviceId) {
+			settings.deviceId = crypto.randomUUID();
+			needsUpdate = true;
+		}
+
+		// Migration: Add default free preset if user has no presets
+		if (!settings.aiPresets || settings.aiPresets.length === 0) {
+			settings.aiPresets = [DEFAULT_FREE_PRESET as any];
+			needsUpdate = true;
+		}
+
+		// Save migrations if needed
+		if (needsUpdate) {
+			await store.set("settings", settings);
+			await store.save();
+		}
+
+		return settings;
 	};
 
 	const set = async (value: Partial<Settings>) => {

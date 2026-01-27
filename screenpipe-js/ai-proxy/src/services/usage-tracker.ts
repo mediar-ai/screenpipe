@@ -1,5 +1,8 @@
 import { Env, UserTier, TierLimits, UsageResult, UsageStatus } from '../types';
 
+// IP-based abuse prevention limits (on top of device limits)
+const IP_DAILY_LIMIT = 200; // Max queries per IP per day (catches device ID spoofing)
+
 // Tier configuration - models and limits per tier
 export const TIER_CONFIG: Record<UserTier, TierLimits> = {
   anonymous: {
@@ -28,21 +31,8 @@ export const TIER_CONFIG: Record<UserTier, TierLimits> = {
   },
 };
 
-// SQL schema for the usage table
-export const USAGE_SCHEMA = `
-CREATE TABLE IF NOT EXISTS usage (
-  device_id TEXT PRIMARY KEY,
-  user_id TEXT,
-  daily_count INTEGER DEFAULT 0,
-  last_reset TEXT,
-  tier TEXT DEFAULT 'anonymous',
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_usage_last_reset ON usage(last_reset);
-CREATE INDEX IF NOT EXISTS idx_usage_user_id ON usage(user_id);
-`;
+// Schema is defined in migrations/0001_create_usage_table.sql
+// Run: wrangler d1 execute screenpipe-usage --file=./migrations/0001_create_usage_table.sql
 
 /**
  * Get today's date in UTC as ISO string (YYYY-MM-DD)
@@ -63,12 +53,14 @@ function getNextResetTime(): string {
 
 /**
  * Track a request and check if it's within limits
+ * Also checks IP-based limits to prevent device ID spoofing abuse
  */
 export async function trackUsage(
   env: Env,
   deviceId: string,
   tier: UserTier,
-  userId?: string
+  userId?: string,
+  ipAddress?: string
 ): Promise<UsageResult> {
   const today = getTodayUTC();
   const limits = TIER_CONFIG[tier];
@@ -85,6 +77,37 @@ export async function trackUsage(
   }
 
   try {
+    // IP-based abuse prevention (catches device ID spoofing)
+    if (ipAddress && tier === 'anonymous') {
+      const ipKey = `ip:${ipAddress}`;
+      const ipUsage = await env.DB.prepare(
+        'SELECT daily_count, last_reset FROM usage WHERE device_id = ?'
+      ).bind(ipKey).first<{ daily_count: number; last_reset: string }>();
+
+      if (ipUsage) {
+        const ipCount = ipUsage.last_reset < today ? 0 : ipUsage.daily_count;
+        if (ipCount >= IP_DAILY_LIMIT) {
+          console.warn(`IP abuse detected: ${ipAddress} has ${ipCount} queries today`);
+          return {
+            used: ipCount,
+            limit: IP_DAILY_LIMIT,
+            remaining: 0,
+            allowed: false,
+            resetsAt: getNextResetTime(),
+          };
+        }
+      }
+
+      // Track IP usage (upsert)
+      await env.DB.prepare(`
+        INSERT INTO usage (device_id, daily_count, last_reset, tier)
+        VALUES (?, 1, ?, 'ip_tracking')
+        ON CONFLICT(device_id) DO UPDATE SET
+          daily_count = CASE WHEN last_reset < ? THEN 1 ELSE daily_count + 1 END,
+          last_reset = ?
+      `).bind(ipKey, today, today, today).run();
+    }
+
     // Try to get existing record
     const existing = await env.DB.prepare(
       'SELECT daily_count, last_reset FROM usage WHERE device_id = ?'
@@ -209,14 +232,3 @@ export function isModelAllowed(model: string, tier: UserTier): boolean {
   );
 }
 
-/**
- * Initialize the database schema
- */
-export async function initializeSchema(env: Env): Promise<void> {
-  try {
-    await env.DB.exec(USAGE_SCHEMA);
-    console.log('Usage schema initialized');
-  } catch (error) {
-    console.error('Error initializing schema:', error);
-  }
-}

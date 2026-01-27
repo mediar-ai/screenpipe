@@ -46,7 +46,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
     // Check if the preset has the required fields
     const { url, model, provider } = defaultPreset;
     const isApiKeyRequired =
-      url !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
+      url !== "https://api.screenpi.pe/v1" &&
       url !== "http://localhost:11434/v1";
 
     // Check if API key is required and present

@@ -27,7 +27,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       ...defaultSettings.user,
       token: "eyJhbGciOiJSUzI1NiIsImNhdCI6ImNsX0I3ZDRQRDIyMkFBQSIsImtpZCI6Imluc18ycGFFR0Jxc0dEYTZXcVlyaEFySjdtS0o0elYiLCJ0eXAiOiJKV1QifQ.eyJhenAiOiJodHRwczovL3NjcmVlbnBpLnBlIiwiZXhwIjoyMDU0MzI2MDkyLCJpYXQiOjE3Mzg5NjYwOTIsImlzcyI6Imh0dHBzOi8vY2xlcmsuc2NyZWVucGkucGUiLCJqdGkiOiI3NzkxM2JlYTQxNGUxZGEyOGYyNCIsIm5iZiI6MTczODk2NjA4Nywic3ViIjoidXNlcl8yc2pQYjhlTEwyVTNTWU9TZDZkZnVsdUdrZlIifQ.FUNvk3iJVZa9JP1aq-qa6ta9DvtvW1piiUE5AQA7RydDHCkHPzQedPriLBuVKaZt9bLlPmdLOv2vK-qsB1bgVzSXUFXiPSC-OdySH7Do3WLQIEz-9YX4J-LaC8FSrOkvxjWch6uTev0k2-gdOyhClOOGpKR3qIHPDRy5eftZpw0Mc3cGmJp4AjWIAKllBKoa3F0DGN0WIUBM1GwpPw5e1nTJ3F9BDFf_dNwJmQ5MWCFXJXjC9mX4K0xbT3AkWJqQdXopP2wZlnAWwLyURWbWthZEqMCZEQQwCm5P7tW7GIAkWpiouHoaLT9C90YNYsI2j8EkPCbIPieDfncXXiWNQA"
     },
-    aiUrl: "https://ai-proxy.i-f9f.workers.dev/v1",
+    aiUrl: "https://api.screenpi.pe/v1",
     aiModel: "gpt-4o",
     analyticsEnabled: true
   };

@@ -238,7 +238,7 @@ impl Default for AIPreset {
             id: String::new(),
             prompt: String::new(),
             provider: AIProviderType::ScreenpipeCloud,
-            url: "https://ai-proxy.i-f9f.workers.dev/v1".to_string(),
+            url: "https://api.screenpi.pe/v1".to_string(),
             model: "claude-haiku-4-5@20251001".to_string(),
             default_preset: false,
             api_key: None,
@@ -381,7 +381,7 @@ impl Default for SettingsStore {
 - Always answer my question/intent, do not make up things
 "#.to_string(),
             provider: AIProviderType::ScreenpipeCloud,
-            url: "https://ai-proxy.i-f9f.workers.dev/v1".to_string(),
+            url: "https://api.screenpi.pe/v1".to_string(),
             model: "claude-haiku-4-5@20251001".to_string(),
             default_preset: true,
             api_key: None,

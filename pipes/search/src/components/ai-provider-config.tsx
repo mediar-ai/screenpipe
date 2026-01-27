@@ -191,7 +191,7 @@ export function AIProviderConfig({
 			fetchOllamaModels(baseUrl);
 		} else if (selectedProvider === "screenpipe-cloud") {
 			fetchOpenAIModels(
-				"https://ai-proxy.i-f9f.workers.dev/v1",
+				"https://api.screenpi.pe/v1",
 				settings?.user?.token ?? "",
 			);
 		} else if (
@@ -304,7 +304,7 @@ export function AIProviderConfig({
 						onClick={() => {
 							setSelectedProvider("screenpipe-cloud");
 							setFormData({ ...formData, provider: "screenpipe-cloud",
-								baseUrl: "https://ai-proxy.i-f9f.workers.dev/v1",
+								baseUrl: "https://api.screenpi.pe/v1",
 							 });
 						}}
 					>

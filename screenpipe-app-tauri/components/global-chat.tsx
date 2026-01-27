@@ -935,7 +935,7 @@ export function GlobalChat() {
     // Force correct URL for screenpipe-cloud (in case preset has wrong URL saved)
     const baseURL =
       activePreset.provider === "screenpipe-cloud"
-        ? "https://ai-proxy.i-f9f.workers.dev/v1"
+        ? "https://api.screenpi.pe/v1"
         : activePreset.url;
 
     // Add device ID header for usage tracking (free tier)

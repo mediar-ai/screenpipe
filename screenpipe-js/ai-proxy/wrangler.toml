@@ -5,6 +5,12 @@ compatibility_date = "2024-10-11"
 compatibility_flags = ["nodejs_compat"]
 upload_source_maps = true
 
+# Custom domain - requires screenpi.pe to be on this Cloudflare account
+# After deploying, add DNS record: api.screenpi.pe -> CNAME to this worker
+routes = [
+  { pattern = "api.screenpi.pe/*", zone_name = "screenpi.pe" }
+]
+
 # tail_consumers = [{service = "ai-proxy-tail"}]
 
 # Workers Logs

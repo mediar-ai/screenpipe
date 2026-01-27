@@ -86,8 +86,9 @@ export default Sentry.withSentry(
 						})));
 					}
 
-					// Track usage and check daily limit
-					const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId);
+					// Track usage and check daily limit (includes IP-based abuse prevention)
+					const ipAddress = request.headers.get('cf-connecting-ip') || undefined;
+					const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId, ipAddress);
 					if (!usage.allowed) {
 						return addCorsHeaders(createErrorResponse(429, JSON.stringify({
 							error: 'daily_limit_exceeded',
@@ -161,7 +162,7 @@ wrangler dev
 
 
 terminal 2
-HOST=https://ai-proxy.i-f9f.workers.dev
+HOST=https://api.screenpi.pe
 HOST=http://localhost:8787
 TOKEN=foobar (check app settings)
 in

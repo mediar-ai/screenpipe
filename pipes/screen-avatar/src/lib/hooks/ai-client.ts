@@ -56,7 +56,7 @@ export function createAiClient(settings: Settings) {
 
     return new OpenAI({
         apiKey,
-        baseURL: "https://ai-proxy.i-f9f.workers.dev/v1",
+        baseURL: "https://api.screenpi.pe/v1",
         dangerouslyAllowBrowser: true,
     })
 }

@@ -149,7 +149,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       const defaultPreset = {
         id: crypto.randomUUID(),
         provider: "screenpipe-cloud" as const,
-        url: "https://ai-proxy.i-f9f.workers.dev/v1",
+        url: "https://api.screenpi.pe/v1",
         model: "claude-haiku-4-5",
         maxContextChars: 512000,
         defaultPreset: true,
