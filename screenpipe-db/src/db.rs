@@ -1306,7 +1306,7 @@ impl DatabaseManager {
                        AND (?4 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?4)
                        AND (?5 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?5)
                        AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
-                       AND (?7 IS NULL OR speakers.name LIKE '%' || ?7 || '%' COLLATE NOCASE)
+                       {speaker_name_condition}
                 "#,
                 table = if query.is_empty() {
                     "audio_transcriptions"
@@ -1315,6 +1315,11 @@ impl DatabaseManager {
                 },
                 speaker_join = if speaker_name.is_some() {
                     "LEFT JOIN speakers ON audio_transcriptions.speaker_id = speakers.id"
+                } else {
+                    ""
+                },
+                speaker_name_condition = if speaker_name.is_some() {
+                    "AND speakers.name LIKE '%' || ?7 || '%' COLLATE NOCASE"
                 } else {
                     ""
                 },
@@ -1356,16 +1361,17 @@ impl DatabaseManager {
                     .await?
             }
             ContentType::Audio => {
-                sqlx::query_scalar(&sql)
+                let mut query_builder = sqlx::query_scalar(&sql)
                     .bind(if query.is_empty() { "*" } else { query })
                     .bind(start_time)
                     .bind(end_time)
                     .bind(min_length.map(|l| l as i64))
                     .bind(max_length.map(|l| l as i64))
-                    .bind(&json_array)
-                    .bind(speaker_name)
-                    .fetch_one(&self.pool)
-                    .await?
+                    .bind(&json_array);
+                if let Some(name) = speaker_name {
+                    query_builder = query_builder.bind(name);
+                }
+                query_builder.fetch_one(&self.pool).await?
             }
             _ => {
                 sqlx::query_scalar(&sql)
