@@ -39,6 +39,7 @@ interface SearchResult {
 export function SearchCommand() {
 	const [open, setOpen] = React.useState(false);
 	const { isMac } = usePlatform();
+	const inputRef = React.useRef<HTMLInputElement>(null);
 
 	const [state] = useQueryStates(queryParser);
 	const [options, setOptions] = useState<QueryParser>(
@@ -67,6 +68,14 @@ export function SearchCommand() {
 		};
 	}, []);
 
+	// Focus input when dialog opens
+	React.useEffect(() => {
+		if (open) {
+			// Use setTimeout to ensure the dialog has rendered
+			setTimeout(() => inputRef.current?.focus(), 50);
+		}
+	}, [open]);
+
 	// Close dialog when Tauri window loses focus
 	React.useEffect(() => {
 		const unlisten = listen<boolean>("window-focused", (event) => {
@@ -84,8 +93,24 @@ export function SearchCommand() {
 		if (!open) {
 			setResults([]);
 			setHasSearched(false);
+			setOptions({
+				query: null,
+				start_time: null,
+				end_time: null,
+				apps: [],
+			});
 		}
 	}, [open]);
+
+	// Close search when window is hidden
+	React.useEffect(() => {
+		const unlisten = listen("window-hidden", () => {
+			setOpen(false);
+		});
+		return () => {
+			unlisten.then((fn) => fn());
+		};
+	}, []);
 
 	// Execute search
 	async function handleSearch() {
@@ -168,6 +193,7 @@ export function SearchCommand() {
 					<div className="flex items-center gap-2">
 						<Search className="h-4 w-4 text-muted-foreground shrink-0" />
 						<Input
+							ref={inputRef}
 							value={options?.query || ""}
 							className="focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ring-0 outline-none border-0 h-10"
 							placeholder="Search your screen activity..."
@@ -175,7 +201,6 @@ export function SearchCommand() {
 								setOptions((prev) => ({ ...prev, query: e.target.value }));
 							}}
 							onKeyDown={handleKeyDown}
-							autoFocus
 						/>
 						{isSearching && <Loader2 className="h-4 w-4 animate-spin" />}
 					</div>

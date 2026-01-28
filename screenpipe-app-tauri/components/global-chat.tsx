@@ -827,6 +827,16 @@ export function GlobalChat() {
     }
   }, [isOnTimeline, open]);
 
+  // Close chat when window is hidden (Esc pressed, timeline closed)
+  useEffect(() => {
+    const unlisten = listen("window-hidden", () => {
+      setOpen(false);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

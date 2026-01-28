@@ -305,6 +305,8 @@ pub async fn close_window(
     app_handle: tauri::AppHandle,
     window: ShowRewindWindow,
 ) -> Result<(), String> {
+    // Emit window-hidden event so React components can clean up
+    let _ = app_handle.emit("window-hidden", ());
     window.close(&app_handle).map_err(|e| e.to_string())?;
     Ok(())
 }
