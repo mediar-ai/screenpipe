@@ -43,6 +43,7 @@ candle-transformers = { workspace = true }
 tokenizers = { workspace = true }
 
 anyhow = "1.0.86"
+moka = { version = "0.12", features = ["future"] }
 hf-hub = { workspace = true }
 
 #opentelemetry

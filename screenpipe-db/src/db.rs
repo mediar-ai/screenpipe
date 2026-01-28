@@ -71,10 +71,14 @@ impl DatabaseManager {
             .execute(&pool)
             .await?;
 
-        // Enable SQLite's query result caching
-        // PRAGMA cache_size = -2000; -- Set cache size to 2MB
-        // PRAGMA temp_store = MEMORY; -- Store temporary tables and indices in memory
-        sqlx::query("PRAGMA cache_size = -2000;")
+        // Optimize SQLite for search performance
+        // cache_size: -64000 = 64MB page cache (negative = KB)
+        // mmap_size: 256MB memory-mapped I/O for faster reads
+        // temp_store: keep temp tables in memory
+        sqlx::query("PRAGMA cache_size = -64000;")
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA mmap_size = 268435456;")
             .execute(&pool)
             .await?;
         sqlx::query("PRAGMA temp_store = MEMORY;")

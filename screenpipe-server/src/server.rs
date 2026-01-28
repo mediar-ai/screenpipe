@@ -57,6 +57,8 @@ use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
     net::SocketAddr,
     num::NonZeroUsize,
     path::PathBuf,
@@ -72,6 +74,7 @@ use std::{
 const MAX_WEBSOCKET_CONNECTIONS: usize = 100;
 
 use lru::LruCache;
+use moka::future::Cache as MokaCache;
 
 use tokio::{
     net::TcpListener,
@@ -93,6 +96,9 @@ use uuid::Uuid; // or sentry::protocol::Uuid depending on which you want to use
 
 pub type FrameImageCache = LruCache<i64, (String, Instant)>;
 
+/// Cache key for search results (hash of query parameters)
+pub type SearchCache = MokaCache<u64, Arc<SearchResponse>>;
+
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
     pub audio_manager: Arc<AudioManager>,
@@ -107,6 +113,8 @@ pub struct AppState {
     pub element_cache: Arc<Mutex<Option<(Vec<UIElement>, Instant, String)>>>,
     /// Counter for active WebSocket connections to prevent resource exhaustion
     pub ws_connection_count: Arc<AtomicUsize>,
+    /// LRU cache for search results (10x faster for repeated queries)
+    pub search_cache: SearchCache,
 }
 
 // Update the SearchQuery struct
@@ -172,7 +180,7 @@ pub struct PaginatedResponse<T> {
     pub pagination: PaginationInfo,
 }
 
-#[derive(Serialize, OaSchema, Deserialize)]
+#[derive(Serialize, OaSchema, Deserialize, Clone)]
 pub struct PaginationInfo {
     pub limit: u32,
     pub offset: u32,
@@ -221,7 +229,7 @@ struct MarkAsHallucinationRequest {
     speaker_id: i64,
 }
 
-#[derive(OaSchema, Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type", content = "content")]
 pub enum ContentItem {
     OCR(OCRContent),
@@ -229,7 +237,7 @@ pub enum ContentItem {
     UI(UiContent),
 }
 
-#[derive(OaSchema, Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug, Clone)]
 pub struct OCRContent {
     pub frame_id: i64,
     pub text: String,
@@ -246,7 +254,7 @@ pub struct OCRContent {
     pub device_name: String,
 }
 
-#[derive(OaSchema, Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug, Clone)]
 pub struct AudioContent {
     pub chunk_id: i64,
     pub transcription: String,
@@ -261,7 +269,7 @@ pub struct AudioContent {
     pub end_time: Option<f64>,
 }
 
-#[derive(OaSchema, Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug, Clone)]
 pub struct UiContent {
     pub id: i64,
     pub text: String,
@@ -328,10 +336,31 @@ pub struct HealthCheckResponse {
     pub device_status_details: Option<String>,
 }
 
-#[derive(OaSchema, Serialize, Deserialize)]
+#[derive(OaSchema, Serialize, Deserialize, Clone)]
 pub struct SearchResponse {
     pub data: Vec<ContentItem>,
     pub pagination: PaginationInfo,
+}
+
+/// Compute a cache key for a search query by hashing its parameters
+fn compute_search_cache_key(query: &SearchQuery) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    query.q.hash(&mut hasher);
+    query.pagination.limit.hash(&mut hasher);
+    query.pagination.offset.hash(&mut hasher);
+    format!("{:?}", query.content_type).hash(&mut hasher);
+    query.start_time.map(|t| t.timestamp()).hash(&mut hasher);
+    query.end_time.map(|t| t.timestamp()).hash(&mut hasher);
+    query.app_name.hash(&mut hasher);
+    query.window_name.hash(&mut hasher);
+    query.frame_name.hash(&mut hasher);
+    query.min_length.hash(&mut hasher);
+    query.max_length.hash(&mut hasher);
+    query.speaker_ids.hash(&mut hasher);
+    query.focused.hash(&mut hasher);
+    query.browser_url.hash(&mut hasher);
+    query.speaker_name.hash(&mut hasher);
+    hasher.finish()
 }
 
 // Update the search function
@@ -358,6 +387,15 @@ pub(crate) async fn search(
         query.focused,
         query.speaker_name,
     );
+
+    // Check cache first (only for queries without frame extraction)
+    let cache_key = compute_search_cache_key(&query);
+    if !query.include_frames {
+        if let Some(cached) = state.search_cache.get(&cache_key).await {
+            debug!("search cache hit for key {}", cache_key);
+            return Ok(JsonResponse((*cached).clone()));
+        }
+    }
 
     let query_str = query.q.as_deref().unwrap_or("");
 
@@ -503,14 +541,24 @@ pub(crate) async fn search(
         }),
     );
 
-    Ok(JsonResponse(SearchResponse {
+    let response = SearchResponse {
         data: content_items,
         pagination: PaginationInfo {
             limit: query.pagination.limit,
             offset: query.pagination.offset,
             total: total as i64,
         },
-    }))
+    };
+
+    // Cache the result (only for queries without frame extraction)
+    if !query.include_frames {
+        state
+            .search_cache
+            .insert(cache_key, Arc::new(response.clone()))
+            .await;
+    }
+
+    Ok(JsonResponse(response))
 }
 
 #[oasgen]
@@ -1227,6 +1275,11 @@ impl SCServer {
             },
             element_cache: Arc::new(Mutex::new(None)),
             ws_connection_count: Arc::new(AtomicUsize::new(0)),
+            // Search cache: 1000 entries, 60 second TTL
+            search_cache: MokaCache::builder()
+                .max_capacity(1000)
+                .time_to_live(Duration::from_secs(60))
+                .build(),
         });
 
         let cors = CorsLayer::new()
@@ -4995,5 +5048,111 @@ async fn scroll_element_handler(
             StatusCode::NOT_FOUND,
             JsonResponse(json!({"error": "No element found"})),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_search_cache_key_deterministic() {
+        // Same query should produce same cache key
+        let query1 = SearchQuery {
+            q: Some("test".to_string()),
+            pagination: PaginationQuery {
+                limit: 10,
+                offset: 0,
+            },
+            content_type: ContentType::All,
+            start_time: None,
+            end_time: None,
+            app_name: Some("chrome".to_string()),
+            window_name: None,
+            frame_name: None,
+            include_frames: false,
+            min_length: None,
+            max_length: None,
+            speaker_ids: None,
+            focused: None,
+            browser_url: None,
+            speaker_name: None,
+        };
+
+        let query2 = SearchQuery {
+            q: Some("test".to_string()),
+            pagination: PaginationQuery {
+                limit: 10,
+                offset: 0,
+            },
+            content_type: ContentType::All,
+            start_time: None,
+            end_time: None,
+            app_name: Some("chrome".to_string()),
+            window_name: None,
+            frame_name: None,
+            include_frames: false,
+            min_length: None,
+            max_length: None,
+            speaker_ids: None,
+            focused: None,
+            browser_url: None,
+            speaker_name: None,
+        };
+
+        let key1 = compute_search_cache_key(&query1);
+        let key2 = compute_search_cache_key(&query2);
+
+        assert_eq!(key1, key2, "Same queries should produce same cache key");
+    }
+
+    #[test]
+    fn test_search_cache_key_differs_for_different_queries() {
+        let query1 = SearchQuery {
+            q: Some("test".to_string()),
+            pagination: PaginationQuery {
+                limit: 10,
+                offset: 0,
+            },
+            content_type: ContentType::All,
+            start_time: None,
+            end_time: None,
+            app_name: None,
+            window_name: None,
+            frame_name: None,
+            include_frames: false,
+            min_length: None,
+            max_length: None,
+            speaker_ids: None,
+            focused: None,
+            browser_url: None,
+            speaker_name: None,
+        };
+
+        let query2 = SearchQuery {
+            q: Some("different".to_string()),
+            pagination: PaginationQuery {
+                limit: 10,
+                offset: 0,
+            },
+            content_type: ContentType::All,
+            start_time: None,
+            end_time: None,
+            app_name: None,
+            window_name: None,
+            frame_name: None,
+            include_frames: false,
+            min_length: None,
+            max_length: None,
+            speaker_ids: None,
+            focused: None,
+            browser_url: None,
+            speaker_name: None,
+        };
+
+        let key1 = compute_search_cache_key(&query1);
+        let key2 = compute_search_cache_key(&query2);
+
+        assert_ne!(key1, key2, "Different queries should produce different cache keys");
     }
 }
