@@ -454,7 +454,6 @@ async fn save_frames_as_video(
                 "Starting new video chunk: {} for monitor {}",
                 output_file, monitor_id
             );
-            new_chunk_callback(&output_file);
 
             match start_ffmpeg_process(&output_file, fps).await {
                 Ok(mut child) => {
@@ -471,6 +470,10 @@ async fn save_frames_as_video(
                     }
                     frame_count += 1;
                     frames_total += 1;
+
+                    // Register in DB only after first frame is written successfully
+                    // This ensures the file has valid headers and content before timeline can request it
+                    new_chunk_callback(&output_file);
 
                     current_ffmpeg = Some(child);
                     current_stdin = Some(stdin);
