@@ -1215,19 +1215,6 @@ export function RecordingSettings() {
           />
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <Label htmlFor="usePiiRemoval">PII removal</Label>
-            <p className="text-sm text-muted-foreground">
-              Remove personally identifiable information from transcriptions
-            </p>
-          </div>
-          <Switch
-            id="usePiiRemoval"
-            checked={settings.usePiiRemoval}
-            onCheckedChange={handlePiiRemovalChange}
-          />
-        </div>
       </div>
 
       {/* VAD Sensitivity */}
@@ -1431,6 +1418,20 @@ export function RecordingSettings() {
               onCheckedChange={(checked) =>
                 handleSettingsChange({ useAllMonitors: checked }, true)
               }
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="usePiiRemoval">PII removal</Label>
+              <p className="text-sm text-muted-foreground">
+                Redact emails, phone numbers, and addresses from screen text
+              </p>
+            </div>
+            <Switch
+              id="usePiiRemoval"
+              checked={settings.usePiiRemoval}
+              onCheckedChange={handlePiiRemovalChange}
             />
           </div>
 
