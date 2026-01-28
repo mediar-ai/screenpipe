@@ -7,7 +7,7 @@ import { AudioTranscript } from "@/components/rewind/timeline/audio-transcript";
 import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
 import { TimelineControls } from "@/components/rewind/timeline/timeline-controls";
-import { addDays, isAfter, isSameDay, subDays } from "date-fns";
+import { addDays, endOfDay, isAfter, isSameDay, startOfDay, subDays } from "date-fns";
 import { getStartDate } from "@/lib/actions/get-start-date";
 import { useTimelineData } from "@/lib/hooks/use-timeline-data";
 import { useCurrentFrame } from "@/lib/hooks/use-current-frame";
@@ -468,10 +468,31 @@ export default function Timeline() {
 				to_date: newDate.toISOString(),
 			});
 
+			// Store pending navigation - will be processed when frames are available
+			pendingNavigationRef.current = newDate;
+
 			// Clear frame first to prevent sync effect from reverting
 			setCurrentFrame(null);
-			setCurrentIndex(0);
 			setCurrentDate(newDate);
+
+			// Find and jump to first frame of target date (frames are sorted newest-first)
+			const targetDayStart = startOfDay(newDate);
+			const targetDayEnd = endOfDay(newDate);
+
+			// Find first frame that falls within the target date
+			const targetIndex = frames.findIndex((frame) => {
+				const frameDate = new Date(frame.timestamp);
+				return frameDate >= targetDayStart && frameDate <= targetDayEnd;
+			});
+
+			if (targetIndex !== -1) {
+				setCurrentIndex(targetIndex);
+				setCurrentFrame(frames[targetIndex]);
+				pendingNavigationRef.current = null; // Clear pending since we found it
+			} else {
+				// Frames not loaded yet - will be handled by pendingNavigation effect
+				setCurrentIndex(0);
+			}
 		} finally {
 			// Clear navigation flag after a short delay to let state settle
 			setTimeout(() => {
