@@ -400,7 +400,51 @@ impl ShowRewindWindow {
                     // This is required for the panel to appear above fullscreen apps on macOS
                     let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-                    let monitor = app.primary_monitor().unwrap().unwrap();
+                    // Use cursor position to find the correct monitor (not primary)
+                    let (monitor, position) = {
+                        use tauri_nspanel::cocoa::appkit::{NSEvent, NSScreen};
+                        use tauri_nspanel::cocoa::base::{id, nil};
+                        use tauri_nspanel::cocoa::foundation::{NSArray, NSPoint, NSRect};
+
+                        unsafe {
+                            let mouse_location: NSPoint = NSEvent::mouseLocation(nil);
+                            let screens: id = NSScreen::screens(nil);
+                            let screen_count: u64 = NSArray::count(screens);
+
+                            let mut target_monitor = app.primary_monitor().unwrap().unwrap();
+                            let mut target_position = (0.0_f64, 0.0_f64);
+
+                            for i in 0..screen_count {
+                                let screen: id = NSArray::objectAtIndex(screens, i);
+                                let frame: NSRect = NSScreen::frame(screen);
+
+                                if mouse_location.x >= frame.origin.x
+                                    && mouse_location.x < frame.origin.x + frame.size.width
+                                    && mouse_location.y >= frame.origin.y
+                                    && mouse_location.y < frame.origin.y + frame.size.height
+                                {
+                                    // Found the screen with cursor - use its position and size
+                                    target_position = (frame.origin.x, frame.origin.y);
+                                    // Find matching Tauri monitor
+                                    if let Ok(monitors) = app.available_monitors() {
+                                        for mon in monitors {
+                                            let pos = mon.position();
+                                            // macOS uses bottom-left origin, Tauri uses top-left
+                                            // Match by x position and approximate y
+                                            if (pos.x as f64 - frame.origin.x).abs() < 10.0 {
+                                                target_monitor = mon;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+
+                            (target_monitor, target_position)
+                        }
+                    };
+
                     let logical_size = monitor.size().to_logical(monitor.scale_factor());
                     let builder = self.window_builder(app, "/")
                         .visible_on_all_workspaces(true)
@@ -413,14 +457,32 @@ impl ShowRewindWindow {
                         .hidden_title(true)
                         .inner_size(logical_size.width, logical_size.height)
                         .max_inner_size(logical_size.width, logical_size.height)
-                        .position(0.0, 0.0);
+                        .position(position.0, position.1);
                     builder.build()?
                 };
 
                 // Windows uses a fullscreen transparent overlay with Win32 click-through
                 #[cfg(target_os = "windows")]
                 let window = {
-                    let monitor = app.primary_monitor().unwrap().unwrap();
+                    // Use cursor position to find the correct monitor
+                    let monitor = app.cursor_position()
+                        .ok()
+                        .and_then(|cursor| {
+                            app.available_monitors().ok().and_then(|monitors| {
+                                monitors.into_iter().find(|m| {
+                                    let pos = m.position();
+                                    let size = m.size();
+                                    cursor.x >= pos.x as f64
+                                        && cursor.x < (pos.x + size.width as i32) as f64
+                                        && cursor.y >= pos.y as f64
+                                        && cursor.y < (pos.y + size.height as i32) as f64
+                                })
+                            })
+                        })
+                        .or_else(|| app.primary_monitor().ok().flatten())
+                        .unwrap();
+
+                    let position = monitor.position();
                     let logical_size = monitor.size().to_logical(monitor.scale_factor());
                     let builder = self.window_builder(app, "/")
                         .title("screenpipe")
@@ -434,7 +496,7 @@ impl ShowRewindWindow {
                         .drag_and_drop(false)
                         .inner_size(logical_size.width, logical_size.height)
                         .max_inner_size(logical_size.width, logical_size.height)
-                        .position(0.0, 0.0);
+                        .position(position.x as f64, position.y as f64);
                     let win = builder.build()?;
 
                     // Setup Win32 overlay with click-through disabled so user can interact
