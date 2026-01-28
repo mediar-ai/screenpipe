@@ -1,0 +1,266 @@
+# Beta release workflow for screenpipe
+# Builds and releases to the beta channel on CrabNebula
+
+name: Release App (Beta)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.3.3-beta.1)"
+        required: true
+  push:
+    branches: [main]
+
+jobs:
+  check_commit:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      should_publish: ${{ steps.check.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: check
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -q "release-app-beta"; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+          if echo "$COMMIT_MSG" | grep -q "release-app-beta-publish"; then
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+          fi
+
+  draft:
+    needs: [check_commit]
+    if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update version in Cargo.toml
+        if: github.event.inputs.version
+        run: |
+          sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+
+      - name: create draft release
+        uses: crabnebula-dev/cloud-release@v0.2.6
+        with:
+          command: release draft ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+
+  publish-tauri:
+    needs: [check_commit, draft]
+    if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest"
+            args: "--target aarch64-apple-darwin --features metal"
+            target: aarch64-apple-darwin
+            tauri-args: "--target aarch64-apple-darwin"
+            os_type: "macos"
+          - platform: "macos-latest"
+            args: "--target x86_64-apple-darwin --features metal"
+            target: x86_64-apple-darwin
+            tauri-args: "--target x86_64-apple-darwin"
+            os_type: "macos"
+          - platform: "windows-2019"
+            args: "--target x86_64-pc-windows-msvc --features mkl"
+            pre-build-args: ""
+            tauri-args: "--target x86_64-pc-windows-msvc"
+            os_type: "windows"
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Enable Git long paths on Windows
+        if: matrix.os_type == 'windows'
+        shell: powershell
+        run: |
+          git config --system core.longpaths true
+
+      - uses: actions/checkout@v4
+
+      - name: Update version in Cargo.toml (Unix)
+        if: github.event.inputs.version && matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+
+      - name: Update version in Cargo.toml (Windows)
+        if: github.event.inputs.version && matrix.platform != 'macos-latest'
+        shell: pwsh
+        run: |
+          $content = Get-Content screenpipe-app-tauri/src-tauri/Cargo.toml
+          $content = $content -replace '^version = ".*"', ('version = "' + '${{ github.event.inputs.version }}' + '"')
+          $content | Set-Content screenpipe-app-tauri/src-tauri/Cargo.toml -Force
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        if: matrix.os_type != 'windows'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Install Rust
+        if: matrix.os_type == 'windows'
+        run: |
+          Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
+          .\rustup-init.exe -y
+
+      - name: setup rust path
+        if: matrix.os_type == 'windows'
+        shell: powershell
+        run: |
+          $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+          echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ runner.os }}-rust-${{ matrix.target }}-beta
+
+      - name: Install dependencies (macOS)
+        if: matrix.os_type == 'macos'
+        run: brew install ffmpeg
+
+      - name: Install frontend dependencies
+        working-directory: ./screenpipe-app-tauri
+        run: bun install
+
+      - name: Install vcpkg
+        if: matrix.os_type == 'windows'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
+
+      - name: Set up MSVC
+        if: matrix.os_type == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Run pre_build.js
+        env:
+          SKIP_SCREENPIPE_SETUP: true
+        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        working-directory: ./screenpipe-app-tauri
+
+      - name: Build CLI
+        if: matrix.os_type != 'windows'
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os_type }}" == "macos" ]]; then
+            export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
+            export PKG_CONFIG_ALLOW_CROSS=1
+            if [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
+              export CFLAGS="-march=armv8.5-a"
+              export CXXFLAGS="-march=armv8.5-a"
+            fi
+          fi
+          cargo build --release -p screenpipe-server ${{ matrix.args }}
+
+      - name: Build CLI on Windows
+        if: matrix.os_type == 'windows'
+        shell: powershell
+        run: cargo build --release -p screenpipe-server ${{ matrix.args }}
+
+      - name: Run pre_build.js (copy CLI)
+        run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
+        working-directory: ./screenpipe-app-tauri
+
+      # Use BETA config instead of prod config
+      - name: Use beta config for release
+        shell: bash
+        run: cp screenpipe-app-tauri/src-tauri/tauri.beta.conf.json screenpipe-app-tauri/src-tauri/tauri.conf.json
+
+      - name: Build
+        uses: tauri-apps/tauri-action@v0.5.17
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CI: true
+          CFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-march=armv8.5-a' || '' }}
+          CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-march=armv8.5-a' || '' }}
+        with:
+          args: ${{ matrix.tauri-args }}
+          projectPath: "./screenpipe-app-tauri"
+          tauriScript: bunx tauri
+
+      - name: Upload Assets to CrabNebula Cloud (Beta)
+        if: matrix.os_type != 'windows'
+        uses: crabnebula-dev/cloud-release@v0.2.6
+        with:
+          command: release upload ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: ./screenpipe-app-tauri/src-tauri
+
+  publish-release:
+    needs: [check_commit, publish-tauri]
+    if: needs.check_commit.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Publish Release on CrabNebula Cloud (Beta)
+        uses: crabnebula-dev/cloud-release@v0.2.6
+        with:
+          command: release publish ${{ secrets.CN_APP_SLUG_BETA }} ${{ env.VERSION }}
+          api-key: ${{ secrets.CN_API_KEY }}
+
+      - name: Create beta release announcement
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const message = `
+            ## 🧪 Beta Release v${{ env.VERSION }}
+
+            A new beta version is available for testing!
+
+            **Download:** [CrabNebula Cloud](https://web.crabnebula.cloud/mediar/screenpipe-beta/releases)
+
+            **Note:** This is a beta release with experimental features. Please report any issues on GitHub.
+
+            ### What's different in beta?
+            - Separate app bundle (\`screenpipe beta.app\`)
+            - Can run alongside stable version
+            - Experimental features enabled
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: \`🧪 Beta Release: v${{ env.VERSION }}\`,
+              body: message,
+              labels: ['beta', 'release']
+            });
