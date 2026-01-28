@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download, ExternalLink, Check, Loader2 } from "lucide-react";
 import { open, Command } from "@tauri-apps/plugin-shell";
 import { message } from "@tauri-apps/plugin-dialog";
-import { writeFile } from "@tauri-apps/plugin-fs";
+import { writeFile, readTextFile } from "@tauri-apps/plugin-fs";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { platform } from "@tauri-apps/plugin-os";
-import { tempDir, join } from "@tauri-apps/api/path";
+import { tempDir, join, homeDir } from "@tauri-apps/api/path";
 
 const GITHUB_RELEASES_API = "https://api.github.com/repos/mediar-ai/screenpipe/releases";
 
@@ -23,7 +23,12 @@ interface GitHubRelease {
   assets: GitHubAsset[];
 }
 
-async function getLatestMcpbUrl(): Promise<string> {
+interface McpVersionInfo {
+  available: string | null;
+  installed: string | null;
+}
+
+async function getLatestMcpRelease(): Promise<{ url: string; version: string }> {
   const response = await tauriFetch(GITHUB_RELEASES_API, {
     method: "GET",
     headers: {
@@ -49,18 +54,71 @@ async function getLatestMcpbUrl(): Promise<string> {
     throw new Error("No .mcpb file found in release");
   }
 
-  return mcpbAsset.browser_download_url;
+  // Extract version from tag (mcp-v0.5.0 -> 0.5.0)
+  const version = mcpRelease.tag_name.replace("mcp-v", "");
+
+  return { url: mcpbAsset.browser_download_url, version };
+}
+
+async function getInstalledMcpVersion(): Promise<string | null> {
+  try {
+    const os = platform();
+    const home = await homeDir();
+
+    let configPath: string;
+    if (os === "macos") {
+      configPath = await join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json");
+    } else if (os === "windows") {
+      configPath = await join(home, "AppData", "Roaming", "Claude", "claude_desktop_config.json");
+    } else {
+      return null;
+    }
+
+    const configContent = await readTextFile(configPath);
+    const config = JSON.parse(configContent);
+
+    // Check if screenpipe is configured
+    if (config?.mcpServers?.screenpipe) {
+      // Try to get version from the installed package
+      // For now, just return "installed" if configured
+      return "installed";
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function ConnectionsSection() {
   const [downloadState, setDownloadState] = useState<"idle" | "downloading" | "downloaded">("idle");
+  const [versionInfo, setVersionInfo] = useState<McpVersionInfo>({ available: null, installed: null });
+
+  useEffect(() => {
+    async function fetchVersions() {
+      try {
+        const [release, installed] = await Promise.all([
+          getLatestMcpRelease().catch(() => null),
+          getInstalledMcpVersion(),
+        ]);
+        setVersionInfo({
+          available: release?.version || null,
+          installed,
+        });
+      } catch {
+        // Ignore errors
+      }
+    }
+    fetchVersions();
+  }, [downloadState]);
 
   const handleClaudeConnect = async () => {
     try {
       setDownloadState("downloading");
 
       // Get the latest mcpb URL dynamically
-      const mcpbUrl = await getLatestMcpbUrl();
+      const release = await getLatestMcpRelease();
+      const mcpbUrl = release.url;
 
       // Use Tauri's HTTP client to avoid CORS issues
       const response = await tauriFetch(mcpbUrl, {
@@ -172,9 +230,19 @@ export function ConnectionsSection() {
                   <h3 className="text-xl font-semibold text-foreground">
                     Claude Desktop
                   </h3>
-                  <span className="px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary rounded-full">
+                  <span className="px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground rounded-full">
                     by Anthropic
                   </span>
+                  {versionInfo.available && (
+                    <span className="px-2 py-0.5 text-xs font-mono bg-muted text-muted-foreground rounded">
+                      v{versionInfo.available}
+                    </span>
+                  )}
+                  {versionInfo.installed && (
+                    <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded-full">
+                      installed
+                    </span>
+                  )}
                 </div>
                 <p className="text-muted-foreground mb-4">
                   Connect Screenpipe to Claude Desktop to search your screen recordings,
@@ -220,8 +288,8 @@ export function ConnectionsSection() {
             {/* Success message */}
             {downloadState === "downloaded" && (
               <div className="px-6 pb-6">
-                <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                  <p className="text-sm text-green-600 dark:text-green-400">
+                <div className="p-4 bg-muted border border-border rounded-lg">
+                  <p className="text-sm text-foreground">
                     <strong>Screenpipe is now connected to Claude!</strong> Try asking Claude:
                     &quot;What did I do in the last 5 minutes?&quot; or &quot;Search my screen for meetings today&quot;
                   </p>
@@ -232,9 +300,9 @@ export function ConnectionsSection() {
         </Card>
 
         {/* Info card */}
-        <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
-          <p className="text-sm text-primary">
-            <strong>How it works:</strong> The extension allows Claude to search through your
+        <div className="p-4 bg-muted border border-border rounded-lg">
+          <p className="text-sm text-muted-foreground">
+            <strong className="text-foreground">How it works:</strong> The extension allows Claude to search through your
             Screenpipe recordings and transcriptions. Make sure Screenpipe is running when you
             use Claude with Screenpipe features.
           </p>
