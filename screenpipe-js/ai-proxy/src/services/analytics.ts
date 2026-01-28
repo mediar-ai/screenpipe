@@ -14,7 +14,7 @@ export function setupAnalytics(env: Env): Langfuse {
     console.log('Langfuse credentials missing, using stub');
     // Return a no-op stub that matches the Langfuse interface
     const stub = {
-      trace: () => ({ span: () => ({ end: () => {} }), generation: () => ({ end: () => {} }) }),
+      trace: () => ({ update: () => {}, span: () => ({ end: () => {} }), generation: () => ({ end: () => {} }) }),
       span: () => ({ end: () => {} }),
       generation: () => ({ end: () => {} }),
       debug: () => {},
