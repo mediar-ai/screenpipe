@@ -164,7 +164,13 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   };
 
   const handleComplete = async () => {
-    await ensureDefaultPreset();
+    // Try to ensure default preset, but don't block onboarding if it fails
+    try {
+      await ensureDefaultPreset();
+    } catch (error) {
+      console.error("Failed to ensure default preset:", error);
+      // Continue anyway - user can set up AI later
+    }
     // Note: Shortcut reminder and notification are shown after entire onboarding completes (in page.tsx)
     handleNextSlide();
   };

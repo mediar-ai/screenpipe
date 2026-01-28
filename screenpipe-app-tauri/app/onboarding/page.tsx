@@ -233,26 +233,49 @@ export default function OnboardingPage() {
   };
 
   const handleEnd = async () => {
+    setIsTransitioning(true);
+
+    // Track completion (don't block on failure)
     try {
-      setIsTransitioning(true);
       trackOnboardingStep("completed");
+    } catch (error) {
+      console.error("Error tracking onboarding step:", error);
+    }
 
-      // Complete onboarding in backend (only store completion status)
+    // Complete onboarding in backend (don't block on failure)
+    try {
       await completeOnboarding();
+    } catch (error) {
+      console.error("Error completing onboarding:", error);
+      // Continue anyway - we'll try to proceed to main window
+    }
 
-      // Now that onboarding is complete, show the shortcut reminder overlay
+    // Show shortcut reminder (don't block on failure)
+    try {
       if (settings.showScreenpipeShortcut && settings.showShortcutOverlay !== false) {
         commands.showShortcutReminder(settings.showScreenpipeShortcut);
       }
-
-      // Schedule 2-hour reminder notification (first run only)
-      scheduleFirstRunNotification();
-
-      showSuccessToast("Onboarding completed successfully!");
-
     } catch (error) {
-      console.error("Error completing onboarding:", error);
-      showErrorToast("Failed to complete onboarding");
+      console.error("Error showing shortcut reminder:", error);
+    }
+
+    // Schedule notification (don't block on failure)
+    try {
+      scheduleFirstRunNotification();
+    } catch (error) {
+      console.error("Error scheduling notification:", error);
+    }
+
+    // Always try to proceed to main window
+    try {
+      await commands.showWindow("Main");
+      showSuccessToast("Onboarding completed successfully!");
+      if (typeof window !== 'undefined' && 'close' in window) {
+        window.close();
+      }
+    } catch (error) {
+      console.error("Error showing main window:", error);
+      showErrorToast("Failed to open main window. Please restart the app.");
       setIsTransitioning(false);
     }
   };

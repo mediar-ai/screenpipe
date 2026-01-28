@@ -174,59 +174,6 @@ export default function Timeline() {
 	const hasInitialFrames = frames.length > 0;
 	const showBlockingLoader = isLoading && !hasInitialFrames;
 
-	// Message timeout and dismiss state
-	const [messageShownAt, setMessageShownAt] = useState<number | null>(null);
-	const [canDismissMessage, setCanDismissMessage] = useState(false);
-	const [messageDismissed, setMessageDismissed] = useState(false);
-	const MESSAGE_DISMISS_DELAY = 3000; // Show dismiss button after 3 seconds
-	const MESSAGE_AUTO_TIMEOUT = 15000; // Auto-dismiss after 15 seconds if no frames
-
-	// Track when message appears
-	useEffect(() => {
-		if (message && !messageShownAt) {
-			setMessageShownAt(Date.now());
-			setCanDismissMessage(false);
-			setMessageDismissed(false);
-		} else if (!message) {
-			setMessageShownAt(null);
-			setCanDismissMessage(false);
-			setMessageDismissed(false);
-		}
-	}, [message, messageShownAt]);
-
-	// Enable dismiss button after delay
-	useEffect(() => {
-		if (messageShownAt && !canDismissMessage) {
-			const timer = setTimeout(() => {
-				setCanDismissMessage(true);
-			}, MESSAGE_DISMISS_DELAY);
-			return () => clearTimeout(timer);
-		}
-	}, [messageShownAt, canDismissMessage]);
-
-	// Auto-dismiss message after timeout if no frames arrived
-	useEffect(() => {
-		if (messageShownAt && !hasInitialFrames) {
-			const timer = setTimeout(() => {
-				setMessageDismissed(true);
-			}, MESSAGE_AUTO_TIMEOUT);
-			return () => clearTimeout(timer);
-		}
-	}, [messageShownAt, hasInitialFrames]);
-
-	// Clear message dismissed state when frames arrive
-	useEffect(() => {
-		if (hasInitialFrames && messageDismissed) {
-			setMessageDismissed(false);
-		}
-	}, [hasInitialFrames, messageDismissed]);
-
-	const handleDismissMessage = useCallback(() => {
-		setMessageDismissed(true);
-	}, []);
-
-	// Show message only if not dismissed
-	const shouldShowMessage = message && !messageDismissed && !hasInitialFrames;
 
 	// Auto-select first frame when frames arrive and no frame is selected
 	useEffect(() => {
@@ -652,45 +599,6 @@ export default function Timeline() {
 					</div>
 				)}
 
-				{!error && shouldShowMessage && (
-					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
-						{/* Close window button - always visible to prevent being stuck */}
-						<button
-							onClick={() => commands.closeWindow("Main")}
-							className="absolute top-4 right-4 p-2 bg-card hover:bg-muted border border-border rounded-md transition-colors z-50"
-							title="Close (Esc)"
-						>
-							<X className="w-4 h-4 text-muted-foreground" />
-						</button>
-						<div className="bg-card text-foreground p-6 border border-border rounded-2xl shadow-2xl text-center space-y-3 max-w-md mx-4 relative">
-							{/* Dismiss message button - appears after delay */}
-							{canDismissMessage && (
-								<button
-									onClick={handleDismissMessage}
-									className="absolute top-3 right-3 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200"
-									title="Dismiss message"
-								>
-									<X className="h-4 w-4" />
-								</button>
-							)}
-
-							<h3 className="font-medium">
-								{message.includes("connecting") ? "Starting Up" : "Processing"}
-							</h3>
-							<p className="text-sm text-foreground">
-								{message}
-							</p>
-							<Loader2 className="h-5 w-5 animate-spin mx-auto mt-2" />
-
-							{/* Progress hint after delay */}
-							{canDismissMessage && (
-								<p className="text-xs text-muted-foreground mt-3 animate-in fade-in duration-300">
-									Taking longer than expected? You can dismiss this and continue.
-								</p>
-							)}
-						</div>
-					</div>
-				)}
 
 				{error && (
 					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
