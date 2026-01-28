@@ -129,7 +129,8 @@ export const validateField = (
   value: any
 ): FieldValidationResult => {
   try {
-    const fieldSchema = settingsStoreSchema.shape[field];
+    const schemaShape = settingsStoreSchema.shape as Record<string, z.ZodTypeAny>;
+    const fieldSchema = schemaShape[field];
     if (!fieldSchema) {
       return { isValid: false, error: "Unknown field" };
     }

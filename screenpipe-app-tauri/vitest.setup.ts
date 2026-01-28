@@ -6,17 +6,12 @@ if (typeof window === "undefined") {
     url: "http://localhost",
   });
 
-  const globalWithDom = globalThis as typeof globalThis & {
-    window: Window;
-    document: Document;
-    navigator: Navigator;
-    location: Location;
-    HTMLElement: typeof HTMLElement;
-  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const globalWithDom = globalThis as any;
 
-  globalWithDom.window = dom.window as unknown as Window;
+  globalWithDom.window = dom.window;
   globalWithDom.document = dom.window.document;
-  globalWithDom.navigator = dom.window.navigator as Navigator;
+  globalWithDom.navigator = dom.window.navigator;
   globalWithDom.location = dom.window.location;
   globalWithDom.HTMLElement = dom.window.HTMLElement;
 }
