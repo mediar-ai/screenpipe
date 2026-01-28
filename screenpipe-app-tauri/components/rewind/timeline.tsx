@@ -500,9 +500,13 @@ export default function Timeline() {
 				setCurrentIndex(targetIndex);
 				setCurrentFrame(frames[targetIndex]);
 				pendingNavigationRef.current = null; // Clear pending since we found it
+				setSeekingTimestamp(null); // Clear any seeking state
 			} else {
-				// Frames not loaded yet - will be handled by pendingNavigation effect
-				setCurrentIndex(0);
+				// Frames not loaded yet - set pending navigation and wait
+				// DON'T set currentIndex(0) as that causes a visible jump to "today"
+				pendingNavigationRef.current = newDate;
+				// Show seeking overlay while waiting for frames
+				setSeekingTimestamp(newDate.toISOString());
 			}
 		} finally {
 			// Clear navigation flag after a short delay to let state settle
