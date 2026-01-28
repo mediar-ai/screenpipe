@@ -5,6 +5,10 @@ use std::error::Error;
 use std::fmt;
 use tracing::debug;
 
+#[cfg(target_os = "macos")]
+use sck_rs::{Window, XCapError};
+
+#[cfg(not(target_os = "macos"))]
 use xcap::{Window, XCapError};
 
 use crate::browser_utils::create_url_detector;
