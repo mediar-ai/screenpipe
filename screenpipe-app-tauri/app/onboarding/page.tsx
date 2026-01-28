@@ -53,20 +53,27 @@ const getPrevSlide = (currentSlide: SlideKey): SlideKey | null => {
   }
 };
 
-// Track each step as a distinct event for clean funnel analysis
-const trackOnboardingStep = (
-  step: SlideKey | "completed",
+// Track step completion (when user clicks next/back)
+const trackOnboardingStepCompleted = (
+  step: SlideKey,
   properties?: Record<string, any>
 ) => {
-  // Fire specific event for funnel tracking
-  const eventName = step === "completed"
-    ? "onboarding_completed"
-    : `onboarding_${step}_viewed`;
-
-  posthog.capture(eventName, {
-    step, // Keep for backwards compatibility
+  posthog.capture(`onboarding_${step}_completed`, {
+    step,
     ...properties,
   });
+};
+
+// Track step viewed (when user enters a step)
+const trackOnboardingStepViewed = (step: SlideKey) => {
+  posthog.capture(`onboarding_${step}_viewed`, {
+    step,
+  });
+};
+
+// Track final completion
+const trackOnboardingCompleted = () => {
+  posthog.capture("onboarding_completed");
 };
 
 // Function to set window size for current slide
@@ -120,10 +127,12 @@ export default function OnboardingPage() {
     init();
   }, []);
 
-  // Set window size when slide changes
+  // Set window size and track view when slide changes
   useEffect(() => {
     setWindowSizeForSlide(currentSlide);
     setIsVisible(true);
+    // Track that user viewed this step (fires on ENTER, not exit)
+    trackOnboardingStepViewed(currentSlide);
   }, [currentSlide]);
 
   useEffect(() => {
@@ -176,7 +185,8 @@ export default function OnboardingPage() {
     const nextSlide = getNextSlide(currentSlide);
 
     try {
-      trackOnboardingStep(currentSlide, {
+      // Track that user completed this step (clicked next)
+      trackOnboardingStepCompleted(currentSlide, {
         direction: "next",
       });
 
@@ -210,7 +220,8 @@ export default function OnboardingPage() {
     setIsTransitioning(true);
 
     try {
-      trackOnboardingStep(currentSlide, {
+      // Track that user went back from this step
+      trackOnboardingStepCompleted(currentSlide, {
         direction: "back",
       });
 
@@ -237,9 +248,9 @@ export default function OnboardingPage() {
 
     // Track completion (don't block on failure)
     try {
-      trackOnboardingStep("completed");
+      trackOnboardingCompleted();
     } catch (error) {
-      console.error("Error tracking onboarding step:", error);
+      console.error("Error tracking onboarding completion:", error);
     }
 
     // Complete onboarding in backend (don't block on failure)

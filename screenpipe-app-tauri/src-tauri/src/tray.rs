@@ -1,5 +1,6 @@
 use crate::commands::show_main_window;
 use crate::health::{get_recording_status, RecordingStatus};
+use crate::sidecar::SidecarState;
 use crate::store::{get_store, OnboardingStore};
 use crate::window_api::ShowRewindWindow;
 use anyhow::Result;
@@ -10,10 +11,10 @@ use tauri::tray::TrayIcon;
 use tauri::Emitter;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
-    AppHandle, Wry,
+    AppHandle, Manager, Wry,
 };
 
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 // Track last known state to avoid unnecessary updates
 static LAST_MENU_STATE: Lazy<Mutex<MenuState>> = Lazy::new(|| Mutex::new(MenuState::default()));
@@ -171,7 +172,23 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         "quit" => {
             debug!("Quit requested");
 
-            app_handle.exit(0);
+            // Stop the sidecar before exiting
+            let app_handle_clone = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                info!("Stopping screenpipe sidecar before quit...");
+                if let Some(sidecar_state) = app_handle_clone.try_state::<SidecarState>() {
+                    match crate::sidecar::stop_screenpipe(
+                        sidecar_state,
+                        app_handle_clone.clone(),
+                    )
+                    .await
+                    {
+                        Ok(_) => info!("Screenpipe sidecar stopped successfully"),
+                        Err(e) => error!("Failed to stop screenpipe sidecar: {}", e),
+                    }
+                }
+                app_handle_clone.exit(0);
+            });
         }
         _ => debug!("Unhandled menu event: {:?}", event.id()),
     }
