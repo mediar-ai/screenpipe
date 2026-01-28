@@ -433,11 +433,12 @@ jobs:
           if [[ "${{ matrix.os_type }}" == "macos" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
-            # Fix i8mm build error on GitHub runners - target armv8.5-a which doesn't include i8mm
+            # Fix i8mm build error - use apple-m1 target to ensure M1 compatibility
+            # M1 = armv8.4-a (no i8mm), M2+ = armv8.5-a+ (has i8mm)
             # See: https://github.com/ggml-org/whisper.cpp/issues/3427
             if [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
-              export CFLAGS="-march=armv8.5-a"
-              export CXXFLAGS="-march=armv8.5-a"
+              export CFLAGS="-mcpu=apple-m1"
+              export CXXFLAGS="-mcpu=apple-m1"
             fi
           fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
@@ -535,10 +536,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
-          # Fix i8mm build error on macOS GitHub runners - target armv8.5-a which doesn't include i8mm
+          # Fix i8mm build error - use apple-m1 target to ensure M1 compatibility
+          # M1 = armv8.4-a (no i8mm), M2+ = armv8.5-a+ (has i8mm)
           # See: https://github.com/ggml-org/whisper.cpp/issues/3427
-          CFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-march=armv8.5-a' || '' }}
-          CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-march=armv8.5-a' || '' }}
+          CFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1' || '' }}
+          CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1' || '' }}
           # Optimize for build speed on Windows
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.os_type == 'windows' && 'thin' || 'false' }}
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.os_type == 'windows' && '2' || '3' }}

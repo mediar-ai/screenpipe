@@ -169,9 +169,10 @@ jobs:
           if [[ "${{ matrix.os_type }}" == "macos" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
+            # Fix i8mm build error - use apple-m1 target to ensure M1 compatibility
             if [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
-              export CFLAGS="-march=armv8.5-a"
-              export CXXFLAGS="-march=armv8.5-a"
+              export CFLAGS="-mcpu=apple-m1"
+              export CXXFLAGS="-mcpu=apple-m1"
             fi
           fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
@@ -203,8 +204,9 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CI: true
-          CFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-march=armv8.5-a' || '' }}
-          CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-march=armv8.5-a' || '' }}
+          # Fix i8mm - use apple-m1 target for M1 compatibility
+          CFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1' || '' }}
+          CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
