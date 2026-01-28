@@ -417,7 +417,7 @@ export function AIPanel({
 							}}
 						>
 							<span>ASK AI</span>
-							<span className="text-muted-foreground text-[10px] normal-case">
+							<span className="text-muted-foreground text-sm normal-case bg-muted px-2 py-0.5 rounded font-medium">
 								{osType === "macos" ? "⌘L" : "Ctrl+L"}
 							</span>
 						</button>

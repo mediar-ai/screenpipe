@@ -309,7 +309,7 @@ export const TimelineSlider = ({
 									<motion.div
 										key={frame.timestamp}
 										data-timestamp={frame.timestamp}
-										className={`flex-shrink-0 cursor-pointer w-1.5 mx-0.5 rounded-t relative group hover:z-50 transition-all duration-200 ${
+										className={`flex-shrink-0 cursor-ew-resize w-1.5 mx-0.5 rounded-t relative group hover:z-50 transition-all duration-200 ${
 											isSelected || isInRange
 												? "ring-2 ring-blue-400 ring-offset-1 ring-offset-black/20"
 												: ""
