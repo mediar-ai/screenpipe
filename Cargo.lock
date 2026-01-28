@@ -1505,7 +1505,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/mediar-ai/cpal-1.git?branch=master#a262741cc778f071888c9dd57bda3e87fa5cf240"
+source = "git+https://github.com/louis030195/cpal.git?branch=main#a262741cc778f071888c9dd57bda3e87fa5cf240"
 dependencies = [
  "alsa",
  "cidre",
@@ -6572,7 +6572,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
- "cpal 0.15.3 (git+https://github.com/mediar-ai/cpal-1.git?branch=master)",
+ "cpal 0.15.3 (git+https://github.com/louis030195/cpal.git?branch=main)",
  "criterion",
  "crossbeam",
  "dashmap",

@@ -19,8 +19,8 @@ serde_json = "1.0"
 oasgen = { workspace = true }
 
 # Cross-platform audio capture
-# Using mediar-ai fork with unified cidre version (compatible with sck-rs)
-cpal = { git = "https://github.com/mediar-ai/cpal-1.git", branch = "master" }
+# Using fork with unified cidre version (compatible with sck-rs)
+cpal = { git = "https://github.com/louis030195/cpal.git", branch = "main" }
 
 # Wav encoding
 hound = "3.5"
