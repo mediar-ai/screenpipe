@@ -79,6 +79,9 @@ export default function Timeline() {
 	// Flag to prevent frame-date sync from fighting with intentional navigation
 	const isNavigatingRef = useRef(false);
 
+	// Pending navigation target from search - will jump when frames load
+	const pendingNavigationRef = useRef<Date | null>(null);
+
 	// Re-show audio transcript when navigating timeline
 	useEffect(() => {
 		setShowAudioTranscript(true);
@@ -134,21 +137,38 @@ export default function Timeline() {
 
 			const targetDate = new Date(targetTimestamp);
 
-			// First, navigate to the correct date if needed
+			// Store the pending navigation target - will be processed by the frames effect
+			pendingNavigationRef.current = targetDate;
+
+			// Navigate to the correct date if needed (this triggers frame fetch)
 			if (!isSameDay(targetDate, currentDate)) {
 				await handleDateChange(targetDate);
 			}
-
-			// Then jump to the specific time (after a short delay to let frames load)
-			setTimeout(() => {
-				jumpToTime(targetDate);
-			}, 500);
+			// Note: We don't call jumpToTime here even if on same date.
+			// The frames effect below handles all cases to avoid stale closure issues.
 		});
 
 		return () => {
 			unlisten.then((fn) => fn());
 		};
 	}, [currentDate]);
+
+	// Process pending navigation when frames load after date change
+	useEffect(() => {
+		if (pendingNavigationRef.current && frames.length > 0) {
+			const targetDate = pendingNavigationRef.current;
+			// Only jump if we're on the correct date AND frames for that day have loaded
+			// Check that at least one frame is from the target date
+			const hasFramesForTargetDate = frames.some(frame =>
+				isSameDay(new Date(frame.timestamp), targetDate)
+			);
+			if (isSameDay(targetDate, currentDate) && hasFramesForTargetDate) {
+				console.log("Frames loaded, jumping to pending navigation:", targetDate);
+				jumpToTime(targetDate);
+				pendingNavigationRef.current = null;
+			}
+		}
+	}, [frames, currentDate]);
 
 	// Progressive loading: show UI immediately once we have any frames
 	const hasInitialFrames = frames.length > 0;
