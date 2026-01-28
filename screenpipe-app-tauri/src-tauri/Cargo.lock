@@ -5635,6 +5635,7 @@ dependencies = [
  "async-stream",
  "axum",
  "base64 0.22.1",
+ "block",
  "chrono",
  "cocoa 0.26.0",
  "core-foundation 0.10.0",

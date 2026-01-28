@@ -110,6 +110,7 @@ core-foundation = "=0.10.0"
 libc = "0.2.152"
 cocoa = "0.26.0"
 objc = "0.2.7"
+block = "0.1"
 base64 = "0.22.1"
 # bunch of hack for permissions
 core-graphics-helmer-fork = "0.24.0"
