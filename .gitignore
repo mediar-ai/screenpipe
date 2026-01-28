@@ -59,3 +59,4 @@ app.py
 *.py3z
 __pycache__/
 
+screenpipe-app-tauri/src-tauri/.next/

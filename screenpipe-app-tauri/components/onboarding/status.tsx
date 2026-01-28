@@ -7,12 +7,15 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { commands, type OSPermissionsCheck } from "@/lib/utils/tauri";
 import { motion } from "framer-motion";
 import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
-import { open as openPath, open as openUrl } from "@tauri-apps/plugin-shell";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { homeDir, join } from "@tauri-apps/api/path";
 import { TimelineAIDemo } from "./timeline-ai-demo";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { getVersion } from "@tauri-apps/api/app";
 import { version as osVersion, platform as osPlatform } from "@tauri-apps/plugin-os";
+import Lottie from "lottie-react";
+import pipeFlowAnimation from "@/public/animations/pipe-flow.json";
 
 // Format shortcut for display (platform-aware)
 function formatShortcut(shortcut: string, isMac: boolean): string {
@@ -288,7 +291,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     try {
       const home = await homeDir();
       const screenpipeDir = await join(home, ".screenpipe");
-      await openPath(screenpipeDir);
+      await revealItemInDir(screenpipeDir);
     } catch (error) {
       console.error("Failed to open logs folder:", error);
     }
@@ -338,7 +341,11 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin" />
+          <Lottie
+            animationData={pipeFlowAnimation}
+            loop={true}
+            className="w-24 h-10"
+          />
           <p className="font-mono text-sm text-muted-foreground">checking permissions...</p>
         </motion.div>
       )}
@@ -437,7 +444,11 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin" />
+          <Lottie
+            animationData={pipeFlowAnimation}
+            loop={true}
+            className="w-32 h-12"
+          />
           <div className="text-center space-y-2">
             <p className="font-mono text-sm text-foreground">starting screenpipe...</p>
             <p className="font-mono text-xs text-muted-foreground">downloading AI models</p>
@@ -491,6 +502,17 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                 >
                   <Calendar className="w-3 h-3 mr-1" />
                   book a call for help
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    posthog.capture("onboarding_startup_skipped");
+                    handleComplete();
+                  }}
+                  className="font-mono text-xs mt-2"
+                >
+                  skip waiting →
                 </Button>
               </div>
             </motion.div>
@@ -568,7 +590,11 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <div className="w-6 h-6 border border-foreground border-t-transparent animate-spin" />
+          <Lottie
+            animationData={pipeFlowAnimation}
+            loop={true}
+            className="w-32 h-12"
+          />
           <p className="font-mono text-sm text-muted-foreground">starting screenpipe...</p>
 
           {isStuck && (
@@ -631,6 +657,17 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                 >
                   <Calendar className="w-3 h-3 mr-1" />
                   book a call for help
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    posthog.capture("onboarding_startup_skipped");
+                    handleComplete();
+                  }}
+                  className="font-mono text-xs mt-2"
+                >
+                  skip waiting →
                 </Button>
               </div>
             </motion.div>

@@ -142,15 +142,17 @@ pub async fn stop_screenpipe(
                 }
             }
         }
-        match tokio::process::Command::new("pkill")
-            .arg("-9")
-            .arg("-f")
-            .arg("screenpipe")
+        // Use pgrep + kill instead of pkill -f to avoid killing screenpipe-app
+        // -x matches exact process name, so "screenpipe" won't match "screenpipe-app"
+        let command = "pgrep -x screenpipe | xargs -r kill -9 2>/dev/null || true";
+        match tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(command)
             .output()
             .await
         {
             Ok(_) => {
-                debug!("Successfully killed screenpipe processes");
+                debug!("Successfully killed screenpipe sidecar processes");
                 Ok(())
             }
             Err(e) => {
