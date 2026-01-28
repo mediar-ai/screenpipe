@@ -1131,28 +1131,13 @@ dependencies = [
 
 [[package]]
 name = "cidre"
-version = "0.4.0"
-source = "git+https://github.com/yury/cidre.git?rev=f05c428#f05c4288f9870c9fab53272ddafd6ec01c7b2dbf"
-dependencies = [
- "cidre-macros 0.1.0 (git+https://github.com/yury/cidre.git?rev=f05c428)",
- "parking_lot",
- "tokio",
-]
-
-[[package]]
-name = "cidre"
 version = "0.7.0"
 source = "git+https://github.com/mediar-ai/cidre.git#5ec1e32f72bee75bfb33d1e73610c3c22d97733b"
 dependencies = [
- "cidre-macros 0.1.0 (git+https://github.com/mediar-ai/cidre.git)",
+ "cidre-macros",
  "parking_lot",
  "tokio",
 ]
-
-[[package]]
-name = "cidre-macros"
-version = "0.1.0"
-source = "git+https://github.com/yury/cidre.git?rev=f05c428#f05c4288f9870c9fab53272ddafd6ec01c7b2dbf"
 
 [[package]]
 name = "cidre-macros"
@@ -1520,10 +1505,10 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/Kree0/cpal.git?branch=master#e851e41b6e4f2318455b109b14dd5a64db3ac47a"
+source = "git+https://github.com/mediar-ai/cpal-1.git?branch=master#a262741cc778f071888c9dd57bda3e87fa5cf240"
 dependencies = [
  "alsa",
- "cidre 0.4.0",
+ "cidre",
  "core-foundation-sys",
  "coreaudio-rs",
  "dasp_sample",
@@ -6558,7 +6543,7 @@ name = "sck-rs"
 version = "0.1.0"
 source = "git+https://github.com/louis030195/sck-rs#e09225902d7ea977ca0ebda336bb01fbac3e7948"
 dependencies = [
- "cidre 0.7.0",
+ "cidre",
  "image",
  "once_cell",
  "thiserror 1.0.69",
@@ -6587,7 +6572,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
- "cpal 0.15.3 (git+https://github.com/Kree0/cpal.git?branch=master)",
+ "cpal 0.15.3 (git+https://github.com/mediar-ai/cpal-1.git?branch=master)",
  "criterion",
  "crossbeam",
  "dashmap",
@@ -6805,7 +6790,7 @@ dependencies = [
  "atspi-proxies",
  "base64 0.22.1",
  "chrono",
- "cidre 0.7.0",
+ "cidre",
  "clap",
  "core-foundation 0.10.0",
  "criterion",
