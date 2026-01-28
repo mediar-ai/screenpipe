@@ -129,6 +129,62 @@ export default function Timeline() {
 		};
 	}, [onWindowFocus]);
 
+	// Hide timeline when mouse moves to a different screen
+	useEffect(() => {
+		let initialScreenBounds: { x: number; y: number; width: number; height: number } | null = null;
+		let checkInterval: ReturnType<typeof setInterval> | null = null;
+
+		const initScreenBounds = async () => {
+			try {
+				const { currentMonitor, cursorPosition } = await import("@tauri-apps/api/window");
+				const { getCurrentWindow } = await import("@tauri-apps/api/window");
+
+				const window = getCurrentWindow();
+				const monitor = await currentMonitor();
+
+				if (monitor) {
+					initialScreenBounds = {
+						x: monitor.position.x,
+						y: monitor.position.y,
+						width: monitor.size.width,
+						height: monitor.size.height,
+					};
+
+					// Check cursor position periodically
+					checkInterval = setInterval(async () => {
+						if (!initialScreenBounds) return;
+
+						try {
+							const cursor = await cursorPosition();
+							const isOutside =
+								cursor.x < initialScreenBounds.x ||
+								cursor.x >= initialScreenBounds.x + initialScreenBounds.width ||
+								cursor.y < initialScreenBounds.y ||
+								cursor.y >= initialScreenBounds.y + initialScreenBounds.height;
+
+							if (isOutside) {
+								console.log("Cursor left screen, hiding timeline");
+								commands.closeWindow("Main");
+							}
+						} catch (e) {
+							// Ignore errors (window might be closing)
+						}
+					}, 500); // Check every 500ms
+				}
+			} catch (e) {
+				console.warn("Failed to init screen bounds check:", e);
+			}
+		};
+
+		initScreenBounds();
+
+		return () => {
+			if (checkInterval) {
+				clearInterval(checkInterval);
+			}
+		};
+	}, []);
+
 	// Listen for navigate-to-timestamp events from search window
 	useEffect(() => {
 		const unlisten = listen<string>("navigate-to-timestamp", async (event) => {
