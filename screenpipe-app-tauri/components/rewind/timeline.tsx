@@ -240,7 +240,11 @@ export default function Timeline() {
 
 
 	// Auto-select first frame when frames arrive and no frame is selected
+	// Skip during intentional navigation (day change) to prevent double-jump
 	useEffect(() => {
+		if (isNavigatingRef.current) {
+			return; // Don't auto-select during navigation
+		}
 		if (!currentFrame && frames.length > 0) {
 			setCurrentFrame(frames[0]);
 			setCurrentIndex(0);
