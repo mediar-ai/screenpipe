@@ -30,6 +30,10 @@
             "pages": ["plugins", "mcp-server"]
           },
           {
+            "group": "integrations",
+            "pages": ["claude-code", "opencode", "moltbot"]
+          },
+          {
             "group": "reference",
             "pages": ["cli-reference", "sdk-reference"]
           },

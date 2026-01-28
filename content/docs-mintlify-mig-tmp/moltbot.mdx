@@ -1,0 +1,127 @@
+---
+title: "moltbot (clawdbot) - AI assistant with screenpipe memory"
+sidebarTitle: "moltbot"
+description: "Connect screenpipe to Moltbot (formerly Clawdbot) to give your personal AI assistant access to everything you've seen and heard."
+icon: "robot"
+---
+
+[Moltbot](https://molt.bot) (formerly Clawdbot) is a self-hosted personal AI assistant that connects to your messaging apps (WhatsApp, Telegram, Discord, iMessage, etc.) and can take actions on your behalf.
+
+with screenpipe, Moltbot can recall what you've seen on screen, reference past conversations, and answer questions about your digital history.
+
+## setup options
+
+### option 1: custom skill (recommended)
+
+Moltbot uses [Agent Skills](https://opencode.ai/docs/skills) - the same open standard as Claude Code and OpenCode. create a skill that queries screenpipe's REST API.
+
+1. create `~/.moltbot/skills/screenpipe/SKILL.md`:
+
+```markdown
+---
+name: screenpipe
+description: Search screen recordings, audio transcriptions, and UI elements from the user's computer
+tools:
+  - Bash
+---
+
+# screenpipe skill
+
+query the user's screen and audio history via the screenpipe API at http://localhost:3030.
+
+## search content
+
+```bash
+# search all content (OCR, audio, UI)
+curl -s "http://localhost:3030/search?q=QUERY&limit=20"
+
+# filter by type: ocr, audio, ui
+curl -s "http://localhost:3030/search?q=QUERY&content_type=ocr"
+
+# filter by app
+curl -s "http://localhost:3030/search?q=QUERY&app_name=Chrome"
+
+# filter by time (ISO 8601 UTC)
+curl -s "http://localhost:3030/search?start_time=2026-01-01T00:00:00Z&end_time=2026-01-02T00:00:00Z"
+```
+
+## health check
+
+```bash
+curl -s http://localhost:3030/health
+```
+
+## common queries
+
+- "what was I working on?" → search recent OCR, group by app
+- "find mentions of X" → full-text search all content types
+- "meeting notes about Y" → search audio transcriptions
+- "code I was looking at" → search OCR filtered by IDE apps
+
+## response format
+
+1. summarize what was found (count, time range)
+2. present the most relevant results with timestamps
+3. include app context for each result
+```
+
+2. restart Moltbot to load the skill
+
+### option 2: mcporter (MCP)
+
+if you prefer using MCP, Moltbot supports it via the mcporter skill:
+
+1. ensure mcporter skill is installed
+2. configure screenpipe-mcp:
+
+```bash
+# test the MCP server
+npx @modelcontextprotocol/inspector npx screenpipe-mcp
+```
+
+3. add to your Moltbot MCP config:
+
+```json
+{
+  "screenpipe": {
+    "command": "npx",
+    "args": ["-y", "screenpipe-mcp"]
+  }
+}
+```
+
+<Note>
+MCP uses more context tokens than skills. the Moltbot team recommends skills for most use cases.
+</Note>
+
+## example prompts
+
+once configured, message Moltbot from any chat app:
+
+- "what was I reading about yesterday afternoon?"
+- "find the slack message from john about the deployment"
+- "what code was I looking at in cursor this morning?"
+- "summarize my meetings from last week"
+- "what tabs did I have open when researching that bug?"
+
+## requirements
+
+- screenpipe must be running on the same machine as Moltbot
+- screenpipe API accessible at http://localhost:3030
+- for remote setups, configure a secure tunnel (e.g., tailscale, cloudflare tunnel)
+
+## troubleshooting
+
+**skill not loading?**
+- check `~/.moltbot/skills/screenpipe/SKILL.md` exists
+- verify yaml frontmatter is valid
+- restart Moltbot
+
+**no results from queries?**
+- verify screenpipe is running: `curl http://localhost:3030/health`
+- check screenpipe has recorded data: `curl "http://localhost:3030/search?limit=1"`
+- ensure screenpipe has screen recording permissions
+
+**Moltbot can't reach screenpipe?**
+- both must run on same machine, or use a tunnel
+- check firewall isn't blocking localhost:3030
