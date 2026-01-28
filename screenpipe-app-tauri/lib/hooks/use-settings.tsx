@@ -52,10 +52,13 @@ export type AIPreset = {
 	  }
 );
 
+export type UpdateChannel = "stable" | "beta";
+
 // Extend SettingsStore with deviceId (for AI free tier tracking)
 // This is added here until the Rust types are regenerated
 export type Settings = SettingsStore & {
 	deviceId?: string;
+	updateChannel?: UpdateChannel;
 }
 
 export const DEFAULT_PROMPT = `Rules:
@@ -143,6 +146,7 @@ let DEFAULT_SETTINGS: Settings = {
 				port: 11434,
 			},
 			enableBeta: false,
+		updateChannel: "stable",
 			isFirstTimeUser: true,
 			autoStartEnabled: true,
 			enableFrameCache: true,
