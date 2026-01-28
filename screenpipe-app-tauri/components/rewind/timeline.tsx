@@ -82,6 +82,9 @@ export default function Timeline() {
 	// Pending navigation target from search - will jump when frames load
 	const pendingNavigationRef = useRef<Date | null>(null);
 
+	// Seeking state for UX feedback when navigating from search
+	const [seekingTimestamp, setSeekingTimestamp] = useState<string | null>(null);
+
 	// Re-show audio transcript when navigating timeline
 	useEffect(() => {
 		setShowAudioTranscript(true);
@@ -193,6 +196,9 @@ export default function Timeline() {
 
 			const targetDate = new Date(targetTimestamp);
 
+			// Show seeking overlay
+			setSeekingTimestamp(targetTimestamp);
+
 			// Store the pending navigation target - will be processed by the frames effect
 			pendingNavigationRef.current = targetDate;
 
@@ -222,6 +228,8 @@ export default function Timeline() {
 				console.log("Frames loaded, jumping to pending navigation:", targetDate);
 				jumpToTime(targetDate);
 				pendingNavigationRef.current = null;
+				// Clear seeking overlay
+				setSeekingTimestamp(null);
 			}
 		}
 	}, [frames, currentDate]);
@@ -655,6 +663,20 @@ export default function Timeline() {
 					</div>
 				)}
 
+				{/* Seeking overlay - shows when navigating from search */}
+				{seekingTimestamp && (
+					<div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
+						<div className="bg-card/95 backdrop-blur-md text-foreground px-6 py-4 rounded-xl text-center space-y-2 border border-border shadow-2xl">
+							<div className="flex items-center justify-center gap-2">
+								<Loader2 className="h-4 w-4 animate-spin" />
+								<span className="font-medium">Finding frame...</span>
+							</div>
+							<p className="text-xs text-muted-foreground font-mono">
+								{new Date(seekingTimestamp).toLocaleString()}
+							</p>
+						</div>
+					</div>
+				)}
 
 				{error && (
 					<div className="absolute inset-0 z-50 flex items-center justify-center bg-background/90">
