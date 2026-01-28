@@ -3274,8 +3274,8 @@ async fn handle_stream_frames_socket(
     let mut frame_buffer = Vec::with_capacity(100);
     let mut buffer_timer = tokio::time::interval(Duration::from_millis(100));
 
-    // Timer for polling new frames (every 2 seconds)
-    let mut poll_timer = tokio::time::interval(Duration::from_secs(2));
+    // Timer for polling new frames (every 1 second for faster timeline updates)
+    let mut poll_timer = tokio::time::interval(Duration::from_secs(1));
     poll_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     // Timer for keep-alive messages (every 30 seconds)

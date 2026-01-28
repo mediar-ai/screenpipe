@@ -1,6 +1,7 @@
 #[cfg(target_os = "windows")]
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use screenpipe_vision::capture_screenshot_by_window::{CapturedWindow, WindowFilters};
     use screenpipe_vision::core::OcrTaskData;
     use screenpipe_vision::monitor::get_default_monitor;
@@ -32,9 +33,14 @@ mod tests {
         let window_images = vec![CapturedWindow {
             app_name: "test_app".to_string(),
             window_name: "test_window".to_string(),
-            image,
+            image: image.clone(),
             is_focused: true,
             process_id: 1234,
+            browser_url: None,
+            window_x: 0,
+            window_y: 0,
+            window_width: image.width(),
+            window_height: image.height(),
         }];
 
         let result = process_ocr_task(
@@ -43,6 +49,7 @@ mod tests {
                 window_images,
                 frame_number,
                 timestamp,
+                captured_at: Utc::now(),
                 result_tx: tx,
             },
             &ocr_engine,
