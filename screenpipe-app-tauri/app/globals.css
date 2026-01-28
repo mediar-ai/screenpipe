@@ -243,6 +243,25 @@
     draggable: false;
   }
 
+  /* Allow video/audio controls to work normally */
+  video, audio {
+    -webkit-user-drag: auto !important;
+    user-select: auto !important;
+  }
+
+  video::-webkit-media-controls,
+  video::-webkit-media-controls-enclosure,
+  video::-webkit-media-controls-panel,
+  video::-webkit-media-controls-timeline,
+  audio::-webkit-media-controls,
+  audio::-webkit-media-controls-enclosure,
+  audio::-webkit-media-controls-panel,
+  audio::-webkit-media-controls-timeline {
+    -webkit-user-drag: auto !important;
+    pointer-events: auto !important;
+    user-select: auto !important;
+  }
+
   .scrollbar-hide {
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
