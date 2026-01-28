@@ -87,8 +87,8 @@ use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
 
-use std::collections::{HashMap, HashSet};
-use uuid::Uuid; // or sentry::protocol::Uuid depending on which you want to use
+use std::collections::HashMap;
+// or sentry::protocol::Uuid depending on which you want to use
 
 pub type FrameImageCache = LruCache<i64, (String, Instant)>;
 
@@ -1237,7 +1237,7 @@ impl SCServer {
             app.into_make_service_with_connect_info::<SocketAddr>(),
         )
         .await
-        .map_err(|e| std::io::Error::other(e))?;
+        .map_err(std::io::Error::other)?;
 
         Ok(())
     }
@@ -3352,7 +3352,7 @@ async fn handle_stream_frames_socket(
                 _ = poll_timer.tick() => {
                     let request_info = {
                         let req = active_request_for_poll.lock().await;
-                        req.clone()
+                        *req
                     };
 
                     if let Some((_start_time, end_time, is_descending, last_polled)) = request_info {

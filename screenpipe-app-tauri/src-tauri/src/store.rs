@@ -176,8 +176,8 @@ pub struct SettingsStore {
     pub start_audio_shortcut: String,
     #[serde(rename = "stopAudioShortcut")]
     pub stop_audio_shortcut: String,
-    #[serde(rename = "showSearchShortcut")]
-    pub show_search_shortcut: String,
+    #[serde(rename = "showChatShortcut")]
+    pub show_chat_shortcut: String,
     #[serde(rename = "enableRealtimeAudioTranscription")]
     pub enable_realtime_audio_transcription: bool,
     #[serde(rename = "realtimeAudioTranscriptionEngine")]
@@ -454,9 +454,9 @@ impl Default for SettingsStore {
             start_audio_shortcut: "".to_string(),
             stop_audio_shortcut: "".to_string(),
             #[cfg(target_os = "windows")]
-            show_search_shortcut: "Alt+K".to_string(),
+            show_chat_shortcut: "Alt+L".to_string(),
             #[cfg(not(target_os = "windows"))]
-            show_search_shortcut: "Super+Alt+K".to_string(),
+            show_chat_shortcut: "Super+Alt+L".to_string(),
             enable_realtime_audio_transcription: false,
             realtime_audio_transcription_engine: "deepgram".to_string(),
             disable_vision: false,

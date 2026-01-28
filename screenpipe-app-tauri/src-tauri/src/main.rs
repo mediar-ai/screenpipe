@@ -88,7 +88,7 @@ struct ShortcutConfig {
     stop: String,
     start_audio: String,
     stop_audio: String,
-    show_search: String,
+    show_chat: String,
     disabled: Vec<String>,
 }
 
@@ -107,8 +107,8 @@ impl ShortcutConfig {
                 .start_audio_shortcut,
             stop_audio: store
                 .stop_audio_shortcut,
-            show_search: store
-                .show_search_shortcut,
+            show_chat: store
+                .show_chat_shortcut,
             disabled: store
                 .disabled_shortcuts,
         })
@@ -162,7 +162,7 @@ async fn update_global_shortcuts(
         stop: stop_shortcut,
         start_audio: start_audio_shortcut,
         stop_audio: stop_audio_shortcut,
-        show_search: store_config.show_search,
+        show_chat: store_config.show_chat,
         disabled: store_config.disabled,
     };
     apply_shortcuts(&app, &config).await

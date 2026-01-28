@@ -341,7 +341,7 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
 }
 
 async fn get_video_fps_and_duration(ffmpeg_path: &PathBuf, video_path: &str) -> Result<(f64, f64)> {
-    let ffprobe_path = get_ffprobe_path(&ffmpeg_path);
+    let ffprobe_path = get_ffprobe_path(ffmpeg_path);
 
     let output = Command::new(&ffprobe_path)
         .args([
