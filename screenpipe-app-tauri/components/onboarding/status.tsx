@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Check, Monitor, Mic, AlertTriangle, Upload, Loader, Calendar } from "lucide-react";
+import { Check, Monitor, Mic, Keyboard, AlertTriangle, Upload, Loader, Calendar } from "lucide-react";
 import { Button } from "../ui/button";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
@@ -180,8 +180,9 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
         const screenOk = perms.screenRecording === "granted" || perms.screenRecording === "notNeeded";
         const audioOk = perms.microphone === "granted" || perms.microphone === "notNeeded";
+        const accessibilityOk = perms.accessibility === "granted" || perms.accessibility === "notNeeded";
 
-        if (screenOk && audioOk && !hasStartedRef.current) {
+        if (screenOk && audioOk && accessibilityOk && !hasStartedRef.current) {
           setSetupState("ready");
         } else if (!hasStartedRef.current) {
           setSetupState("needs-permissions");
@@ -202,30 +203,39 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     checkScreenPermissionOnce();
   }, [isMacOS]);
 
-  // Poll microphone permission only (screen permission requires app restart)
+  // Poll microphone and accessibility permissions (screen permission requires app restart)
   useEffect(() => {
     if (!isMacOS || screenPermissionRef.current === null) return;
 
-    const checkMicPermission = async () => {
+    const checkPermissions = async () => {
       if (hasStartedRef.current) return;
 
       try {
-        // Use mic-only check to avoid triggering screen capture permission dialogs
-        const micStatus = await commands.checkMicrophonePermission();
-        setPermissions(prev => prev ? { ...prev, microphone: micStatus } : null);
+        // Use individual checks to avoid triggering screen capture permission dialogs
+        const [micStatus, accessibilityStatus] = await Promise.all([
+          commands.checkMicrophonePermission(),
+          commands.checkAccessibilityPermissionCmd(),
+        ]);
+
+        setPermissions(prev => prev ? {
+          ...prev,
+          microphone: micStatus,
+          accessibility: accessibilityStatus,
+        } : null);
 
         const screenOk = screenPermissionRef.current === "granted" || screenPermissionRef.current === "notNeeded";
         const audioOk = micStatus === "granted" || micStatus === "notNeeded";
+        const accessibilityOk = accessibilityStatus === "granted" || accessibilityStatus === "notNeeded";
 
-        if (screenOk && audioOk && !hasStartedRef.current) {
+        if (screenOk && audioOk && accessibilityOk && !hasStartedRef.current) {
           setSetupState("ready");
         }
       } catch (error) {
-        console.error("Failed to check mic permission:", error);
+        console.error("Failed to check permissions:", error);
       }
     };
 
-    const interval = setInterval(checkMicPermission, 2000);
+    const interval = setInterval(checkPermissions, 2000);
     return () => clearInterval(interval);
   }, [isMacOS, screenPermissionRef.current]);
 
@@ -300,12 +310,14 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     }
   };
 
-  const requestPermission = async (type: "screen" | "audio") => {
+  const requestPermission = async (type: "screen" | "audio" | "accessibility") => {
     try {
       if (type === "screen") {
         await commands.requestPermission("screenRecording");
-      } else {
+      } else if (type === "audio") {
         await commands.requestPermission("microphone");
+      } else {
+        await commands.requestPermission("accessibility");
       }
     } catch (error) {
       console.error("Failed to request permission:", error);
@@ -314,6 +326,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   const screenGranted = permissions?.screenRecording === "granted" || permissions?.screenRecording === "notNeeded";
   const audioGranted = permissions?.microphone === "granted" || permissions?.microphone === "notNeeded";
+  const accessibilityGranted = permissions?.accessibility === "granted" || permissions?.accessibility === "notNeeded";
 
   return (
     <div className={`${className} w-full flex flex-col items-center justify-center min-h-[400px]`}>
@@ -340,7 +353,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           <div className="text-center space-y-2">
             <h2 className="font-mono text-xl text-foreground">grant access</h2>
             <p className="font-mono text-xs text-muted-foreground">
-              screenpipe needs permission to capture your screen and audio
+              screenpipe needs these permissions to work
             </p>
           </div>
 
@@ -351,12 +364,15 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             >
               <div className="flex items-center space-x-3">
                 <Monitor className="w-5 h-5" strokeWidth={1.5} />
-                <span className="font-mono text-sm">screen recording</span>
+                <div className="text-left">
+                  <span className="font-mono text-sm block">screen recording</span>
+                  <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">capture what&apos;s on screen</span>
+                </div>
               </div>
               {screenGranted ? (
                 <Check className="w-5 h-5 text-foreground group-hover:text-background" strokeWidth={1.5} />
               ) : (
-                <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">click to enable</span>
+                <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">enable</span>
               )}
             </button>
 
@@ -366,14 +382,37 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             >
               <div className="flex items-center space-x-3">
                 <Mic className="w-5 h-5" strokeWidth={1.5} />
-                <span className="font-mono text-sm">microphone</span>
+                <div className="text-left">
+                  <span className="font-mono text-sm block">microphone</span>
+                  <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">transcribe speech</span>
+                </div>
               </div>
               {audioGranted ? (
                 <Check className="w-5 h-5 text-foreground group-hover:text-background" strokeWidth={1.5} />
               ) : (
-                <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">click to enable</span>
+                <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">enable</span>
               )}
             </button>
+
+            {isMacOS && (
+              <button
+                onClick={() => requestPermission("accessibility")}
+                className="w-full flex items-center justify-between p-4 border border-border hover:bg-foreground hover:text-background transition-all group"
+              >
+                <div className="flex items-center space-x-3">
+                  <Keyboard className="w-5 h-5" strokeWidth={1.5} />
+                  <div className="text-left">
+                    <span className="font-mono text-sm block">accessibility</span>
+                    <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">keyboard shortcuts</span>
+                  </div>
+                </div>
+                {accessibilityGranted ? (
+                  <Check className="w-5 h-5 text-foreground group-hover:text-background" strokeWidth={1.5} />
+                ) : (
+                  <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">enable</span>
+                )}
+              </button>
+            )}
           </div>
 
           {showContinueAnyway && (

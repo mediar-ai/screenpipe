@@ -21,6 +21,13 @@ async doPermissionsCheck(initialCheck: boolean) : Promise<OSPermissionsCheck> {
 async checkMicrophonePermission() : Promise<OSPermissionStatus> {
     return await TAURI_INVOKE("check_microphone_permission");
 },
+/**
+ * Check only accessibility permission
+ * Use this for polling to check if user has granted accessibility permission
+ */
+async checkAccessibilityPermissionCmd() : Promise<OSPermissionStatus> {
+    return await TAURI_INVOKE("check_accessibility_permission_cmd");
+},
 async getEnv(name: string) : Promise<string> {
     return await TAURI_INVOKE("get_env", { name });
 },
@@ -184,6 +191,30 @@ async hideShortcutReminder() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Register window-specific shortcuts (Escape, Cmd+K, Cmd+L) when main window is visible
+ * These should only be active when the overlay is open to avoid blocking other apps
+ */
+async registerWindowShortcuts() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("register_window_shortcuts") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Unregister window-specific shortcuts when main window is hidden
+ * This allows Escape, Cmd+K, Cmd+L to work normally in other apps
+ */
+async unregisterWindowShortcuts() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("unregister_window_shortcuts") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async setTrayUnhealthIcon() : Promise<void> {
     await TAURI_INVOKE("set_tray_unhealth_icon");
 },
@@ -208,9 +239,9 @@ export type Credits = { amount: number }
 export type EmbeddedLLM = { enabled: boolean; model: string; port: number }
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key in string]: JsonValue }
 export type LogFile = { name: string; path: string; modified_at: bigint }
-export type OSPermission = "screenRecording" | "microphone"
+export type OSPermission = "screenRecording" | "microphone" | "accessibility"
 export type OSPermissionStatus = "notNeeded" | "empty" | "granted" | "denied"
-export type OSPermissionsCheck = { screenRecording: OSPermissionStatus; microphone: OSPermissionStatus }
+export type OSPermissionsCheck = { screenRecording: OSPermissionStatus; microphone: OSPermissionStatus; accessibility: OSPermissionStatus }
 export type OnboardingStore = { isCompleted: boolean; completedAt: string | null; 
 /**
  * Current step in onboarding flow (login, intro, usecases, status)
@@ -221,7 +252,11 @@ export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isL
 /**
  * Persistent analytics ID used for PostHog tracking (both frontend and backend)
  */
-analyticsId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngine: string; monitorIds: string[]; audioDevices: string[]; usePiiRemoval: boolean; restartInterval: number; port: number; dataDir: string; disableAudio: boolean; ignoredWindows: string[]; includedWindows: string[]; fps: number; vadSensitivity: string; analyticsEnabled: boolean; audioChunkDuration: number; useChineseMirror: boolean; languages: string[]; embeddedLLM: EmbeddedLLM; enableBeta: boolean; isFirstTimeUser: boolean; autoStartEnabled: boolean; enableFrameCache: boolean; platform: string; disabledShortcuts: string[]; user: User; showScreenpipeShortcut: string; startRecordingShortcut: string; stopRecordingShortcut: string; startAudioShortcut: string; stopAudioShortcut: string; enableRealtimeAudioTranscription: boolean; realtimeAudioTranscriptionEngine: string; disableVision: boolean; useAllMonitors: boolean; enableRealtimeVision: boolean; showShortcutOverlay?: boolean }
+analyticsId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngine: string; monitorIds: string[]; audioDevices: string[]; usePiiRemoval: boolean; restartInterval: number; port: number; dataDir: string; disableAudio: boolean; ignoredWindows: string[]; includedWindows: string[]; fps: number; vadSensitivity: string; analyticsEnabled: boolean; audioChunkDuration: number; useChineseMirror: boolean; languages: string[]; embeddedLLM: EmbeddedLLM; enableBeta: boolean; isFirstTimeUser: boolean; autoStartEnabled: boolean; enableFrameCache: boolean; platform: string; disabledShortcuts: string[]; user: User; showScreenpipeShortcut: string; startRecordingShortcut: string; stopRecordingShortcut: string; startAudioShortcut: string; stopAudioShortcut: string; enableRealtimeAudioTranscription: boolean; realtimeAudioTranscriptionEngine: string; disableVision: boolean; useAllMonitors: boolean; enableRealtimeVision: boolean; showShortcutOverlay?: boolean; 
+/**
+ * Unique device ID for AI usage tracking (generated on first launch)
+ */
+deviceId?: string }
 export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding"
 export type User = { id: string | null; name: string | null; email: string | null; image: string | null; token: string | null; clerk_id: string | null; api_key: string | null; credits: Credits | null; stripe_connected: boolean | null; stripe_account_status: string | null; github_username: string | null; bio: string | null; website: string | null; contact: string | null; cloud_subscribed: boolean | null }
 

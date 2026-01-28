@@ -1,13 +1,12 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-
-
 #[derive(Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum OSPermission {
     ScreenRecording,
     Microphone,
+    Accessibility,
 }
 
 #[tauri::command(async)]
@@ -28,6 +27,12 @@ pub fn open_permission_settings(permission: OSPermission) {
                 .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
                 .spawn()
                 .expect("Failed to open Microphone settings"),
+            OSPermission::Accessibility => Command::new("open")
+                .arg(
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                )
+                .spawn()
+                .expect("Failed to open Accessibility settings"),
         };
     }
 }
@@ -57,6 +62,10 @@ pub async fn request_permission(permission: OSPermission) {
                     request_av_permission(AVMediaType::Audio);
                 }
             }
+            OSPermission::Accessibility => {
+                // Request accessibility permission (shows system prompt)
+                request_accessibility_permission();
+            }
         }
     }
 }
@@ -73,6 +82,51 @@ fn request_av_permission(media_type: nokhwa_bindings_macos::AVMediaType) {
     unsafe {
         let _: () = msg_send![cls, requestAccessForMediaType:media_type.into_ns_str() completionHandler:objc_fn_pass];
     };
+}
+
+// Accessibility permission APIs using ApplicationServices framework
+#[cfg(target_os = "macos")]
+mod accessibility {
+    use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::string::CFString;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+        fn AXIsProcessTrustedWithOptions(options: *const std::ffi::c_void) -> bool;
+        static kAXTrustedCheckOptionPrompt: *const std::ffi::c_void;
+    }
+
+    /// Check if the app has accessibility permission (without prompting)
+    pub fn is_trusted() -> bool {
+        unsafe { AXIsProcessTrusted() }
+    }
+
+    /// Check accessibility permission and show system prompt if not granted
+    pub fn request_with_prompt() -> bool {
+        unsafe {
+            let key = CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt as *const _);
+            let value = CFBoolean::true_value();
+            let dict = CFDictionary::from_CFType_pairs(&[(key, value)]);
+            AXIsProcessTrustedWithOptions(dict.as_concrete_TypeRef() as *const _)
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn check_accessibility_permission() -> OSPermissionStatus {
+    if accessibility::is_trusted() {
+        OSPermissionStatus::Granted
+    } else {
+        OSPermissionStatus::Denied
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn request_accessibility_permission() {
+    accessibility::request_with_prompt();
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Type)]
@@ -99,6 +153,7 @@ impl OSPermissionStatus {
 pub struct OSPermissionsCheck {
     pub screen_recording: OSPermissionStatus,
     pub microphone: OSPermissionStatus,
+    pub accessibility: OSPermissionStatus,
 }
 
 impl OSPermissionsCheck {
@@ -126,6 +181,22 @@ pub fn check_microphone_permission() -> OSPermissionStatus {
             AVAuthorizationStatus::Authorized => OSPermissionStatus::Granted,
             _ => OSPermissionStatus::Denied,
         }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        OSPermissionStatus::NotNeeded
+    }
+}
+
+/// Check only accessibility permission
+/// Use this for polling to check if user has granted accessibility permission
+#[tauri::command(async)]
+#[specta::specta]
+pub fn check_accessibility_permission_cmd() -> OSPermissionStatus {
+    #[cfg(target_os = "macos")]
+    {
+        check_accessibility_permission()
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -166,6 +237,7 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
                 }
             },
             microphone: check_av_permission(AVMediaType::Audio),
+            accessibility: check_accessibility_permission(),
         }
     }
 
@@ -174,6 +246,7 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
         OSPermissionsCheck {
             screen_recording: OSPermissionStatus::NotNeeded,
             microphone: OSPermissionStatus::NotNeeded,
+            accessibility: OSPermissionStatus::NotNeeded,
         }
     }
 }
