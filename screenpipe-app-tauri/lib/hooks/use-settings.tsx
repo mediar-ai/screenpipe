@@ -170,6 +170,7 @@ let DEFAULT_SETTINGS: Settings = {
 			stopRecordingShortcut: "Super+Alt+X",
 			startAudioShortcut: "",
 			stopAudioShortcut: "",
+			showSearchShortcut: "Super+Alt+K",
 			enableRealtimeAudioTranscription: false,
 			realtimeAudioTranscriptionEngine: "deepgram",
 			disableVision: false,
@@ -187,6 +188,7 @@ export function createDefaultSettingsObject(): Settings {
 		DEFAULT_SETTINGS.ocrEngine = p === "macos" ? "apple-native" : p === "windows" ? "windows-native" : "tesseract";
 		DEFAULT_SETTINGS.fps = p === "macos" ? 0.5 : 1;
 		DEFAULT_SETTINGS.showScreenpipeShortcut = p === "windows" ? "Alt+S" : "Super+Alt+S";
+		DEFAULT_SETTINGS.showSearchShortcut = p === "windows" ? "Alt+K" : "Super+Alt+K";
 
 		return DEFAULT_SETTINGS;
 	} catch (e) {

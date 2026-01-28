@@ -1,5 +1,5 @@
 use crate::{get_data_dir, window_api::ShowRewindWindow, store::OnboardingStore};
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 use tracing::{error, info};
 
 

@@ -88,6 +88,7 @@ struct ShortcutConfig {
     stop: String,
     start_audio: String,
     stop_audio: String,
+    show_search: String,
     disabled: Vec<String>,
 }
 
@@ -106,6 +107,8 @@ impl ShortcutConfig {
                 .start_audio_shortcut,
             stop_audio: store
                 .stop_audio_shortcut,
+            show_search: store
+                .show_search_shortcut,
             disabled: store
                 .disabled_shortcuts,
         })
@@ -152,13 +155,15 @@ async fn update_global_shortcuts(
     stop_audio_shortcut: String,
     _profile_shortcuts: HashMap<String, String>, // Keep for API compatibility but ignore
 ) -> Result<(), String> {
+    let store_config = ShortcutConfig::from_store(&app).await?;
     let config = ShortcutConfig {
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
         start_audio: start_audio_shortcut,
         stop_audio: stop_audio_shortcut,
-        disabled: ShortcutConfig::from_store(&app).await?.disabled,
+        show_search: store_config.show_search,
+        disabled: store_config.disabled,
     };
     apply_shortcuts(&app, &config).await
 }
@@ -276,6 +281,25 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
             store.save().unwrap();
             let _ = app.emit("shortcut-stop-audio", ());
             info!("stop audio shortcut triggered");
+        },
+    )
+    .await?;
+
+    // Register show search shortcut (global - shows main window + opens search dialog)
+    register_shortcut(
+        app,
+        &config.show_search,
+        config.is_disabled("show_search"),
+        |app| {
+            info!("show search shortcut triggered");
+            // First show the main window
+            show_main_window(app, false);
+            // Then emit event to open search dialog (with small delay for window to be ready)
+            let app_clone = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let _ = app_clone.emit("open-search", ());
+            });
         },
     )
     .await?;

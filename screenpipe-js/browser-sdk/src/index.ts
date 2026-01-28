@@ -15,8 +15,6 @@ import {
   setAnalyticsClient,
 } from "../../common/analytics";
 import posthog from "posthog-js";
-import { Operator } from "../../common/Operator";
-
 setAnalyticsClient({
   init: posthog.init.bind(posthog),
   identify: posthog.identify.bind(posthog),
@@ -102,7 +100,6 @@ export interface BrowserPipe {
   queryScreenpipe(
     params: ScreenpipeQueryParams
   ): Promise<ScreenpipeResponse | null>;
-  operator: Operator;
   streamTranscriptions(): AsyncGenerator<
     TranscriptionStreamResponse,
     void,
@@ -147,8 +144,6 @@ export interface BrowserPipe {
 }
 
 class BrowserPipeImpl implements BrowserPipe {
-  public operator: Operator = new Operator();
-
   private async initAnalyticsIfNeeded(): Promise<{
     analyticsEnabled: boolean;
     userId?: string;

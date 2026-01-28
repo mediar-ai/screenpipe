@@ -13,7 +13,6 @@ import {
   setAnalyticsClient,
 } from "../../common/analytics";
 import posthog from "posthog-js";
-import { Operator } from "../../common/Operator";
 
 setAnalyticsClient({
   init: posthog.init.bind(posthog),
@@ -27,7 +26,6 @@ class NodePipe {
   public settings = new SettingsManager();
   public inbox = new InboxManager();
   public pipes = new PipesManager();
-  public operator = new Operator();
   public async sendDesktopNotification(
     options: NotificationOptions
   ): Promise<boolean> {

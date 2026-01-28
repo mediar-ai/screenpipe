@@ -548,15 +548,22 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
             </p>
           </div>
 
-          {/* Shortcut reminder */}
-          <div className="bg-muted/50 border border-border px-4 py-3 rounded-lg">
-            <p className="font-mono text-xs text-center text-muted-foreground">
-              press{" "}
-              <span className="font-semibold text-foreground">
-                {formatShortcut(settings.showScreenpipeShortcut, isMacOS)}
-              </span>{" "}
-              anytime to open screenpipe
-            </p>
+          {/* Shortcut reminders */}
+          <div className="bg-muted/50 border border-border px-4 py-3 rounded-lg space-y-2">
+            <div className="flex justify-center gap-6 font-mono text-xs text-muted-foreground">
+              <span>
+                <span className="font-semibold text-foreground">
+                  {formatShortcut(settings.showScreenpipeShortcut, isMacOS)}
+                </span>{" "}
+                timeline
+              </span>
+              <span>
+                <span className="font-semibold text-foreground">
+                  {formatShortcut(settings.showSearchShortcut, isMacOS)}
+                </span>{" "}
+                search
+              </span>
+            </div>
           </div>
 
           {/* Timeline + AI Chat animation */}
