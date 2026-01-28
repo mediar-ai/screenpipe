@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>screenpipe search</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a;
+      color: #fafafa;
+      padding: 16px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .logo {
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 6px;
+    }
+
+    .search-box {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .search-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #1a1a1a;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: #666;
+    }
+
+    .search-input::placeholder {
+      color: #666;
+    }
+
+    .btn {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #fff;
+      color: #000;
+    }
+
+    .btn-primary:hover {
+      background: #e0e0e0;
+    }
+
+    .btn-secondary {
+      background: #1a1a1a;
+      color: #fff;
+      border: 1px solid #333;
+    }
+
+    .btn-secondary:hover {
+      background: #252525;
+    }
+
+    .filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      padding: 6px 14px;
+      border: 1px solid #333;
+      border-radius: 20px;
+      background: transparent;
+      color: #888;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+      border-color: #555;
+      color: #fff;
+    }
+
+    .filter-btn.active {
+      background: #fff;
+      color: #000;
+      border-color: #fff;
+    }
+
+    .stats {
+      display: flex;
+      gap: 20px;
+      padding: 12px 16px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 13px;
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-value {
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .stat-label {
+      color: #666;
+    }
+
+    .results {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .result-card {
+      background: #1a1a1a;
+      border: 1px solid #252525;
+      border-radius: 10px;
+      padding: 16px;
+      transition: border-color 0.2s;
+    }
+
+    .result-card:hover {
+      border-color: #333;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .result-type {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .type-ocr {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+
+    .type-audio {
+      background: rgba(34, 197, 94, 0.2);
+      color: #4ade80;
+    }
+
+    .type-ui {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+    }
+
+    .result-time {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .result-app {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    .result-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #ccc;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #252525;
+    }
+
+    .action-btn {
+      padding: 6px 12px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: transparent;
+      color: #888;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+      border-color: #555;
+      color: #fff;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #666;
+    }
+
+    .empty-state h3 {
+      font-size: 16px;
+      margin-bottom: 8px;
+      color: #888;
+    }
+
+    .loading {
+      display: flex;
+      justify-content: center;
+      padding: 40px;
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #333;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo"></div>
+      <h1>screenpipe search</h1>
+    </div>
+
+    <div class="search-box">
+      <input
+        type="text"
+        id="query"
+        class="search-input"
+        placeholder="search your screen history, audio, and more..."
+        onkeydown="if(event.key==='Enter')search()"
+      />
+      <button class="btn btn-primary" onclick="search()">search</button>
+    </div>
+
+    <div class="filters">
+      <button class="filter-btn active" data-type="all" onclick="setFilter('all')">all</button>
+      <button class="filter-btn" data-type="ocr" onclick="setFilter('ocr')">screen</button>
+      <button class="filter-btn" data-type="audio" onclick="setFilter('audio')">audio</button>
+      <button class="filter-btn" data-type="ui" onclick="setFilter('ui')">ui elements</button>
+    </div>
+
+    <div id="stats" class="stats hidden">
+      <div class="stat">
+        <span class="stat-value" id="result-count">0</span>
+        <span class="stat-label">results</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="time-range">-</span>
+        <span class="stat-label">time range</span>
+      </div>
+    </div>
+
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+    </div>
+
+    <div id="results" class="results">
+      <div class="empty-state">
+        <h3>search your digital history</h3>
+        <p>type a query above to search through your screen recordings and audio transcriptions</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentFilter = 'all';
+    let pendingRequestId = null;
+
+    // MCP App communication layer
+    const mcp = {
+      requestId: 0,
+
+      callTool: function(name, args) {
+        this.requestId++;
+        pendingRequestId = this.requestId;
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          id: this.requestId,
+          method: 'tools/call',
+          params: { name, arguments: args }
+        }, '*');
+        return this.requestId;
+      },
+
+      sendMessage: function(text) {
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: { content: text }
+        }, '*');
+      }
+    };
+
+    // listen for messages from host
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+
+      // handle tool results
+      if (data?.result || data?.method === 'tool/result') {
+        hideLoading();
+        const result = data.result || data.params?.result;
+        if (result) {
+          displayResults(result);
+        }
+      }
+
+      // handle errors
+      if (data?.error) {
+        hideLoading();
+        showError(data.error.message || 'search failed');
+      }
+    });
+
+    function setFilter(type) {
+      currentFilter = type;
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.type === type);
+      });
+      // re-run search with new filter if there's a query
+      const query = document.getElementById('query').value;
+      if (query) {
+        search();
+      }
+    }
+
+    function search() {
+      const query = document.getElementById('query').value;
+      showLoading();
+
+      const args = {
+        q: query || undefined,
+        content_type: currentFilter,
+        limit: 20
+      };
+
+      mcp.callTool('search-content', args);
+    }
+
+    function showLoading() {
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('results').innerHTML = '';
+      document.getElementById('stats').classList.add('hidden');
+    }
+
+    function hideLoading() {
+      document.getElementById('loading').classList.add('hidden');
+    }
+
+    function showError(message) {
+      document.getElementById('results').innerHTML = `
+        <div class="empty-state">
+          <h3>error</h3>
+          <p>${escapeHtml(message)}</p>
+        </div>
+      `;
+    }
+
+    function displayResults(data) {
+      const results = data.data || data || [];
+      const container = document.getElementById('results');
+      const statsEl = document.getElementById('stats');
+
+      if (!Array.isArray(results) || results.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <h3>no results found</h3>
+            <p>try a different search term or adjust your filters</p>
+          </div>
+        `;
+        statsEl.classList.add('hidden');
+        return;
+      }
+
+      // update stats
+      document.getElementById('result-count').textContent = results.length;
+
+      // calculate time range
+      const timestamps = results
+        .map(r => r.content?.timestamp)
+        .filter(Boolean)
+        .map(t => new Date(t).getTime())
+        .sort((a, b) => a - b);
+
+      if (timestamps.length > 1) {
+        const start = new Date(timestamps[0]);
+        const end = new Date(timestamps[timestamps.length - 1]);
+        document.getElementById('time-range').textContent = formatTimeRange(start, end);
+      } else {
+        document.getElementById('time-range').textContent = 'now';
+      }
+
+      statsEl.classList.remove('hidden');
+
+      // render results
+      container.innerHTML = results.map(result => {
+        const content = result.content || {};
+        const type = result.type?.toLowerCase() || 'unknown';
+        const text = content.text || content.transcription || '';
+        const app = content.app_name || content.device_name || 'unknown';
+        const window = content.window_name || '';
+        const time = content.timestamp ? formatTime(new Date(content.timestamp)) : '';
+
+        return `
+          <div class="result-card">
+            <div class="result-header">
+              <span class="result-type type-${type}">${getTypeIcon(type)} ${type}</span>
+              <span class="result-time">${time}</span>
+            </div>
+            <div class="result-app">${escapeHtml(app)}${window ? ' - ' + escapeHtml(window) : ''}</div>
+            <div class="result-text">${escapeHtml(truncate(text, 300))}</div>
+            <div class="result-actions">
+              <button class="action-btn" onclick="copyText('${escapeJs(text)}')">copy</button>
+              <button class="action-btn" onclick="askAbout('${escapeJs(text.substring(0, 100))}')">ask AI</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function getTypeIcon(type) {
+      switch(type) {
+        case 'ocr': return '';
+        case 'audio': return '';
+        case 'ui': return '';
+        default: return '';
+      }
+    }
+
+    function formatTime(date) {
+      const now = new Date();
+      const diff = now - date;
+
+      if (diff < 60000) return 'just now';
+      if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+
+    function formatTimeRange(start, end) {
+      const diff = end - start;
+      if (diff < 3600000) return Math.floor(diff / 60000) + ' min';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + ' hours';
+      return Math.floor(diff / 86400000) + ' days';
+    }
+
+    function truncate(str, len) {
+      if (!str) return '';
+      if (str.length <= len) return str;
+      return str.substring(0, len) + '...';
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escapeJs(str) {
+      if (!str) return '';
+      return str
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r');
+    }
+
+    function copyText(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        // could show a toast here
+      });
+    }
+
+    function askAbout(text) {
+      mcp.sendMessage(`Tell me more about: "${text}"`);
+    }
+
+    // auto-focus search input
+    document.getElementById('query').focus();
+  </script>
+</body>
+</html>

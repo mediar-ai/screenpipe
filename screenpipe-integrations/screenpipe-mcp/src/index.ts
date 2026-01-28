@@ -51,7 +51,7 @@ const SCREENPIPE_API = `http://localhost:${port}`;
 const server = new Server(
   {
     name: "screenpipe",
-    version: "0.4.0",
+    version: "0.5.0",
   },
   {
     capabilities: {
@@ -466,6 +466,12 @@ const RESOURCES = [
     description: "How to use screenpipe search effectively",
     mimeType: "text/markdown",
   },
+  {
+    uri: "ui://search",
+    name: "Search Dashboard",
+    description: "Interactive search UI for exploring screen recordings and audio transcriptions",
+    mimeType: "text/html",
+  },
 ];
 
 // List resources handler
@@ -542,6 +548,56 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           },
         ],
       };
+
+    case "ui://search": {
+      // MCP App UI - Interactive search dashboard
+      const uiHtmlPath = path.join(__dirname, "..", "ui", "search.html");
+      let htmlContent: string;
+      try {
+        htmlContent = fs.readFileSync(uiHtmlPath, "utf-8");
+      } catch {
+        // Fallback: serve embedded minimal UI if file not found
+        htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: system-ui; background: #0a0a0a; color: #fff; padding: 20px; }
+    input { width: 100%; padding: 10px; margin-bottom: 10px; background: #1a1a1a; border: 1px solid #333; color: #fff; border-radius: 6px; }
+    button { padding: 10px 20px; background: #fff; color: #000; border: none; border-radius: 6px; cursor: pointer; }
+    #results { margin-top: 20px; }
+    .result { background: #1a1a1a; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #333; }
+  </style>
+</head>
+<body>
+  <h2>screenpipe search</h2>
+  <input id="q" placeholder="search..." onkeydown="if(event.key==='Enter')search()"/>
+  <button onclick="search()">search</button>
+  <div id="results"></div>
+  <script>
+    function search() {
+      window.parent.postMessage({jsonrpc:'2.0',method:'tools/call',params:{name:'search-content',arguments:{q:document.getElementById('q').value,limit:20}}},'*');
+    }
+    window.addEventListener('message',e=>{
+      if(e.data?.result||e.data?.method==='tool/result'){
+        const r=e.data.result||e.data.params?.result;
+        const d=r?.data||r||[];
+        document.getElementById('results').innerHTML=d.map(x=>'<div class="result"><b>'+((x.type||'')+'</b> '+(x.content?.app_name||'')+': '+(x.content?.text||x.content?.transcription||'').substring(0,200))+'</div>').join('');
+      }
+    });
+  </script>
+</body>
+</html>`;
+      }
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "text/html",
+            text: htmlContent,
+          },
+        ],
+      };
+    }
 
     default:
       throw new Error(`Unknown resource: ${uri}`);
