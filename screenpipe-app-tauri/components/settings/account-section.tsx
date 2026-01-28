@@ -288,7 +288,7 @@ export function AccountSection() {
           <Separator className="my-2" />
           <div className="text-sm">
             <span className="text-muted-foreground">upgrade benefits: </span>
-            <span className="text-foreground">unlimited queries, all models (gpt-4, claude opus), priority support</span>
+            <span className="text-foreground">unlimited queries, all models (claude opus), priority support</span>
           </div>
         </Card>
       )}
