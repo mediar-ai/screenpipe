@@ -559,9 +559,9 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
               </span>
               <span>
                 <span className="font-semibold text-foreground">
-                  {formatShortcut(settings.showSearchShortcut, isMacOS)}
+                  {formatShortcut(settings.showChatShortcut, isMacOS)}
                 </span>{" "}
-                search
+                ai chat
               </span>
             </div>
           </div>

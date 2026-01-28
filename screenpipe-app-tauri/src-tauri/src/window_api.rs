@@ -142,6 +142,7 @@ pub enum RewindWindowId {
     Settings,
     Search,
     Onboarding,
+    Chat,
 }
 
 impl FromStr for RewindWindowId {
@@ -153,6 +154,7 @@ impl FromStr for RewindWindowId {
             "settings" => Ok(RewindWindowId::Settings),
             "search" => Ok(RewindWindowId::Search),
             "onboarding" => Ok(RewindWindowId::Onboarding),
+            "chat" => Ok(RewindWindowId::Chat),
             _ => Ok(RewindWindowId::Main),
         }
     }
@@ -165,6 +167,7 @@ impl std::fmt::Display for RewindWindowId {
             RewindWindowId::Settings => write!(f, "settings"),
             RewindWindowId::Search => write!(f, "search"),
             RewindWindowId::Onboarding => write!(f, "onboarding"),
+            RewindWindowId::Chat => write!(f, "chat"),
         }
     }
 }
@@ -176,6 +179,7 @@ impl RewindWindowId {
             RewindWindowId::Settings => "settings",
             RewindWindowId::Search => "search",
             RewindWindowId::Onboarding => "onboarding",
+            RewindWindowId::Chat => "chat",
         }
     }
 
@@ -185,6 +189,7 @@ impl RewindWindowId {
             RewindWindowId::Settings => "settings",
             RewindWindowId::Search => "search",
             RewindWindowId::Onboarding => "onboarding",
+            RewindWindowId::Chat => "ai chat",
         }
     }
 
@@ -194,6 +199,7 @@ impl RewindWindowId {
             RewindWindowId::Settings => (1200.0, 850.0),
             RewindWindowId::Search => (1200.0, 850.0),
             RewindWindowId::Onboarding => (900.0, 800.0),
+            RewindWindowId::Chat => (500.0, 600.0),
         })
     }
 
@@ -209,6 +215,7 @@ pub enum ShowRewindWindow {
     Settings { page: Option<String> },
     Search { query: Option<String> },
     Onboarding,
+    Chat,
 }
 
 impl ShowRewindWindow {
@@ -254,6 +261,7 @@ impl ShowRewindWindow {
             ShowRewindWindow::Settings { page: _ } => RewindWindowId::Settings,
             ShowRewindWindow::Search { query: _ } => RewindWindowId::Search,
             ShowRewindWindow::Onboarding => RewindWindowId::Onboarding,
+            ShowRewindWindow::Chat => RewindWindowId::Chat,
         }
     }
 
@@ -263,6 +271,7 @@ impl ShowRewindWindow {
             ShowRewindWindow::Settings { page: _ } => None,
             ShowRewindWindow::Search { query } => Some(query.clone().unwrap_or_default().to_string()),
             ShowRewindWindow::Onboarding => None,
+            ShowRewindWindow::Chat => None,
         }
     }
 
@@ -638,6 +647,17 @@ impl ShowRewindWindow {
                 let builder = self.window_builder(app, "/onboarding").visible_on_all_workspaces(true).inner_size(1000.0, 850.0).minimizable(false).maximizable(false).focused(true);
                 let window = builder.build()?;
 
+                window
+            }
+            ShowRewindWindow::Chat => {
+                let builder = self.window_builder(app, "/chat")
+                    .inner_size(500.0, 650.0)
+                    .min_inner_size(400.0, 500.0)
+                    .focused(true)
+                    .always_on_top(true);
+                #[cfg(target_os = "macos")]
+                let builder = builder.hidden_title(true);
+                let window = builder.build()?;
                 window
             }
         };

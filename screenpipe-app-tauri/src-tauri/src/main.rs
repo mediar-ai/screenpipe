@@ -48,6 +48,8 @@ mod updates;
 mod window_api;
 #[cfg(target_os = "windows")]
 mod windows_overlay;
+#[cfg(target_os = "macos")]
+mod space_monitor;
 
 pub use server::*;
 
@@ -285,21 +287,21 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     )
     .await?;
 
-    // Register show search shortcut (global - shows main window + opens search dialog)
+    // Register show chat shortcut (global - toggles standalone AI chat window)
     register_shortcut(
         app,
-        &config.show_search,
-        config.is_disabled("show_search"),
+        &config.show_chat,
+        config.is_disabled("show_chat"),
         |app| {
-            info!("show search shortcut triggered");
-            // First show the main window
-            show_main_window(app, false);
-            // Then emit event to open search dialog (with small delay for window to be ready)
-            let app_clone = app.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                let _ = app_clone.emit("open-search", ());
-            });
+            info!("show chat shortcut triggered");
+            // Toggle the chat window - close if visible, show if not
+            if let Some(window) = app.get_webview_window("chat") {
+                if window.is_visible().unwrap_or(false) {
+                    let _ = window.close();
+                    return;
+                }
+            }
+            let _ = ShowRewindWindow::Chat.show(app);
         },
     )
     .await?;
@@ -879,6 +881,9 @@ async fn main() {
                         let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
                     }
                 });
+
+                // Set up Space change listener to hide overlay when switching Spaces
+                space_monitor::setup_space_listener(app.handle().clone());
             }
 
             // Logging setup
