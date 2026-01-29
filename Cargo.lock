@@ -6669,6 +6669,7 @@ dependencies = [
  "console-subscriber",
  "criterion",
  "crossbeam",
+ "dashmap",
  "dirs",
  "env_logger 0.10.2",
  "fastrand",

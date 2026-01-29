@@ -227,6 +227,11 @@ pub struct Cli {
     #[arg(short = 'm', long)]
     pub monitor_id: Vec<u32>,
 
+    /// Automatically record all monitors and dynamically detect when monitors are
+    /// connected/disconnected. Recording starts/stops automatically as monitors change.
+    #[arg(long, default_value_t = false)]
+    pub use_all_monitors: bool,
+
     #[arg(short = 'l', long, value_enum)]
     pub language: Vec<Language>,
 

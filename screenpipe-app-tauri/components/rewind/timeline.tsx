@@ -759,7 +759,7 @@ export default function Timeline() {
 
 				{/* Audio Transcript Panel - Re-enabled and properly positioned */}
 				{currentFrame && showAudioTranscript && (
-					<div className="absolute bottom-28 left-4 right-4 z-35">
+					<div className="absolute bottom-28 left-4 right-4 z-[35]">
 						<AudioTranscript
 							frames={frames}
 							currentIndex={currentIndex}

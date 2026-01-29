@@ -25,6 +25,7 @@ use screenpipe_server::{
     handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer,
+    vision_manager::{VisionManager, VisionManagerConfig, start_monitor_watcher, stop_monitor_watcher},
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;
@@ -764,7 +765,57 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let handle = {
+    // Create VisionManager for dynamic monitor detection if enabled
+    let vision_manager: Option<Arc<VisionManager>> = if cli.use_all_monitors && !cli.disable_vision {
+        info!("Using dynamic monitor detection (--use-all-monitors)");
+        let config = VisionManagerConfig {
+            output_path: output_path_clone.to_string(),
+            fps,
+            video_chunk_duration: Duration::from_secs(cli.video_chunk_duration),
+            ocr_engine: Arc::new(cli.ocr_engine.clone().into()),
+            use_pii_removal: cli.use_pii_removal,
+            ignored_windows: cli.ignored_windows.clone(),
+            included_windows: cli.included_windows.clone(),
+            languages: languages_clone.clone(),
+            capture_unfocused_windows: cli.capture_unfocused_windows,
+            realtime_vision: cli.enable_realtime_audio_transcription,
+        };
+        Some(Arc::new(VisionManager::new(config, db_clone.clone(), vision_handle.clone())))
+    } else {
+        None
+    };
+
+    let handle = if let Some(ref vm) = vision_manager {
+        // Use VisionManager for dynamic monitor detection
+        let vm_clone = vm.clone();
+        let shutdown_tx_clone2 = shutdown_tx_clone.clone();
+        let runtime = &tokio::runtime::Handle::current();
+        runtime.spawn(async move {
+            let mut shutdown_rx = shutdown_tx_clone2.subscribe();
+
+            // Start VisionManager
+            if let Err(e) = vm_clone.start().await {
+                error!("Failed to start VisionManager: {:?}", e);
+                return;
+            }
+
+            // Start MonitorWatcher for dynamic detection
+            if let Err(e) = start_monitor_watcher(vm_clone.clone()).await {
+                error!("Failed to start monitor watcher: {:?}", e);
+            }
+
+            // Wait for shutdown signal
+            let _ = shutdown_rx.recv().await;
+            info!("received shutdown signal for VisionManager");
+
+            // Stop monitor watcher and VisionManager
+            let _ = stop_monitor_watcher().await;
+            if let Err(e) = vm_clone.shutdown().await {
+                error!("Error shutting down VisionManager: {:?}", e);
+            }
+        })
+    } else {
+        // Use traditional start_continuous_recording
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
@@ -889,6 +940,7 @@ async fn main() -> anyhow::Result<()> {
     println!("│ local llm              │ {:<34} │", cli.enable_llm);
 
     println!("│ use pii removal        │ {:<34} │", cli.use_pii_removal);
+    println!("│ use all monitors       │ {:<34} │", cli.use_all_monitors);
     println!(
         "│ ignored windows        │ {:<34} │",
         format_cell(&format!("{:?}", &ignored_windows_clone), VALUE_WIDTH)

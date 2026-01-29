@@ -111,7 +111,7 @@ pub async fn start_continuous_recording(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn record_video(
+pub async fn record_video(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: f64,
