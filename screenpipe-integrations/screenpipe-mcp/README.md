@@ -64,32 +64,23 @@ npx @modelcontextprotocol/inspector npx screenpipe-mcp
 
 ## Available Tools
 
-### Cross-Platform
-
 - **search-content** - Search through recorded screen content, audio transcriptions, and UI elements
   - Full text search with content type filtering (OCR/Audio/UI)
   - Time range and app/window filtering
+  - Speaker filtering (by ID or name)
   - Pagination support
 
-- **pixel-control** - Control mouse and keyboard
-  - Type text, press keys, move mouse, click
-
-### macOS Only
-
-- **find-elements** - Find UI elements in applications by role
-- **click-element** - Click UI elements by accessibility ID
-- **fill-element** - Type text into UI elements
-- **scroll-element** - Scroll UI elements
-- **open-application** - Open applications by name
-- **open-url** - Open URLs in default browser
+- **export-video** - Export screen recordings as video files
+  - Specify time range with start/end times
+  - Configurable FPS for output video
 
 ## Example Queries in Claude
 
 - "Search for any mentions of 'rust' in my screen recordings"
 - "Find audio transcriptions from the last hour"
 - "Show me what was on my screen in VSCode yesterday"
-- "Open Safari and go to github.com"
-- "Find the search button in Chrome and click it"
+- "Export a video of my screen from 2-3pm today"
+- "Find what John said in our meeting about the database"
 
 ## Requirements
 

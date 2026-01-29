@@ -80,6 +80,43 @@ then configure Claude Desktop:
 }
 ```
 
+## claude code cli
+
+to use with Claude Code:
+
+### option 1: CLI command (recommended)
+
+```bash
+# add screenpipe as an MCP server
+claude mcp add screenpipe --transport stdio -- npx -y screenpipe-mcp
+
+# make it available in all projects
+claude mcp add screenpipe --transport stdio --scope user -- npx -y screenpipe-mcp
+```
+
+### option 2: JSON config
+
+```bash
+claude mcp add-json screenpipe '{"type":"stdio","command":"npx","args":["-y","screenpipe-mcp"]}'
+```
+
+### verify connection
+
+```bash
+# list configured servers
+claude mcp list
+
+# inside Claude Code
+/mcp
+```
+
+<Tip>
+if you have Claude Desktop configured, you can import those settings:
+```bash
+claude mcp add-from-claude-desktop
+```
+</Tip>
+
 ## cursor ide
 
 to use with Cursor:
@@ -109,19 +146,31 @@ to use with Cursor:
 
 search through recorded screen content, audio transcriptions, and UI elements:
 
-- full text search with content type filtering (OCR/audio/UI)
-- time range and app/window filtering
-- pagination support
+| parameter | type | description |
+|-----------|------|-------------|
+| `q` | string | search query (optional - omit to get recent content) |
+| `content_type` | string | `all`, `ocr`, `audio`, or `ui` (default: `all`) |
+| `limit` | integer | max results (default: 10) |
+| `offset` | integer | pagination offset (default: 0) |
+| `start_time` | string | ISO 8601 UTC start time (e.g., `2024-01-15T10:00:00Z`) |
+| `end_time` | string | ISO 8601 UTC end time |
+| `app_name` | string | filter by app (e.g., `Google Chrome`, `Slack`) |
+| `window_name` | string | filter by window title |
+| `min_length` | integer | minimum content length |
+| `max_length` | integer | maximum content length |
+| `include_frames` | boolean | include base64 screenshots (OCR only) |
+| `speaker_ids` | string | comma-separated speaker IDs for audio filtering (e.g., `1,2,3`) |
+| `speaker_name` | string | filter audio by speaker name (case-insensitive partial match) |
 
-### control tools (macos)
+### export-video
 
-- **find-elements** - find UI elements in applications by role
-- **click-element** - click UI elements by accessibility ID
-- **fill-element** - type text into UI elements
-- **scroll-element** - scroll UI elements
-- **open-application** - open applications by name
-- **open-url** - open URLs in default browser
-- **pixel-control** - control mouse and keyboard (type, click, move)
+create video exports from screen recordings for a specific time range:
+
+| parameter | type | description |
+|-----------|------|-------------|
+| `start_time` | string | ISO 8601 UTC start time (required) |
+| `end_time` | string | ISO 8601 UTC end time (required) |
+| `fps` | number | frames per second (default: 1.0) |
 
 ## example queries
 
@@ -130,8 +179,8 @@ try these in Claude or Cursor:
 - "search for any mentions of 'project' in my screen recordings"
 - "find audio transcriptions from the last hour"
 - "show me what was on my screen in VS Code yesterday"
-- "open Safari and go to github.com"
-- "find the search button in Chrome and click it"
+- "export a video of my screen from 10am to 11am today"
+- "find what John said in our meeting about the API"
 
 ## testing
 
@@ -145,7 +194,6 @@ npx @modelcontextprotocol/inspector npx screenpipe-mcp
 
 - screenpipe must be running on localhost:3030
 - Node.js >= 18.0.0
-- macos automation features require accessibility permissions
 
 ## mintlify mcp (use our docs in cursor, claude)
 

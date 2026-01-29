@@ -5,131 +5,137 @@ description: "Use screenpipe with Claude Code CLI to give Claude access to your 
 icon: "terminal"
 ---
 
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code) is Anthropic's official CLI for agentic coding. with screenpipe integration, Claude can reference what you've been working on, recall information from your screen, and access meeting transcriptions.
+[Claude Code](https://code.claude.com) is Anthropic's official CLI for agentic coding. with screenpipe integration, Claude can reference what you've been working on, recall information from your screen, and access meeting transcriptions.
 
 ## setup
 
-Claude Code uses [Agent Skills](https://opencode.ai/docs/skills) via the `.claude/agents/` folder. screenpipe provides pre-built agents you can copy to your project or home directory.
+Claude Code connects to screenpipe via MCP (Model Context Protocol). there are two ways to set this up:
 
-### option 1: copy agents to your project
+### option 1: one-click from screenpipe app (recommended)
 
-```bash
-# clone screenpipe repo
-git clone https://github.com/mediar-ai/screenpipe
+1. open the **screenpipe app**
+2. go to **settings** → **connections**
+3. click **"install extension"** next to Claude Code
+4. done! Claude Code now has access to screenpipe
 
-# copy agents to your project
-cp -r screenpipe/.claude/agents/* your-project/.claude/agents/
-```
-
-### option 2: copy to home directory (global)
+### option 2: CLI command
 
 ```bash
-# copy to home directory for all projects
-mkdir -p ~/.claude/agents
-cp -r screenpipe/.claude/agents/* ~/.claude/agents/
+# add screenpipe MCP server to Claude Code
+claude mcp add screenpipe --transport stdio -- npx -y screenpipe-mcp
 ```
 
-## available agents
-
-screenpipe provides these specialized agents:
-
-| agent | description |
-|-------|-------------|
-| `screenpipe-query` | search screen OCR, audio transcriptions, UI elements |
-| `screenpipe-health` | check status, diagnose issues, verify permissions |
-| `screenpipe-logs` | retrieve and analyze screenpipe logs for debugging |
-
-## usage
-
-once agents are installed, Claude Code automatically discovers them. reference them in your prompts:
+### option 3: add from JSON config
 
 ```bash
-# in Claude Code CLI
-claude
-
-> use screenpipe-query to find what I was reading about kubernetes yesterday
-
-> check screenpipe-health to see if recording is working
-
-> use screenpipe-logs to find any errors from today
+claude mcp add-json screenpipe '{"type":"stdio","command":"npx","args":["-y","screenpipe-mcp"]}'
 ```
 
-## agent capabilities
+<Tip>
+use `--scope user` to make screenpipe available in all your projects:
+```bash
+claude mcp add screenpipe --transport stdio --scope user -- npx -y screenpipe-mcp
+```
+</Tip>
 
-### screenpipe-query
+## verify connection
 
-searches your recorded data:
+check that screenpipe is connected:
 
 ```bash
-# REST API queries
-curl "http://localhost:3030/search?q=QUERY&limit=20"
-curl "http://localhost:3030/search?q=QUERY&content_type=ocr"
-curl "http://localhost:3030/search?q=QUERY&app_name=Cursor"
+# list MCP servers
+claude mcp list
 
-# direct SQL queries
-sqlite3 ~/.screenpipe/db.sqlite "SELECT * FROM ocr_text ORDER BY frame_id DESC LIMIT 10"
+# or inside Claude Code, use
+/mcp
 ```
 
-### screenpipe-health
+## available tools
 
-diagnoses issues:
+once connected, Claude Code has access to these tools:
 
-- checks if screenpipe process is running
-- verifies API is responding
-- checks disk usage and database integrity
-- validates macos permissions (screen recording, microphone)
+| tool | description |
+|------|-------------|
+| `search-content` | search screen OCR, audio transcriptions, UI elements with time/app filters |
+| `export-video` | create video exports from screen recordings |
 
-### screenpipe-logs
+## usage examples
 
-analyzes logs for debugging:
+ask Claude Code to use screenpipe naturally:
 
-- retrieves today's logs from `~/.screenpipe/`
-- filters errors and warnings
-- searches for specific issues
+```
+> what was I looking at in my browser an hour ago?
+
+> find mentions of "kubernetes" from my screen today
+
+> show me audio transcriptions from my last meeting
+
+> what code was I reading in VS Code yesterday about async?
+
+> export a video of my screen from 2-3pm today
+```
+
+## search parameters
+
+the `search-content` tool supports these parameters:
+
+| parameter | description |
+|-----------|-------------|
+| `q` | search query (optional - omit to get all content) |
+| `content_type` | `ocr`, `audio`, `ui`, or `all` (default: `all`) |
+| `limit` | max results (default: 10) |
+| `offset` | pagination offset |
+| `start_time` | ISO 8601 UTC start time |
+| `end_time` | ISO 8601 UTC end time |
+| `app_name` | filter by app (e.g., "Chrome", "Slack") |
+| `window_name` | filter by window title |
+| `include_frames` | include base64 screenshots |
+| `speaker_ids` | comma-separated speaker IDs for audio filtering |
+| `speaker_name` | filter audio by speaker name |
 
 ## example workflows
 
 **recall context from earlier:**
 ```
 > I was reading a blog post about rust async earlier today,
-> use screenpipe to find it and summarize the key points
+> search screenpipe and summarize the key points
 ```
 
 **reference meeting discussion:**
 ```
-> use screenpipe to find what was discussed in my standup
+> search my audio transcriptions for what was discussed in standup
 > about the API refactor, then help me implement it
 ```
 
 **debug with screen history:**
 ```
-> I saw an error message flash on screen, use screenpipe
+> I saw an error message flash on screen, search screenpipe
 > to find it and help me fix the issue
 ```
 
 **find code examples:**
 ```
-> use screenpipe to find the python code I was looking at
+> search screenpipe for the python code I was looking at
 > in the browser yesterday about asyncio patterns
 ```
 
 ## requirements
 
 - screenpipe running on localhost:3030
-- Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
-- agents copied to `.claude/agents/` (project or home directory)
+- Claude Code CLI installed
+- Node.js >= 18.0.0
 
 ## troubleshooting
 
-**agents not showing up?**
-- verify files exist in `.claude/agents/` or `~/.claude/agents/`
-- check yaml frontmatter is valid in each agent file
-- restart Claude Code
+**MCP not connecting?**
+- verify screenpipe is running: `curl http://localhost:3030/health`
+- check MCP status in Claude Code: `/mcp`
+- remove and re-add: `claude mcp remove screenpipe && claude mcp add screenpipe --transport stdio -- npx -y screenpipe-mcp`
 
 **queries returning empty?**
-- verify screenpipe is running: `curl http://localhost:3030/health`
 - check screenpipe has data: `curl "http://localhost:3030/search?limit=1"`
 - ensure screen recording permissions are granted
+- verify the time range you're querying
 
 **permission errors?**
 - macos: check System Settings > Privacy & Security > Screen Recording

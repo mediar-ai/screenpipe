@@ -91,9 +91,10 @@ const results = await pipe.queryScreenpipe({
   includeFrames: true,
   minLength: 10,
   maxLength: 1000,
-  speakerIds: [1, 2],
+  speakerIds: [1, 2],        // filter audio by speaker IDs
+  speakerName: "John",       // filter audio by speaker name (partial match)
   frameName: "screenshot.png",
-  browserUrl: "github.com/mediar-ai/screenpipe" // Filter by browser URL
+  browserUrl: "github.com/mediar-ai/screenpipe" // filter by browser URL
 })
 ```
 

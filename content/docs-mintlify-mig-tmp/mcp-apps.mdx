@@ -120,7 +120,13 @@ create a single HTML file with embedded CSS and JavaScript:
 
     function search() {
       const query = document.getElementById('query').value;
-      app.callTool('search-content', { q: query, limit: 10 });
+      // available params: q, content_type, limit, offset, start_time, end_time,
+      // app_name, window_name, speaker_ids, speaker_name, include_frames
+      app.callTool('search-content', {
+        q: query,
+        limit: 10,
+        content_type: 'all'  // 'ocr', 'audio', 'ui', or 'all'
+      });
     }
 
     function displayResults(results) {
