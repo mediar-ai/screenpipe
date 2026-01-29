@@ -1440,9 +1440,16 @@ export function GlobalChat() {
           customClose={<X className="w-4 h-4" />}
         >
           {/* Header - sleek geometric style */}
-          <div className="relative flex items-center gap-3 px-4 py-3 pr-12 border-b border-border/50 bg-gradient-to-r from-background to-muted/30">
+          {/* Add left padding on macOS to avoid traffic light overlap */}
+          <div className={cn(
+            "relative flex items-center gap-3 px-4 py-3 pr-12 border-b border-border/50 bg-gradient-to-r from-background to-muted/30",
+            isMac && "pl-[72px]"
+          )}>
             {/* Geometric corner accent */}
-            <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg" />
+            <div className={cn(
+              "absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg",
+              isMac && "left-[60px]"
+            )} />
 
             <div className="relative z-10 p-1.5 rounded-lg bg-foreground/5 border border-border/50">
               <PipeAIIcon size={18} animated={false} className="text-foreground" />
