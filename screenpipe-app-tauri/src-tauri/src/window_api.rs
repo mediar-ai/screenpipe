@@ -143,6 +143,7 @@ pub enum RewindWindowId {
     Search,
     Onboarding,
     Chat,
+    PermissionRecovery,
 }
 
 impl FromStr for RewindWindowId {
@@ -155,6 +156,7 @@ impl FromStr for RewindWindowId {
             "search" => Ok(RewindWindowId::Search),
             "onboarding" => Ok(RewindWindowId::Onboarding),
             "chat" => Ok(RewindWindowId::Chat),
+            "permission-recovery" => Ok(RewindWindowId::PermissionRecovery),
             _ => Ok(RewindWindowId::Main),
         }
     }
@@ -168,6 +170,7 @@ impl std::fmt::Display for RewindWindowId {
             RewindWindowId::Search => write!(f, "search"),
             RewindWindowId::Onboarding => write!(f, "onboarding"),
             RewindWindowId::Chat => write!(f, "chat"),
+            RewindWindowId::PermissionRecovery => write!(f, "permission-recovery"),
         }
     }
 }
@@ -180,6 +183,7 @@ impl RewindWindowId {
             RewindWindowId::Search => "search",
             RewindWindowId::Onboarding => "onboarding",
             RewindWindowId::Chat => "chat",
+            RewindWindowId::PermissionRecovery => "permission-recovery",
         }
     }
 
@@ -190,6 +194,7 @@ impl RewindWindowId {
             RewindWindowId::Search => "search",
             RewindWindowId::Onboarding => "onboarding",
             RewindWindowId::Chat => "ai chat",
+            RewindWindowId::PermissionRecovery => "fix permissions",
         }
     }
 
@@ -200,6 +205,7 @@ impl RewindWindowId {
             RewindWindowId::Search => (1200.0, 850.0),
             RewindWindowId::Onboarding => (900.0, 800.0),
             RewindWindowId::Chat => (500.0, 600.0),
+            RewindWindowId::PermissionRecovery => (500.0, 400.0),
         })
     }
 
@@ -216,6 +222,7 @@ pub enum ShowRewindWindow {
     Search { query: Option<String> },
     Onboarding,
     Chat,
+    PermissionRecovery,
 }
 
 impl ShowRewindWindow {
@@ -262,6 +269,7 @@ impl ShowRewindWindow {
             ShowRewindWindow::Search { query: _ } => RewindWindowId::Search,
             ShowRewindWindow::Onboarding => RewindWindowId::Onboarding,
             ShowRewindWindow::Chat => RewindWindowId::Chat,
+            ShowRewindWindow::PermissionRecovery => RewindWindowId::PermissionRecovery,
         }
     }
 
@@ -272,6 +280,7 @@ impl ShowRewindWindow {
             ShowRewindWindow::Search { query } => Some(query.clone().unwrap_or_default().to_string()),
             ShowRewindWindow::Onboarding => None,
             ShowRewindWindow::Chat => None,
+            ShowRewindWindow::PermissionRecovery => None,
         }
     }
 
@@ -655,6 +664,19 @@ impl ShowRewindWindow {
                     .min_inner_size(400.0, 500.0)
                     .focused(true)
                     .always_on_top(true);
+                #[cfg(target_os = "macos")]
+                let builder = builder.hidden_title(true);
+                let window = builder.build()?;
+                window
+            }
+            ShowRewindWindow::PermissionRecovery => {
+                let builder = self.window_builder(app, "/permission-recovery")
+                    .inner_size(500.0, 450.0)
+                    .min_inner_size(450.0, 400.0)
+                    .resizable(false)
+                    .focused(true)
+                    .always_on_top(true)
+                    .center();
                 #[cfg(target_os = "macos")]
                 let builder = builder.hidden_title(true);
                 let window = builder.build()?;

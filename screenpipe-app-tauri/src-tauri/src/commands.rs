@@ -311,6 +311,16 @@ pub async fn close_window(
     Ok(())
 }
 
+// Permission recovery command
+#[tauri::command]
+#[specta::specta]
+pub async fn show_permission_recovery_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    ShowRewindWindow::PermissionRecovery
+        .show(&app_handle)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // Onboarding commands
 #[tauri::command]
 #[specta::specta]

@@ -11,14 +11,14 @@ import { UpdateChannel } from "@/lib/hooks/use-settings";
 import { checkForAppUpdates } from "@/components/updater";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
-import { SettingsStore } from "@/lib/utils/tauri";
+import { Settings } from "@/lib/hooks/use-settings";
 
 export default function GeneralSettings() {
   const { settings, updateSettings } = useSettings();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
-  
-  const handleSettingsChange = (newSettings: Partial<SettingsStore>) => {
+
+  const handleSettingsChange = (newSettings: Partial<Settings>) => {
     if (settings) {
       updateSettings(newSettings);
     }

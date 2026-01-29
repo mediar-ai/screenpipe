@@ -169,10 +169,12 @@ jobs:
           if [[ "${{ matrix.os_type }}" == "macos" ]]; then
             export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
             export PKG_CONFIG_ALLOW_CROSS=1
-            # Fix i8mm build error - use apple-m1 target to ensure M1 compatibility
+            # Fix i8mm build error - force M1 compatible architecture
+            # GGML_NO_NATIVE prevents whisper.cpp from using native CPU detection
             if [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
               export CFLAGS="-mcpu=apple-m1"
               export CXXFLAGS="-mcpu=apple-m1"
+              export GGML_NO_NATIVE=1
             fi
           fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
@@ -205,8 +207,10 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CI: true
           # Fix i8mm - use apple-m1 target for M1 compatibility
+          # GGML_NO_NATIVE prevents whisper.cpp from using native CPU detection
           CFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1' || '' }}
           CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1' || '' }}
+          GGML_NO_NATIVE: ${{ matrix.target == 'aarch64-apple-darwin' && '1' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"

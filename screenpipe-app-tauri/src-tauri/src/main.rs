@@ -805,6 +805,8 @@ async fn main() {
             permissions::do_permissions_check,
             permissions::check_microphone_permission,
             permissions::check_accessibility_permission_cmd,
+            permissions::reset_and_request_permission,
+            permissions::get_missing_permissions,
             set_tray_unhealth_icon,
             set_tray_health_icon,
             commands::update_show_screenpipe_shortcut,
@@ -813,6 +815,8 @@ async fn main() {
             commands::show_window,
             commands::close_window,
             commands::set_window_size,
+            // Permission recovery commands
+            commands::show_permission_recovery_window,
             // Onboarding commands
             commands::get_onboarding_status,
             commands::complete_onboarding,
@@ -1085,6 +1089,12 @@ async fn main() {
                 if let Err(e) = start_health_check(app_handle_clone).await {
                     error!("Failed to start health check service: {}", e);
                 }
+            });
+
+            // Start permission monitor (polls permissions and emits events when lost)
+            let app_handle_clone = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                permissions::start_permission_monitor(app_handle_clone).await;
             });
 
             #[cfg(target_os = "macos")]

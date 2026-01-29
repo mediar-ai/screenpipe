@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use tracing::{info, warn, error};
 
-#[derive(Serialize, Deserialize, Type)]
+#[derive(Serialize, Deserialize, Type, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum OSPermission {
     ScreenRecording,
@@ -205,6 +206,83 @@ pub fn check_accessibility_permission_cmd() -> OSPermissionStatus {
     }
 }
 
+/// Reset a permission using tccutil and re-request it
+/// This removes the app from the TCC database and triggers a fresh permission request
+#[tauri::command(async)]
+#[specta::specta]
+pub async fn reset_and_request_permission(permission: OSPermission) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        use tokio::time::{sleep, Duration};
+
+        let service = match &permission {
+            OSPermission::ScreenRecording => "ScreenCapture",
+            OSPermission::Microphone => "Microphone",
+            OSPermission::Accessibility => "Accessibility",
+        };
+
+        info!("resetting permission for service: {}", service);
+
+        // Reset permission using tccutil
+        // Note: tccutil reset removes the app from the permission list entirely
+        let output = Command::new("tccutil")
+            .args(["reset", service])
+            .output()
+            .map_err(|e| format!("failed to run tccutil: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            warn!("tccutil reset returned non-zero: {}", stderr);
+            // Don't fail - tccutil might return non-zero even when it works
+        }
+
+        info!("tccutil reset completed, waiting before re-request");
+
+        // Wait for TCC database to update
+        sleep(Duration::from_millis(500)).await;
+
+        // Re-request the permission
+        request_permission(permission).await;
+
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = permission;
+        Ok(())
+    }
+}
+
+/// Check all permissions and return which ones are missing
+#[tauri::command(async)]
+#[specta::specta]
+pub fn get_missing_permissions() -> Vec<OSPermission> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut missing = Vec::new();
+        let check = do_permissions_check(false);
+
+        if !check.screen_recording.permitted() {
+            missing.push(OSPermission::ScreenRecording);
+        }
+        if !check.microphone.permitted() {
+            missing.push(OSPermission::Microphone);
+        }
+        if !check.accessibility.permitted() {
+            missing.push(OSPermission::Accessibility);
+        }
+
+        missing
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Vec::new()
+    }
+}
+
 #[tauri::command(async)]
 #[specta::specta]
 pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
@@ -249,4 +327,56 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
             accessibility: OSPermissionStatus::NotNeeded,
         }
     }
+}
+
+/// Start background permission monitor that checks permissions periodically
+/// and emits an event when any critical permission is lost
+#[cfg(target_os = "macos")]
+pub async fn start_permission_monitor(app: tauri::AppHandle) {
+    use tokio::time::{interval, Duration};
+    use tauri::Emitter;
+
+    // Wait a bit before starting to monitor (let the app initialize)
+    tokio::time::sleep(Duration::from_secs(10)).await;
+
+    let mut check_interval = interval(Duration::from_secs(30));
+    let mut last_screen_ok = true;
+    let mut last_mic_ok = true;
+
+    info!("permission monitor started");
+
+    loop {
+        check_interval.tick().await;
+
+        let perms = do_permissions_check(false);
+        let screen_ok = perms.screen_recording.permitted();
+        let mic_ok = perms.microphone.permitted();
+
+        // Check if any critical permission was lost (was OK, now not OK)
+        let screen_lost = last_screen_ok && !screen_ok;
+        let mic_lost = last_mic_ok && !mic_ok;
+
+        if screen_lost || mic_lost {
+            warn!(
+                "permission lost - screen: {} -> {}, mic: {} -> {}",
+                last_screen_ok, screen_ok, last_mic_ok, mic_ok
+            );
+
+            // Emit event to frontend
+            if let Err(e) = app.emit("permission-lost", serde_json::json!({
+                "screen_recording": !screen_ok,
+                "microphone": !mic_ok,
+            })) {
+                error!("failed to emit permission-lost event: {}", e);
+            }
+        }
+
+        last_screen_ok = screen_ok;
+        last_mic_ok = mic_ok;
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub async fn start_permission_monitor(_app: tauri::AppHandle) {
+    // No-op on non-macOS platforms
 }

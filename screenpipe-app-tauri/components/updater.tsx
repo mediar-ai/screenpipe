@@ -25,9 +25,10 @@ export async function checkForAppUpdates({
   const target = os === "macos" ? "darwin" : os;
   const endpoint = `${baseEndpoint}/${target}-${cpuArch}/{{current_version}}`;
 
+  // @ts-ignore - endpoints option may not be in type definitions but is supported
   const update = await check({
     endpoints: [endpoint],
-  });
+  } as any);
 
   if (update?.available) {
     const channelLabel = channel === "beta" ? " (Beta)" : "";
