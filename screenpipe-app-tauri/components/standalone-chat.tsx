@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, Settings, ExternalLink } from "lucide-react";
+import { Loader2, Send, Square, User, Settings, ExternalLink, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { PipeAIIcon, PipeAIIconLarge } from "@/components/pipe-ai-icon";
@@ -146,6 +146,24 @@ export function StandaloneChat() {
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<"daily_limit" | "model_not_allowed">("daily_limit");
   const [upgradeResetsAt, setUpgradeResetsAt] = useState<string | undefined>();
+  const [prefillContext, setPrefillContext] = useState<string | null>(null);
+
+  // Listen for chat-prefill events from search modal
+  useEffect(() => {
+    const unlisten = listen<{ context: string; prompt?: string }>("chat-prefill", (event) => {
+      const { context, prompt } = event.payload;
+      setPrefillContext(context);
+      if (prompt) {
+        setInput(prompt);
+      }
+      // Focus the input
+      setTimeout(() => inputRef.current?.focus(), 100);
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   const appMentionSuggestions = React.useMemo(
     () => buildAppMentionSuggestions(appItems, APP_SUGGESTION_LIMIT),
@@ -472,6 +490,13 @@ export function StandaloneChat() {
 
       if (mentions.speakerName) {
         mentionContext.push(`SPEAKER FILTER: ${mentions.speakerName}`);
+      }
+
+      // Add prefill context from search modal
+      if (prefillContext) {
+        mentionContext.push(`CONTEXT FROM SEARCH:\n${prefillContext}`);
+        // Clear prefill after using it
+        setPrefillContext(null);
       }
 
       if (mentionContext.length > 0) {
@@ -885,6 +910,30 @@ export function StandaloneChat() {
             showLoginCta={false}
           />
         </div>
+
+        {/* Prefill context indicator from search */}
+        {prefillContext && (
+          <div className="px-3 py-2 border-b border-border/30 bg-muted/30">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                  context from search
+                </div>
+                <p className="text-xs text-foreground font-mono line-clamp-2">
+                  {prefillContext.slice(0, 150)}{prefillContext.length > 150 ? "..." : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPrefillContext(null)}
+                className="p-1 hover:bg-muted rounded text-muted-foreground"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="p-3">
           <div className="flex gap-2">
             <div className="relative flex-1">

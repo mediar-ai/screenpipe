@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { Loader2, RotateCcw, AlertCircle, X } from "lucide-react";
+import { Loader2, RotateCcw, AlertCircle, X, Search } from "lucide-react";
 import { commands } from "@/lib/utils/tauri";
 import { listen } from "@tauri-apps/api/event";
+import { SearchModal } from "@/components/rewind/search-modal";
 import { AudioTranscript } from "@/components/rewind/timeline/audio-transcript";
 import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
@@ -64,6 +65,7 @@ const easeOutCubic = (x: number): number => {
 export default function Timeline() {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [showAudioTranscript, setShowAudioTranscript] = useState(true);
+	const [showSearchModal, setShowSearchModal] = useState(false);
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	// const [searchResults, setSearchResults] = useState<number[]>([]);
 	const [startAndEndDates, setStartAndEndDates] = useState<TimeRange>({
@@ -255,6 +257,24 @@ export default function Timeline() {
 	useEffect(() => {
 		posthog.capture("timeline_opened");
 	}, []);
+
+	// Keyboard shortcut for search modal (/ or Cmd+K)
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			// Don't trigger if already in an input or search modal is open
+			if (showSearchModal) return;
+			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+			// / key or Cmd+K
+			if (e.key === "/" || (e.key === "k" && (e.metaKey || e.ctrlKey))) {
+				e.preventDefault();
+				setShowSearchModal(true);
+			}
+		};
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [showSearchModal]);
 
 	useEffect(() => {
 		const getStartDateAndSet = async () => {
@@ -631,14 +651,26 @@ export default function Timeline() {
 						onDateChange={handleDateChange}
 						onJumpToday={handleJumpToday}
 					/>
-					{/* Refresh button - top right */}
-					<button
-						onClick={handleRefresh}
-						className="absolute top-[calc(env(safe-area-inset-top)+16px)] right-4 p-2 bg-background/80 hover:bg-background border border-border rounded-md transition-colors"
-						title="Refresh timeline"
-					>
-						<RotateCcw className="w-4 h-4 text-muted-foreground" />
-					</button>
+					{/* Top right buttons */}
+					<div className="absolute top-[calc(env(safe-area-inset-top)+16px)] right-4 flex items-center gap-2">
+						{/* Search button */}
+						<button
+							onClick={() => setShowSearchModal(true)}
+							className="p-2 bg-background/80 hover:bg-background border border-border rounded-md transition-colors flex items-center gap-1.5"
+							title="Search (/ or ⌘K)"
+						>
+							<Search className="w-4 h-4 text-muted-foreground" />
+							<span className="text-xs text-muted-foreground font-mono">/</span>
+						</button>
+						{/* Refresh button */}
+						<button
+							onClick={handleRefresh}
+							className="p-2 bg-background/80 hover:bg-background border border-border rounded-md transition-colors"
+							title="Refresh timeline"
+						>
+							<RotateCcw className="w-4 h-4 text-muted-foreground" />
+						</button>
+					</div>
 				</div>
 
 				{/* Loading/Error States - Progressive loading: only block when no frames yet */}
@@ -806,6 +838,25 @@ export default function Timeline() {
 						</button>
 					</div>
 				</div>
+
+				{/* Search Modal */}
+				<SearchModal
+					isOpen={showSearchModal}
+					onClose={() => setShowSearchModal(false)}
+					onNavigateToTimestamp={(timestamp) => {
+						// Navigate to the timestamp
+						const targetDate = new Date(timestamp);
+						pendingNavigationRef.current = targetDate;
+						setSeekingTimestamp(timestamp);
+
+						if (!isSameDay(targetDate, currentDate)) {
+							handleDateChange(targetDate);
+						} else {
+							jumpToTime(targetDate);
+							setSeekingTimestamp(null);
+						}
+					}}
+				/>
 			</div>
 		</TimelineProvider>
 	);
