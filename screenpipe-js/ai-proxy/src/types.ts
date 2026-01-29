@@ -130,6 +130,8 @@ export interface Env {
 	VERTEX_REGION: string;
 	// D1 database for usage tracking
 	DB: D1Database;
+	// Sentry error tracking
+	SENTRY_DSN: string;
 }
 
 // User tier for rate limiting and model access

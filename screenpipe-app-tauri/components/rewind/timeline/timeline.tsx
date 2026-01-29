@@ -522,9 +522,9 @@ export const TimelineSlider = ({
 											}}
 											onMouseLeave={() => setHoveredTimestamp(null)}
 										>
-											{/* Audio indicator - subtle dot at top of bar */}
+											{/* Audio indicator - visible line at top of bar */}
 											{hasAudio && (
-												<div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-foreground/60" />
+												<div className="absolute top-0 left-0 right-0 h-1 bg-foreground/80 rounded-t" />
 											)}
 
 											{/* Time marker below frame */}
@@ -580,7 +580,9 @@ export const TimelineSlider = ({
 						<span>current</span>
 					</span>
 					<span className="flex items-center gap-1">
-						<Mic className="w-3 h-3 text-muted-foreground" />
+						<div className="w-3 h-3 rounded bg-muted-foreground/50 relative">
+							<div className="absolute top-0 left-0 right-0 h-0.5 bg-foreground rounded-t" />
+						</div>
 						<span>has audio</span>
 					</span>
 					<span className="opacity-60">scroll to navigate • pinch to zoom</span>

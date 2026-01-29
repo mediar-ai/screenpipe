@@ -1,6 +1,9 @@
 # Copy this file to .dev.vars and fill in your values
 # These are used for local development with `wrangler dev`
 
+# Sentry error tracking (get DSN from sentry.io > Project Settings > Client Keys)
+SENTRY_DSN=https://xxx@xxx.ingest.us.sentry.io/xxx
+
 # Existing API keys
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
