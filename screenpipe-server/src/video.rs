@@ -1,5 +1,6 @@
 use chrono::Utc;
 use crossbeam::queue::ArrayQueue;
+use dashmap::DashMap;
 use image::ImageFormat::{self};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::monitor::get_monitor_by_id;
@@ -9,7 +10,7 @@ use screenpipe_vision::{
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncBufReadExt;
@@ -20,6 +21,81 @@ use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
+/// Tracks which frames were successfully written to video and at what offset.
+/// This ensures DB insertion uses the correct video offset, even when frames are dropped.
+#[derive(Debug, Clone)]
+pub struct FrameWriteInfo {
+    /// Offset within the current video chunk (0-indexed)
+    pub offset: u64,
+    /// Path to the video file containing this frame
+    pub video_path: String,
+}
+
+/// Thread-safe tracker for frame writes. Shared between video encoding and DB insertion.
+#[derive(Debug)]
+pub struct FrameWriteTracker {
+    /// Maps frame_number -> FrameWriteInfo
+    writes: DashMap<u64, FrameWriteInfo>,
+    /// Counter for cleanup: frames older than this can be removed
+    oldest_relevant_frame: AtomicU64,
+}
+
+impl FrameWriteTracker {
+    pub fn new() -> Self {
+        Self {
+            writes: DashMap::new(),
+            oldest_relevant_frame: AtomicU64::new(0),
+        }
+    }
+
+    /// Record that a frame was written to video at the given offset.
+    pub fn record_write(&self, frame_number: u64, offset: u64, video_path: String) {
+        self.writes.insert(
+            frame_number,
+            FrameWriteInfo { offset, video_path },
+        );
+        debug!(
+            "FrameWriteTracker: recorded frame {} at offset {} in {}",
+            frame_number, offset, video_path
+        );
+    }
+
+    /// Get the video offset for a frame. Returns None if frame wasn't written to video.
+    pub fn get_offset(&self, frame_number: u64) -> Option<FrameWriteInfo> {
+        self.writes.get(&frame_number).map(|r| r.clone())
+    }
+
+    /// Check if a frame was written to video.
+    pub fn was_written(&self, frame_number: u64) -> bool {
+        self.writes.contains_key(&frame_number)
+    }
+
+    /// Clean up old entries to prevent memory bloat.
+    /// Removes all entries with frame_number < min_frame.
+    pub fn cleanup_before(&self, min_frame: u64) {
+        let old_min = self.oldest_relevant_frame.swap(min_frame, Ordering::SeqCst);
+        if min_frame > old_min {
+            self.writes.retain(|&k, _| k >= min_frame);
+            debug!(
+                "FrameWriteTracker: cleaned up frames before {}, remaining: {}",
+                min_frame,
+                self.writes.len()
+            );
+        }
+    }
+
+    /// Get the number of tracked frames (for debugging).
+    pub fn len(&self) -> usize {
+        self.writes.len()
+    }
+}
+
+impl Default for FrameWriteTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub(crate) const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 30; // Increased from 10 for more buffer room
 
@@ -27,6 +103,9 @@ pub struct VideoCapture {
     #[allow(unused)]
     video_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
     pub ocr_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
+    /// Tracks which frames were written to video and at what offset.
+    /// Used by DB insertion to ensure correct offset mapping.
+    pub frame_write_tracker: Arc<FrameWriteTracker>,
     // Add handles to tasks so we can monitor their status
     capture_thread_handle: tokio::task::JoinHandle<()>,
     queue_thread_handle: tokio::task::JoinHandle<()>,
@@ -59,6 +138,7 @@ impl VideoCapture {
         let interval = Duration::from_secs_f64(1.0 / fps);
         let video_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
         let ocr_frame_queue = Arc::new(ArrayQueue::new(MAX_QUEUE_SIZE));
+        let frame_write_tracker = Arc::new(FrameWriteTracker::new());
         let new_chunk_callback = Arc::new(new_chunk_callback);
         let new_chunk_callback_clone = Arc::clone(&new_chunk_callback);
         let monitor_available = Arc::new(AtomicBool::new(true));
