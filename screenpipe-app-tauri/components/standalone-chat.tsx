@@ -737,10 +737,10 @@ export function StandaloneChat() {
           }
         }}
       >
-        <div className={cn(
-          "absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg",
-          isMac && "left-[60px]"
-        )} />
+        {/* Geometric corner accent - hidden on macOS where traffic lights are */}
+        {!isMac && (
+          <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg" />
+        )}
         <div className="relative z-10 p-1.5 rounded-lg bg-foreground/5 border border-border/50">
           <PipeAIIcon size={18} animated={false} className="text-foreground" />
         </div>
