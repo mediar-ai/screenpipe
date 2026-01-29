@@ -2,9 +2,10 @@ import { StreamTimeSeriesResponse, TimeRange } from "@/components/rewind/timelin
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { isAfter, subDays } from "date-fns";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { AudioLinesIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AudioLinesIcon, ZoomIn, ZoomOut } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import posthog from "posthog-js";
+import { cn } from "@/lib/utils";
 
 interface TimelineSliderProps {
 	frames: StreamTimeSeriesResponse[];
@@ -65,6 +66,53 @@ export const TimelineSlider = ({
 	);
 	const { setSelectionRange, selectionRange } = useTimelineSelection();
 
+	// Zoom state: 1 = normal, >1 = zoomed in, <1 = zoomed out
+	// Range: 0.25 (very zoomed out) to 4 (very zoomed in)
+	const [zoomLevel, setZoomLevel] = useState(1);
+	const MIN_ZOOM = 0.25;
+	const MAX_ZOOM = 4;
+
+	// Handle pinch-to-zoom (trackpad) and Cmd+Scroll (mouse)
+	const handleWheel = useCallback((e: WheelEvent) => {
+		// Pinch gesture on trackpad sends ctrlKey=true
+		// Cmd+Scroll on mouse sends metaKey=true
+		if (e.ctrlKey || e.metaKey) {
+			e.preventDefault();
+
+			// Calculate zoom delta (negative deltaY = zoom in)
+			const zoomDelta = -e.deltaY * 0.01;
+
+			setZoomLevel((prev) => {
+				const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + zoomDelta));
+				return newZoom;
+			});
+		}
+	}, []);
+
+	// Attach wheel event listener for zoom
+	useEffect(() => {
+		const container = containerRef.current;
+		if (!container) return;
+
+		// Use passive: false to allow preventDefault for pinch gestures
+		container.addEventListener('wheel', handleWheel, { passive: false });
+
+		return () => {
+			container.removeEventListener('wheel', handleWheel);
+		};
+	}, [handleWheel]);
+
+	// Calculate frame width based on zoom level
+	const frameWidth = useMemo(() => {
+		const baseWidth = 6; // 1.5 * 4 = 6px base (w-1.5 = 0.375rem = 6px)
+		return Math.max(2, baseWidth * zoomLevel);
+	}, [zoomLevel]);
+
+	const frameMargin = useMemo(() => {
+		const baseMargin = 2; // mx-0.5 = 0.125rem = 2px
+		return Math.max(1, baseMargin * zoomLevel);
+	}, [zoomLevel]);
+
 	// Animation state for new frames pulse
 	const [showNewFramesPulse, setShowNewFramesPulse] = useState(false);
 	const prevFlushTimestampRef = useRef(lastFlushTimestamp);
@@ -90,12 +138,15 @@ export const TimelineSlider = ({
 		return map;
 	}, [frames]);
 
+	// Adjust visible frames based on zoom - zoomed out shows more frames
 	const visibleFrames = useMemo(() => {
 		if (!frames || frames.length === 0) return [];
-		const start = Math.max(0, currentIndex - 200);
-		const end = Math.min(frames.length, currentIndex + 200);
+		// At zoom 0.25, show ~800 frames; at zoom 4, show ~50 frames
+		const visibleCount = Math.round(200 / zoomLevel);
+		const start = Math.max(0, currentIndex - visibleCount);
+		const end = Math.min(frames.length, currentIndex + visibleCount);
 		return frames.slice(start, end);
-	}, [frames, currentIndex]);
+	}, [frames, currentIndex, zoomLevel]);
 
 	const appGroups = useMemo(() => {
 		if (!visibleFrames || visibleFrames.length === 0) return [];
@@ -243,6 +294,27 @@ export const TimelineSlider = ({
 				className="absolute top-0 h-1 bg-blue-500/50"
 				style={{ width: lineWidth }}
 			/>
+			{/* Zoom controls - floating on left side */}
+			<div className="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-1 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-1">
+				<button
+					onClick={() => setZoomLevel((prev) => Math.min(MAX_ZOOM, prev * 1.5))}
+					className="p-1.5 hover:bg-foreground/10 rounded transition-colors"
+					title="Zoom in (or pinch/Cmd+scroll)"
+				>
+					<ZoomIn className="w-4 h-4 text-foreground" />
+				</button>
+				<div className="text-[10px] text-center text-muted-foreground font-mono">
+					{Math.round(zoomLevel * 100)}%
+				</div>
+				<button
+					onClick={() => setZoomLevel((prev) => Math.max(MIN_ZOOM, prev / 1.5))}
+					className="p-1.5 hover:bg-foreground/10 rounded transition-colors"
+					title="Zoom out (or pinch/Cmd+scroll)"
+				>
+					<ZoomOut className="w-4 h-4 text-foreground" />
+				</button>
+			</div>
+
 			{/* New frames pulse indicator - appears on right side (newest) */}
 			{showNewFramesPulse && (
 				<motion.div
@@ -309,12 +381,14 @@ export const TimelineSlider = ({
 									<motion.div
 										key={frame.timestamp}
 										data-timestamp={frame.timestamp}
-										className={`flex-shrink-0 cursor-ew-resize w-1.5 mx-0.5 rounded-t relative group hover:z-50 transition-all duration-200 ${
-											isSelected || isInRange
-												? "ring-2 ring-blue-400 ring-offset-1 ring-offset-black/20"
-												: ""
-										}`}
+										className={cn(
+											"flex-shrink-0 cursor-ew-resize rounded-t relative group hover:z-50 transition-all duration-200",
+											(isSelected || isInRange) && "ring-2 ring-blue-400 ring-offset-1 ring-offset-black/20"
+										)}
 										style={{
+											width: `${frameWidth}px`,
+											marginLeft: `${frameMargin}px`,
+											marginRight: `${frameMargin}px`,
 											backgroundColor: isCurrent ? '#3b82f6' : group.color,
 											height: isCurrent || isSelected || isInRange ? "80%" : "50%",
 											opacity: isCurrent || isSelected || isInRange ? 1 : 0.8,
