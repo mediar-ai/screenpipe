@@ -1431,7 +1431,7 @@ export function GlobalChat() {
               <PipeAIIcon size={14} animated={false} />
             </div>
             <span className="font-mono text-[10px] uppercase tracking-wider">
-              {formatShortcutDisplay(settings.showChatShortcut || "", isMac)}
+              {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
             </span>
           </button>
         </motion.div>
@@ -1463,7 +1463,7 @@ export function GlobalChat() {
               <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
             </div>
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
-              {formatShortcutDisplay(settings.showChatShortcut || "", isMac)}
+              {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
             </kbd>
           </div>
 
