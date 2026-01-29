@@ -18,9 +18,10 @@ interface PermissionRowProps {
   onFix: () => void;
   onReset: () => void;
   isFixing: boolean;
+  isAnyFixing: boolean;
 }
 
-function PermissionRow({ icon, label, description, status, onFix, onReset, isFixing }: PermissionRowProps) {
+function PermissionRow({ icon, label, description, status, onFix, onReset, isFixing, isAnyFixing }: PermissionRowProps) {
   return (
     <div className="flex items-center justify-between p-4 border border-border rounded-lg bg-card">
       <div className="flex items-center space-x-3">
@@ -44,7 +45,7 @@ function PermissionRow({ icon, label, description, status, onFix, onReset, isFix
               variant="outline"
               size="sm"
               onClick={onReset}
-              disabled={isFixing}
+              disabled={isAnyFixing}
               className="font-mono text-xs"
             >
               {isFixing ? (
@@ -63,7 +64,7 @@ function PermissionRow({ icon, label, description, status, onFix, onReset, isFix
               variant="ghost"
               size="sm"
               onClick={onFix}
-              disabled={isFixing}
+              disabled={isAnyFixing}
               className="font-mono text-xs"
             >
               <ExternalLink className="w-3 h-3 mr-1" />
@@ -272,6 +273,7 @@ export default function PermissionRecoveryPage() {
                   onFix={() => openSettings("screenRecording")}
                   onReset={() => resetAndFix("screenRecording")}
                   isFixing={fixingPermission === "screenRecording"}
+                  isAnyFixing={fixingPermission !== null}
                 />
 
                 <PermissionRow
@@ -282,6 +284,7 @@ export default function PermissionRecoveryPage() {
                   onFix={() => openSettings("microphone")}
                   onReset={() => resetAndFix("microphone")}
                   isFixing={fixingPermission === "microphone"}
+                  isAnyFixing={fixingPermission !== null}
                 />
 
                 {isMacOS && (
@@ -293,6 +296,7 @@ export default function PermissionRecoveryPage() {
                     onFix={() => openSettings("accessibility")}
                     onReset={() => resetAndFix("accessibility")}
                     isFixing={fixingPermission === "accessibility"}
+                    isAnyFixing={fixingPermission !== null}
                   />
                 )}
               </div>
