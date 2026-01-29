@@ -31,6 +31,14 @@ const ShortcutSection = () => {
 
         <ShortcutRow
           type="global"
+          shortcut="showChatShortcut"
+          title="toggle ai chat"
+          description="global shortcut to show/hide the ai chat window"
+          value={settings.showChatShortcut}
+        />
+
+        <ShortcutRow
+          type="global"
           shortcut="startRecordingShortcut"
           title="start recording"
           description="global shortcut to start screen recording"
@@ -59,14 +67,6 @@ const ShortcutSection = () => {
           title="stop audio recording"
           description="global shortcut to stop audio recording"
           value={settings.stopAudioShortcut}
-        />
-
-        <ShortcutRow
-          type="global"
-          shortcut="showChatShortcut"
-          title="toggle ai chat"
-          description="global shortcut to show/hide the ai chat window"
-          value={settings.showChatShortcut}
         />
 
         <div className="flex items-center justify-between py-4 border-t">

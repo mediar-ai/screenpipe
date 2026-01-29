@@ -152,7 +152,7 @@ function SearchPage() {
 			</div>
 			{!querys.query && (
 				<div className="h-64 w-96 flex mx-auto items-center justify-center">
-					<p className="text-sm text-gray-500">
+					<p className="text-sm text-muted-foreground">
 						Please provide query for searching
 					</p>
 				</div>
@@ -160,7 +160,7 @@ function SearchPage() {
 
 			{!isSearching && searchResults.length === 0 && querys.query ? (
 				<div className="h-64 w-96 flex mx-auto items-center justify-center whitespace-nowrap">
-					<p className="text-sm text-gray-500">
+					<p className="text-sm text-muted-foreground">
 						No results found for &quot;{querys.query}&quot;
 					</p>
 				</div>
@@ -181,6 +181,14 @@ function SearchPage() {
 			) : (
 				<div></div>
 			)}
+
+			{/* Keyboard hints footer */}
+			<div className="fixed bottom-0 left-0 right-0 px-4 py-2 border-t border-border bg-background/80 backdrop-blur-sm flex items-center justify-center gap-6 text-[10px] text-muted-foreground font-mono">
+				<span>←→↑↓ navigate</span>
+				<span>click select</span>
+				<span>hover expand</span>
+				<span>esc close</span>
+			</div>
 		</div>
 	);
 }
