@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, CalendarIcon } from "lucide-react";
 import {
 	endOfDay,
 	format,
@@ -12,8 +12,14 @@ import {
 } from "date-fns";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { Calendar } from "@/components/ui/calendar";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface TimeRange {
 	start: Date;
@@ -36,6 +42,7 @@ export function TimelineControls({
 	className,
 }: TimelineControlsProps) {
 	const { isMac } = usePlatform();
+	const [calendarOpen, setCalendarOpen] = useState(false);
 
 	const jumpDay = async (days: number) => {
 		const today = new Date();
@@ -87,23 +94,50 @@ export function TimelineControls({
 						<ChevronLeft className="h-4 w-4" />
 					</Button>
 
-					<AnimatePresence mode="wait">
-						<motion.div
-							key={currentDate.toISOString()}
-							initial={{ y: -10, opacity: 0 }}
-							animate={{ y: 0, opacity: 1 }}
-							exit={{ y: 10, opacity: 0 }}
-							transition={{
-								type: "spring",
-								stiffness: 500,
-								damping: 30,
-								duration: 0.15,
-							}}
-							className="px-3 text-sm font-mono text-foreground min-w-[100px] text-center"
-						>
-							{format(currentDate, "d MMM yyyy")}
-						</motion.div>
-					</AnimatePresence>
+					<Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+						<PopoverTrigger asChild>
+							<Button
+								variant="ghost"
+								className="px-3 h-8 text-sm font-mono text-foreground min-w-[100px] text-center hover:bg-foreground hover:text-background transition-colors duration-150"
+							>
+								<AnimatePresence mode="wait">
+									<motion.div
+										key={currentDate.toISOString()}
+										initial={{ y: -10, opacity: 0 }}
+										animate={{ y: 0, opacity: 1 }}
+										exit={{ y: 10, opacity: 0 }}
+										transition={{
+											type: "spring",
+											stiffness: 500,
+											damping: 30,
+											duration: 0.15,
+										}}
+										className="flex items-center gap-2"
+									>
+										<CalendarIcon className="h-3 w-3" />
+										{format(currentDate, "d MMM yyyy")}
+									</motion.div>
+								</AnimatePresence>
+							</Button>
+						</PopoverTrigger>
+						<PopoverContent className="w-auto p-0" align="center">
+							<Calendar
+								mode="single"
+								selected={currentDate}
+								onSelect={(date) => {
+									if (date) {
+										onDateChange(date);
+										setCalendarOpen(false);
+									}
+								}}
+								disabled={(date) =>
+									isAfter(startOfDay(date), startOfDay(new Date())) ||
+									isAfter(startOfDay(startAndEndDates.start), startOfDay(date))
+								}
+								initialFocus
+							/>
+						</PopoverContent>
+					</Popover>
 
 					<Button
 						variant="ghost"
