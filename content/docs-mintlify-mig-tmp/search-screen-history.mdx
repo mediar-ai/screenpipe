@@ -5,6 +5,167 @@ description: "Learn how to search through your screen recordings using natural l
 icon: "magnifying-glass"
 ---
 
+<div className="sp-search-animation">
+  <style>{`
+    .sp-search-animation {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem 0;
+      gap: 1.5rem;
+    }
+    .sp-search-box {
+      display: flex;
+      align-items: center;
+      background: #111;
+      border: 2px solid #333;
+      border-radius: 24px;
+      padding: 8px 16px;
+      gap: 8px;
+      min-width: 180px;
+    }
+    .sp-search-icon {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #666;
+      border-radius: 50%;
+      position: relative;
+    }
+    .sp-search-icon::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      right: -4px;
+      width: 8px;
+      height: 2px;
+      background: #666;
+      transform: rotate(45deg);
+    }
+    .sp-search-text {
+      display: flex;
+      gap: 3px;
+    }
+    .sp-search-char {
+      width: 6px;
+      height: 14px;
+      background: #555;
+      border-radius: 1px;
+      animation: sp-typing 2s steps(1) infinite;
+      opacity: 0;
+    }
+    .sp-search-char:nth-child(1) { animation-delay: 0s; }
+    .sp-search-char:nth-child(2) { animation-delay: 0.15s; }
+    .sp-search-char:nth-child(3) { animation-delay: 0.3s; }
+    .sp-search-char:nth-child(4) { animation-delay: 0.45s; }
+    .sp-search-char:nth-child(5) { animation-delay: 0.6s; }
+    .sp-search-char:nth-child(6) { animation-delay: 0.75s; }
+    .sp-search-char:nth-child(7) { animation-delay: 0.9s; }
+    @keyframes sp-typing {
+      0%, 5% { opacity: 0; }
+      10%, 100% { opacity: 1; }
+    }
+    .sp-cursor {
+      width: 2px;
+      height: 16px;
+      background: #888;
+      animation: sp-blink 0.8s step-end infinite;
+    }
+    @keyframes sp-blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+    .sp-results {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .sp-result-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #151515;
+      border: 1px solid #333;
+      border-radius: 6px;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: sp-result-appear 2s ease-out infinite;
+    }
+    .sp-result-card:nth-child(1) { animation-delay: 1s; }
+    .sp-result-card:nth-child(2) { animation-delay: 1.2s; }
+    .sp-result-card:nth-child(3) { animation-delay: 1.4s; }
+    @keyframes sp-result-appear {
+      0%, 45% { opacity: 0; transform: translateY(10px); }
+      55%, 100% { opacity: 1; transform: translateY(0); }
+    }
+    .sp-result-icon {
+      width: 24px;
+      height: 24px;
+      background: #222;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .sp-result-icon-inner {
+      width: 12px;
+      height: 8px;
+      border: 1px solid #555;
+      border-radius: 2px;
+    }
+    .sp-result-lines {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .sp-result-line {
+      height: 3px;
+      background: #444;
+      border-radius: 1px;
+    }
+    .sp-result-line:nth-child(1) { width: 50px; }
+    .sp-result-line:nth-child(2) { width: 35px; background: #333; }
+  `}</style>
+
+  <div className="sp-search-box">
+    <div className="sp-search-icon"></div>
+    <div className="sp-search-text">
+      <div className="sp-search-char"></div>
+      <div className="sp-search-char"></div>
+      <div className="sp-search-char"></div>
+      <div className="sp-search-char"></div>
+      <div className="sp-search-char"></div>
+      <div className="sp-search-char"></div>
+      <div className="sp-search-char"></div>
+    </div>
+    <div className="sp-cursor"></div>
+  </div>
+
+  <div className="sp-results">
+    <div className="sp-result-card">
+      <div className="sp-result-icon"><div className="sp-result-icon-inner"></div></div>
+      <div className="sp-result-lines">
+        <div className="sp-result-line"></div>
+        <div className="sp-result-line"></div>
+      </div>
+    </div>
+    <div className="sp-result-card">
+      <div className="sp-result-icon"><div className="sp-result-icon-inner"></div></div>
+      <div className="sp-result-lines">
+        <div className="sp-result-line"></div>
+        <div className="sp-result-line"></div>
+      </div>
+    </div>
+    <div className="sp-result-card">
+      <div className="sp-result-icon"><div className="sp-result-icon-inner"></div></div>
+      <div className="sp-result-lines">
+        <div className="sp-result-line"></div>
+        <div className="sp-result-line"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 screenpipe records your screen 24/7 and lets you search through everything using natural language. find that code snippet, conversation, or document you saw last week.
 
 ## how it works
