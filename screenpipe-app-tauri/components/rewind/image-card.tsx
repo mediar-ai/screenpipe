@@ -191,7 +191,7 @@ export const ImageGrid = ({
 							key={result.frame_id}
 							data-timestamp={result.timestamp}
 							className={cn(
-								"group flex flex-col relative overflow-hidden bg-card border border-border transition-all duration-200 cursor-pointer",
+								"group flex flex-col relative overflow-hidden bg-card border border-border transition-all duration-200 cursor-pointer hover:scale-[1.02] hover:shadow-lg hover:z-10",
 								currentResultIndex === index && "ring-1 ring-foreground",
 							)}
 							onClick={() => setCurrentResultIndex(index)}
@@ -207,9 +207,15 @@ export const ImageGrid = ({
 								<p className="text-sm font-mono truncate">
 									{result.app_name}
 								</p>
-								<p className="text-xs font-mono text-muted-foreground truncate">
+								<p className="text-xs font-mono text-muted-foreground truncate group-hover:whitespace-normal group-hover:line-clamp-2">
 									{result.window_name}
 								</p>
+								{/* Expanded text preview on hover */}
+								{result.text && (
+									<p className="text-xs text-muted-foreground/70 hidden group-hover:block group-hover:line-clamp-3 mt-1 pt-1 border-t border-border/50">
+										{result.text}
+									</p>
+								)}
 							</div>
 						</div>
 					))}

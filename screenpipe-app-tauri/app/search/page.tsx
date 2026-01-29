@@ -6,13 +6,13 @@ import { SearchBar } from "@/components/rewind/search-bar";
 import { Button } from "@/components/ui/button";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
-import { endOfDay, startOfDay } from "date-fns";
+import { endOfDay, startOfDay, format } from "date-fns";
 import { useCallback, useEffect, useRef, Suspense } from "react";
 import { parser } from "@/lib/keyword-parser";
 import { CurrentFrame } from "@/components/rewind/current-frame-search";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 import { AppSelect } from "@/components/rewind/search-command";
-import { ArrowLeft, Clock } from "lucide-react";
+import { ArrowLeft, Clock, MessageSquare } from "lucide-react";
 import { emit } from "@tauri-apps/api/event";
 import { commands } from "@/lib/utils/tauri";
 
@@ -112,23 +112,41 @@ function SearchPage() {
 				<div className="relative">
 					<CurrentFrame />
 					{currentResultIndex >= 0 && searchResults[currentResultIndex] && (
-						<Button
-							variant="secondary"
-							size="sm"
-							className="absolute bottom-2 right-2 gap-1.5"
-							onClick={async () => {
-								const timestamp = searchResults[currentResultIndex].timestamp;
-								// Show main timeline window
-								await commands.showWindow("Main");
-								// Emit event to navigate to the timestamp
-								await emit("navigate-to-timestamp", timestamp);
-								// Close search window
-								await commands.closeWindow({ Search: { query: null } });
-							}}
-						>
-							<Clock className="h-3.5 w-3.5" />
-							view in timeline
-						</Button>
+						<div className="absolute bottom-2 right-2 flex gap-2">
+							<Button
+								variant="secondary"
+								size="sm"
+								className="gap-1.5"
+								onClick={async () => {
+									const result = searchResults[currentResultIndex];
+									// Build context for AI chat
+									const context = `Context from search result:\n${result.app_name} - ${result.window_name}\nTime: ${format(new Date(result.timestamp), "PPpp")}\n\nText:\n${result.text || ""}`;
+									// Open AI chat window with context
+									await commands.showWindow("Chat");
+									await emit("chat-prefill", { context });
+								}}
+							>
+								<MessageSquare className="h-3.5 w-3.5" />
+								ask AI
+							</Button>
+							<Button
+								variant="secondary"
+								size="sm"
+								className="gap-1.5"
+								onClick={async () => {
+									const timestamp = searchResults[currentResultIndex].timestamp;
+									// Show main timeline window
+									await commands.showWindow("Main");
+									// Emit event to navigate to the timestamp
+									await emit("navigate-to-timestamp", timestamp);
+									// Close search window
+									await commands.closeWindow({ Search: { query: null } });
+								}}
+							>
+								<Clock className="h-3.5 w-3.5" />
+								view in timeline
+							</Button>
+						</div>
 					)}
 				</div>
 			</div>
