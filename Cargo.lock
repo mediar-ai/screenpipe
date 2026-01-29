@@ -628,7 +628,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
  "log",
@@ -1122,28 +1122,13 @@ dependencies = [
 
 [[package]]
 name = "cidre"
-version = "0.4.0"
-source = "git+https://github.com/yury/cidre.git?rev=f05c428#f05c4288f9870c9fab53272ddafd6ec01c7b2dbf"
-dependencies = [
- "cidre-macros 0.1.0 (git+https://github.com/yury/cidre.git?rev=f05c428)",
- "parking_lot",
- "tokio",
-]
-
-[[package]]
-name = "cidre"
 version = "0.7.0"
 source = "git+https://github.com/mediar-ai/cidre.git#5ec1e32f72bee75bfb33d1e73610c3c22d97733b"
 dependencies = [
- "cidre-macros 0.1.0 (git+https://github.com/mediar-ai/cidre.git)",
+ "cidre-macros",
  "parking_lot",
  "tokio",
 ]
-
-[[package]]
-name = "cidre-macros"
-version = "0.1.0"
-source = "git+https://github.com/yury/cidre.git?rev=f05c428#f05c4288f9870c9fab53272ddafd6ec01c7b2dbf"
 
 [[package]]
 name = "cidre-macros"
@@ -1511,10 +1496,10 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/Kree0/cpal.git?branch=master#e851e41b6e4f2318455b109b14dd5a64db3ac47a"
+source = "git+https://github.com/louis030195/cpal.git?branch=main#a262741cc778f071888c9dd57bda3e87fa5cf240"
 dependencies = [
  "alsa",
- "cidre 0.4.0",
+ "cidre",
  "core-foundation-sys",
  "coreaudio-rs",
  "dasp_sample",
@@ -3919,7 +3904,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -6483,6 +6468,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sck-rs"
+version = "0.1.0"
+source = "git+https://github.com/louis030195/sck-rs#e09225902d7ea977ca0ebda336bb01fbac3e7948"
+dependencies = [
+ "cidre",
+ "image",
+ "once_cell",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "scoped-tls"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6503,7 +6501,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
- "cpal 0.15.3 (git+https://github.com/Kree0/cpal.git?branch=master)",
+ "cpal 0.15.3 (git+https://github.com/louis030195/cpal.git?branch=main)",
  "criterion",
  "crossbeam",
  "dashmap",
@@ -6721,7 +6719,7 @@ dependencies = [
  "atspi-proxies",
  "base64 0.22.1",
  "chrono",
- "cidre 0.7.0",
+ "cidre",
  "clap",
  "core-foundation 0.10.0",
  "criterion",
@@ -6733,6 +6731,7 @@ dependencies = [
  "once_cell",
  "reqwest 0.12.12",
  "rusty-tesseract",
+ "sck-rs",
  "screenpipe-core",
  "screenpipe-db",
  "screenpipe-integrations",
