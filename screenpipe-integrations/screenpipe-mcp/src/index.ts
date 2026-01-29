@@ -638,7 +638,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         frameIds.sort((a, b) => a - b);
 
         // Step 2: Connect to WebSocket and export video
-        const wsUrl = `ws://localhost:${port}/frames/export?frame_ids=${frameIds.join(",")}&fps=${fps}`;
+        // Send frame_ids in message body to avoid URL length limits
+        const wsUrl = `ws://localhost:${port}/frames/export?fps=${fps}`;
 
         const exportResult = await new Promise<{
           success: boolean;
@@ -656,6 +657,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               resolve({ success: false, error: "Export timed out after 5 minutes" });
             }
           }, 5 * 60 * 1000); // 5 minute timeout
+
+          ws.on("open", () => {
+            // Send frame_ids in message body to avoid URL length limits
+            ws.send(JSON.stringify({ frame_ids: frameIds }));
+          });
 
           ws.on("error", (error) => {
             if (!resolved) {

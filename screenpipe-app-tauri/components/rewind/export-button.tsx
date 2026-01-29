@@ -56,9 +56,9 @@ export function ExportButton() {
 				ws = null;
 			};
 
-			// Create WebSocket connection
+			// Create WebSocket connection - send frame_ids in message body to avoid URL length limits
 			ws = new WebSocket(
-				`ws://localhost:3030/frames/export?frame_ids=${sortedFrameIds.join(",")}&fps=${settings.fps ?? 0.5}`,
+				`ws://localhost:3030/frames/export?fps=${settings.fps ?? 0.5}`,
 			);
 
 			// Set a timeout to handle connection issues
@@ -78,6 +78,8 @@ export function ExportButton() {
 			ws.onopen = () => {
 				clearTimeout(connectionTimeout);
 				console.log("WebSocket connection established");
+				// Send frame_ids in message body to avoid URL length limits
+				ws?.send(JSON.stringify({ frame_ids: sortedFrameIds.map(id => parseInt(id)) }));
 			};
 
 			ws.onmessage = async (event) => {

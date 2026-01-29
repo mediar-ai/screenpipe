@@ -2383,9 +2383,35 @@ async fn handle_health_socket(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct VideoExportRequest {
-    #[serde(deserialize_with = "deserialize_frame_ids")]
+    #[serde(default, deserialize_with = "deserialize_frame_ids_optional")]
     frame_ids: Vec<i64>,
+    #[serde(default = "default_fps")]
     fps: f64,
+}
+
+fn default_fps() -> f64 {
+    0.5
+}
+
+fn deserialize_frame_ids_optional<'de, D>(deserializer: D) -> Result<Vec<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    match s {
+        Some(s) if !s.is_empty() => s
+            .split(',')
+            .map(|id| id.trim().parse::<i64>())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(serde::de::Error::custom),
+        _ => Ok(Vec::new()),
+    }
+}
+
+/// Message sent by client with frame IDs (for when URL would be too long)
+#[derive(Debug, Deserialize)]
+struct VideoExportMessage {
+    frame_ids: Vec<i64>,
 }
 
 #[derive(OaSchema, Debug, Deserialize)]
@@ -2453,13 +2479,6 @@ async fn stop_audio_device(
     }))
 }
 
-fn deserialize_frame_ids<'de, D>(deserializer: D) -> Result<Vec<i64>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s: String = String::deserialize(deserializer)?;
-    Ok(s.split(',').filter_map(|id| id.parse().ok()).collect())
-}
 
 #[derive(Debug, Serialize)]
 struct ExportProgress {
@@ -2506,15 +2525,8 @@ pub async fn handle_video_export_ws(
     State(state): State<Arc<AppState>>,
     Query(payload): Query<VideoExportRequest>,
 ) -> Response {
-    if payload.frame_ids.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "No valid frame IDs provided" })),
-        )
-            .into_response();
-    }
-
     // Check connection limit before upgrading
+    // Frame IDs can be empty - they'll be sent via WebSocket message
     match try_acquire_ws_connection(&state.ws_connection_count) {
         Some(guard) => ws
             .on_upgrade(move |socket| async move {
@@ -2531,9 +2543,95 @@ pub async fn handle_video_export_ws(
 async fn handle_video_export(
     mut socket: WebSocket,
     state: Arc<AppState>,
-    payload: VideoExportRequest,
+    mut payload: VideoExportRequest,
     _guard: WsConnectionGuard,
 ) {
+    // If frame_ids not provided in URL, wait for them via WebSocket message
+    if payload.frame_ids.is_empty() {
+        info!("No frame_ids in URL, waiting for WebSocket message...");
+        // Wait for frame_ids message with timeout
+        let timeout = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            socket.recv()
+        ).await;
+
+        match timeout {
+            Ok(Some(Ok(Message::Text(text)))) => {
+                match serde_json::from_str::<VideoExportMessage>(&text) {
+                    Ok(msg) => {
+                        info!("Received {} frame_ids via WebSocket message", msg.frame_ids.len());
+                        payload.frame_ids = msg.frame_ids;
+                    }
+                    Err(e) => {
+                        let _ = socket
+                            .send(Message::Text(
+                                serde_json::to_string(&ExportProgress {
+                                    status: "error".to_string(),
+                                    progress: 0.0,
+                                    video_data: None,
+                                    error: Some(format!("Invalid frame_ids message: {}", e)),
+                                })
+                                .unwrap_or_default(),
+                            ))
+                            .await;
+                        return;
+                    }
+                }
+            }
+            Ok(Some(Ok(_))) => {
+                let _ = socket
+                    .send(Message::Text(
+                        serde_json::to_string(&ExportProgress {
+                            status: "error".to_string(),
+                            progress: 0.0,
+                            video_data: None,
+                            error: Some("Expected text message with frame_ids".to_string()),
+                        })
+                        .unwrap_or_default(),
+                    ))
+                    .await;
+                return;
+            }
+            Ok(Some(Err(e))) => {
+                error!("WebSocket error receiving frame_ids: {}", e);
+                return;
+            }
+            Ok(None) => {
+                error!("WebSocket closed before receiving frame_ids");
+                return;
+            }
+            Err(_) => {
+                let _ = socket
+                    .send(Message::Text(
+                        serde_json::to_string(&ExportProgress {
+                            status: "error".to_string(),
+                            progress: 0.0,
+                            video_data: None,
+                            error: Some("Timeout waiting for frame_ids".to_string()),
+                        })
+                        .unwrap_or_default(),
+                    ))
+                    .await;
+                return;
+            }
+        }
+    }
+
+    if payload.frame_ids.is_empty() {
+        let _ = socket
+            .send(Message::Text(
+                serde_json::to_string(&ExportProgress {
+                    status: "error".to_string(),
+                    progress: 0.0,
+                    video_data: None,
+                    error: Some("No valid frame IDs provided".to_string()),
+                })
+                .unwrap_or_default(),
+            ))
+            .await;
+        return;
+    }
+
     let temp_dir = match tempfile::tempdir() {
         Ok(dir) => dir,
         Err(e) => {

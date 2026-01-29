@@ -569,8 +569,9 @@ export function GlobalChat() {
         ws = null;
       };
 
+      // Send frame_ids in message body to avoid URL length limits
       ws = new WebSocket(
-        `ws://localhost:3030/frames/export?frame_ids=${sortedFrameIds.join(",")}&fps=${settings.fps ?? 0.5}`,
+        `ws://localhost:3030/frames/export?fps=${settings.fps ?? 0.5}`,
       );
 
       const connectionTimeout = setTimeout(() => {
@@ -582,7 +583,11 @@ export function GlobalChat() {
         }
       }, 10000);
 
-      ws.onopen = () => clearTimeout(connectionTimeout);
+      ws.onopen = () => {
+        clearTimeout(connectionTimeout);
+        // Send frame_ids in message body to avoid URL length limits
+        ws?.send(JSON.stringify({ frame_ids: sortedFrameIds.map(id => parseInt(id)) }));
+      };
 
       ws.onmessage = async (event) => {
         try {
