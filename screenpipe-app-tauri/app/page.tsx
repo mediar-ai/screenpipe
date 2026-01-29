@@ -21,7 +21,6 @@ import { RefreshCw, AlertTriangle } from "lucide-react";
 import { PermissionButtons } from "@/components/status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import SplashScreen from "@/components/splash-screen";
-import { SearchCommand } from "@/components/rewind/search-command";
 
 export default function Home() {
   const { settings, updateSettings, loadUser, reloadStore, isSettingsLoaded, loadingError } = useSettings();
@@ -152,7 +151,6 @@ export default function Home() {
                 </div>
               )}
               <Timeline />
-              <SearchCommand />
             </div>
           ) : (
             <div className="flex items-center justify-center h-screen p-4 bg-background w-full">

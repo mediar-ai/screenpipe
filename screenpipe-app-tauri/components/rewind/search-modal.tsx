@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { Search, X, Loader2, Clock } from "lucide-react";
+import { Search, X, Loader2, Clock, MessageSquare } from "lucide-react";
 import { useKeywordSearchStore, SearchMatch } from "@/lib/hooks/use-keyword-search-store";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
+import { commands } from "@/lib/utils/tauri";
+import { emit } from "@tauri-apps/api/event";
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -96,6 +98,18 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
     });
   }, [debouncedQuery, searchKeywords, resetSearch]);
 
+  // Send to AI handler
+  const handleSendToAI = useCallback(async () => {
+    const result = searchResults[selectedIndex];
+    if (!result) return;
+
+    const context = `Context from search result:\n${result.app_name} - ${result.window_name}\nTime: ${format(new Date(result.timestamp), "PPpp")}\n\nText:\n${result.text || ""}`;
+
+    await commands.showWindow("Chat");
+    await emit("chat-prefill", { context });
+    onClose();
+  }, [searchResults, selectedIndex, onClose]);
+
   // Keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
@@ -125,7 +139,11 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
           break;
         case "Enter":
           e.preventDefault();
-          if (searchResults[selectedIndex]) {
+          if (e.metaKey || e.ctrlKey) {
+            // Cmd+Enter = send to AI
+            handleSendToAI();
+          } else if (searchResults[selectedIndex]) {
+            // Enter = navigate to timestamp
             onNavigateToTimestamp(searchResults[selectedIndex].timestamp);
             onClose();
           }
@@ -135,7 +153,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, searchResults, selectedIndex, onClose, onNavigateToTimestamp]);
+  }, [isOpen, searchResults, selectedIndex, onClose, onNavigateToTimestamp, handleSendToAI]);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -286,7 +304,10 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
           <div className="flex items-center gap-4">
             <span>←→↑↓ navigate</span>
             <span>⏎ go to timeline</span>
-            <span>hover for details</span>
+            <span className="flex items-center gap-1">
+              <MessageSquare className="w-3 h-3" />
+              ⌘⏎ ask AI
+            </span>
           </div>
           <span>esc close</span>
         </div>
