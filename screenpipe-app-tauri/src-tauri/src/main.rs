@@ -757,7 +757,7 @@ async fn main() {
                 let _ = window
                     .app_handle()
                     .set_activation_policy(tauri::ActivationPolicy::Regular);
-                window.hide().unwrap();
+                let _ = window.hide();
                 api.prevent_close();
             }
             _ => {}
@@ -775,13 +775,11 @@ async fn main() {
             None,
         ))
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Gracefully handle case where no windows exist yet (can happen during early init)
             let windows = app.webview_windows();
-            windows
-                .values()
-                .next()
-                .expect("Sorry, no window found")
-                .set_focus()
-                .expect("Can't focus window!");
+            if let Some(window) = windows.values().next() {
+                let _ = window.set_focus();
+            }
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build());
@@ -891,19 +889,27 @@ async fn main() {
             }
 
             // Logging setup
-            let base_dir =
-                get_base_dir(app_handle, None).expect("Failed to ensure local data directory");
+            let base_dir = get_base_dir(app_handle, None)
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to get base dir, using fallback: {}", e);
+                    dirs::home_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                        .join(".screenpipe")
+                });
 
             // Set up rolling file appender
+            let log_dir = get_screenpipe_data_dir(app.handle())
+                .unwrap_or_else(|_| {
+                    dirs::home_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                        .join(".screenpipe")
+                });
             let file_appender = RollingFileAppender::builder()
                 .rotation(Rotation::DAILY)
                 .filename_prefix("screenpipe-app")
                 .filename_suffix("log")
                 .max_log_files(5)
-                .build(
-                    get_screenpipe_data_dir(app.handle())
-                        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")),
-                )?;
+                .build(log_dir)?;
 
             // Create a custom layer for file logging
             let file_layer = tracing_subscriber::fmt::layer()
@@ -944,15 +950,24 @@ async fn main() {
 
             let path = base_dir.join("store.bin");
             if !path.exists() {
-                let _ = File::create(path.clone()).unwrap();
+                if let Err(e) = File::create(path.clone()) {
+                    error!("Failed to create store.bin: {}", e);
+                }
             }
 
             // Store setup and initialization - must be done first
-            let store = store::init_store(&app.handle()).unwrap();
+            // Use unwrap_or_default to prevent crashes from corrupted stores
+            let store = store::init_store(&app.handle()).unwrap_or_else(|e| {
+                error!("Failed to init settings store, using defaults: {}", e);
+                store::SettingsStore::default()
+            });
             app.manage(store.clone());
 
             // Initialize onboarding store
-            let onboarding_store = store::init_onboarding_store(&app.handle()).unwrap();
+            let onboarding_store = store::init_onboarding_store(&app.handle()).unwrap_or_else(|e| {
+                error!("Failed to init onboarding store, using defaults: {}", e);
+                store::OnboardingStore::default()
+            });
             app.manage(onboarding_store.clone());
 
             // Show onboarding window if not completed
