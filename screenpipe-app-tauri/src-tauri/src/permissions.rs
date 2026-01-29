@@ -210,7 +210,10 @@ pub fn check_accessibility_permission_cmd() -> OSPermissionStatus {
 /// This removes the app from the TCC database and triggers a fresh permission request
 #[tauri::command(async)]
 #[specta::specta]
-pub async fn reset_and_request_permission(permission: OSPermission) -> Result<(), String> {
+pub async fn reset_and_request_permission(
+    app: tauri::AppHandle,
+    permission: OSPermission,
+) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
@@ -222,12 +225,14 @@ pub async fn reset_and_request_permission(permission: OSPermission) -> Result<()
             OSPermission::Accessibility => "Accessibility",
         };
 
-        info!("resetting permission for service: {}", service);
+        // Get bundle identifier from Tauri config (handles dev/beta/prod automatically)
+        let bundle_id = app.config().identifier.as_str();
 
-        // Reset permission using tccutil
-        // Note: tccutil reset removes the app from the permission list entirely
+        info!("resetting permission for service: {} (bundle: {})", service, bundle_id);
+
+        // Reset permission using tccutil - ONLY for this app's bundle ID
         let output = Command::new("tccutil")
-            .args(["reset", service])
+            .args(["reset", service, bundle_id])
             .output()
             .map_err(|e| format!("failed to run tccutil: {}", e))?;
 
@@ -237,7 +242,7 @@ pub async fn reset_and_request_permission(permission: OSPermission) -> Result<()
             // Don't fail - tccutil might return non-zero even when it works
         }
 
-        info!("tccutil reset completed, waiting before re-request");
+        info!("tccutil reset completed for {} (bundle: {}), waiting before re-request", service, bundle_id);
 
         // Wait for TCC database to update
         sleep(Duration::from_millis(500)).await;
@@ -250,7 +255,7 @@ pub async fn reset_and_request_permission(permission: OSPermission) -> Result<()
 
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = permission;
+        let _ = (app, permission);
         Ok(())
     }
 }
