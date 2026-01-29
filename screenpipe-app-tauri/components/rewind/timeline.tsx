@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { Loader2, RotateCcw, AlertCircle, X, Search } from "lucide-react";
+import { Loader2, RotateCcw, AlertCircle, X } from "lucide-react";
 import { commands } from "@/lib/utils/tauri";
 import { listen } from "@tauri-apps/api/event";
-import { SearchModal } from "@/components/rewind/search-modal";
 import { AudioTranscript } from "@/components/rewind/timeline/audio-transcript";
 import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
@@ -65,8 +64,7 @@ const easeOutCubic = (x: number): number => {
 export default function Timeline() {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [showAudioTranscript, setShowAudioTranscript] = useState(true);
-	const [showSearchModal, setShowSearchModal] = useState(false);
-	const containerRef = useRef<HTMLDivElement | null>(null);
+		const containerRef = useRef<HTMLDivElement | null>(null);
 	// const [searchResults, setSearchResults] = useState<number[]>([]);
 	const [startAndEndDates, setStartAndEndDates] = useState<TimeRange>({
 		// Default to 1 year ago so navigation works even if getStartDate fails
@@ -258,23 +256,22 @@ export default function Timeline() {
 		posthog.capture("timeline_opened");
 	}, []);
 
-	// Keyboard shortcut for search modal (/ or Cmd+K)
+	// Keyboard shortcut for search window (/ or Cmd+K)
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			// Don't trigger if already in an input or search modal is open
-			if (showSearchModal) return;
+			// Don't trigger if already in an input
 			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-			// / key or Cmd+K
+			// / key or Cmd+K - open search window
 			if (e.key === "/" || (e.key === "k" && (e.metaKey || e.ctrlKey))) {
 				e.preventDefault();
-				setShowSearchModal(true);
+				commands.openSearchWindow(null);
 			}
 		};
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [showSearchModal]);
+	}, []);
 
 	useEffect(() => {
 		const getStartDateAndSet = async () => {
@@ -830,24 +827,6 @@ export default function Timeline() {
 					</div>
 				</div>
 
-				{/* Search Modal */}
-				<SearchModal
-					isOpen={showSearchModal}
-					onClose={() => setShowSearchModal(false)}
-					onNavigateToTimestamp={(timestamp) => {
-						// Navigate to the timestamp
-						const targetDate = new Date(timestamp);
-						pendingNavigationRef.current = targetDate;
-						setSeekingTimestamp(timestamp);
-
-						if (!isSameDay(targetDate, currentDate)) {
-							handleDateChange(targetDate);
-						} else {
-							jumpToTime(targetDate);
-							setSeekingTimestamp(null);
-						}
-					}}
-				/>
 			</div>
 		</TimelineProvider>
 	);

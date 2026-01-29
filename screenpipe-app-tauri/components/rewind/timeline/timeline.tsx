@@ -88,12 +88,24 @@ export const TimelineSlider = ({
 		return () => cancelAnimationFrame(animationId);
 	}, [zoomLevel, targetZoom]);
 
+	// Track if we're in a zoom gesture to prevent simultaneous scrolling
+	const isZoomingRef = useRef(false);
+	const zoomTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
 	// Handle pinch-to-zoom (trackpad) and Cmd+Scroll (mouse)
 	const handleWheel = useCallback((e: WheelEvent) => {
 		// Pinch gesture on trackpad sends ctrlKey=true
 		// Cmd+Scroll on mouse sends metaKey=true
 		if (e.ctrlKey || e.metaKey) {
 			e.preventDefault();
+			e.stopPropagation();
+
+			// Mark that we're zooming - this prevents scroll from happening
+			isZoomingRef.current = true;
+			if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current);
+			zoomTimeoutRef.current = setTimeout(() => {
+				isZoomingRef.current = false;
+			}, 150); // Debounce - wait 150ms after last zoom event
 
 			// Calculate zoom delta (negative deltaY = zoom in)
 			const zoomDelta = -e.deltaY * 0.008;
@@ -102,7 +114,8 @@ export const TimelineSlider = ({
 				const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev * (1 + zoomDelta)));
 				return newZoom;
 			});
-		} else {
+		} else if (!isZoomingRef.current) {
+			// Only allow scroll when not in a zoom gesture
 			// Regular scroll - speed scales inversely with zoom
 			// When zoomed out (0.25), scroll moves 4x faster through frames
 			// When zoomed in (4), scroll moves 0.25x slower
@@ -385,9 +398,9 @@ export const TimelineSlider = ({
 					animate={{ opacity: [0, 1, 0] }}
 					transition={{ duration: 1.5, ease: "easeOut" }}
 				>
-					<div className="h-full w-full bg-gradient-to-l from-green-400/40 via-green-400/20 to-transparent" />
+					<div className="h-full w-full bg-gradient-to-l from-foreground/30 via-foreground/15 to-transparent" />
 					<motion.div
-						className="absolute right-2 top-1/2 -translate-y-1/2 bg-green-500 text-white text-xs font-medium px-2 py-1 rounded-full shadow-lg"
+						className="absolute right-2 top-1/2 -translate-y-1/2 bg-foreground text-background text-xs font-medium px-2 py-1 rounded-full shadow-lg"
 						initial={{ scale: 0, x: 20 }}
 						animate={{ scale: 1, x: 0 }}
 						exit={{ scale: 0, x: 20 }}
@@ -401,7 +414,7 @@ export const TimelineSlider = ({
 				ref={containerRef}
 				className="w-full overflow-x-auto overflow-y-visible scrollbar-hide bg-gradient-to-t from-black/50 to-black/0"
 				style={{
-					paddingTop: "40px", // Space for tooltips above
+					paddingTop: "60px", // Space for tooltips above
 					paddingBottom: "24px", // Space for time axis below
 				}}
 			>
@@ -477,17 +490,17 @@ export const TimelineSlider = ({
 											data-timestamp={frame.timestamp}
 											className={cn(
 												"flex-shrink-0 cursor-ew-resize rounded-t relative hover:z-50 transition-all duration-200",
-												(isSelected || isInRange) && "ring-2 ring-blue-400 ring-offset-1 ring-offset-black/20"
+												(isSelected || isInRange) && "ring-2 ring-foreground/60 ring-offset-1 ring-offset-black/20"
 											)}
 											style={{
 												width: `${frameWidth}px`,
 												marginLeft: `${frameMargin}px`,
 												marginRight: `${frameMargin}px`,
-												backgroundColor: isCurrent ? '#3b82f6' : group.color,
+												backgroundColor: isCurrent ? 'hsl(var(--foreground))' : group.color,
 												height: isCurrent || isSelected || isInRange ? "75%" : "45%",
 												opacity: isCurrent || isSelected || isInRange ? 1 : 0.7,
 												direction: "ltr",
-												boxShadow: isCurrent ? '0 0 15px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.3)' : 'none',
+												boxShadow: isCurrent ? '0 0 10px rgba(255, 255, 255, 0.4), 0 0 20px rgba(255, 255, 255, 0.2)' : 'none',
 												transform: isCurrent ? 'scale(1.1)' : 'scale(1)',
 												transition: 'all 0.2s ease-out',
 												borderRadius: '4px 4px 0 0',
@@ -509,9 +522,9 @@ export const TimelineSlider = ({
 											}}
 											onMouseLeave={() => setHoveredTimestamp(null)}
 										>
-											{/* Audio indicator - green dot at top of bar */}
+											{/* Audio indicator - subtle dot at top of bar */}
 											{hasAudio && (
-												<div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-green-400 shadow-sm" />
+												<div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-foreground/60" />
 											)}
 
 											{/* Time marker below frame */}
@@ -527,7 +540,7 @@ export const TimelineSlider = ({
 											{/* Tooltip on hover */}
 											{(hoveredTimestamp === frame.timestamp ||
 												frames[currentIndex]?.timestamp === frame.timestamp) && (
-												<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-8 w-max bg-popover border border-border rounded-lg px-3 py-2 text-xs shadow-2xl">
+												<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-2 w-max bg-popover border border-border rounded-lg px-3 py-2 text-xs shadow-2xl">
 													<div className="flex items-center gap-2 mb-1">
 														<img
 															src={`http://localhost:11435/app-icon?name=${encodeURIComponent(group.appName)}`}
@@ -542,7 +555,7 @@ export const TimelineSlider = ({
 														{format(new Date(frame.timestamp), 'h:mm:ss a')}
 													</p>
 													{hasAudio && (
-														<p className="text-green-400 flex items-center gap-1 mt-1">
+														<p className="text-muted-foreground flex items-center gap-1 mt-1">
 															<Mic className="w-3 h-3" />
 															<span>audio recorded</span>
 														</p>
@@ -563,11 +576,11 @@ export const TimelineSlider = ({
 			<div className="absolute bottom-0 left-0 right-0 h-6 flex items-center justify-center pointer-events-none">
 				<div className="flex items-center gap-4 text-[10px] text-muted-foreground">
 					<span className="flex items-center gap-1">
-						<div className="w-3 h-3 rounded bg-blue-500" />
+						<div className="w-3 h-3 rounded bg-foreground" />
 						<span>current</span>
 					</span>
 					<span className="flex items-center gap-1">
-						<Mic className="w-3 h-3 text-green-400" />
+						<Mic className="w-3 h-3 text-muted-foreground" />
 						<span>has audio</span>
 					</span>
 					<span className="opacity-60">scroll to navigate • pinch to zoom</span>
