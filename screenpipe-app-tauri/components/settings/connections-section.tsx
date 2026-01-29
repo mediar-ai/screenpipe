@@ -299,13 +299,67 @@ export function ConnectionsSection() {
           </CardContent>
         </Card>
 
-        {/* Info card */}
-        <div className="p-4 bg-muted border border-border rounded-lg">
-          <p className="text-sm text-muted-foreground">
-            <strong className="text-foreground">How it works:</strong> The extension allows Claude to search through your
-            Screenpipe recordings and transcriptions. Make sure Screenpipe is running when you
-            use Claude with Screenpipe features.
-          </p>
+        {/* Learn & Build section */}
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            Learn & Build
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <button
+              onClick={() => open("https://docs.screenpi.pe/docs/api-reference")}
+              className="flex items-center gap-2 p-3 bg-card hover:bg-muted border border-border rounded-lg transition-colors text-left group"
+            >
+              <span className="text-lg">📡</span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground group-hover:text-foreground/80">REST API</p>
+                <p className="text-xs text-muted-foreground truncate">Query data via HTTP</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => open("https://docs.screenpi.pe/docs/mcp-server")}
+              className="flex items-center gap-2 p-3 bg-card hover:bg-muted border border-border rounded-lg transition-colors text-left group"
+            >
+              <span className="text-lg">🔌</span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground group-hover:text-foreground/80">MCP Server</p>
+                <p className="text-xs text-muted-foreground truncate">Cursor, Windsurf</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => open("https://docs.screenpi.pe/docs/plugins")}
+              className="flex items-center gap-2 p-3 bg-card hover:bg-muted border border-border rounded-lg transition-colors text-left group"
+            >
+              <span className="text-lg">🤖</span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground group-hover:text-foreground/80">AI Agents</p>
+                <p className="text-xs text-muted-foreground truncate">Automate workflows</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => open("https://docs.screenpi.pe/docs/sdk-reference")}
+              className="flex items-center gap-2 p-3 bg-card hover:bg-muted border border-border rounded-lg transition-colors text-left group"
+            >
+              <span className="text-lg">🔧</span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground group-hover:text-foreground/80">SDK</p>
+                <p className="text-xs text-muted-foreground truncate">TS & Python</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => open("https://docs.screenpi.pe")}
+              className="flex items-center gap-2 p-3 bg-card hover:bg-muted border border-border rounded-lg transition-colors text-left group"
+            >
+              <span className="text-lg">📚</span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground group-hover:text-foreground/80">All Docs</p>
+                <p className="text-xs text-muted-foreground truncate">Full documentation</p>
+              </div>
+            </button>
+          </div>
         </div>
 
       </div>

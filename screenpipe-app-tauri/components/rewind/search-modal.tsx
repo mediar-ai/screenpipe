@@ -319,7 +319,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
                 ))}
               </div>
               <div className="mt-4 text-xs text-muted-foreground">
-                <span className="opacity-60">tips:</span> "slack yesterday" · "@zoom meeting" · "budget today"
+                <span className="opacity-60">tips:</span> &quot;slack yesterday&quot; · &quot;@zoom meeting&quot; · &quot;budget today&quot;
               </div>
             </div>
           )}
@@ -327,7 +327,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
           {/* Empty state */}
           {showEmpty && (
             <div className="p-8 text-center text-sm text-muted-foreground">
-              no results for "{debouncedQuery}"
+              no results for &quot;{debouncedQuery}&quot;
             </div>
           )}
 
