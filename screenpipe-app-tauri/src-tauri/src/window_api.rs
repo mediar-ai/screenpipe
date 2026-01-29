@@ -406,7 +406,8 @@ impl ShowRewindWindow {
                         use objc::{msg_send, sel, sel_impl};
 
                         if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Chat.label()) {
-                            panel.set_level(1001);
+                            // Level 1002 = above timeline overlay (1001), so chat appears on top
+                            panel.set_level(1002);
                             // Enable dragging by clicking anywhere on the window background
                             let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
                             panel.set_collection_behaviour(
@@ -716,8 +717,8 @@ impl ShowRewindWindow {
                             use objc::{msg_send, sel, sel_impl};
 
                             if let Ok(panel) = window_clone.to_panel() {
-                                // Level 1001 = above CGShieldingWindowLevel, shows over fullscreen
-                                panel.set_level(1001);
+                                // Level 1002 = above timeline overlay (1001), so chat appears on top
+                                panel.set_level(1002);
 
                                 // Enable dragging by clicking anywhere on the window background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };

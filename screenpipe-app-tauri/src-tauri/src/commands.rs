@@ -604,24 +604,10 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
         }
     }
 
-    // Register Cmd+L (macOS) / Ctrl+L (Windows/Linux) to open AI chat
-    #[cfg(target_os = "macos")]
-    let chat_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyL);
-    #[cfg(not(target_os = "macos"))]
-    let chat_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyL);
+    // Note: Chat shortcut (Ctrl+Cmd+L) is now global-only, not window-specific
+    // This allows one consistent shortcut for chat everywhere
 
-    if let Err(e) = global_shortcut.on_shortcut(chat_shortcut, |app, _, event| {
-        if matches!(event.state, ShortcutState::Pressed) {
-            info!("Chat shortcut triggered (Cmd+L / Ctrl+L)");
-            let _ = app.emit("open-chat", ());
-        }
-    }) {
-        if !e.to_string().contains("already registered") {
-            error!("Failed to register chat shortcut: {}", e);
-        }
-    }
-
-    info!("Window-specific shortcuts registered (Escape, Cmd+K, Cmd+L)");
+    info!("Window-specific shortcuts registered (Escape, Cmd+K)");
     Ok(())
 }
 
@@ -645,12 +631,7 @@ pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), S
     let search_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyK);
     let _ = global_shortcut.unregister(search_shortcut);
 
-    // Unregister Cmd+L / Ctrl+L
-    #[cfg(target_os = "macos")]
-    let chat_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyL);
-    #[cfg(not(target_os = "macos"))]
-    let chat_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyL);
-    let _ = global_shortcut.unregister(chat_shortcut);
+    // Note: Chat shortcut (Ctrl+Cmd+L) is global-only, no need to unregister here
 
     info!("Window-specific shortcuts unregistered");
     Ok(())
