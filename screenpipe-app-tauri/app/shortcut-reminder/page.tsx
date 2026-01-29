@@ -101,6 +101,26 @@ export default function ShortcutReminderPage() {
           className="flex items-center gap-0 border border-white/20"
           style={{ background: "#000" }}
         >
+          {/* Pipe logo - subtle branding */}
+          <div className="flex items-center px-1.5 py-1 border-r border-white/20">
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              className="text-white/40"
+            >
+              {/* Simplified S-pipe shape */}
+              <path
+                d="M7 4h6a4 4 0 0 1 4 4v0a4 4 0 0 1-4 4h-2a4 4 0 0 0-4 4v0a4 4 0 0 0 4 4h6"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                fill="none"
+              />
+            </svg>
+          </div>
+
           {/* Overlay shortcut */}
           <div className="flex items-center gap-1.5 px-2 py-1 border-r border-white/20">
             <svg
