@@ -169,7 +169,7 @@ let DEFAULT_SETTINGS: Settings = {
 				contact: null,
 				cloud_subscribed: null
 			},
-			showScreenpipeShortcut: "Super+Alt+S",
+			showScreenpipeShortcut: "Control+Super+S",
 			startRecordingShortcut: "Super+Alt+U",
 			stopRecordingShortcut: "Super+Alt+X",
 			startAudioShortcut: "",

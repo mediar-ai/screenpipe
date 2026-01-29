@@ -1,6 +1,25 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { MessageSquare, Sparkles } from "lucide-react";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { usePlatform } from "@/lib/hooks/use-platform";
+
+// Format shortcut for display (platform-aware)
+function formatShortcut(shortcut: string, isMac: boolean): string {
+  if (!shortcut) return "";
+  if (isMac) {
+    return shortcut
+      .replace(/Super|Command|Cmd/gi, "⌘")
+      .replace(/Ctrl|Control/gi, "⌃")
+      .replace(/Alt|Option/gi, "⌥")
+      .replace(/Shift/gi, "⇧")
+      .replace(/\+/g, "");
+  }
+  return shortcut
+    .replace(/Super/gi, "Win")
+    .replace(/Command|Cmd/gi, "Ctrl")
+    .replace(/Option/gi, "Alt");
+}
 
 /**
  * Animated demo showing:
@@ -12,6 +31,9 @@ import { MessageSquare, Sparkles } from "lucide-react";
  * Loops every 6 seconds
  */
 export const TimelineAIDemo: React.FC = () => {
+  const { settings } = useSettings();
+  const { isMac } = usePlatform();
+  const chatShortcut = formatShortcut(settings.showChatShortcut, isMac);
   return (
     <div className="bg-muted/30 border border-border rounded-lg p-4 max-w-sm overflow-hidden">
       <div className="flex items-center space-x-2 mb-3">
@@ -99,7 +121,7 @@ export const TimelineAIDemo: React.FC = () => {
         >
           <span className="font-mono text-[10px] text-muted-foreground">press</span>
           <kbd className="px-1.5 py-0.5 bg-muted border border-border rounded text-[10px] font-mono font-semibold">
-            ⌘ L
+            {chatShortcut}
           </kbd>
         </motion.div>
 

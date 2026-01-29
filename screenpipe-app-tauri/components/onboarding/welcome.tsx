@@ -476,7 +476,7 @@ const OnboardingWelcome: React.FC<OnboardingWelcomeProps> = ({
             {isLoggedIn ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm text-foreground">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  <CheckCircle2 className="w-4 h-4" />
                   signed in as {settings?.user?.email}
                 </div>
                 <Button
@@ -519,21 +519,14 @@ const OnboardingWelcome: React.FC<OnboardingWelcomeProps> = ({
           </motion.div>
 
           {/* Trust badges */}
-          <motion.div
-            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono text-muted-foreground"
+          <motion.p
+            className="text-[10px] font-mono text-muted-foreground"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.4 }}
           >
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-              100% local
-            </div>
-            <span className="text-foreground/20">•</span>
-            <span>open source</span>
-            <span className="text-foreground/20">•</span>
-            <span>your data stays yours</span>
-          </motion.div>
+            100% local · open source · your data stays yours
+          </motion.p>
         </div>
       </div>
 

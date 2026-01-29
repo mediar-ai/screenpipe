@@ -549,19 +549,17 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           </div>
 
           {/* Shortcut reminders */}
-          <div className="bg-muted/50 border border-border px-4 py-3 rounded-lg space-y-2">
-            <div className="flex justify-center gap-6 font-mono text-xs text-muted-foreground">
-              <span>
-                <span className="font-semibold text-foreground">
-                  {formatShortcut(settings.showScreenpipeShortcut, isMacOS)}
-                </span>{" "}
-                timeline
+          <div className="border border-border px-6 py-3 space-y-1.5">
+            <div className="flex items-center justify-between gap-8 font-mono text-xs">
+              <span className="text-muted-foreground">timeline</span>
+              <span className="font-semibold text-foreground px-2 py-0.5 bg-muted border border-border">
+                {formatShortcut(settings.showScreenpipeShortcut, isMacOS)}
               </span>
-              <span>
-                <span className="font-semibold text-foreground">
-                  {formatShortcut(settings.showChatShortcut, isMacOS)}
-                </span>{" "}
-                ai chat
+            </div>
+            <div className="flex items-center justify-between gap-8 font-mono text-xs">
+              <span className="text-muted-foreground">ai chat</span>
+              <span className="font-semibold text-foreground px-2 py-0.5 bg-muted border border-border">
+                {formatShortcut(settings.showChatShortcut, isMacOS)}
               </span>
             </div>
           </div>
