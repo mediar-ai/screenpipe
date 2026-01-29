@@ -258,15 +258,26 @@ export default function Timeline() {
 		posthog.capture("timeline_opened");
 	}, []);
 
-	// Keyboard shortcut for search modal (/ or Cmd+K)
+	// Listen for open-search event from Rust (Cmd+K global shortcut)
+	useEffect(() => {
+		const unlisten = listen("open-search", () => {
+			if (!showSearchModal) {
+				setShowSearchModal(true);
+			}
+		});
+
+		return () => {
+			unlisten.then((fn) => fn());
+		};
+	}, [showSearchModal]);
+
+	// Also listen for "/" key (not intercepted by Rust)
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			// Don't trigger if already in an input or modal is open
 			if (showSearchModal) return;
 			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-			// / key or Cmd+K - open search modal
-			if (e.key === "/" || (e.key === "k" && (e.metaKey || e.ctrlKey))) {
+			if (e.key === "/") {
 				e.preventDefault();
 				setShowSearchModal(true);
 			}

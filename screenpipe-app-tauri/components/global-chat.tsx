@@ -31,6 +31,10 @@ import { UpgradeDialog } from "@/components/upgrade-dialog";
 
 const SCREENPIPE_API = "http://localhost:3030";
 
+// Default chat shortcut - matches store.rs defaults
+const DEFAULT_CHAT_SHORTCUT_MAC = "Control+Super+L";
+const DEFAULT_CHAT_SHORTCUT_OTHER = "Alt+L";
+
 // ============================================================================
 // SHORTCUT FORMATTING - Consistent modifier ordering (⌘ → ⌃ → ⌥ → ⇧ → key)
 // ============================================================================
