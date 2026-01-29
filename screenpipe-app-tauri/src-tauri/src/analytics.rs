@@ -72,8 +72,8 @@ impl AnalyticsManager {
             },
         });
 
-        // Add disk usage information
-        let disk_usage_result = crate::disk_usage::disk_usage(&self.screenpipe_dir_path).await;
+        // Add disk usage information (use cache, don't force refresh for analytics)
+        let disk_usage_result = crate::disk_usage::disk_usage(&self.screenpipe_dir_path, false).await;
         
         if let Ok(Some(disk_usage)) = disk_usage_result {
             if let Some(payload_props) = payload["properties"].as_object_mut() {

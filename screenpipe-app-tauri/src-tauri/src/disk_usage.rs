@@ -73,10 +73,14 @@ pub fn readable(size: u64) -> String {
     }
 }
 
-pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, String> {
+pub async fn disk_usage(
+    screenpipe_dir: &PathBuf,
+    force_refresh: bool,
+) -> Result<Option<DiskUsage>, String> {
     info!(
-        "Calculating disk usage for directory: {}",
-        screenpipe_dir.display()
+        "Calculating disk usage for directory: {} (force_refresh: {})",
+        screenpipe_dir.display(),
+        force_refresh
     );
     let data_dir = screenpipe_dir.join("data");
 
@@ -88,20 +92,22 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
     fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
     let cache_file = cache_dir.join("disk_usage.json");
 
-    if let Ok(content) = fs::read_to_string(&cache_file) {
-        warn!("disk cache file found: {}", cache_file.to_string_lossy());
-        if content.contains("---") {
-            info!("possibly some values in disk usage haven't calculated, recalculating...");
-        } else {
-            if let Ok(cached) = serde_json::from_str::<CachedDiskUsage>(&content) {
+    // Skip cache if force_refresh is requested
+    if !force_refresh {
+        if let Ok(content) = fs::read_to_string(&cache_file) {
+            if content.contains("---") {
+                info!("Cache contains incomplete values, recalculating...");
+            } else if let Ok(cached) = serde_json::from_str::<CachedDiskUsage>(&content) {
                 let now = chrono::Local::now().timestamp();
-                let two_days = 2 * 24 * 60 * 60; // 2 days in seconds
-                if now - cached.timestamp < two_days {
-                    info!("Using cached disk usage data");
+                let one_hour = 60 * 60; // 1 hour cache (reduced from 2 days)
+                if now - cached.timestamp < one_hour {
+                    info!("Using cached disk usage data (age: {}s)", now - cached.timestamp);
                     return Ok(Some(cached.usage));
                 }
             }
         }
+    } else {
+        info!("Force refresh requested, bypassing cache");
     }
 
     let mut total_video_size: u64 = 0;
@@ -161,28 +167,31 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
                         .unwrap_or("")
                         .to_lowercase();
 
-                    match extension.as_str() {
-                        // Audio file extensions
-                        "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" | "wma" => {
+                    // For .mp4 files, check filename to determine if audio or video
+                    // Audio devices (microphones) save as "DeviceName (input)_timestamp.mp4"
+                    // Screen recordings save as "monitor_N_timestamp.mp4"
+                    if extension == "mp4" {
+                        if file_name.contains("(input)")
+                            || file_name.contains("(output)")
+                            || file_name.to_lowercase().contains("audio")
+                            || file_name.to_lowercase().contains("microphone")
+                        {
                             *audio_size += size;
-                        }
-                        // Video file extensions
-                        "avi" | "mkv" | "mov" | "wmv" | "flv" | "webm" | "m4v" => {
+                        } else {
                             *video_size += size;
                         }
-                        // Fallback to filename patterns for files without clear extensions
-                        _ => {
-                            if file_name.contains("input")
-                                || file_name.contains("output")
-                                || file_name.contains("audio")
-                            {
+                    } else {
+                        match extension.as_str() {
+                            // Audio file extensions
+                            "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" | "wma" => {
                                 *audio_size += size;
-                            } else if file_name.contains("video") || file_name.contains("screen") {
-                                *video_size += size;
-                            } else {
-                                // Default to video for unknown media files
+                            }
+                            // Video file extensions
+                            "avi" | "mkv" | "mov" | "wmv" | "flv" | "webm" | "m4v" => {
                                 *video_size += size;
                             }
+                            // Ignore non-media files (db, json, log, etc.)
+                            _ => {}
                         }
                     }
                 }

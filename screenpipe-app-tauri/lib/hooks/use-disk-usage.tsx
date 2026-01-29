@@ -21,15 +21,15 @@ export function useDiskUsage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDiskUsage = async () => {
+  const fetchDiskUsage = async (forceRefresh: boolean = false) => {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       // Add a small delay to show loading state for very fast calculations
       const [result] = await Promise.all([
-        invoke<DiskUsage>("get_disk_usage"),
-        new Promise(resolve => setTimeout(resolve, 500)) // Minimum 500ms loading
+        invoke<DiskUsage>("get_disk_usage", { forceRefresh }),
+        new Promise(resolve => setTimeout(resolve, forceRefresh ? 300 : 500)) // Shorter delay on force refresh
       ]);
       
       setDiskUsage(result);
@@ -69,6 +69,6 @@ export function useDiskUsage() {
     diskUsage,
     isLoading,
     error,
-    refetch: fetchDiskUsage,
+    refetch: () => fetchDiskUsage(true), // Force refresh when user clicks refresh
   };
 } 
