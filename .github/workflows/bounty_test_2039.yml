@@ -1,0 +1,70 @@
+name: Bounty Test 2039
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          repository: Ashutosh0x/screenpipe
+          ref: feature/session-tracking-1560
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: "10.0"
+          directory: ${{ runner.temp }}/llvm
+
+      - name: Set LIBCLANG_PATH
+        run: echo "LIBCLANG_PATH=$((gcm clang).source -replace 'clang.exe')" >> $env:GITHUB_ENV
+
+      - name: Install FFMPEG
+        run: choco install ffmpeg
+
+      - name: Build
+        run: cargo build --release --verbose 2>&1 | tee build.log
+
+      - name: Run Tests
+        run: cargo test --verbose 2>&1 | tee test_output.log
+
+      - name: Checkout Target Repo for Log Upload
+        uses: actions/checkout@v4
+        if: always()
+        with:
+          repository: Godzilla675/screenpipe
+          path: log_repo
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit Logs
+        if: always()
+        run: |
+          cd log_repo
+          copy ..\test_output.log .
+          copy ..\build.log .
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add test_output.log build.log
+          git commit -m "Add test logs from workflow run"
+          git push
