@@ -1113,6 +1113,8 @@ export function GlobalChat() {
 
       let accumulatedText = "";
       let toolCalls: any[] = [];
+      let streamCompleted = false;
+      let lastChunkTime = Date.now();
 
       // First request with streaming
       const stream = await openai.chat.completions.create(
@@ -1125,8 +1127,18 @@ export function GlobalChat() {
         { signal: abortControllerRef.current.signal }
       );
 
+      // Stream timeout - 60 seconds without receiving a chunk
+      const STREAM_TIMEOUT_MS = 60000;
+
       for await (const chunk of stream) {
+        lastChunkTime = Date.now();
         const delta = chunk.choices[0]?.delta;
+        const finishReason = chunk.choices[0]?.finish_reason;
+
+        // Track stream completion
+        if (finishReason) {
+          streamCompleted = true;
+        }
 
         // Handle text content
         if (delta?.content) {
@@ -1155,6 +1167,20 @@ export function GlobalChat() {
             if (toolCall.function?.arguments) toolCalls[index].function.arguments += toolCall.function.arguments;
           }
         }
+      }
+
+      // Check for incomplete stream (no finish_reason and no tool calls)
+      if (!streamCompleted && toolCalls.length === 0 && accumulatedText) {
+        console.warn("Stream ended without finish_reason - possible connection issue");
+        // Append a note that the response may be incomplete
+        accumulatedText += "\n\n*(Response may be incomplete due to connection issue)*";
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId
+              ? { ...m, content: accumulatedText }
+              : m
+          )
+        );
       }
 
       // Handle tool calls if any
@@ -1219,6 +1245,7 @@ export function GlobalChat() {
 
         // Continue conversation with tool results
         accumulatedText = "";
+        streamCompleted = false;
         const continueStream = await openai.chat.completions.create(
           {
             model: activePreset.model || "gpt-4",
@@ -1230,6 +1257,12 @@ export function GlobalChat() {
 
         for await (const chunk of continueStream) {
           const content = chunk.choices[0]?.delta?.content;
+          const finishReason = chunk.choices[0]?.finish_reason;
+
+          if (finishReason) {
+            streamCompleted = true;
+          }
+
           if (content) {
             accumulatedText += content;
             setMessages((prev) =>
@@ -1240,6 +1273,19 @@ export function GlobalChat() {
               )
             );
           }
+        }
+
+        // Check for incomplete continuation stream
+        if (!streamCompleted && accumulatedText) {
+          console.warn("Continuation stream ended without finish_reason");
+          accumulatedText += "\n\n*(Response may be incomplete due to connection issue)*";
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: accumulatedText }
+                : m
+            )
+          );
         }
       }
 
@@ -1281,8 +1327,14 @@ export function GlobalChat() {
         errorMessage = "Invalid API key. Please check your preset configuration.";
       } else if (errorMessage.includes("429")) {
         errorMessage = "Rate limit exceeded. Please wait a moment and try again.";
-      } else if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
-        errorMessage = "Network error. Please check your internet connection and that the API endpoint is correct.";
+      } else if (
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("network") ||
+        errorMessage.includes("ECONNRESET") ||
+        errorMessage.includes("stream")
+      ) {
+        errorMessage = "Connection error. The AI response was interrupted. Please try again.";
       } else if (
         errorMessage.includes("context") ||
         errorMessage.includes("token") ||
