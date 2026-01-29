@@ -104,10 +104,16 @@ fn create_dynamic_menu(
     );
 
     // Version and update items
+    let is_beta = app.config().identifier.contains("beta");
+    let version_text = if is_beta {
+        format!("version {} (beta)", app.package_info().version)
+    } else {
+        format!("version {}", app.package_info().version)
+    };
     menu_builder = menu_builder
         .item(&PredefinedMenuItem::separator(app)?)
         .item(
-            &MenuItemBuilder::with_id("version", format!("version {}", app.package_info().version))
+            &MenuItemBuilder::with_id("version", version_text)
                 .enabled(false)
                 .build(app)?,
         )

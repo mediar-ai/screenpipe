@@ -33,7 +33,8 @@
       "icons/beta/icon.icns",
       "icons/beta/icon.ico",
       "icons/screenpipe-logo-tray-failed.png",
-      "icons/screenpipe-logo-tray-black.png"
+      "icons/screenpipe-logo-tray-black.png",
+      "icons/screenpipe-logo-tray-beta.png"
     ],
     "resources": [
       "assets/*"
@@ -107,7 +108,7 @@
     "withGlobalTauri": true,
     "trayIcon": {
       "id": "screenpipe_main",
-      "iconPath": "assets/screenpipe-logo-tray-white.png",
+      "iconPath": "assets/screenpipe-logo-tray-beta-white.png",
       "iconAsTemplate": true,
       "menuOnLeftClick": true
     },
