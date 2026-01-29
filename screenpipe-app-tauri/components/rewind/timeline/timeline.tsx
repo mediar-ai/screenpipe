@@ -366,7 +366,7 @@ export const TimelineSlider = ({
 	return (
 		<div className="relative w-full" dir="rtl">
 			<motion.div
-				className="absolute top-0 h-1 bg-blue-500/50"
+				className="absolute top-0 h-1 bg-foreground/30"
 				style={{ width: lineWidth }}
 			/>
 			{/* Zoom controls - floating on left side */}

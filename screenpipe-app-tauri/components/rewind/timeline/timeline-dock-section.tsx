@@ -296,7 +296,7 @@ export function TimelineIconsSection({
               onClick={() => setSelectedApp(block)}
               whileHover={{
                 scale: 1.5,
-                backgroundColor: "red",
+                backgroundColor: "rgba(255, 255, 255, 0.2)",
                 y: -20,
               }}
               transition={{
