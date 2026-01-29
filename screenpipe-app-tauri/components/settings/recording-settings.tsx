@@ -127,7 +127,7 @@ const createWindowOptions = (
 };
 
 export function RecordingSettings() {
-  const { settings, updateSettings, getDataDir } = useSettings();
+  const { settings, updateSettings, getDataDir, loadUser } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
   const [dataDirInputVisible, setDataDirInputVisible] = React.useState(false);
@@ -154,6 +154,7 @@ export function RecordingSettings() {
   const isDisabled = health?.status_code === 500;
   const [isMacOS, setIsMacOS] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [isRefreshingSubscription, setIsRefreshingSubscription] = useState(false);
   const { checkLogin } = useLoginDialog();
 
   // Add new state to track if settings have changed
@@ -901,6 +902,35 @@ export function RecordingSettings() {
                 <span className="text-sm text-muted-foreground">
                   Screenpipe Cloud: {settings.user.cloud_subscribed ? "Subscribed" : "Not subscribed"}
                 </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  disabled={isRefreshingSubscription}
+                  onClick={async () => {
+                    if (!settings.user?.token) return;
+                    setIsRefreshingSubscription(true);
+                    try {
+                      await loadUser(settings.user.token, true);
+                      toast({
+                        title: "Subscription status refreshed",
+                        description: settings.user.cloud_subscribed
+                          ? "Your subscription is active"
+                          : "Subscription status updated",
+                      });
+                    } catch (error) {
+                      toast({
+                        title: "Failed to refresh",
+                        description: "Please try again",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setIsRefreshingSubscription(false);
+                    }
+                  }}
+                >
+                  <RefreshCw className={cn("h-3 w-3", isRefreshingSubscription && "animate-spin")} />
+                </Button>
               </div>
               {!settings.user.cloud_subscribed && (
                 <Button
