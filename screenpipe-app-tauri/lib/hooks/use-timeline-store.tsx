@@ -436,13 +436,9 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 	},
 
 	fetchNextDayData: async (date: Date) => {
-		const dateFramesLen = await hasFramesForDate(date);
+		const hasFrames = await hasFramesForDate(date);
 
-		if (typeof dateFramesLen === "object" && dateFramesLen.error) {
-			return;
-		}
-
-		if (!dateFramesLen) {
+		if (!hasFrames) {
 			date = subDays(date, 1);
 		}
 

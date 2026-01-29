@@ -330,7 +330,7 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
 }
 
 /// Start background permission monitor that checks permissions periodically
-/// and emits an event when any critical permission is lost
+/// and emits an event when any permission is lost
 #[cfg(target_os = "macos")]
 pub async fn start_permission_monitor(app: tauri::AppHandle) {
     use tokio::time::{interval, Duration};
@@ -342,6 +342,7 @@ pub async fn start_permission_monitor(app: tauri::AppHandle) {
     let mut check_interval = interval(Duration::from_secs(30));
     let mut last_screen_ok = true;
     let mut last_mic_ok = true;
+    let mut last_accessibility_ok = true;
 
     info!("permission monitor started");
 
@@ -351,21 +352,24 @@ pub async fn start_permission_monitor(app: tauri::AppHandle) {
         let perms = do_permissions_check(false);
         let screen_ok = perms.screen_recording.permitted();
         let mic_ok = perms.microphone.permitted();
+        let accessibility_ok = perms.accessibility.permitted();
 
-        // Check if any critical permission was lost (was OK, now not OK)
+        // Check if any permission was lost (was OK, now not OK)
         let screen_lost = last_screen_ok && !screen_ok;
         let mic_lost = last_mic_ok && !mic_ok;
+        let accessibility_lost = last_accessibility_ok && !accessibility_ok;
 
-        if screen_lost || mic_lost {
+        if screen_lost || mic_lost || accessibility_lost {
             warn!(
-                "permission lost - screen: {} -> {}, mic: {} -> {}",
-                last_screen_ok, screen_ok, last_mic_ok, mic_ok
+                "permission lost - screen: {} -> {}, mic: {} -> {}, accessibility: {} -> {}",
+                last_screen_ok, screen_ok, last_mic_ok, mic_ok, last_accessibility_ok, accessibility_ok
             );
 
             // Emit event to frontend
             if let Err(e) = app.emit("permission-lost", serde_json::json!({
                 "screen_recording": !screen_ok,
                 "microphone": !mic_ok,
+                "accessibility": !accessibility_ok,
             })) {
                 error!("failed to emit permission-lost event: {}", e);
             }
@@ -373,6 +377,7 @@ pub async fn start_permission_monitor(app: tauri::AppHandle) {
 
         last_screen_ok = screen_ok;
         last_mic_ok = mic_ok;
+        last_accessibility_ok = accessibility_ok;
     }
 }
 
