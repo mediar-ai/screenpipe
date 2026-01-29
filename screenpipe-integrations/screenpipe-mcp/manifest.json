@@ -3,8 +3,8 @@
   "name": "screenpipe",
   "display_name": "Screenpipe",
   "version": "0.5.0",
-  "description": "Search your screen recordings, audio transcriptions, and control your computer with AI",
-  "long_description": "Screenpipe is a 24/7 screen and audio recorder that lets you search everything you've seen or heard. This extension connects Claude to your local screenpipe instance, enabling AI-powered search through your digital memory and computer control capabilities.",
+  "description": "Search your screen recordings and audio transcriptions with AI",
+  "long_description": "Screenpipe is a 24/7 screen and audio recorder that lets you search everything you've seen or heard. This extension connects Claude to your local screenpipe instance, enabling AI-powered search through your digital memory.",
   "author": {
     "name": "screenpipe",
     "url": "https://screenpi.pe"
@@ -28,39 +28,11 @@
   "tools": [
     {
       "name": "search-content",
-      "description": "Search through recorded screen content, audio transcriptions, and UI elements"
+      "description": "Search through recorded screen content, audio transcriptions, and UI elements with speaker filtering"
     },
     {
       "name": "export-video",
       "description": "Export screen recordings as MP4 video for a specific time range"
-    },
-    {
-      "name": "pixel-control",
-      "description": "Control mouse and keyboard (type text, press keys, move mouse, click)"
-    },
-    {
-      "name": "find-elements",
-      "description": "Find UI elements in applications by role (macOS only)"
-    },
-    {
-      "name": "click-element",
-      "description": "Click UI elements by ID (macOS only)"
-    },
-    {
-      "name": "fill-element",
-      "description": "Type text into UI elements (macOS only)"
-    },
-    {
-      "name": "scroll-element",
-      "description": "Scroll UI elements (macOS only)"
-    },
-    {
-      "name": "open-application",
-      "description": "Open applications by name (macOS only)"
-    },
-    {
-      "name": "open-url",
-      "description": "Open URLs in browser (macOS only)"
     }
   ],
   "compatibility": {
