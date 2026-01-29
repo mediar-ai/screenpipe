@@ -233,12 +233,10 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
     // Build context for AI chat
     const context = `Context from search result:\n${result.app_name} - ${result.window_name}\nTime: ${format(new Date(result.timestamp), "PPpp")}\n\nText:\n${result.text}`;
 
-    // Open AI chat window with context
+    // Open AI chat window with context (no pre-filled prompt - let user ask anything)
     await commands.showWindow("Chat");
-    // Emit event to pre-fill the chat with context
     await emit("chat-prefill", {
       context,
-      prompt: `What would you like to know about this?`,
     });
 
     onClose();
@@ -302,7 +300,11 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
         )}
 
         {/* Results */}
-        <div ref={listRef} className="max-h-[50vh] overflow-y-auto">
+        <div
+          ref={listRef}
+          className="max-h-[50vh] overflow-y-auto"
+          onWheel={(e) => e.stopPropagation()}
+        >
           {/* Recent searches */}
           {showRecent && (
             <div className="p-3">
@@ -355,38 +357,55 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
                     data-index={globalIndex}
                     onClick={() => handleSelectResult(result)}
                     className={`
-                      px-4 py-2.5 cursor-pointer transition-colors border-b border-border/50
-                      ${isSelected ? "bg-foreground/10" : "hover:bg-muted/50"}
+                      px-4 cursor-pointer transition-all border-b border-border/50 group/result
+                      ${isSelected ? "bg-foreground/10 py-3" : "hover:bg-muted/50 py-2"}
                     `}
                   >
                     <div className="flex items-start gap-3">
-                      {/* Time + App */}
-                      <div className="flex-shrink-0 w-16 text-xs font-mono text-muted-foreground">
+                      {/* App icon */}
+                      <img
+                        src={`http://localhost:11435/app-icon?name=${encodeURIComponent(result.app_name)}`}
+                        className="w-5 h-5 rounded flex-shrink-0 opacity-80"
+                        alt=""
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+
+                      {/* Time */}
+                      <div className="flex-shrink-0 w-14 text-xs font-mono text-muted-foreground">
                         {format(new Date(result.timestamp), "h:mm a")}
                       </div>
 
-                      {/* App name with icon */}
-                      <div className="flex-shrink-0 w-20 flex items-center gap-1.5">
-                        {isAudio && <Mic className="w-3 h-3 text-muted-foreground" />}
+                      {/* App name */}
+                      <div className="flex-shrink-0 w-24 flex items-center gap-1">
+                        {isAudio && <Mic className="w-3 h-3 text-green-400 flex-shrink-0" />}
                         <span className="text-xs font-medium text-foreground truncate">
                           {result.app_name}
                         </span>
                       </div>
 
-                      {/* Matched text */}
+                      {/* Matched text - expand on select */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-muted-foreground truncate">
+                        <p className={`text-sm text-muted-foreground ${isSelected ? "" : "truncate"}`}>
                           {highlightMatch(
-                            result.text?.slice(0, 100) || result.window_name || "",
+                            isSelected
+                              ? (result.text?.slice(0, 300) || result.window_name || "")
+                              : (result.text?.slice(0, 80) || result.window_name || ""),
                             parsedQuery.keywords
                           )}
+                          {isSelected && result.text && result.text.length > 300 && "..."}
                         </p>
+                        {/* Window name on expanded view */}
+                        {isSelected && result.window_name && (
+                          <p className="text-xs text-muted-foreground/60 mt-1 truncate">
+                            {result.window_name}
+                          </p>
+                        )}
                       </div>
 
                       {/* Arrow indicator for selected */}
-                      {isSelected && (
-                        <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      )}
+                      <ArrowRight className={`w-4 h-4 flex-shrink-0 transition-opacity ${isSelected ? "text-foreground opacity-100" : "text-muted-foreground opacity-0 group-hover/result:opacity-50"}`} />
                     </div>
                   </div>
                 );

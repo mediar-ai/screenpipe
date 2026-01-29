@@ -653,15 +653,6 @@ export default function Timeline() {
 					/>
 					{/* Top right buttons */}
 					<div className="absolute top-[calc(env(safe-area-inset-top)+16px)] right-4 flex items-center gap-2">
-						{/* Search button */}
-						<button
-							onClick={() => setShowSearchModal(true)}
-							className="p-2 bg-background/80 hover:bg-background border border-border rounded-md transition-colors flex items-center gap-1.5"
-							title="Search (/ or ⌘K)"
-						>
-							<Search className="w-4 h-4 text-muted-foreground" />
-							<span className="text-xs text-muted-foreground font-mono">/</span>
-						</button>
 						{/* Refresh button */}
 						<button
 							onClick={handleRefresh}

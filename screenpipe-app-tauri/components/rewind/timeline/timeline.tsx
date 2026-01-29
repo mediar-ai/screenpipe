@@ -80,10 +80,11 @@ export const TimelineSlider = ({
 			e.preventDefault();
 
 			// Calculate zoom delta (negative deltaY = zoom in)
-			const zoomDelta = -e.deltaY * 0.01;
+			// Use smaller delta for smoother zoom
+			const zoomDelta = -e.deltaY * 0.005;
 
 			setZoomLevel((prev) => {
-				const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + zoomDelta));
+				const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev * (1 + zoomDelta)));
 				return newZoom;
 			});
 		}
@@ -139,14 +140,16 @@ export const TimelineSlider = ({
 	}, [frames]);
 
 	// Adjust visible frames based on zoom - zoomed out shows more frames
+	// Use a stable window size to prevent jumpy behavior
 	const visibleFrames = useMemo(() => {
 		if (!frames || frames.length === 0) return [];
-		// At zoom 0.25, show ~800 frames; at zoom 4, show ~50 frames
-		const visibleCount = Math.round(200 / zoomLevel);
+		// Fixed window centered on current index - zoom affects frame SIZE, not count
+		// This prevents jumpy behavior when zooming
+		const visibleCount = 400; // Fixed window
 		const start = Math.max(0, currentIndex - visibleCount);
 		const end = Math.min(frames.length, currentIndex + visibleCount);
 		return frames.slice(start, end);
-	}, [frames, currentIndex, zoomLevel]);
+	}, [frames, currentIndex]);
 
 	const appGroups = useMemo(() => {
 		if (!visibleFrames || visibleFrames.length === 0) return [];
@@ -368,10 +371,9 @@ export const TimelineSlider = ({
 			)}
 			<div
 				ref={containerRef}
-				className="w-full overflow-x-auto overflow-y-visible scroll-smooth scrollbar-hide bg-gradient-to-t from-black/50 to-black/0"
+				className="w-full overflow-x-auto overflow-y-visible scrollbar-hide bg-gradient-to-t from-black/50 to-black/0"
 				style={{
-					scrollBehavior: "auto",
-					paddingTop: "60px", // Space for tooltips above
+					paddingTop: "40px", // Space for tooltips above
 					paddingBottom: "24px", // Space for time axis below
 				}}
 			>
@@ -401,7 +403,7 @@ export const TimelineSlider = ({
 								>
 									<div className="w-5 h-5 rounded-md bg-card/90 border border-border/50 p-0.5 shadow-sm">
 										<img
-											src={`http://localhost:11435/app-icon?name=${group.appName}`}
+											src={`http://localhost:11435/app-icon?name=${encodeURIComponent(group.appName)}`}
 											className="w-full h-full opacity-80 rounded-sm"
 											alt={group.appName}
 											loading="lazy"
@@ -479,19 +481,9 @@ export const TimelineSlider = ({
 											}}
 											onMouseLeave={() => setHoveredTimestamp(null)}
 										>
-											{/* Audio indicator - improved with mic icon */}
+											{/* Audio indicator - green dot at top of bar */}
 											{hasAudio && (
-												<div
-													className={cn(
-														"absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-0.5",
-														zoomLevel >= 1.5 ? "bg-green-500/90 px-1 py-0.5 rounded-full" : ""
-													)}
-												>
-													<Mic className="w-2.5 h-2.5 text-green-400" />
-													{zoomLevel >= 2 && (
-														<span className="text-[8px] text-green-100 font-medium">audio</span>
-													)}
-												</div>
+												<div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-green-400 shadow-sm" />
 											)}
 
 											{/* Time marker below frame */}
@@ -510,7 +502,7 @@ export const TimelineSlider = ({
 												<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-8 w-max bg-popover border border-border rounded-lg px-3 py-2 text-xs shadow-2xl">
 													<div className="flex items-center gap-2 mb-1">
 														<img
-															src={`http://localhost:11435/app-icon?name=${group.appName}`}
+															src={`http://localhost:11435/app-icon?name=${encodeURIComponent(group.appName)}`}
 															className="w-4 h-4 rounded"
 															alt=""
 														/>
