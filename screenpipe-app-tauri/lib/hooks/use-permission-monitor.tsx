@@ -26,9 +26,28 @@ export function usePermissionMonitor() {
 
       // Don't show multiple times in quick succession
       if (hasShownRef.current) return;
-      hasShownRef.current = true;
 
-      console.log("Permission lost detected:", { screen_recording, microphone });
+      console.log("Permission lost event received:", { screen_recording, microphone });
+
+      // Double-check permissions before showing modal to avoid false positives
+      // The backend already requires 3 consecutive failures, but let's verify once more
+      try {
+        const currentPerms = await commands.doPermissionsCheck(false);
+        const screenOk = currentPerms.screenRecording === "granted" || currentPerms.screenRecording === "notNeeded";
+        const micOk = currentPerms.microphone === "granted" || currentPerms.microphone === "notNeeded";
+
+        if (screenOk && micOk) {
+          console.log("Permission check passed on frontend verification, skipping modal");
+          return;
+        }
+
+        console.log("Permission loss confirmed:", { screenOk, micOk });
+      } catch (error) {
+        console.error("Failed to verify permissions:", error);
+        // Continue to show modal if we can't verify
+      }
+
+      hasShownRef.current = true;
 
       // Track the event
       posthog.capture("permission_lost", {

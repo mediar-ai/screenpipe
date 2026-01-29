@@ -349,6 +349,13 @@ pub async fn start_permission_monitor(app: tauri::AppHandle) {
     let mut last_mic_ok = true;
     let mut last_accessibility_ok = true;
 
+    // Track consecutive failures to avoid false positives from transient TCC issues
+    // macOS preflight() can return false transiently even when permission is granted
+    let mut screen_fail_count = 0u32;
+    let mut mic_fail_count = 0u32;
+    let mut accessibility_fail_count = 0u32;
+    const REQUIRED_CONSECUTIVE_FAILURES: u32 = 3; // Require 3 consecutive failures (~90 seconds)
+
     info!("permission monitor started");
 
     loop {
@@ -359,15 +366,38 @@ pub async fn start_permission_monitor(app: tauri::AppHandle) {
         let mic_ok = perms.microphone.permitted();
         let accessibility_ok = perms.accessibility.permitted();
 
-        // Check if any permission was lost (was OK, now not OK)
-        let screen_lost = last_screen_ok && !screen_ok;
-        let mic_lost = last_mic_ok && !mic_ok;
-        let accessibility_lost = last_accessibility_ok && !accessibility_ok;
+        // Update consecutive failure counts
+        if screen_ok {
+            screen_fail_count = 0;
+        } else if last_screen_ok || screen_fail_count > 0 {
+            screen_fail_count += 1;
+        }
 
-        if screen_lost || mic_lost || accessibility_lost {
+        if mic_ok {
+            mic_fail_count = 0;
+        } else if last_mic_ok || mic_fail_count > 0 {
+            mic_fail_count += 1;
+        }
+
+        if accessibility_ok {
+            accessibility_fail_count = 0;
+        } else if last_accessibility_ok || accessibility_fail_count > 0 {
+            accessibility_fail_count += 1;
+        }
+
+        // Only trigger when we have REQUIRED_CONSECUTIVE_FAILURES in a row
+        // This prevents false positives from transient TCC database issues
+        let screen_confirmed_lost = screen_fail_count == REQUIRED_CONSECUTIVE_FAILURES;
+        let mic_confirmed_lost = mic_fail_count == REQUIRED_CONSECUTIVE_FAILURES;
+        let accessibility_confirmed_lost = accessibility_fail_count == REQUIRED_CONSECUTIVE_FAILURES;
+
+        if screen_confirmed_lost || mic_confirmed_lost || accessibility_confirmed_lost {
             warn!(
-                "permission lost - screen: {} -> {}, mic: {} -> {}, accessibility: {} -> {}",
-                last_screen_ok, screen_ok, last_mic_ok, mic_ok, last_accessibility_ok, accessibility_ok
+                "permission confirmed lost after {} consecutive failures - screen: {} (fails: {}), mic: {} (fails: {}), accessibility: {} (fails: {})",
+                REQUIRED_CONSECUTIVE_FAILURES,
+                screen_ok, screen_fail_count,
+                mic_ok, mic_fail_count,
+                accessibility_ok, accessibility_fail_count
             );
 
             // Emit event to frontend
