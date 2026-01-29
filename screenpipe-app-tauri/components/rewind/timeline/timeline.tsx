@@ -152,6 +152,17 @@ export const TimelineSlider = ({
 		};
 	}, [handleWheel]);
 
+	// Auto-focus container on mount so zoom works immediately
+	useEffect(() => {
+		const container = containerRef.current;
+		if (container) {
+			// Small delay to ensure DOM is ready
+			requestAnimationFrame(() => {
+				container.focus();
+			});
+		}
+	}, []);
+
 	// Calculate frame width based on zoom level
 	const frameWidth = useMemo(() => {
 		const baseWidth = 6; // 1.5 * 4 = 6px base (w-1.5 = 0.375rem = 6px)
@@ -420,7 +431,8 @@ export const TimelineSlider = ({
 			)}
 			<div
 				ref={containerRef}
-				className="w-full overflow-x-auto overflow-y-visible scrollbar-hide bg-gradient-to-t from-black/50 to-black/0"
+				tabIndex={0}
+				className="w-full overflow-x-auto overflow-y-visible scrollbar-hide bg-gradient-to-t from-black/50 to-black/0 outline-none"
 				style={{
 					paddingTop: "60px", // Space for tooltips above
 					paddingBottom: "24px", // Space for time axis below
