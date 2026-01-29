@@ -456,7 +456,7 @@ impl Default for SettingsStore {
             #[cfg(target_os = "windows")]
             show_chat_shortcut: "Alt+L".to_string(),
             #[cfg(not(target_os = "windows"))]
-            show_chat_shortcut: "Super+Alt+L".to_string(),
+            show_chat_shortcut: "Control+Super+L".to_string(),
             enable_realtime_audio_transcription: false,
             realtime_audio_transcription_engine: "deepgram".to_string(),
             disable_vision: false,
