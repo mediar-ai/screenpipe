@@ -315,6 +315,25 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
 
 #[tauri::command]
 #[specta::specta]
+async fn suspend_global_shortcuts(app: AppHandle) -> Result<(), String> {
+    let global_shortcut = app.global_shortcut();
+    global_shortcut
+        .unregister_all()
+        .map_err(|e| format!("failed to suspend shortcuts: {}", e))?;
+    info!("global shortcuts suspended for recording");
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn resume_global_shortcuts(app: AppHandle) -> Result<(), String> {
+    initialize_global_shortcuts(&app).await?;
+    info!("global shortcuts resumed after recording");
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 fn get_env(name: &str) -> String {
     std::env::var(String::from(name)).unwrap_or(String::from(""))
 }
@@ -836,6 +855,8 @@ async fn main() {
             get_media_file,
             upload_file_to_s3,
             update_global_shortcuts,
+            suspend_global_shortcuts,
+            resume_global_shortcuts,
             get_env
         ])
         .setup(move |app| {

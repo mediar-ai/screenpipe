@@ -249,6 +249,30 @@ async setTrayUnhealthIcon() : Promise<void> {
 },
 async setTrayHealthIcon() : Promise<void> {
     await TAURI_INVOKE("set_tray_health_icon");
+},
+/**
+ * Suspend all global shortcuts (for shortcut recording mode)
+ * Call this before entering shortcut recording to prevent existing shortcuts from triggering
+ */
+async suspendGlobalShortcuts() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("suspend_global_shortcuts") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Resume all global shortcuts (after shortcut recording mode)
+ * Call this after exiting shortcut recording to re-register all shortcuts
+ */
+async resumeGlobalShortcuts() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("resume_global_shortcuts") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
