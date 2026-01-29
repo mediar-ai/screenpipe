@@ -39,10 +39,10 @@ export default function ShortcutReminderPage() {
   // Set default shortcuts once platform is detected (fallback if store fails)
   useEffect(() => {
     if (!isLoading && overlayShortcut === null) {
-      setOverlayShortcut(isMac ? "⌘⌥S" : "Win+Alt+S");
+      setOverlayShortcut(isMac ? "⌃⌘S" : "Alt+S");
     }
     if (!isLoading && chatShortcut === null) {
-      setChatShortcut(isMac ? "⌘⌥L" : "Win+Alt+L");
+      setChatShortcut(isMac ? "⌃⌘L" : "Alt+L");
     }
   }, [isMac, isLoading, overlayShortcut, chatShortcut]);
 
@@ -164,8 +164,8 @@ export default function ShortcutReminderPage() {
 }
 
 function formatShortcut(shortcut: string, isMac: boolean): string {
-  // Default matches Super+Alt+S from settings
-  if (!shortcut) return isMac ? "⌘⌥S" : "Win+Alt+S";
+  // Default matches Control+Super+S from settings
+  if (!shortcut) return isMac ? "⌃⌘S" : "Alt+S";
   if (isMac) {
     return shortcut
       .replace(/Super|Command|Cmd/gi, "⌘")
