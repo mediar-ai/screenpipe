@@ -32,6 +32,67 @@ import { UpgradeDialog } from "@/components/upgrade-dialog";
 const SCREENPIPE_API = "http://localhost:3030";
 
 // ============================================================================
+// SHORTCUT FORMATTING - Consistent modifier ordering (⌘ → ⌃ → ⌥ → ⇧ → key)
+// ============================================================================
+
+/**
+ * Format a shortcut string for display with consistent modifier ordering.
+ * On macOS: Command (⌘) → Control (⌃) → Option (⌥) → Shift (⇧) → Key
+ * On Windows/Linux: Ctrl → Alt → Shift → Key
+ */
+export function formatShortcutDisplay(shortcut: string, isMac: boolean): string {
+  if (!shortcut) return "";
+
+  // Parse the shortcut into parts
+  const parts = shortcut.split("+").map(p => p.trim().toLowerCase());
+
+  // Define modifier priorities (lower = comes first)
+  const modifierPriority: Record<string, number> = {
+    "super": 0, "command": 0, "cmd": 0,
+    "ctrl": 1, "control": 1,
+    "alt": 2, "option": 2,
+    "shift": 3,
+  };
+
+  // Separate modifiers from the key
+  const modifiers: string[] = [];
+  let key = "";
+
+  for (const part of parts) {
+    if (modifierPriority[part] !== undefined) {
+      modifiers.push(part);
+    } else {
+      key = part;
+    }
+  }
+
+  // Sort modifiers by priority
+  modifiers.sort((a, b) => (modifierPriority[a] ?? 99) - (modifierPriority[b] ?? 99));
+
+  if (isMac) {
+    // Convert to Mac symbols
+    const macSymbols: Record<string, string> = {
+      "super": "⌘", "command": "⌘", "cmd": "⌘",
+      "ctrl": "⌃", "control": "⌃",
+      "alt": "⌥", "option": "⌥",
+      "shift": "⇧",
+    };
+    const formattedMods = modifiers.map(m => macSymbols[m] || m).join("");
+    return formattedMods + key.toUpperCase();
+  } else {
+    // Windows/Linux: readable format
+    const winNames: Record<string, string> = {
+      "super": "Win", "command": "Ctrl", "cmd": "Ctrl",
+      "ctrl": "Ctrl", "control": "Ctrl",
+      "alt": "Alt", "option": "Alt",
+      "shift": "Shift",
+    };
+    const formattedMods = modifiers.map(m => winNames[m] || m);
+    return [...formattedMods, key.toUpperCase()].join("+");
+  }
+}
+
+// ============================================================================
 // @MENTION SYSTEM - Time, Content Type, and App filters
 // ============================================================================
 
@@ -1300,15 +1361,17 @@ export function GlobalChat() {
             </motion.button>
           )}
 
-          {/* AI Chat button */}
+          {/* AI Chat button - opens standalone chat window */}
           <button
-            onClick={() => setOpen(true)}
+            onClick={() => commands.showWindow("Chat")}
             className="group flex items-center gap-2 px-3 py-2 rounded-lg bg-background/90 backdrop-blur-md border border-border/50 hover:border-foreground/20 text-xs text-muted-foreground hover:text-foreground transition-all duration-200 shadow-lg shadow-black/5"
           >
             <div className="p-1 rounded bg-foreground/5 group-hover:bg-foreground/10 transition-colors">
               <PipeAIIcon size={14} animated={false} />
             </div>
-            <span className="font-mono text-[10px] uppercase tracking-wider">{isMac ? "⌘L" : "Ctrl+L"}</span>
+            <span className="font-mono text-[10px] uppercase tracking-wider">
+              {formatShortcutDisplay(settings.showChatShortcut || "", isMac)}
+            </span>
           </button>
         </motion.div>
       )}
@@ -1332,7 +1395,7 @@ export function GlobalChat() {
               <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
             </div>
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
-              {isMac ? "⌘" : "Ctrl"}+L
+              {formatShortcutDisplay(settings.showChatShortcut || "", isMac)}
             </kbd>
           </div>
 

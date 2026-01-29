@@ -17,22 +17,59 @@ import { version as osVersion, platform as osPlatform } from "@tauri-apps/plugin
 import Lottie from "lottie-react";
 import pipeFlowAnimation from "@/public/animations/pipe-flow.json";
 
-// Format shortcut for display (platform-aware)
+/**
+ * Format a shortcut string for display with consistent modifier ordering.
+ * On macOS: Command (⌘) → Control (⌃) → Option (⌥) → Shift (⇧) → Key
+ * On Windows/Linux: Ctrl → Alt → Shift → Key
+ */
 function formatShortcut(shortcut: string, isMac: boolean): string {
   if (!shortcut) return "";
-  if (isMac) {
-    return shortcut
-      .replace(/Super|Command|Cmd/gi, "⌘")
-      .replace(/Ctrl|Control/gi, "⌃")
-      .replace(/Alt|Option/gi, "⌥")
-      .replace(/Shift/gi, "⇧")
-      .replace(/\+/g, " ");
+
+  // Parse the shortcut into parts
+  const parts = shortcut.split("+").map(p => p.trim().toLowerCase());
+
+  // Define modifier priorities (lower = comes first)
+  const modifierPriority: Record<string, number> = {
+    "super": 0, "command": 0, "cmd": 0,
+    "ctrl": 1, "control": 1,
+    "alt": 2, "option": 2,
+    "shift": 3,
+  };
+
+  // Separate modifiers from the key
+  const modifiers: string[] = [];
+  let key = "";
+
+  for (const part of parts) {
+    if (modifierPriority[part] !== undefined) {
+      modifiers.push(part);
+    } else {
+      key = part;
+    }
   }
-  // Windows/Linux: use readable text
-  return shortcut
-    .replace(/Super/gi, "Win")
-    .replace(/Command|Cmd/gi, "Ctrl")
-    .replace(/Option/gi, "Alt");
+
+  // Sort modifiers by priority (Command first)
+  modifiers.sort((a, b) => (modifierPriority[a] ?? 99) - (modifierPriority[b] ?? 99));
+
+  if (isMac) {
+    const macSymbols: Record<string, string> = {
+      "super": "⌘", "command": "⌘", "cmd": "⌘",
+      "ctrl": "⌃", "control": "⌃",
+      "alt": "⌥", "option": "⌥",
+      "shift": "⇧",
+    };
+    const formattedMods = modifiers.map(m => macSymbols[m] || m).join("");
+    return formattedMods + " " + key.toUpperCase();
+  } else {
+    const winNames: Record<string, string> = {
+      "super": "Win", "command": "Ctrl", "cmd": "Ctrl",
+      "ctrl": "Ctrl", "control": "Ctrl",
+      "alt": "Alt", "option": "Alt",
+      "shift": "Shift",
+    };
+    const formattedMods = modifiers.map(m => winNames[m] || m);
+    return [...formattedMods, key.toUpperCase()].join("+");
+  }
 }
 
 interface OnboardingStatusProps {

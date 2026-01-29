@@ -16,6 +16,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { formatShortcutDisplay } from "@/components/global-chat";
 import { useLoginDialog } from "@/components/login-dialog";
 import { ExportButton } from "../export-button";
 import Image from "next/image";
@@ -418,7 +419,7 @@ export function AIPanel({
 						>
 							<span>ASK AI</span>
 							<span className="text-muted-foreground text-sm normal-case bg-muted px-2 py-0.5 rounded font-medium">
-								{osType === "macos" ? "⌘L" : "Ctrl+L"}
+								{formatShortcutDisplay(settings.showChatShortcut || "", osType === "macos")}
 							</span>
 						</button>
 					</div>

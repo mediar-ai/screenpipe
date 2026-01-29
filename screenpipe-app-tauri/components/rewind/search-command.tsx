@@ -21,6 +21,8 @@ import { useQueryStates } from "nuqs";
 import { commands } from "@/lib/utils/tauri";
 import { Badge } from "./ui/badge";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { formatShortcutDisplay } from "@/components/global-chat";
 
 const SCREENPIPE_API = "http://localhost:3030";
 
@@ -39,6 +41,7 @@ interface SearchResult {
 export function SearchCommand() {
 	const [open, setOpen] = React.useState(false);
 	const { isMac } = usePlatform();
+	const { settings } = useSettings();
 	const inputRef = React.useRef<HTMLInputElement>(null);
 
 	const [state] = useQueryStates(queryParser);
@@ -265,7 +268,7 @@ export function SearchCommand() {
 				{/* Hint for AI chat */}
 				<div className="px-3 py-2 border-t text-xs text-muted-foreground flex items-center justify-between">
 					<span>Press Enter to search</span>
-					<span>{isMac ? "⌘L" : "Ctrl+L"} for AI chat</span>
+					<span>{formatShortcutDisplay(settings.showChatShortcut || "", isMac)} for AI chat</span>
 				</div>
 			</CustomDialogContent>
 		</Dialog>

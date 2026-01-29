@@ -39,10 +39,10 @@ export default function ShortcutReminderPage() {
   // Set default shortcuts once platform is detected (fallback if store fails)
   useEffect(() => {
     if (!isLoading && overlayShortcut === null) {
-      setOverlayShortcut(isMac ? "⌃⌘S" : "Alt+S");
+      setOverlayShortcut(isMac ? "⌘⌃S" : "Alt+S");
     }
     if (!isLoading && chatShortcut === null) {
-      setChatShortcut(isMac ? "⌃⌘L" : "Alt+L");
+      setChatShortcut(isMac ? "⌘⌃L" : "Alt+L");
     }
   }, [isMac, isLoading, overlayShortcut, chatShortcut]);
 
@@ -163,20 +163,60 @@ export default function ShortcutReminderPage() {
   );
 }
 
+/**
+ * Format a shortcut string for display with consistent modifier ordering.
+ * On macOS: Command (⌘) → Control (⌃) → Option (⌥) → Shift (⇧) → Key
+ * On Windows/Linux: Ctrl → Alt → Shift → Key
+ */
 function formatShortcut(shortcut: string, isMac: boolean): string {
-  // Default matches Control+Super+S from settings
-  if (!shortcut) return isMac ? "⌃⌘S" : "Alt+S";
-  if (isMac) {
-    return shortcut
-      .replace(/Super|Command|Cmd/gi, "⌘")
-      .replace(/Ctrl|Control/gi, "⌃")
-      .replace(/Alt|Option/gi, "⌥")
-      .replace(/Shift/gi, "⇧")
-      .replace(/\+/g, "");
+  if (!shortcut) return isMac ? "⌘⌃S" : "Alt+S";
+
+  // Parse the shortcut into parts
+  const parts = shortcut.split("+").map(p => p.trim().toLowerCase());
+
+  // Define modifier priorities (lower = comes first)
+  // Command/Super comes first, then Control, then Alt/Option, then Shift
+  const modifierPriority: Record<string, number> = {
+    "super": 0, "command": 0, "cmd": 0,
+    "ctrl": 1, "control": 1,
+    "alt": 2, "option": 2,
+    "shift": 3,
+  };
+
+  // Separate modifiers from the key
+  const modifiers: string[] = [];
+  let key = "";
+
+  for (const part of parts) {
+    if (modifierPriority[part] !== undefined) {
+      modifiers.push(part);
+    } else {
+      key = part;
+    }
   }
-  // Windows/Linux: use readable text
-  return shortcut
-    .replace(/Super/gi, "Win")
-    .replace(/Command|Cmd/gi, "Ctrl")
-    .replace(/Option/gi, "Alt");
+
+  // Sort modifiers by priority (Command first)
+  modifiers.sort((a, b) => (modifierPriority[a] ?? 99) - (modifierPriority[b] ?? 99));
+
+  if (isMac) {
+    // Convert to Mac symbols in sorted order
+    const macSymbols: Record<string, string> = {
+      "super": "⌘", "command": "⌘", "cmd": "⌘",
+      "ctrl": "⌃", "control": "⌃",
+      "alt": "⌥", "option": "⌥",
+      "shift": "⇧",
+    };
+    const formattedMods = modifiers.map(m => macSymbols[m] || m).join("");
+    return formattedMods + key.toUpperCase();
+  } else {
+    // Windows/Linux: readable format
+    const winNames: Record<string, string> = {
+      "super": "Win", "command": "Ctrl", "cmd": "Ctrl",
+      "ctrl": "Ctrl", "control": "Ctrl",
+      "alt": "Alt", "option": "Alt",
+      "shift": "Shift",
+    };
+    const formattedMods = modifiers.map(m => winNames[m] || m);
+    return [...formattedMods, key.toUpperCase()].join("+");
+  }
 }

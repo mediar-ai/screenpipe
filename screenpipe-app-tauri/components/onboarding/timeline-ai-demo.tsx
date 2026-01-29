@@ -4,21 +4,51 @@ import { MessageSquare, Sparkles } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
-// Format shortcut for display (platform-aware)
+/**
+ * Format a shortcut string for display with consistent modifier ordering.
+ * On macOS: Command (⌘) → Control (⌃) → Option (⌥) → Shift (⇧) → Key
+ */
 function formatShortcut(shortcut: string, isMac: boolean): string {
   if (!shortcut) return "";
-  if (isMac) {
-    return shortcut
-      .replace(/Super|Command|Cmd/gi, "⌘")
-      .replace(/Ctrl|Control/gi, "⌃")
-      .replace(/Alt|Option/gi, "⌥")
-      .replace(/Shift/gi, "⇧")
-      .replace(/\+/g, "");
+
+  const parts = shortcut.split("+").map(p => p.trim().toLowerCase());
+  const modifierPriority: Record<string, number> = {
+    "super": 0, "command": 0, "cmd": 0,
+    "ctrl": 1, "control": 1,
+    "alt": 2, "option": 2,
+    "shift": 3,
+  };
+
+  const modifiers: string[] = [];
+  let key = "";
+
+  for (const part of parts) {
+    if (modifierPriority[part] !== undefined) {
+      modifiers.push(part);
+    } else {
+      key = part;
+    }
   }
-  return shortcut
-    .replace(/Super/gi, "Win")
-    .replace(/Command|Cmd/gi, "Ctrl")
-    .replace(/Option/gi, "Alt");
+
+  modifiers.sort((a, b) => (modifierPriority[a] ?? 99) - (modifierPriority[b] ?? 99));
+
+  if (isMac) {
+    const macSymbols: Record<string, string> = {
+      "super": "⌘", "command": "⌘", "cmd": "⌘",
+      "ctrl": "⌃", "control": "⌃",
+      "alt": "⌥", "option": "⌥",
+      "shift": "⇧",
+    };
+    return modifiers.map(m => macSymbols[m] || m).join("") + key.toUpperCase();
+  } else {
+    const winNames: Record<string, string> = {
+      "super": "Win", "command": "Ctrl", "cmd": "Ctrl",
+      "ctrl": "Ctrl", "control": "Ctrl",
+      "alt": "Alt", "option": "Alt",
+      "shift": "Shift",
+    };
+    return [...modifiers.map(m => winNames[m] || m), key.toUpperCase()].join("+");
+  }
 }
 
 /**
