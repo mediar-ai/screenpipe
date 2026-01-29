@@ -27,7 +27,7 @@
           },
           {
             "group": "guides",
-            "pages": ["plugins", "mcp-server", "mcp-apps"]
+            "pages": ["mcp-server", "mcp-apps"]
           },
           {
             "group": "integrations",
