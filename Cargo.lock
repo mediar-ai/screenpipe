@@ -1125,7 +1125,18 @@ name = "cidre"
 version = "0.7.0"
 source = "git+https://github.com/mediar-ai/cidre.git#5ec1e32f72bee75bfb33d1e73610c3c22d97733b"
 dependencies = [
- "cidre-macros",
+ "cidre-macros 0.1.0",
+ "parking_lot",
+ "tokio",
+]
+
+[[package]]
+name = "cidre"
+version = "0.13.1"
+source = "git+https://github.com/yury/cidre.git#0146b38468898cb779e6798e0ac01752b399652d"
+dependencies = [
+ "cidre-macros 0.4.0",
+ "half",
  "parking_lot",
  "tokio",
 ]
@@ -1134,6 +1145,12 @@ dependencies = [
 name = "cidre-macros"
 version = "0.1.0"
 source = "git+https://github.com/mediar-ai/cidre.git#5ec1e32f72bee75bfb33d1e73610c3c22d97733b"
+
+[[package]]
+name = "cidre-macros"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5da2cdee573cf967cf4fec1f95f12a16dce31efb6d104238a8cb114cbdae1780"
 
 [[package]]
 name = "cipher"
@@ -1499,7 +1516,7 @@ version = "0.15.3"
 source = "git+https://github.com/louis030195/cpal.git?branch=main#a262741cc778f071888c9dd57bda3e87fa5cf240"
 dependencies = [
  "alsa",
- "cidre",
+ "cidre 0.7.0",
  "core-foundation-sys",
  "coreaudio-rs",
  "dasp_sample",
@@ -2866,8 +2883,9 @@ dependencies = [
 
 [[package]]
 name = "half"
-version = "2.5.0"
-source = "git+https://github.com/starkat99/half-rs.git?tag=v2.5.0#989d2700376b311a4765f43eaec8e9661bfa579a"
+version = "2.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
 dependencies = [
  "bytemuck",
  "cfg-if",
@@ -2875,6 +2893,7 @@ dependencies = [
  "num-traits",
  "rand 0.9.0",
  "rand_distr 0.5.1",
+ "zerocopy 0.8.35",
 ]
 
 [[package]]
@@ -5556,7 +5575,7 @@ version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
- "zerocopy 0.8.24",
+ "zerocopy 0.8.35",
 ]
 
 [[package]]
@@ -5798,7 +5817,7 @@ checksum = "3779b94aeb87e8bd4e834cee3650289ee9e0d5677f976ecdb6d219e5f4f6cd94"
 dependencies = [
  "rand_chacha 0.9.0",
  "rand_core 0.9.3",
- "zerocopy 0.8.24",
+ "zerocopy 0.8.35",
 ]
 
 [[package]]
@@ -6470,9 +6489,11 @@ dependencies = [
 [[package]]
 name = "sck-rs"
 version = "0.1.0"
-source = "git+https://github.com/louis030195/sck-rs#e09225902d7ea977ca0ebda336bb01fbac3e7948"
+source = "git+https://github.com/louis030195/sck-rs#9e238f63ba4e51bdf73fb9edef533973dd7c803f"
 dependencies = [
- "cidre",
+ "cidre 0.13.1",
+ "core-foundation 0.10.0",
+ "core-graphics",
  "image",
  "once_cell",
  "thiserror 1.0.69",
@@ -6719,7 +6740,7 @@ dependencies = [
  "atspi-proxies",
  "base64 0.22.1",
  "chrono",
- "cidre",
+ "cidre 0.7.0",
  "clap",
  "core-foundation 0.10.0",
  "criterion",
@@ -9988,11 +10009,11 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.24"
+version = "0.8.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2586fea28e186957ef732a5f8b3be2da217d65c5969d4b1e17f973ebbe876879"
+checksum = "fdea86ddd5568519879b8187e1cf04e24fce28f7fe046ceecbce472ff19a2572"
 dependencies = [
- "zerocopy-derive 0.8.24",
+ "zerocopy-derive 0.8.35",
 ]
 
 [[package]]
@@ -10008,9 +10029,9 @@ dependencies = [
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.24"
+version = "0.8.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a996a8f63c5c4448cd959ac1bab0aaa3306ccfd060472f85943ee0750f0169be"
+checksum = "0c15e1b46eff7c6c91195752e0eeed8ef040e391cdece7c25376957d5f15df22"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10270,3 +10291,8 @@ dependencies = [
  "syn 2.0.100",
  "winnow",
 ]
+
+[[patch.unused]]
+name = "half"
+version = "2.5.0"
+source = "git+https://github.com/starkat99/half-rs.git?tag=v2.5.0#989d2700376b311a4765f43eaec8e9661bfa579a"
