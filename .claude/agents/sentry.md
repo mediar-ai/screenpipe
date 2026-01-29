@@ -1,7 +1,7 @@
 ---
 name: sentry
-description: Query Sentry for application errors, issues, and events. Auto-activates when user asks about errors, exceptions, crashes, or debugging production issues. Trigger words: "check sentry", "sentry errors", "production errors", "what's crashing", "error tracking", "show exceptions", "recent errors", "windows crash", "app crash"
-allowed-tools: Bash, Read
+description: Query Sentry for application errors, issues, and events. Use when user asks about errors, exceptions, crashes, or debugging production issues.
+tools: Bash, Read
 ---
 
 # Sentry Error Tracking Skill
