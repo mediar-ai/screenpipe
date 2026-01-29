@@ -130,14 +130,27 @@ export default function PermissionRecoveryPage() {
       setJustFixed(newJustFixed);
     }
 
-    // Close window if all critical permissions are granted
+    // Close window and restart screenpipe if all critical permissions are granted
     if (screenOk && micOk) {
-      // Wait a moment to show success state
+      // Wait a moment to show success state, then restart screenpipe
       setTimeout(async () => {
         try {
+          // Restart screenpipe to resume recording
+          console.log("Permissions fixed, restarting screenpipe...");
+          await commands.stopScreenpipe();
+          await commands.spawnScreenpipe(null);
+          console.log("Screenpipe restarted successfully");
+
+          // Close the modal
           await commands.closeWindow("PermissionRecovery");
         } catch (error) {
-          console.error("Failed to close window:", error);
+          console.error("Failed to restart screenpipe:", error);
+          // Still close the modal even if restart fails
+          try {
+            await commands.closeWindow("PermissionRecovery");
+          } catch (e) {
+            console.error("Failed to close window:", e);
+          }
         }
       }, 1500);
     }
@@ -160,6 +173,16 @@ export default function PermissionRecoveryPage() {
     try {
       await commands.resetAndRequestPermission(permission);
       // The polling will detect when it's fixed
+      // Add timeout fallback - if not fixed after 10s, clear the fixing state
+      setTimeout(() => {
+        setFixingPermission((current) => {
+          if (current === permission) {
+            console.log("Timeout: clearing fixing state for", permission);
+            return null;
+          }
+          return current;
+        });
+      }, 10000);
     } catch (error) {
       console.error("Failed to reset permission:", error);
       setFixingPermission(null);
