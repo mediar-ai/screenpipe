@@ -661,6 +661,7 @@ export default function Timeline() {
 						startAndEndDates={startAndEndDates}
 						onDateChange={handleDateChange}
 						onJumpToday={handleJumpToday}
+						onSearchClick={() => setShowSearchModal(true)}
 					/>
 					{/* Top right buttons */}
 					<div className="absolute top-[calc(env(safe-area-inset-top)+16px)] right-4 flex items-center gap-2">

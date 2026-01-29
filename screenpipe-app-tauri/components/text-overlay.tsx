@@ -82,6 +82,9 @@ interface ScaledTextPositionWithUrl extends ScaledTextPosition {
  * TextOverlay renders transparent, selectable text positioned over a screenshot.
  * This enables native text selection (Cmd+C / Ctrl+C) on OCR-extracted text.
  * URLs are automatically detected and made clickable.
+ *
+ * NOTE: Currently disabled due to buggy text selection experience.
+ * TODO: Re-enable once text selection UX is improved.
  */
 export const TextOverlay = memo(function TextOverlay({
 	textPositions,
@@ -94,6 +97,9 @@ export const TextOverlay = memo(function TextOverlay({
 	debug = false,
 	clickableUrls = true,
 }: TextOverlayProps) {
+	// TEMPORARILY DISABLED: Text selection is buggy, disable for now
+	// Remove this line to re-enable text overlay
+	return null;
 	// Scale and filter text positions, detect URLs
 	// Note: OCR bounds are normalized (0-1 range), so we multiply directly by displayed dimensions
 	const scaledPositions = useMemo<ScaledTextPositionWithUrl[]>(() => {

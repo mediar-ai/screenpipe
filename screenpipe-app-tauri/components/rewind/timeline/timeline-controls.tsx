@@ -31,6 +31,7 @@ interface TimelineControlsProps {
 	currentDate: Date;
 	onDateChange: (date: Date) => Promise<any>;
 	onJumpToday: () => void;
+	onSearchClick?: () => void;
 	className?: string;
 }
 
@@ -39,6 +40,7 @@ export function TimelineControls({
 	currentDate,
 	onDateChange,
 	onJumpToday,
+	onSearchClick,
 	className,
 }: TimelineControlsProps) {
 	const { isMac } = usePlatform();
@@ -170,10 +172,14 @@ export function TimelineControls({
 					</Button>
 				</div>
 
-				<div className="flex items-center h-10 gap-1.5 bg-background border border-border px-4 font-mono">
+				<button
+					type="button"
+					onClick={onSearchClick}
+					className="flex items-center h-10 gap-1.5 bg-background border border-border px-4 font-mono hover:bg-foreground hover:text-background transition-colors duration-150 cursor-pointer"
+				>
 					<span className="text-xs text-muted-foreground">{isMac ? "⌘K" : "Ctrl+K"}</span>
 					<span className="text-xs text-foreground">search</span>
-				</div>
+				</button>
 			</div>
 
 			
