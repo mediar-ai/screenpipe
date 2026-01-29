@@ -435,13 +435,12 @@ jobs:
             export PKG_CONFIG_ALLOW_CROSS=1
             # Fix i8mm build error - force M1 compatible architecture
             # M1 = armv8.4-a (no i8mm), M2+ = armv8.5-a+ (has i8mm)
-            # CMAKE_OSX_ARCHITECTURES prevents whisper.cpp CMake from auto-detecting and using native CPU features
+            # -U__ARM_FEATURE_MATMUL_INT8 undefines the i8mm macro to prevent
+            # the code from using i8mm intrinsics that aren't available on M1
             # See: https://github.com/ggml-org/whisper.cpp/issues/3427
             if [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
-              export CFLAGS="-mcpu=apple-m1"
-              export CXXFLAGS="-mcpu=apple-m1"
-              export CMAKE_APPLE_SILICON_PROCESSOR="arm64"
-              export GGML_NO_NATIVE=1
+              export CFLAGS="-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8"
+              export CXXFLAGS="-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8"
             fi
           fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
@@ -540,13 +539,10 @@ jobs:
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
           # Fix i8mm build error - force M1 compatible architecture
-          # M1 = armv8.4-a (no i8mm), M2+ = armv8.5-a+ (has i8mm)
-          # GGML_NO_NATIVE prevents whisper.cpp from using native CPU detection
+          # -U__ARM_FEATURE_MATMUL_INT8 undefines i8mm macro
           # See: https://github.com/ggml-org/whisper.cpp/issues/3427
-          CFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1' || '' }}
-          CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1' || '' }}
-          GGML_NO_NATIVE: ${{ matrix.target == 'aarch64-apple-darwin' && '1' || '' }}
-          CMAKE_APPLE_SILICON_PROCESSOR: ${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || '' }}
+          CFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8' || '' }}
+          CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8' || '' }}
           # Optimize for build speed on Windows
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.os_type == 'windows' && 'thin' || 'false' }}
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.os_type == 'windows' && '2' || '3' }}
