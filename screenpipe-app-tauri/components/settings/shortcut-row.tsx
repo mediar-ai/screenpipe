@@ -90,6 +90,7 @@ const ShortcutRow = ({
     stopRecordingShortcut: string;
     startAudioShortcut: string;
     stopAudioShortcut: string;
+    showChatShortcut: string;
   }) => {
     console.log("syncing shortcuts:", {
       showShortcut: updatedShortcuts.showScreenpipeShortcut,
@@ -97,9 +98,11 @@ const ShortcutRow = ({
       stopShortcut: updatedShortcuts.stopRecordingShortcut,
       startAudioShortcut: updatedShortcuts.startAudioShortcut,
       stopAudioShortcut: updatedShortcuts.stopAudioShortcut,
+      showChatShortcut: updatedShortcuts.showChatShortcut,
     });
-    // wait 1 second
+    // wait 1 second for settings to persist
     await new Promise((resolve) => setTimeout(resolve, 1000));
+    // updateGlobalShortcuts re-reads all shortcuts from store including showChatShortcut
     await commands.updateGlobalShortcuts(
       updatedShortcuts.showScreenpipeShortcut,
       updatedShortcuts.startRecordingShortcut,
@@ -136,13 +139,14 @@ const ShortcutRow = ({
             stopRecordingShortcut: shortcut === "stopRecordingShortcut" ? keys : settings.stopRecordingShortcut,
             startAudioShortcut: shortcut === "startAudioShortcut" ? keys : settings.startAudioShortcut,
             stopAudioShortcut: shortcut === "stopAudioShortcut" ? keys : settings.stopAudioShortcut,
+            showChatShortcut: shortcut === "showChatShortcut" ? keys : settings.showChatShortcut,
           };
           await syncShortcuts(updatedShortcuts);
 
-          // Update the shortcut reminder overlay if this is the show shortcut
-          if (shortcut === "showScreenpipeShortcut") {
+          // Update the shortcut reminder overlay if either show shortcut changed
+          if (shortcut === "showScreenpipeShortcut" || shortcut === "showChatShortcut") {
             try {
-              await invoke("show_shortcut_reminder", { shortcut: keys });
+              await invoke("show_shortcut_reminder", { shortcut: updatedShortcuts.showScreenpipeShortcut });
             } catch (e) {
               // Window may not exist, that's ok
             }
@@ -179,6 +183,7 @@ const ShortcutRow = ({
       stopRecordingShortcut: settings.stopRecordingShortcut,
       startAudioShortcut: settings.startAudioShortcut,
       stopAudioShortcut: settings.stopAudioShortcut,
+      showChatShortcut: settings.showChatShortcut,
     });
   };
 

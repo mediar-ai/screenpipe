@@ -19,6 +19,7 @@ import remarkGfm from "remark-gfm";
 import OpenAI from "openai";
 import { ChatCompletionTool } from "openai/resources/chat/completions";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { commands } from "@/lib/utils/tauri";
@@ -694,8 +695,19 @@ export function StandaloneChat() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
-      <div className="relative flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-gradient-to-r from-background to-muted/30">
+      {/* Header - draggable */}
+      <div
+        className="relative flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-gradient-to-r from-background to-muted/30 cursor-grab active:cursor-grabbing"
+        onMouseDown={async (e) => {
+          if (e.button === 0) {
+            try {
+              await getCurrentWindow().startDragging();
+            } catch {
+              // Ignore drag errors
+            }
+          }
+        }}
+      >
         <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg" />
         <div className="relative z-10 p-1.5 rounded-lg bg-foreground/5 border border-border/50">
           <PipeAIIcon size={18} animated={false} className="text-foreground" />

@@ -432,9 +432,9 @@ pub async fn show_shortcut_reminder(
     let screen_size = monitor.size();
     let scale_factor = monitor.scale_factor();
 
-    // Compact window dimensions
-    let window_width = 180.0;
-    let window_height = 28.0;
+    // Window dimensions for dual-shortcut display
+    let window_width = 220.0;
+    let window_height = 24.0;
 
     // Position at top center of screen
     let x = ((screen_size.width as f64 / scale_factor) - window_width) / 2.0;
@@ -534,7 +534,7 @@ pub async fn show_shortcut_reminder(
             if let Ok(Some(monitor)) = app_handle_clone.primary_monitor() {
                 let screen_size = monitor.size();
                 let scale_factor = monitor.scale_factor();
-                let new_x = ((screen_size.width as f64 / scale_factor) - 180.0) / 2.0;
+                let new_x = ((screen_size.width as f64 / scale_factor) - 220.0) / 2.0;
                 let new_y = 12.0;
 
                 if let Some(window) = app_handle_clone.get_webview_window("shortcut-reminder") {

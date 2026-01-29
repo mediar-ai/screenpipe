@@ -1,6 +1,6 @@
 import { isSameDay } from "date-fns";
 
-export async function hasFramesForDate(date: Date) {
+export async function hasFramesForDate(date: Date): Promise<boolean> {
 	try {
 		// Set up start and end of the day
 		const startOfDay = new Date(date);
@@ -30,19 +30,17 @@ export async function hasFramesForDate(date: Date) {
 		});
 
 		if (!response.ok) {
-			return {
-				error: "Error occurred while checking frames",
-				details: await response.json(),
-			};
+			console.error("Error checking frames for date:", await response.text());
+			// Return false on error - let navigation proceed to try the date
+			return false;
 		}
 
 		const result = await response.json();
-		console.log("result", result);
+		console.log("hasFramesForDate result:", date.toISOString(), result);
 		return result[0]?.frame_count > 0;
 	} catch (e) {
-		return {
-			error: "Error occurred while checking frames",
-			details: e,
-		};
+		console.error("Error checking frames for date:", e);
+		// Return false on error - let navigation proceed to try the date
+		return false;
 	}
 }

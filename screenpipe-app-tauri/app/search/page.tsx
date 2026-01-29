@@ -85,6 +85,7 @@ function SearchPage() {
 									query,
 								}));
 							}}
+							autoFocus
 						/>
 						<DatePickerWithRange
 							start_time={querys.start_time}

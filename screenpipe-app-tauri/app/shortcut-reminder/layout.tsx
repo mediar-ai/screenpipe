@@ -9,6 +9,7 @@ export default function ShortcutReminderLayout({
     <html lang="en" style={{ background: "transparent" }}>
       <head>
         <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');
           *, *::before, *::after {
             box-sizing: border-box;
           }
@@ -22,7 +23,7 @@ export default function ShortcutReminderLayout({
             width: 100%;
           }
           body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: "IBM Plex Mono", monospace;
           }
         `}</style>
       </head>

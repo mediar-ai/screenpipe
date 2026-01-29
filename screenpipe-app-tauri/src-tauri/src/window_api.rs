@@ -394,7 +394,39 @@ impl ShowRewindWindow {
                 return Ok(window);
             }
 
-                 
+            // Chat window needs panel behavior on macOS to show above fullscreen
+            if id.label() == RewindWindowId::Chat.label() {
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                    let app_clone = app.clone();
+                    app.run_on_main_thread(move || {
+                        use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                        use objc::{msg_send, sel, sel_impl};
+
+                        if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Chat.label()) {
+                            panel.set_level(1001);
+                            // Enable dragging by clicking anywhere on the window background
+                            let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
+                            panel.set_collection_behaviour(
+                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                            );
+                            panel.order_front_regardless();
+                        }
+                    }).ok();
+
+                    return Ok(window);
+                }
+
+                #[cfg(not(target_os = "macos"))]
+                {
+                    window.show().ok();
+                    return Ok(window);
+                }
+            }
+
             info!("showing window: {:?}", id.label());
 
             window.show().ok();
@@ -659,14 +691,60 @@ impl ShowRewindWindow {
                 window
             }
             ShowRewindWindow::Chat => {
-                let builder = self.window_builder(app, "/chat")
-                    .inner_size(500.0, 650.0)
-                    .min_inner_size(400.0, 500.0)
-                    .focused(true)
-                    .always_on_top(true);
+                // macOS: use NSPanel for fullscreen support
                 #[cfg(target_os = "macos")]
-                let builder = builder.hidden_title(true);
-                let window = builder.build()?;
+                let window = {
+                    // Set Accessory policy so panel can appear above fullscreen apps
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                    let builder = self.window_builder(app, "/chat")
+                        .inner_size(500.0, 650.0)
+                        .min_inner_size(400.0, 500.0)
+                        .focused(true)
+                        .always_on_top(true)
+                        .visible_on_all_workspaces(true)
+                        .hidden_title(true);
+                    let window = builder.build()?;
+
+                    // Convert to panel for fullscreen support
+                    if let Ok(_panel) = window.to_panel() {
+                        info!("Successfully converted chat window to panel");
+
+                        let window_clone = window.clone();
+                        app.run_on_main_thread(move || {
+                            use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                            use objc::{msg_send, sel, sel_impl};
+
+                            if let Ok(panel) = window_clone.to_panel() {
+                                // Level 1001 = above CGShieldingWindowLevel, shows over fullscreen
+                                panel.set_level(1001);
+
+                                // Enable dragging by clicking anywhere on the window background
+                                let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
+
+                                panel.set_collection_behaviour(
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                );
+
+                                panel.order_front_regardless();
+                            }
+                        }).ok();
+                    }
+
+                    window
+                };
+
+                #[cfg(not(target_os = "macos"))]
+                let window = {
+                    let builder = self.window_builder(app, "/chat")
+                        .inner_size(500.0, 650.0)
+                        .min_inner_size(400.0, 500.0)
+                        .focused(true)
+                        .always_on_top(true);
+                    builder.build()?
+                };
+
                 window
             }
             ShowRewindWindow::PermissionRecovery => {

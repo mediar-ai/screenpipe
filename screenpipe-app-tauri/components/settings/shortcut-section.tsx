@@ -61,6 +61,14 @@ const ShortcutSection = () => {
           value={settings.stopAudioShortcut}
         />
 
+        <ShortcutRow
+          type="global"
+          shortcut="showChatShortcut"
+          title="toggle ai chat"
+          description="global shortcut to show/hide the ai chat window"
+          value={settings.showChatShortcut}
+        />
+
         <div className="flex items-center justify-between py-4 border-t">
           <div className="space-y-1">
             <Label htmlFor="shortcut-overlay" className="text-base font-medium">

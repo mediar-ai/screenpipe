@@ -280,8 +280,12 @@ export default function Timeline() {
 		const checkIfThereAreFrames = async () => {
 			const checkFramesForDate = await hasFramesForDate(currentDateEffect);
 			console.log("checkFramesForDate", currentDateEffect, checkFramesForDate);
-			if (!checkFramesForDate) {
+			// Only auto-navigate to previous day if NOT during intentional navigation
+			// (e.g., user clicking day arrows). During navigation, handleDateChange
+			// already handles finding dates with frames.
+			if (!checkFramesForDate && !isNavigatingRef.current) {
 				setCurrentDate(subDays(currentDateEffect, 1));
+				return; // Don't fetch frames for a date we're leaving
 			}
 
 			const startTime = new Date(currentDateEffect);
