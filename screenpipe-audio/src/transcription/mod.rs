@@ -14,7 +14,7 @@ pub struct AudioInput {
     pub device: Arc<AudioDevice>,
 }
 
-mod text_utils;
+pub mod text_utils;
 
 mod transcription_result;
 

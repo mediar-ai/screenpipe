@@ -24,17 +24,21 @@ impl TranscriptionResult {
     pub fn cleanup_overlap(&mut self, previous_transcript: String) -> Option<(String, String)> {
         if let Some(transcription) = &self.transcription {
             let transcription = transcription.to_string();
-            if let Some((prev_idx, cur_idx)) =
+            if let Some((prev_idx, cur_idx, match_len)) =
                 longest_common_word_substring(previous_transcript.as_str(), transcription.as_str())
             {
-                // strip old transcript from prev_idx word pos
-                let new_prev = previous_transcript
-                    .split_whitespace()
-                    .collect::<Vec<&str>>()[..prev_idx]
-                    .join(" ");
-                // strip new transcript before cur_idx word pos
-                let new_cur =
-                    transcription.split_whitespace().collect::<Vec<&str>>()[cur_idx..].join(" ");
+                // strip old transcript from prev_idx word pos (keep words before the overlap)
+                let prev_words: Vec<&str> = previous_transcript.split_whitespace().collect();
+                let new_prev = prev_words[..prev_idx].join(" ");
+
+                // strip new transcript AFTER the overlap ends (skip the overlapped portion)
+                let curr_words: Vec<&str> = transcription.split_whitespace().collect();
+                let skip_until = cur_idx + match_len;
+                let new_cur = if skip_until < curr_words.len() {
+                    curr_words[skip_until..].join(" ")
+                } else {
+                    String::new() // Entire current transcript was overlap
+                };
 
                 return Some((new_prev, new_cur));
             }

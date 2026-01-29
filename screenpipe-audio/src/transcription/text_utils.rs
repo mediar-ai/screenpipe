@@ -1,4 +1,6 @@
-pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize)> {
+/// Returns (start_idx_s1, start_idx_s2, match_length) for the longest common word substring.
+/// This allows callers to properly handle overlap removal by skipping past the matched portion.
+pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize, usize)> {
     let s1 = s1.to_lowercase();
     let s2 = s2.to_lowercase();
 
@@ -32,7 +34,7 @@ pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize
     }
 
     match (max_index_s1, max_index_s2) {
-        (Some(idx1), Some(idx2)) => Some((idx1, idx2)),
+        (Some(idx1), Some(idx2)) if max_len > 0 => Some((idx1, idx2, max_len)),
         _ => None,
     }
 }
