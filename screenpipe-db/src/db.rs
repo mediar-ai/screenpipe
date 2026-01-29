@@ -2454,6 +2454,22 @@ impl DatabaseManager {
             String::new()
         };
 
+        // Build relevance scoring: prioritize results where search term appears in window_name/app_name
+        let relevance_case = if !query.is_empty() {
+            let query_lower = query.to_lowercase();
+            format!(
+                r#"CASE
+                    WHEN LOWER(COALESCE(f.window_name, o.window_name)) LIKE '%{}%' THEN 3
+                    WHEN LOWER(COALESCE(f.app_name, o.app_name)) LIKE '%{}%' THEN 2
+                    ELSE 1
+                END"#,
+                query_lower.replace("'", "''"),
+                query_lower.replace("'", "''")
+            )
+        } else {
+            "1".to_string()
+        };
+
         let sql = format!(
             r#"
 SELECT
@@ -2467,7 +2483,7 @@ SELECT
 FROM frames f
 INNER JOIN ocr_text o ON f.id = o.frame_id
 WHERE {}
-ORDER BY f.timestamp {}
+ORDER BY {} DESC, f.timestamp {}
 LIMIT ? OFFSET ?
 "#,
             if conditions.is_empty() {
@@ -2475,6 +2491,7 @@ LIMIT ? OFFSET ?
             } else {
                 conditions.join(" AND ")
             },
+            relevance_case,
             match order {
                 Order::Ascending => "ASC",
                 Order::Descending => "DESC",
