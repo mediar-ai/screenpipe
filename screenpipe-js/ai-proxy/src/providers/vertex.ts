@@ -325,10 +325,68 @@ export class VertexAIProvider implements AIProvider {
 					}],
 				});
 			} else {
-				// Regular user message
+				// Regular user message - handle multimodal content
+				let convertedContent: any;
+				if (typeof msg.content === 'string') {
+					convertedContent = msg.content;
+				} else if (Array.isArray(msg.content)) {
+					// Convert OpenAI-style content parts to Anthropic format
+					convertedContent = msg.content.map((part: any) => {
+						if (part.type === 'text') {
+							return { type: 'text', text: part.text };
+						} else if (part.type === 'image_url') {
+							// Convert OpenAI image_url format to Anthropic source format
+							const url = part.image_url?.url || '';
+							// Handle data URLs (data:image/png;base64,...)
+							const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+							if (dataUrlMatch) {
+								return {
+									type: 'image',
+									source: {
+										type: 'base64',
+										media_type: dataUrlMatch[1],
+										data: dataUrlMatch[2],
+									},
+								};
+							}
+							// Handle regular URLs
+							return {
+								type: 'image',
+								source: {
+									type: 'url',
+									url: url,
+								},
+							};
+						} else if (part.type === 'image' && part.image?.url) {
+							// Handle the proxy's custom format
+							const url = part.image.url;
+							const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+							if (dataUrlMatch) {
+								return {
+									type: 'image',
+									source: {
+										type: 'base64',
+										media_type: dataUrlMatch[1],
+										data: dataUrlMatch[2],
+									},
+								};
+							}
+							return {
+								type: 'image',
+								source: {
+									type: 'url',
+									url: url,
+								},
+							};
+						}
+						return part;
+					});
+				} else {
+					convertedContent = msg.content;
+				}
 				convertedMessages.push({
 					role: 'user',
-					content: typeof msg.content === 'string' ? msg.content : msg.content,
+					content: convertedContent,
 				});
 			}
 		}

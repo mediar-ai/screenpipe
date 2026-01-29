@@ -106,7 +106,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
     const context = `Context from search result:\n${result.app_name} - ${result.window_name}\nTime: ${format(new Date(result.timestamp), "PPpp")}\n\nText:\n${result.text || ""}`;
 
     await commands.showWindow("Chat");
-    await emit("chat-prefill", { context });
+    await emit("chat-prefill", { context, frameId: result.frame_id });
     onClose();
   }, [searchResults, selectedIndex, onClose]);
 

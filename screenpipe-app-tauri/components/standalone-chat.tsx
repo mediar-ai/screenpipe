@@ -147,12 +147,16 @@ export function StandaloneChat() {
   const [upgradeReason, setUpgradeReason] = useState<"daily_limit" | "model_not_allowed">("daily_limit");
   const [upgradeResetsAt, setUpgradeResetsAt] = useState<string | undefined>();
   const [prefillContext, setPrefillContext] = useState<string | null>(null);
+  const [prefillFrameId, setPrefillFrameId] = useState<number | null>(null);
 
   // Listen for chat-prefill events from search modal
   useEffect(() => {
-    const unlisten = listen<{ context: string; prompt?: string }>("chat-prefill", (event) => {
-      const { context, prompt } = event.payload;
+    const unlisten = listen<{ context: string; prompt?: string; frameId?: number }>("chat-prefill", (event) => {
+      const { context, prompt, frameId } = event.payload;
       setPrefillContext(context);
+      if (frameId) {
+        setPrefillFrameId(frameId);
+      }
       if (prompt) {
         setInput(prompt);
       }
@@ -503,15 +507,48 @@ export function StandaloneChat() {
         systemPrompt += `\n\nUser specified filters via @mentions:\n${mentionContext.join("\n\n")}`;
       }
 
+      // Fetch frame image if prefillFrameId is set
+      let frameImageBase64: string | null = null;
+      if (prefillFrameId) {
+        try {
+          const response = await fetch(`http://localhost:3030/frames/${prefillFrameId}`);
+          if (response.ok) {
+            const blob = await response.blob();
+            const arrayBuffer = await blob.arrayBuffer();
+            const base64 = btoa(
+              new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+            );
+            const mimeType = blob.type || 'image/png';
+            frameImageBase64 = `data:${mimeType};base64,${base64}`;
+          }
+        } catch (error) {
+          console.error("Failed to fetch frame image:", error);
+        }
+        // Clear after using
+        setPrefillFrameId(null);
+      }
+
       const MAX_HISTORY = 10;
       const recentMessages = messages.slice(-MAX_HISTORY);
+
+      // Build user message - multimodal if we have an image
+      let userMessageContent: OpenAI.Chat.ChatCompletionUserMessageParam["content"];
+      if (frameImageBase64) {
+        userMessageContent = [
+          { type: "text" as const, text: processedMessage },
+          { type: "image_url" as const, image_url: { url: frameImageBase64, detail: "auto" as const } },
+        ];
+      } else {
+        userMessageContent = processedMessage;
+      }
+
       const conversationMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
         ...recentMessages.map((m) => ({
           role: m.role as "user" | "assistant",
           content: m.content,
         })),
-        { role: "user", content: processedMessage },
+        { role: "user", content: userMessageContent },
       ];
 
       setMessages((prev) => [
@@ -919,20 +956,43 @@ export function StandaloneChat() {
         </div>
 
         {/* Prefill context indicator from search */}
-        {prefillContext && (
+        {(prefillContext || prefillFrameId) && (
           <div className="px-3 py-2 border-b border-border/30 bg-muted/30">
             <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                  context from search
+              {prefillFrameId && (
+                <div className="flex-shrink-0">
+                  <div className="relative group">
+                    <img
+                      src={`http://localhost:3030/frames/${prefillFrameId}`}
+                      alt="Attached frame"
+                      className="w-16 h-12 object-cover rounded border border-border/50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPrefillFrameId(null)}
+                      className="absolute -top-1 -right-1 p-0.5 bg-background rounded-full border border-border shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-2.5 h-2.5 text-muted-foreground" />
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs text-foreground font-mono line-clamp-2">
-                  {prefillContext.slice(0, 150)}{prefillContext.length > 150 ? "..." : ""}
-                </p>
-              </div>
+              )}
+              {prefillContext && (
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                    context from search
+                  </div>
+                  <p className="text-xs text-foreground font-mono line-clamp-2">
+                    {prefillContext.slice(0, 150)}{prefillContext.length > 150 ? "..." : ""}
+                  </p>
+                </div>
+              )}
               <button
                 type="button"
-                onClick={() => setPrefillContext(null)}
+                onClick={() => {
+                  setPrefillContext(null);
+                  setPrefillFrameId(null);
+                }}
                 className="p-1 hover:bg-muted rounded text-muted-foreground"
               >
                 <X className="w-3 h-3" />
