@@ -113,6 +113,11 @@ static SKIP_TITLES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "Status Bar",
         "Menu Extra",
         "System Settings",
+        // Additional system UI elements from ScreenCaptureKit
+        "StatusIndicator",
+        "Cursor",
+        "Menubar",
+        "tracking",
     ])
 });
 
@@ -334,9 +339,11 @@ pub async fn capture_all_visible_windows(
         );
 
         // Apply filters
-        // Note: Empty window_name check fixes frame-window mismatch bug where apps like Arc
+        // Note: Empty window_name/app_name check fixes frame-window mismatch bug where apps like Arc
         // have internal windows with empty titles that create duplicate DB records
+        // Also skip system UI elements that have no owning app (empty app_name)
         let is_valid = !SKIP_APPS.contains(app_name.as_str())
+            && !app_name.is_empty()
             && !window_name.is_empty()
             && !SKIP_TITLES.contains(window_name.as_str())
             && (capture_unfocused_windows || (is_focused && monitor.id() == monitor.id()))
