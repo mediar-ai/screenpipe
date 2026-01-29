@@ -123,6 +123,14 @@ const BASE_TOOLS: Tool[] = [
           description: "Include base64 screenshots (OCR only). Default: false",
           default: false,
         },
+        speaker_ids: {
+          type: "string",
+          description: "Comma-separated speaker IDs to filter audio results (e.g., '1,2,3')",
+        },
+        speaker_name: {
+          type: "string",
+          description: "Filter audio by speaker name (case-insensitive partial match)",
+        },
       },
     },
   },

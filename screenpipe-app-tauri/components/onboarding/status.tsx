@@ -58,6 +58,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const { isMac: isMacOS } = usePlatform();
   const { settings, updateSettings } = useSettings();
   const hasStartedRef = useRef(false);
+  const isStartingRef = useRef(false);
   const stuckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sendLogs = async () => {
@@ -246,7 +247,8 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
     const interval = setInterval(checkPermissions, 2000);
     return () => clearInterval(interval);
-  }, [isMacOS, screenPermissionRef.current]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMacOS]);
 
   // Auto-start when ready (only once)
   useEffect(() => {
@@ -304,6 +306,13 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   };
 
   const handleStartRecording = async () => {
+    // Prevent concurrent calls
+    if (isStartingRef.current) {
+      console.log("handleStartRecording already in progress, skipping");
+      return;
+    }
+    isStartingRef.current = true;
+
     posthog.capture("screenpipe_setup_start");
     setSetupState("starting");
 
@@ -315,7 +324,11 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       setSetupState("recording");
     } catch (error) {
       console.error("Failed to start screenpipe:", error);
-      setSetupState("ready");
+      // Don't reset to "ready" on error to prevent retry loops
+      // User can use the stuck timeout UI to retry or continue
+      setSetupState("starting");
+    } finally {
+      isStartingRef.current = false;
     }
   };
 
