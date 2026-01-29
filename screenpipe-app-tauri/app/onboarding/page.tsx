@@ -3,31 +3,27 @@
 import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import OnboardingStatus from "@/components/onboarding/status";
-import OnboardingIntro from "@/components/onboarding/introduction";
+import OnboardingWelcome from "@/components/onboarding/welcome";
 import OnboardingSelection from "@/components/onboarding/usecases-selection";
-import OnboardingLogin from "@/components/onboarding/login";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { scheduleFirstRunNotification } from "@/lib/notifications";
 import posthog from "posthog-js";
 import { commands } from "@/lib/utils/tauri";
 
-type SlideKey = "login" | "intro" | "usecases" | "status";
+type SlideKey = "welcome" | "usecases" | "status";
 
-// Window size configurations for each slide - consistent size to avoid resizing issues
+// Window size configurations for each slide
 const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = {
-  login: { width: 900, height: 800 },
-  intro: { width: 900, height: 800 },
+  welcome: { width: 1000, height: 650 },
   usecases: { width: 900, height: 800 },
   status: { width: 900, height: 800 },
 };
 
-// 4-step flow: login → intro → usecases → status → done
+// 3-step flow: welcome → usecases → status → done
 const getNextSlide = (currentSlide: SlideKey): SlideKey | null => {
   switch (currentSlide) {
-    case "login":
-      return "intro";
-    case "intro":
+    case "welcome":
       return "usecases";
     case "usecases":
       return "status";
@@ -40,12 +36,10 @@ const getNextSlide = (currentSlide: SlideKey): SlideKey | null => {
 
 const getPrevSlide = (currentSlide: SlideKey): SlideKey | null => {
   switch (currentSlide) {
-    case "login":
+    case "welcome":
       return null;
-    case "intro":
-      return "login";
     case "usecases":
-      return "intro";
+      return "welcome";
     case "status":
       return "usecases";
     default:
@@ -91,11 +85,11 @@ const setWindowSizeForSlide = async (slide: SlideKey) => {
 
 export default function OnboardingPage() {
   const { toast } = useToast();
-  const [currentSlide, setCurrentSlide] = useState<SlideKey>("login");
+  const [currentSlide, setCurrentSlide] = useState<SlideKey>("welcome");
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [completedSteps, setCompletedSteps] = useState<SlideKey[]>(["login"]);
+  const [completedSteps, setCompletedSteps] = useState<SlideKey[]>(["welcome"]);
   const [selectedUsecase, setSelectedUsecase] = useState<string | null>(null);
   const {
     onboardingData,
@@ -118,9 +112,18 @@ export default function OnboardingPage() {
       // Restore saved step if exists (e.g., after app restart during permissions)
       if (onboardingData.currentStep && !onboardingData.isCompleted) {
         const savedStep = onboardingData.currentStep as SlideKey;
-        if (["login", "intro", "usecases", "status"].includes(savedStep)) {
-          setCurrentSlide(savedStep);
-          console.log(`Restored onboarding to step: ${savedStep}`);
+        // Map old step names to new ones for backwards compatibility
+        const stepMap: Record<string, SlideKey> = {
+          "login": "welcome",
+          "intro": "welcome",
+          "usecases": "usecases",
+          "status": "status",
+          "welcome": "welcome",
+        };
+        const mappedStep = stepMap[savedStep];
+        if (mappedStep) {
+          setCurrentSlide(mappedStep);
+          console.log(`Restored onboarding to step: ${mappedStep}`);
         }
       }
     };
@@ -309,19 +312,11 @@ export default function OnboardingPage() {
       </div>
 
       {/* Main content container */}
-      <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
-        <div className="w-full max-w-2xl mx-auto">
-          {currentSlide === "login" && (
-            <OnboardingLogin
-              className={`transition-opacity duration-300 w-full
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handlePrevSlide={handlePrevSlide}
-              handleNextSlide={handleNextSlide}
-            />
-          )}
-          {currentSlide === "intro" && (
-            <OnboardingIntro
-              className={`transition-opacity duration-300 w-full
+      <div className={`flex-1 flex items-center justify-center overflow-auto ${currentSlide === "welcome" ? "p-0" : "p-6"}`}>
+        <div className={`w-full ${currentSlide === "welcome" ? "h-full" : "max-w-2xl mx-auto"}`}>
+          {currentSlide === "welcome" && (
+            <OnboardingWelcome
+              className={`transition-opacity duration-300 w-full h-full
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleNextSlide={handleNextSlide}
             />
