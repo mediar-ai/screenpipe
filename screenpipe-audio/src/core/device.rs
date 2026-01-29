@@ -172,6 +172,13 @@ pub async fn get_cpal_device_and_config(
         .to_string();
 
     let cpal_audio_device = if audio_device.to_string() == "default" {
+        #[cfg(target_os = "linux")]
+        {
+            let is_input = audio_device.device_type == DeviceType::Input;
+            Some(get_linux_device_with_fallback(&host, is_input)?)
+        }
+
+        #[cfg(not(target_os = "linux"))]
         match audio_device.device_type {
             DeviceType::Input => host.default_input_device(),
             DeviceType::Output => host.default_output_device(),
@@ -421,7 +428,14 @@ pub async fn default_output_device() -> Result<AudioDevice> {
         Ok(AudioDevice::new(device.name()?, DeviceType::Output))
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        let host = cpal::default_host();
+        let device = get_linux_device_with_fallback(&host, false)?;
+        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
+    }
+
+    #[cfg(target_os = "windows")]
     {
         let host = cpal::default_host();
         let device = host
