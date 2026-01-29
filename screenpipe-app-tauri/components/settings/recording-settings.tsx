@@ -748,40 +748,6 @@ export function RecordingSettings() {
       )}
 
 
-      {/* Enhanced Deepgram API Key Section */}
-      {settings.audioTranscriptionEngine === "deepgram" && (
-        <div className="space-y-4">
-          <h4 className="text-lg font-semibold">Deepgram Configuration</h4>
-          
-          <ValidatedInput
-            id="deepgramApiKey"
-            label="Deepgram API Key"
-            type={showApiKey ? "text" : "password"}
-            value={settings.deepgramApiKey || ""}
-            onChange={handleDeepgramApiKeyChange}
-            validation={validateDeepgramApiKey}
-            placeholder="Enter your Deepgram API key"
-            required={true}
-            helperText="Don&apos;t have an API key? Get one from Deepgram&apos;s website or use screenpipe cloud"
-            className="pr-10"
-          />
-          
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full"
-            onClick={() => setShowApiKey(!showApiKey)}
-          >
-            {showApiKey ? (
-              <EyeOff className="h-4 w-4" />
-            ) : (
-              <Eye className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      )}
-
       {/* Enhanced Data Directory Section */}
       <div className="space-y-4">
         <div className="flex items-center gap-2 mb-2">
@@ -989,6 +955,37 @@ export function RecordingSettings() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Deepgram API Key - shown only when Deepgram is selected */}
+          {settings.audioTranscriptionEngine === "deepgram" && (
+            <div className="relative">
+              <ValidatedInput
+                id="deepgramApiKey"
+                label="Deepgram API Key"
+                type={showApiKey ? "text" : "password"}
+                value={settings.deepgramApiKey || ""}
+                onChange={handleDeepgramApiKeyChange}
+                validation={validateDeepgramApiKey}
+                placeholder="Enter your Deepgram API key"
+                required={true}
+                helperText="Get an API key from deepgram.com or use Screenpipe Cloud"
+                className="pr-10"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-2 top-7 h-8 w-8"
+                onClick={() => setShowApiKey(!showApiKey)}
+              >
+                {showApiKey ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          )}
 
         </div>
       </div>
