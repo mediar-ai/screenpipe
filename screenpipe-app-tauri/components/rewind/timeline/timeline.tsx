@@ -39,6 +39,14 @@ export function stringToColor(str: string): string {
 	return color;
 }
 
+// Get the app name from a frame, preferring devices with non-empty app names
+export function getFrameAppName(frame: StreamTimeSeriesResponse | undefined): string {
+	if (!frame?.devices?.length) return 'Unknown';
+	// Find first device with a non-empty app_name
+	const deviceWithApp = frame.devices.find(d => d.metadata?.app_name);
+	return deviceWithApp?.metadata?.app_name || 'Unknown';
+}
+
 export const TimelineSlider = ({
 	frames = [],
 	currentIndex,
@@ -200,7 +208,7 @@ export const TimelineSlider = ({
 		let currentGroup: StreamTimeSeriesResponse[] = [];
 
 		visibleFrames.forEach((frame) => {
-			const appName = frame?.devices?.[0]?.metadata?.app_name || 'Unknown';
+			const appName = getFrameAppName(frame);
 			if (appName !== currentApp) {
 				if (currentGroup.length > 0) {
 					groups.push({
@@ -548,7 +556,7 @@ export const TimelineSlider = ({
 															alt=""
 														/>
 														<p className="font-medium text-popover-foreground">
-															{frame?.devices?.[0]?.metadata?.app_name || 'Unknown'}
+															{getFrameAppName(frame)}
 														</p>
 													</div>
 													<p className="text-muted-foreground">
