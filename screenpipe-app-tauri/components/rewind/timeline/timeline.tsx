@@ -1,8 +1,8 @@
 import { StreamTimeSeriesResponse, TimeRange } from "@/components/rewind/timeline";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
-import { isAfter, subDays } from "date-fns";
+import { isAfter, subDays, format } from "date-fns";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { AudioLinesIcon, ZoomIn, ZoomOut } from "lucide-react";
+import { ZoomIn, ZoomOut, Mic } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import posthog from "posthog-js";
 import { cn } from "@/lib/utils";
@@ -150,7 +150,7 @@ export const TimelineSlider = ({
 
 	const appGroups = useMemo(() => {
 		if (!visibleFrames || visibleFrames.length === 0) return [];
-		
+
 		const groups: AppGroup[] = [];
 		let currentApp = "";
 		let currentGroup: StreamTimeSeriesResponse[] = [];
@@ -180,6 +180,32 @@ export const TimelineSlider = ({
 			});
 		}
 		return groups;
+	}, [visibleFrames]);
+
+	// Compute time markers for the visible range
+	const timeMarkers = useMemo(() => {
+		if (!visibleFrames || visibleFrames.length === 0) return [];
+
+		const markers: { time: string; position: number; isHour: boolean }[] = [];
+		const seenHours = new Set<string>();
+
+		visibleFrames.forEach((frame, index) => {
+			const date = new Date(frame.timestamp);
+			const hourKey = `${date.getHours()}`;
+			const minuteKey = `${date.getHours()}:${Math.floor(date.getMinutes() / 15) * 15}`;
+
+			// Add hour markers
+			if (!seenHours.has(hourKey)) {
+				seenHours.add(hourKey);
+				markers.push({
+					time: format(date, 'h a'),
+					position: index,
+					isHour: true,
+				});
+			}
+		});
+
+		return markers;
 	}, [visibleFrames]);
 
 	useEffect(() => {
@@ -288,6 +314,11 @@ export const TimelineSlider = ({
 		setDragStartIndex(null);
 	};
 
+	// Calculate group width for positioning labels
+	const getGroupWidth = useCallback((group: AppGroup) => {
+		return group.frames.length * (frameWidth + frameMargin * 2);
+	}, [frameWidth, frameMargin]);
+
 	return (
 		<div className="relative w-full" dir="rtl">
 			<motion.div
@@ -340,103 +371,187 @@ export const TimelineSlider = ({
 				className="w-full overflow-x-auto overflow-y-visible scroll-smooth scrollbar-hide bg-gradient-to-t from-black/50 to-black/0"
 				style={{
 					scrollBehavior: "auto",
-					paddingTop: "80px", // Space for tooltips above
-					paddingBottom: "0px",
+					paddingTop: "60px", // Space for tooltips above
+					paddingBottom: "24px", // Space for time axis below
 				}}
 			>
 				<motion.div
-					className="whitespace-nowrap flex flex-nowrap w-max justify-center px-[50vw] h-24 sticky right-0 scrollbar-hide"
+					className="whitespace-nowrap flex flex-nowrap w-max justify-center px-[50vw] h-24 sticky right-0 scrollbar-hide relative"
 					onMouseUp={handleDragEnd}
 					onMouseLeave={handleDragEnd}
 				>
-					{appGroups.map((group, groupIndex) => (
-						<div
-							key={`${group.appName}-${groupIndex}`}
-							className="flex flex-nowrap items-end h-full group pt-6 relative"
-							dir="rtl"
-						>
-							<div className="absolute top-1 left-1/2 w-5 h-5 rounded-full -translate-x-1/2 bg-card border border-border p-0.5 z-10">
-								<img
-									src={`http://localhost:11435/app-icon?name=${group.appName}`}
-									className="w-full h-full opacity-70 rounded-sm"
-									alt={group.appName}
-									loading="lazy"
-									decoding="async"
-								/>
+					{appGroups.map((group, groupIndex) => {
+						const groupWidth = getGroupWidth(group);
+						const showLabel = groupWidth > 60; // Only show label if group is wide enough
+						const showFullLabel = groupWidth > 100;
+
+						return (
+							<div
+								key={`${group.appName}-${groupIndex}`}
+								className="flex flex-nowrap items-end h-full group/appgroup relative"
+								dir="rtl"
+								style={{
+									borderLeft: groupIndex > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+								}}
+							>
+								{/* App icon and label - improved visibility */}
+								<div
+									className="absolute top-0 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 pointer-events-none"
+									style={{ direction: 'ltr' }}
+								>
+									<div className="w-5 h-5 rounded-md bg-card/90 border border-border/50 p-0.5 shadow-sm">
+										<img
+											src={`http://localhost:11435/app-icon?name=${group.appName}`}
+											className="w-full h-full opacity-80 rounded-sm"
+											alt={group.appName}
+											loading="lazy"
+											decoding="async"
+										/>
+									</div>
+									{showLabel && (
+										<span
+											className={cn(
+												"text-[10px] font-medium text-foreground/70 bg-background/60 backdrop-blur-sm px-1.5 py-0.5 rounded truncate",
+												showFullLabel ? "max-w-[100px]" : "max-w-[50px]"
+											)}
+										>
+											{group.appName}
+										</span>
+									)}
+								</div>
+
+								{group.frames.map((frame, frameIdx) => {
+									// O(1) lookup instead of O(n) indexOf
+									const frameIndex = frameIndexMap.get(frame.timestamp) ?? -1;
+									const isSelected = selectedIndices.has(frameIndex);
+									const frameDate = new Date(frame.timestamp);
+									const isInRange =
+										selectionRange &&
+										frameDate >= selectionRange.start &&
+										frameDate <= selectionRange.end;
+
+									const hasAudio = Boolean(frame?.devices?.[0]?.audio?.length);
+									const isCurrent = frameIndex === currentIndex;
+
+									// Show time marker on first frame of each hour
+									const showTimeMarker = timeMarkers.some(
+										m => m.position === visibleFrames.indexOf(frame)
+									);
+									const timeMarker = showTimeMarker
+										? timeMarkers.find(m => m.position === visibleFrames.indexOf(frame))
+										: null;
+
+									return (
+										<motion.div
+											key={frame.timestamp}
+											data-timestamp={frame.timestamp}
+											className={cn(
+												"flex-shrink-0 cursor-ew-resize rounded-t relative hover:z-50 transition-all duration-200",
+												(isSelected || isInRange) && "ring-2 ring-blue-400 ring-offset-1 ring-offset-black/20"
+											)}
+											style={{
+												width: `${frameWidth}px`,
+												marginLeft: `${frameMargin}px`,
+												marginRight: `${frameMargin}px`,
+												backgroundColor: isCurrent ? '#3b82f6' : group.color,
+												height: isCurrent || isSelected || isInRange ? "75%" : "45%",
+												opacity: isCurrent || isSelected || isInRange ? 1 : 0.7,
+												direction: "ltr",
+												boxShadow: isCurrent ? '0 0 15px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.3)' : 'none',
+												transform: isCurrent ? 'scale(1.1)' : 'scale(1)',
+												transition: 'all 0.2s ease-out',
+												borderRadius: '4px 4px 0 0',
+											}}
+											whileHover={{
+												height: "75%",
+												opacity: 1,
+												scale: 1.05,
+												transition: { duration: 0.15 }
+											}}
+											whileTap={{
+												scale: 0.95,
+												transition: { duration: 0.1 }
+											}}
+											onMouseDown={() => handleDragStart(frameIndex)}
+											onMouseEnter={() => {
+												setHoveredTimestamp(frame.timestamp);
+												handleDragOver(frameIndex);
+											}}
+											onMouseLeave={() => setHoveredTimestamp(null)}
+										>
+											{/* Audio indicator - improved with mic icon */}
+											{hasAudio && (
+												<div
+													className={cn(
+														"absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-0.5",
+														zoomLevel >= 1.5 ? "bg-green-500/90 px-1 py-0.5 rounded-full" : ""
+													)}
+												>
+													<Mic className="w-2.5 h-2.5 text-green-400" />
+													{zoomLevel >= 2 && (
+														<span className="text-[8px] text-green-100 font-medium">audio</span>
+													)}
+												</div>
+											)}
+
+											{/* Time marker below frame */}
+											{timeMarker && (
+												<div
+													className="absolute top-full mt-1 left-1/2 -translate-x-1/2 text-[9px] font-mono text-muted-foreground whitespace-nowrap"
+													style={{ direction: 'ltr' }}
+												>
+													{timeMarker.time}
+												</div>
+											)}
+
+											{/* Tooltip on hover */}
+											{(hoveredTimestamp === frame.timestamp ||
+												frames[currentIndex]?.timestamp === frame.timestamp) && (
+												<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-8 w-max bg-popover border border-border rounded-lg px-3 py-2 text-xs shadow-2xl">
+													<div className="flex items-center gap-2 mb-1">
+														<img
+															src={`http://localhost:11435/app-icon?name=${group.appName}`}
+															className="w-4 h-4 rounded"
+															alt=""
+														/>
+														<p className="font-medium text-popover-foreground">
+															{frame?.devices?.[0]?.metadata?.app_name || 'Unknown'}
+														</p>
+													</div>
+													<p className="text-muted-foreground">
+														{format(new Date(frame.timestamp), 'h:mm:ss a')}
+													</p>
+													{hasAudio && (
+														<p className="text-green-400 flex items-center gap-1 mt-1">
+															<Mic className="w-3 h-3" />
+															<span>audio recorded</span>
+														</p>
+													)}
+												</div>
+											)}
+										</motion.div>
+									);
+								})}
 							</div>
-							{group.frames.map((frame) => {
-								// O(1) lookup instead of O(n) indexOf
-								const frameIndex = frameIndexMap.get(frame.timestamp) ?? -1;
-								const isSelected = selectedIndices.has(frameIndex);
-								const frameDate = new Date(frame.timestamp);
-								const isInRange =
-									selectionRange &&
-									frameDate >= selectionRange.start &&
-									frameDate <= selectionRange.end;
-
-								const hasAudio = Boolean(frame?.devices?.[0]?.audio?.length);
-								const isCurrent = frameIndex === currentIndex;
-
-								return (
-									<motion.div
-										key={frame.timestamp}
-										data-timestamp={frame.timestamp}
-										className={cn(
-											"flex-shrink-0 cursor-ew-resize rounded-t relative group hover:z-50 transition-all duration-200",
-											(isSelected || isInRange) && "ring-2 ring-blue-400 ring-offset-1 ring-offset-black/20"
-										)}
-										style={{
-											width: `${frameWidth}px`,
-											marginLeft: `${frameMargin}px`,
-											marginRight: `${frameMargin}px`,
-											backgroundColor: isCurrent ? '#3b82f6' : group.color,
-											height: isCurrent || isSelected || isInRange ? "80%" : "50%",
-											opacity: isCurrent || isSelected || isInRange ? 1 : 0.8,
-											direction: "ltr",
-											boxShadow: isCurrent ? '0 0 15px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.3)' : 'none',
-											transform: isCurrent ? 'scale(1.1)' : 'scale(1)',
-											transition: 'all 0.2s ease-out',
-										}}
-										whileHover={{ 
-											height: "80%", 
-											opacity: 1,
-											scale: 1.05,
-											transition: { duration: 0.15 }
-										}}
-										whileTap={{ 
-											scale: 0.95,
-											transition: { duration: 0.1 }
-										}}
-										onMouseDown={() => handleDragStart(frameIndex)}
-										onMouseEnter={() => {
-											setHoveredTimestamp(frame.timestamp);
-											handleDragOver(frameIndex);
-										}}
-										onMouseLeave={() => setHoveredTimestamp(null)}
-									>
-										{hasAudio && (
-											<div className="absolute -top-4 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-green-400/80">
-												<AudioLinesIcon className="w-full h-full p-0.5" />
-											</div>
-										)}
-										{(hoveredTimestamp === frame.timestamp ||
-											frames[currentIndex]?.timestamp === frame.timestamp) && (
-											<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-12 w-max bg-popover border border-border rounded-xl px-3 py-2 text-xs shadow-2xl">
-												<p className="font-medium text-popover-foreground">
-													{frame?.devices?.[0]?.metadata?.app_name || 'Unknown'}
-												</p>
-												<p className="text-muted-foreground">
-													{new Date(frame.timestamp).toLocaleString()}
-												</p>
-											</div>
-										)}
-									</motion.div>
-								);
-							})}
-						</div>
-					))}
+						);
+					})}
 					<div ref={observerTargetRef} className="h-full w-1" />
 				</motion.div>
+			</div>
+
+			{/* Time axis legend at bottom */}
+			<div className="absolute bottom-0 left-0 right-0 h-6 flex items-center justify-center pointer-events-none">
+				<div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+					<span className="flex items-center gap-1">
+						<div className="w-3 h-3 rounded bg-blue-500" />
+						<span>current</span>
+					</span>
+					<span className="flex items-center gap-1">
+						<Mic className="w-3 h-3 text-green-400" />
+						<span>has audio</span>
+					</span>
+					<span className="opacity-60">scroll to navigate • pinch to zoom</span>
+				</div>
 			</div>
 		</div>
 	);
