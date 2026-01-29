@@ -120,7 +120,16 @@ export function TimelineControls({
 								</AnimatePresence>
 							</Button>
 						</PopoverTrigger>
-						<PopoverContent className="w-auto p-0" align="center">
+						<PopoverContent
+						className="w-auto p-0 z-[200]"
+						align="center"
+						sideOffset={8}
+					>
+						<div
+							onClick={(e) => e.stopPropagation()}
+							onMouseDown={(e) => e.stopPropagation()}
+							onPointerDown={(e) => e.stopPropagation()}
+						>
 							<Calendar
 								mode="single"
 								selected={currentDate}
@@ -136,7 +145,8 @@ export function TimelineControls({
 								}
 								initialFocus
 							/>
-						</PopoverContent>
+						</div>
+					</PopoverContent>
 					</Popover>
 
 					<Button
