@@ -50,13 +50,13 @@ impl FrameWriteTracker {
 
     /// Record that a frame was written to video at the given offset.
     pub fn record_write(&self, frame_number: u64, offset: u64, video_path: String) {
-        self.writes.insert(
-            frame_number,
-            FrameWriteInfo { offset, video_path },
-        );
         debug!(
             "FrameWriteTracker: recorded frame {} at offset {} in {}",
             frame_number, offset, video_path
+        );
+        self.writes.insert(
+            frame_number,
+            FrameWriteInfo { offset, video_path },
         );
     }
 
@@ -309,6 +309,7 @@ impl VideoCapture {
         });
 
         let video_frame_queue_clone = video_frame_queue.clone();
+        let frame_write_tracker_clone = frame_write_tracker.clone();
 
         let output_path = output_path.to_string();
         let video_thread = tokio::spawn(async move {
@@ -323,6 +324,7 @@ impl VideoCapture {
                 new_chunk_callback_clone,
                 monitor_id,
                 video_chunk_duration,
+                &frame_write_tracker_clone,
             )
             .await
             {
@@ -372,6 +374,7 @@ impl VideoCapture {
         VideoCapture {
             video_frame_queue,
             ocr_frame_queue,
+            frame_write_tracker,
             capture_thread_handle: capture_thread,
             queue_thread_handle: queue_thread,
             video_thread_handle: video_thread,
@@ -495,6 +498,7 @@ async fn save_frames_as_video(
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
     monitor_id: u32,
     video_chunk_duration: Duration,
+    frame_write_tracker: &Arc<FrameWriteTracker>,
 ) -> Result<(), anyhow::Error> {
     info!(
         "Starting save_frames_as_video function for monitor {}",
@@ -504,6 +508,7 @@ async fn save_frames_as_video(
     let mut frame_count = 0;
     let mut current_ffmpeg: Option<Child> = None;
     let mut current_stdin: Option<ChildStdin> = None;
+    let mut current_video_path: Option<String> = None;
 
     // Track health metrics
     let start_time = std::time::Instant::now();
@@ -529,6 +534,12 @@ async fn save_frames_as_video(
             let buffer = encode_frame(&first_frame);
             debug!("Got first frame for new chunk for monitor {}", monitor_id);
 
+            // Clean up old tracker entries to prevent memory bloat
+            // Keep entries from the last ~1000 frames (enough buffer for DB to catch up)
+            if first_frame.frame_number > 1000 {
+                frame_write_tracker.cleanup_before(first_frame.frame_number - 1000);
+            }
+
             let output_file = create_output_file(output_path, monitor_id);
             info!(
                 "Starting new video chunk: {} for monitor {}",
@@ -548,6 +559,14 @@ async fn save_frames_as_video(
                         );
                         continue;
                     }
+
+                    // Record first frame write in tracker (offset 0)
+                    frame_write_tracker.record_write(
+                        first_frame.frame_number,
+                        0, // First frame is at offset 0
+                        output_file.clone(),
+                    );
+
                     frame_count += 1;
                     frames_total += 1;
 
@@ -557,6 +576,7 @@ async fn save_frames_as_video(
 
                     current_ffmpeg = Some(child);
                     current_stdin = Some(stdin);
+                    current_video_path = Some(output_file.clone());
                     info!(
                         "New FFmpeg process started for file: {} (monitor {})",
                         output_file, monitor_id
@@ -591,14 +611,18 @@ async fn save_frames_as_video(
             "Processing frames for monitor {}, current count: {}/{}",
             monitor_id, frame_count, frames_per_video
         );
-        process_frames(
-            frame_queue,
-            &mut current_stdin,
-            &mut frame_count,
-            frames_per_video,
-            fps,
-        )
-        .await;
+        if let Some(ref video_path) = current_video_path {
+            process_frames(
+                frame_queue,
+                &mut current_stdin,
+                &mut frame_count,
+                frames_per_video,
+                fps,
+                frame_write_tracker,
+                video_path,
+            )
+            .await;
+        }
 
         // Update total frame count
         frames_total = frames_total.max(frame_count);
@@ -657,18 +681,33 @@ async fn process_frames(
     frame_count: &mut usize,
     frames_per_video: usize,
     fps: f64,
+    frame_write_tracker: &Arc<FrameWriteTracker>,
+    video_path: &str,
 ) {
     let write_timeout = Duration::from_secs_f64(1.0 / fps);
     while *frame_count < frames_per_video {
         if let Some(frame) = frame_queue.pop() {
+            let frame_number = frame.frame_number;
             let buffer = encode_frame(&frame);
             if let Some(stdin) = current_stdin.as_mut() {
                 if let Err(e) = write_frame_with_retry(stdin, &buffer).await {
                     error!("Failed to write frame to ffmpeg after max retries: {}", e);
                     break;
                 }
+
+                // Record this frame write in the tracker
+                // frame_count is 0-indexed offset within this video chunk
+                frame_write_tracker.record_write(
+                    frame_number,
+                    *frame_count as u64,
+                    video_path.to_string(),
+                );
+
                 *frame_count += 1;
-                debug!("Wrote frame {} to FFmpeg", frame_count);
+                debug!(
+                    "Wrote frame {} (frame_number={}) to FFmpeg at offset {}",
+                    frame_count, frame_number, *frame_count - 1
+                );
 
                 flush_ffmpeg_input(stdin, *frame_count, fps).await;
             }

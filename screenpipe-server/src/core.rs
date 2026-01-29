@@ -229,15 +229,34 @@ pub async fn record_video(
             frames_processed += 1;
 
             debug!(
-                "record_video: Processing frame {} with {} window results ({}ms since last frame)",
+                "record_video: Processing frame {} (frame_number={}) with {} window results ({}ms since last frame)",
                 frames_processed,
+                frame.frame_number,
                 frame.window_ocr_results.len(),
                 time_since_last_frame.as_millis()
             );
 
-            // Get the current video frame offset for this capture cycle
-            // All window results from this capture share the same video frame
-            let video_frame_offset = db.get_next_frame_offset(&device_name).await.unwrap_or(0);
+            // Check if this frame was actually written to video
+            // If not, skip DB insertion to prevent offset mismatch
+            let frame_write_info = video_capture.frame_write_tracker.get_offset(frame.frame_number);
+            let video_frame_offset = match frame_write_info {
+                Some(info) => info.offset as i64,
+                None => {
+                    // Frame wasn't written to video (likely dropped from video queue)
+                    // Wait a bit and retry - the video encoder might not have processed it yet
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    match video_capture.frame_write_tracker.get_offset(frame.frame_number) {
+                        Some(info) => info.offset as i64,
+                        None => {
+                            debug!(
+                                "Skipping frame {} - not found in video write tracker (was dropped)",
+                                frame.frame_number
+                            );
+                            continue;
+                        }
+                    }
+                }
+            };
 
             for window_result in &frame.window_ocr_results {
                 let insert_frame_start = std::time::Instant::now();

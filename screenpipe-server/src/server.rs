@@ -3244,46 +3244,63 @@ async fn serve_file(path: &str) -> Result<Response, (StatusCode, JsonResponse<Va
 }
 
 fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
+    // Pre-compute audio entries once (avoid duplicating for each OCR entry)
+    let audio_entries: Vec<AudioEntry> = chunk
+        .audio_entries
+        .iter()
+        .map(|a| AudioEntry {
+            transcription: a.transcription.clone(),
+            device_name: a.device_name.clone(),
+            is_input: a.is_input,
+            audio_file_path: a.audio_file_path.clone(),
+            duration_secs: a.duration_secs,
+            audio_chunk_id: a.audio_chunk_id,
+            speaker_id: a.speaker_id,
+            speaker_name: a.speaker_name.clone(),
+        })
+        .collect();
+
+    // Pre-compute transcription text once
+    let transcription_text: String = chunk
+        .audio_entries
+        .iter()
+        .map(|a| a.transcription.clone())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    // Create DeviceFrames from OCR entries
+    let mut device_frames: Vec<DeviceFrame> = chunk
+        .ocr_entries
+        .into_iter()
+        // Filter out screenpipe frames at display time
+        .filter(|device_data| !device_data.app_name.to_lowercase().contains("screenpipe"))
+        .map(|device_data| DeviceFrame {
+            device_id: device_data.device_name,
+            frame_id: chunk.frame_id,
+            image_data: vec![], // Empty since we don't need image data
+            metadata: FrameMetadata {
+                file_path: device_data.video_file_path,
+                app_name: device_data.app_name,
+                window_name: device_data.window_name,
+                transcription: transcription_text.clone(),
+                ocr_text: device_data.text,
+                browser_url: device_data.browser_url,
+            },
+            // FIX: Don't duplicate audio entries for each OCR entry
+            // Audio will be added only to the first DeviceFrame
+            audio_entries: vec![],
+        })
+        .collect();
+
+    // Only put audio entries in the first DeviceFrame to avoid duplication
+    // This ensures audio is displayed once per frame, not once per OCR text region
+    if let Some(first_frame) = device_frames.first_mut() {
+        first_frame.audio_entries = audio_entries;
+    }
+
     TimeSeriesFrame {
         timestamp: chunk.timestamp,
-        frame_data: chunk
-            .ocr_entries
-            .into_iter()
-            // Filter out screenpipe frames at display time
-            .filter(|device_data| !device_data.app_name.to_lowercase().contains("screenpipe"))
-            .map(|device_data| DeviceFrame {
-                device_id: device_data.device_name,
-                frame_id: chunk.frame_id,
-                image_data: vec![], // Empty since we don't need image data
-                metadata: FrameMetadata {
-                    file_path: device_data.video_file_path,
-                    app_name: device_data.app_name,
-                    window_name: device_data.window_name,
-                    transcription: chunk
-                        .audio_entries
-                        .iter()
-                        .map(|a| a.transcription.clone())
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                    ocr_text: device_data.text,
-                    browser_url: device_data.browser_url,
-                },
-                audio_entries: chunk
-                    .audio_entries
-                    .iter()
-                    .map(|a| AudioEntry {
-                        transcription: a.transcription.clone(),
-                        device_name: a.device_name.clone(),
-                        is_input: a.is_input,
-                        audio_file_path: a.audio_file_path.clone(),
-                        duration_secs: a.duration_secs,
-                        audio_chunk_id: a.audio_chunk_id,
-                        speaker_id: a.speaker_id,
-                        speaker_name: a.speaker_name.clone(),
-                    })
-                    .collect(),
-            })
-            .collect(),
+        frame_data: device_frames,
         error: None,
     }
 }
@@ -3850,5 +3867,117 @@ mod tests {
             key1, key2,
             "Different queries should produce different cache keys"
         );
+    }
+
+    // ===========================================================================
+    // AUDIO DUPLICATION TESTS
+    // ===========================================================================
+
+    fn create_test_frame_data(num_ocr_entries: usize, num_audio_entries: usize) -> FrameData {
+        use screenpipe_db::{AudioEntry as DbAudioEntry, OCREntry};
+
+        let ocr_entries: Vec<OCREntry> = (0..num_ocr_entries)
+            .map(|i| OCREntry {
+                device_name: format!("monitor_{}", i % 2),
+                video_file_path: format!("/path/to/video_{}.mp4", i % 2),
+                app_name: format!("App{}", i),
+                window_name: format!("Window{}", i),
+                text: format!("OCR text block {}", i),
+                browser_url: None,
+            })
+            .collect();
+
+        let audio_entries: Vec<DbAudioEntry> = (0..num_audio_entries)
+            .map(|i| DbAudioEntry {
+                transcription: format!("Audio transcription {}", i),
+                device_name: format!("microphone_{}", i),
+                is_input: true,
+                audio_file_path: format!("/path/to/audio_{}.mp4", i),
+                duration_secs: 3.0,
+                audio_chunk_id: i as i64,
+                speaker_id: None,
+                speaker_name: None,
+            })
+            .collect();
+
+        FrameData {
+            frame_id: 12345,
+            timestamp: chrono::Utc::now(),
+            offset_index: 0,
+            ocr_entries,
+            audio_entries,
+        }
+    }
+
+    /// TEST: Demonstrate and verify the audio duplication bug is fixed
+    /// With the fix, audio should appear only once, not duplicated per OCR entry
+    #[test]
+    fn test_audio_not_duplicated_per_ocr_entry() {
+        // Create a frame with 10 OCR entries and 1 audio entry
+        let frame_data = create_test_frame_data(10, 1);
+
+        let result = create_time_series_frame(frame_data);
+
+        // Count total audio entries across all DeviceFrames
+        let total_audio_entries: usize = result
+            .frame_data
+            .iter()
+            .map(|df| df.audio_entries.len())
+            .sum();
+
+        let num_device_frames = result.frame_data.len();
+
+        println!("OCR entries: 10, Audio entries: 1");
+        println!("DeviceFrames created: {}", num_device_frames);
+        println!("Total audio entries in result: {}", total_audio_entries);
+
+        // After fix: Should have exactly 1 audio entry total, not 10
+        assert_eq!(num_device_frames, 10, "Should have 10 DeviceFrames");
+        assert_eq!(
+            total_audio_entries, 1,
+            "Audio should appear exactly once, not duplicated per OCR entry"
+        );
+    }
+
+    /// TEST: Multiple audio entries should still work correctly
+    #[test]
+    fn test_multiple_audio_entries_not_duplicated() {
+        // 5 OCR entries, 3 audio entries
+        let frame_data = create_test_frame_data(5, 3);
+
+        let result = create_time_series_frame(frame_data);
+
+        let total_audio_entries: usize = result
+            .frame_data
+            .iter()
+            .map(|df| df.audio_entries.len())
+            .sum();
+
+        println!("OCR entries: 5, Audio entries: 3");
+        println!("DeviceFrames: {}", result.frame_data.len());
+        println!("Total audio entries: {}", total_audio_entries);
+
+        // Should have exactly 3 audio entries, not 15 (5 * 3)
+        assert_eq!(
+            total_audio_entries, 3,
+            "Should have exactly 3 audio entries, not duplicated"
+        );
+    }
+
+    /// TEST: Empty audio entries should work
+    #[test]
+    fn test_no_audio_entries_handled() {
+        let frame_data = create_test_frame_data(5, 0);
+
+        let result = create_time_series_frame(frame_data);
+
+        let total_audio_entries: usize = result
+            .frame_data
+            .iter()
+            .map(|df| df.audio_entries.len())
+            .sum();
+
+        assert_eq!(total_audio_entries, 0, "Should have no audio entries");
+        assert_eq!(result.frame_data.len(), 5, "Should have 5 DeviceFrames");
     }
 }

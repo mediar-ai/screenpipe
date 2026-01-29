@@ -28,5 +28,5 @@ pub use server::HealthCheckResponse;
 pub use server::PaginatedResponse;
 pub use server::SCServer;
 pub use server::{api_list_monitors, MonitorInfo};
-pub use video::VideoCapture;
+pub use video::{FrameWriteInfo, FrameWriteTracker, VideoCapture};
 pub mod embedding;
