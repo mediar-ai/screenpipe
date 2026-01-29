@@ -69,8 +69,24 @@ export const TimelineSlider = ({
 	// Zoom state: 1 = normal, >1 = zoomed in, <1 = zoomed out
 	// Range: 0.25 (very zoomed out) to 4 (very zoomed in)
 	const [zoomLevel, setZoomLevel] = useState(1);
+	const [targetZoom, setTargetZoom] = useState(1);
 	const MIN_ZOOM = 0.25;
 	const MAX_ZOOM = 4;
+
+	// Smooth zoom animation using requestAnimationFrame
+	useEffect(() => {
+		if (Math.abs(zoomLevel - targetZoom) < 0.01) {
+			if (zoomLevel !== targetZoom) setZoomLevel(targetZoom);
+			return;
+		}
+
+		const animationId = requestAnimationFrame(() => {
+			// Ease toward target (lerp with 0.15 factor for smooth animation)
+			setZoomLevel(prev => prev + (targetZoom - prev) * 0.15);
+		});
+
+		return () => cancelAnimationFrame(animationId);
+	}, [zoomLevel, targetZoom]);
 
 	// Handle pinch-to-zoom (trackpad) and Cmd+Scroll (mouse)
 	const handleWheel = useCallback((e: WheelEvent) => {
@@ -80,15 +96,27 @@ export const TimelineSlider = ({
 			e.preventDefault();
 
 			// Calculate zoom delta (negative deltaY = zoom in)
-			// Use smaller delta for smoother zoom
-			const zoomDelta = -e.deltaY * 0.005;
+			const zoomDelta = -e.deltaY * 0.008;
 
-			setZoomLevel((prev) => {
+			setTargetZoom((prev) => {
 				const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev * (1 + zoomDelta)));
 				return newZoom;
 			});
+		} else {
+			// Regular scroll - speed scales inversely with zoom
+			// When zoomed out (0.25), scroll moves 4x faster through frames
+			// When zoomed in (4), scroll moves 0.25x slower
+			const scrollMultiplier = 1 / zoomLevel;
+			const framesToSkip = Math.round(e.deltaX * scrollMultiplier * 0.1);
+
+			if (framesToSkip !== 0 && onFrameChange) {
+				const newIndex = Math.max(0, Math.min(frames.length - 1, currentIndex - framesToSkip));
+				if (newIndex !== currentIndex) {
+					onFrameChange(newIndex);
+				}
+			}
 		}
-	}, []);
+	}, [zoomLevel, currentIndex, frames.length, onFrameChange]);
 
 	// Attach wheel event listener for zoom
 	useEffect(() => {
