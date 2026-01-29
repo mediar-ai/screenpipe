@@ -164,25 +164,49 @@ pub async fn stop_screenpipe(
 
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        match tokio::process::Command::new("powershell")
-            .arg("-NoProfile")
-            .arg("-WindowStyle")
-            .arg("hidden")
-            .arg("-Command")
-            .arg(r#"taskkill.exe /F /T /IM screenpipe.exe"#)
+
+        // Try taskkill directly first (most reliable, doesn't depend on PowerShell)
+        let taskkill_result = tokio::process::Command::new("taskkill")
+            .args(["/F", "/T", "/IM", "screenpipe.exe"])
             .creation_flags(CREATE_NO_WINDOW)
             .output()
-            .await
-        {
-            Ok(_) => {
-                debug!("Successfully killed screenpipe processes");
+            .await;
+
+        match taskkill_result {
+            Ok(output) => {
+                // taskkill returns success even if process wasn't found, check stderr for real errors
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if output.status.success() || stderr.contains("not found") || stderr.contains("ERROR: The process") {
+                    debug!("Successfully killed screenpipe processes (or none were running)");
+                    return Ok(());
+                }
+                debug!("taskkill completed with output: {:?}", stderr);
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to kill screenpipe processes: {}", e);
-                Err(format!("Failed to kill screenpipe processes: {}", e))
+                warn!("taskkill failed: {}, trying cmd.exe fallback", e);
+
+                // Fallback: try via cmd.exe
+                match tokio::process::Command::new("cmd")
+                    .args(["/C", "taskkill", "/F", "/T", "/IM", "screenpipe.exe"])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+                    .await
+                {
+                    Ok(_) => {
+                        debug!("Successfully killed screenpipe processes via cmd.exe fallback");
+                        Ok(())
+                    }
+                    Err(e2) => {
+                        error!("All methods to kill screenpipe processes failed. taskkill: {}, cmd: {}", e, e2);
+                        // Don't fail hard - the process might not be running anyway
+                        warn!("Continuing despite kill failure - process may not be running");
+                        Ok(())
+                    }
+                }
             }
         }
     }

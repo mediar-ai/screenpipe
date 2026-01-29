@@ -286,12 +286,118 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     Ok(devices)
 }
 
+/// Test if a cpal device actually works by trying to get its supported configs
+#[cfg(target_os = "linux")]
+fn test_device_works(device: &cpal::Device, is_input: bool) -> bool {
+    if is_input {
+        device.supported_input_configs().is_ok()
+    } else {
+        device.supported_output_configs().is_ok()
+    }
+}
+
+/// Linux fallback: try default device, then enumerate and find first working device
+#[cfg(target_os = "linux")]
+fn get_linux_device_with_fallback(
+    host: &cpal::Host,
+    is_input: bool,
+) -> Result<cpal::Device> {
+    // First, try the default device
+    let default_device = if is_input {
+        host.default_input_device()
+    } else {
+        host.default_output_device()
+    };
+
+    if let Some(device) = default_device {
+        if test_device_works(&device, is_input) {
+            tracing::debug!(
+                "linux audio: using default {} device: {:?}",
+                if is_input { "input" } else { "output" },
+                device.name()
+            );
+            return Ok(device);
+        }
+        tracing::warn!(
+            "linux audio: default {} device {:?} failed validation, trying fallbacks",
+            if is_input { "input" } else { "output" },
+            device.name()
+        );
+    }
+
+    // Fallback: enumerate all devices and try each one
+    let devices: Vec<_> = if is_input {
+        host.input_devices()?.collect()
+    } else {
+        host.output_devices()?.collect()
+    };
+
+    // Priority order for device names (prefer pulse/pipewire over raw hw)
+    let priority_prefixes = ["pulse", "pipewire", "default", "plughw", "hw"];
+
+    // Sort devices by priority
+    let mut sorted_devices: Vec<_> = devices.into_iter().collect();
+    sorted_devices.sort_by(|a, b| {
+        let a_name = a.name().unwrap_or_default().to_lowercase();
+        let b_name = b.name().unwrap_or_default().to_lowercase();
+
+        let a_priority = priority_prefixes
+            .iter()
+            .position(|p| a_name.starts_with(p))
+            .unwrap_or(priority_prefixes.len());
+        let b_priority = priority_prefixes
+            .iter()
+            .position(|p| b_name.starts_with(p))
+            .unwrap_or(priority_prefixes.len());
+
+        a_priority.cmp(&b_priority)
+    });
+
+    for device in sorted_devices {
+        let device_name = device.name().unwrap_or_else(|_| "unknown".to_string());
+
+        // Skip OSS devices explicitly
+        if device_name.contains("oss") || device_name.contains("/dev/dsp") {
+            tracing::debug!("linux audio: skipping OSS device: {}", device_name);
+            continue;
+        }
+
+        if test_device_works(&device, is_input) {
+            tracing::info!(
+                "linux audio: fallback successful, using {} device: {}",
+                if is_input { "input" } else { "output" },
+                device_name
+            );
+            return Ok(device);
+        }
+        tracing::debug!(
+            "linux audio: device {} failed validation, trying next",
+            device_name
+        );
+    }
+
+    Err(anyhow!(
+        "No working {} audio device found. Make sure PulseAudio or PipeWire is running.",
+        if is_input { "input" } else { "output" }
+    ))
+}
+
 pub fn default_input_device() -> Result<AudioDevice> {
     let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or(anyhow!("No default input device detected"))?;
-    Ok(AudioDevice::new(device.name()?, DeviceType::Input))
+
+    #[cfg(target_os = "linux")]
+    {
+        let device = get_linux_device_with_fallback(&host, true)?;
+        Ok(AudioDevice::new(device.name()?, DeviceType::Input))
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let device = host
+            .default_input_device()
+            .ok_or(anyhow!("No default input device detected"))?;
+        Ok(AudioDevice::new(device.name()?, DeviceType::Input))
+    }
 }
 
 pub async fn default_output_device() -> Result<AudioDevice> {
