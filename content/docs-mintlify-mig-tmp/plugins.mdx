@@ -1,7 +1,7 @@
 ---
 title: "build plugins for screenpipe - extend with TypeScript & Next.js"
 sidebarTitle: "plugins (pipes)"
-description: "Build and monetize plugins (pipes) for screenpipe. Use TypeScript and Next.js to create apps that process screen recordings, generate summaries, and integrate with AI."
+description: "Build plugins (pipes) for screenpipe. Use TypeScript and Next.js to create apps that process screen recordings, generate summaries, and integrate with AI."
 icon: "puzzle-piece"
 ---
 
@@ -21,8 +21,7 @@ regardless of progress in ai architecture, it's as good as the given context. sc
 - **typescript \+ rust \+ bun**: blazing fast environment, highly optimized pipeline, 4 ai models, running on $200 laptops, best local stt in the market
 - **full context**: rich ocr, desktop scrapping, keyboard/mouse, and audio transcription apis
 - **open source**: no bs, no tricks, mit license
-- **monetization ready**: stripe integration to monetize your pipes
-- **no lock-in**: use our store for distribution, then drive traffic into your exported standalone app
+- **standalone apps**: export your pipes as standalone desktop apps
   - [screenpipe-tauri-template](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)
   - [screenpipe-electron-template](https://github.com/neo773/screenpipe-electron)
 
@@ -55,30 +54,9 @@ bun dev
 
 ### developer cli
 
-for developers wanting to publish pipes to the store, we provide a dedicated cli tool:
-
-![developer account](https://raw.githubusercontent.com/mediar-ai/screenpipe/main/content/developer-account.png)
-
-prerequisite: connect your stripe account in settings/account to obtain your developer api key.
-
-available commands:
+the developer cli provides tools for building and managing pipes:
 
 ```bash
-# authenticate with your api key
-bunx --bun @screenpipe/dev@latest login
-
-# create a new pipe
-bunx --bun @screenpipe/dev@latest pipe register --name my-pipe [--paid --price 9.99] # make sure to set the price if you want to sell it - irreversible
-# you'll receive payouts to your stripe account on a daily basis
-
-# publish your pipe to the store
-bunx --bun @screenpipe/dev@latest pipe publish --name my-pipe
-# our team will review your pipe and publish it to the store
-# if approved, your pipe will be available in the store to everyone
-
-# list all versions of your pipe
-bunx --bun @screenpipe/dev@latest pipe list-versions --name my-pipe
-
 # add predefined components to your pipe (shadcn style)
 bunx --bun @screenpipe/dev@latest components add
 # select components from the interactive menu:
@@ -89,18 +67,24 @@ bunx --bun @screenpipe/dev@latest components add
 # - sql-autocomplete-input: sql input component
 # - use-search-history: search history management
 # - use-ai-provider: ai integration hooks
-
-# end current session
-bunx --bun @screenpipe/dev@latest logout
 ```
 
-you can deploy your pipe to your screenpipe app through the ui or using `screenpipe pipe install <path>` and `screenpipe pipe enable <id/folder of your pipe>`.
+### installing pipes
 
-when you're ready to deploy, send a pr to the [screenpipe repo](https://github.com/mediar-ai/screenpipe) to add your pipe to the store.
+you can install pipes in the screenpipe app:
 
-ps: monetization requires a stripe account and us bank account, we recommend [wise](https://wise.com) for international users.
+```bash
+# install from local path or GitHub URL
+screenpipe pipe install <path-or-url>
 
-(louis) i am french and i don't have a personal us bank account, so i use wise.
+# enable the pipe
+screenpipe pipe enable <pipe-id>
+
+# list installed pipes
+screenpipe pipe list
+```
+
+or use the UI in the screenpipe desktop app to install pipes by URL.
 
 ### available pipes
 
@@ -115,7 +99,7 @@ ps: monetization requires a stripe account and us bank account, we recommend [wi
 | | organize and summarize meetings with ai - get transcripts and insights | |
 | | automate development on linkedin                              | |
 
-to install a pipe from the store, just add the url of the folder in the ui and click install.
+to install a pipe, add the GitHub URL in the screenpipe app and click install.
 
 ### llm links
 

@@ -5,23 +5,21 @@ description: "Frequently asked questions about screenpipe: hardware requirements
 icon: "question"
 ---
 
-<Expandable title="how can i monetize my custom pipes (plugins)?">
-  - you can publish your pipes to the screenpipe store and earn money
-  - set your own pricing model (subscription or one-time purchase)
-  - publish using the cli: `bunx --bun @screenpipe/dev@latest pipe publish --name your-pipe \[--paid --price 50\]`
-  - our platform handles payment processing and distribution
-  - get detailed analytics on installations and usage
-  - check our [monetization guide](/docs/plugins) for more details on revenue sharing
+<Expandable title="how can i create and share custom pipes (plugins)?">
+  - create pipes using: `bunx --bun @screenpipe/dev@latest pipe create`
+  - pipes run locally in the screenpipe app
+  - share your pipes by publishing to GitHub
+  - install pipes via URL in the screenpipe desktop app
+  - check our [plugins guide](/plugins) for more details
 </Expandable>
 
 <Expandable title="what are some example pipes (plugins) available?">
-  - **rewind**: timeline and search through your screen history
+  - **search**: search through your screen history with AI
   - **obsidian**: sync your screen activities to obsidian notes
   - **meeting**: automatic meeting notes and summaries
-  - **reddit-auto-posts**: create reddit posts based on your screen activities
-  - **desktop-to-table**: low-level api for desktop automation (similar to playwright but for your desktop)
-  - **visual-conversation**: chat with your screen history
-  - and many more in our [pipe store](/docs/plugins)
+  - **timeline**: visual timeline of your screen activity
+  - **identify-speakers**: automatically identify and label speakers
+  - see available pipes on [GitHub](https://github.com/mediar-ai/screenpipe/tree/main/pipes)
 </Expandable>
 
 <Expandable title="how do i develop and test a pipe locally?">
