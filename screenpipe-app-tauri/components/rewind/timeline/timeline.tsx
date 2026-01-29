@@ -359,17 +359,17 @@ export const TimelineSlider = ({
 			{/* Zoom controls - floating on left side */}
 			<div className="absolute left-3 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-1 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-1">
 				<button
-					onClick={() => setZoomLevel((prev) => Math.min(MAX_ZOOM, prev * 1.5))}
+					onClick={() => setTargetZoom((prev) => Math.min(MAX_ZOOM, prev * 1.5))}
 					className="p-1.5 hover:bg-foreground/10 rounded transition-colors"
 					title="Zoom in (or pinch/Cmd+scroll)"
 				>
 					<ZoomIn className="w-4 h-4 text-foreground" />
 				</button>
 				<div className="text-[10px] text-center text-muted-foreground font-mono">
-					{Math.round(zoomLevel * 100)}%
+					{Math.round(targetZoom * 100)}%
 				</div>
 				<button
-					onClick={() => setZoomLevel((prev) => Math.max(MIN_ZOOM, prev / 1.5))}
+					onClick={() => setTargetZoom((prev) => Math.max(MIN_ZOOM, prev / 1.5))}
 					className="p-1.5 hover:bg-foreground/10 rounded transition-colors"
 					title="Zoom out (or pinch/Cmd+scroll)"
 				>
