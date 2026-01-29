@@ -92,7 +92,7 @@ windows = { version = "0.58", features = [
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2.168"
-cidre = { git = "https://github.com/mediar-ai/cidre.git" }
+cidre = { git = "https://github.com/yury/cidre.git", features = ["vn", "cv", "cg"] }
 accessibility-sys = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
 core-foundation = "=0.10.0"
 url = "2.5.0"

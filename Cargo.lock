@@ -1122,29 +1122,14 @@ dependencies = [
 
 [[package]]
 name = "cidre"
-version = "0.7.0"
-source = "git+https://github.com/mediar-ai/cidre.git#5ec1e32f72bee75bfb33d1e73610c3c22d97733b"
-dependencies = [
- "cidre-macros 0.1.0",
- "parking_lot",
- "tokio",
-]
-
-[[package]]
-name = "cidre"
 version = "0.13.1"
 source = "git+https://github.com/yury/cidre.git#0146b38468898cb779e6798e0ac01752b399652d"
 dependencies = [
- "cidre-macros 0.4.0",
+ "cidre-macros",
  "half",
  "parking_lot",
  "tokio",
 ]
-
-[[package]]
-name = "cidre-macros"
-version = "0.1.0"
-source = "git+https://github.com/mediar-ai/cidre.git#5ec1e32f72bee75bfb33d1e73610c3c22d97733b"
 
 [[package]]
 name = "cidre-macros"
@@ -1516,7 +1501,7 @@ version = "0.15.3"
 source = "git+https://github.com/louis030195/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
 dependencies = [
  "alsa",
- "cidre 0.13.1",
+ "cidre",
  "core-foundation-sys",
  "coreaudio-rs",
  "dasp_sample",
@@ -6491,7 +6476,7 @@ name = "sck-rs"
 version = "0.1.0"
 source = "git+https://github.com/louis030195/sck-rs#9e238f63ba4e51bdf73fb9edef533973dd7c803f"
 dependencies = [
- "cidre 0.13.1",
+ "cidre",
  "core-foundation 0.10.0",
  "core-graphics",
  "image",
@@ -6740,7 +6725,7 @@ dependencies = [
  "atspi-proxies",
  "base64 0.22.1",
  "chrono",
- "cidre 0.7.0",
+ "cidre",
  "clap",
  "core-foundation 0.10.0",
  "criterion",
