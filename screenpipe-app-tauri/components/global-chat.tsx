@@ -1697,16 +1697,19 @@ export function GlobalChat() {
               <h2 className="font-semibold text-sm tracking-tight">Pipe AI</h2>
               <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
             </div>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setMessages([]);
                 setInput("");
               }}
-              className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
+              className="h-7 px-2 gap-1 text-xs"
               title="New chat"
             >
-              <Plus size={16} />
-            </button>
+              <Plus size={14} />
+              <span className="hidden sm:inline">New</span>
+            </Button>
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
               {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
             </kbd>
