@@ -119,6 +119,7 @@ export function TimelineControls({
 								mode="single"
 								selected={currentDate}
 								onSelect={(date) => {
+									console.log("[Calendar] onSelect called with:", date?.toISOString(), "currentDate:", currentDate.toISOString());
 									if (date) {
 										onDateChange(date);
 										setCalendarOpen(false);

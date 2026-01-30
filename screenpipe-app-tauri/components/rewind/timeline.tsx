@@ -582,8 +582,11 @@ export default function Timeline() {
 		// This ensures clicking on a date in the calendar always loads fresh data
 		clearSentRequestForDate(newDate);
 
+		console.log("[handleDateChange] called with:", newDate.toISOString(), "currentDate:", currentDate.toISOString());
+
 		try {
 			const checkFramesForDate = await hasFramesForDate(newDate);
+			console.log("[handleDateChange] hasFramesForDate result:", checkFramesForDate);
 
 			if (!checkFramesForDate) {
 				let subDate;
@@ -593,22 +596,41 @@ export default function Timeline() {
 					subDate = addDays(newDate, 1);
 				}
 
-				// Limit recursion - don't go past start date
+				// Limit recursion - don't go past start date or future
 				if (isAfter(startAndEndDates.start, subDate)) {
-					console.log("Reached start date boundary, stopping navigation");
+					console.log("[handleDateChange] Reached start date boundary, stopping navigation");
+					return;
+				}
+				if (isAfter(startOfDay(subDate), startOfDay(new Date()))) {
+					console.log("[handleDateChange] Reached today boundary, stopping navigation");
 					return;
 				}
 
+				console.log("[handleDateChange] No frames for date, trying:", subDate.toISOString());
 				return await handleDateChange(subDate);
 			}
 
-			// Already on this day
+			// Already on this day - but still allow jumping to first frame of the day
+			// This helps when user wants to "reset" to the start of the current day
 			if (isSameDay(newDate, currentDate)) {
+				console.log("[handleDateChange] Same day, jumping to first frame of day");
+				// Find and jump to first frame of target date
+				const targetDayStart = startOfDay(newDate);
+				const targetDayEnd = endOfDay(newDate);
+				const targetIndex = frames.findIndex((frame) => {
+					const frameDate = new Date(frame.timestamp);
+					return frameDate >= targetDayStart && frameDate <= targetDayEnd;
+				});
+				if (targetIndex !== -1) {
+					setCurrentIndex(targetIndex);
+					setCurrentFrame(frames[targetIndex]);
+				}
 				return;
 			}
 
 			// Don't go before start date
 			if (isAfter(startAndEndDates.start, newDate)) {
+				console.log("[handleDateChange] Before start date, stopping");
 				return;
 			}
 
