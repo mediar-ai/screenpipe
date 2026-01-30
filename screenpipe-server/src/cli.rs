@@ -260,6 +260,12 @@ pub struct Cli {
     #[arg(long)]
     pub included_windows: Vec<String>,
 
+    /// List of URLs to ignore for browser privacy filtering - we use contains to match, example:
+    /// --ignored-urls "wellsfargo.com" --ignored-urls "chase.com" will ignore banking sites
+    /// --ignored-urls ".bank" will ignore any URL containing ".bank"
+    #[arg(long)]
+    pub ignored_urls: Vec<String>,
+
     /// Video chunk duration in seconds
     #[arg(long, default_value_t = 60)]
     pub video_chunk_duration: u64,

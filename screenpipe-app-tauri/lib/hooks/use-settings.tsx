@@ -76,12 +76,12 @@ export interface ChatHistoryStore {
 	historyEnabled: boolean;
 }
 
-// Extend SettingsStore with deviceId (for AI free tier tracking)
-// This is added here until the Rust types are regenerated
+// Extend SettingsStore with fields added before Rust types are regenerated
 export type Settings = SettingsStore & {
 	deviceId?: string;
 	updateChannel?: UpdateChannel;
 	chatHistory?: ChatHistoryStore;
+	ignoredUrls?: string[];
 }
 
 export const DEFAULT_PROMPT = `Rules:
@@ -170,7 +170,8 @@ let DEFAULT_SETTINGS: Settings = {
 			ignoredWindows: [
 			],
 			includedWindows: [],
-		
+			ignoredUrls: [],
+
 			fps: 0.5,
 			vadSensitivity: "high",
 			analyticsEnabled: true,

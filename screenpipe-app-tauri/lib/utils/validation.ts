@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { SettingsStore, AIPreset, AIProviderType, EmbeddedLLM, User, Credits } from "./tauri";
 
+// Extended settings type that includes fields not yet in generated SettingsStore
+type ExtendedSettingsKeys = keyof SettingsStore | "ignoredUrls" | "deviceId" | "updateChannel";
+
 // Zod schemas for validation
 export const creditsSchema = z.object({
   amount: z.number().min(0, "Credits amount cannot be negative"),
@@ -72,6 +75,7 @@ export const settingsStoreSchema = z.object({
   monitorIds: z.array(z.string()),
   ignoredWindows: z.array(z.string()),
   includedWindows: z.array(z.string()),
+  ignoredUrls: z.array(z.string()),
   disableVision: z.boolean(),
   useAllMonitors: z.boolean(),
   enableRealtimeVision: z.boolean(),
@@ -171,7 +175,7 @@ export const validateSettings = (settings: Partial<SettingsStore>): ValidationRe
 };
 
 // Sanitize input values
-export const sanitizeValue = (field: keyof SettingsStore, value: any): any => {
+export const sanitizeValue = (field: ExtendedSettingsKeys, value: any): any => {
   switch (field) {
     case "port":
     case "restartInterval":
@@ -186,6 +190,7 @@ export const sanitizeValue = (field: keyof SettingsStore, value: any): any => {
       
     case "ignoredWindows":
     case "includedWindows":
+    case "ignoredUrls":
     case "audioDevices":
     case "monitorIds":
     case "languages":

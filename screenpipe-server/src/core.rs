@@ -25,6 +25,7 @@ pub async fn start_continuous_recording(
     vision_handle: &Handle,
     ignored_windows: &[String],
     include_windows: &[String],
+    ignored_urls: &[String],
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
     realtime_vision: bool,
@@ -39,6 +40,7 @@ pub async fn start_continuous_recording(
                 let ocr_engine = Arc::clone(&ocr_engine);
                 let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
+                let ignored_urls_video = ignored_urls.to_vec();
 
                 let languages = languages.clone();
 
@@ -56,6 +58,7 @@ pub async fn start_continuous_recording(
                             use_pii_removal,
                             &ignored_windows_video,
                             &include_windows_video,
+                            &ignored_urls_video,
                             video_chunk_duration,
                             languages.clone(),
                             capture_unfocused_windows,
@@ -120,6 +123,7 @@ pub async fn record_video(
     use_pii_removal: bool,
     ignored_windows: &[String],
     include_windows: &[String],
+    ignored_urls: &[String],
     video_chunk_duration: Duration,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
@@ -168,6 +172,7 @@ pub async fn record_video(
         monitor_id,
         ignored_windows,
         include_windows,
+        ignored_urls,
         languages,
         capture_unfocused_windows,
     );

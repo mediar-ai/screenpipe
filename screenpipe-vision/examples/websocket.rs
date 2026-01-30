@@ -84,6 +84,7 @@ async fn main() -> Result<()> {
     let window_filters = Arc::new(WindowFilters::new(
         &cli.ignored_windows,
         &cli.included_windows,
+        &[],
     ));
 
     tokio::spawn(async move {

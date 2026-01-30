@@ -137,7 +137,9 @@ pub struct SettingsStore {
     pub ignored_windows: Vec<String>,
     #[serde(rename = "includedWindows")]
     pub included_windows: Vec<String>,
- 
+    #[serde(rename = "ignoredUrls", default)]
+    pub ignored_urls: Vec<String>,
+
     #[serde(rename = "fps")]
     pub fps: f32,
     #[serde(rename = "vadSensitivity")]
@@ -414,7 +416,8 @@ impl Default for SettingsStore {
             disable_audio: false,
             ignored_windows,
             included_windows: vec![],
-           
+            ignored_urls: vec![],
+
             fps: 0.5,
             vad_sensitivity: "high".to_string(),
             analytics_enabled: true,
