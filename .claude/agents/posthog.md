@@ -8,6 +8,60 @@ allowed-tools: Bash, Read
 
 Query and manage PostHog product analytics for Screenpipe applications.
 
+---
+
+## ⚠️ IMPORTANT: Real Metrics vs Vanity Metrics
+
+**DO NOT use these as DAU/engagement metrics (vanity):**
+- `resource_usage` - passive health pings every few seconds
+- `app_still_running` - background heartbeat
+- `health_check_unhealthy` - error pings
+- `enabled_pipes_hourly` - hourly background check
+- `$autocapture`, `$pageview`, `$pageleave` - passive web events
+- `$set`, `$identify` - identity events
+
+**ALWAYS use CORE ACTIONS for real engagement:**
+- `search_performed` - user actively searched
+- `timeline_opened` - user opened timeline view
+- `shortcut_used` - user used keyboard shortcut
+- `timeline_selection_made` - user selected content in timeline
+- `timeline_date_changed` - user navigated timeline
+
+**Key Metrics to Track:**
+1. **Real DAU** = unique users doing core actions (target: 200+)
+2. **Activation Rate** = core_action_users / app_started_users (target: 40%+, currently ~23%)
+3. **Onboarding Completion** = onboarding_completed / onboarding_login_viewed (target: 50%+)
+
+---
+
+## Quick Health Check (Run This First)
+
+```bash
+# Real DAU + Activation Rate - THE MOST IMPORTANT QUERY
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT toDate(timestamp) as day, uniq(distinct_id) as real_dau FROM events WHERE event IN ('\''search_performed'\'', '\''timeline_opened'\'', '\''shortcut_used'\'', '\''timeline_selection_made'\'') AND timestamp > now() - INTERVAL 7 DAY GROUP BY day ORDER BY day"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" > /tmp/ph.json && \
+  python3 -c "import json; print('Real DAU (core actions):'); [print(f'  {r[0]}: {r[1]}') for r in json.load(open('/tmp/ph.json')).get('results',[])]"
+```
+
+```bash
+# Activation Rate (% of users who do a core action)
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT count(distinct a.distinct_id) as started, count(distinct c.distinct_id) as activated FROM (SELECT distinct_id FROM events WHERE event = '\''app_started'\'' AND timestamp > now() - INTERVAL 7 DAY) a LEFT JOIN (SELECT distinct_id FROM events WHERE event IN ('\''search_performed'\'', '\''timeline_opened'\'', '\''shortcut_used'\'', '\''timeline_selection_made'\'') AND timestamp > now() - INTERVAL 7 DAY) c ON a.distinct_id = c.distinct_id"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" > /tmp/ph.json && \
+  python3 -c "import json; r=json.load(open('/tmp/ph.json'))['results'][0]; print(f'Activation: {r[1]}/{r[0]} = {r[1]/r[0]*100:.1f}%')"
+```
+
+```bash
+# Onboarding Funnel
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT event, uniq(distinct_id) as users FROM events WHERE event LIKE '\''%onboarding%'\'' AND timestamp > now() - INTERVAL 7 DAY GROUP BY event ORDER BY users DESC"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" > /tmp/ph.json && \
+  python3 -c "import json; print('Onboarding Funnel:'); [print(f'  {r[0]}: {r[1]}') for r in json.load(open('/tmp/ph.json')).get('results',[])]"
+```
+
+---
+
 ## Configuration
 
 **Host:** `https://eu.i.posthog.com`
@@ -38,39 +92,78 @@ export $(cat /Users/louisbeaumont/Documents/screenpipe/.env.local | xargs) && cu
 
 ---
 
+## Project IDs (Hardcoded)
+
+| Project | ID |
+|---------|-----|
+| screenpipe | 27525 |
+| mediar-app | 64593 |
+| mediar-merged | 65690 |
+
+---
+
+## Weekly Review Queries
+
+Run these every week to track progress on the metrics that matter:
+
+### 1. Real DAU Trend (Core Actions)
+```bash
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT toDate(timestamp) as day, uniq(distinct_id) as real_dau FROM events WHERE event IN ('\''search_performed'\'', '\''timeline_opened'\'', '\''shortcut_used'\'', '\''timeline_selection_made'\'') AND timestamp > now() - INTERVAL 14 DAY GROUP BY day ORDER BY day"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" > /tmp/ph.json && \
+  python3 -c "import json; print('Real DAU (14d):'); [print(f'  {r[0]}: {r[1]}') for r in json.load(open('/tmp/ph.json')).get('results',[])]"
+```
+
+### 2. Activation Rate (The Key Metric)
+```bash
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT count(distinct a.distinct_id) as started, count(distinct c.distinct_id) as activated FROM (SELECT distinct_id FROM events WHERE event = '\''app_started'\'' AND timestamp > now() - INTERVAL 7 DAY) a LEFT JOIN (SELECT distinct_id FROM events WHERE event IN ('\''search_performed'\'', '\''timeline_opened'\'', '\''shortcut_used'\'', '\''timeline_selection_made'\'') AND timestamp > now() - INTERVAL 7 DAY) c ON a.distinct_id = c.distinct_id"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" > /tmp/ph.json && \
+  python3 -c "import json; r=json.load(open('/tmp/ph.json'))['results'][0]; print(f'Activation: {r[1]}/{r[0]} = {r[1]/r[0]*100:.1f}% (target: 40%+)')"
+```
+
+### 3. Real WAU (Weekly Active on Core Actions)
+```bash
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT uniq(distinct_id) as real_wau FROM events WHERE event IN ('\''search_performed'\'', '\''timeline_opened'\'', '\''shortcut_used'\'', '\''timeline_selection_made'\'') AND timestamp > now() - INTERVAL 7 DAY"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" > /tmp/ph.json && \
+  python3 -c "import json; print(f'Real WAU: {json.load(open(\"/tmp/ph.json\"))[\"results\"][0][0]}')"
+```
+
+### 4. Core Action Breakdown
+```bash
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT event, count() as cnt, uniq(distinct_id) as users FROM events WHERE event IN ('\''search_performed'\'', '\''timeline_opened'\'', '\''shortcut_used'\'', '\''timeline_selection_made'\'', '\''ai_chat_message'\'') AND timestamp > now() - INTERVAL 7 DAY GROUP BY event ORDER BY users DESC"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" > /tmp/ph.json && \
+  python3 -c "import json; print('Core Actions (7d):'); [print(f'  {r[0]}: {r[2]} users, {r[1]} events') for r in json.load(open('/tmp/ph.json')).get('results',[])]"
+```
+
+### 5. Onboarding Drop-off
+```bash
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":{"kind":"HogQLQuery","query":"SELECT event, uniq(distinct_id) as users FROM events WHERE event IN ('\''onboarding_login_viewed'\'', '\''onboarding_usecases_viewed'\'', '\''onboarding_status_viewed'\'', '\''onboarding_completed'\'') AND timestamp > now() - INTERVAL 7 DAY GROUP BY event ORDER BY users DESC"}}' \
+  "https://eu.i.posthog.com/api/projects/27525/query/" > /tmp/ph.json && \
+  python3 -c "import json; print('Onboarding Funnel (7d):'); [print(f'  {r[0]}: {r[1]} users') for r in json.load(open('/tmp/ph.json')).get('results',[])]"
+```
+
+---
+
 ## Bash Queries (macOS/Linux)
 
-**Note:** All commands below assume you have sourced `.env.local` first.
-
-### Get Project ID
-
-Run this first to get your project ID:
-
-```bash
-curl -s -H "Authorization: Bearer $POSTHOG_API_KEY" \
-  "https://eu.i.posthog.com/api/projects/" | \
-  python3 -c "import sys,json; r=json.load(sys.stdin); [print(f'[{p[\"id\"]}] {p[\"name\"]}') for p in r.get('results', [])]"
-```
+**Note:** All commands below assume you have sourced `.env.local` first. Project ID for screenpipe is **27525**.
 
 ### List All Insights
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"  # Get from above query
 curl -s -H "Authorization: Bearer $POSTHOG_API_KEY" \
-  "https://eu.i.posthog.com/api/projects/$PROJECT_ID/insights/?limit=20" | \
-  python3 -c "
-import sys,json
-r=json.load(sys.stdin)
-for i in r.get('results', []):
-    print(f'[{i[\"id\"]}] {i[\"name\"]}')
-    print(f'  Type: {i.get(\"filters\", {}).get(\"insight\", \"?\")} | Created: {i[\"created_at\"]}')
-"
+  "https://eu.i.posthog.com/api/projects/27525/insights/?limit=20" > /tmp/ph.json && \
+  python3 -c "import json; [print(f'[{i[\"id\"]}] {i[\"name\"]}') for i in json.load(open('/tmp/ph.json')).get('results', [])]"
 ```
 
 ### List All Dashboards
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -H "Authorization: Bearer $POSTHOG_API_KEY" \
   "https://eu.i.posthog.com/api/projects/$PROJECT_ID/dashboards/" | \
   python3 -c "
@@ -85,7 +178,7 @@ for d in r.get('results', []):
 ### Query Recent Events
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -108,7 +201,7 @@ for row in r.get('results', []):
 ### Query Events by Platform/OS
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -123,7 +216,7 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 ### Query User Onboarding Funnel
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -138,7 +231,7 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 ### Get Insight Results
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 INSIGHT_ID="YOUR_INSIGHT_ID"
 curl -s -H "Authorization: Bearer $POSTHOG_API_KEY" \
   "https://eu.i.posthog.com/api/projects/$PROJECT_ID/insights/$INSIGHT_ID/" | \
@@ -214,7 +307,7 @@ $response.results | ForEach-Object { Write-Host "$($_[0]): $($_[1])" }
 ### Create Pageviews by Page Insight
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -233,7 +326,7 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 ### Create User Funnel Insight
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -258,7 +351,7 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 ### Create Dashboard
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -313,7 +406,7 @@ When investigating user drop-off or issues in onboarding:
 
 1. Query onboarding events by OS:
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -327,7 +420,7 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 
 2. Check onboarding completion rate by step:
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -361,7 +454,7 @@ These insights track audio deduplication performance across versions. Use them t
 Compare deduplication performance across releases:
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -387,7 +480,7 @@ for row in r.get('results', []):
 Track dedup rate over the past 7 days:
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -413,7 +506,7 @@ for row in r.get('results', []):
 Find users where deduplication might not be working:
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -430,7 +523,7 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 Compare dedup performance across operating systems:
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -457,7 +550,7 @@ for row in r.get('results', []):
 Create a dashboard with audio quality insights:
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -470,7 +563,7 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 ### Create Audio Dedup Rate Trend Insight
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -488,7 +581,7 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 ### Create Audio Quality by Version Insight
 
 ```bash
-PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_ID="27525"
 curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{

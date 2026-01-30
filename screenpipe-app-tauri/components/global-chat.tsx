@@ -1283,38 +1283,146 @@ export function GlobalChat() {
           }
         }
 
-        // Continue conversation with tool results
-        console.log("[Chat] Starting continuation stream with tool results", {
-          totalMessages: conversationMessages.length + toolResults.length
-        });
-        accumulatedText = "";
-        streamCompleted = false;
-        let continueChunkCount = 0;
-        const continueStream = await openai.chat.completions.create(
-          {
-            model: activePreset.model || "gpt-4",
-            messages: [...conversationMessages, ...toolResults],
-            stream: true,
-          },
-          { signal: abortControllerRef.current?.signal }
-        );
+        // Continue conversation with tool results - support multiple rounds of tool calls
+        let allMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [...conversationMessages, ...toolResults];
+        const maxToolRounds = 5; // Prevent infinite loops
 
-        for await (const chunk of continueStream) {
-          continueChunkCount++;
-          const content = chunk.choices[0]?.delta?.content;
-          const finishReason = chunk.choices[0]?.finish_reason;
+        for (let toolRound = 1; toolRound <= maxToolRounds; toolRound++) {
+          console.log("[Chat] Starting continuation stream (round " + toolRound + ")", {
+            totalMessages: allMessages.length
+          });
+          accumulatedText = "";
+          streamCompleted = false;
+          let continueChunkCount = 0;
+          const continueToolCalls: { id: string; function: { name: string; arguments: string } }[] = [];
 
-          if (continueChunkCount <= 3 || continueChunkCount % 20 === 0 || finishReason) {
-            console.log("[Chat] Continue chunk", continueChunkCount, { hasContent: !!content, finishReason });
+          // Create stream - use type assertion to avoid circular type inference in loop
+          const continueStream = (await openai.chat.completions.create(
+            {
+              model: activePreset.model || "gpt-4",
+              messages: allMessages,
+              tools: TOOLS,
+              stream: true,
+            },
+            { signal: abortControllerRef.current?.signal }
+          )) as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+
+          for await (const chunk of continueStream) {
+            continueChunkCount++;
+            const delta = chunk.choices[0]?.delta;
+            const finishReason = chunk.choices[0]?.finish_reason;
+
+            if (continueChunkCount <= 3 || continueChunkCount % 20 === 0 || finishReason) {
+              console.log("[Chat] Continue chunk", continueChunkCount, {
+                hasContent: !!delta?.content,
+                hasToolCalls: !!delta?.tool_calls,
+                finishReason
+              });
+            }
+
+            if (finishReason) {
+              streamCompleted = true;
+              console.log("[Chat] Continuation stream completed with finish_reason:", finishReason);
+            }
+
+            if (delta?.content) {
+              accumulatedText += delta.content;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessageId
+                    ? { ...m, content: accumulatedText }
+                    : m
+                )
+              );
+            }
+
+            // Handle tool calls in continuation
+            if (delta?.tool_calls) {
+              for (const toolCall of delta.tool_calls) {
+                const index = toolCall.index;
+                if (!continueToolCalls[index]) {
+                  continueToolCalls[index] = {
+                    id: toolCall.id || "",
+                    function: { name: "", arguments: "" },
+                  };
+                  console.log("[Chat] Continuation tool call started:", toolCall.function?.name);
+                }
+                if (toolCall.id) continueToolCalls[index].id = toolCall.id;
+                if (toolCall.function?.name) continueToolCalls[index].function.name = toolCall.function.name;
+                if (toolCall.function?.arguments) continueToolCalls[index].function.arguments += toolCall.function.arguments;
+              }
+            }
           }
 
-          if (finishReason) {
-            streamCompleted = true;
-            console.log("[Chat] Continuation stream completed with finish_reason:", finishReason);
+          console.log("[Chat] Continuation stream loop ended", {
+            toolRound,
+            continueChunkCount,
+            streamCompleted,
+            continueToolCallsCount: continueToolCalls.length,
+            textLength: accumulatedText.length
+          });
+
+          // If no more tool calls, we're done
+          if (continueToolCalls.length === 0) {
+            break;
           }
 
-          if (content) {
-            accumulatedText += content;
+          // Execute the new tool calls
+          console.log("[Chat] Executing additional tool calls (round " + toolRound + ")");
+          const additionalToolResults: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+
+          additionalToolResults.push({
+            role: "assistant",
+            content: accumulatedText || null,
+            tool_calls: continueToolCalls.map((tc) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: {
+                name: tc.function.name,
+                arguments: tc.function.arguments,
+              },
+            })),
+          });
+
+          for (const toolCall of continueToolCalls) {
+            if (toolCall.function.name === "search_content") {
+              try {
+                const args = JSON.parse(toolCall.function.arguments || "{}");
+                console.log("[Chat] Executing search_content tool (round " + toolRound + ")", args);
+                const result = await executeSearchTool(args);
+                console.log("[Chat] Search result length:", result.length);
+                additionalToolResults.push({
+                  role: "tool",
+                  tool_call_id: toolCall.id,
+                  content: result,
+                });
+              } catch (e) {
+                console.error("[Chat] Tool execution error:", e);
+                additionalToolResults.push({
+                  role: "tool",
+                  tool_call_id: toolCall.id,
+                  content: `Error parsing tool arguments: ${e}`,
+                });
+              }
+            }
+          }
+
+          // Update messages for next round
+          allMessages = [...allMessages, ...additionalToolResults];
+
+          // Update UI to show searching
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: accumulatedText + `\n\n*Searching (round ${toolRound})...*` }
+                : m
+            )
+          );
+
+          // Check if we've hit max rounds
+          if (toolRound >= maxToolRounds) {
+            console.warn("[Chat] Reached maximum tool rounds, stopping");
+            accumulatedText += "\n\n*(Reached maximum search rounds)*";
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === assistantMessageId
@@ -1322,21 +1430,16 @@ export function GlobalChat() {
                   : m
               )
             );
+            break;
           }
         }
 
-        console.log("[Chat] Continuation stream loop ended", {
-          continueChunkCount,
-          streamCompleted,
-          textLength: accumulatedText.length
-        });
+        // Note: If we exited the loop at maxToolRounds, show a message
+        // (This is handled inside the loop by the break condition)
 
         // Check for incomplete continuation stream
         if (!streamCompleted && accumulatedText) {
-          console.warn("[Chat] Continuation stream ended without finish_reason", {
-            continueChunkCount,
-            textLength: accumulatedText.length
-          });
+          console.warn("[Chat] Continuation stream ended without finish_reason");
           accumulatedText += "\n\n*(Response may be incomplete due to connection issue)*";
           setMessages((prev) =>
             prev.map((m) =>
