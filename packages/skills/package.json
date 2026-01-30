@@ -1,0 +1,37 @@
+{
+  "name": "@screenpipe/skills",
+  "version": "0.1.1",
+  "description": "Screenpipe skills for AI agents (Clawdbot, Claude Code, etc). Query your screen history, get daily digests, search memories.",
+  "type": "module",
+  "bin": {
+    "screenpipe-skills": "dist/index.js"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "dev": "bun run src/index.ts",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist",
+    "skills"
+  ],
+  "keywords": [
+    "screenpipe",
+    "ai-agent",
+    "clawdbot",
+    "skills",
+    "memory",
+    "screen-recording"
+  ],
+  "author": "Louis Beaumont <louis@screenpi.pe>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mediar-ai/screenpipe",
+    "directory": "packages/skills"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}
