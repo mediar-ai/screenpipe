@@ -84,7 +84,9 @@ pub fn remove_pii(text: &str) -> String {
 ///
 /// This function sanitizes the "text" field in each OCR bounding box entry,
 /// preserving the coordinate information while redacting any PII.
-pub fn remove_pii_from_text_json(text_json: &[HashMap<String, String>]) -> Vec<HashMap<String, String>> {
+pub fn remove_pii_from_text_json(
+    text_json: &[HashMap<String, String>],
+) -> Vec<HashMap<String, String>> {
     text_json
         .iter()
         .map(|entry| {
@@ -377,14 +379,8 @@ mod tests {
 
     #[test]
     fn test_remove_pii_phone_numbers() {
-        assert_eq!(
-            remove_pii("Call me at 234-567-8901"),
-            "Call me at [PHONE]"
-        );
-        assert_eq!(
-            remove_pii("Phone: (555) 123-4567"),
-            "Phone: [PHONE]"
-        );
+        assert_eq!(remove_pii("Call me at 234-567-8901"), "Call me at [PHONE]");
+        assert_eq!(remove_pii("Phone: (555) 123-4567"), "Phone: [PHONE]");
         assert_eq!(
             remove_pii("Reach me at +1-800-555-1234"),
             "Reach me at [PHONE]"
@@ -439,10 +435,7 @@ mod tests {
             remove_pii("Use key sk-proj-1234567890abcdefghijklmnop"),
             "Use key [API_KEY]"
         );
-        assert_eq!(
-            remove_pii("AWS: AKIAIOSFODNN7EXAMPLE"),
-            "AWS: [AWS_KEY]"
-        );
+        assert_eq!(remove_pii("AWS: AKIAIOSFODNN7EXAMPLE"), "AWS: [AWS_KEY]");
         assert_eq!(
             remove_pii("GitHub token: ghp_abcdefghijklmnopqrstuvwxyz1234567890"),
             "GitHub token: [GITHUB_TOKEN]"
@@ -453,9 +446,18 @@ mod tests {
     fn test_get_pii_type_new_patterns() {
         assert_eq!(get_pii_type("234-567-8901"), Some("PHONE".to_string()));
         assert_eq!(get_pii_type("192.168.1.1"), Some("IP_ADDRESS".to_string()));
-        assert_eq!(get_pii_type("sk-abcdefghijklmnopqrst"), Some("API_KEY".to_string()));
-        assert_eq!(get_pii_type("AKIAIOSFODNN7EXAMPLE"), Some("AWS_KEY".to_string()));
-        assert_eq!(get_pii_type("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"), Some("GITHUB_TOKEN".to_string()));
+        assert_eq!(
+            get_pii_type("sk-abcdefghijklmnopqrst"),
+            Some("API_KEY".to_string())
+        );
+        assert_eq!(
+            get_pii_type("AKIAIOSFODNN7EXAMPLE"),
+            Some("AWS_KEY".to_string())
+        );
+        assert_eq!(
+            get_pii_type("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"),
+            Some("GITHUB_TOKEN".to_string())
+        );
     }
 
     #[test]
@@ -569,18 +571,9 @@ mod tests {
     #[test]
     fn test_password_context_basic() {
         // Basic password: value patterns
-        assert_eq!(
-            remove_pii("password: secret123"),
-            "password: [PASSWORD]"
-        );
-        assert_eq!(
-            remove_pii("Password: MyP@ssw0rd!"),
-            "Password: [PASSWORD]"
-        );
-        assert_eq!(
-            remove_pii("PASSWORD: test"),
-            "PASSWORD: [PASSWORD]"
-        );
+        assert_eq!(remove_pii("password: secret123"), "password: [PASSWORD]");
+        assert_eq!(remove_pii("Password: MyP@ssw0rd!"), "Password: [PASSWORD]");
+        assert_eq!(remove_pii("PASSWORD: test"), "PASSWORD: [PASSWORD]");
     }
 
     #[test]
@@ -599,24 +592,16 @@ mod tests {
     #[test]
     fn test_password_context_variants() {
         // Different password-related keywords
-        assert_eq!(
-            remove_pii("passcode: 123456"),
-            "passcode: [PASSWORD]"
-        );
+        assert_eq!(remove_pii("passcode: 123456"), "passcode: [PASSWORD]");
         // Note: passphrase captures first token only to avoid over-redacting
-        assert!(remove_pii("passphrase: correct horse battery staple").contains("passphrase: [PASSWORD]"));
-        assert_eq!(
-            remove_pii("PIN: 1234"),
-            "PIN: [PASSWORD]"
-        );
+        assert!(remove_pii("passphrase: correct horse battery staple")
+            .contains("passphrase: [PASSWORD]"));
+        assert_eq!(remove_pii("PIN: 1234"), "PIN: [PASSWORD]");
         assert_eq!(
             remove_pii("secret key: abc123xyz"),
             "secret key: [PASSWORD]"
         );
-        assert_eq!(
-            remove_pii("unlock code: 9876"),
-            "unlock code: [PASSWORD]"
-        );
+        assert_eq!(remove_pii("unlock code: 9876"), "unlock code: [PASSWORD]");
         assert_eq!(
             remove_pii("security code: 789"),
             "security code: [PASSWORD]"
@@ -626,14 +611,8 @@ mod tests {
     #[test]
     fn test_password_context_equals_sign() {
         // Equals sign as separator
-        assert_eq!(
-            remove_pii("password=secret123"),
-            "password=[PASSWORD]"
-        );
-        assert_eq!(
-            remove_pii("PASSWORD = mypass"),
-            "PASSWORD = [PASSWORD]"
-        );
+        assert_eq!(remove_pii("password=secret123"), "password=[PASSWORD]");
+        assert_eq!(remove_pii("PASSWORD = mypass"), "PASSWORD = [PASSWORD]");
     }
 
     #[test]
@@ -664,10 +643,7 @@ mod tests {
             remove_pii("password manager app"),
             "password manager app" // No colon/equals
         );
-        assert_eq!(
-            remove_pii("reset password link"),
-            "reset password link"
-        );
+        assert_eq!(remove_pii("reset password link"), "reset password link");
     }
 
     #[test]

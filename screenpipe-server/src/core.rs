@@ -243,14 +243,19 @@ pub async fn record_video(
 
             // Check if this frame was actually written to video
             // If not, skip DB insertion to prevent offset mismatch
-            let frame_write_info = video_capture.frame_write_tracker.get_offset(frame.frame_number);
+            let frame_write_info = video_capture
+                .frame_write_tracker
+                .get_offset(frame.frame_number);
             let video_frame_offset = match frame_write_info {
                 Some(info) => info.offset as i64,
                 None => {
                     // Frame wasn't written to video (likely dropped from video queue)
                     // Wait a bit and retry - the video encoder might not have processed it yet
                     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                    match video_capture.frame_write_tracker.get_offset(frame.frame_number) {
+                    match video_capture
+                        .frame_write_tracker
+                        .get_offset(frame.frame_number)
+                    {
                         Some(info) => info.offset as i64,
                         None => {
                             debug!(
@@ -296,7 +301,8 @@ pub async fn record_video(
                         // Apply PII removal if enabled
                         let (text, sanitized_text_json) = if use_pii_removal {
                             let sanitized_text = remove_pii(&window_result.text);
-                            let sanitized_json = remove_pii_from_text_json(&window_result.text_json);
+                            let sanitized_json =
+                                remove_pii_from_text_json(&window_result.text_json);
                             (sanitized_text, sanitized_json)
                         } else {
                             (window_result.text.clone(), window_result.text_json.clone())

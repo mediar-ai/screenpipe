@@ -219,7 +219,8 @@ mod tests {
     /// Test that PII removal preserves non-PII content
     #[test]
     fn test_pii_removal_preserves_non_pii() {
-        let input = "The meeting is at 3 PM in conference room 42. We'll discuss the quarterly report.";
+        let input =
+            "The meeting is at 3 PM in conference room 42. We'll discuss the quarterly report.";
         let result = remove_pii(input);
         assert_eq!(result, input); // No changes - no PII present
     }
@@ -267,7 +268,10 @@ mod tests {
         // Meeting transcription with email mention
         let input = "So Sarah said to email her at sarah.johnson@company.org about the proposal";
         let result = remove_pii(input);
-        assert_eq!(result, "So Sarah said to email her at [EMAIL] about the proposal");
+        assert_eq!(
+            result,
+            "So Sarah said to email her at [EMAIL] about the proposal"
+        );
 
         // Customer service call with card number
         let input = "I'll read you the card number: 4111 1111 1111 1111";

@@ -24,8 +24,11 @@ use screenpipe_server::{
     },
     handle_index_command,
     pipe_manager::PipeInfo,
-    start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer,
-    vision_manager::{VisionManager, VisionManagerConfig, start_monitor_watcher, stop_monitor_watcher},
+    start_continuous_recording,
+    vision_manager::{
+        start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
+    },
+    watch_pid, PipeManager, ResourceMonitor, SCServer,
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;
@@ -767,7 +770,8 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Create VisionManager for dynamic monitor detection if enabled
-    let vision_manager: Option<Arc<VisionManager>> = if cli.use_all_monitors && !cli.disable_vision {
+    let vision_manager: Option<Arc<VisionManager>> = if cli.use_all_monitors && !cli.disable_vision
+    {
         info!("Using dynamic monitor detection (--use-all-monitors)");
         let config = VisionManagerConfig {
             output_path: output_path_clone.to_string(),
@@ -782,7 +786,11 @@ async fn main() -> anyhow::Result<()> {
             capture_unfocused_windows: cli.capture_unfocused_windows,
             realtime_vision: cli.enable_realtime_audio_transcription,
         };
-        Some(Arc::new(VisionManager::new(config, db_clone.clone(), vision_handle.clone())))
+        Some(Arc::new(VisionManager::new(
+            config,
+            db_clone.clone(),
+            vision_handle.clone(),
+        )))
     } else {
         None
     };

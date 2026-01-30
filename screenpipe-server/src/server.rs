@@ -2494,7 +2494,6 @@ async fn stop_audio_device(
     }))
 }
 
-
 #[derive(Debug, Serialize)]
 struct ExportProgress {
     status: String,
@@ -2565,16 +2564,16 @@ async fn handle_video_export(
     if payload.frame_ids.is_empty() {
         info!("No frame_ids in URL, waiting for WebSocket message...");
         // Wait for frame_ids message with timeout
-        let timeout = tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            socket.recv()
-        ).await;
+        let timeout = tokio::time::timeout(std::time::Duration::from_secs(30), socket.recv()).await;
 
         match timeout {
             Ok(Some(Ok(Message::Text(text)))) => {
                 match serde_json::from_str::<VideoExportMessage>(&text) {
                     Ok(msg) => {
-                        info!("Received {} frame_ids via WebSocket message", msg.frame_ids.len());
+                        info!(
+                            "Received {} frame_ids via WebSocket message",
+                            msg.frame_ids.len()
+                        );
                         payload.frame_ids = msg.frame_ids;
                     }
                     Err(e) => {

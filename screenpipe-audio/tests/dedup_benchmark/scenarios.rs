@@ -119,7 +119,11 @@ fn scenario_exact_duplicates_cross_device() {
 
     let mut current_time = 0.0;
     for segment in segments {
-        session = session.add_segment(SpeechSegment::speech(segment, speaker.clone(), current_time));
+        session = session.add_segment(SpeechSegment::speech(
+            segment,
+            speaker.clone(),
+            current_time,
+        ));
         current_time += 5.0; // 5 second gap between segments
     }
 
@@ -209,7 +213,11 @@ fn scenario_noisy_transcriptions() {
 
     let mut current_time = 0.0;
     for segment in segments {
-        session = session.add_segment(SpeechSegment::speech(segment, speaker.clone(), current_time));
+        session = session.add_segment(SpeechSegment::speech(
+            segment,
+            speaker.clone(),
+            current_time,
+        ));
         current_time += 5.0;
     }
 
@@ -240,9 +248,9 @@ fn scenario_multiple_speakers() {
     println!("\n");
 
     let session = generate_meeting_scenario(
-        5.0,  // 5 minutes
-        6,    // 6 speakers
-        0.7,  // 70% speech density
+        5.0, // 5 minutes
+        6,   // 6 speakers
+        0.7, // 70% speech density
         42,
     );
 
@@ -272,9 +280,9 @@ fn scenario_intermittent_speech() {
     println!("\n");
 
     let session = generate_intermittent_scenario(
-        10.0,  // 10 minutes total
-        8,     // 8 speech bursts
-        15.0,  // Average 15 seconds per burst
+        10.0, // 10 minutes total
+        8,    // 8 speech bursts
+        15.0, // Average 15 seconds per burst
         42,
     );
 
@@ -342,7 +350,11 @@ fn scenario_edge_cases() {
 
     let mut current_time = 0.0;
     for segment in EDGE_CASE_SEGMENTS {
-        session = session.add_segment(SpeechSegment::speech(segment, speaker.clone(), current_time));
+        session = session.add_segment(SpeechSegment::speech(
+            segment,
+            speaker.clone(),
+            current_time,
+        ));
         current_time += 3.0;
     }
 
@@ -385,7 +397,11 @@ fn scenario_high_frequency_device_switching() {
 
     let mut current_time = 0.0;
     for segment in segments {
-        session = session.add_segment(SpeechSegment::speech(segment, speaker.clone(), current_time));
+        session = session.add_segment(SpeechSegment::speech(
+            segment,
+            speaker.clone(),
+            current_time,
+        ));
         current_time += 2.0; // Very short gaps
     }
 
@@ -426,12 +442,36 @@ fn scenario_overlapping_speakers() {
 
     // Create overlapping speech segments
     session = session
-        .add_segment(SpeechSegment::speech("hello everyone welcome to the meeting", speaker1.clone(), 0.0))
-        .add_segment(SpeechSegment::speech("yes thank you for having us here", speaker2.clone(), 1.5)) // Overlaps
-        .add_segment(SpeechSegment::speech("lets start with the agenda", speaker1.clone(), 4.0))
-        .add_segment(SpeechSegment::speech("sounds good to me", speaker2.clone(), 4.5)) // Overlaps
-        .add_segment(SpeechSegment::speech("first item is the project update", speaker1.clone(), 7.0))
-        .add_segment(SpeechSegment::speech("i have some updates to share", speaker2.clone(), 8.0)); // Overlaps
+        .add_segment(SpeechSegment::speech(
+            "hello everyone welcome to the meeting",
+            speaker1.clone(),
+            0.0,
+        ))
+        .add_segment(SpeechSegment::speech(
+            "yes thank you for having us here",
+            speaker2.clone(),
+            1.5,
+        )) // Overlaps
+        .add_segment(SpeechSegment::speech(
+            "lets start with the agenda",
+            speaker1.clone(),
+            4.0,
+        ))
+        .add_segment(SpeechSegment::speech(
+            "sounds good to me",
+            speaker2.clone(),
+            4.5,
+        )) // Overlaps
+        .add_segment(SpeechSegment::speech(
+            "first item is the project update",
+            speaker1.clone(),
+            7.0,
+        ))
+        .add_segment(SpeechSegment::speech(
+            "i have some updates to share",
+            speaker2.clone(),
+            8.0,
+        )); // Overlaps
 
     let result = run_scenario(
         "Overlapping Speakers",
@@ -465,11 +505,19 @@ fn benchmark_all_scenarios() {
 
         let mut current_time = 0.0;
         for segment in segments {
-            session = session.add_segment(SpeechSegment::speech(segment, speaker.clone(), current_time));
+            session = session.add_segment(SpeechSegment::speech(
+                segment,
+                speaker.clone(),
+                current_time,
+            ));
             current_time += 5.0;
         }
 
-        report.add(run_scenario("Exact Duplicates", "Cross-device capture", session));
+        report.add(run_scenario(
+            "Exact Duplicates",
+            "Cross-device capture",
+            session,
+        ));
     }
 
     // Scenario 2: Noisy transcriptions
@@ -484,29 +532,49 @@ fn benchmark_all_scenarios() {
 
         let mut current_time = 0.0;
         for segment in segments {
-            session = session.add_segment(SpeechSegment::speech(segment, speaker.clone(), current_time));
+            session = session.add_segment(SpeechSegment::speech(
+                segment,
+                speaker.clone(),
+                current_time,
+            ));
             current_time += 5.0;
         }
 
-        report.add(run_scenario("Noisy Transcriptions", "With Whisper noise", session));
+        report.add(run_scenario(
+            "Noisy Transcriptions",
+            "With Whisper noise",
+            session,
+        ));
     }
 
     // Scenario 3: Multiple speakers
     {
         let session = generate_meeting_scenario(5.0, 6, 0.7, 44);
-        report.add(run_scenario("6-Speaker Meeting", "High activity meeting", session));
+        report.add(run_scenario(
+            "6-Speaker Meeting",
+            "High activity meeting",
+            session,
+        ));
     }
 
     // Scenario 4: Intermittent speech
     {
         let session = generate_intermittent_scenario(10.0, 8, 15.0, 45);
-        report.add(run_scenario("Intermittent Speech", "Speech bursts with silences", session));
+        report.add(run_scenario(
+            "Intermittent Speech",
+            "Speech bursts with silences",
+            session,
+        ));
     }
 
     // Scenario 5: 24/7 recording
     {
         let session = generate_24h_scenario(46);
-        report.add(run_scenario("24/7 Recording", "Continuous capture", session));
+        report.add(run_scenario(
+            "24/7 Recording",
+            "Continuous capture",
+            session,
+        ));
     }
 
     // Scenario 6: Edge cases
@@ -520,7 +588,11 @@ fn benchmark_all_scenarios() {
 
         let mut current_time = 0.0;
         for segment in EDGE_CASE_SEGMENTS {
-            session = session.add_segment(SpeechSegment::speech(segment, speaker.clone(), current_time));
+            session = session.add_segment(SpeechSegment::speech(
+                segment,
+                speaker.clone(),
+                current_time,
+            ));
             current_time += 3.0;
         }
 

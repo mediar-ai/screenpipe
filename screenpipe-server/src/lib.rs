@@ -17,7 +17,7 @@ pub use add::handle_index_command;
 pub use auto_destruct::watch_pid;
 pub use axum::Json as JsonResponse;
 pub use cli::Cli;
-pub use core::{start_continuous_recording, record_video};
+pub use core::{record_video, start_continuous_recording};
 pub use pipe_manager::PipeManager;
 pub use resource_monitor::{ResourceMonitor, RestartSignal};
 pub use screenpipe_core::Language;

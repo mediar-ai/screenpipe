@@ -87,7 +87,10 @@ impl VisionManager {
         for monitor in monitors {
             let monitor_id = monitor.id();
             if let Err(e) = self.start_monitor(monitor_id).await {
-                warn!("Failed to start recording on monitor {}: {:?}", monitor_id, e);
+                warn!(
+                    "Failed to start recording on monitor {}: {:?}",
+                    monitor_id, e
+                );
             }
         }
 
@@ -107,10 +110,17 @@ impl VisionManager {
         drop(status);
 
         // Stop all monitors
-        let monitor_ids: Vec<u32> = self.recording_tasks.iter().map(|entry| *entry.key()).collect();
+        let monitor_ids: Vec<u32> = self
+            .recording_tasks
+            .iter()
+            .map(|entry| *entry.key())
+            .collect();
         for monitor_id in monitor_ids {
             if let Err(e) = self.stop_monitor(monitor_id).await {
-                warn!("Failed to stop recording on monitor {}: {:?}", monitor_id, e);
+                warn!(
+                    "Failed to stop recording on monitor {}: {:?}",
+                    monitor_id, e
+                );
             }
         }
 
@@ -129,7 +139,8 @@ impl VisionManager {
         }
 
         // Verify monitor exists
-        let monitor = get_monitor_by_id(monitor_id).await
+        let monitor = get_monitor_by_id(monitor_id)
+            .await
             .ok_or_else(|| anyhow::anyhow!("Monitor {} not found", monitor_id))?;
 
         info!(
@@ -170,13 +181,18 @@ impl VisionManager {
                     languages.clone(),
                     capture_unfocused_windows,
                     realtime_vision,
-                ).await {
+                )
+                .await
+                {
                     Ok(_) => {
                         info!("Monitor {} recording completed normally", monitor_id);
                         break;
                     }
                     Err(e) => {
-                        error!("Monitor {} recording error: {:?}, restarting in 1s...", monitor_id, e);
+                        error!(
+                            "Monitor {} recording error: {:?}, restarting in 1s...",
+                            monitor_id, e
+                        );
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                 }
@@ -208,7 +224,10 @@ impl VisionManager {
 
     /// Get list of currently recording monitor IDs
     pub async fn active_monitors(&self) -> Vec<u32> {
-        self.recording_tasks.iter().map(|entry| *entry.key()).collect()
+        self.recording_tasks
+            .iter()
+            .map(|entry| *entry.key())
+            .collect()
     }
 
     /// Shutdown the VisionManager

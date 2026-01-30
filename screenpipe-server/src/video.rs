@@ -54,10 +54,8 @@ impl FrameWriteTracker {
             "FrameWriteTracker: recorded frame {} at offset {} in {}",
             frame_number, offset, video_path
         );
-        self.writes.insert(
-            frame_number,
-            FrameWriteInfo { offset, video_path },
-        );
+        self.writes
+            .insert(frame_number, FrameWriteInfo { offset, video_path });
     }
 
     /// Get the video offset for a frame. Returns None if frame wasn't written to video.
@@ -707,7 +705,9 @@ async fn process_frames(
                 *frame_count += 1;
                 debug!(
                     "Wrote frame {} (frame_number={}) to FFmpeg at offset {}",
-                    frame_count, frame_number, *frame_count - 1
+                    frame_count,
+                    frame_number,
+                    *frame_count - 1
                 );
 
                 flush_ffmpeg_input(stdin, *frame_count, fps).await;

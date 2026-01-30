@@ -305,10 +305,7 @@ fn test_device_works(device: &cpal::Device, is_input: bool) -> bool {
 
 /// Linux fallback: try default device, then enumerate and find first working device
 #[cfg(target_os = "linux")]
-fn get_linux_device_with_fallback(
-    host: &cpal::Host,
-    is_input: bool,
-) -> Result<cpal::Device> {
+fn get_linux_device_with_fallback(host: &cpal::Host, is_input: bool) -> Result<cpal::Device> {
     // First, try the default device
     let default_device = if is_input {
         host.default_input_device()

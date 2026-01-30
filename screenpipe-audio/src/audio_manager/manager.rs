@@ -426,10 +426,7 @@ impl AudioManager {
         // Stop the device in device manager (clears streams and states)
         let _ = self.device_manager.stop_device(&device).await;
 
-        info!(
-            "cleaned up stale device {} for restart",
-            device_name
-        );
+        info!("cleaned up stale device {} for restart", device_name);
 
         Ok(())
     }

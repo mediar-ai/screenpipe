@@ -300,11 +300,11 @@ fn test_interleaved_devices_stress() {
 
     let sequence = vec![
         ("speaker", "hello world"),
-        ("mic", "hello world"),      // dup of speaker
+        ("mic", "hello world"), // dup of speaker
         ("speaker", "how are you"),
-        ("mic", "how are you"),      // dup of speaker
+        ("mic", "how are you"), // dup of speaker
         ("speaker", "im doing well"),
-        ("mic", "im doing well"),    // dup of speaker
+        ("mic", "im doing well"), // dup of speaker
     ];
 
     for (_device, text) in &sequence {
@@ -330,18 +330,16 @@ fn test_interleaved_devices_failure_case() {
     // t=2: Mic → "hello world" (delayed capture of t=0)
     // The mic's "hello world" is compared to "how are you", no overlap, INSERTED
 
-    sim.process_fixed("hello world");      // Speaker t=0
-    sim.process_fixed("how are you");      // Speaker t=1
-    sim.process_fixed("hello world");      // Mic t=2 (delayed)
+    sim.process_fixed("hello world"); // Speaker t=0
+    sim.process_fixed("how are you"); // Speaker t=1
+    sim.process_fixed("hello world"); // Mic t=2 (delayed)
 
     // This WILL insert the duplicate because previous is "how are you"
     // This is a known limitation that requires per-device or time-based tracking
 
     println!("\n=== KNOWN LIMITATION TEST ===");
     println!("Inserted: {:?}", sim.inserted);
-    println!(
-        "Note: Delayed mic capture bypasses dedup due to single-state tracking"
-    );
+    println!("Note: Delayed mic capture bypasses dedup due to single-state tracking");
     println!("Fix requires: per-device tracking or time-windowed comparison");
     println!("=============================\n");
 
@@ -445,13 +443,13 @@ fn comprehensive_accuracy_report() {
         let mut sim = HandleNewTranscriptSimulator::new();
         let sequence = [
             "welcome to the meeting",
-            "welcome to the meeting",     // dup
+            "welcome to the meeting", // dup
             "lets discuss the agenda",
-            "lets discuss the agenda",    // dup
+            "lets discuss the agenda", // dup
             "any questions",
-            "no questions here",          // different
+            "no questions here", // different
             "okay moving on",
-            "okay moving on",             // dup
+            "okay moving on", // dup
         ];
 
         for t in &sequence {

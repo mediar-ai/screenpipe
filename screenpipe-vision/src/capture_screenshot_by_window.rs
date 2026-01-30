@@ -269,17 +269,19 @@ impl WindowFilters {
                     // For patterns without TLD (e.g., "chase" instead of "chase.com")
                     if !blocked.contains('.') {
                         // Match "chase.com", "chase.net", etc.
-                        if host_lower == format!("{}.com", blocked) ||
-                           host_lower == format!("{}.net", blocked) ||
-                           host_lower == format!("{}.org", blocked) ||
-                           host_lower == format!("{}.bank", blocked) {
+                        if host_lower == format!("{}.com", blocked)
+                            || host_lower == format!("{}.net", blocked)
+                            || host_lower == format!("{}.org", blocked)
+                            || host_lower == format!("{}.bank", blocked)
+                        {
                             return true;
                         }
                         // Match "www.chase.com", "online.chase.com", etc.
-                        if host_lower.ends_with(&format!(".{}.com", blocked)) ||
-                           host_lower.ends_with(&format!(".{}.net", blocked)) ||
-                           host_lower.ends_with(&format!(".{}.org", blocked)) ||
-                           host_lower.ends_with(&format!(".{}.bank", blocked)) {
+                        if host_lower.ends_with(&format!(".{}.com", blocked))
+                            || host_lower.ends_with(&format!(".{}.net", blocked))
+                            || host_lower.ends_with(&format!(".{}.org", blocked))
+                            || host_lower.ends_with(&format!(".{}.bank", blocked))
+                        {
                             return true;
                         }
                     }
@@ -292,7 +294,9 @@ impl WindowFilters {
         // Fallback to simple contains check if URL parsing fails
         // This is less precise but ensures we don't miss obvious matches
         let url_lower = url.to_lowercase();
-        self.ignored_urls.iter().any(|blocked| url_lower.contains(blocked))
+        self.ignored_urls
+            .iter()
+            .any(|blocked| url_lower.contains(blocked))
     }
 
     /// Check if a window title suggests it's a blocked site (fallback for unfocused windows)
@@ -308,7 +312,8 @@ impl WindowFilters {
 
         self.ignored_urls.iter().any(|blocked| {
             // Remove TLD for title matching (wellsfargo.com -> wellsfargo)
-            let pattern = blocked.trim_end_matches(".com")
+            let pattern = blocked
+                .trim_end_matches(".com")
                 .trim_end_matches(".net")
                 .trim_end_matches(".org")
                 .trim_end_matches(".bank");
@@ -321,9 +326,9 @@ impl WindowFilters {
             let no_space_match = title_no_spaces.contains(pattern);
 
             // Strategy 3: Check if pattern appears with word boundaries
-            let boundary_match = title_lower.starts_with(&format!("{} ", pattern)) ||
-                title_lower.contains(&format!(" {} ", pattern)) ||
-                title_lower.ends_with(&format!(" {}", pattern));
+            let boundary_match = title_lower.starts_with(&format!("{} ", pattern))
+                || title_lower.contains(&format!(" {} ", pattern))
+                || title_lower.ends_with(&format!(" {}", pattern));
 
             word_match || no_space_match || boundary_match
         })
@@ -491,7 +496,10 @@ pub async fn capture_all_visible_windows(
             // Check if URL should be blocked for privacy (e.g., banking sites)
             if let Some(ref url) = browser_url {
                 if window_filters.is_url_blocked(url) {
-                    tracing::info!("Privacy filter: Skipping window due to blocked URL: {}", url);
+                    tracing::info!(
+                        "Privacy filter: Skipping window due to blocked URL: {}",
+                        url
+                    );
                     continue;
                 }
             }
@@ -711,11 +719,8 @@ mod tests {
         assert!(filters.is_valid("Chrome", "Google"));
         assert!(filters.is_valid("Chrome", "Private Window")); // ignore_set not checked!
 
-        let filters_with_include = WindowFilters::new(
-            &["private".to_string()],
-            &["chrome".to_string()],
-            &[],
-        );
+        let filters_with_include =
+            WindowFilters::new(&["private".to_string()], &["chrome".to_string()], &[]);
         // Chrome matches include, so valid even if title has "private"
         assert!(filters_with_include.is_valid("Chrome", "Google"));
         assert!(filters_with_include.is_valid("Chrome", "Private Window")); // include wins
