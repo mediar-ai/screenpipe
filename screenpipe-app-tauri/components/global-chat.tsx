@@ -1521,7 +1521,7 @@ export function GlobalChat() {
                 setMessages([]);
                 setInput("");
               }}
-              className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
               title="New chat"
             >
               <Plus size={16} />
