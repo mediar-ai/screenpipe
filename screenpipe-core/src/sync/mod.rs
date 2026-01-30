@@ -86,15 +86,23 @@
 //! ```
 
 pub mod blob;
+pub mod client;
 pub mod crypto;
 pub mod error;
 pub mod keys;
+pub mod manager;
 
 // Re-exports for convenient access
 pub use blob::{decrypt_blob, encrypt_blob, BlobMetadata, BlobType, DecryptedBlob, EncryptedBlob};
+pub use client::{
+    DownloadBlob, DownloadRequest, SearchMatch, SearchRequest, SearchResponse, StorageBreakdown,
+    SyncClient, SyncClientConfig, SyncDevice, SyncQuota, SyncStats, SyncStatus, TimeRange,
+    UploadCompleteResponse, UploadUrlResponse,
+};
 pub use crypto::{
     compute_checksum, generate_nonce, generate_salt, generate_search_token,
     generate_search_tokens_from_text, HMAC_SIZE, KEY_SIZE, NONCE_SIZE, SALT_SIZE,
 };
 pub use error::{SyncError, SyncResult};
 pub use keys::{ExistingUserKeyData, NewUserKeyData, SyncKeys};
+pub use manager::{SearchMatchInfo, SearchResult, SyncManager, UploadResult};
