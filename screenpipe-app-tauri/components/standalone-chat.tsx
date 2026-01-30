@@ -5,9 +5,9 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettings, ChatMessage, ChatConversation } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, Settings, ExternalLink, X, ImageIcon, Zap } from "lucide-react";
+import { Loader2, Send, Square, User, Settings, ExternalLink, X, ImageIcon, Zap, History, Search, Trash2, ChevronLeft, Plus } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { PipeAIIcon, PipeAIIconLarge } from "@/components/pipe-ai-icon";
@@ -137,10 +137,11 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  timestamp: number;
 }
 
 export function StandaloneChat() {
-  const { settings } = useSettings();
+  const { settings, updateSettings, isSettingsLoaded } = useSettings();
   const { isMac } = usePlatform();
   const { items: appItems } = useSqlAutocomplete("app");
 
@@ -168,6 +169,11 @@ export function StandaloneChat() {
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
 
+  // Chat history state
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+
   // Process an image file to base64
   const processImageFile = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) return;
@@ -178,6 +184,171 @@ export function StandaloneChat() {
     };
     reader.readAsDataURL(file);
   }, []);
+
+  // Load active conversation from settings on mount
+  useEffect(() => {
+    if (!isSettingsLoaded) return;
+
+    const history = settings.chatHistory;
+    if (history?.activeConversationId && history.historyEnabled !== false) {
+      const activeConv = history.conversations.find(
+        c => c.id === history.activeConversationId
+      );
+      if (activeConv && activeConv.messages.length > 0) {
+        setMessages(activeConv.messages.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        })));
+        setConversationId(activeConv.id);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSettingsLoaded]);
+
+  // Save conversation to settings
+  const saveConversation = async (msgs: Message[]) => {
+    if (!settings.chatHistory?.historyEnabled) return;
+    if (msgs.length === 0) return;
+
+    const history = settings.chatHistory || { conversations: [], activeConversationId: null, historyEnabled: true };
+    const convId = conversationId || crypto.randomUUID();
+
+    const existingIndex = history.conversations.findIndex(c => c.id === convId);
+    const firstUserMsg = msgs.find(m => m.role === "user");
+    const title = firstUserMsg?.content.slice(0, 50) || "New Chat";
+
+    const conversation: ChatConversation = {
+      id: convId,
+      title,
+      messages: msgs.slice(-100).map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+      })),
+      createdAt: existingIndex >= 0 ? history.conversations[existingIndex].createdAt : Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    let newConversations = [...history.conversations];
+    if (existingIndex >= 0) {
+      newConversations[existingIndex] = conversation;
+    } else {
+      newConversations = [conversation, ...newConversations].slice(0, 50);
+    }
+
+    await updateSettings({
+      chatHistory: {
+        ...history,
+        conversations: newConversations,
+        activeConversationId: convId,
+      }
+    });
+
+    if (!conversationId) {
+      setConversationId(convId);
+    }
+  };
+
+  // Delete a conversation
+  const deleteConversation = async (convId: string) => {
+    const history = settings.chatHistory;
+    if (!history) return;
+
+    const newConversations = history.conversations.filter(c => c.id !== convId);
+    const newActiveId = history.activeConversationId === convId ? null : history.activeConversationId;
+
+    await updateSettings({
+      chatHistory: {
+        ...history,
+        conversations: newConversations,
+        activeConversationId: newActiveId,
+      }
+    });
+
+    if (conversationId === convId) {
+      setMessages([]);
+      setConversationId(null);
+    }
+  };
+
+  // Load a specific conversation
+  const loadConversation = (conv: ChatConversation) => {
+    setMessages(conv.messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+    })));
+    setConversationId(conv.id);
+    setShowHistory(false);
+
+    if (settings.chatHistory) {
+      updateSettings({
+        chatHistory: {
+          ...settings.chatHistory,
+          activeConversationId: conv.id,
+        }
+      });
+    }
+  };
+
+  // Start a new conversation
+  const startNewConversation = () => {
+    setMessages([]);
+    setConversationId(null);
+    setInput("");
+    setShowHistory(false);
+    setPastedImage(null);
+  };
+
+  // Filter conversations by search
+  const filteredConversations = React.useMemo(() => {
+    const convs = settings.chatHistory?.conversations || [];
+    if (!historySearch.trim()) return convs;
+
+    const search = historySearch.toLowerCase();
+    return convs.filter(c =>
+      c.title.toLowerCase().includes(search) ||
+      c.messages.some(m => m.content.toLowerCase().includes(search))
+    );
+  }, [settings.chatHistory?.conversations, historySearch]);
+
+  // Group conversations by date
+  const groupedConversations = React.useMemo(() => {
+    const groups: { label: string; conversations: ChatConversation[] }[] = [];
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const todayConvs: ChatConversation[] = [];
+    const yesterdayConvs: ChatConversation[] = [];
+    const lastWeekConvs: ChatConversation[] = [];
+    const olderConvs: ChatConversation[] = [];
+
+    for (const conv of filteredConversations) {
+      const convDate = new Date(conv.updatedAt);
+      if (convDate >= today) {
+        todayConvs.push(conv);
+      } else if (convDate >= yesterday) {
+        yesterdayConvs.push(conv);
+      } else if (convDate >= lastWeek) {
+        lastWeekConvs.push(conv);
+      } else {
+        olderConvs.push(conv);
+      }
+    }
+
+    if (todayConvs.length > 0) groups.push({ label: "Today", conversations: todayConvs });
+    if (yesterdayConvs.length > 0) groups.push({ label: "Yesterday", conversations: yesterdayConvs });
+    if (lastWeekConvs.length > 0) groups.push({ label: "Last 7 Days", conversations: lastWeekConvs });
+    if (olderConvs.length > 0) groups.push({ label: "Older", conversations: olderConvs });
+
+    return groups;
+  }, [filteredConversations]);
 
   // Handle drag events for image drop
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -625,6 +796,7 @@ export function StandaloneChat() {
       id: Date.now().toString(),
       role: "user",
       content: displayMessage,
+      timestamp: Date.now(),
     };
 
     const assistantMessageId = (Date.now() + 1).toString();
@@ -752,7 +924,7 @@ export function StandaloneChat() {
 
       setMessages((prev) => [
         ...prev,
-        { id: assistantMessageId, role: "assistant", content: "" },
+        { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() },
       ]);
 
       let accumulatedText = "";
@@ -930,6 +1102,7 @@ export function StandaloneChat() {
             id: Date.now().toString(),
             role: "assistant",
             content: `Error: ${errorMessage}`,
+            timestamp: Date.now(),
           },
         ];
       });
@@ -937,6 +1110,16 @@ export function StandaloneChat() {
       setIsLoading(false);
       setIsStreaming(false);
       abortControllerRef.current = null;
+
+      // Save conversation after state updates
+      setTimeout(() => {
+        setMessages((currentMsgs) => {
+          if (currentMsgs.length > 0) {
+            saveConversation(currentMsgs);
+          }
+          return currentMsgs;
+        });
+      }, 100);
     }
   }
 
@@ -984,13 +1167,131 @@ export function StandaloneChat() {
           <h2 className="font-semibold text-sm tracking-tight">Pipe AI</h2>
           <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
         </div>
+        <Button
+          variant={showHistory ? "secondary" : "ghost"}
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowHistory(!showHistory);
+          }}
+          className="h-7 px-2 gap-1 text-xs"
+          title="Chat history"
+        >
+          <History size={14} />
+          <span className="hidden sm:inline">History</span>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            startNewConversation();
+          }}
+          className="h-7 px-2 gap-1 text-xs"
+          title="New chat"
+        >
+          <Plus size={14} />
+          <span className="hidden sm:inline">New</span>
+        </Button>
         <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
           {isMac ? "⌘⌥" : "Alt+"}L
         </kbd>
       </div>
 
-      {/* Messages */}
-      <div className="relative flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Main content area with optional history sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* History Sidebar */}
+        <AnimatePresence>
+          {showHistory && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 280, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="border-r border-border/50 bg-muted/30 flex flex-col overflow-hidden"
+            >
+              {/* History Header */}
+              <div className="p-3 border-b border-border/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Chat History</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowHistory(false)}
+                    className="h-6 w-6 p-0"
+                  >
+                    <ChevronLeft size={14} />
+                  </Button>
+                </div>
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search conversations..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="h-8 pl-8 text-xs bg-background/50"
+                  />
+                </div>
+              </div>
+
+              {/* Conversations List */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                {groupedConversations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <History className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-xs text-muted-foreground">
+                      {historySearch ? "No matching conversations" : "No chat history yet"}
+                    </p>
+                  </div>
+                ) : (
+                  groupedConversations.map((group) => (
+                    <div key={group.label} className="space-y-1">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-2 py-1">
+                        {group.label}
+                      </p>
+                      {group.conversations.map((conv) => (
+                        <div
+                          key={conv.id}
+                          className={cn(
+                            "group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors",
+                            conv.id === conversationId
+                              ? "bg-foreground/10"
+                              : "hover:bg-foreground/5"
+                          )}
+                          onClick={() => loadConversation(conv)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">
+                              {conv.title}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {conv.messages.length} messages
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteConversation(conv.id);
+                            }}
+                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 size={12} />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Messages */}
+        <div className="relative flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && disabledReason && (
           <div className="relative flex flex-col items-center justify-center py-12 space-y-4">
             <div className={cn(
@@ -1156,6 +1457,7 @@ export function StandaloneChat() {
         )}
         <div ref={messagesEndRef} />
       </div>
+      </div> {/* End of main content area with history sidebar */}
 
       {/* Input */}
       <div className="relative border-t border-border/50 bg-gradient-to-t from-muted/20 to-transparent">

@@ -54,11 +54,34 @@ export type AIPreset = {
 
 export type UpdateChannel = "stable" | "beta";
 
+// Chat history types
+export interface ChatMessage {
+	id: string;
+	role: "user" | "assistant";
+	content: string;
+	timestamp: number;
+}
+
+export interface ChatConversation {
+	id: string;
+	title: string;
+	messages: ChatMessage[];
+	createdAt: number;
+	updatedAt: number;
+}
+
+export interface ChatHistoryStore {
+	conversations: ChatConversation[];
+	activeConversationId: string | null;
+	historyEnabled: boolean;
+}
+
 // Extend SettingsStore with deviceId (for AI free tier tracking)
 // This is added here until the Rust types are regenerated
 export type Settings = SettingsStore & {
 	deviceId?: string;
 	updateChannel?: UpdateChannel;
+	chatHistory?: ChatHistoryStore;
 }
 
 export const DEFAULT_PROMPT = `Rules:
@@ -192,6 +215,11 @@ let DEFAULT_SETTINGS: Settings = {
 			useAllMonitors: true,
 			enableRealtimeVision: true,
 			showShortcutOverlay: true,
+			chatHistory: {
+				conversations: [],
+				activeConversationId: null,
+				historyEnabled: true,
+			},
 		};
 
 export function createDefaultSettingsObject(): Settings {
@@ -254,6 +282,16 @@ function createSettingsStore() {
 		);
 		if (settings.aiPresets && settings.aiPresets.length > 0 && !hasGeminiPreset) {
 			settings.aiPresets = [...settings.aiPresets, DEFAULT_GEMINI_PRESET as any];
+			needsUpdate = true;
+		}
+
+		// Migration: Add chat history for existing users
+		if (!settings.chatHistory) {
+			settings.chatHistory = {
+				conversations: [],
+				activeConversationId: null,
+				historyEnabled: true,
+			};
 			needsUpdate = true;
 		}
 
