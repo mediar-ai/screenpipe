@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, Code, MessageSquare } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { parseInt } from "lodash";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,9 +26,11 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
-import { commands } from "@/lib/utils/tauri";
+import { commands, OpencodeInfo } from "@/lib/utils/tauri";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
-import { OpenCodeChat } from "@/components/opencode-chat";
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
+
+type OpencodeClient = ReturnType<typeof createOpencodeClient>;
 
 const SCREENPIPE_API = "http://localhost:3030";
 
@@ -533,7 +535,6 @@ export function GlobalChat() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"chat" | "code">("chat");
   const [isStreaming, setIsStreaming] = useState(false);
   const [activePreset, setActivePreset] = useState<AIPreset | undefined>();
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
@@ -554,6 +555,11 @@ export function GlobalChat() {
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<"daily_limit" | "model_not_allowed">("daily_limit");
   const [upgradeResetsAt, setUpgradeResetsAt] = useState<string | undefined>();
+
+  // OpenCode state
+  const [opencodeInfo, setOpencodeInfo] = useState<OpencodeInfo | null>(null);
+  const [opencodeClient, setOpencodeClient] = useState<OpencodeClient | null>(null);
+  const [opencodeSessionId, setOpencodeSessionId] = useState<string | null>(null);
 
   const appMentionSuggestions = React.useMemo(
     () => buildAppMentionSuggestions(appItems, APP_SUGGESTION_LIMIT),
@@ -866,9 +872,11 @@ export function GlobalChat() {
 
   // Check if we have valid AI setup
   const hasPresets = settings.aiPresets && settings.aiPresets.length > 0;
-  const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
-  const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
-  const canChat = hasPresets && hasValidModel && !needsLogin;
+  const hasValidModel = activePreset?.provider === "opencode" || (activePreset?.model && activePreset.model.trim() !== "");
+  const needsLogin = (activePreset?.provider === "screenpipe-cloud" || activePreset?.provider === "opencode") && !settings.user?.token;
+  const isOpencode = activePreset?.provider === "opencode";
+  const opencodeReady = isOpencode ? (opencodeInfo?.running && opencodeClient && opencodeSessionId) : true;
+  const canChat = hasPresets && hasValidModel && !needsLogin && opencodeReady;
 
   // Debug: log why chat might be disabled
   useEffect(() => {
@@ -885,12 +893,74 @@ export function GlobalChat() {
     }
   }, [open, activePreset, hasValidModel, needsLogin, canChat]);
 
+  // Start OpenCode when preset is selected and dialog is open
+  useEffect(() => {
+    if (!isOpencode || !open || needsLogin) return;
+
+    const initOpencode = async () => {
+      // Check current status
+      const infoResult = await commands.opencodeInfo();
+      if (infoResult.status === "ok") {
+        setOpencodeInfo(infoResult.data);
+
+        if (infoResult.data.running && infoResult.data.baseUrl) {
+          // Already running, set up client
+          const client = createOpencodeClient({ baseUrl: infoResult.data.baseUrl });
+          setOpencodeClient(client);
+
+          // Get or create a session
+          try {
+            const sessions = await client.session.list();
+            if (sessions.data && sessions.data.length > 0) {
+              setOpencodeSessionId(sessions.data[0].id);
+            } else {
+              const newSession = await client.session.create({ directory: infoResult.data.projectDir || "~" });
+              if (newSession.data) {
+                setOpencodeSessionId(newSession.data.id);
+              }
+            }
+          } catch (e) {
+            console.error("Failed to get/create opencode session:", e);
+          }
+        } else {
+          // Not running, start it with home directory
+          const homeDir = await commands.getEnv("HOME");
+          const startResult = await commands.opencodeStart(homeDir || "~", settings.user?.token || undefined);
+          if (startResult.status === "ok" && startResult.data.running && startResult.data.baseUrl) {
+            setOpencodeInfo(startResult.data);
+            const client = createOpencodeClient({ baseUrl: startResult.data.baseUrl });
+            setOpencodeClient(client);
+
+            // Create initial session
+            try {
+              const newSession = await client.session.create({ directory: startResult.data.projectDir || homeDir || "~" });
+              if (newSession.data) {
+                setOpencodeSessionId(newSession.data.id);
+              }
+            } catch (e) {
+              console.error("Failed to create opencode session:", e);
+            }
+          } else if (startResult.status === "error") {
+            toast({
+              title: "OpenCode failed to start",
+              description: startResult.error,
+              variant: "destructive",
+            });
+          }
+        }
+      }
+    };
+
+    initOpencode();
+  }, [isOpencode, open, needsLogin, settings.user?.token]);
+
   // Get error message for why chat is disabled
   const getDisabledReason = (): string | null => {
     if (!hasPresets) return "No AI presets configured";
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset - click edit to add one`;
     if (needsLogin) return "Login required for Screenpipe Cloud";
+    if (isOpencode && !opencodeReady) return "Starting OpenCode...";
     return null;
   };
   const disabledReason = getDisabledReason();
@@ -1079,9 +1149,95 @@ export function GlobalChat() {
     });
   }
 
+  // Send message using OpenCode SDK
+  async function sendOpencodeMessage(userMessage: string) {
+    if (!opencodeClient || !opencodeSessionId) return;
+
+    const newUserMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: userMessage,
+    };
+
+    const assistantMessageId = (Date.now() + 1).toString();
+    setMessages((prev) => [...prev, newUserMessage]);
+    setInput("");
+    setIsLoading(true);
+    setIsStreaming(true);
+
+    try {
+      // Add placeholder for streaming response
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantMessageId, role: "assistant", content: "" },
+      ]);
+
+      // Send to OpenCode
+      await opencodeClient.session.promptAsync({
+        sessionID: opencodeSessionId,
+        parts: [{ type: "text", text: userMessage }],
+      });
+
+      // Poll for updates
+      let accumulatedText = "";
+      const pollInterval = setInterval(async () => {
+        if (opencodeClient && opencodeSessionId) {
+          try {
+            const msgs = await opencodeClient.session.messages({ sessionID: opencodeSessionId });
+            if (msgs.data && msgs.data.length > 0) {
+              const lastAssistantMsg = msgs.data.filter((m: any) => m.info.role === "assistant").pop();
+              if (lastAssistantMsg) {
+                const textParts = lastAssistantMsg.parts
+                  .filter((p: any) => p.type === "text")
+                  .map((p: any) => p.text)
+                  .join("\n");
+                if (textParts !== accumulatedText) {
+                  accumulatedText = textParts;
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMessageId
+                        ? { ...m, content: accumulatedText }
+                        : m
+                    )
+                  );
+                }
+              }
+            }
+          } catch (e) {
+            console.error("Error polling opencode messages:", e);
+          }
+        }
+      }, 1000);
+
+      // Stop polling after 2 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setIsLoading(false);
+        setIsStreaming(false);
+      }, 120000);
+
+    } catch (error) {
+      console.error("OpenCode error:", error);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMessageId
+            ? { ...m, content: `Error: ${error instanceof Error ? error.message : "Unknown error"}` }
+            : m
+        )
+      );
+      setIsLoading(false);
+      setIsStreaming(false);
+    }
+  }
+
   // Send message using OpenAI SDK with streaming
   async function sendMessage(userMessage: string) {
     if (!canChat || !activePreset) return;
+
+    // Use OpenCode if that's the active provider
+    if (isOpencode) {
+      return sendOpencodeMessage(userMessage);
+    }
 
     const openai = getOpenAIClient();
     if (!openai) return;
@@ -1681,84 +1837,39 @@ export function GlobalChat() {
           className="p-0 max-w-2xl h-[70vh] flex flex-col overflow-hidden bg-background/95 backdrop-blur-xl border-border/50"
           customClose={<X className="w-4 h-4" />}
         >
-          {/* Header - sleek geometric style with tabs */}
+          {/* Header - sleek geometric style */}
           {/* Add left padding on macOS to avoid traffic light overlap */}
           <div className={cn(
-            "relative flex flex-col border-b border-border/50 bg-gradient-to-r from-background to-muted/30",
+            "relative flex items-center gap-3 px-4 py-3 pr-12 border-b border-border/50 bg-gradient-to-r from-background to-muted/30",
             isMac && "pl-[72px]"
           )}>
-            <div className="flex items-center gap-3 px-4 py-3 pr-12">
-              {/* Geometric corner accent - hidden on macOS where traffic lights are */}
-              {!isMac && (
-                <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg" />
-              )}
+            {/* Geometric corner accent - hidden on macOS where traffic lights are */}
+            {!isMac && (
+              <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg" />
+            )}
 
-              <div className="relative z-10 p-1.5 rounded-lg bg-foreground/5 border border-border/50">
-                {activeTab === "chat" ? (
-                  <PipeAIIcon size={18} animated={false} className="text-foreground" />
-                ) : (
-                  <Code size={18} className="text-foreground" />
-                )}
-              </div>
-              <div className="flex-1">
-                <h2 className="font-semibold text-sm tracking-tight">
-                  {activeTab === "chat" ? "Pipe AI" : "Code Assistant"}
-                </h2>
-                <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
-                  {activeTab === "chat" ? "Screen Activity Assistant" : "AI-Powered Coding"}
-                </p>
-              </div>
-              {activeTab === "chat" && (
-                <button
-                  onClick={() => {
-                    setMessages([]);
-                    setInput("");
-                  }}
-                  className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
-                  title="New chat"
-                >
-                  <Plus size={16} />
-                </button>
-              )}
-              <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
-                {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
-              </kbd>
+            <div className="relative z-10 p-1.5 rounded-lg bg-foreground/5 border border-border/50">
+              <PipeAIIcon size={18} animated={false} className="text-foreground" />
             </div>
-
-            {/* Tab switcher */}
-            <div className="flex gap-1 px-4 pb-2">
-              <button
-                onClick={() => setActiveTab("chat")}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
-                  activeTab === "chat"
-                    ? "bg-foreground text-background"
-                    : "bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                )}
-              >
-                <MessageSquare size={14} />
-                Chat
-              </button>
-              <button
-                onClick={() => setActiveTab("code")}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
-                  activeTab === "code"
-                    ? "bg-foreground text-background"
-                    : "bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                )}
-              >
-                <Code size={14} />
-                Code
-              </button>
+            <div className="flex-1">
+              <h2 className="font-semibold text-sm tracking-tight">Pipe AI</h2>
+              <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
             </div>
+            <button
+              onClick={() => {
+                setMessages([]);
+                setInput("");
+              }}
+              className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
+              title="New chat"
+            >
+              <Plus size={16} />
+            </button>
+            <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
+              {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
+            </kbd>
           </div>
 
-          {/* Tab content */}
-          {activeTab === "code" ? (
-            <OpenCodeChat className="flex-1 overflow-hidden" />
-          ) : (
-          <>
           {/* Messages - with subtle pattern background */}
           <div className="relative flex-1 overflow-y-auto p-4 space-y-4">
             {/* Subtle geometric background pattern */}
@@ -2099,8 +2210,6 @@ export function GlobalChat() {
               </div>
             </form>
           </div>
-          </>
-          )}
         </CustomDialogContent>
       </Dialog>
 

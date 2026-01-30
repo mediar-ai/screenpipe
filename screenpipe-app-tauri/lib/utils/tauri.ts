@@ -320,7 +320,7 @@ async opencodeCheck() : Promise<Result<OpencodeCheckResult, string>> {
 /** user-defined types **/
 
 export type AIPreset = { id: string; prompt: string; provider: AIProviderType; url?: string; model?: string; defaultPreset: boolean; apiKey: string | null; maxContextChars: number }
-export type AIProviderType = "openai" | "native-ollama" | "custom" | "screenpipe-cloud"
+export type AIProviderType = "openai" | "native-ollama" | "custom" | "screenpipe-cloud" | "opencode"
 export type Credits = { amount: number }
 export type EmbeddedLLM = { enabled: boolean; model: string; port: number }
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key in string]: JsonValue }
