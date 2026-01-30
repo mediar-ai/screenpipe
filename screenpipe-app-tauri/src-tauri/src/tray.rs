@@ -298,41 +298,44 @@ pub fn setup_tray_menu_updater(app: AppHandle, update_item: &tauri::menu::MenuIt
 
 fn format_shortcut(shortcut: &str) -> String {
     // Format shortcut for display in tray menu
-    // Handle both "control" and "ctrl" variants since frontend uses "Control"
-    let ctrl_symbol = if cfg!(target_os = "macos") {
-        "⌃"
-    } else {
-        "ctrl"
-    };
+    // macOS convention: ⌘ (Command) → ⌃ (Control) → ⌥ (Option) → ⇧ (Shift) → Key
 
-    shortcut
-        .to_lowercase()
-        .replace(
-            "super",
-            if cfg!(target_os = "macos") {
-                "⌘"
-            } else {
-                "win"
-            },
-        )
-        .replace("commandorcontrol", ctrl_symbol)
-        .replace("control", ctrl_symbol)
-        .replace("ctrl", ctrl_symbol)
-        .replace(
-            "alt",
-            if cfg!(target_os = "macos") {
-                "⌥"
-            } else {
-                "alt"
-            },
-        )
-        .replace(
-            "shift",
-            if cfg!(target_os = "macos") {
-                "⇧"
-            } else {
-                "shift"
-            },
-        )
-        .replace("+", " ")
+    let parts: Vec<&str> = shortcut.split('+').collect();
+
+    let mut has_cmd = false;
+    let mut has_ctrl = false;
+    let mut has_alt = false;
+    let mut has_shift = false;
+    let mut key = String::new();
+
+    for part in parts {
+        let lower = part.trim().to_lowercase();
+        match lower.as_str() {
+            "super" | "command" | "cmd" | "meta" => has_cmd = true,
+            "control" | "ctrl" | "commandorcontrol" => has_ctrl = true,
+            "alt" | "option" => has_alt = true,
+            "shift" => has_shift = true,
+            _ => key = part.trim().to_uppercase(),
+        }
+    }
+
+    if cfg!(target_os = "macos") {
+        // macOS: Use symbols in correct order (⌘⌃⌥⇧Key)
+        let mut result = String::new();
+        if has_cmd { result.push_str("⌘"); }
+        if has_ctrl { result.push_str("⌃"); }
+        if has_alt { result.push_str("⌥"); }
+        if has_shift { result.push_str("⇧"); }
+        result.push_str(&key);
+        result
+    } else {
+        // Windows/Linux: Use text with + separator
+        let mut parts_out = Vec::new();
+        if has_ctrl { parts_out.push("Ctrl"); }
+        if has_cmd { parts_out.push("Win"); }
+        if has_alt { parts_out.push("Alt"); }
+        if has_shift { parts_out.push("Shift"); }
+        parts_out.push(&key);
+        parts_out.join("+")
+    }
 }
