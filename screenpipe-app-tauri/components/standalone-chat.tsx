@@ -87,7 +87,20 @@ RULES:
   },
 ];
 
-const SYSTEM_PROMPT = `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions.
+// Helper to get timezone offset string (e.g., "+1" or "-5")
+function getTimezoneOffsetString(): string {
+  const offsetMinutes = new Date().getTimezoneOffset();
+  const offsetHours = -offsetMinutes / 60; // Negate because getTimezoneOffset returns opposite sign
+  return offsetHours >= 0 ? `+${offsetHours}` : `${offsetHours}`;
+}
+
+// Build system prompt dynamically to ensure current time is accurate
+function buildSystemPrompt(): string {
+  const now = new Date();
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const offsetStr = getTimezoneOffsetString();
+
+  return `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions.
 
 CRITICAL SEARCH RULES (database has 600k+ entries - ALWAYS use time filters):
 1. ALWAYS include start_time in EVERY search - NEVER search without a time range
@@ -99,9 +112,12 @@ Rules for showing videos/audio:
 - Show videos by putting .mp4 file paths in inline code blocks: \`/path/to/video.mp4\`
 - Use the exact, absolute file_path from search results
 
-Be concise. Cite timestamps when relevant.
+Be concise. Cite timestamps when relevant. Always display times in the user's local timezone.
 
-Current time: ${new Date().toISOString()}`;
+Current time: ${now.toISOString()}
+User's timezone: ${timezone} (UTC${offsetStr})
+User's local time: ${now.toLocaleString()}`;
+}
 
 interface SearchResult {
   type: "OCR" | "Audio" | "UI";
@@ -188,6 +204,59 @@ export function StandaloneChat() {
     () => [...STATIC_MENTION_SUGGESTIONS, ...appMentionSuggestions],
     [appMentionSuggestions]
   );
+
+  // Parse current input to extract active filters for chip display
+  const activeFilters = React.useMemo(() => {
+    if (!input.trim()) return { timeRanges: [], contentType: null, appName: null, speakerName: null };
+    const parsed = parseMentions(input, { appTagMap });
+    return {
+      timeRanges: parsed.timeRanges,
+      contentType: parsed.contentType,
+      appName: parsed.appName,
+      speakerName: parsed.speakerName,
+    };
+  }, [input, appTagMap]);
+
+  // Check if any filters are active
+  const hasActiveFilters = activeFilters.timeRanges.length > 0 ||
+    activeFilters.contentType ||
+    activeFilters.appName ||
+    activeFilters.speakerName;
+
+  // Remove a specific @mention from input
+  const removeFilter = (filterType: "time" | "content" | "app" | "speaker", label?: string) => {
+    let newInput = input;
+    if (filterType === "time" && label) {
+      // Remove time mentions like @today, @yesterday, @last-hour, etc.
+      const timePatterns: Record<string, RegExp> = {
+        "today": /@today\b/gi,
+        "yesterday": /@yesterday\b/gi,
+        "last week": /@last[- ]?week\b/gi,
+        "last hour": /@last[- ]?hour\b/gi,
+        "this morning": /@this[- ]?morning\b/gi,
+      };
+      const pattern = timePatterns[label];
+      if (pattern) newInput = newInput.replace(pattern, "").trim();
+    } else if (filterType === "content") {
+      newInput = newInput.replace(/@(audio|screen)\b/gi, "").trim();
+    } else if (filterType === "app" && activeFilters.appName) {
+      // Remove app mention - need to find the pattern
+      const appPattern = new RegExp(`@${activeFilters.appName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, "gi");
+      newInput = newInput.replace(appPattern, "").trim();
+      // Also try normalized versions
+      for (const [tag, name] of Object.entries(appTagMap)) {
+        if (name === activeFilters.appName) {
+          newInput = newInput.replace(new RegExp(`@${tag}\\b`, "gi"), "").trim();
+        }
+      }
+    } else if (filterType === "speaker" && activeFilters.speakerName) {
+      const speakerPattern = new RegExp(`@"?${activeFilters.speakerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"?\\b`, "gi");
+      newInput = newInput.replace(speakerPattern, "").trim();
+    }
+    // Clean up extra spaces
+    newInput = newInput.replace(/\s+/g, " ").trim();
+    setInput(newInput);
+  };
 
   // Fetch speakers dynamically
   useEffect(() => {
@@ -473,7 +542,7 @@ export function StandaloneChat() {
     abortControllerRef.current = new AbortController();
 
     try {
-      let systemPrompt = SYSTEM_PROMPT;
+      let systemPrompt = buildSystemPrompt();
 
       const mentionContext: string[] = [];
 
@@ -998,6 +1067,57 @@ export function StandaloneChat() {
                 <X className="w-3 h-3" />
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Active filters chips */}
+        {hasActiveFilters && (
+          <div className="px-3 py-2 border-b border-border/30 flex flex-wrap gap-1.5">
+            {activeFilters.timeRanges.map((range, idx) => (
+              <button
+                key={`time-${idx}`}
+                type="button"
+                onClick={() => removeFilter("time", range.label)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 rounded-full hover:bg-blue-500/20 transition-colors"
+              >
+                <span>🕐</span>
+                <span>{range.label}</span>
+                <X className="w-2.5 h-2.5 ml-0.5" />
+              </button>
+            ))}
+            {activeFilters.contentType && (
+              <button
+                type="button"
+                onClick={() => removeFilter("content")}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 rounded-full hover:bg-purple-500/20 transition-colors"
+              >
+                <span>{activeFilters.contentType === "audio" ? "🎤" : "🖥️"}</span>
+                <span>{activeFilters.contentType}</span>
+                <X className="w-2.5 h-2.5 ml-0.5" />
+              </button>
+            )}
+            {activeFilters.appName && (
+              <button
+                type="button"
+                onClick={() => removeFilter("app")}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 rounded-full hover:bg-green-500/20 transition-colors"
+              >
+                <span>📱</span>
+                <span>{activeFilters.appName}</span>
+                <X className="w-2.5 h-2.5 ml-0.5" />
+              </button>
+            )}
+            {activeFilters.speakerName && (
+              <button
+                type="button"
+                onClick={() => removeFilter("speaker")}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20 rounded-full hover:bg-orange-500/20 transition-colors"
+              >
+                <span>👤</span>
+                <span>{activeFilters.speakerName}</span>
+                <X className="w-2.5 h-2.5 ml-0.5" />
+              </button>
+            )}
           </div>
         )}
 
