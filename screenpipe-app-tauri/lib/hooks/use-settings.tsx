@@ -299,6 +299,13 @@ function createSettingsStore() {
 			needsUpdate = true;
 		}
 
+		// Migration: Fill empty showChatShortcut with platform default
+		if (!settings.showChatShortcut || settings.showChatShortcut.trim() === "") {
+			const p = platform();
+			settings.showChatShortcut = p === "windows" ? "Alt+L" : "Control+Super+L";
+			needsUpdate = true;
+		}
+
 		// Save migrations if needed
 		if (needsUpdate) {
 			await store.set("settings", settings);
