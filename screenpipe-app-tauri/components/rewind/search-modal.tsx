@@ -105,9 +105,17 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
     const context = `Context from search result:\n${result.app_name} - ${result.window_name}\nTime: ${format(new Date(result.timestamp), "PPpp")}\n\nText:\n${result.text || ""}`;
 
-    await commands.showWindow("Chat");
-    await emit("chat-prefill", { context, frameId: result.frame_id });
+    // Close search modal first
     onClose();
+
+    // Show chat window (it will overlay on top of timeline, not close it)
+    await commands.showWindow("Chat");
+
+    // Small delay to ensure chat window's React components are mounted and listening
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Emit prefill event with context and frame image
+    await emit("chat-prefill", { context, frameId: result.frame_id });
   }, [searchResults, selectedIndex, onClose]);
 
   // Keyboard navigation

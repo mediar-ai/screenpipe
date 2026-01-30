@@ -291,9 +291,12 @@ pub async fn show_window(
     app_handle: tauri::AppHandle,
     window: ShowRewindWindow,
 ) -> Result<(), String> {
-
-    if window.id().label() != ShowRewindWindow::Main.id().label() {
-      ShowRewindWindow::Main.close(&app_handle).map_err(|e| e.to_string())?;
+    // Close Main window when opening other windows, EXCEPT for Chat
+    // Chat is designed to overlay on top of Main (level 1002 vs 1001)
+    if window.id().label() != ShowRewindWindow::Main.id().label()
+        && window.id().label() != ShowRewindWindow::Chat.id().label()
+    {
+        ShowRewindWindow::Main.close(&app_handle).map_err(|e| e.to_string())?;
     }
 
     window.show(&app_handle).map_err(|e| e.to_string())?;
