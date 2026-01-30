@@ -98,8 +98,8 @@ export const TextOverlay = memo(function TextOverlay({
 	clickableUrls = true,
 }: TextOverlayProps) {
 	// TEMPORARILY DISABLED: Text selection is buggy, disable for now
-	// Remove this line to re-enable text overlay
-	return null;
+	const isDisabled = true;
+
 	// Scale and filter text positions, detect URLs
 	// Note: OCR bounds are normalized (0-1 range), so we multiply directly by displayed dimensions
 	const scaledPositions = useMemo<ScaledTextPositionWithUrl[]>(() => {
@@ -150,6 +150,11 @@ export const TextOverlay = memo(function TextOverlay({
 		e.stopPropagation();
 		window.open(url, "_blank", "noopener,noreferrer");
 	}, []);
+
+	// Early return for disabled state (must be after all hooks)
+	if (isDisabled) {
+		return null;
+	}
 
 	if (scaledPositions.length === 0) {
 		return null;
