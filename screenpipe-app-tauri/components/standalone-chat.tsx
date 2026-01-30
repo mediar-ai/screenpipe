@@ -164,6 +164,30 @@ export function StandaloneChat() {
   const [upgradeResetsAt, setUpgradeResetsAt] = useState<string | undefined>();
   const [prefillContext, setPrefillContext] = useState<string | null>(null);
   const [prefillFrameId, setPrefillFrameId] = useState<number | null>(null);
+  const [pastedImage, setPastedImage] = useState<string | null>(null); // Base64 data URL
+
+  // Handle paste events to capture images
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const base64 = event.target?.result as string;
+            setPastedImage(base64);
+          };
+          reader.readAsDataURL(file);
+        }
+        break; // Only handle first image
+      }
+    }
+  }, []);
 
   // Listen for chat-prefill events from search modal
   useEffect(() => {
@@ -597,16 +621,41 @@ export function StandaloneChat() {
         setPrefillFrameId(null);
       }
 
+      // Also include pasted image if present
+      let pastedImageBase64: string | null = null;
+      if (pastedImage) {
+        pastedImageBase64 = pastedImage;
+        // Clear after using
+        setPastedImage(null);
+      }
+
       const MAX_HISTORY = 10;
       const recentMessages = messages.slice(-MAX_HISTORY);
 
-      // Build user message - multimodal if we have an image
+      // Build user message - multimodal if we have image(s)
       let userMessageContent: OpenAI.Chat.ChatCompletionUserMessageParam["content"];
-      if (frameImageBase64) {
-        userMessageContent = [
+      const hasAnyImage = frameImageBase64 || pastedImageBase64;
+
+      if (hasAnyImage) {
+        const contentParts: OpenAI.Chat.ChatCompletionContentPart[] = [
           { type: "text" as const, text: processedMessage },
-          { type: "image_url" as const, image_url: { url: frameImageBase64, detail: "auto" as const } },
         ];
+
+        if (frameImageBase64) {
+          contentParts.push({
+            type: "image_url" as const,
+            image_url: { url: frameImageBase64, detail: "auto" as const }
+          });
+        }
+
+        if (pastedImageBase64) {
+          contentParts.push({
+            type: "image_url" as const,
+            image_url: { url: pastedImageBase64, detail: "auto" as const }
+          });
+        }
+
+        userMessageContent = contentParts;
       } else {
         userMessageContent = processedMessage;
       }
@@ -1129,17 +1178,39 @@ export function StandaloneChat() {
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder={
                   disabledReason
                     ? disabledReason
-                    : "Ask about your screen... (type @ for filters)"
+                    : "Ask about your screen... (type @ for filters, paste images)"
                 }
                 disabled={isLoading || !canChat}
                 className={cn(
                   "flex-1 bg-background/50 border-border/50 focus:border-foreground/30 focus:ring-foreground/10 transition-colors",
-                  disabledReason && "border-destructive/50"
+                  disabledReason && "border-destructive/50",
+                  pastedImage && "pr-14" // Make room for image preview
                 )}
               />
+
+              {/* Pasted image preview inside input */}
+              {pastedImage && (
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  <div className="relative group">
+                    <img
+                      src={pastedImage}
+                      alt="Pasted"
+                      className="h-7 w-7 object-cover rounded border border-border/50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPastedImage(null)}
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <AnimatePresence>
                 {showMentionDropdown && filteredMentions.length > 0 && (
