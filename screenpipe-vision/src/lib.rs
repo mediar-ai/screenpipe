@@ -5,6 +5,7 @@ pub mod custom_ocr;
 #[cfg(target_os = "windows")]
 pub mod microsoft;
 pub mod monitor;
+pub mod ocr_cache;
 pub mod tesseract;
 pub mod utils;
 #[cfg(target_os = "macos")]
