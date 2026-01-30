@@ -54,11 +54,11 @@ export type AIPreset = {
 
 export type UpdateChannel = "stable" | "beta";
 
-// Extend SettingsStore with deviceId (for AI free tier tracking)
-// This is added here until the Rust types are regenerated
+// Extend SettingsStore with fields added before Rust types are regenerated
 export type Settings = SettingsStore & {
 	deviceId?: string;
 	updateChannel?: UpdateChannel;
+	ignoredUrls?: string[];
 }
 
 export const DEFAULT_PROMPT = `Rules:

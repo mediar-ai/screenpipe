@@ -48,6 +48,7 @@ import { commands, SettingsStore } from "@/lib/utils/tauri";
 import {
   useSettings,
   VadSensitivity,
+  Settings,
 } from "@/lib/hooks/use-settings";
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
@@ -207,13 +208,13 @@ export function RecordingSettings() {
 
   // Enhanced settings change handler with validation
   const handleSettingsChange = useCallback((
-    newSettings: Partial<SettingsStore>,
+    newSettings: Partial<Settings>,
     restart: boolean = true
   ) => {
     // Sanitize values
-    const sanitizedSettings: Partial<SettingsStore> = {};
+    const sanitizedSettings: Partial<Settings> = {};
     for (const [key, value] of Object.entries(newSettings)) {
-      sanitizedSettings[key as keyof SettingsStore] = sanitizeValue(key as keyof SettingsStore, value);
+      sanitizedSettings[key as keyof Settings] = sanitizeValue(key as keyof SettingsStore, value);
     }
     
     // Update pending changes
