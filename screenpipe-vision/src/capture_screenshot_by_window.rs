@@ -60,6 +60,10 @@ static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         // Apps with overlay windows that frequently fail capture
         "TheBoringNotch",
         "Grammarly Desktop",
+        // Screenpipe's own UI should never be captured
+        "screenpipe",
+        "screenpipe - Development",
+        "screenpipe beta",
     ])
 });
 
@@ -73,6 +77,10 @@ static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "Microsoft Store",
         "Search",
         "TaskBar",
+        // Screenpipe's own UI should never be captured
+        "screenpipe",
+        "screenpipe - Development",
+        "screenpipe beta",
     ])
 });
 
@@ -86,6 +94,11 @@ static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "i3bar",
         "Plank",
         "Dock",
+        // Screenpipe's own UI should never be captured
+        "screenpipe",
+        "screenpipe - Development",
+        "screenpipe beta",
+        "screenpipe-app",
     ])
 });
 
@@ -445,7 +458,10 @@ pub async fn capture_all_visible_windows(
         // Note: Empty window_name/app_name check fixes frame-window mismatch bug where apps like Arc
         // have internal windows with empty titles that create duplicate DB records
         // Also skip system UI elements that have no owning app (empty app_name)
-        let is_valid = !SKIP_APPS.contains(app_name.as_str())
+        // Safety-net: always exclude screenpipe's own UI regardless of exact app name variant
+        let is_screenpipe_ui = app_name.to_lowercase().contains("screenpipe");
+        let is_valid = !is_screenpipe_ui
+            && !SKIP_APPS.contains(app_name.as_str())
             && !app_name.is_empty()
             && !window_name.is_empty()
             && !SKIP_TITLES.contains(window_name.as_str())
