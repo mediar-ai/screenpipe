@@ -386,6 +386,49 @@ impl AudioManager {
     pub async fn enabled_devices(&self) -> HashSet<String> {
         self.options.read().await.enabled_devices.clone()
     }
+
+    /// Check for recording handles that have finished (crashed or timed out)
+    /// Returns device names that need to be cleaned up and restarted
+    pub async fn check_stale_recording_handles(&self) -> Vec<String> {
+        let mut stale_devices = Vec::new();
+
+        for pair in self.recording_handles.iter() {
+            let device = pair.key();
+            let handle = pair.value();
+
+            // Check if the JoinHandle has finished (task completed/crashed)
+            if handle.lock().await.is_finished() {
+                stale_devices.push(device.to_string());
+            }
+        }
+
+        stale_devices
+    }
+
+    /// Clean up a stale device that had its recording handle crash/timeout
+    /// This prepares the device for restart by the device monitor
+    pub async fn cleanup_stale_device(&self, device_name: &str) -> anyhow::Result<()> {
+        let device = match parse_audio_device(device_name) {
+            Ok(device) => device,
+            Err(_) => return Err(anyhow!("Device {} not found", device_name)),
+        };
+
+        // Remove from recording handles
+        if let Some((_, handle)) = self.recording_handles.remove(&device) {
+            // Abort the handle if somehow still running
+            handle.lock().await.abort();
+        }
+
+        // Stop the device in device manager (clears streams and states)
+        let _ = self.device_manager.stop_device(&device).await;
+
+        info!(
+            "cleaned up stale device {} for restart",
+            device_name
+        );
+
+        Ok(())
+    }
 }
 
 impl Drop for AudioManager {

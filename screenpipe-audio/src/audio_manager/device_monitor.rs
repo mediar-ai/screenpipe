@@ -2,7 +2,7 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::{core::device::parse_audio_device, device::device_manager::DeviceManager};
 
@@ -24,6 +24,19 @@ pub async fn start_device_monitor(
             if audio_manager.status().await == AudioManagerStatus::Running {
                 let currently_available_devices = device_manager.devices().await;
                 let enabled_devices = audio_manager.enabled_devices().await;
+
+                // Check for stale recording handles (tasks that have finished/crashed)
+                // This handles cases where audio stream was hijacked by another app
+                let stale_devices = audio_manager.check_stale_recording_handles().await;
+                for device_name in stale_devices {
+                    warn!(
+                        "detected stale recording handle for {}, cleaning up for restart",
+                        device_name
+                    );
+                    let _ = audio_manager.cleanup_stale_device(&device_name).await;
+                    disconnected_devices.insert(device_name);
+                }
+
                 for device_name in disconnected_devices.clone() {
                     let device = match parse_audio_device(&device_name) {
                         Ok(device) => device,
@@ -34,6 +47,7 @@ pub async fn start_device_monitor(
                     };
 
                     if audio_manager.start_device(&device).await.is_ok() {
+                        info!("successfully restarted device {}", device_name);
                         disconnected_devices.remove(&device_name);
                     }
                 }

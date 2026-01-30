@@ -14,6 +14,11 @@ use crate::{core::update_device_capture_time, AudioInput};
 
 use super::AudioStream;
 
+/// Timeout for receiving audio data before considering the stream dead.
+/// If no audio is received for this duration, the stream is likely hijacked
+/// by another app (e.g., Wispr Flow taking over the microphone).
+const AUDIO_RECEIVE_TIMEOUT_SECS: u64 = 30;
+
 pub async fn run_record_and_transcribe(
     audio_stream: Arc<AudioStream>,
     duration: Duration,
@@ -40,12 +45,20 @@ pub async fn run_record_and_transcribe(
         && !audio_stream.is_disconnected.load(Ordering::Relaxed)
     {
         while collected_audio.len() < max_samples && is_running.load(Ordering::Relaxed) {
-            match receiver.recv().await {
-                Ok(chunk) => {
+            // Use timeout to detect when audio stream stops sending data
+            // This happens when another app hijacks the audio device
+            let recv_result = tokio::time::timeout(
+                Duration::from_secs(AUDIO_RECEIVE_TIMEOUT_SECS),
+                receiver.recv(),
+            )
+            .await;
+
+            match recv_result {
+                Ok(Ok(chunk)) => {
                     collected_audio.extend(chunk);
                     update_device_capture_time(&device_name);
                 }
-                Err(broadcast::error::RecvError::Lagged(n)) => {
+                Ok(Err(broadcast::error::RecvError::Lagged(n))) => {
                     // Channel buffer overflow - receiver fell behind producer
                     // This is expected under heavy load, continue instead of failing
                     warn!(
@@ -54,9 +67,23 @@ pub async fn run_record_and_transcribe(
                     );
                     continue;
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     error!("error receiving audio data: {}", e);
                     return Err(anyhow!("Audio stream error: {}", e));
+                }
+                Err(_timeout) => {
+                    // No audio data received for AUDIO_RECEIVE_TIMEOUT_SECS seconds
+                    // This likely means another app took over the audio device
+                    warn!(
+                        "no audio received from {} for {}s - stream may be hijacked by another app, triggering reconnect",
+                        device_name, AUDIO_RECEIVE_TIMEOUT_SECS
+                    );
+                    // Mark stream as disconnected so device monitor can restart it
+                    audio_stream.is_disconnected.store(true, Ordering::Relaxed);
+                    return Err(anyhow!(
+                        "Audio stream timeout - no data received for {}s (possible audio hijack)",
+                        AUDIO_RECEIVE_TIMEOUT_SECS
+                    ));
                 }
             }
         }
