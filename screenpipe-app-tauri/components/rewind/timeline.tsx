@@ -95,7 +95,7 @@ export default function Timeline() {
 		setShowAudioTranscript(true);
 	}, [currentIndex]);
 
-	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus, newFramesCount, lastFlushTimestamp, clearNewFramesCount } =
+	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus, newFramesCount, lastFlushTimestamp, clearNewFramesCount, clearSentRequestForDate } =
 		useTimelineStore();
 
 	const { frames, isLoading, error, message, fetchNextDayData, websocket } =
@@ -577,6 +577,10 @@ export default function Timeline() {
 	const handleDateChange = async (newDate: Date) => {
 		// Set navigation flag to prevent frame-date sync from fighting
 		isNavigatingRef.current = true;
+
+		// Clear the sent request cache for this date to force a fresh fetch
+		// This ensures clicking on a date in the calendar always loads fresh data
+		clearSentRequestForDate(newDate);
 
 		try {
 			const checkFramesForDate = await hasFramesForDate(newDate);

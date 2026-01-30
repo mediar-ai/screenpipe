@@ -55,6 +55,7 @@ interface TimelineState {
 	flushFrameBuffer: () => void;
 	onWindowFocus: () => void;
 	clearNewFramesCount: () => void;
+	clearSentRequestForDate: (date: Date) => void;
 }
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
@@ -76,6 +77,15 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 	setMessage: (message) => set({ message }),
 	setCurrentDate: (date) => set({ currentDate: date }),
 	clearNewFramesCount: () => set({ newFramesCount: 0 }),
+
+	clearSentRequestForDate: (date: Date) => {
+		const dateKey = `${date.getDate()}-${date.getMonth()}-${date.getFullYear()}`;
+		set((state) => {
+			const newSentRequests = new Set(state.sentRequests);
+			newSentRequests.delete(dateKey);
+			return { sentRequests: newSentRequests };
+		});
+	},
 
 	hasDateBeenFetched: (date: Date) => {
 		const { sentRequests } = get();
