@@ -55,7 +55,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { AIPreset } from "@/lib/utils/tauri";
+import { AIPreset, commands } from "@/lib/utils/tauri";
+import { listen } from "@tauri-apps/api/event";
 import {
   validatePresetName,
   validateUrl,
@@ -147,10 +148,12 @@ const AISection = ({
   preset,
   setDialog,
   isDuplicating,
+  opencodeAvailable,
 }: {
   preset?: AIPreset;
   setDialog: (value: boolean) => void;
   isDuplicating?: boolean;
+  opencodeAvailable?: boolean;
 }) => {
   const { settings, updateSettings } = useSettings();
   const [settingsPreset, setSettingsPreset] = useState<
@@ -573,16 +576,18 @@ const AISection = ({
             onClick={() => handleAiProviderChange("custom")}
           />
 
-          <AIProviderCard
-            type="opencode"
-            title="OpenCode"
-            description="High-intelligence AI agent powered by Claude. Requires login."
-            imageSrc="/images/screenpipe.png"
-            selected={settingsPreset?.provider === "opencode"}
-            onClick={() => handleAiProviderChange("opencode")}
-            disabled={!settings.user?.token}
-            warningText={!settings.user?.token ? "Login required" : undefined}
-          />
+          {opencodeAvailable && (
+            <AIProviderCard
+              type="opencode"
+              title="OpenCode"
+              description="High-intelligence AI agent powered by Claude. Requires login."
+              imageSrc="/images/screenpipe.png"
+              selected={settingsPreset?.provider === "opencode"}
+              onClick={() => handleAiProviderChange("opencode")}
+              disabled={!settings.user?.token}
+              warningText={!settings.user?.token ? "Login required" : undefined}
+            />
+          )}
 
         </div>
       </div>
@@ -832,6 +837,36 @@ export const AIPresets = () => {
     null
   );
   const [isDuplicating, setIsDuplicating] = useState(false);
+  const [opencodeAvailable, setOpencodeAvailable] = useState(false);
+  const [opencodeInstalling, setOpencodeInstalling] = useState(false);
+
+  // Check OpenCode availability and install if needed (background)
+  useEffect(() => {
+    const checkAndInstallOpencode = async () => {
+      const result = await commands.opencodeCheck();
+      if (result.status === "ok" && result.data.available) {
+        setOpencodeAvailable(true);
+      } else {
+        // Try to install in background
+        setOpencodeInstalling(true);
+        await commands.opencodeInstall();
+      }
+    };
+
+    checkAndInstallOpencode();
+
+    // Listen for install completion
+    const unlisten = listen<boolean>("opencode_installed", (event) => {
+      setOpencodeInstalling(false);
+      if (event.payload) {
+        setOpencodeAvailable(true);
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   useEffect(() => {
     if (!createPresetsDialog) {
@@ -846,6 +881,7 @@ export const AIPresets = () => {
         setDialog={setCreatePresentDialog}
         preset={selectedPreset}
         isDuplicating={isDuplicating}
+        opencodeAvailable={opencodeAvailable}
       />
     );
 

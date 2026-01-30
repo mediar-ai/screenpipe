@@ -17,18 +17,8 @@ const cwd = process.cwd()
 console.log('cwd', cwd)
 
 
-// OpenCode version to download (from sst/opencode aka anomalyco/opencode)
-const OPENCODE_VERSION = 'v1.1.45';
-
 const config = {
 	ffmpegRealname: 'ffmpeg',
-	opencode: {
-		// New repo: anomalyco/opencode (formerly sst/opencode)
-		macosArm64: `https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-darwin-arm64.zip`,
-		macosX86_64: `https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-darwin-x64.zip`,
-		linuxX86_64: `https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-linux-x64.zip`,
-		windowsX86_64: `https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-windows-x64.zip`,
-	},
 	windows: {
 		ffmpegName: 'ffmpeg-8.0.1-full_build-shared',
 		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.0.1-full_build-shared.7z',
@@ -212,73 +202,6 @@ async function copyFile(src, dest) {
 	await fs.chmod(dest, 0o755); // ensure the binary is executable
 }
 
-// Download and setup OpenCode binary
-async function setupOpencode(platform, arch) {
-	let url, destName, binaryName;
-
-	if (platform === 'macos') {
-		if (arch === 'arm64') {
-			url = config.opencode.macosArm64;
-			destName = 'opencode-aarch64-apple-darwin';
-			binaryName = 'opencode';
-		} else {
-			url = config.opencode.macosX86_64;
-			destName = 'opencode-x86_64-apple-darwin';
-			binaryName = 'opencode';
-		}
-	} else if (platform === 'linux') {
-		url = config.opencode.linuxX86_64;
-		destName = 'opencode-x86_64-unknown-linux-gnu';
-		binaryName = 'opencode';
-	} else if (platform === 'windows') {
-		url = config.opencode.windowsX86_64;
-		destName = 'opencode-x86_64-pc-windows-msvc.exe';
-		binaryName = 'opencode.exe';
-	} else {
-		console.log('OpenCode not available for this platform');
-		return;
-	}
-
-	const destPath = path.join(cwd, destName);
-
-	if (await fs.exists(destPath)) {
-		console.log(`OpenCode binary already exists: ${destName}`);
-		return;
-	}
-
-	console.log(`Downloading OpenCode for ${platform} ${arch}...`);
-	const zipName = `opencode-${platform}-${arch}.zip`;
-
-	try {
-		if (platform === 'windows') {
-			const wgetPath = await findWget();
-			await $`${wgetPath} --no-config -q ${url} -O ${zipName}`;
-			await $`7z x ${zipName} -y`;
-		} else {
-			await $`wget --no-config -q ${url} -O ${zipName}`;
-			await $`unzip -o ${zipName}`;
-		}
-
-		// Find the binary in extracted files
-		if (await fs.exists(binaryName)) {
-			await fs.rename(binaryName, destPath);
-			if (platform !== 'windows') {
-				await fs.chmod(destPath, 0o755);
-			}
-			console.log(`OpenCode binary installed: ${destName}`);
-		} else {
-			// Try looking in a subdirectory
-			const files = await fs.readdir('.');
-			console.log('Extracted files:', files.filter(f => f.includes('opencode')));
-			console.error(`OpenCode binary '${binaryName}' not found after extraction`);
-		}
-
-		await fs.rm(zipName, { force: true });
-	} catch (error) {
-		console.error(`Failed to download/extract OpenCode: ${error.message}`);
-	}
-}
-
 /* ########## Linux ########## */
 if (platform == 'linux') {
 	// Check and install APT packages
@@ -365,9 +288,6 @@ if (platform == 'linux') {
 	} else {
 		console.log('TESSERACT already exists');
 	}
-
-	// Setup OpenCode
-	await setupOpencode('linux', 'x86_64');
 }
 
 /* ########## Windows ########## */
@@ -418,9 +338,6 @@ if (platform == 'windows') {
 	// Setup vcpkg packages with environment variables set inline
 	// TODO is this even used? dont we use build.rs for this?
 	// await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} ${process.env.VCPKG_ROOT}\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
-
-	// Setup OpenCode
-	await setupOpencode('windows', 'x86_64');
 }
 
 async function getMostRecentBinaryPath(targetArch, paths) {
@@ -520,10 +437,6 @@ if (platform == 'macos') {
 
   console.log('FFMPEG and FFPROBE checks completed');
 	console.log('Moved and renamed ffmpeg binary for externalBin');
-
-	// Setup OpenCode for both architectures
-	await setupOpencode('macos', 'arm64');
-	await setupOpencode('macos', 'x86_64');
 
 	// Strip extended attributes from all binaries to prevent codesign failures
 	console.log('Stripping extended attributes from binaries...');

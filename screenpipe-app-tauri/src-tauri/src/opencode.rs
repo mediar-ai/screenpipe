@@ -455,6 +455,68 @@ pub async fn opencode_check(app: tauri::AppHandle) -> Result<OpencodeCheckResult
     })
 }
 
+/// Install opencode via bun (runs in background)
+/// Returns immediately, installation happens async
+#[tauri::command]
+#[specta::specta]
+pub async fn opencode_install(app: tauri::AppHandle) -> Result<(), String> {
+    info!("Installing opencode via bun...");
+
+    // Use bundled bun sidecar to install opencode globally
+    let bun_result = app.shell().sidecar("bun");
+
+    match bun_result {
+        Ok(cmd) => {
+            let args = vec!["add", "-g", "opencode-ai"];
+            info!("Running: bun {:?}", args);
+
+            match cmd.args(&args).spawn() {
+                Ok((mut rx, _child)) => {
+                    // Spawn a task to log output but don't block
+                    let app_handle = app.app_handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        while let Some(event) = rx.recv().await {
+                            match event {
+                                CommandEvent::Stdout(line) => {
+                                    let text = String::from_utf8_lossy(&line);
+                                    debug!("opencode install stdout: {}", text);
+                                }
+                                CommandEvent::Stderr(line) => {
+                                    let text = String::from_utf8_lossy(&line);
+                                    debug!("opencode install stderr: {}", text);
+                                }
+                                CommandEvent::Terminated(payload) => {
+                                    if payload.code == Some(0) {
+                                        info!("OpenCode installed successfully");
+                                        let _ = app_handle.emit("opencode_installed", true);
+                                    } else {
+                                        error!("OpenCode installation failed with code: {:?}", payload.code);
+                                        let _ = app_handle.emit("opencode_installed", false);
+                                    }
+                                }
+                                CommandEvent::Error(e) => {
+                                    error!("OpenCode install error: {}", e);
+                                    let _ = app_handle.emit("opencode_installed", false);
+                                }
+                                _ => {}
+                            }
+                        }
+                    });
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("Failed to spawn bun install: {}", e);
+                    Err(format!("Failed to start installation: {}", e))
+                }
+            }
+        }
+        Err(e) => {
+            error!("Bun sidecar not available: {}", e);
+            Err("Bun not available for installation".to_string())
+        }
+    }
+}
+
 /// Cleanup function to be called on app exit
 pub async fn cleanup_opencode(state: &OpencodeState) {
     info!("Cleaning up opencode on app exit");

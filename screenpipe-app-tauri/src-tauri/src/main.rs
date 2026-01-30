@@ -755,6 +755,7 @@ async fn main() {
                 opencode::opencode_start,
                 opencode::opencode_stop,
                 opencode::opencode_check,
+                opencode::opencode_install,
             ])
             .typ::<SettingsStore>()
             .typ::<OnboardingStore>();
@@ -870,7 +871,8 @@ async fn main() {
             opencode::opencode_info,
             opencode::opencode_start,
             opencode::opencode_stop,
-            opencode::opencode_check
+            opencode::opencode_check,
+            opencode::opencode_install
         ])
         .setup(move |app| {
             //deep link register_all
