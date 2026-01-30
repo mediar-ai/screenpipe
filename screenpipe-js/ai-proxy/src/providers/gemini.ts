@@ -223,6 +223,8 @@ export class GeminiProvider implements AIProvider {
 		let buffer = '';
 		const self = this;
 
+		let toolCallIndex = 0;
+
 		return new ReadableStream({
 			async start(controller) {
 				try {
@@ -242,15 +244,44 @@ export class GeminiProvider implements AIProvider {
 							if (line.startsWith('data: ')) {
 								try {
 									const data = JSON.parse(line.slice(6));
-									const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-									if (text) {
-										controller.enqueue(
-											new TextEncoder().encode(
-												`data: ${JSON.stringify({
-													choices: [{ delta: { content: text } }],
-												})}\n\n`
-											)
-										);
+									const parts = data.candidates?.[0]?.content?.parts || [];
+
+									for (const part of parts) {
+										// Handle text content
+										if (part.text) {
+											controller.enqueue(
+												new TextEncoder().encode(
+													`data: ${JSON.stringify({
+														choices: [{ delta: { content: part.text } }],
+													})}\n\n`
+												)
+											);
+										}
+
+										// Handle function calls - convert to OpenAI streaming format
+										if (part.functionCall) {
+											const toolCallId = `call_${Date.now()}_${toolCallIndex}`;
+											controller.enqueue(
+												new TextEncoder().encode(
+													`data: ${JSON.stringify({
+														choices: [{
+															delta: {
+																tool_calls: [{
+																	index: toolCallIndex,
+																	id: toolCallId,
+																	type: 'function',
+																	function: {
+																		name: part.functionCall.name,
+																		arguments: JSON.stringify(part.functionCall.args || {}),
+																	},
+																}],
+															},
+														}],
+													})}\n\n`
+												)
+											);
+											toolCallIndex++;
+										}
 									}
 
 									// Check for grounding metadata at the end
@@ -265,6 +296,21 @@ export class GeminiProvider implements AIProvider {
 												)
 											);
 										}
+									}
+
+									// Check for finish reason
+									const finishReason = data.candidates?.[0]?.finishReason;
+									if (finishReason) {
+										const mappedReason = finishReason === 'STOP' ? 'stop' :
+											finishReason === 'MAX_TOKENS' ? 'length' :
+											finishReason === 'TOOL_USE' ? 'tool_calls' : 'stop';
+										controller.enqueue(
+											new TextEncoder().encode(
+												`data: ${JSON.stringify({
+													choices: [{ delta: {}, finish_reason: mappedReason }],
+												})}\n\n`
+											)
+										);
 									}
 								} catch (e) {
 									// Skip invalid JSON
@@ -298,12 +344,82 @@ export class GeminiProvider implements AIProvider {
 			requestBody.generationConfig.responseMimeType = 'application/json';
 		}
 
-		// Add Google Search grounding if web_search tool is requested
+		// Build tools - Vertex AI Gemini doesn't support mixing function tools with Google Search
+		// If web_search is requested, use ONLY Google Search grounding (most useful for external queries)
+		// Otherwise, use function declarations
 		if (hasWebSearch) {
+			// Use Google Search grounding only
 			requestBody.tools = [{ googleSearch: {} }];
+			console.log('[Gemini Vertex] Using Google Search grounding (function tools disabled)');
+		} else if (body.tools && body.tools.length > 0) {
+			// Convert and use function declarations only
+			const functionDeclarations = this.convertToolsToGeminiFormat(body.tools);
+			if (functionDeclarations.length > 0) {
+				requestBody.tools = [{ functionDeclarations }];
+				console.log('[Gemini Vertex] Using function declarations:', functionDeclarations.map(f => f.name));
+			}
 		}
 
 		return requestBody;
+	}
+
+	/**
+	 * Convert OpenAI-style function tools to Gemini functionDeclarations format
+	 */
+	private convertToolsToGeminiFormat(tools: any[]): any[] {
+		const functionDeclarations: any[] = [];
+
+		for (const tool of tools) {
+			// Skip web_search - it's handled via Google Search grounding
+			if (tool.type === 'web_search' ||
+				tool.type === 'google_search' ||
+				tool.function?.name === 'web_search' ||
+				tool.function?.name === 'google_search') {
+				continue;
+			}
+
+			// Convert OpenAI function format to Gemini format
+			if (tool.type === 'function' && tool.function) {
+				functionDeclarations.push({
+					name: tool.function.name,
+					description: tool.function.description || '',
+					parameters: this.convertParametersToGeminiSchema(tool.function.parameters),
+				});
+			}
+		}
+
+		return functionDeclarations;
+	}
+
+	/**
+	 * Convert OpenAI JSON Schema parameters to Gemini schema format
+	 */
+	private convertParametersToGeminiSchema(params: any): any {
+		if (!params) return { type: 'OBJECT', properties: {} };
+
+		const converted: any = {
+			type: (params.type || 'object').toUpperCase(),
+		};
+
+		if (params.properties) {
+			converted.properties = {};
+			for (const [key, value] of Object.entries(params.properties as Record<string, any>)) {
+				converted.properties[key] = {
+					type: (value.type || 'string').toUpperCase(),
+					description: value.description || '',
+				};
+				// Handle enum
+				if (value.enum) {
+					converted.properties[key].enum = value.enum;
+				}
+			}
+		}
+
+		if (params.required && Array.isArray(params.required)) {
+			converted.required = params.required;
+		}
+
+		return converted;
 	}
 
 	formatMessages(messages: Message[]): any[] {
@@ -315,17 +431,55 @@ export class GeminiProvider implements AIProvider {
 				continue;
 			}
 
+			// Handle tool results - convert to Gemini functionResponse format
+			if (msg.role === 'tool') {
+				const toolMsg = msg as any;
+				formatted.push({
+					role: 'user',
+					parts: [{
+						functionResponse: {
+							name: toolMsg.name || 'unknown_function',
+							response: {
+								result: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+							},
+						},
+					}],
+				});
+				continue;
+			}
+
 			const role = msg.role === 'assistant' ? 'model' : 'user';
 			const parts: any[] = [];
 
+			// Handle text content
 			if (typeof msg.content === 'string') {
 				parts.push({ text: msg.content });
 			} else if (Array.isArray(msg.content)) {
 				for (const part of msg.content) {
 					if (part.type === 'text') {
 						parts.push({ text: part.text || '' });
+					} else if (part.type === 'image_url' && part.image_url?.url) {
+						// Handle OpenAI vision format (image_url with base64 or URL)
+						const url = part.image_url.url;
+						const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+						if (dataUrlMatch) {
+							parts.push({
+								inlineData: {
+									mimeType: dataUrlMatch[1],
+									data: dataUrlMatch[2],
+								},
+							});
+						} else {
+							// Handle external URLs
+							parts.push({
+								fileData: {
+									mimeType: 'image/jpeg', // Default, Gemini will detect
+									fileUri: url,
+								},
+							});
+						}
 					} else if (part.type === 'image' && part.image?.url) {
-						// Handle base64 images
+						// Legacy format support
 						const url = part.image.url;
 						const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
 						if (dataUrlMatch) {
@@ -337,6 +491,20 @@ export class GeminiProvider implements AIProvider {
 							});
 						}
 					}
+				}
+			}
+
+			// Handle assistant messages with tool calls - convert to Gemini functionCall format
+			if (msg.role === 'assistant' && (msg as any).tool_calls) {
+				for (const toolCall of (msg as any).tool_calls) {
+					parts.push({
+						functionCall: {
+							name: toolCall.function?.name || toolCall.name,
+							args: typeof toolCall.function?.arguments === 'string'
+								? JSON.parse(toolCall.function.arguments)
+								: toolCall.function?.arguments || {},
+						},
+					});
 				}
 			}
 
@@ -370,7 +538,28 @@ export class GeminiProvider implements AIProvider {
 	}
 
 	formatResponse(response: any, includeGrounding: boolean = false): any {
-		let content = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+		const parts = response.candidates?.[0]?.content?.parts || [];
+
+		// Extract text content
+		let content = '';
+		const toolCalls: any[] = [];
+
+		for (const part of parts) {
+			if (part.text) {
+				content += part.text;
+			}
+			// Handle Gemini function calls - convert to OpenAI format
+			if (part.functionCall) {
+				toolCalls.push({
+					id: `call_${Date.now()}_${toolCalls.length}`,
+					type: 'function',
+					function: {
+						name: part.functionCall.name,
+						arguments: JSON.stringify(part.functionCall.args || {}),
+					},
+				});
+			}
+		}
 
 		// If grounding was used, append sources
 		if (includeGrounding) {
@@ -378,15 +567,18 @@ export class GeminiProvider implements AIProvider {
 			content += this.formatGroundingSources(groundingMetadata);
 		}
 
+		const message: any = {
+			content: content || null,
+			role: 'assistant',
+		};
+
+		// Add tool_calls if any function calls were made
+		if (toolCalls.length > 0) {
+			message.tool_calls = toolCalls;
+		}
+
 		const result: any = {
-			choices: [
-				{
-					message: {
-						content,
-						role: 'assistant',
-					},
-				},
-			],
+			choices: [{ message }],
 		};
 
 		// Include grounding metadata in response for clients that want it

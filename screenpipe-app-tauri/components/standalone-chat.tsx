@@ -689,6 +689,17 @@ export function StandaloneChat() {
         { role: "user", content: userMessageContent },
       ];
 
+      // Debug: log if image is being sent
+      if (hasAnyImage) {
+        console.log("[Chat] Sending multimodal message with image(s):", {
+          hasFrameImage: !!frameImageBase64,
+          hasPastedImage: !!pastedImageBase64,
+          contentParts: Array.isArray(userMessageContent) ? userMessageContent.length : 1,
+          model: activePreset?.model,
+          provider: activePreset?.provider,
+        });
+      }
+
       setMessages((prev) => [
         ...prev,
         { id: assistantMessageId, role: "assistant", content: "" },
