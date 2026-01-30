@@ -327,7 +327,7 @@ impl Default for SettingsStore {
     fn default() -> Self {
         // Default ignored windows for all OS
         let mut ignored_windows = vec![
-            "bit".to_string(),
+            "bit".to_string(),       // Bitwarden
             "VPN".to_string(),
             "Trash".to_string(),
             "Private".to_string(),
@@ -339,6 +339,15 @@ impl Default for SettingsStore {
             "Vaults".to_string(),
             "OBS Studio".to_string(),
             "screenpipe".to_string(),
+            // Password managers (PII protection)
+            "1Password".to_string(),
+            "LastPass".to_string(),
+            "Dashlane".to_string(),
+            "NordPass".to_string(),
+            "Keeper".to_string(),
+            "Enpass".to_string(),
+            "RoboForm".to_string(),
+            "Keychain".to_string(), // macOS Keychain Access
         ];
 
         // Add platform-specific ignored windows
