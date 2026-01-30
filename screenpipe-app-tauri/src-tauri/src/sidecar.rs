@@ -297,6 +297,8 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
 
     let included_windows = store.included_windows.clone();
 
+    let ignored_urls = store.ignored_urls.clone();
+
     let deepgram_api_key = store.deepgram_api_key.clone();
 
     let fps = store.fps;
@@ -438,6 +440,14 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
             args.push(window.as_str());
         }
     }
+
+    if !ignored_urls.is_empty() {
+        for url in &ignored_urls {
+            args.push("--ignored-urls");
+            args.push(url.as_str());
+        }
+    }
+
     let current_pid = std::process::id();
     let current_pid_str = current_pid.to_string();
     // Set auto-destruct PID if not in dev mode

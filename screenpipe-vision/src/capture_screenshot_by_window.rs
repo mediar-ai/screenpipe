@@ -171,13 +171,15 @@ pub struct CapturedWindow {
 pub struct WindowFilters {
     ignore_set: HashSet<String>,
     include_set: HashSet<String>,
+    ignored_urls: HashSet<String>,
 }
 
 impl WindowFilters {
-    pub fn new(ignore_list: &[String], include_list: &[String]) -> Self {
+    pub fn new(ignore_list: &[String], include_list: &[String], ignored_urls: &[String]) -> Self {
         Self {
             ignore_set: ignore_list.iter().map(|s| s.to_lowercase()).collect(),
             include_set: include_list.iter().map(|s| s.to_lowercase()).collect(),
+            ignored_urls: ignored_urls.iter().map(|s| s.to_lowercase()).collect(),
         }
     }
 
@@ -211,6 +213,16 @@ impl WindowFilters {
         }
 
         false
+    }
+
+    /// Check if a URL should be filtered out for privacy
+    /// Returns true if the URL is blocked (should be skipped)
+    pub fn is_url_blocked(&self, url: &str) -> bool {
+        if self.ignored_urls.is_empty() {
+            return false;
+        }
+        let url_lower = url.to_lowercase();
+        self.ignored_urls.iter().any(|blocked| url_lower.contains(blocked))
     }
 }
 
@@ -368,6 +380,14 @@ pub async fn capture_all_visible_windows(
             } else {
                 None
             };
+
+            // Check if URL should be blocked for privacy (e.g., banking sites)
+            if let Some(ref url) = browser_url {
+                if window_filters.is_url_blocked(url) {
+                    debug!("Skipping window due to blocked URL: {}", url);
+                    continue;
+                }
+            }
 
             all_captured_images.push(CapturedWindow {
                 image,

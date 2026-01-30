@@ -711,6 +711,39 @@ export function RecordingSettings() {
     }
   };
 
+  const handleIgnoredUrlsChange = (values: string[]) => {
+    const currentUrls = settings.ignoredUrls || [];
+    const lowerCaseValues = values.map((v) => v.toLowerCase());
+    const currentLowerCase = currentUrls.map((v) => v.toLowerCase());
+
+    // Find added values
+    const addedValues = values.filter(
+      (v) => !currentLowerCase.includes(v.toLowerCase())
+    );
+    // Find removed values
+    const removedValues = currentUrls.filter(
+      (v) => !lowerCaseValues.includes(v.toLowerCase())
+    );
+
+    if (addedValues.length > 0) {
+      const newValue = addedValues[0];
+      handleSettingsChange(
+        {
+          ignoredUrls: [...currentUrls, newValue],
+        },
+        true
+      );
+    } else if (removedValues.length > 0) {
+      const removedValue = removedValues[0];
+      handleSettingsChange(
+        {
+          ignoredUrls: currentUrls.filter((u) => u !== removedValue),
+        },
+        true
+      );
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="space-y-3">
@@ -1523,6 +1556,35 @@ export function RecordingSettings() {
             value={settings.includedWindows}
             onValueChange={handleIncludedWindowsChange}
             placeholder="Select windows to include (optional)..."
+          />
+        </div>
+
+        <div className="flex flex-col space-y-2">
+          <Label htmlFor="ignoredUrls" className="flex items-center space-x-2">
+            <span>Ignored URLs (privacy)</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 cursor-default" />
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>
+                    Browser URLs that will be excluded from recording. Useful for banking sites and private browsing.
+                    Example: "wellsfargo.com" or ".bank" to match partial URLs.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
+          <MultiSelect
+            options={(settings.ignoredUrls || []).map((url) => ({
+              label: url,
+              value: url,
+            }))}
+            defaultValue={settings.ignoredUrls || []}
+            value={settings.ignoredUrls || []}
+            onValueChange={handleIgnoredUrlsChange}
+            placeholder="Type URL patterns to block (e.g., wellsfargo.com, chase.com)..."
           />
         </div>
       </div>

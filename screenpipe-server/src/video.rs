@@ -126,6 +126,7 @@ impl VideoCapture {
         monitor_id: u32,
         ignore_list: &[String],
         include_list: &[String],
+        ignored_urls: &[String],
         languages: Vec<Language>,
         capture_unfocused_windows: bool,
     ) -> Self {
@@ -152,7 +153,7 @@ impl VideoCapture {
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(512);
-        let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list));
+        let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list, ignored_urls));
 
         // Add parameters for monitoring restart
         let capture_ocr_engine = ocr_engine.clone();

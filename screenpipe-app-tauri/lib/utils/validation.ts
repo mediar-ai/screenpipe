@@ -72,6 +72,7 @@ export const settingsStoreSchema = z.object({
   monitorIds: z.array(z.string()),
   ignoredWindows: z.array(z.string()),
   includedWindows: z.array(z.string()),
+  ignoredUrls: z.array(z.string()),
   disableVision: z.boolean(),
   useAllMonitors: z.boolean(),
   enableRealtimeVision: z.boolean(),
@@ -186,6 +187,7 @@ export const sanitizeValue = (field: keyof SettingsStore, value: any): any => {
       
     case "ignoredWindows":
     case "includedWindows":
+    case "ignoredUrls":
     case "audioDevices":
     case "monitorIds":
     case "languages":

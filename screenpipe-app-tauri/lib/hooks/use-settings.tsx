@@ -144,7 +144,8 @@ let DEFAULT_SETTINGS: Settings = {
 			ignoredWindows: [
 			],
 			includedWindows: [],
-		
+			ignoredUrls: [],
+
 			fps: 0.5,
 			vadSensitivity: "high",
 			analyticsEnabled: true,

@@ -25,6 +25,7 @@ pub struct VisionManagerConfig {
     pub use_pii_removal: bool,
     pub ignored_windows: Vec<String>,
     pub included_windows: Vec<String>,
+    pub ignored_urls: Vec<String>,
     pub languages: Vec<Language>,
     pub capture_unfocused_windows: bool,
     pub realtime_vision: bool,
@@ -147,6 +148,7 @@ impl VisionManager {
         let use_pii_removal = self.config.use_pii_removal;
         let ignored_windows = self.config.ignored_windows.clone();
         let included_windows = self.config.included_windows.clone();
+        let ignored_urls = self.config.ignored_urls.clone();
         let languages = self.config.languages.clone();
         let capture_unfocused_windows = self.config.capture_unfocused_windows;
         let realtime_vision = self.config.realtime_vision;
@@ -163,6 +165,7 @@ impl VisionManager {
                     use_pii_removal,
                     &ignored_windows,
                     &included_windows,
+                    &ignored_urls,
                     video_chunk_duration,
                     languages.clone(),
                     capture_unfocused_windows,
