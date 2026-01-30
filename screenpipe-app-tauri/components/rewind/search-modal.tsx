@@ -187,7 +187,10 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
   const activeIndex = hoveredIndex ?? selectedIndex;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]"
+      onWheel={(e) => e.stopPropagation()}
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -223,11 +226,15 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
           )}
         </div>
 
-        {/* Results Grid */}
+        {/* Results Grid - isolate scroll to prevent timeline from scrolling */}
         <div
           ref={gridRef}
-          className="max-h-[60vh] overflow-y-auto p-4"
-          onWheel={(e) => e.stopPropagation()}
+          className="max-h-[60vh] overflow-y-auto p-4 overscroll-contain"
+          onWheel={(e) => {
+            // Stop event from reaching timeline
+            e.stopPropagation();
+          }}
+          onScroll={(e) => e.stopPropagation()}
         >
           {/* Empty state */}
           {showEmpty && (
@@ -284,15 +291,15 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
                       <p className="text-xs font-medium text-foreground truncate">
                         {result.app_name}
                       </p>
-                      {/* Expanded details on hover/select */}
+                      {/* Expanded details on hover/select - hide noisy OCR, show useful metadata */}
                       {isActive && (
-                        <div className="mt-1 pt-1 border-t border-border">
+                        <div className="mt-1 pt-1 border-t border-border space-y-1">
                           <p className="text-xs text-muted-foreground line-clamp-2">
                             {result.window_name}
                           </p>
-                          {result.text && (
-                            <p className="text-xs text-muted-foreground/70 line-clamp-2 mt-1">
-                              {result.text}
+                          {result.url && (
+                            <p className="text-xs text-muted-foreground/70 truncate">
+                              {result.url}
                             </p>
                           )}
                         </div>
