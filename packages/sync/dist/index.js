@@ -9603,6 +9603,7 @@ var sdk_default = Anthropic;
 // src/index.ts
 function parseArgs() {
   const args = process.argv.slice(2);
+  const home = process.env.HOME || process.env.USERPROFILE || "~";
   const config = {
     screenpipeUrl: process.env.SCREENPIPE_URL || "http://localhost:3030",
     outputDir: null,
@@ -9614,7 +9615,9 @@ function parseArgs() {
     ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434",
     ollamaModel: process.env.OLLAMA_MODEL || "llama3.2",
     format: "markdown",
-    verbose: false
+    verbose: false,
+    dbSync: false,
+    dbPath: process.env.SCREENPIPE_DB || `${home}/.screenpipe/db.sqlite`
   };
   for (let i2 = 0;i2 < args.length; i2++) {
     const arg = args[i2];
@@ -9642,6 +9645,13 @@ function parseArgs() {
       case "-v":
         config.verbose = true;
         break;
+      case "--db":
+      case "--db-sync":
+        config.dbSync = true;
+        break;
+      case "--db-path":
+        config.dbPath = args[++i2];
+        break;
       case "--help":
         printHelp();
         process.exit(0);
@@ -9651,10 +9661,14 @@ function parseArgs() {
 }
 function printHelp() {
   console.log(`
-@screenpipe/sync - Extract daily context from Screenpipe
+screenpipe-sync - Extract daily context from Screenpipe
 
 USAGE:
-  bunx @screenpipe/sync [options]
+  bunx screenpipe-sync [options]
+
+MODES:
+  Summary mode (default):  AI-powered daily summary extraction
+  DB sync mode (--db):     Copy raw SQLite database to remote
 
 OPTIONS:
   -o, --output <dir>    Save summary to directory (default: stdout)
@@ -9664,18 +9678,28 @@ OPTIONS:
   --json                Output as JSON instead of markdown
   -v, --verbose         Show debug output
 
+  --db, --db-sync       Sync raw SQLite database instead of summary
+  --db-path <path>      Path to Screenpipe DB (default: ~/.screenpipe/db.sqlite)
+
 ENVIRONMENT:
   SCREENPIPE_URL        Screenpipe API URL (default: http://localhost:3030)
-  ANTHROPIC_API_KEY     Required for AI summarization
+  SCREENPIPE_DB         Path to Screenpipe database
+  ANTHROPIC_API_KEY     For AI summarization (or OPENAI_API_KEY)
 
 EXAMPLES:
-  bunx @screenpipe/sync
-  bunx @screenpipe/sync --output ~/Documents/brain/context --git
-  bunx @screenpipe/sync --hours 24 --json
-  bunx @screenpipe/sync --remote clawdbot:~/brain/context
+  # AI summary to stdout
+  bunx screenpipe-sync
 
-OUTPUT:
-  Creates structured daily summaries with:
+  # Save daily summaries locally
+  bunx screenpipe-sync --output ~/Documents/brain/context --git
+
+  # Sync raw database to remote (e.g., Clawdbot)
+  bunx screenpipe-sync --db --remote user@clawdbot:~/.screenpipe/
+
+  # Full sync: DB + daily summary
+  bunx screenpipe-sync --db -r clawdbot:~/.screenpipe && bunx screenpipe-sync -o ~/context -g
+
+OUTPUT (summary mode):
   - Todo items extracted from screen content
   - Goals and intentions mentioned
   - Decisions made
@@ -9683,6 +9707,10 @@ OUTPUT:
   - Meetings and conversations
   - Blockers and problems
   - AI-generated insights
+
+OUTPUT (db mode):
+  - Copies ~/.screenpipe/db.sqlite to remote
+  - Remote can query SQLite directly for full history
 `);
 }
 async function queryScreenpipe(config) {
@@ -9921,9 +9949,74 @@ async function writeOutput(content, config, filename) {
     }
   }
 }
+async function syncDatabase(config) {
+  const fs2 = await import("fs/promises");
+  const { execSync } = await import("child_process");
+  try {
+    await fs2.access(config.dbPath);
+  } catch {
+    console.error(`[error] Database not found at ${config.dbPath}`);
+    console.error(`        Set --db-path or SCREENPIPE_DB environment variable`);
+    process.exit(1);
+  }
+  const stats = await fs2.stat(config.dbPath);
+  const sizeMB = (stats.size / 1024 / 1024).toFixed(1);
+  console.error(`[db] Found database: ${config.dbPath} (${sizeMB} MB)`);
+  if (!config.remote && !config.outputDir) {
+    console.error(`[error] --db requires --remote or --output to specify destination`);
+    process.exit(1);
+  }
+  if (config.outputDir) {
+    const path = await import("path");
+    const destDir = path.resolve(config.outputDir);
+    await fs2.mkdir(destDir, { recursive: true });
+    const destPath = path.join(destDir, "db.sqlite");
+    console.error(`[db] Copying to ${destPath}...`);
+    await fs2.copyFile(config.dbPath, destPath);
+    try {
+      await fs2.copyFile(`${config.dbPath}-wal`, `${destPath}-wal`);
+      await fs2.copyFile(`${config.dbPath}-shm`, `${destPath}-shm`);
+    } catch {}
+    console.error(`[ok] Database copied to ${destPath}`);
+    if (config.gitPush) {
+      try {
+        execSync(`cd "${destDir}" && git add -A && git commit -m "db sync $(date +%Y-%m-%d)" && git push`, {
+          stdio: config.verbose ? "inherit" : "pipe"
+        });
+        console.error(`[ok] Git pushed`);
+      } catch {
+        console.error(`[warn] Git push failed - maybe no changes?`);
+      }
+    }
+  }
+  if (config.remote) {
+    console.error(`[db] Syncing to ${config.remote}...`);
+    try {
+      execSync(`rsync -avz --progress "${config.dbPath}" "${config.remote}/db.sqlite"`, {
+        stdio: config.verbose ? "inherit" : "pipe"
+      });
+      console.error(`[ok] Database synced to ${config.remote}`);
+    } catch {
+      try {
+        execSync(`scp "${config.dbPath}" "${config.remote}/db.sqlite"`, {
+          stdio: config.verbose ? "inherit" : "pipe"
+        });
+        console.error(`[ok] Database copied to ${config.remote}`);
+      } catch (e2) {
+        console.error(`[error] Failed to sync database: ${e2}`);
+        process.exit(1);
+      }
+    }
+  }
+  console.error(`[done] Database sync complete`);
+}
 async function main() {
   const config = parseArgs();
   const today = new Date().toISOString().split("T")[0];
+  if (config.dbSync) {
+    await syncDatabase(config);
+    return;
+  }
   console.error(`[screenpipe-sync] Analyzing last ${config.hours} hours...`);
   const results = await queryScreenpipe(config);
   console.error(`[ok] Retrieved ${results.length} screen captures`);
