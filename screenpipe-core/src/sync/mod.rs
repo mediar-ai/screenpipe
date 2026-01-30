@@ -91,6 +91,7 @@ pub mod crypto;
 pub mod error;
 pub mod keys;
 pub mod manager;
+pub mod service;
 
 // Re-exports for convenient access
 pub use blob::{decrypt_blob, encrypt_blob, BlobMetadata, BlobType, DecryptedBlob, EncryptedBlob};
@@ -106,3 +107,7 @@ pub use crypto::{
 pub use error::{SyncError, SyncResult};
 pub use keys::{ExistingUserKeyData, NewUserKeyData, SyncKeys};
 pub use manager::{SearchMatchInfo, SearchResult, SyncManager, UploadResult};
+pub use service::{
+    PendingBlob, SyncCommand, SyncDataProvider, SyncEvent, SyncReport, SyncService,
+    SyncServiceConfig, SyncServiceHandle,
+};

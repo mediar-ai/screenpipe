@@ -6644,6 +6644,7 @@ dependencies = [
  "accessibility-sys",
  "anyhow",
  "argon2",
+ "async-trait",
  "base64 0.22.1",
  "candle-core",
  "candle-nn",
