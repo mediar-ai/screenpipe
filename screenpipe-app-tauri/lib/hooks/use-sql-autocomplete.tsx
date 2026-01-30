@@ -23,21 +23,33 @@ export function useSqlAutocomplete(type: "app" | "window" | "url") {
       } else {
         let query: string;
         if (type === "url") {
-          // Query unique domains from browser_url
+          // Query unique domains from browser_url using subquery for proper deduplication
           query = `
-            SELECT
-              CASE
-                WHEN browser_url LIKE 'https://%' THEN SUBSTR(browser_url, 9, INSTR(SUBSTR(browser_url, 9), '/') - 1)
-                WHEN browser_url LIKE 'http://%' THEN SUBSTR(browser_url, 8, INSTR(SUBSTR(browser_url, 8), '/') - 1)
-                ELSE browser_url
-              END as name,
-              COUNT(*) as count
-            FROM frames
-            WHERE browser_url IS NOT NULL
-            AND browser_url != ''
-            AND timestamp > datetime('now', '-7 days')
-            GROUP BY name
-            HAVING name != ''
+            SELECT domain as name, COUNT(*) as count
+            FROM (
+              SELECT
+                CASE
+                  WHEN browser_url LIKE 'https://%' THEN
+                    CASE
+                      WHEN INSTR(SUBSTR(browser_url, 9), '/') > 0
+                      THEN SUBSTR(browser_url, 9, INSTR(SUBSTR(browser_url, 9), '/') - 1)
+                      ELSE SUBSTR(browser_url, 9)
+                    END
+                  WHEN browser_url LIKE 'http://%' THEN
+                    CASE
+                      WHEN INSTR(SUBSTR(browser_url, 8), '/') > 0
+                      THEN SUBSTR(browser_url, 8, INSTR(SUBSTR(browser_url, 8), '/') - 1)
+                      ELSE SUBSTR(browser_url, 8)
+                    END
+                  ELSE browser_url
+                END as domain
+              FROM frames
+              WHERE browser_url IS NOT NULL
+              AND browser_url != ''
+              AND timestamp > datetime('now', '-7 days')
+            )
+            WHERE domain != '' AND domain IS NOT NULL
+            GROUP BY domain
             ORDER BY count DESC
             LIMIT 100
           `;
