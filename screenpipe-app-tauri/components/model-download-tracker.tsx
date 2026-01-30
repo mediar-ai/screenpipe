@@ -219,6 +219,7 @@ export function ModelDownloadTracker() {
     return () => {
       unlisten.then((unsubscribe) => unsubscribe());
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast, dismiss, activeDownloads, toastRefs]);
 
   return null; // This component doesn't render anything
