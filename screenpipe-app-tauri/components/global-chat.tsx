@@ -435,11 +435,49 @@ EXAMPLES:
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "web_search",
+      description: `Search the web for current, up-to-date information. Use this when:
+- User asks about recent news, events, or current information
+- User wants to verify or supplement screen data with web sources
+- User asks about topics that need real-time data (stocks, weather, news)
+- Combining screen context with external web information
+
+This tool uses Google Search to ground responses in current web data and provides cited sources.
+
+EXAMPLES:
+- "What's the latest news about [topic from my screen]?"
+- "Search the web for current ECB rates"
+- "Find recent articles about [something I was researching]"`,
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query. Be specific and include relevant context.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
 ];
 
-const SYSTEM_PROMPT = `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions.
+const SYSTEM_PROMPT = `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions. You also have access to web search for current information.
 
-CRITICAL SEARCH RULES (database has 600k+ entries - ALWAYS use time filters):
+CAPABILITIES:
+1. **Screen/Audio Search** (search_content): Search user's captured screen text, audio transcriptions, UI elements
+2. **Web Search** (web_search): Search the internet for current news, real-time data, and external information
+
+WHEN TO USE WEB SEARCH:
+- User asks about current events, news, or real-time information
+- User wants to combine screen context with external web data (e.g., "based on what I was looking at, search for...")
+- Topics that need up-to-date information (stock prices, news, weather, recent developments)
+- Verifying or supplementing information from screen captures
+
+CRITICAL SCREEN SEARCH RULES (database has 600k+ entries - ALWAYS use time filters):
 1. ALWAYS include start_time in EVERY search - NEVER search without a time range
 2. Default time range: last 1-2 hours. Expand ONLY if no results found
 3. ALWAYS use app_name filter when user mentions ANY app
@@ -455,7 +493,7 @@ Rules for showing videos/audio:
 - Do NOT use markdown links or multi-line code blocks for videos
 - Always show relevant video/audio when answering about what user saw/heard
 
-Be concise. Cite timestamps when relevant.
+Be concise. Cite timestamps when relevant. When using web search, always cite your sources.
 
 Current time: ${new Date().toISOString()}`;
 
@@ -1280,6 +1318,29 @@ export function GlobalChat() {
                 content: `Error parsing tool arguments: ${e}`,
               });
             }
+          } else if (toolCall.function.name === "web_search") {
+            // For Gemini models, web search is handled via Google Search grounding
+            // The grounding results are automatically included in the response
+            // For non-Gemini models, this would need an actual search API call
+            const args = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("[Chat] Web search requested:", args.query);
+
+            // Check if using Gemini (grounding is automatic)
+            const isGemini = activePreset.model?.toLowerCase().includes("gemini");
+            if (isGemini) {
+              toolResults.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: `Web search for "${args.query}" is being performed via Google Search grounding. The results will be included in the response with citations.`,
+              });
+            } else {
+              // For non-Gemini models, we don't have web search yet
+              toolResults.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: `Web search is currently only available for Gemini models. Please use a Gemini model to enable web search functionality.`,
+              });
+            }
           }
         }
 
@@ -1402,6 +1463,23 @@ export function GlobalChat() {
                   role: "tool",
                   tool_call_id: toolCall.id,
                   content: `Error parsing tool arguments: ${e}`,
+                });
+              }
+            } else if (toolCall.function.name === "web_search") {
+              const args = JSON.parse(toolCall.function.arguments || "{}");
+              console.log("[Chat] Web search requested (round " + toolRound + "):", args.query);
+              const isGemini = activePreset.model?.toLowerCase().includes("gemini");
+              if (isGemini) {
+                additionalToolResults.push({
+                  role: "tool",
+                  tool_call_id: toolCall.id,
+                  content: `Web search for "${args.query}" is being performed via Google Search grounding.`,
+                });
+              } else {
+                additionalToolResults.push({
+                  role: "tool",
+                  tool_call_id: toolCall.id,
+                  content: `Web search is currently only available for Gemini models.`,
                 });
               }
             }
