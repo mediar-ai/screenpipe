@@ -89,6 +89,7 @@ export const DEFAULT_PROMPT = `Rules:
 - Diagrams: use \`\`\`mermaid blocks for visual summaries (flowchart, gantt, mindmap, graph)
 - Activity summaries: gantt charts with apps/duration
 - Workflows: flowcharts showing steps taken
+- Knowledge sources: graph diagrams showing where info came from (apps, times, conversations)
 - Meetings: extract speakers, decisions, action items
 - Stay factual, use only provided data
 `;
