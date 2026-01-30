@@ -2227,6 +2227,28 @@ export function GlobalChat() {
                       upgrade now
                     </button>
                   )}
+                  {/* Copy button - appears on hover */}
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(message.content);
+                      setCopiedMessageId(message.id);
+                      setTimeout(() => setCopiedMessageId(null), 2000);
+                    }}
+                    className={cn(
+                      "absolute top-2 right-2 p-1.5 rounded-md transition-all duration-200",
+                      "opacity-0 group-hover/message:opacity-100",
+                      message.role === "user"
+                        ? "hover:bg-background/20 text-background"
+                        : "hover:bg-foreground/10 text-muted-foreground hover:text-foreground"
+                    )}
+                    title="Copy message"
+                  >
+                    {copiedMessageId === message.id ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                 </div>
               </motion.div>
             ))}

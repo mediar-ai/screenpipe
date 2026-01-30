@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useSettings, ChatMessage, ChatConversation } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, Settings, ExternalLink, X, ImageIcon, Zap, History, Search, Trash2, ChevronLeft, Plus } from "lucide-react";
+import { Loader2, Send, Square, User, Settings, ExternalLink, X, ImageIcon, Zap, History, Search, Trash2, ChevronLeft, Plus, Copy, Check } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { PipeAIIcon, PipeAIIconLarge } from "@/components/pipe-ai-icon";
@@ -160,6 +160,7 @@ export function StandaloneChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [activePreset, setActivePreset] = useState<AIPreset | undefined>();
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
@@ -1395,7 +1396,7 @@ export function StandaloneChat() {
               </div>
               <div
                 className={cn(
-                  "relative flex-1 rounded-xl px-4 py-3 text-sm border",
+                  "group/message relative flex-1 rounded-xl px-4 py-3 text-sm border",
                   message.role === "user"
                     ? "bg-foreground text-background border-foreground"
                     : "bg-muted/30 border-border/50"
@@ -1477,6 +1478,28 @@ export function StandaloneChat() {
                     upgrade now
                   </button>
                 )}
+                {/* Copy button - appears on hover */}
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(message.content);
+                    setCopiedMessageId(message.id);
+                    setTimeout(() => setCopiedMessageId(null), 2000);
+                  }}
+                  className={cn(
+                    "absolute top-2 right-2 p-1.5 rounded-md transition-all duration-200",
+                    "opacity-0 group-hover/message:opacity-100",
+                    message.role === "user"
+                      ? "hover:bg-background/20 text-background"
+                      : "hover:bg-foreground/10 text-muted-foreground hover:text-foreground"
+                  )}
+                  title="Copy message"
+                >
+                  {copiedMessageId === message.id ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                </button>
               </div>
             </motion.div>
           ))}
