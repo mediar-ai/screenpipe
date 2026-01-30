@@ -1287,99 +1287,101 @@ export function RecordingSettings() {
           <h3 className="text-lg font-semibold">Video Recording</h3>
         </div>
 
-        {/* Monitor Selection */}
-        <div className="flex flex-col space-y-2">
-          <Label htmlFor="monitors" className="flex items-center space-x-2">
-            <span>Monitors</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>
-                    Select which monitors to record from. Multiple monitors can be selected.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {/* Default Monitor Option */}
-            <div
-              className={cn(
-                "flex items-center space-x-3 rounded-lg border p-3 cursor-pointer transition-colors",
-                settings.monitorIds.includes("default")
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:bg-accent"
-              )}
-              onClick={() => {
-                const isDefaultSelected = settings.monitorIds.includes("default");
-                if (isDefaultSelected) {
-                  // Remove default selection
-                  handleSettingsChange({ 
-                    monitorIds: settings.monitorIds.filter(id => id !== "default") 
-                  }, true);
-                } else {
-                  // Select default (clear other selections and add default)
-                  handleSettingsChange({ monitorIds: ["default"] }, true);
-                }
-              }}
-            >
-              <div className="flex-1">
-                <p className="font-medium">Default Monitor</p>
-                <p className="text-sm text-muted-foreground">
-                  Automatically use the system&apos;s default monitor
-                </p>
-              </div>
-              <Check
-                className={cn(
-                  "h-4 w-4",
-                  settings.monitorIds.includes("default")
-                    ? "opacity-100"
-                    : "opacity-0"
-                )}
-              />
-            </div>
-
-            {availableMonitors.map((monitor) => (
+        {/* Monitor Selection - hidden when useAllMonitors is enabled */}
+        {!settings.useAllMonitors && (
+          <div className="flex flex-col space-y-2">
+            <Label htmlFor="monitors" className="flex items-center space-x-2">
+              <span>Monitors</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 cursor-default" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>
+                      Select which monitors to record from. Multiple monitors can be selected.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {/* Default Monitor Option */}
               <div
-                key={monitor.id}
                 className={cn(
                   "flex items-center space-x-3 rounded-lg border p-3 cursor-pointer transition-colors",
-                  settings.monitorIds.includes(monitor.id.toString())
+                  settings.monitorIds.includes("default")
                     ? "border-primary bg-primary/5"
                     : "border-border hover:bg-accent"
                 )}
                 onClick={() => {
-                  const currentIds = settings.monitorIds.filter(id => id !== "default"); // Remove default when selecting specific monitors
-                  const monitorId = monitor.id.toString();
-                  const updatedIds = currentIds.includes(monitorId)
-                    ? currentIds.filter(id => id !== monitorId)
-                    : [...currentIds, monitorId];
-                  
-                  handleSettingsChange({ monitorIds: updatedIds }, true);
+                  const isDefaultSelected = settings.monitorIds.includes("default");
+                  if (isDefaultSelected) {
+                    // Remove default selection
+                    handleSettingsChange({
+                      monitorIds: settings.monitorIds.filter(id => id !== "default")
+                    }, true);
+                  } else {
+                    // Select default (clear other selections and add default)
+                    handleSettingsChange({ monitorIds: ["default"] }, true);
+                  }
                 }}
               >
                 <div className="flex-1">
-                  <p className="font-medium">{monitor.name}</p>
+                  <p className="font-medium">Default Monitor</p>
                   <p className="text-sm text-muted-foreground">
-                    {monitor.width}x{monitor.height}
-                    {monitor.is_default && " (Default)"}
+                    Automatically use the system&apos;s default monitor
                   </p>
                 </div>
                 <Check
                   className={cn(
                     "h-4 w-4",
-                    settings.monitorIds.includes(monitor.id.toString())
+                    settings.monitorIds.includes("default")
                       ? "opacity-100"
                       : "opacity-0"
                   )}
                 />
               </div>
-            ))}
+
+              {availableMonitors.map((monitor) => (
+                <div
+                  key={monitor.id}
+                  className={cn(
+                    "flex items-center space-x-3 rounded-lg border p-3 cursor-pointer transition-colors",
+                    settings.monitorIds.includes(monitor.id.toString())
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:bg-accent"
+                  )}
+                  onClick={() => {
+                    const currentIds = settings.monitorIds.filter(id => id !== "default"); // Remove default when selecting specific monitors
+                    const monitorId = monitor.id.toString();
+                    const updatedIds = currentIds.includes(monitorId)
+                      ? currentIds.filter(id => id !== monitorId)
+                      : [...currentIds, monitorId];
+
+                    handleSettingsChange({ monitorIds: updatedIds }, true);
+                  }}
+                >
+                  <div className="flex-1">
+                    <p className="font-medium">{monitor.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {monitor.width}x{monitor.height}
+                      {monitor.is_default && " (Default)"}
+                    </p>
+                  </div>
+                  <Check
+                    className={cn(
+                      "h-4 w-4",
+                      settings.monitorIds.includes(monitor.id.toString())
+                        ? "opacity-100"
+                        : "opacity-0"
+                    )}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* OCR Engine */}
         <div className="flex flex-col space-y-2">
