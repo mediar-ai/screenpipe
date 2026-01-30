@@ -31,7 +31,17 @@ lazy_static! {
 
         // GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
         (Regex::new(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b").unwrap(), "GITHUB_TOKEN"),
+
+        // Contextual password detection - redact text following password-related keywords
+        // Matches: "password: secret123", "Master Password: mypass", "PIN: 1234", etc.
+        // The keyword is preserved, only the value after colon/equals is redacted
+        (Regex::new(r"(?i)(?:master\s+)?(?:password|passcode|passphrase|pin|secret\s*key|unlock\s*code|security\s*code)[\s]*[:=][\s]*\S+").unwrap(), "PASSWORD_CONTEXT"),
     ];
+
+    // Password context keywords for replacement - we need to preserve the keyword
+    static ref PASSWORD_CONTEXT_PATTERN: Regex = Regex::new(
+        r"(?i)((?:master\s+)?(?:password|passcode|passphrase|pin|secret\s*key|unlock\s*code|security\s*code)[\s]*[:=][\s]*)(\S+)"
+    ).unwrap();
 }
 
 /// Represents a region in an image that contains PII and should be redacted
@@ -51,7 +61,17 @@ pub struct PiiRegion {
 
 pub fn remove_pii(text: &str) -> String {
     let mut sanitized = text.to_string();
+
+    // First, handle password context specially - preserve the keyword, redact only the value
+    sanitized = PASSWORD_CONTEXT_PATTERN
+        .replace_all(&sanitized, "$1[PASSWORD]")
+        .to_string();
+
+    // Then apply other PII patterns (skip PASSWORD_CONTEXT as it's already handled)
     for (pattern, replacement) in PII_PATTERNS.iter() {
+        if *replacement == "PASSWORD_CONTEXT" {
+            continue; // Already handled above
+        }
         let replacement_bracketed = format!("[{}]", replacement);
         sanitized = pattern
             .replace_all(&sanitized, replacement_bracketed.as_str())
@@ -542,5 +562,130 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert!(!result[0].contains_key("text"));
         assert_eq!(result[0].get("left").unwrap(), "100");
+    }
+
+    // ==================== PASSWORD CONTEXT REDACTION TESTS ====================
+
+    #[test]
+    fn test_password_context_basic() {
+        // Basic password: value patterns
+        assert_eq!(
+            remove_pii("password: secret123"),
+            "password: [PASSWORD]"
+        );
+        assert_eq!(
+            remove_pii("Password: MyP@ssw0rd!"),
+            "Password: [PASSWORD]"
+        );
+        assert_eq!(
+            remove_pii("PASSWORD: test"),
+            "PASSWORD: [PASSWORD]"
+        );
+    }
+
+    #[test]
+    fn test_password_context_master_password() {
+        // Master password patterns (common in password managers)
+        assert_eq!(
+            remove_pii("master password: myMasterSecret"),
+            "master password: [PASSWORD]"
+        );
+        assert_eq!(
+            remove_pii("Master Password: bitwarden123"),
+            "Master Password: [PASSWORD]"
+        );
+    }
+
+    #[test]
+    fn test_password_context_variants() {
+        // Different password-related keywords
+        assert_eq!(
+            remove_pii("passcode: 123456"),
+            "passcode: [PASSWORD]"
+        );
+        // Note: passphrase captures first token only to avoid over-redacting
+        assert!(remove_pii("passphrase: correct horse battery staple").contains("passphrase: [PASSWORD]"));
+        assert_eq!(
+            remove_pii("PIN: 1234"),
+            "PIN: [PASSWORD]"
+        );
+        assert_eq!(
+            remove_pii("secret key: abc123xyz"),
+            "secret key: [PASSWORD]"
+        );
+        assert_eq!(
+            remove_pii("unlock code: 9876"),
+            "unlock code: [PASSWORD]"
+        );
+        assert_eq!(
+            remove_pii("security code: 789"),
+            "security code: [PASSWORD]"
+        );
+    }
+
+    #[test]
+    fn test_password_context_equals_sign() {
+        // Equals sign as separator
+        assert_eq!(
+            remove_pii("password=secret123"),
+            "password=[PASSWORD]"
+        );
+        assert_eq!(
+            remove_pii("PASSWORD = mypass"),
+            "PASSWORD = [PASSWORD]"
+        );
+    }
+
+    #[test]
+    fn test_password_context_in_sentence() {
+        // Password in context of other text
+        let result = remove_pii("Please enter your password: hunter2 to continue");
+        assert!(result.contains("password: [PASSWORD]"));
+        assert!(result.contains("to continue"));
+    }
+
+    #[test]
+    fn test_password_context_multiple() {
+        // Multiple password fields
+        let input = "password: pass1 and PIN: 1234";
+        let result = remove_pii(input);
+        assert!(result.contains("password: [PASSWORD]"));
+        assert!(result.contains("PIN: [PASSWORD]"));
+    }
+
+    #[test]
+    fn test_password_context_no_false_positives() {
+        // Should NOT redact these
+        assert_eq!(
+            remove_pii("I forgot my password"),
+            "I forgot my password" // No colon/equals, no value to redact
+        );
+        assert_eq!(
+            remove_pii("password manager app"),
+            "password manager app" // No colon/equals
+        );
+        assert_eq!(
+            remove_pii("reset password link"),
+            "reset password link"
+        );
+    }
+
+    #[test]
+    fn test_password_context_preserves_keyword() {
+        // The keyword should be preserved for context
+        let result = remove_pii("Master Password: secret");
+        assert!(result.starts_with("Master Password:"));
+        assert!(result.contains("[PASSWORD]"));
+        assert!(!result.contains("secret"));
+    }
+
+    #[test]
+    fn test_password_context_with_other_pii() {
+        // Password context combined with other PII types
+        let input = "Email: test@example.com, password: secret123, phone: 555-123-4567";
+        let result = remove_pii(input);
+        assert!(result.contains("[EMAIL]"));
+        assert!(result.contains("[PASSWORD]"));
+        assert!(result.contains("[PHONE]"));
     }
 }
