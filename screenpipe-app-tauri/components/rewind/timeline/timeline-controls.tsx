@@ -166,7 +166,7 @@ export function TimelineControls({
 						size="icon"
 						onClick={onJumpToday}
 						className="h-8 w-8 text-foreground hover:bg-foreground hover:text-background transition-colors duration-150"
-						disabled={isAtToday}
+						title="Jump to now"
 					>
 						<RefreshCw className="h-4 w-4" />
 					</Button>
