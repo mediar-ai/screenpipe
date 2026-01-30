@@ -1411,16 +1411,34 @@ export function StandaloneChat() {
                         </a>
                       );
                     },
+                    pre({ children, ...props }) {
+                      return (
+                        <pre className="overflow-x-auto rounded-lg bg-neutral-900 dark:bg-neutral-950 text-neutral-100 p-3 my-2 text-xs" style={{ maxWidth: 'calc(100% - 0px)' }} {...props}>
+                          {children}
+                        </pre>
+                      );
+                    },
                     code({ className, children, ...props }) {
                       const content = String(children).replace(/\n$/, "");
                       const isMedia = content.trim().toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
+                      const isCodeBlock = className?.includes("language-");
 
                       if (isMedia) {
                         return <VideoComponent filePath={content.trim()} className="my-2" />;
                       }
 
+                      // Code block (inside pre) - just the code, pre handles styling
+                      if (isCodeBlock) {
+                        return (
+                          <code className="font-mono text-xs block whitespace-pre text-neutral-100" {...props}>
+                            {content}
+                          </code>
+                        );
+                      }
+
+                      // Inline code
                       return (
-                        <code className="px-1.5 py-0.5 rounded bg-background/50 border border-border/50 font-mono text-xs" {...props}>
+                        <code className="px-1.5 py-0.5 rounded bg-neutral-800 dark:bg-neutral-900 text-neutral-100 font-mono text-xs" {...props}>
                           {content}
                         </code>
                       );

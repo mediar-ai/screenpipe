@@ -2180,7 +2180,7 @@ export function GlobalChat() {
                       },
                       pre({ children, ...props }) {
                         return (
-                          <pre className="overflow-x-auto max-w-full rounded-lg bg-background/80 border border-border/50 p-3 my-2" {...props}>
+                          <pre className="overflow-x-auto rounded-lg bg-neutral-900 dark:bg-neutral-950 text-neutral-100 p-3 my-2 text-xs" style={{ maxWidth: 'calc(100% - 0px)' }} {...props}>
                             {children}
                           </pre>
                         );
@@ -2194,10 +2194,10 @@ export function GlobalChat() {
                           return <VideoComponent filePath={content.trim()} className="my-2" />;
                         }
 
-                        // Code block (inside pre) - different styling
+                        // Code block (inside pre) - just the code, pre handles styling
                         if (isCodeBlock) {
                           return (
-                            <code className="font-mono text-xs block whitespace-pre" {...props}>
+                            <code className="font-mono text-xs block whitespace-pre text-neutral-100" {...props}>
                               {content}
                             </code>
                           );
@@ -2205,7 +2205,7 @@ export function GlobalChat() {
 
                         // Inline code
                         return (
-                          <code className="px-1.5 py-0.5 rounded bg-background/50 border border-border/50 font-mono text-xs break-all" {...props}>
+                          <code className="px-1.5 py-0.5 rounded bg-neutral-800 dark:bg-neutral-900 text-neutral-100 font-mono text-xs" {...props}>
                             {content}
                           </code>
                         );
