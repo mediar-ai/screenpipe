@@ -38,3 +38,8 @@ pub use network::*;
 pub use language::{Language, TESSERACT_LANGUAGES};
 pub mod embedding;
 pub use embedding::*;
+
+#[cfg(feature = "cloud-sync")]
+pub mod sync;
+#[cfg(feature = "cloud-sync")]
+pub use sync::*;
