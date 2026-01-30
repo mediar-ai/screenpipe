@@ -798,7 +798,7 @@ export default function Timeline() {
 
 				{/* Non-blocking streaming indicator - shows when frames are loading in background */}
 				{loadingProgress.isStreaming && hasInitialFrames && (
-					<div className="absolute top-20 left-1/2 -translate-x-1/2 z-45 pointer-events-none">
+					<div className="absolute top-20 left-1/2 -translate-x-1/2 z-[45] pointer-events-none">
 						<div className="bg-card/80 backdrop-blur-sm text-foreground px-4 py-2 rounded-full text-sm flex items-center gap-2 border border-border shadow-lg">
 							<Loader2 className="h-3 w-3 animate-spin" />
 							<span>Loading frames... {loadingProgress.loaded.toLocaleString()}</span>

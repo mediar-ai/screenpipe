@@ -11,7 +11,6 @@ import {
 	subDays,
 } from "date-fns";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
 import { useMemo, useState } from "react";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { Calendar } from "@/components/ui/calendar";
@@ -100,26 +99,10 @@ export function TimelineControls({
 						<PopoverTrigger asChild>
 							<button
 								type="button"
-								className="px-3 h-8 text-sm font-mono text-foreground min-w-[100px] text-center hover:bg-foreground hover:text-background transition-colors duration-150 flex items-center justify-center"
+								className="px-3 h-8 text-sm font-mono text-foreground min-w-[100px] text-center hover:bg-foreground hover:text-background transition-colors duration-150 flex items-center justify-center gap-2"
 							>
-								<AnimatePresence mode="wait">
-									<motion.div
-										key={currentDate.toISOString()}
-										initial={{ y: -10, opacity: 0 }}
-										animate={{ y: 0, opacity: 1 }}
-										exit={{ y: 10, opacity: 0 }}
-										transition={{
-											type: "spring",
-											stiffness: 500,
-											damping: 30,
-											duration: 0.15,
-										}}
-										className="flex items-center gap-2"
-									>
-										<CalendarIcon className="h-3 w-3" />
-										{format(currentDate, "d MMM yyyy")}
-									</motion.div>
-								</AnimatePresence>
+								<CalendarIcon className="h-3 w-3" />
+								<span>{format(currentDate, "d MMM yyyy")}</span>
 							</button>
 						</PopoverTrigger>
 						<PopoverContent
@@ -145,7 +128,6 @@ export function TimelineControls({
 									isAfter(startOfDay(date), startOfDay(new Date())) ||
 									isAfter(startOfDay(startAndEndDates.start), startOfDay(date))
 								}
-								initialFocus
 							/>
 						</div>
 					</PopoverContent>
