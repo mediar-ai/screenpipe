@@ -98,9 +98,9 @@ export function TimelineControls({
 
 					<Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
 						<PopoverTrigger asChild>
-							<Button
-								variant="ghost"
-								className="px-3 h-8 text-sm font-mono text-foreground min-w-[100px] text-center hover:bg-foreground hover:text-background transition-colors duration-150"
+							<button
+								type="button"
+								className="px-3 h-8 text-sm font-mono text-foreground min-w-[100px] text-center hover:bg-foreground hover:text-background transition-colors duration-150 flex items-center justify-center"
 							>
 								<AnimatePresence mode="wait">
 									<motion.div
@@ -120,7 +120,7 @@ export function TimelineControls({
 										{format(currentDate, "d MMM yyyy")}
 									</motion.div>
 								</AnimatePresence>
-							</Button>
+							</button>
 						</PopoverTrigger>
 						<PopoverContent
 						className="w-auto p-0 z-[200]"

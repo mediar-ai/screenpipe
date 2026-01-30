@@ -69,6 +69,7 @@ export const TimelineSlider = ({
 	const [hoveredTimestamp, setHoveredTimestamp] = useState<string | null>(null);
 	const [isDragging, setIsDragging] = useState(false);
 	const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
+	const [hasDragMoved, setHasDragMoved] = useState(false); // Track if mouse moved during drag
 	const [selectedIndices, setSelectedIndices] = useState<Set<number>>(
 		new Set(),
 	);
@@ -326,17 +327,50 @@ export const TimelineSlider = ({
 		}
 	}, [selectionRange]);
 
+	// Clear selection when user scrolls/navigates away from the selected range
+	useEffect(() => {
+		if (!selectionRange || selectedIndices.size === 0 || !frames.length) return;
+
+		// Check if current frame is still within or near the selection
+		const currentFrame = frames[currentIndex];
+		if (!currentFrame) return;
+
+		const currentTime = new Date(currentFrame.timestamp).getTime();
+		const selectionStart = selectionRange.start.getTime();
+		const selectionEnd = selectionRange.end.getTime();
+
+		// Allow some buffer (30 seconds) outside selection before clearing
+		const buffer = 30000;
+		const isNearSelection =
+			currentTime >= selectionStart - buffer &&
+			currentTime <= selectionEnd + buffer;
+
+		if (!isNearSelection) {
+			setSelectionRange(null);
+			setSelectedIndices(new Set());
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [currentIndex, frames.length]);
+
 	const handleDragStart = (index: number) => {
 		setIsDragging(true);
 		setDragStartIndex(index);
-		setSelectedIndices(new Set([index]));
-
-		const startDate = new Date(frames[index].timestamp);
-		setSelectionRange({ start: startDate, end: startDate, frameIds: [] });
+		setHasDragMoved(false); // Reset movement tracking
+		// Don't set selection immediately - wait for movement
 	};
 
 	const handleDragOver = (index: number) => {
 		if (isDragging && dragStartIndex !== null && frames && frames.length > 0) {
+			// Check if we've actually moved to a different frame
+			if (index !== dragStartIndex) {
+				setHasDragMoved(true); // Mark that mouse has moved during drag
+			}
+
+			// Only create selection if we've moved
+			if (!hasDragMoved && index === dragStartIndex) {
+				return; // No movement yet, don't create selection
+			}
+
 			const start = Math.min(dragStartIndex, index);
 			const end = Math.max(dragStartIndex, index);
 			const newSelection = new Set<number>();
@@ -367,14 +401,21 @@ export const TimelineSlider = ({
 	};
 
 	const handleDragEnd = () => {
-		// Track selection if multiple frames were selected
-		if (selectedIndices.size > 1) {
+		// If no movement during drag, this was a click - jump to that frame
+		if (!hasDragMoved && dragStartIndex !== null) {
+			onFrameChange(dragStartIndex);
+			// Don't create selection for clicks
+			setSelectedIndices(new Set());
+			setSelectionRange(null);
+		} else if (selectedIndices.size > 1) {
+			// Track selection if multiple frames were selected
 			posthog.capture("timeline_selection_made", {
 				frames_selected: selectedIndices.size,
 			});
 		}
 		setIsDragging(false);
 		setDragStartIndex(null);
+		setHasDragMoved(false);
 	};
 
 	// Calculate group width for positioning labels
