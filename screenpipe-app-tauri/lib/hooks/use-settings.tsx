@@ -54,18 +54,44 @@ export type AIPreset = {
 
 export type UpdateChannel = "stable" | "beta";
 
+// Chat history types
+export interface ChatMessage {
+	id: string;
+	role: "user" | "assistant";
+	content: string;
+	timestamp: number;
+}
+
+export interface ChatConversation {
+	id: string;
+	title: string;
+	messages: ChatMessage[];
+	createdAt: number;
+	updatedAt: number;
+}
+
+export interface ChatHistoryStore {
+	conversations: ChatConversation[];
+	activeConversationId: string | null;
+	historyEnabled: boolean;
+}
+
 // Extend SettingsStore with fields added before Rust types are regenerated
 export type Settings = SettingsStore & {
 	deviceId?: string;
 	updateChannel?: UpdateChannel;
+	chatHistory?: ChatHistoryStore;
 	ignoredUrls?: string[];
 }
 
 export const DEFAULT_PROMPT = `Rules:
-- You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
-- Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
-- Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
-- Always answer my question/intent, do not make up things
+- Videos: use inline code \`/path/to/video.mp4\` (not links or multiline blocks)
+- Diagrams: use \`\`\`mermaid blocks for visual summaries (flowchart, gantt, mindmap, graph)
+- Activity summaries: gantt charts with apps/duration
+- Workflows: flowcharts showing steps taken
+- Knowledge sources: graph diagrams showing where info came from (apps, times, conversations)
+- Meetings: extract speakers, decisions, action items
+- Stay factual, use only provided data
 `;
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -193,6 +219,11 @@ let DEFAULT_SETTINGS: Settings = {
 			useAllMonitors: true,
 			enableRealtimeVision: true,
 			showShortcutOverlay: true,
+			chatHistory: {
+				conversations: [],
+				activeConversationId: null,
+				historyEnabled: true,
+			},
 		};
 
 export function createDefaultSettingsObject(): Settings {
@@ -255,6 +286,16 @@ function createSettingsStore() {
 		);
 		if (settings.aiPresets && settings.aiPresets.length > 0 && !hasGeminiPreset) {
 			settings.aiPresets = [...settings.aiPresets, DEFAULT_GEMINI_PRESET as any];
+			needsUpdate = true;
+		}
+
+		// Migration: Add chat history for existing users
+		if (!settings.chatHistory) {
+			settings.chatHistory = {
+				conversations: [],
+				activeConversationId: null,
+				historyEnabled: true,
+			};
 			needsUpdate = true;
 		}
 

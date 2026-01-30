@@ -409,7 +409,7 @@ impl Default for SettingsStore {
             ocr_engine: "tesseract".to_string(),
             monitor_ids: vec!["default".to_string()],
             audio_devices: vec!["default".to_string()],
-            use_pii_removal: false,
+            use_pii_removal: true,
             restart_interval: 0,
             port: 3030,
             data_dir: "default".to_string(),

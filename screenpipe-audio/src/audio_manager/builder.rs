@@ -32,6 +32,8 @@ pub struct AudioManagerOptions {
     pub deepgram_url: Option<String>,
     pub deepgram_websocket_url: Option<String>,
     pub output_path: Option<PathBuf>,
+    /// Enable PII removal from audio transcriptions
+    pub use_pii_removal: bool,
 }
 
 impl Default for AudioManagerOptions {
@@ -56,6 +58,7 @@ impl Default for AudioManagerOptions {
             db_path: None,
             deepgram_url,
             deepgram_websocket_url,
+            use_pii_removal: false,
         }
     }
 }
@@ -134,6 +137,11 @@ impl AudioManagerBuilder {
 
     pub fn deepgram_websocket_url(mut self, deepgram_websocket_url: Option<String>) -> Self {
         self.options.deepgram_websocket_url = deepgram_websocket_url;
+        self
+    }
+
+    pub fn use_pii_removal(mut self, use_pii_removal: bool) -> Self {
+        self.options.use_pii_removal = use_pii_removal;
         self
     }
 
