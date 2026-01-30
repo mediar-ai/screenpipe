@@ -178,7 +178,7 @@ let DEFAULT_SETTINGS: Settings = {
 			enableRealtimeAudioTranscription: false,
 			realtimeAudioTranscriptionEngine: "deepgram",
 			disableVision: false,
-			useAllMonitors: false,
+			useAllMonitors: true,
 			enableRealtimeVision: true,
 			showShortcutOverlay: true,
 		};

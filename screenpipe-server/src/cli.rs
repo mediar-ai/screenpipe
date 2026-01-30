@@ -229,7 +229,7 @@ pub struct Cli {
 
     /// Automatically record all monitors and dynamically detect when monitors are
     /// connected/disconnected. Recording starts/stops automatically as monitors change.
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = true)]
     pub use_all_monitors: bool,
 
     #[arg(short = 'l', long, value_enum)]
