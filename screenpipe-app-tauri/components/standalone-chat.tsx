@@ -28,6 +28,7 @@ import {
   parseMentions,
   buildAppMentionSuggestions,
   normalizeAppTag,
+  formatShortcutDisplay,
 } from "@/components/global-chat";
 
 const SCREENPIPE_API = "http://localhost:3030";
@@ -1194,7 +1195,7 @@ export function StandaloneChat() {
           <span>New</span>
         </Button>
         <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
-          {isMac ? "⌘⌥" : "Alt+"}L
+          {formatShortcutDisplay(settings.showChatShortcut || (isMac ? "Control+Super+L" : "Alt+L"), isMac)}
         </kbd>
       </div>
 
