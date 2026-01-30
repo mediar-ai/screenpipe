@@ -4,6 +4,10 @@ const nextConfig = {
     images: {
         unoptimized: true,
     },
+    eslint: {
+        // Disable eslint during builds - we run it separately in CI
+        ignoreDuringBuilds: true,
+    },
 }
 export default nextConfig;
 
