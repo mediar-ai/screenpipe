@@ -42,6 +42,7 @@ serde = "1.0.200"
 once_cell = { workspace = true }
 base64 = "0.22.1"
 reqwest = { workspace = true }
+url = "2.5.0"
 
 # Screen capture - platform specific
 [target.'cfg(target_os = "macos")'.dependencies.sck-rs]
@@ -95,7 +96,6 @@ libc = "0.2.168"
 cidre = { git = "https://github.com/yury/cidre.git", features = ["vn", "cv", "cg"] }
 accessibility-sys = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
 core-foundation = "=0.10.0"
-url = "2.5.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2.168"
