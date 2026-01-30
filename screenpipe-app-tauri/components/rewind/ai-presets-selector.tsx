@@ -427,23 +427,6 @@ export function AIProviderConfig({
             <span>custom</span>
           </Button>
 
-          <Button
-            type="button"
-            variant={selectedProvider === "opencode" ? "default" : "outline"}
-            className="flex h-24 flex-col items-center justify-center gap-2"
-            onClick={() => {
-              setSelectedProvider("opencode");
-              setFormData({
-                ...formData,
-                provider: "opencode",
-                url: "", // Will be set dynamically when OpenCode starts
-                model: "claude-sonnet-4-20250514",
-              });
-            }}
-          >
-            <Icons.terminal className="h-8 w-8" />
-            <span>opencode</span>
-          </Button>
         </div>
 
         {selectedProvider === "openai" && (

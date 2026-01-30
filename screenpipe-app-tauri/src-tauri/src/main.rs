@@ -1202,6 +1202,14 @@ async fn main() {
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
                 drop(server_shutdown_tx.send(()));
             }
+
+            // Cleanup OpenCode sidecar
+            let app_handle_opencode = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(opencode_state) = app_handle_opencode.try_state::<opencode::OpencodeState>() {
+                    opencode::cleanup_opencode(&opencode_state).await;
+                }
+            });
         }
 
         tauri::RunEvent::WindowEvent {

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::sync::Arc;
 use tauri::Emitter;
 use tauri::{Manager, State};
@@ -11,7 +12,7 @@ use uuid::Uuid;
 /// State for managing the OpenCode sidecar process
 pub struct OpencodeState(pub Arc<Mutex<Option<OpencodeManager>>>);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OpencodeInfo {
     pub running: bool,
@@ -21,8 +22,6 @@ pub struct OpencodeInfo {
     pub username: Option<String>,
     pub password: Option<String>,
     pub pid: Option<u32>,
-    pub last_stdout: Option<String>,
-    pub last_stderr: Option<String>,
 }
 
 impl Default for OpencodeInfo {
@@ -35,10 +34,17 @@ impl Default for OpencodeInfo {
             username: None,
             password: None,
             pid: None,
-            last_stdout: None,
-            last_stderr: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct OpencodeCheckResult {
+    pub available: bool,
+    pub sidecar_available: bool,
+    pub path_available: bool,
+    pub version: Option<String>,
 }
 
 pub struct OpencodeManager {
@@ -47,8 +53,6 @@ pub struct OpencodeManager {
     project_dir: Option<String>,
     username: Option<String>,
     password: Option<String>,
-    last_stdout: Option<String>,
-    last_stderr: Option<String>,
     child_exited: bool,
 }
 
@@ -60,8 +64,6 @@ impl OpencodeManager {
             project_dir: None,
             username: None,
             password: None,
-            last_stdout: None,
-            last_stderr: None,
             child_exited: false,
         }
     }
@@ -81,22 +83,24 @@ impl OpencodeManager {
             username: self.username.clone(),
             password: self.password.clone(),
             pid,
-            last_stdout: self.last_stdout.clone(),
-            last_stderr: self.last_stderr.clone(),
         }
     }
 
     pub fn stop(&mut self) {
         if let Some(child) = self.child.take() {
-            let _ = child.kill();
+            if let Err(e) = child.kill() {
+                error!("Failed to kill opencode child process: {}", e);
+            }
         }
         self.child_exited = true;
         self.port = None;
         self.project_dir = None;
         self.username = None;
         self.password = None;
-        self.last_stdout = None;
-        self.last_stderr = None;
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.child.is_some() && !self.child_exited
     }
 }
 
@@ -107,36 +111,8 @@ fn find_free_port() -> Result<u16, String> {
     Ok(port)
 }
 
-/// Truncate output to avoid memory issues
-fn truncate_output(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("...{}", &s[s.len() - max_len..])
-    }
-}
-
-/// Get OpenCode info
-#[tauri::command]
-#[specta::specta]
-pub async fn opencode_info(state: State<'_, OpencodeState>) -> Result<OpencodeInfo, String> {
-    let manager = state.0.lock().await;
-    match manager.as_ref() {
-        Some(m) => Ok(m.snapshot()),
-        None => Ok(OpencodeInfo::default()),
-    }
-}
-
-/// Stop the OpenCode sidecar
-#[tauri::command]
-#[specta::specta]
-pub async fn opencode_stop(state: State<'_, OpencodeState>) -> Result<OpencodeInfo, String> {
-    let mut manager = state.0.lock().await;
-    if let Some(m) = manager.as_mut() {
-        m.stop();
-    }
-
-    // Also kill any orphaned opencode processes
+/// Kill orphaned opencode processes
+pub async fn kill_orphaned_opencode_processes() {
     #[cfg(target_os = "macos")]
     {
         let _ = tokio::process::Command::new("sh")
@@ -155,6 +131,44 @@ pub async fn opencode_stop(state: State<'_, OpencodeState>) -> Result<OpencodeIn
             .await;
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let _ = tokio::process::Command::new("taskkill")
+            .args(["/F", "/IM", "opencode.exe"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .await;
+    }
+}
+
+/// Get OpenCode info
+#[tauri::command]
+#[specta::specta]
+pub async fn opencode_info(state: State<'_, OpencodeState>) -> Result<OpencodeInfo, String> {
+    let manager = state.0.lock().await;
+    match manager.as_ref() {
+        Some(m) => Ok(m.snapshot()),
+        None => Ok(OpencodeInfo::default()),
+    }
+}
+
+/// Stop the OpenCode sidecar
+#[tauri::command]
+#[specta::specta]
+pub async fn opencode_stop(state: State<'_, OpencodeState>) -> Result<OpencodeInfo, String> {
+    info!("Stopping opencode sidecar");
+
+    let mut manager = state.0.lock().await;
+    if let Some(m) = manager.as_mut() {
+        m.stop();
+    }
+
+    // Also kill any orphaned opencode processes
+    kill_orphaned_opencode_processes().await;
+
     match manager.as_ref() {
         Some(m) => Ok(m.snapshot()),
         None => Ok(OpencodeInfo::default()),
@@ -171,7 +185,7 @@ pub async fn opencode_start(
 ) -> Result<OpencodeInfo, String> {
     let project_dir = project_dir.trim().to_string();
     if project_dir.is_empty() {
-        return Err("project_dir is required".to_string());
+        return Err("Project directory is required".to_string());
     }
 
     // Create project directory if it doesn't exist
@@ -191,19 +205,24 @@ pub async fn opencode_start(
 
     // Stop any existing instance
     if let Some(m) = manager_guard.as_mut() {
-        m.stop();
+        if m.is_running() {
+            info!("Stopping existing opencode instance");
+            m.stop();
+        }
     }
 
     // Build opencode serve command
     let args = vec![
         "serve".to_string(),
         "--hostname".to_string(),
-        "0.0.0.0".to_string(),
+        "127.0.0.1".to_string(),
         "--port".to_string(),
         port.to_string(),
         "--cors".to_string(),
         "*".to_string(),
     ];
+
+    info!("Starting opencode with args: {:?} in dir: {}", args, project_dir);
 
     // Try to spawn opencode - first try sidecar, then PATH
     let spawn_result = {
@@ -237,9 +256,9 @@ pub async fn opencode_start(
 
     let (mut rx, child) = spawn_result.map_err(|e| {
         format!(
-            "Failed to start opencode. Please install it:\n\
-             - brew install anomalyco/tap/opencode\n\
-             - curl -fsSL https://opencode.ai/install | bash\n\n\
+            "Failed to start OpenCode. Please install it first:\n\n\
+             macOS/Linux:\n  curl -fsSL https://opencode.ai/install | bash\n\n\
+             Or with Homebrew:\n  brew install opencode-ai/tap/opencode\n\n\
              Error: {}",
             e
         )
@@ -256,8 +275,6 @@ pub async fn opencode_start(
         m.username = Some(username.clone());
         m.password = Some(password.clone());
         m.child_exited = false;
-        m.last_stdout = None;
-        m.last_stderr = None;
     }
 
     // Clone state for async task
@@ -271,87 +288,77 @@ pub async fn opencode_start(
                 CommandEvent::Stdout(line_bytes) => {
                     let line = String::from_utf8_lossy(&line_bytes).to_string();
                     debug!("opencode stdout: {}", line);
-
-                    if let Ok(mut manager) = state_arc.try_lock() {
-                        if let Some(m) = manager.as_mut() {
-                            let next = m.last_stdout.as_deref().unwrap_or_default().to_string() + &line;
-                            m.last_stdout = Some(truncate_output(&next, 8000));
-                        }
-                    }
-
                     let _ = app_handle.emit("opencode_log", &line);
                 }
                 CommandEvent::Stderr(line_bytes) => {
                     let line = String::from_utf8_lossy(&line_bytes).to_string();
-                    error!("opencode stderr: {}", line);
-
-                    if let Ok(mut manager) = state_arc.try_lock() {
-                        if let Some(m) = manager.as_mut() {
-                            let next = m.last_stderr.as_deref().unwrap_or_default().to_string() + &line;
-                            m.last_stderr = Some(truncate_output(&next, 8000));
-                        }
+                    // Only log as error if it's actually an error, not just info
+                    if line.to_lowercase().contains("error") || line.to_lowercase().contains("failed") {
+                        error!("opencode stderr: {}", line);
+                    } else {
+                        debug!("opencode stderr: {}", line);
                     }
-
-                    let _ = app_handle.emit("opencode_log", format!("ERROR: {}", line));
+                    let _ = app_handle.emit("opencode_log", &line);
                 }
                 CommandEvent::Terminated(payload) => {
                     warn!("opencode terminated with status: {:?}", payload.code);
-
                     if let Ok(mut manager) = state_arc.try_lock() {
                         if let Some(m) = manager.as_mut() {
                             m.child_exited = true;
                         }
                     }
+                    let _ = app_handle.emit("opencode_terminated", payload.code);
                 }
                 CommandEvent::Error(message) => {
                     error!("opencode error: {}", message);
-
                     if let Ok(mut manager) = state_arc.try_lock() {
                         if let Some(m) = manager.as_mut() {
                             m.child_exited = true;
-                            let next = m.last_stderr.as_deref().unwrap_or_default().to_string() + &message;
-                            m.last_stderr = Some(truncate_output(&next, 8000));
                         }
                     }
+                    let _ = app_handle.emit("opencode_error", &message);
                 }
                 _ => {}
             }
         }
     });
 
-    // Wait for warmup (2 seconds) to detect early crashes
-    let warmup_deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    // Wait for server to be ready (poll health endpoint)
+    let base_url = format!("http://127.0.0.1:{}", port);
+    let health_url = format!("{}/health", base_url);
+    let client = reqwest::Client::new();
+
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(10);
+
     loop {
+        // Check if process exited
         if let Some(m) = manager_guard.as_ref() {
             if m.child_exited {
-                let stdout = m.last_stdout.clone().unwrap_or_default();
-                let stderr = m.last_stderr.clone().unwrap_or_default();
-
-                let mut parts = Vec::new();
-                if !stdout.is_empty() {
-                    parts.push(format!("stdout:\n{}", stdout));
-                }
-                if !stderr.is_empty() {
-                    parts.push(format!("stderr:\n{}", stderr));
-                }
-
-                let suffix = if parts.is_empty() {
-                    String::new()
-                } else {
-                    format!("\n\n{}", parts.join("\n\n"))
-                };
-
-                return Err(format!("OpenCode exited immediately.{}", suffix));
+                return Err("OpenCode exited unexpectedly. Check the logs for details.".to_string());
             }
         }
 
-        if std::time::Instant::now() >= warmup_deadline {
-            break;
+        // Try health check
+        match client.get(&health_url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                info!("OpenCode server is ready at {}", base_url);
+                break;
+            }
+            _ => {}
+        }
+
+        if start.elapsed() > timeout {
+            // Stop the process since it didn't become healthy
+            if let Some(m) = manager_guard.as_mut() {
+                m.stop();
+            }
+            return Err("OpenCode server failed to start within 10 seconds.".to_string());
         }
 
         // Release lock during sleep
         drop(manager_guard);
-        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
         manager_guard = state.0.lock().await;
     }
 
@@ -390,30 +397,18 @@ pub async fn opencode_check(app: tauri::AppHandle) -> Result<OpencodeCheckResult
     };
 
     // Try to get version if available
-    let version = if sidecar_available || path_available {
-        let output = if sidecar_available {
-            app.shell()
-                .sidecar("opencode")
-                .ok()
-                .and_then(|cmd| cmd.args(["--version"]).output().ok())
-        } else {
-            None
-        };
-
-        let output = output.or_else(|| {
-            std::process::Command::new("opencode")
-                .arg("--version")
-                .output()
-                .ok()
-        });
-
-        output.and_then(|o| {
-            if o.status.success() {
-                String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
-            } else {
-                None
-            }
-        })
+    let version = if path_available {
+        std::process::Command::new("opencode")
+            .arg("--version")
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                } else {
+                    None
+                }
+            })
     } else {
         None
     };
@@ -426,11 +421,12 @@ pub async fn opencode_check(app: tauri::AppHandle) -> Result<OpencodeCheckResult
     })
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OpencodeCheckResult {
-    pub available: bool,
-    pub sidecar_available: bool,
-    pub path_available: bool,
-    pub version: Option<String>,
+/// Cleanup function to be called on app exit
+pub async fn cleanup_opencode(state: &OpencodeState) {
+    info!("Cleaning up opencode on app exit");
+    let mut manager = state.0.lock().await;
+    if let Some(m) = manager.as_mut() {
+        m.stop();
+    }
+    kill_orphaned_opencode_processes().await;
 }

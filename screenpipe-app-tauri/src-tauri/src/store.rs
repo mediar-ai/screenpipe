@@ -214,8 +214,6 @@ pub enum AIProviderType {
     Custom,
     #[serde(rename = "screenpipe-cloud")]
     ScreenpipeCloud,
-    #[serde(rename = "opencode")]
-    OpenCode,
 }
 
 #[derive(Serialize, Deserialize,Type,Clone)]

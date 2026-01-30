@@ -76,7 +76,7 @@ const formatPresetName = (name: string): string => {
 };
 
 export interface AIProviderCardProps {
-  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded" | "opencode";
+  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
   title: string;
   description: string;
   imageSrc: string;
@@ -368,11 +368,6 @@ const AISection = ({
       case "custom":
         newUrl = settingsPreset?.url || "";
         break;
-      case "opencode":
-        // OpenCode URL will be set dynamically when started
-        newUrl = "";
-        newModel = "claude-sonnet-4-20250514";
-        break;
     }
 
     updateSettingsPreset({
@@ -574,14 +569,6 @@ const AISection = ({
             onClick={() => handleAiProviderChange("custom")}
           />
 
-          <AIProviderCard
-            type="opencode"
-            title="OpenCode"
-            description="Agentic coding AI. Uses Claude for intelligent code assistance. Requires OpenCode CLI installed."
-            imageSrc="/images/opencode.png"
-            selected={settingsPreset?.provider === "opencode"}
-            onClick={() => handleAiProviderChange("opencode")}
-          />
         </div>
       </div>
 
@@ -817,7 +804,6 @@ const providerImageSrc: Record<AIPreset["provider"], string> = {
   "screenpipe-cloud": "/images/screenpipe.png",
   "native-ollama": "/images/ollama.png",
   custom: "/images/custom.png",
-  opencode: "/images/opencode.png",
 };
 
 export const AIPresets = () => {
