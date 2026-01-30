@@ -17,7 +17,15 @@ export function createProvider(model: string, env: Env): AIProvider {
 		);
 	}
 	if (model.toLowerCase().includes('gemini')) {
-		return new GeminiProvider(env.GEMINI_API_KEY);
+		// Use Vertex AI for Gemini models
+		if (!env.VERTEX_SERVICE_ACCOUNT_JSON || !env.VERTEX_PROJECT_ID) {
+			throw new Error('Vertex AI credentials not configured for Gemini');
+		}
+		return new GeminiProvider(
+			env.VERTEX_SERVICE_ACCOUNT_JSON,
+			env.VERTEX_PROJECT_ID,
+			'us-central1' // Gemini uses us-central1 region
+		);
 	}
 	return new OpenAIProvider(env.OPENAI_API_KEY);
 }
