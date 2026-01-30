@@ -1859,7 +1859,7 @@ export function GlobalChat() {
                 </div>
                 <div
                   className={cn(
-                    "relative flex-1 rounded-xl px-4 py-3 text-sm border",
+                    "relative flex-1 rounded-xl px-4 py-3 text-sm border overflow-hidden min-w-0",
                     message.role === "user"
                       ? "bg-foreground text-background border-foreground"
                       : "bg-muted/30 border-border/50"
@@ -1890,16 +1890,34 @@ export function GlobalChat() {
                           </a>
                         );
                       },
+                      pre({ children, ...props }) {
+                        return (
+                          <pre className="overflow-x-auto max-w-full rounded-lg bg-background/80 border border-border/50 p-3 my-2" {...props}>
+                            {children}
+                          </pre>
+                        );
+                      },
                       code({ className, children, ...props }) {
                         const content = String(children).replace(/\n$/, "");
                         const isMedia = content.trim().toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
+                        const isCodeBlock = className?.includes("language-");
 
                         if (isMedia) {
                           return <VideoComponent filePath={content.trim()} className="my-2" />;
                         }
 
+                        // Code block (inside pre) - different styling
+                        if (isCodeBlock) {
+                          return (
+                            <code className="font-mono text-xs block whitespace-pre" {...props}>
+                              {content}
+                            </code>
+                          );
+                        }
+
+                        // Inline code
                         return (
-                          <code className="px-1.5 py-0.5 rounded bg-background/50 border border-border/50 font-mono text-xs" {...props}>
+                          <code className="px-1.5 py-0.5 rounded bg-background/50 border border-border/50 font-mono text-xs break-all" {...props}>
                             {content}
                           </code>
                         );
