@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "2.0.157"
+version = "2.0.158"
 description = "24/7 memory for your desktop. 100% local."
 authors = ["you"]
 license = ""
@@ -154,6 +154,10 @@ default = ["custom-protocol"]
 
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
+
+# Set by GitHub Actions release workflow - enables auto-updates
+# Source builds without this flag will show "auto-updates unavailable"
+official-build = []
 
 
 [package.metadata.cargo-machete]

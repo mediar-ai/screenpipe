@@ -9,10 +9,19 @@ use tauri::menu::{MenuItem, MenuItemBuilder};
 use tauri::{Emitter, Manager, Wry};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_dialog::MessageDialogButtons;
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio::time::interval;
+
+/// Check if this is a source/community build (not an official release)
+/// Official releases are built with --features official-build in GitHub Actions
+pub fn is_source_build(_app: &tauri::AppHandle) -> bool {
+    // The official-build feature is only enabled during CI releases
+    // Source builds will not have this feature enabled
+    !cfg!(feature = "official-build")
+}
 
 pub struct UpdatesManager {
     interval: Duration,
@@ -24,13 +33,20 @@ pub struct UpdatesManager {
 
 impl UpdatesManager {
     pub fn new(app: &tauri::AppHandle, interval_minutes: u64) -> Result<Self, Error> {
+        // Show different menu text for source builds
+        let menu_text = if is_source_build(app) {
+            "auto-updates unavailable (source build)"
+        } else {
+            "screenpipe is up to date"
+        };
+
         Ok(Self {
             interval: Duration::from_secs(interval_minutes * 60),
             update_available: Arc::new(Mutex::new(false)),
             update_installed: Arc::new(Mutex::new(false)),
             app: app.clone(),
-            update_menu_item: MenuItemBuilder::with_id("update_now", "screenpipe is up to date")
-                .enabled(false)
+            update_menu_item: MenuItemBuilder::with_id("update_now", menu_text)
+                .enabled(is_source_build(app)) // Enable for source builds to show info dialog
                 .build(app)?,
         })
     }
@@ -39,6 +55,15 @@ impl UpdatesManager {
         &self,
         show_dialog: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
+        // Handle source/community builds
+        if is_source_build(&self.app) {
+            info!("source build detected, auto-updates not available");
+            if show_dialog {
+                self.show_source_build_dialog().await?;
+            }
+            return Result::Ok(false);
+        }
+
         if let Ok(val) = std::env::var("TAURI_ENV_DEBUG") {
             if val == "true" {
                 info!("dev mode is enabled, skipping update check");
@@ -164,6 +189,38 @@ impl UpdatesManager {
 
     pub fn update_screenpipe(&self) -> Option<Error> {
         self.app.restart();
+    }
+
+    /// Show dialog explaining auto-updates are not available for source builds
+    async fn show_source_build_dialog(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let (tx, rx) = oneshot::channel();
+        let dialog = self
+            .app
+            .dialog()
+            .message(
+                "auto-updates are only available in the pre-built version.\n\n\
+                source builds require manual updates from github.",
+            )
+            .title("source build detected")
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "download pre-built".to_string(),
+                "view on github".to_string(),
+            ));
+
+        dialog.show(move |answer| {
+            let _ = tx.send(answer);
+        });
+
+        let clicked_download = rx.await?;
+        if clicked_download {
+            // Open download page
+            let _ = self.app.opener().open_url("https://screenpi.pe/download", None::<&str>);
+        } else {
+            // Open GitHub releases
+            let _ = self.app.opener().open_url("https://github.com/mediar-ai/screenpipe/releases", None::<&str>);
+        }
+
+        Ok(())
     }
 
     pub async fn start_periodic_event(&self) {
