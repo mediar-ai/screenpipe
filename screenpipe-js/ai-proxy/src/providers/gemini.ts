@@ -349,24 +349,44 @@ export class GeminiProvider implements AIProvider {
 		const lastUserMessage = body.messages.filter(m => m.role === 'user').pop();
 		const userQuery = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content.toLowerCase() : '';
 
-		// Check if user explicitly wants web/internet search
-		const wantsWebSearch = hasWebSearch && (
-			userQuery.includes('internet') ||
-			userQuery.includes('web search') ||
-			userQuery.includes('search the web') ||
-			userQuery.includes('search online') ||
-			userQuery.includes('latest news') ||
-			userQuery.includes('current news') ||
-			userQuery.includes('recent news') ||
-			userQuery.includes('what is happening') ||
-			userQuery.includes('today\'s') ||
-			userQuery.includes('this week')
-		);
+		// Check if user wants web/internet search - be lenient with typos and variations
+		// Use regex patterns to catch common misspellings
+		const webSearchPatterns = [
+			/i[nt]{1,2}[ea]?r?n[ea]t/i,  // internet and typos: itnernet, intrnet, intenet, etc.
+			/web\s*search/i,          // web search, websearch
+			/search.*web/i,           // search the web, search on web
+			/search.*online/i,        // search online
+			/online.*search/i,        // online search
+			/google/i,                // google it, google search
+			/look\s*up/i,             // look up, lookup
+			/find.*online/i,          // find online
+			/latest\s*news/i,         // latest news
+			/current\s*news/i,        // current news
+			/recent\s*news/i,         // recent news
+			/news\s*about/i,          // news about
+			/what.*happening/i,       // what is happening, what's happening
+			/today'?s?\s/i,           // today's, todays
+			/this\s*week/i,           // this week
+			/real.?time/i,            // real-time, realtime
+			/live\s/i,                // live updates
+			/breaking/i,              // breaking news
+			/trending/i,              // trending
+			/on\s+the\s+net/i,        // on the net
+		];
 
-		if (wantsWebSearch) {
-			// User explicitly wants web search - use Google Search grounding
+		const wantsWebSearch = hasWebSearch && webSearchPatterns.some(pattern => pattern.test(userQuery));
+
+		// Also check if query is about external topics (not about "my screen", "my data", etc.)
+		const isAboutExternalTopic = hasWebSearch && !userQuery.includes('my ') &&
+			!userQuery.includes('screen') && !userQuery.includes('yesterday') &&
+			!userQuery.includes('earlier') && !userQuery.includes('last hour') &&
+			(userQuery.includes('search') || userQuery.includes('find')) &&
+			/\b(who|what|where|when|why|how)\b/i.test(userQuery);
+
+		if (wantsWebSearch || isAboutExternalTopic) {
+			// User wants web search - use Google Search grounding
 			requestBody.tools = [{ googleSearch: {} }];
-			console.log('[Gemini Vertex] User requested web search, using Google Search grounding');
+			console.log('[Gemini Vertex] Using Google Search grounding, query:', userQuery.slice(0, 50));
 		} else if (body.tools && body.tools.length > 0) {
 			// Use function declarations for local search
 			const functionDeclarations = this.convertToolsToGeminiFormat(body.tools);
