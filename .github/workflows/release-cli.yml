@@ -9,11 +9,53 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - main
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
+  check_commit:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: check
+        run: |
+          # Always release on tag push or manual trigger
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "Manual trigger - will release"
+            exit 0
+          fi
+
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "Tag push - will release"
+            exit 0
+          fi
+
+          # For branch pushes, check commit message
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "Commit message: $COMMIT_MSG"
+
+          # Release CLI when app is released or explicitly requested
+          if echo "$COMMIT_MSG" | grep -qE "(release-app|release-cli)"; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "Commit message contains release trigger - will release"
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "No release trigger found - skipping"
+          fi
+
   build-macos:
+    needs: check_commit
+    if: needs.check_commit.outputs.should_release == 'true'
     runs-on: macos-latest
     strategy:
       matrix:
@@ -87,7 +129,8 @@ jobs:
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
           else
-            VERSION=$(git ls-remote --tags --refs --sort="version:refname" | tail -n1 | sed 's/.*\///' | sed 's/^v//')
+            # Read version from workspace Cargo.toml
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           fi
           if [[ -z "$VERSION" ]]; then
             VERSION="0.0.0"
@@ -112,6 +155,8 @@ jobs:
           path: screenpipe-*.tar.gz
 
   build-windows:
+    needs: check_commit
+    if: needs.check_commit.outputs.should_release == 'true'
     runs-on: windows-2019
     steps:
       - name: Checkout code
@@ -178,10 +223,10 @@ jobs:
           $VERSION = if ($env:GITHUB_REF -match "refs/tags/*") {
               $env:GITHUB_REF -replace "refs/tags/v", ""
           } else {
-              $tags = git ls-remote --tags --refs --sort="version:refname"
-              if ($tags) {
-                  $latestTag = ($tags -split "`n")[-1] -replace ".*/v", ""
-                  $latestTag
+              # Read version from workspace Cargo.toml
+              $cargoContent = Get-Content "Cargo.toml" -Raw
+              if ($cargoContent -match 'version = "([^"]+)"') {
+                  $matches[1]
               } else {
                   "0.0.0"
               }
@@ -214,6 +259,8 @@ jobs:
           path: screenpipe-*.zip
 
   build-linux:
+    needs: check_commit
+    if: needs.check_commit.outputs.should_release == 'true'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -298,7 +345,8 @@ jobs:
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
           else
-            VERSION=$(git ls-remote --tags --refs --sort="version:refname" | tail -n1 | sed 's/.*\///' | sed 's/^v//')
+            # Read version from workspace Cargo.toml
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           fi
           if [[ -z "$VERSION" ]]; then
             VERSION="0.0.0"
@@ -332,9 +380,11 @@ jobs:
       - name: Set version
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
+            # Use tag version if triggered by tag
             VERSION=${GITHUB_REF#refs/tags/v}
           else
-            VERSION=$(git ls-remote --tags --refs --sort="version:refname" | tail -n1 | sed 's/.*\///' | sed 's/^v//')
+            # Read version from workspace Cargo.toml
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           fi
           if [[ -z "$VERSION" ]]; then
             VERSION="0.0.0"
