@@ -1567,10 +1567,15 @@ export function RecordingSettings() {
                 <TooltipTrigger>
                   <HelpCircle className="h-4 w-4 cursor-default" />
                 </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>
-                    Browser URLs that will be excluded from recording. Useful for banking sites and private browsing.
-                    Example: "wellsfargo.com" or ".bank" to match partial URLs.
+                <TooltipContent side="right" className="max-w-xs">
+                  <p className="font-semibold mb-1">Block browser URLs from recording</p>
+                  <p className="text-xs mb-2">
+                    Use domain patterns like "wellsfargo.com" or "chase.com".
+                    Works best with the active browser tab. For background tabs,
+                    we also check window titles as a fallback.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Tip: Use specific domains, not generic words like "bank" which may over-match.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -1584,8 +1589,16 @@ export function RecordingSettings() {
             defaultValue={settings.ignoredUrls || []}
             value={settings.ignoredUrls || []}
             onValueChange={handleIgnoredUrlsChange}
-            placeholder="Type URL patterns to block (e.g., wellsfargo.com, chase.com)..."
+            placeholder="Type domain patterns (e.g., wellsfargo.com, chase.com)..."
           />
+          {(settings.ignoredUrls || []).some((url) =>
+            url.length < 5 || ['bank', 'pay', 'money', 'finance'].includes(url.toLowerCase())
+          ) && (
+            <p className="text-xs text-yellow-600 dark:text-yellow-500 flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Short or generic patterns may block unintended sites. Use specific domains.
+            </p>
+          )}
         </div>
       </div>
 

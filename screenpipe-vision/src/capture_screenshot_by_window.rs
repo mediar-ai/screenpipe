@@ -13,6 +13,7 @@ use xcap::{Window, XCapError};
 
 use crate::browser_utils::create_url_detector;
 use crate::monitor::SafeMonitor;
+use url::Url;
 
 const BROWSER_NAMES: [&str; 9] = [
     "chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera",
@@ -216,13 +217,67 @@ impl WindowFilters {
     }
 
     /// Check if a URL should be filtered out for privacy
+    /// Uses domain-level matching to avoid false positives (e.g., "chase" won't match "purchase.com")
     /// Returns true if the URL is blocked (should be skipped)
     pub fn is_url_blocked(&self, url: &str) -> bool {
         if self.ignored_urls.is_empty() {
             return false;
         }
+
+        // Try to extract the host/domain from the URL for more precise matching
+        let url_to_parse = if !url.starts_with("http://") && !url.starts_with("https://") {
+            format!("https://{}", url)
+        } else {
+            url.to_string()
+        };
+
+        if let Ok(parsed) = Url::parse(&url_to_parse) {
+            if let Some(host) = parsed.host_str() {
+                let host_lower = host.to_lowercase();
+                // Match against the domain/host specifically
+                return self.ignored_urls.iter().any(|blocked| {
+                    // Check if blocked pattern matches the host
+                    // e.g., "wellsfargo.com" matches "www.wellsfargo.com"
+                    // e.g., "chase" matches "chase.com" but NOT "purchase.com"
+                    host_lower.contains(blocked) ||
+                    host_lower.ends_with(&format!(".{}", blocked)) ||
+                    host_lower == *blocked
+                });
+            }
+        }
+
+        // Fallback to simple contains check if URL parsing fails
         let url_lower = url.to_lowercase();
         self.ignored_urls.iter().any(|blocked| url_lower.contains(blocked))
+    }
+
+    /// Check if a window title suggests it's a blocked site (fallback for unfocused windows)
+    /// This is less precise but catches cases where URL detection isn't available
+    pub fn is_title_suggesting_blocked_url(&self, window_title: &str) -> bool {
+        if self.ignored_urls.is_empty() {
+            return false;
+        }
+
+        let title_lower = window_title.to_lowercase();
+
+        // Only match if the pattern appears as a distinct word/brand in the title
+        // e.g., "Wells Fargo" in title, or "Chase Bank" in title
+        self.ignored_urls.iter().any(|blocked| {
+            // Remove TLD for title matching (wellsfargo.com -> wellsfargo)
+            let pattern = blocked.trim_end_matches(".com")
+                .trim_end_matches(".net")
+                .trim_end_matches(".org")
+                .trim_end_matches(".bank");
+
+            // Check if it appears as a word boundary match
+            // This prevents "chase" from matching "purchased" in title
+            let words: Vec<&str> = title_lower.split_whitespace().collect();
+            words.iter().any(|word| {
+                word.contains(pattern) && word.len() < pattern.len() + 5
+            }) || title_lower.contains(&format!("{} ", pattern))
+              || title_lower.contains(&format!(" {}", pattern))
+              || title_lower.starts_with(pattern)
+        })
     }
 }
 
@@ -384,7 +439,23 @@ pub async fn capture_all_visible_windows(
             // Check if URL should be blocked for privacy (e.g., banking sites)
             if let Some(ref url) = browser_url {
                 if window_filters.is_url_blocked(url) {
-                    debug!("Skipping window due to blocked URL: {}", url);
+                    tracing::info!("Privacy filter: Skipping window due to blocked URL: {}", url);
+                    continue;
+                }
+            }
+
+            // Fallback: For unfocused browser windows where we can't get URL,
+            // check if window title suggests it's a blocked site
+            let is_browser = BROWSER_NAMES
+                .iter()
+                .any(|&browser| app_name.to_lowercase().contains(browser));
+
+            if is_browser && browser_url.is_none() && !is_focused {
+                if window_filters.is_title_suggesting_blocked_url(&window_name) {
+                    tracing::info!(
+                        "Privacy filter: Skipping unfocused browser window with suspicious title: {}",
+                        window_name
+                    );
                     continue;
                 }
             }
