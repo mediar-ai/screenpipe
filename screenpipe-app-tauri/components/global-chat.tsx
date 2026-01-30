@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, Code, MessageSquare } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { parseInt } from "lodash";
 import { motion, AnimatePresence } from "framer-motion";
@@ -28,6 +28,7 @@ import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { commands } from "@/lib/utils/tauri";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
+import { OpenCodeChat } from "@/components/opencode-chat";
 
 const SCREENPIPE_API = "http://localhost:3030";
 
@@ -532,6 +533,7 @@ export function GlobalChat() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"chat" | "code">("chat");
   const [isStreaming, setIsStreaming] = useState(false);
   const [activePreset, setActivePreset] = useState<AIPreset | undefined>();
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
@@ -1679,39 +1681,84 @@ export function GlobalChat() {
           className="p-0 max-w-2xl h-[70vh] flex flex-col overflow-hidden bg-background/95 backdrop-blur-xl border-border/50"
           customClose={<X className="w-4 h-4" />}
         >
-          {/* Header - sleek geometric style */}
+          {/* Header - sleek geometric style with tabs */}
           {/* Add left padding on macOS to avoid traffic light overlap */}
           <div className={cn(
-            "relative flex items-center gap-3 px-4 py-3 pr-12 border-b border-border/50 bg-gradient-to-r from-background to-muted/30",
+            "relative flex flex-col border-b border-border/50 bg-gradient-to-r from-background to-muted/30",
             isMac && "pl-[72px]"
           )}>
-            {/* Geometric corner accent - hidden on macOS where traffic lights are */}
-            {!isMac && (
-              <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg" />
-            )}
+            <div className="flex items-center gap-3 px-4 py-3 pr-12">
+              {/* Geometric corner accent - hidden on macOS where traffic lights are */}
+              {!isMac && (
+                <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-foreground/10 rounded-tl-lg" />
+              )}
 
-            <div className="relative z-10 p-1.5 rounded-lg bg-foreground/5 border border-border/50">
-              <PipeAIIcon size={18} animated={false} className="text-foreground" />
+              <div className="relative z-10 p-1.5 rounded-lg bg-foreground/5 border border-border/50">
+                {activeTab === "chat" ? (
+                  <PipeAIIcon size={18} animated={false} className="text-foreground" />
+                ) : (
+                  <Code size={18} className="text-foreground" />
+                )}
+              </div>
+              <div className="flex-1">
+                <h2 className="font-semibold text-sm tracking-tight">
+                  {activeTab === "chat" ? "Pipe AI" : "Code Assistant"}
+                </h2>
+                <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
+                  {activeTab === "chat" ? "Screen Activity Assistant" : "AI-Powered Coding"}
+                </p>
+              </div>
+              {activeTab === "chat" && (
+                <button
+                  onClick={() => {
+                    setMessages([]);
+                    setInput("");
+                  }}
+                  className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
+                  title="New chat"
+                >
+                  <Plus size={16} />
+                </button>
+              )}
+              <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
+                {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
+              </kbd>
             </div>
-            <div className="flex-1">
-              <h2 className="font-semibold text-sm tracking-tight">Pipe AI</h2>
-              <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
+
+            {/* Tab switcher */}
+            <div className="flex gap-1 px-4 pb-2">
+              <button
+                onClick={() => setActiveTab("chat")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
+                  activeTab === "chat"
+                    ? "bg-foreground text-background"
+                    : "bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <MessageSquare size={14} />
+                Chat
+              </button>
+              <button
+                onClick={() => setActiveTab("code")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
+                  activeTab === "code"
+                    ? "bg-foreground text-background"
+                    : "bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <Code size={14} />
+                Code
+              </button>
             </div>
-            <button
-              onClick={() => {
-                setMessages([]);
-                setInput("");
-              }}
-              className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
-              title="New chat"
-            >
-              <Plus size={16} />
-            </button>
-            <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
-              {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
-            </kbd>
           </div>
 
+          {/* Tab content */}
+          {activeTab === "code" ? (
+            <OpenCodeChat className="flex-1 overflow-hidden" />
+          ) : (
+          <>
           {/* Messages - with subtle pattern background */}
           <div className="relative flex-1 overflow-y-auto p-4 space-y-4">
             {/* Subtle geometric background pattern */}
@@ -2052,6 +2099,8 @@ export function GlobalChat() {
               </div>
             </form>
           </div>
+          </>
+          )}
         </CustomDialogContent>
       </Dialog>
 

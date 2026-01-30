@@ -14,7 +14,8 @@
             "bun",
             "ui_monitor",
             "ffmpeg",
-            "ffprobe"
+            "ffprobe",
+            "opencode"
         ]
     }
 }

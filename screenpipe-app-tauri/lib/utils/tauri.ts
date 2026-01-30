@@ -283,9 +283,9 @@ async opencodeInfo() : Promise<Result<OpencodeInfo, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async opencodeStart(projectDir: string) : Promise<Result<OpencodeInfo, string>> {
+async opencodeStart(projectDir: string, userToken?: string) : Promise<Result<OpencodeInfo, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("opencode_start", { projectDir }) };
+    return { status: "ok", data: await TAURI_INVOKE("opencode_start", { projectDir, userToken }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -347,8 +347,8 @@ export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | 
 export type User = { id: string | null; name: string | null; email: string | null; image: string | null; token: string | null; clerk_id: string | null; api_key: string | null; credits: Credits | null; stripe_connected: boolean | null; stripe_account_status: string | null; github_username: string | null; bio: string | null; website: string | null; contact: string | null; cloud_subscribed: boolean | null }
 
 // OpenCode types
-export type OpencodeInfo = { running: boolean; baseUrl: string | null; port: number | null; projectDir: string | null; username: string | null; password: string | null; pid: number | null }
-export type OpencodeCheckResult = { available: boolean; sidecarAvailable: boolean; pathAvailable: boolean; version: string | null }
+export type OpencodeInfo = { running: boolean; baseUrl: string | null; port: number | null; projectDir: string | null; pid: number | null }
+export type OpencodeCheckResult = { available: boolean; sidecarAvailable: boolean; pathAvailable: boolean }
 
 /** tauri-specta globals **/
 

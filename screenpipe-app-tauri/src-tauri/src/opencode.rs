@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use specta::Type;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Emitter;
 use tauri::{Manager, State};
@@ -7,7 +9,6 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 /// State for managing the OpenCode sidecar process
 pub struct OpencodeState(pub Arc<Mutex<Option<OpencodeManager>>>);
@@ -19,8 +20,6 @@ pub struct OpencodeInfo {
     pub base_url: Option<String>,
     pub port: Option<u16>,
     pub project_dir: Option<String>,
-    pub username: Option<String>,
-    pub password: Option<String>,
     pub pid: Option<u32>,
 }
 
@@ -31,8 +30,6 @@ impl Default for OpencodeInfo {
             base_url: None,
             port: None,
             project_dir: None,
-            username: None,
-            password: None,
             pid: None,
         }
     }
@@ -44,15 +41,12 @@ pub struct OpencodeCheckResult {
     pub available: bool,
     pub sidecar_available: bool,
     pub path_available: bool,
-    pub version: Option<String>,
 }
 
 pub struct OpencodeManager {
     child: Option<CommandChild>,
     port: Option<u16>,
     project_dir: Option<String>,
-    username: Option<String>,
-    password: Option<String>,
     child_exited: bool,
 }
 
@@ -62,8 +56,6 @@ impl OpencodeManager {
             child: None,
             port: None,
             project_dir: None,
-            username: None,
-            password: None,
             child_exited: false,
         }
     }
@@ -80,8 +72,6 @@ impl OpencodeManager {
             base_url: self.port.map(|p| format!("http://127.0.0.1:{}", p)),
             port: self.port,
             project_dir: self.project_dir.clone(),
-            username: self.username.clone(),
-            password: self.password.clone(),
             pid,
         }
     }
@@ -95,8 +85,6 @@ impl OpencodeManager {
         self.child_exited = true;
         self.port = None;
         self.project_dir = None;
-        self.username = None;
-        self.password = None;
     }
 
     pub fn is_running(&self) -> bool {
@@ -111,13 +99,84 @@ fn find_free_port() -> Result<u16, String> {
     Ok(port)
 }
 
+/// Get the OpenCode config directory
+fn get_opencode_config_dir() -> Result<PathBuf, String> {
+    let config_dir = dirs::config_dir()
+        .ok_or_else(|| "Could not find config directory".to_string())?
+        .join("opencode");
+    Ok(config_dir)
+}
+
+/// Ensure OpenCode is configured to use screenpipe-cloud as the AI provider
+/// This creates/updates the opencode.json config file
+fn ensure_opencode_config(user_token: Option<&str>) -> Result<(), String> {
+    let config_dir = get_opencode_config_dir()?;
+    std::fs::create_dir_all(&config_dir)
+        .map_err(|e| format!("Failed to create opencode config dir: {}", e))?;
+
+    let config_path = config_dir.join("opencode.json");
+
+    // Create config that uses screenpipe-cloud as the provider
+    // This leverages the $200k Vertex AI credits through screenpipe's proxy
+    let config = json!({
+        "$schema": "https://opencode.ai/config.json",
+        "provider": {
+            "screenpipe": {
+                "api": "anthropic",
+                "baseURL": "https://ai-proxy.i.screenpi.pe/anthropic",
+                "models": {
+                    "claude-sonnet-4-20250514": {
+                        "name": "Claude Sonnet 4",
+                        "attachments": true,
+                        "reasoning": false
+                    },
+                    "claude-opus-4-20250514": {
+                        "name": "Claude Opus 4",
+                        "attachments": true,
+                        "reasoning": false
+                    }
+                }
+            }
+        },
+        "model": {
+            "default": "screenpipe/claude-sonnet-4-20250514",
+            "reasoning": "screenpipe/claude-sonnet-4-20250514"
+        }
+    });
+
+    // Write the config
+    let config_str = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+    std::fs::write(&config_path, config_str)
+        .map_err(|e| format!("Failed to write opencode config: {}", e))?;
+
+    // If we have a user token, also set up auth
+    if let Some(token) = user_token {
+        let auth_path = config_dir.join("auth.json");
+        let auth = json!({
+            "screenpipe": {
+                "type": "api_key",
+                "key": token
+            }
+        });
+        let auth_str = serde_json::to_string_pretty(&auth)
+            .map_err(|e| format!("Failed to serialize auth: {}", e))?;
+        std::fs::write(&auth_path, auth_str)
+            .map_err(|e| format!("Failed to write opencode auth: {}", e))?;
+    }
+
+    info!("OpenCode configured to use screenpipe-cloud at {:?}", config_path);
+    Ok(())
+}
+
 /// Kill orphaned opencode processes
 pub async fn kill_orphaned_opencode_processes() {
     #[cfg(target_os = "macos")]
     {
         let _ = tokio::process::Command::new("sh")
             .arg("-c")
-            .arg("pgrep -x opencode | xargs -r kill -9 2>/dev/null || true")
+            .arg("pgrep -x opencode | xargs kill -9 2>/dev/null || true")
             .output()
             .await;
     }
@@ -176,12 +235,14 @@ pub async fn opencode_stop(state: State<'_, OpencodeState>) -> Result<OpencodeIn
 }
 
 /// Start the OpenCode sidecar
+/// user_token: The user's screenpipe auth token for API access
 #[tauri::command]
 #[specta::specta]
 pub async fn opencode_start(
     app: tauri::AppHandle,
     state: State<'_, OpencodeState>,
     project_dir: String,
+    user_token: Option<String>,
 ) -> Result<OpencodeInfo, String> {
     let project_dir = project_dir.trim().to_string();
     if project_dir.is_empty() {
@@ -192,9 +253,10 @@ pub async fn opencode_start(
     std::fs::create_dir_all(&project_dir)
         .map_err(|e| format!("Failed to create project directory: {}", e))?;
 
+    // Ensure OpenCode is configured to use screenpipe-cloud
+    ensure_opencode_config(user_token.as_deref())?;
+
     let port = find_free_port()?;
-    let username = Uuid::new_v4().to_string();
-    let password = Uuid::new_v4().to_string();
 
     let mut manager_guard = state.0.lock().await;
 
@@ -226,42 +288,39 @@ pub async fn opencode_start(
 
     // Try to spawn opencode - first try sidecar, then PATH
     let spawn_result = {
-        // Try sidecar first
         let sidecar_result = app.shell().sidecar("opencode");
 
         match sidecar_result {
             Ok(cmd) => {
                 info!("Using bundled opencode sidecar");
-                cmd.args(&args)
-                    .current_dir(&project_dir)
-                    .env("OPENCODE_CLIENT", "screenpipe")
-                    .env("OPENCODE_SERVER_USERNAME", &username)
-                    .env("OPENCODE_SERVER_PASSWORD", &password)
-                    .spawn()
+                let mut command = cmd.args(&args).current_dir(&project_dir);
+
+                // Pass the API key via environment variable for the provider
+                if let Some(ref token) = user_token {
+                    command = command.env("ANTHROPIC_API_KEY", token);
+                }
+
+                command.spawn()
             }
             Err(_) => {
                 // Fallback to PATH
                 info!("Sidecar not found, trying opencode from PATH");
-                app.shell()
+                let mut command = app.shell()
                     .command("opencode")
                     .args(&args)
-                    .current_dir(&project_dir)
-                    .env("OPENCODE_CLIENT", "screenpipe")
-                    .env("OPENCODE_SERVER_USERNAME", &username)
-                    .env("OPENCODE_SERVER_PASSWORD", &password)
-                    .spawn()
+                    .current_dir(&project_dir);
+
+                if let Some(ref token) = user_token {
+                    command = command.env("ANTHROPIC_API_KEY", token);
+                }
+
+                command.spawn()
             }
         }
     };
 
     let (mut rx, child) = spawn_result.map_err(|e| {
-        format!(
-            "Failed to start OpenCode. Please install it first:\n\n\
-             macOS/Linux:\n  curl -fsSL https://opencode.ai/install | bash\n\n\
-             Or with Homebrew:\n  brew install opencode-ai/tap/opencode\n\n\
-             Error: {}",
-            e
-        )
+        format!("Failed to start OpenCode: {}", e)
     })?;
 
     let pid = child.pid();
@@ -272,8 +331,6 @@ pub async fn opencode_start(
         m.child = Some(child);
         m.port = Some(port);
         m.project_dir = Some(project_dir.clone());
-        m.username = Some(username.clone());
-        m.password = Some(password.clone());
         m.child_exited = false;
     }
 
@@ -292,7 +349,6 @@ pub async fn opencode_start(
                 }
                 CommandEvent::Stderr(line_bytes) => {
                     let line = String::from_utf8_lossy(&line_bytes).to_string();
-                    // Only log as error if it's actually an error, not just info
                     if line.to_lowercase().contains("error") || line.to_lowercase().contains("failed") {
                         error!("opencode stderr: {}", line);
                     } else {
@@ -329,13 +385,13 @@ pub async fn opencode_start(
     let client = reqwest::Client::new();
 
     let start = std::time::Instant::now();
-    let timeout = std::time::Duration::from_secs(10);
+    let timeout = std::time::Duration::from_secs(15);
 
     loop {
         // Check if process exited
         if let Some(m) = manager_guard.as_ref() {
             if m.child_exited {
-                return Err("OpenCode exited unexpectedly. Check the logs for details.".to_string());
+                return Err("OpenCode exited unexpectedly. Check logs for details.".to_string());
             }
         }
 
@@ -349,14 +405,12 @@ pub async fn opencode_start(
         }
 
         if start.elapsed() > timeout {
-            // Stop the process since it didn't become healthy
             if let Some(m) = manager_guard.as_mut() {
                 m.stop();
             }
-            return Err("OpenCode server failed to start within 10 seconds.".to_string());
+            return Err("OpenCode server failed to start within 15 seconds.".to_string());
         }
 
-        // Release lock during sleep
         drop(manager_guard);
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
         manager_guard = state.0.lock().await;
@@ -372,10 +426,8 @@ pub async fn opencode_start(
 #[tauri::command]
 #[specta::specta]
 pub async fn opencode_check(app: tauri::AppHandle) -> Result<OpencodeCheckResult, String> {
-    // Check sidecar first
     let sidecar_available = app.shell().sidecar("opencode").is_ok();
 
-    // Check PATH
     let path_available = {
         #[cfg(target_os = "windows")]
         {
@@ -396,28 +448,10 @@ pub async fn opencode_check(app: tauri::AppHandle) -> Result<OpencodeCheckResult
         }
     };
 
-    // Try to get version if available
-    let version = if path_available {
-        std::process::Command::new("opencode")
-            .arg("--version")
-            .output()
-            .ok()
-            .and_then(|o| {
-                if o.status.success() {
-                    String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
-                } else {
-                    None
-                }
-            })
-    } else {
-        None
-    };
-
     Ok(OpencodeCheckResult {
         available: sidecar_available || path_available,
         sidecar_available,
         path_available,
-        version,
     })
 }
 
