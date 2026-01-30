@@ -306,7 +306,7 @@ export function ConnectionsSection() {
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <button
-              onClick={() => open("https://docs.screenpi.pe/docs/api-reference")}
+              onClick={() => open("https://docs.screenpi.pe/api-reference")}
               className="flex items-center gap-2 p-3 bg-card hover:bg-muted border border-border rounded-lg transition-colors text-left group"
             >
               <span className="text-lg">📡</span>
@@ -317,7 +317,7 @@ export function ConnectionsSection() {
             </button>
 
             <button
-              onClick={() => open("https://docs.screenpi.pe/docs/mcp-server")}
+              onClick={() => open("https://docs.screenpi.pe/mcp-server")}
               className="flex items-center gap-2 p-3 bg-card hover:bg-muted border border-border rounded-lg transition-colors text-left group"
             >
               <span className="text-lg">🔌</span>
@@ -328,7 +328,7 @@ export function ConnectionsSection() {
             </button>
 
             <button
-              onClick={() => open("https://docs.screenpi.pe/docs/plugins")}
+              onClick={() => open("https://docs.screenpi.pe/mcp-apps")}
               className="flex items-center gap-2 p-3 bg-card hover:bg-muted border border-border rounded-lg transition-colors text-left group"
             >
               <span className="text-lg">🤖</span>
@@ -339,7 +339,7 @@ export function ConnectionsSection() {
             </button>
 
             <button
-              onClick={() => open("https://docs.screenpi.pe/docs/sdk-reference")}
+              onClick={() => open("https://docs.screenpi.pe/sdk-reference")}
               className="flex items-center gap-2 p-3 bg-card hover:bg-muted border border-border rounded-lg transition-colors text-left group"
             >
               <span className="text-lg">🔧</span>
