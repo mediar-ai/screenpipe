@@ -444,11 +444,9 @@ pub async fn show_shortcut_reminder(
     let x = ((screen_size.width as f64 / scale_factor) - window_width) / 2.0;
     let y = 12.0; // 12px from top
 
-    // CRITICAL: Set Accessory activation policy for fullscreen support on macOS
-    #[cfg(target_os = "macos")]
-    {
-        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-    }
+    // Note: We intentionally don't set Accessory activation policy here.
+    // The shortcut reminder uses always_on_top which is sufficient for a small overlay.
+    // Setting Accessory would hide the dock icon which is a worse tradeoff.
 
     info!("Creating new shortcut-reminder window");
     let mut builder = WebviewWindowBuilder::new(
