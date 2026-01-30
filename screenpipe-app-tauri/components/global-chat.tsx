@@ -1894,14 +1894,14 @@ export function GlobalChat() {
               <span className="hidden sm:inline">History</span>
             </Button>
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               onClick={startNewConversation}
-              className="h-7 px-2 gap-1 text-xs"
+              className="h-7 px-3 gap-1.5 text-xs bg-foreground text-background hover:bg-foreground/90"
               title="New chat"
             >
               <Plus size={14} />
-              <span className="hidden sm:inline">New</span>
+              <span>New</span>
             </Button>
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
               {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
