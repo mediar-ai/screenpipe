@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { parseInt } from "lodash";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1125,8 +1125,10 @@ export function GlobalChat() {
       let toolCalls: any[] = [];
       let streamCompleted = false;
       let lastChunkTime = Date.now();
+      let chunkCount = 0;
 
       // First request with streaming
+      console.log("[Chat] Starting stream request", { model: activePreset.model, messageCount: conversationMessages.length });
       const stream = await openai.chat.completions.create(
         {
           model: activePreset.model || "gpt-4",
@@ -1136,18 +1138,31 @@ export function GlobalChat() {
         },
         { signal: abortControllerRef.current.signal }
       );
+      console.log("[Chat] Stream created, waiting for chunks...");
 
       // Stream timeout - 60 seconds without receiving a chunk
       const STREAM_TIMEOUT_MS = 60000;
 
       for await (const chunk of stream) {
+        chunkCount++;
         lastChunkTime = Date.now();
         const delta = chunk.choices[0]?.delta;
         const finishReason = chunk.choices[0]?.finish_reason;
 
+        // Log every 10th chunk or important events
+        if (chunkCount <= 3 || chunkCount % 10 === 0 || finishReason) {
+          console.log("[Chat] Chunk", chunkCount, {
+            hasContent: !!delta?.content,
+            hasToolCalls: !!delta?.tool_calls,
+            finishReason,
+            contentPreview: delta?.content?.slice(0, 50)
+          });
+        }
+
         // Track stream completion
         if (finishReason) {
           streamCompleted = true;
+          console.log("[Chat] Stream completed with finish_reason:", finishReason);
         }
 
         // Handle text content
@@ -1171,6 +1186,7 @@ export function GlobalChat() {
                 id: toolCall.id || "",
                 function: { name: "", arguments: "" },
               };
+              console.log("[Chat] Tool call started:", toolCall.function?.name);
             }
             if (toolCall.id) toolCalls[index].id = toolCall.id;
             if (toolCall.function?.name) toolCalls[index].function.name = toolCall.function.name;
@@ -1179,9 +1195,20 @@ export function GlobalChat() {
         }
       }
 
+      console.log("[Chat] Stream loop ended", {
+        chunkCount,
+        streamCompleted,
+        toolCallsCount: toolCalls.length,
+        textLength: accumulatedText.length
+      });
+
       // Check for incomplete stream (no finish_reason and no tool calls)
       if (!streamCompleted && toolCalls.length === 0 && accumulatedText) {
-        console.warn("Stream ended without finish_reason - possible connection issue");
+        console.warn("[Chat] Stream ended without finish_reason - possible connection issue", {
+          chunkCount,
+          textLength: accumulatedText.length,
+          lastChunkAge: Date.now() - lastChunkTime
+        });
         // Append a note that the response may be incomplete
         accumulatedText += "\n\n*(Response may be incomplete due to connection issue)*";
         setMessages((prev) =>
@@ -1237,13 +1264,16 @@ export function GlobalChat() {
           if (toolCall.function.name === "search_content") {
             try {
               const args = JSON.parse(toolCall.function.arguments || "{}");
+              console.log("[Chat] Executing search_content tool", args);
               const result = await executeSearchTool(args);
+              console.log("[Chat] Search result length:", result.length);
               toolResults.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
                 content: result,
               });
             } catch (e) {
+              console.error("[Chat] Tool execution error:", e);
               toolResults.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
@@ -1254,8 +1284,12 @@ export function GlobalChat() {
         }
 
         // Continue conversation with tool results
+        console.log("[Chat] Starting continuation stream with tool results", {
+          totalMessages: conversationMessages.length + toolResults.length
+        });
         accumulatedText = "";
         streamCompleted = false;
+        let continueChunkCount = 0;
         const continueStream = await openai.chat.completions.create(
           {
             model: activePreset.model || "gpt-4",
@@ -1266,11 +1300,17 @@ export function GlobalChat() {
         );
 
         for await (const chunk of continueStream) {
+          continueChunkCount++;
           const content = chunk.choices[0]?.delta?.content;
           const finishReason = chunk.choices[0]?.finish_reason;
 
+          if (continueChunkCount <= 3 || continueChunkCount % 20 === 0 || finishReason) {
+            console.log("[Chat] Continue chunk", continueChunkCount, { hasContent: !!content, finishReason });
+          }
+
           if (finishReason) {
             streamCompleted = true;
+            console.log("[Chat] Continuation stream completed with finish_reason:", finishReason);
           }
 
           if (content) {
@@ -1285,9 +1325,18 @@ export function GlobalChat() {
           }
         }
 
+        console.log("[Chat] Continuation stream loop ended", {
+          continueChunkCount,
+          streamCompleted,
+          textLength: accumulatedText.length
+        });
+
         // Check for incomplete continuation stream
         if (!streamCompleted && accumulatedText) {
-          console.warn("Continuation stream ended without finish_reason");
+          console.warn("[Chat] Continuation stream ended without finish_reason", {
+            continueChunkCount,
+            textLength: accumulatedText.length
+          });
           accumulatedText += "\n\n*(Response may be incomplete due to connection issue)*";
           setMessages((prev) =>
             prev.map((m) =>
@@ -1311,9 +1360,14 @@ export function GlobalChat() {
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
+        console.log("[Chat] Request aborted by user");
         return;
       }
-      console.error("Chat error:", error);
+      console.error("[Chat] Error occurred:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
 
       let errorMessage = error instanceof Error ? error.message : "Something went wrong";
 
@@ -1462,6 +1516,16 @@ export function GlobalChat() {
               <h2 className="font-semibold text-sm tracking-tight">Pipe AI</h2>
               <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
             </div>
+            <button
+              onClick={() => {
+                setMessages([]);
+                setInput("");
+              }}
+              className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+              title="New chat"
+            >
+              <Plus size={16} />
+            </button>
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
               {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
             </kbd>
