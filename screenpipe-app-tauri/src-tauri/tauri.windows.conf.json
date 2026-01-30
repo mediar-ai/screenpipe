@@ -10,7 +10,8 @@
         },
         "externalBin": [
             "screenpipe",
-            "bun"
+            "bun",
+            "opencode"
         ],
         "targets": [
             "nsis"

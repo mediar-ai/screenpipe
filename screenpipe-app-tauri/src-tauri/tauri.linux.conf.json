@@ -2,7 +2,8 @@
     "bundle": {
         "externalBin": [
             "screenpipe",
-            "bun"
+            "bun",
+            "opencode"
         ],
         "linux": {
             "deb": {
