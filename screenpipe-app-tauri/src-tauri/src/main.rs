@@ -39,6 +39,7 @@ use crate::store::SettingsStore;
 
 mod commands;
 mod disk_usage;
+mod opencode;
 mod permissions;
 mod server;
 mod sidecar;
@@ -749,6 +750,11 @@ async fn main() {
                 // Commands from tray.rs
                 set_tray_unhealth_icon,
                 set_tray_health_icon,
+                // OpenCode commands
+                opencode::opencode_info,
+                opencode::opencode_start,
+                opencode::opencode_stop,
+                opencode::opencode_check,
             ])
             .typ::<SettingsStore>()
             .typ::<OnboardingStore>();
@@ -763,6 +769,7 @@ async fn main() {
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     let sidecar_state_for_init = sidecar_state.0.clone(); // Clone for initial spawn
+    let opencode_state = opencode::OpencodeState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -814,6 +821,7 @@ async fn main() {
         let app = app.plugin(tauri_nspanel::init());
 
         let app = app.manage(sidecar_state)
+        .manage(opencode_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             stop_screenpipe,
@@ -857,7 +865,12 @@ async fn main() {
             update_global_shortcuts,
             suspend_global_shortcuts,
             resume_global_shortcuts,
-            get_env
+            get_env,
+            // OpenCode commands
+            opencode::opencode_info,
+            opencode::opencode_start,
+            opencode::opencode_stop,
+            opencode::opencode_check
         ])
         .setup(move |app| {
             //deep link register_all

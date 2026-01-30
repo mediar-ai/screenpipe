@@ -205,7 +205,8 @@ export type AIProviderType =
   | "openai"
   | "custom"
   | "embedded"
-  | "screenpipe-cloud";
+  | "screenpipe-cloud"
+  | "opencode";
 
 export interface EmbeddedLLMConfig {
   enabled: boolean;
