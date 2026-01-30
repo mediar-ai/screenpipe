@@ -5,10 +5,32 @@ use std::collections::HashMap;
 
 lazy_static! {
     static ref PII_PATTERNS: Vec<(Regex, &'static str)> = vec![
+        // Financial
         (Regex::new(r"\b(?:\d{4}[-\s]?){3}\d{4}\b").unwrap(), "CREDIT_CARD"),
+
+        // Government IDs
         (Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap(), "SSN"),
+
+        // Contact info
         (Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap(), "EMAIL"),
-        // add more patterns as needed
+
+        // Phone numbers - various formats:
+        // +1-234-567-8901, (234) 567-8901, 234-567-8901, 234.567.8901, 2345678901
+        // Area code must start with 2-9, but exchange is lenient for PII detection
+        (Regex::new(r"(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}").unwrap(), "PHONE"),
+
+        // IP addresses (IPv4)
+        (Regex::new(r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b").unwrap(), "IP_ADDRESS"),
+
+        // API keys and tokens - common patterns:
+        // sk-xxx, pk-xxx, api_key_xxx, token-xxx (20+ chars after prefix)
+        (Regex::new(r"(?:sk|pk|api|key|token|secret|password|bearer)[-_][A-Za-z0-9_-]{20,}").unwrap(), "API_KEY"),
+
+        // AWS access keys (AKIA...)
+        (Regex::new(r"\bAKIA[0-9A-Z]{16}\b").unwrap(), "AWS_KEY"),
+
+        // GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_)
+        (Regex::new(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b").unwrap(), "GITHUB_TOKEN"),
     ];
 }
 
@@ -298,5 +320,139 @@ mod tests {
         let text_json: Vec<HashMap<String, String>> = vec![];
         let regions = detect_pii_regions(&text_json, 1920, 1080);
         assert!(regions.is_empty());
+    }
+
+    // ==================== NEW PATTERN TESTS ====================
+
+    #[test]
+    fn test_contains_pii_phone_numbers() {
+        // US formats
+        assert!(contains_pii("Call me at 234-567-8901"));
+        assert!(contains_pii("Phone: (234) 567-8901"));
+        assert!(contains_pii("Cell: 234.567.8901"));
+        assert!(contains_pii("+1-234-567-8901"));
+        assert!(contains_pii("2345678901"));
+
+        // Should NOT match short numbers
+        assert!(!contains_pii("Room 1234"));
+        assert!(!contains_pii("Order #12345"));
+    }
+
+    #[test]
+    fn test_remove_pii_phone_numbers() {
+        assert_eq!(
+            remove_pii("Call me at 234-567-8901"),
+            "Call me at [PHONE]"
+        );
+        assert_eq!(
+            remove_pii("Phone: (555) 123-4567"),
+            "Phone: [PHONE]"
+        );
+        assert_eq!(
+            remove_pii("Reach me at +1-800-555-1234"),
+            "Reach me at [PHONE]"
+        );
+    }
+
+    #[test]
+    fn test_contains_pii_ip_addresses() {
+        assert!(contains_pii("Server IP: 192.168.1.1"));
+        assert!(contains_pii("Connect to 10.0.0.1"));
+        assert!(contains_pii("8.8.8.8"));
+        assert!(contains_pii("255.255.255.0"));
+
+        // Should NOT match invalid IPs
+        assert!(!contains_pii("Version 1.2.3"));
+        assert!(!contains_pii("999.999.999.999")); // Invalid octets
+    }
+
+    #[test]
+    fn test_remove_pii_ip_addresses() {
+        assert_eq!(
+            remove_pii("Server at 192.168.1.100"),
+            "Server at [IP_ADDRESS]"
+        );
+        assert_eq!(
+            remove_pii("DNS: 8.8.8.8 and 8.8.4.4"),
+            "DNS: [IP_ADDRESS] and [IP_ADDRESS]"
+        );
+    }
+
+    #[test]
+    fn test_contains_pii_api_keys() {
+        // Generic API keys
+        assert!(contains_pii("sk-1234567890abcdefghij"));
+        assert!(contains_pii("api_key_abcdefghijklmnopqrst"));
+        assert!(contains_pii("token-abcdefghijklmnopqrstuvwx"));
+
+        // AWS keys
+        assert!(contains_pii("AKIAIOSFODNN7EXAMPLE"));
+
+        // GitHub tokens
+        assert!(contains_pii("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"));
+
+        // Should NOT match short strings
+        assert!(!contains_pii("sk-short"));
+        assert!(!contains_pii("api_key"));
+    }
+
+    #[test]
+    fn test_remove_pii_api_keys() {
+        assert_eq!(
+            remove_pii("Use key sk-proj-1234567890abcdefghijklmnop"),
+            "Use key [API_KEY]"
+        );
+        assert_eq!(
+            remove_pii("AWS: AKIAIOSFODNN7EXAMPLE"),
+            "AWS: [AWS_KEY]"
+        );
+        assert_eq!(
+            remove_pii("GitHub token: ghp_abcdefghijklmnopqrstuvwxyz1234567890"),
+            "GitHub token: [GITHUB_TOKEN]"
+        );
+    }
+
+    #[test]
+    fn test_get_pii_type_new_patterns() {
+        assert_eq!(get_pii_type("234-567-8901"), Some("PHONE".to_string()));
+        assert_eq!(get_pii_type("192.168.1.1"), Some("IP_ADDRESS".to_string()));
+        assert_eq!(get_pii_type("sk-abcdefghijklmnopqrst"), Some("API_KEY".to_string()));
+        assert_eq!(get_pii_type("AKIAIOSFODNN7EXAMPLE"), Some("AWS_KEY".to_string()));
+        assert_eq!(get_pii_type("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"), Some("GITHUB_TOKEN".to_string()));
+    }
+
+    #[test]
+    fn test_remove_pii_mixed_new_patterns() {
+        let input = "Contact: 555-123-4567, server 10.0.0.1, key sk-abcdefghijklmnopqrstuvwxyz";
+        let result = remove_pii(input);
+
+        assert!(result.contains("[PHONE]"));
+        assert!(result.contains("[IP_ADDRESS]"));
+        assert!(result.contains("[API_KEY]"));
+        assert!(!result.contains("555-123-4567"));
+        assert!(!result.contains("10.0.0.1"));
+        assert!(!result.contains("sk-"));
+    }
+
+    #[test]
+    fn test_pii_removal_performance_with_new_patterns() {
+        use std::time::Instant;
+
+        // Text with all PII types
+        let input = "Email john@test.com, call 555-123-4567, SSN 123-45-6789, \
+                    card 4111-1111-1111-1111, IP 192.168.1.1, key sk-abcdefghij1234567890";
+
+        let start = Instant::now();
+        for _ in 0..1000 {
+            let _ = remove_pii(input);
+        }
+        let duration = start.elapsed();
+
+        // Should still be fast even with more patterns
+        assert!(
+            duration.as_millis() < 200,
+            "PII removal too slow with new patterns: {:?} for 1000 iterations",
+            duration
+        );
     }
 }
