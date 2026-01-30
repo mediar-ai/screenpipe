@@ -76,7 +76,13 @@ impl WindowOcrCache {
     }
 
     /// Store an OCR result in the cache
-    pub fn insert(&mut self, key: WindowCacheKey, text: String, text_json: String, confidence: f64) {
+    pub fn insert(
+        &mut self,
+        key: WindowCacheKey,
+        text: String,
+        text_json: String,
+        confidence: f64,
+    ) {
         // Evict oldest entries if at capacity
         if self.cache.len() >= self.max_entries {
             self.evict_oldest();
@@ -307,7 +313,12 @@ mod tests {
                 image_hash: *hash,
             };
             let result = cache.get(&key);
-            assert!(result.is_some(), "Should find cached result for {}::{}", app, window);
+            assert!(
+                result.is_some(),
+                "Should find cached result for {}::{}",
+                app,
+                window
+            );
             assert_eq!(result.unwrap().text, *text);
         }
 

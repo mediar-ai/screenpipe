@@ -28,8 +28,8 @@ use std::{
     collections::HashMap,
     time::{Duration, Instant, UNIX_EPOCH},
 };
-use tokio::sync::Mutex;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 
 fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
@@ -361,8 +361,10 @@ pub async fn process_ocr_task(
 
     for captured_window in window_images {
         // Calculate hash for this window's image
-        let window_image_hash = WindowOcrCache::calculate_image_hash(captured_window.image.as_bytes());
-        let window_id = WindowOcrCache::make_window_id(&captured_window.app_name, &captured_window.window_name);
+        let window_image_hash =
+            WindowOcrCache::calculate_image_hash(captured_window.image.as_bytes());
+        let window_id =
+            WindowOcrCache::make_window_id(&captured_window.app_name, &captured_window.window_name);
         let cache_key = WindowCacheKey {
             window_id: window_id.clone(),
             image_hash: window_image_hash,
@@ -426,12 +428,7 @@ pub async fn process_ocr_task(
             {
                 let mut cache = ocr_cache.lock().await;
                 let json_str = serde_json::to_string(&result.text_json).unwrap_or_default();
-                cache.insert(
-                    cache_key,
-                    result.text.clone(),
-                    json_str,
-                    result.confidence,
-                );
+                cache.insert(cache_key, result.text.clone(), json_str, result.confidence);
             }
 
             result
