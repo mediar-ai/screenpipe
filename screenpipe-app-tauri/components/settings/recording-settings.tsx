@@ -32,6 +32,7 @@ import {
   AlertCircle,
   RefreshCw,
   Loader2,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -166,6 +167,9 @@ export function RecordingSettings() {
 
   const { items: windowItems, isLoading: isWindowItemsLoading } =
     useSqlAutocomplete("window");
+
+  const { items: urlItems, isLoading: isUrlItemsLoading } =
+    useSqlAutocomplete("url");
 
   const [availableMonitors, setAvailableMonitors] = useState<MonitorDevice[]>(
     []
@@ -1607,14 +1611,12 @@ export function RecordingSettings() {
             </TooltipProvider>
           </Label>
           <MultiSelect
-            options={(settings.ignoredUrls || []).map((url) => ({
-              label: url,
-              value: url,
-            }))}
+            options={createUrlOptions(urlItems || [], settings.ignoredUrls || [])}
             defaultValue={settings.ignoredUrls || []}
             value={settings.ignoredUrls || []}
             onValueChange={handleIgnoredUrlsChange}
             placeholder="Type domain patterns (e.g., wellsfargo.com, chase.com)..."
+            allowCustomValues={true}
           />
           {(settings.ignoredUrls || []).some((url) =>
             url.length < 5 || ['bank', 'pay', 'money', 'finance'].includes(url.toLowerCase())
