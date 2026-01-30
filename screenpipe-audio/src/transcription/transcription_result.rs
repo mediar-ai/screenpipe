@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_db::{DatabaseManager, Speaker};
 use tracing::{debug, error, info};
 
@@ -54,6 +55,7 @@ pub async fn process_transcription_result(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     previous_transcript: Option<String>,
     previous_transcript_id: Option<i64>,
+    use_pii_removal: bool,
 ) -> Result<Option<i64>, anyhow::Error> {
     if result.error.is_some() || result.transcription.is_none() {
         error!(
@@ -67,7 +69,13 @@ pub async fn process_transcription_result(
 
     info!("Detected speaker: {:?}", speaker);
 
-    let transcription = result.transcription.unwrap();
+    let raw_transcription = result.transcription.unwrap();
+    // Apply PII removal if enabled
+    let transcription = if use_pii_removal {
+        remove_pii(&raw_transcription)
+    } else {
+        raw_transcription
+    };
     let transcription_engine = audio_transcription_engine.to_string();
     let mut chunk_id: Option<i64> = None;
 
@@ -77,8 +85,14 @@ pub async fn process_transcription_result(
     );
     if let Some(id) = previous_transcript_id {
         if let Some(prev_transcript) = previous_transcript {
+            // Apply PII removal to previous transcript update as well
+            let sanitized_prev = if use_pii_removal {
+                remove_pii(&prev_transcript)
+            } else {
+                prev_transcript
+            };
             match db
-                .update_audio_transcription(id, prev_transcript.as_str())
+                .update_audio_transcription(id, sanitized_prev.as_str())
                 .await
             {
                 Ok(_) => {}
