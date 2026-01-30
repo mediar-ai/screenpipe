@@ -3908,7 +3908,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -6474,7 +6474,7 @@ dependencies = [
 [[package]]
 name = "sck-rs"
 version = "0.1.0"
-source = "git+https://github.com/louis030195/sck-rs#9e238f63ba4e51bdf73fb9edef533973dd7c803f"
+source = "git+https://github.com/louis030195/sck-rs#f3667badac256c097ee616e452c9acf0708b6516"
 dependencies = [
  "cidre",
  "core-foundation 0.10.0",
