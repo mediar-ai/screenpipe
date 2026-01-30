@@ -51,6 +51,45 @@ export class GeminiProvider implements AIProvider {
 	}
 
 	/**
+	 * Detect if user is explicitly asking for web search
+	 * Returns the search query if detected, null otherwise
+	 */
+	private detectWebSearchIntent(messages: Message[]): string | null {
+		// Get the last user message
+		const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+		if (!lastUserMsg) return null;
+
+		const content = typeof lastUserMsg.content === 'string'
+			? lastUserMsg.content.toLowerCase()
+			: '';
+
+		// Patterns that indicate explicit web search request
+		const webSearchPatterns = [
+			// "search X on internet/web" or "search X on the internet"
+			/search\s+(.+?)\s+on\s+(?:the\s+)?(?:internet|web|online)/i,
+			// "search internet/web for X" or "search the internet for X"
+			/search\s+(?:the\s+)?(?:internet|web|online|google)\s+(?:for\s+)?(.+)/i,
+			// "google X", "look up X", "find online X"
+			/(?:google|look\s*up|find\s+online|search\s+online)\s+(.+)/i,
+			// "what's the latest news on X"
+			/(?:what(?:'s| is) the latest|current|recent)\s+(?:news|info|information)\s+(?:on|about)\s+(.+)/i,
+			// "search internet X"
+			/search\s+(?:internet|web)\s+(.+)/i,
+		];
+
+		for (const pattern of webSearchPatterns) {
+			const match = content.match(pattern);
+			if (match && match[1]) {
+				const query = match[1].trim().replace(/[?.!]+$/, '');
+				console.log('[Gemini Vertex] Web search intent detected:', query);
+				return query;
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Generate a JWT for service account authentication
 	 */
 	private async generateJWT(): Promise<string> {
@@ -153,11 +192,14 @@ export class GeminiProvider implements AIProvider {
 	private mapModelToVertex(model: string): string {
 		// Map common model names to Vertex AI format
 		const modelMap: Record<string, string> = {
+			'gemini-flash': 'gemini-2.0-flash',
 			'gemini-3-flash': 'gemini-2.0-flash',
+			'gemini-pro': 'gemini-2.0-pro-exp-02-05',
 			'gemini-3-pro': 'gemini-2.0-pro-exp-02-05',
 			'gemini-2.5-flash': 'gemini-2.0-flash',
 			'gemini-2.5-pro': 'gemini-2.0-pro-exp-02-05',
 		};
+		console.log('[Gemini Vertex] Model mapping:', model, '->', modelMap[model] || model);
 		return modelMap[model] || model;
 	}
 
@@ -246,9 +288,16 @@ export class GeminiProvider implements AIProvider {
 
 	async createStreamingCompletion(body: RequestBody): Promise<ReadableStream> {
 		const accessToken = await this.getAccessToken();
-		const url = this.getEndpointUrl(body.model, true) + '?alt=sse';
 		const hasWebSearch = this.hasWebSearchTool(body.tools);
 
+		// Check for explicit web search intent - bypass model and search directly
+		const webSearchQuery = this.detectWebSearchIntent(body.messages);
+		if (webSearchQuery && hasWebSearch) {
+			console.log('[Gemini Vertex] Direct web search for:', webSearchQuery);
+			return this.createDirectWebSearchStream(body, webSearchQuery);
+		}
+
+		const url = this.getEndpointUrl(body.model, true) + '?alt=sse';
 		const requestBody = this.buildRequestBody(body, hasWebSearch);
 
 		console.log('[Gemini Vertex] Streaming request to:', url);
@@ -564,6 +613,71 @@ export class GeminiProvider implements AIProvider {
 		}));
 
 		return { content, sources };
+	}
+
+	/**
+	 * Create a streaming response that directly performs web search
+	 * Used when we detect explicit web search intent from the user
+	 */
+	private async createDirectWebSearchStream(body: RequestBody, query: string): Promise<ReadableStream> {
+		const self = this;
+
+		return new ReadableStream({
+			async start(controller) {
+				try {
+					// Stream a searching indicator
+					controller.enqueue(
+						new TextEncoder().encode(
+							`data: ${JSON.stringify({
+								choices: [{ delta: { content: `*Searching the web for "${query}"...*\n\n` } }],
+							})}\n\n`
+						)
+					);
+
+					// Execute web search
+					const searchResult = await self.executeWebSearch(query);
+
+					// Stream the result
+					controller.enqueue(
+						new TextEncoder().encode(
+							`data: ${JSON.stringify({
+								choices: [{ delta: { content: searchResult.content } }],
+							})}\n\n`
+						)
+					);
+
+					// Send finish reason
+					controller.enqueue(
+						new TextEncoder().encode(
+							`data: ${JSON.stringify({
+								choices: [{ delta: {}, finish_reason: 'stop' }],
+							})}\n\n`
+						)
+					);
+
+					controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+					controller.close();
+				} catch (error) {
+					console.error('[Gemini Vertex] Direct web search failed:', error);
+					controller.enqueue(
+						new TextEncoder().encode(
+							`data: ${JSON.stringify({
+								choices: [{ delta: { content: 'Web search failed. Please try again.' } }],
+							})}\n\n`
+						)
+					);
+					controller.enqueue(
+						new TextEncoder().encode(
+							`data: ${JSON.stringify({
+								choices: [{ delta: {}, finish_reason: 'stop' }],
+							})}\n\n`
+						)
+					);
+					controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+					controller.close();
+				}
+			},
+		});
 	}
 
 	/**

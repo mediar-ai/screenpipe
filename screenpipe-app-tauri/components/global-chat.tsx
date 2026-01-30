@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings, ChatMessage, ChatConversation } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, Zap, History, Search, Trash2, ChevronLeft } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, Zap, History, Search, Trash2, ChevronLeft, Copy, Check } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { parseInt } from "lodash";
 import { motion, AnimatePresence } from "framer-motion";
@@ -534,6 +534,7 @@ export function GlobalChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [activePreset, setActivePreset] = useState<AIPreset | undefined>();
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
@@ -2147,7 +2148,7 @@ export function GlobalChat() {
                 </div>
                 <div
                   className={cn(
-                    "relative flex-1 rounded-xl px-4 py-3 text-sm border overflow-hidden min-w-0",
+                    "group/message relative flex-1 rounded-xl px-4 py-3 text-sm border overflow-hidden min-w-0",
                     message.role === "user"
                       ? "bg-foreground text-background border-foreground"
                       : "bg-muted/30 border-border/50"
