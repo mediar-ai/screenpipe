@@ -3,9 +3,9 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Loader2, RotateCcw, AlertCircle, X } from "lucide-react";
 import { SearchModal } from "@/components/rewind/search-modal";
 import { commands } from "@/lib/utils/tauri";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { AudioTranscript } from "@/components/rewind/timeline/audio-transcript";
-import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
+import { TimelineProvider, useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
 import { TimelineControls } from "@/components/rewind/timeline/timeline-controls";
 import { addDays, endOfDay, isAfter, isSameDay, startOfDay, subDays } from "date-fns";
@@ -86,6 +86,9 @@ export default function Timeline() {
 
 	// Seeking state for UX feedback when navigating from search
 	const [seekingTimestamp, setSeekingTimestamp] = useState<string | null>(null);
+
+	// Get timeline selection for chat context
+	const { selectionRange } = useTimelineSelection();
 
 	// Re-show audio transcript when navigating timeline
 	useEffect(() => {
@@ -270,6 +273,99 @@ export default function Timeline() {
 			unlisten.then((fn) => fn());
 		};
 	}, [showSearchModal]);
+
+	// Pass selection context to chat when chat shortcut is pressed with a selection
+	useEffect(() => {
+		const handleChatShortcut = (e: KeyboardEvent) => {
+			// Check for Ctrl+Cmd+L (macOS) or Alt+L (Windows)
+			const isMac = navigator.platform.toLowerCase().includes("mac");
+			const isChatShortcut = isMac
+				? e.ctrlKey && e.metaKey && e.key.toLowerCase() === "l"
+				: e.altKey && e.key.toLowerCase() === "l";
+
+			if (isChatShortcut && selectionRange) {
+				// Build context from the selection
+				const startTime = selectionRange.start.toLocaleString();
+				const endTime = selectionRange.end.toLocaleString();
+
+				// Get OCR/audio context from frames in the selection range
+				const selectedFrames = frames.filter((frame) => {
+					const frameTime = new Date(frame.timestamp).getTime();
+					return (
+						frameTime >= selectionRange.start.getTime() &&
+						frameTime <= selectionRange.end.getTime()
+					);
+				});
+
+				// Build context string
+				const contextParts: string[] = [];
+				contextParts.push(`Time range: ${startTime} - ${endTime}`);
+
+				// Add app names
+				const apps = new Set<string>();
+				selectedFrames.forEach((frame) => {
+					frame.devices.forEach((device) => {
+						if (device.metadata.app_name) {
+							apps.add(device.metadata.app_name);
+						}
+					});
+				});
+				if (apps.size > 0) {
+					contextParts.push(`Apps: ${Array.from(apps).join(", ")}`);
+				}
+
+				// Add sample OCR text (first few frames)
+				const ocrSamples: string[] = [];
+				selectedFrames.slice(0, 3).forEach((frame) => {
+					frame.devices.forEach((device) => {
+						if (device.metadata.ocr_text && device.metadata.ocr_text.length > 0) {
+							const sample = device.metadata.ocr_text.slice(0, 200);
+							if (sample.trim()) {
+								ocrSamples.push(sample);
+							}
+						}
+					});
+				});
+				if (ocrSamples.length > 0) {
+					contextParts.push(`Screen text samples:\n${ocrSamples.join("\n---\n")}`);
+				}
+
+				// Add audio transcriptions if any
+				const audioSamples: string[] = [];
+				selectedFrames.slice(0, 3).forEach((frame) => {
+					frame.devices.forEach((device) => {
+						device.audio?.forEach((audio) => {
+							if (audio.transcription && audio.transcription.trim()) {
+								audioSamples.push(audio.transcription.slice(0, 200));
+							}
+						});
+					});
+				});
+				if (audioSamples.length > 0) {
+					contextParts.push(`Audio transcriptions:\n${audioSamples.join("\n---\n")}`);
+				}
+
+				const context = contextParts.join("\n\n");
+
+				// Emit the chat-prefill event to the chat window
+				// Use a small delay to ensure chat window is open first
+				setTimeout(() => {
+					emit("chat-prefill", {
+						context,
+						prompt: `Based on my activity from ${startTime} to ${endTime}, `,
+					});
+				}, 200);
+
+				posthog.capture("timeline_selection_to_chat", {
+					selection_duration_ms: selectionRange.end.getTime() - selectionRange.start.getTime(),
+					frames_in_selection: selectedFrames.length,
+				});
+			}
+		};
+
+		window.addEventListener("keydown", handleChatShortcut);
+		return () => window.removeEventListener("keydown", handleChatShortcut);
+	}, [selectionRange, frames]);
 
 	// Also listen for "/" key (not intercepted by Rust)
 	useEffect(() => {
