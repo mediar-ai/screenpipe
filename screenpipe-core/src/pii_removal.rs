@@ -60,6 +60,23 @@ pub fn remove_pii(text: &str) -> String {
     sanitized
 }
 
+/// Remove PII from OCR text_json entries
+///
+/// This function sanitizes the "text" field in each OCR bounding box entry,
+/// preserving the coordinate information while redacting any PII.
+pub fn remove_pii_from_text_json(text_json: &[HashMap<String, String>]) -> Vec<HashMap<String, String>> {
+    text_json
+        .iter()
+        .map(|entry| {
+            let mut sanitized_entry = entry.clone();
+            if let Some(text) = sanitized_entry.get("text") {
+                sanitized_entry.insert("text".to_string(), remove_pii(text));
+            }
+            sanitized_entry
+        })
+        .collect()
+}
+
 /// Check if a given text contains PII
 pub fn contains_pii(text: &str) -> bool {
     for (pattern, _) in PII_PATTERNS.iter() {
@@ -454,5 +471,76 @@ mod tests {
             "PII removal too slow with new patterns: {:?} for 1000 iterations",
             duration
         );
+    }
+
+    // ==================== TEXT_JSON PII REMOVAL TESTS ====================
+
+    #[test]
+    fn test_remove_pii_from_text_json_basic() {
+        let text_json = vec![
+            HashMap::from([
+                ("text".to_string(), "test@example.com".to_string()),
+                ("left".to_string(), "100".to_string()),
+                ("top".to_string(), "200".to_string()),
+            ]),
+            HashMap::from([
+                ("text".to_string(), "Normal text".to_string()),
+                ("left".to_string(), "150".to_string()),
+                ("top".to_string(), "250".to_string()),
+            ]),
+        ];
+
+        let result = remove_pii_from_text_json(&text_json);
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].get("text").unwrap(), "[EMAIL]");
+        assert_eq!(result[0].get("left").unwrap(), "100"); // Coordinates preserved
+        assert_eq!(result[1].get("text").unwrap(), "Normal text"); // Non-PII unchanged
+    }
+
+    #[test]
+    fn test_remove_pii_from_text_json_multiple_pii_types() {
+        let text_json = vec![
+            HashMap::from([
+                ("text".to_string(), "4532-1234-5678-9012".to_string()),
+                ("left".to_string(), "10".to_string()),
+            ]),
+            HashMap::from([
+                ("text".to_string(), "123-45-6789".to_string()),
+                ("left".to_string(), "20".to_string()),
+            ]),
+            HashMap::from([
+                ("text".to_string(), "555-123-4567".to_string()),
+                ("left".to_string(), "30".to_string()),
+            ]),
+        ];
+
+        let result = remove_pii_from_text_json(&text_json);
+
+        assert_eq!(result[0].get("text").unwrap(), "[CREDIT_CARD]");
+        assert_eq!(result[1].get("text").unwrap(), "[SSN]");
+        assert_eq!(result[2].get("text").unwrap(), "[PHONE]");
+    }
+
+    #[test]
+    fn test_remove_pii_from_text_json_empty() {
+        let text_json: Vec<HashMap<String, String>> = vec![];
+        let result = remove_pii_from_text_json(&text_json);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_remove_pii_from_text_json_no_text_field() {
+        let text_json = vec![HashMap::from([
+            ("left".to_string(), "100".to_string()),
+            ("top".to_string(), "200".to_string()),
+        ])];
+
+        let result = remove_pii_from_text_json(&text_json);
+
+        // Should return entry unchanged if no text field
+        assert_eq!(result.len(), 1);
+        assert!(!result[0].contains_key("text"));
+        assert_eq!(result[0].get("left").unwrap(), "100");
     }
 }

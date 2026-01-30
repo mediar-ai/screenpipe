@@ -1,7 +1,7 @@
 use crate::VideoCapture;
 use anyhow::Result;
 use futures::future::join_all;
-use screenpipe_core::pii_removal::remove_pii;
+use screenpipe_core::pii_removal::{remove_pii, remove_pii_from_text_json};
 use screenpipe_core::Language;
 use screenpipe_db::{DatabaseManager, Speaker};
 use screenpipe_events::{poll_meetings_events, send_event};
@@ -287,14 +287,17 @@ pub async fn record_video(
                             frame_id,
                             insert_duration.as_millis()
                         );
-                        let text_json =
-                            serde_json::to_string(&window_result.text_json).unwrap_or_default();
 
-                        let text = if use_pii_removal {
-                            &remove_pii(&window_result.text)
+                        // Apply PII removal if enabled
+                        let (text, sanitized_text_json) = if use_pii_removal {
+                            let sanitized_text = remove_pii(&window_result.text);
+                            let sanitized_json = remove_pii_from_text_json(&window_result.text_json);
+                            (sanitized_text, sanitized_json)
                         } else {
-                            &window_result.text
+                            (window_result.text.clone(), window_result.text_json.clone())
                         };
+                        let text_json =
+                            serde_json::to_string(&sanitized_text_json).unwrap_or_default();
 
                         if realtime_vision {
                             let send_event_start = std::time::Instant::now();
@@ -303,7 +306,7 @@ pub async fn record_video(
                                 WindowOcr {
                                     image: Some(frame.image.clone()),
                                     text: text.clone(),
-                                    text_json: window_result.text_json.clone(),
+                                    text_json: sanitized_text_json.clone(),
                                     app_name: window_result.app_name.clone(),
                                     window_name: window_result.window_name.clone(),
                                     focused: window_result.focused,
@@ -329,7 +332,7 @@ pub async fn record_video(
                         if let Err(e) = db
                             .insert_ocr_text(
                                 frame_id,
-                                text,
+                                &text,
                                 &text_json,
                                 Arc::new((*ocr_engine).clone().into()),
                             )
