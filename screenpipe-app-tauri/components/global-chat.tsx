@@ -439,18 +439,15 @@ EXAMPLES:
     type: "function",
     function: {
       name: "web_search",
-      description: `Search the web for current, up-to-date information. Use this when:
-- User asks about recent news, events, or current information
-- User wants to verify or supplement screen data with web sources
-- User asks about topics that need real-time data (stocks, weather, news)
-- Combining screen context with external web information
+      description: `Search the internet for current information using Google Search. YOU MUST CALL THIS FUNCTION when:
+- User says "search", "look up", "find", "google", or "search the web/internet"
+- User asks about news, current events, people, companies, or real-time data
+- User asks "what is [topic]" where the topic is a public person, company, or concept
+- User wants to combine screen context with external information
 
-This tool uses Google Search to ground responses in current web data and provides cited sources.
+IMPORTANT: When user asks to search the internet/web, ALWAYS call this function - do NOT say you cannot search.
 
-EXAMPLES:
-- "What's the latest news about [topic from my screen]?"
-- "Search the web for current ECB rates"
-- "Find recent articles about [something I was researching]"`,
+Returns search results with cited sources from the web.`,
       parameters: {
         type: "object",
         properties: {
@@ -465,17 +462,20 @@ EXAMPLES:
   },
 ];
 
-const SYSTEM_PROMPT = `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions. You also have access to web search for current information.
+const SYSTEM_PROMPT = `You are a helpful AI assistant with two powerful tools:
 
-CAPABILITIES:
-1. **Screen/Audio Search** (search_content): Search user's captured screen text, audio transcriptions, UI elements
-2. **Web Search** (web_search): Search the internet for current news, real-time data, and external information
+1. **search_content**: Search the user's Screenpipe data (screen recordings, audio transcriptions, UI interactions)
+2. **web_search**: Search the LIVE INTERNET via Google Search (you CAN do this!)
 
-WHEN TO USE WEB SEARCH:
-- User asks about current events, news, or real-time information
-- User wants to combine screen context with external web data (e.g., "based on what I was looking at, search for...")
-- Topics that need up-to-date information (stock prices, news, weather, recent developments)
-- Verifying or supplementing information from screen captures
+IMPORTANT - WEB SEARCH CAPABILITY:
+You HAVE the ability to search the internet. When the user asks you to "search the internet", "look up", "google", or find information about a person, company, news, or any topic - YOU MUST call the web_search function. Do NOT say you cannot search the internet.
+
+WHEN TO USE web_search (CALL THE FUNCTION):
+- User says "search", "look up", "find", "google something"
+- User asks about people (e.g., "Sam Altman", "Elon Musk")
+- User asks about companies, products, news, current events
+- User asks "what is X" where X is a public topic
+- Any request that requires current/real-time information from the web
 
 CRITICAL SCREEN SEARCH RULES (database has 600k+ entries - ALWAYS use time filters):
 1. ALWAYS include start_time in EVERY search - NEVER search without a time range

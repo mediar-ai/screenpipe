@@ -95,7 +95,7 @@ export default function Timeline() {
 		setShowAudioTranscript(true);
 	}, [currentIndex]);
 
-	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus, newFramesCount, lastFlushTimestamp, clearNewFramesCount, clearSentRequestForDate } =
+	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus, newFramesCount, lastFlushTimestamp, clearNewFramesCount, clearSentRequestForDate, clearFramesForNavigation } =
 		useTimelineStore();
 
 	const { frames, isLoading, error, message, fetchNextDayData, websocket } =
@@ -230,11 +230,36 @@ export default function Timeline() {
 				isSameDay(new Date(frame.timestamp), targetDate)
 			);
 			if (isSameDay(targetDate, currentDate) && hasFramesForTargetDate) {
-				console.log("Frames loaded, jumping to pending navigation:", targetDate);
-				jumpToTime(targetDate);
+				console.log("[pendingNavigation] Frames loaded for target date, jumping:", targetDate.toISOString());
+
+				// Find the first frame of the target day (frames are sorted newest-first)
+				const targetDayStart = startOfDay(targetDate);
+				const targetDayEnd = endOfDay(targetDate);
+
+				// Find the LAST frame in the array that's within the target day
+				// (since frames are sorted newest-first, last match = earliest frame)
+				let firstFrameIndex = -1;
+				for (let i = frames.length - 1; i >= 0; i--) {
+					const frameDate = new Date(frames[i].timestamp);
+					if (frameDate >= targetDayStart && frameDate <= targetDayEnd) {
+						firstFrameIndex = i;
+						break;
+					}
+				}
+
+				if (firstFrameIndex !== -1) {
+					setCurrentIndex(firstFrameIndex);
+					setCurrentFrame(frames[firstFrameIndex]);
+					console.log("[pendingNavigation] Jumped to frame index:", firstFrameIndex);
+				} else {
+					// Fallback: just use jumpToTime
+					jumpToTime(targetDate);
+				}
+
+				// Clear pending navigation and UI state
 				pendingNavigationRef.current = null;
-				// Clear seeking overlay
 				setSeekingTimestamp(null);
+				isNavigatingRef.current = false;
 			}
 		}
 	}, [frames, currentDate]);
@@ -578,17 +603,15 @@ export default function Timeline() {
 		// Set navigation flag to prevent frame-date sync from fighting
 		isNavigatingRef.current = true;
 
-		// Clear the sent request cache for this date to force a fresh fetch
-		// This ensures clicking on a date in the calendar always loads fresh data
-		clearSentRequestForDate(newDate);
-
 		console.log("[handleDateChange] called with:", newDate.toISOString(), "currentDate:", currentDate.toISOString());
 
 		try {
+			// Check if target date has frames in the database
 			const checkFramesForDate = await hasFramesForDate(newDate);
 			console.log("[handleDateChange] hasFramesForDate result:", checkFramesForDate);
 
 			if (!checkFramesForDate) {
+				// No frames for this date - try adjacent dates
 				let subDate;
 				if (isAfter(currentDate, newDate)) {
 					subDate = subDays(newDate, 1);
@@ -599,10 +622,12 @@ export default function Timeline() {
 				// Limit recursion - don't go past start date or future
 				if (isAfter(startAndEndDates.start, subDate)) {
 					console.log("[handleDateChange] Reached start date boundary, stopping navigation");
+					isNavigatingRef.current = false;
 					return;
 				}
 				if (isAfter(startOfDay(subDate), startOfDay(new Date()))) {
 					console.log("[handleDateChange] Reached today boundary, stopping navigation");
+					isNavigatingRef.current = false;
 					return;
 				}
 
@@ -610,11 +635,9 @@ export default function Timeline() {
 				return await handleDateChange(subDate);
 			}
 
-			// Already on this day - but still allow jumping to first frame of the day
-			// This helps when user wants to "reset" to the start of the current day
+			// Already on this day - jump to first frame of the day
 			if (isSameDay(newDate, currentDate)) {
 				console.log("[handleDateChange] Same day, jumping to first frame of day");
-				// Find and jump to first frame of target date
 				const targetDayStart = startOfDay(newDate);
 				const targetDayEnd = endOfDay(newDate);
 				const targetIndex = frames.findIndex((frame) => {
@@ -625,12 +648,14 @@ export default function Timeline() {
 					setCurrentIndex(targetIndex);
 					setCurrentFrame(frames[targetIndex]);
 				}
+				isNavigatingRef.current = false;
 				return;
 			}
 
 			// Don't go before start date
 			if (isAfter(startAndEndDates.start, newDate)) {
 				console.log("[handleDateChange] Before start date, stopping");
+				isNavigatingRef.current = false;
 				return;
 			}
 
@@ -640,40 +665,46 @@ export default function Timeline() {
 				to_date: newDate.toISOString(),
 			});
 
-			// Store pending navigation - will be processed when frames are available
+			// CRITICAL: Clear old frames before navigating to prevent confusion
+			// This ensures we wait for the new date's frames to load
+			clearFramesForNavigation();
+
+			// Clear the sent request cache for this date to force a fresh fetch
+			clearSentRequestForDate(newDate);
+
+			// Store pending navigation - will be processed when frames arrive
 			pendingNavigationRef.current = newDate;
 
-			// Clear frame first to prevent sync effect from reverting
+			// Show seeking overlay while waiting for frames
+			setSeekingTimestamp(newDate.toISOString());
+
+			// Clear current frame and update date
+			// This triggers the effect that fetches frames for the new date
 			setCurrentFrame(null);
+			setCurrentIndex(0);
 			setCurrentDate(newDate);
 
-			// Find and jump to first frame of target date (frames are sorted newest-first)
-			const targetDayStart = startOfDay(newDate);
-			const targetDayEnd = endOfDay(newDate);
+			// DON'T try to find frames here - they won't be loaded yet!
+			// The pending navigation effect (line ~224) handles jumping to the
+			// correct frame once the new date's frames arrive via WebSocket.
+			console.log("[handleDateChange] Navigation initiated, waiting for frames to load...");
 
-			// Find first frame that falls within the target date
-			const targetIndex = frames.findIndex((frame) => {
-				const frameDate = new Date(frame.timestamp);
-				return frameDate >= targetDayStart && frameDate <= targetDayEnd;
-			});
-
-			if (targetIndex !== -1) {
-				setCurrentIndex(targetIndex);
-				setCurrentFrame(frames[targetIndex]);
-				pendingNavigationRef.current = null; // Clear pending since we found it
-				setSeekingTimestamp(null); // Clear any seeking state
-			} else {
-				// Frames not loaded yet - set pending navigation and wait
-				// DON'T set currentIndex(0) as that causes a visible jump to "today"
-				pendingNavigationRef.current = newDate;
-				// Show seeking overlay while waiting for frames
-				setSeekingTimestamp(newDate.toISOString());
-			}
-		} finally {
-			// Clear navigation flag after a short delay to let state settle
+			// Safety timeout: clear navigation state if frames don't arrive within 10s
+			// This prevents the app from getting stuck in a loading state
 			setTimeout(() => {
-				isNavigatingRef.current = false;
-			}, 500);
+				if (pendingNavigationRef.current && isSameDay(pendingNavigationRef.current, newDate)) {
+					console.warn("[handleDateChange] Timeout: frames didn't arrive, clearing navigation state");
+					pendingNavigationRef.current = null;
+					setSeekingTimestamp(null);
+					isNavigatingRef.current = false;
+				}
+			}, 10000);
+
+		} catch (error) {
+			console.error("[handleDateChange] Error:", error);
+			isNavigatingRef.current = false;
+			pendingNavigationRef.current = null;
+			setSeekingTimestamp(null);
 		}
 	};
 

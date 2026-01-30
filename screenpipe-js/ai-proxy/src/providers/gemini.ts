@@ -252,6 +252,12 @@ export class GeminiProvider implements AIProvider {
 		const requestBody = this.buildRequestBody(body, hasWebSearch);
 
 		console.log('[Gemini Vertex] Streaming request to:', url);
+		console.log('[Gemini Vertex] Request body:', JSON.stringify({
+			hasSystemInstruction: !!requestBody.systemInstruction,
+			hasTools: !!(requestBody.tools?.length),
+			toolNames: requestBody.tools?.[0]?.functionDeclarations?.map((f: any) => f.name) || [],
+			hasToolConfig: !!requestBody.toolConfig,
+		}));
 
 		const response = await fetch(url, {
 			method: 'POST',
@@ -287,6 +293,15 @@ export class GeminiProvider implements AIProvider {
 								const query = pendingWebSearch.args?.query || pendingWebSearch.args?.q || '';
 								console.log('[Gemini Vertex] Executing pending web_search:', query);
 
+								// Stream a searching indicator
+								controller.enqueue(
+									new TextEncoder().encode(
+										`data: ${JSON.stringify({
+											choices: [{ delta: { content: `\n\n*Searching the web for "${query}"...*\n\n` } }],
+										})}\n\n`
+									)
+								);
+
 								try {
 									const searchResult = await self.executeWebSearch(query);
 
@@ -308,6 +323,15 @@ export class GeminiProvider implements AIProvider {
 										)
 									);
 								}
+
+								// Send proper finish_reason after web search completes
+								controller.enqueue(
+									new TextEncoder().encode(
+										`data: ${JSON.stringify({
+											choices: [{ delta: {}, finish_reason: 'stop' }],
+										})}\n\n`
+									)
+								);
 							}
 
 							controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
@@ -340,6 +364,7 @@ export class GeminiProvider implements AIProvider {
 										// Handle function calls
 										if (part.functionCall) {
 											const funcName = part.functionCall.name;
+											console.log('[Gemini Vertex] Model called function:', funcName, JSON.stringify(part.functionCall.args || {}));
 
 											// If it's web_search, save it for execution after stream ends
 											if (funcName === 'web_search' || funcName === 'google_search') {
@@ -347,7 +372,7 @@ export class GeminiProvider implements AIProvider {
 													name: funcName,
 													args: part.functionCall.args || {},
 												};
-												console.log('[Gemini Vertex] Detected web_search call, will execute after stream');
+												console.log('[Gemini Vertex] Saving web_search for execution after stream ends');
 												// Don't emit the tool call - we'll handle it ourselves
 											} else {
 												// For other tools, emit the tool call for client to handle
@@ -376,19 +401,26 @@ export class GeminiProvider implements AIProvider {
 										}
 									}
 
-									// Check for finish reason (but don't close if we have pending web search)
+									// Check for finish reason
 									const finishReason = data.candidates?.[0]?.finishReason;
 									if (finishReason) {
-										const mappedReason = finishReason === 'STOP' ? 'stop' :
-											finishReason === 'MAX_TOKENS' ? 'length' :
-											finishReason === 'TOOL_USE' ? 'tool_calls' : 'stop';
-										controller.enqueue(
-											new TextEncoder().encode(
-												`data: ${JSON.stringify({
-													choices: [{ delta: {}, finish_reason: mappedReason }],
-												})}\n\n`
-											)
-										);
+										// If we have a pending web search, don't send 'tool_calls' finish reason
+										// because we'll handle the tool ourselves
+										if (pendingWebSearch && finishReason === 'TOOL_USE') {
+											console.log('[Gemini Vertex] Suppressing tool_calls finish_reason for web_search');
+											// Don't emit finish_reason yet - we'll send 'stop' after web search completes
+										} else {
+											const mappedReason = finishReason === 'STOP' ? 'stop' :
+												finishReason === 'MAX_TOKENS' ? 'length' :
+												finishReason === 'TOOL_USE' ? 'tool_calls' : 'stop';
+											controller.enqueue(
+												new TextEncoder().encode(
+													`data: ${JSON.stringify({
+														choices: [{ delta: {}, finish_reason: mappedReason }],
+													})}\n\n`
+												)
+											);
+										}
 									}
 								} catch (e) {
 									// Skip invalid JSON
@@ -405,6 +437,8 @@ export class GeminiProvider implements AIProvider {
 	}
 
 	private buildRequestBody(body: RequestBody, _hasWebSearch: boolean): any {
+		// Extract system message for systemInstruction
+		const systemMsg = body.messages.find(m => m.role === 'system');
 		const contents = this.formatMessages(body.messages);
 
 		const requestBody: any = {
@@ -413,6 +447,17 @@ export class GeminiProvider implements AIProvider {
 				temperature: body.temperature ?? 0.7,
 			},
 		};
+
+		// Add system instruction properly (Gemini's native way)
+		if (systemMsg) {
+			const systemText = typeof systemMsg.content === 'string' ? systemMsg.content : '';
+			if (systemText) {
+				requestBody.systemInstruction = {
+					parts: [{ text: systemText }],
+				};
+				console.log('[Gemini Vertex] System instruction set');
+			}
+		}
 
 		// Add response format if specified
 		if (body.response_format?.type === 'json_schema' && body.response_format.schema) {
@@ -428,6 +473,12 @@ export class GeminiProvider implements AIProvider {
 			const functionDeclarations = this.convertToolsToGeminiFormat(body.tools);
 			if (functionDeclarations.length > 0) {
 				requestBody.tools = [{ functionDeclarations }];
+				// Enable automatic function calling mode
+				requestBody.toolConfig = {
+					functionCallingConfig: {
+						mode: 'AUTO',
+					},
+				};
 				console.log('[Gemini Vertex] Tools available:', functionDeclarations.map(f => f.name));
 			}
 		}
@@ -551,7 +602,7 @@ export class GeminiProvider implements AIProvider {
 
 		for (const msg of messages) {
 			if (msg.role === 'system') {
-				// Gemini doesn't have a system role, prepend to first user message
+				// System messages are handled via systemInstruction in buildRequestBody
 				continue;
 			}
 
@@ -637,14 +688,8 @@ export class GeminiProvider implements AIProvider {
 			}
 		}
 
-		// Handle system message by prepending to first user message
-		const systemMsg = messages.find(m => m.role === 'system');
-		if (systemMsg && formatted.length > 0 && formatted[0].role === 'user') {
-			const systemText = typeof systemMsg.content === 'string' ? systemMsg.content : '';
-			if (systemText) {
-				formatted[0].parts.unshift({ text: `System: ${systemText}\n\n` });
-			}
-		}
+		// Note: System message is now handled via systemInstruction in buildRequestBody
+		// No need to prepend to first user message anymore
 
 		return formatted;
 	}

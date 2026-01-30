@@ -7,10 +7,12 @@ export async function hasFramesForDate(date: Date): Promise<boolean> {
 		startOfDay.setHours(0, 0, 0, 0);
 
 		let endOfDay = new Date(date);
-		if (isSameDay(startOfDay, new Date())) {
-			endOfDay.setMinutes(endOfDay.getMinutes() - 5);
-		} else {
-			endOfDay.setHours(23, 59, 59, 999);
+		endOfDay.setHours(23, 59, 59, 999);
+
+		// For today, use current time minus buffer to avoid querying future
+		const now = new Date();
+		if (isSameDay(startOfDay, now)) {
+			endOfDay = new Date(now.getTime() - 5 * 60 * 1000); // 5 minutes ago
 		}
 
 		const query = `
