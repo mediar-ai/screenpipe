@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { Loader2, RotateCcw, AlertCircle, X } from "lucide-react";
+import { Loader2, RotateCcw, AlertCircle, X, Sparkles } from "lucide-react";
 import { SearchModal } from "@/components/rewind/search-modal";
 import { commands } from "@/lib/utils/tauri";
 import { listen, emit } from "@tauri-apps/api/event";
@@ -757,13 +757,59 @@ export default function Timeline() {
 							}}
 							canNavigatePrev={currentIndex > 0}
 							canNavigateNext={currentIndex < frames.length - 1}
+							onFrameUnavailable={() => {
+								// Auto-skip to next available frame
+								if (currentIndex < frames.length - 1) {
+									const newIndex = currentIndex + 1;
+									setCurrentIndex(newIndex);
+									if (frames[newIndex]) {
+										setCurrentFrame(frames[newIndex]);
+									}
+								} else if (currentIndex > 0) {
+									// If at end, try previous
+									const newIndex = currentIndex - 1;
+									setCurrentIndex(newIndex);
+									if (frames[newIndex]) {
+										setCurrentFrame(frames[newIndex]);
+									}
+								}
+							}}
 						/>
 					) : !showBlockingLoader && !error && frames.length === 0 && !isLoading ? (
-						<div className="absolute inset-0 flex items-center justify-center bg-background/90">
-							<div className="text-center text-foreground p-8">
-								<h3 className="text-lg font-medium mb-2">No Frame Available</h3>
-								<p className="text-sm text-muted-foreground">
-									No frames found for this date
+						<div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-background via-background to-muted/20">
+							<div className="text-center p-8 max-w-md">
+								{/* Animated icon */}
+								<div className="relative mx-auto mb-8 w-24 h-24">
+									{/* Pulsing rings */}
+									<div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping" style={{ animationDuration: '3s' }} />
+									<div className="absolute inset-2 rounded-full border-2 border-primary/30 animate-ping" style={{ animationDuration: '3s', animationDelay: '0.5s' }} />
+									<div className="absolute inset-4 rounded-full border-2 border-primary/40 animate-ping" style={{ animationDuration: '3s', animationDelay: '1s' }} />
+									{/* Center icon */}
+									<div className="absolute inset-0 flex items-center justify-center">
+										<div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
+											<Sparkles className="w-8 h-8 text-primary animate-pulse" />
+										</div>
+									</div>
+								</div>
+
+								<h3 className="text-xl font-semibold text-foreground mb-3">
+									Building Your Memory
+								</h3>
+								<p className="text-muted-foreground mb-6 leading-relaxed">
+									Screenpipe is recording your screen activity. Your timeline will appear here as frames are captured.
+								</p>
+
+								{/* Friendly suggestion */}
+								<div className="inline-flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-full border border-border text-sm text-muted-foreground">
+									<span className="relative flex h-2 w-2">
+										<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+										<span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+									</span>
+									Recording in progress
+								</div>
+
+								<p className="text-xs text-muted-foreground mt-6">
+									Check back in a few minutes
 								</p>
 							</div>
 						</div>
@@ -930,7 +976,13 @@ export default function Timeline() {
 								) : error ? (
 									<div className="text-destructive text-center">Failed to load timeline data</div>
 								) : (
-									<div className="text-center">No timeline data available for this date</div>
+									<div className="text-center text-muted-foreground flex items-center justify-center gap-2">
+										<span className="relative flex h-2 w-2">
+											<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+											<span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+										</span>
+										Recording... timeline will appear soon
+									</div>
 								)}
 							</div>
 						</div>
