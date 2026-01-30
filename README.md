@@ -100,42 +100,29 @@ or [download the desktop app](https://screenpi.pe)
 - ~15gb storage/month
 - works offline
 
-## connect to ai agents
+## use with claude code
 
-give your ai agent (clawdbot, moltbot, etc.) access to your screen memory:
-
-```bash
-# one-liner: full setup with daily morning summaries
-bunx @screenpipe/agent --setup user@server --morning 08:00
-```
-
-this sets up:
-- permanent background sync (survives reboot)
-- screenpipe skills (recall, search, digest, context)
-- morning summary cron job
-
-your agent can now answer: "what was I working on yesterday?"
-
-### manual setup
+give claude code access to your screen history:
 
 ```bash
-# just sync data
-bunx @screenpipe/sync --daemon --remote user@server:~/.screenpipe/
-
-# just install skills
-bunx @screenpipe/skills install --remote user@server
-
-# query directly via sqlite
-sqlite3 ~/.screenpipe/db.sqlite "SELECT text FROM ocr_text WHERE text LIKE '%meeting%' LIMIT 10;"
+npx @screenpipe/claude-code
 ```
 
-### packages
+that's it. now ask claude:
+- "what was i working on yesterday?"
+- "find when i saw that error message"
+- "search my screen for mentions of API"
 
-| package | description |
-|---------|-------------|
-| [@screenpipe/agent](https://www.npmjs.com/package/@screenpipe/agent) | one-liner full setup |
-| [@screenpipe/sync](https://www.npmjs.com/package/@screenpipe/sync) | sync data to remote |
-| [@screenpipe/skills](https://www.npmjs.com/package/@screenpipe/skills) | install agent skills |
+### what it does
+
+1. checks screenpipe is running
+2. adds screenpipe-mcp to claude code config
+3. done - claude can now search your screen history
+
+### requirements
+
+- [screenpipe](https://screenpi.pe) running
+- [claude code cli](https://docs.anthropic.com/en/docs/claude-code) installed
 
 ---
 

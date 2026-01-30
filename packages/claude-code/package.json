@@ -1,0 +1,35 @@
+{
+  "name": "@screenpipe/claude-code",
+  "version": "0.1.0",
+  "description": "One command to give Claude Code access to your screen history",
+  "type": "module",
+  "bin": {
+    "screenpipe-claude-code": "dist/index.js"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "dev": "bun run src/index.ts",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "screenpipe",
+    "claude-code",
+    "mcp",
+    "screen-recording",
+    "memory"
+  ],
+  "author": "Louis Beaumont <louis@screenpi.pe>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mediar-ai/screenpipe",
+    "directory": "packages/claude-code"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}
