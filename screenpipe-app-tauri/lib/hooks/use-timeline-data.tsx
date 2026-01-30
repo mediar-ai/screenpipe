@@ -22,12 +22,8 @@ export function useTimelineData(
 		connectWebSocket();
 	}, []); // Only connect once when component mounts
 
-	// Set initial frame when frames arrive and no frame is selected yet
-	useEffect(() => {
-		if (frames.length > 0) {
-			setCurFrame(frames[0]);
-		}
-	}, [frames.length > 0]); // Only trigger when we go from 0 to some frames
+	// NOTE: Auto-select of first frame is handled in timeline.tsx to avoid
+	// interfering with calendar navigation. Don't add frame selection here.
 
 	return {
 		frames,

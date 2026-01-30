@@ -272,8 +272,10 @@ export default function Timeline() {
 	// Auto-select first frame when frames arrive and no frame is selected
 	// Skip during intentional navigation (day change) to prevent double-jump
 	useEffect(() => {
-		if (isNavigatingRef.current) {
-			return; // Don't auto-select during navigation
+		// Don't auto-select during navigation OR if there's a pending navigation
+		// The pending navigation effect handles frame selection during navigation
+		if (isNavigatingRef.current || pendingNavigationRef.current) {
+			return;
 		}
 		if (!currentFrame && frames.length > 0) {
 			setCurrentFrame(frames[0]);
@@ -444,10 +446,9 @@ export default function Timeline() {
 			startTime.setHours(0, 0, 0, 0);
 
 			const endTime = new Date(currentDateEffect);
-			if (endTime.getDate() === new Date().getDate()) {
-				// For today: use current time so server can poll for real-time frames
-				// Don't subtract 5 minutes - this was breaking live polling
-				// (server checks if now <= end_time, which was always false)
+			if (isSameDay(endTime, new Date())) {
+				// For today: don't set endTime to end of day, leave it as current time
+				// so server can poll for real-time frames
 			} else {
 				endTime.setHours(23, 59, 59, 999);
 			}
