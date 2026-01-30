@@ -100,25 +100,42 @@ or [download the desktop app](https://screenpi.pe)
 - ~15gb storage/month
 - works offline
 
-## sync to remote ai agents
+## connect to ai agents
 
-sync your screenpipe data to a remote server (e.g., [clawdbot](https://github.com/moltinginstar/moltbot), [claude code](https://claude.ai/code)):
+give your ai agent (clawdbot, moltbot, etc.) access to your screen memory:
 
 ```bash
-# one-liner: permanent background sync (survives reboot)
+# one-liner: full setup with daily morning summaries
+bunx @screenpipe/agent --setup user@server --morning 08:00
+```
+
+this sets up:
+- permanent background sync (survives reboot)
+- screenpipe skills (recall, search, digest, context)
+- morning summary cron job
+
+your agent can now answer: "what was I working on yesterday?"
+
+### manual setup
+
+```bash
+# just sync data
 bunx @screenpipe/sync --daemon --remote user@server:~/.screenpipe/
 
-# manual sync
-bunx @screenpipe/sync --db --remote user@server:~/.screenpipe/
+# just install skills
+bunx @screenpipe/skills install --remote user@server
 
-# stop daemon
-bunx @screenpipe/sync --stop
-```
-
-your ai agent can then query your full screen history via sqlite:
-```bash
+# query directly via sqlite
 sqlite3 ~/.screenpipe/db.sqlite "SELECT text FROM ocr_text WHERE text LIKE '%meeting%' LIMIT 10;"
 ```
+
+### packages
+
+| package | description |
+|---------|-------------|
+| [@screenpipe/agent](https://www.npmjs.com/package/@screenpipe/agent) | one-liner full setup |
+| [@screenpipe/sync](https://www.npmjs.com/package/@screenpipe/sync) | sync data to remote |
+| [@screenpipe/skills](https://www.npmjs.com/package/@screenpipe/skills) | install agent skills |
 
 ---
 
