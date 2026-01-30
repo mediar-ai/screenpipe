@@ -166,12 +166,9 @@ export class GeminiProvider implements AIProvider {
 		const url = this.getEndpointUrl(body.model, false);
 		const hasWebSearch = this.hasWebSearchTool(body.tools);
 
-		const requestBody = this.buildRequestBody(body, hasWebSearch);
+		let requestBody = this.buildRequestBody(body, hasWebSearch);
 
 		console.log('[Gemini Vertex] Request to:', url);
-		if (hasWebSearch) {
-			console.log('[Gemini Vertex] Web search grounding enabled');
-		}
 
 		const response = await fetch(url, {
 			method: 'POST',
@@ -188,8 +185,61 @@ export class GeminiProvider implements AIProvider {
 			throw new Error(`Gemini Vertex AI request failed: ${response.status} ${error}`);
 		}
 
-		const result = await response.json();
-		return new Response(JSON.stringify(this.formatResponse(result, hasWebSearch)), {
+		let result = await response.json();
+
+		// Check if model called web_search - if so, execute it and continue
+		const parts = result.candidates?.[0]?.content?.parts || [];
+		const webSearchCall = parts.find((p: any) =>
+			p.functionCall?.name === 'web_search' || p.functionCall?.name === 'google_search'
+		);
+
+		if (webSearchCall) {
+			const query = webSearchCall.functionCall.args?.query || webSearchCall.functionCall.args?.q || '';
+			console.log('[Gemini Vertex] Model called web_search, executing for:', query);
+
+			try {
+				const searchResult = await this.executeWebSearch(query);
+
+				// Build follow-up request with the search result
+				const followUpContents = [
+					...requestBody.contents,
+					{
+						role: 'model',
+						parts: [{ functionCall: webSearchCall.functionCall }],
+					},
+					{
+						role: 'user',
+						parts: [{
+							functionResponse: {
+								name: 'web_search',
+								response: { result: searchResult.content },
+							},
+						}],
+					},
+				];
+
+				const followUpResponse = await fetch(url, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${accessToken}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify({
+						contents: followUpContents,
+						generationConfig: requestBody.generationConfig,
+					}),
+				});
+
+				if (followUpResponse.ok) {
+					result = await followUpResponse.json();
+				}
+			} catch (error) {
+				console.error('[Gemini Vertex] Web search execution failed:', error);
+				// Return the original response with the tool call
+			}
+		}
+
+		return new Response(JSON.stringify(this.formatResponse(result, false)), {
 			headers: { 'Content-Type': 'application/json' },
 		});
 	}
@@ -224,6 +274,7 @@ export class GeminiProvider implements AIProvider {
 		const self = this;
 
 		let toolCallIndex = 0;
+		let pendingWebSearch: { name: string; args: any } | null = null;
 
 		return new ReadableStream({
 			async start(controller) {
@@ -231,6 +282,34 @@ export class GeminiProvider implements AIProvider {
 					while (true) {
 						const { done, value } = await reader.read();
 						if (done) {
+							// Before closing, check if we have a pending web search to execute
+							if (pendingWebSearch) {
+								const query = pendingWebSearch.args?.query || pendingWebSearch.args?.q || '';
+								console.log('[Gemini Vertex] Executing pending web_search:', query);
+
+								try {
+									const searchResult = await self.executeWebSearch(query);
+
+									// Stream the search result as content
+									controller.enqueue(
+										new TextEncoder().encode(
+											`data: ${JSON.stringify({
+												choices: [{ delta: { content: '\n\n' + searchResult.content } }],
+											})}\n\n`
+										)
+									);
+								} catch (error) {
+									console.error('[Gemini Vertex] Web search failed:', error);
+									controller.enqueue(
+										new TextEncoder().encode(
+											`data: ${JSON.stringify({
+												choices: [{ delta: { content: '\n\nWeb search failed. Please try again.' } }],
+											})}\n\n`
+										)
+									);
+								}
+							}
+
 							controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
 							controller.close();
 							return;
@@ -258,47 +337,46 @@ export class GeminiProvider implements AIProvider {
 											);
 										}
 
-										// Handle function calls - convert to OpenAI streaming format
+										// Handle function calls
 										if (part.functionCall) {
-											const toolCallId = `call_${Date.now()}_${toolCallIndex}`;
-											controller.enqueue(
-												new TextEncoder().encode(
-													`data: ${JSON.stringify({
-														choices: [{
-															delta: {
-																tool_calls: [{
-																	index: toolCallIndex,
-																	id: toolCallId,
-																	type: 'function',
-																	function: {
-																		name: part.functionCall.name,
-																		arguments: JSON.stringify(part.functionCall.args || {}),
-																	},
-																}],
-															},
-														}],
-													})}\n\n`
-												)
-											);
-											toolCallIndex++;
+											const funcName = part.functionCall.name;
+
+											// If it's web_search, save it for execution after stream ends
+											if (funcName === 'web_search' || funcName === 'google_search') {
+												pendingWebSearch = {
+													name: funcName,
+													args: part.functionCall.args || {},
+												};
+												console.log('[Gemini Vertex] Detected web_search call, will execute after stream');
+												// Don't emit the tool call - we'll handle it ourselves
+											} else {
+												// For other tools, emit the tool call for client to handle
+												const toolCallId = `call_${Date.now()}_${toolCallIndex}`;
+												controller.enqueue(
+													new TextEncoder().encode(
+														`data: ${JSON.stringify({
+															choices: [{
+																delta: {
+																	tool_calls: [{
+																		index: toolCallIndex,
+																		id: toolCallId,
+																		type: 'function',
+																		function: {
+																			name: funcName,
+																			arguments: JSON.stringify(part.functionCall.args || {}),
+																		},
+																	}],
+																},
+															}],
+														})}\n\n`
+													)
+												);
+												toolCallIndex++;
+											}
 										}
 									}
 
-									// Check for grounding metadata at the end
-									if (hasWebSearch && data.candidates?.[0]?.groundingMetadata) {
-										const sourcesText = self.formatGroundingSources(data.candidates[0].groundingMetadata);
-										if (sourcesText) {
-											controller.enqueue(
-												new TextEncoder().encode(
-													`data: ${JSON.stringify({
-														choices: [{ delta: { content: sourcesText } }],
-													})}\n\n`
-												)
-											);
-										}
-									}
-
-									// Check for finish reason
+									// Check for finish reason (but don't close if we have pending web search)
 									const finishReason = data.candidates?.[0]?.finishReason;
 									if (finishReason) {
 										const mappedReason = finishReason === 'STOP' ? 'stop' :
@@ -326,7 +404,7 @@ export class GeminiProvider implements AIProvider {
 		});
 	}
 
-	private buildRequestBody(body: RequestBody, hasWebSearch: boolean): any {
+	private buildRequestBody(body: RequestBody, _hasWebSearch: boolean): any {
 		const contents = this.formatMessages(body.messages);
 
 		const requestBody: any = {
@@ -344,55 +422,13 @@ export class GeminiProvider implements AIProvider {
 			requestBody.generationConfig.responseMimeType = 'application/json';
 		}
 
-		// Build tools - Vertex AI Gemini doesn't support mixing function tools with Google Search
-		// Strategy: Detect user intent from the last message to decide which mode to use
-		const lastUserMessage = body.messages.filter(m => m.role === 'user').pop();
-		const userQuery = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content.toLowerCase() : '';
-
-		// Check if user wants web/internet search - be lenient with typos and variations
-		// Use regex patterns to catch common misspellings
-		const webSearchPatterns = [
-			/i[nt]{1,2}[ea]?r?n[ea]t/i,  // internet and typos: itnernet, intrnet, intenet, etc.
-			/web\s*search/i,          // web search, websearch
-			/search.*web/i,           // search the web, search on web
-			/search.*online/i,        // search online
-			/online.*search/i,        // online search
-			/google/i,                // google it, google search
-			/look\s*up/i,             // look up, lookup
-			/find.*online/i,          // find online
-			/latest\s*news/i,         // latest news
-			/current\s*news/i,        // current news
-			/recent\s*news/i,         // recent news
-			/news\s*about/i,          // news about
-			/what.*happening/i,       // what is happening, what's happening
-			/today'?s?\s/i,           // today's, todays
-			/this\s*week/i,           // this week
-			/real.?time/i,            // real-time, realtime
-			/live\s/i,                // live updates
-			/breaking/i,              // breaking news
-			/trending/i,              // trending
-			/on\s+the\s+net/i,        // on the net
-		];
-
-		const wantsWebSearch = hasWebSearch && webSearchPatterns.some(pattern => pattern.test(userQuery));
-
-		// Also check if query is about external topics (not about "my screen", "my data", etc.)
-		const isAboutExternalTopic = hasWebSearch && !userQuery.includes('my ') &&
-			!userQuery.includes('screen') && !userQuery.includes('yesterday') &&
-			!userQuery.includes('earlier') && !userQuery.includes('last hour') &&
-			(userQuery.includes('search') || userQuery.includes('find')) &&
-			/\b(who|what|where|when|why|how)\b/i.test(userQuery);
-
-		if (wantsWebSearch || isAboutExternalTopic) {
-			// User wants web search - use Google Search grounding
-			requestBody.tools = [{ googleSearch: {} }];
-			console.log('[Gemini Vertex] Using Google Search grounding, query:', userQuery.slice(0, 50));
-		} else if (body.tools && body.tools.length > 0) {
-			// Use function declarations for local search
+		// Always send function declarations - let the model decide which tool to use
+		// When model calls web_search, we'll execute it via Google Search grounding in a follow-up
+		if (body.tools && body.tools.length > 0) {
 			const functionDeclarations = this.convertToolsToGeminiFormat(body.tools);
 			if (functionDeclarations.length > 0) {
 				requestBody.tools = [{ functionDeclarations }];
-				console.log('[Gemini Vertex] Using function declarations:', functionDeclarations.map(f => f.name));
+				console.log('[Gemini Vertex] Tools available:', functionDeclarations.map(f => f.name));
 			}
 		}
 
@@ -406,14 +442,6 @@ export class GeminiProvider implements AIProvider {
 		const functionDeclarations: any[] = [];
 
 		for (const tool of tools) {
-			// Skip web_search - it's handled via Google Search grounding
-			if (tool.type === 'web_search' ||
-				tool.type === 'google_search' ||
-				tool.function?.name === 'web_search' ||
-				tool.function?.name === 'google_search') {
-				continue;
-			}
-
 			// Convert OpenAI function format to Gemini format
 			if (tool.type === 'function' && tool.function) {
 				functionDeclarations.push({
@@ -425,6 +453,66 @@ export class GeminiProvider implements AIProvider {
 		}
 
 		return functionDeclarations;
+	}
+
+	/**
+	 * Execute a web search using Google Search grounding
+	 * Called when the model decides to use the web_search tool
+	 */
+	async executeWebSearch(query: string): Promise<{ content: string; sources: any[] }> {
+		const accessToken = await this.getAccessToken();
+		const url = this.getEndpointUrl('gemini-2.0-flash', false);
+
+		const requestBody = {
+			contents: [{
+				role: 'user',
+				parts: [{ text: `Search the web and provide information about: ${query}` }],
+			}],
+			tools: [{ googleSearch: {} }],
+			generationConfig: {
+				temperature: 0.7,
+			},
+		};
+
+		console.log('[Gemini Vertex] Executing web search for:', query);
+
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: {
+				'Authorization': `Bearer ${accessToken}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify(requestBody),
+		});
+
+		if (!response.ok) {
+			const error = await response.text();
+			console.error('[Gemini Vertex] Web search error:', error);
+			throw new Error(`Web search failed: ${response.status}`);
+		}
+
+		const result = await response.json();
+		const parts = result.candidates?.[0]?.content?.parts || [];
+		const groundingMetadata = result.candidates?.[0]?.groundingMetadata;
+
+		let content = parts.map((p: any) => p.text || '').join('');
+
+		// Append sources
+		if (groundingMetadata?.groundingChunks?.length) {
+			content += '\n\n**Sources:**\n';
+			for (const chunk of groundingMetadata.groundingChunks) {
+				if (chunk.web?.uri) {
+					content += `- [${chunk.web.title || chunk.web.uri}](${chunk.web.uri})\n`;
+				}
+			}
+		}
+
+		const sources = (groundingMetadata?.groundingChunks || []).map((chunk: any) => ({
+			title: chunk.web?.title,
+			url: chunk.web?.uri,
+		}));
+
+		return { content, sources };
 	}
 
 	/**
