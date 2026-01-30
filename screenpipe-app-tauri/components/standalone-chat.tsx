@@ -169,22 +169,42 @@ export function StandaloneChat() {
   // Handle paste events to capture images
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
-    if (!items) return;
+    const files = e.clipboardData?.files;
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.startsWith("image/")) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) {
+    // Try items first (works in most browsers)
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const base64 = event.target?.result as string;
+              setPastedImage(base64);
+            };
+            reader.readAsDataURL(file);
+          }
+          return;
+        }
+      }
+    }
+
+    // Fallback: try files array (some browsers put images here)
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith("image/")) {
+          e.preventDefault();
           const reader = new FileReader();
           reader.onload = (event) => {
             const base64 = event.target?.result as string;
             setPastedImage(base64);
           };
           reader.readAsDataURL(file);
+          return;
         }
-        break; // Only handle first image
       }
     }
   }, []);
@@ -1170,7 +1190,7 @@ export function StandaloneChat() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="p-3">
+        <form onSubmit={handleSubmit} className="p-3" onPaste={handlePaste}>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Input
@@ -1178,7 +1198,6 @@ export function StandaloneChat() {
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
                 placeholder={
                   disabledReason
                     ? disabledReason
