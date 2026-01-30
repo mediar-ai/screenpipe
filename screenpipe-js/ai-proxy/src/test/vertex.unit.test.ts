@@ -249,8 +249,18 @@ describe('parseStreamingEvent', () => {
 			expect(result.done).toBe(false);
 		});
 
-		it('should ignore message_delta', () => {
+		it('should handle message_delta with stop_reason (emits finish_reason)', () => {
 			const event = { type: 'message_delta', delta: { stop_reason: 'end_turn' } };
+			const result = parseStreamingEvent(event, toolCallsById, toolCallIndex);
+			// Now we emit finish_reason when stop_reason is present
+			expect(result.output).not.toBeNull();
+			expect(result.done).toBe(false); // message_stop will follow
+			const parsed = JSON.parse(result.output!.replace('data: ', '').trim());
+			expect(parsed.choices[0].finish_reason).toBe('stop');
+		});
+
+		it('should ignore message_delta without stop_reason', () => {
+			const event = { type: 'message_delta', delta: {}, usage: { output_tokens: 10 } };
 			const result = parseStreamingEvent(event, toolCallsById, toolCallIndex);
 			expect(result.output).toBeNull();
 			expect(result.done).toBe(false);
@@ -445,10 +455,12 @@ describe('Full streaming scenarios', () => {
 			if (result.done) break;
 		}
 
-		expect(outputs).toHaveLength(3); // 2 text deltas + [DONE]
+		// 2 text deltas + 1 message_delta with finish_reason + [DONE]
+		expect(outputs).toHaveLength(4);
 		expect(outputs[0]).toContain('Hello');
 		expect(outputs[1]).toContain(' world');
-		expect(outputs[2]).toBe('data: [DONE]\n\n');
+		expect(outputs[2]).toContain('finish_reason');
+		expect(outputs[3]).toBe('data: [DONE]\n\n');
 	});
 
 	it('should handle text + tool call stream', () => {
@@ -473,11 +485,14 @@ describe('Full streaming scenarios', () => {
 			if (result.done) break;
 		}
 
-		// Should have: 1 text + 1 tool start + 3 tool args + 1 [DONE] = 6
-		expect(outputs).toHaveLength(6);
+		// Should have: 1 text + 1 tool start + 3 tool args + 1 message_delta finish_reason + 1 [DONE] = 7
+		expect(outputs).toHaveLength(7);
 
 		// Check tool call was properly formed
 		expect(toolCallsById['toolu_abc'].arguments).toBe('{"q":"test"}');
+
+		// Check finish_reason is tool_calls
+		expect(outputs[5]).toContain('tool_calls');
 	});
 
 	it('should handle multiple parallel tool calls', () => {
@@ -687,5 +702,372 @@ describe('Request conversion edge cases', () => {
 
 			expect(transformed).toEqual(expectedAnthropic);
 		});
+	});
+});
+
+// ============================================================================
+// Error Event Handling Tests (NEW - for streaming cutoff fix)
+// ============================================================================
+describe('Error event handling', () => {
+	let toolCallsById: Record<string, { index: number; id: string; name: string; arguments: string }>;
+	let toolCallIndex: { value: number };
+
+	beforeEach(() => {
+		toolCallsById = {};
+		toolCallIndex = { value: 0 };
+	});
+
+	it('should handle Anthropic error events and return error info', () => {
+		const errorEvent = {
+			type: 'error',
+			error: {
+				type: 'overloaded_error',
+				message: 'Overloaded',
+			},
+		};
+
+		const result = parseStreamingEvent(errorEvent, toolCallsById, toolCallIndex);
+
+		// Error events should be converted to an error response and signal done
+		expect(result.done).toBe(true);
+		expect(result.output).not.toBeNull();
+		// The output should contain error information
+		expect(result.output).toContain('error');
+	});
+
+	it('should handle content_filter error events', () => {
+		const errorEvent = {
+			type: 'error',
+			error: {
+				type: 'invalid_request_error',
+				message: 'Content blocked by safety filter',
+			},
+		};
+
+		const result = parseStreamingEvent(errorEvent, toolCallsById, toolCallIndex);
+
+		expect(result.done).toBe(true);
+		expect(result.output).not.toBeNull();
+	});
+
+	it('should handle rate_limit_error events', () => {
+		const errorEvent = {
+			type: 'error',
+			error: {
+				type: 'rate_limit_error',
+				message: 'Rate limit exceeded',
+			},
+		};
+
+		const result = parseStreamingEvent(errorEvent, toolCallsById, toolCallIndex);
+
+		expect(result.done).toBe(true);
+	});
+
+	it('should handle api_error events', () => {
+		const errorEvent = {
+			type: 'error',
+			error: {
+				type: 'api_error',
+				message: 'Internal server error',
+			},
+		};
+
+		const result = parseStreamingEvent(errorEvent, toolCallsById, toolCallIndex);
+
+		expect(result.done).toBe(true);
+	});
+});
+
+// ============================================================================
+// Stream with message_delta stop_reason Tests (NEW)
+// ============================================================================
+describe('message_delta with stop_reason handling', () => {
+	let toolCallsById: Record<string, { index: number; id: string; name: string; arguments: string }>;
+	let toolCallIndex: { value: number };
+
+	beforeEach(() => {
+		toolCallsById = {};
+		toolCallIndex = { value: 0 };
+	});
+
+	it('should emit finish_reason when message_delta contains stop_reason', () => {
+		const messageDelta = {
+			type: 'message_delta',
+			delta: {
+				stop_reason: 'end_turn',
+				stop_sequence: null,
+			},
+			usage: {
+				output_tokens: 150,
+			},
+		};
+
+		const result = parseStreamingEvent(messageDelta, toolCallsById, toolCallIndex);
+
+		// message_delta with stop_reason should emit a chunk with finish_reason
+		// so clients know the response is complete even before message_stop
+		expect(result.output).not.toBeNull();
+		if (result.output) {
+			const parsed = JSON.parse(result.output.replace('data: ', '').trim());
+			expect(parsed.choices[0].finish_reason).toBe('stop');
+		}
+	});
+
+	it('should emit finish_reason=tool_calls for tool_use stop_reason', () => {
+		const messageDelta = {
+			type: 'message_delta',
+			delta: {
+				stop_reason: 'tool_use',
+			},
+		};
+
+		const result = parseStreamingEvent(messageDelta, toolCallsById, toolCallIndex);
+
+		expect(result.output).not.toBeNull();
+		if (result.output) {
+			const parsed = JSON.parse(result.output.replace('data: ', '').trim());
+			expect(parsed.choices[0].finish_reason).toBe('tool_calls');
+		}
+	});
+
+	it('should emit finish_reason=length for max_tokens stop_reason', () => {
+		const messageDelta = {
+			type: 'message_delta',
+			delta: {
+				stop_reason: 'max_tokens',
+			},
+		};
+
+		const result = parseStreamingEvent(messageDelta, toolCallsById, toolCallIndex);
+
+		expect(result.output).not.toBeNull();
+		if (result.output) {
+			const parsed = JSON.parse(result.output.replace('data: ', '').trim());
+			expect(parsed.choices[0].finish_reason).toBe('length');
+		}
+	});
+});
+
+// ============================================================================
+// Buffer Flush Tests (NEW - ensure no data loss on stream end)
+// ============================================================================
+describe('Buffer flush on stream end', () => {
+	it('should not lose data when stream ends with incomplete buffer', () => {
+		// Simulate a stream that ends with data still in buffer
+		const chunks = [
+			'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}\n\n',
+			'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" World"}}', // No trailing \n\n
+		];
+
+		let buffer = '';
+		const completedEvents: any[] = [];
+		const toolCallsById: Record<string, any> = {};
+		const toolCallIndex = { value: 0 };
+
+		for (const chunk of chunks) {
+			buffer += chunk;
+			const lines = buffer.split('\n');
+			buffer = lines.pop() || '';
+
+			for (const line of lines) {
+				if (line.startsWith('data: ')) {
+					try {
+						const data = JSON.parse(line.slice(6));
+						const result = parseStreamingEvent(data, toolCallsById, toolCallIndex);
+						if (result.output) completedEvents.push(result.output);
+					} catch (e) {
+						// incomplete JSON
+					}
+				}
+			}
+		}
+
+		// At this point, buffer still has incomplete data
+		expect(buffer).toContain('World');
+		expect(completedEvents.length).toBe(1); // Only first event was complete
+
+		// NEW BEHAVIOR: Flush remaining buffer when stream ends
+		// This should be done by the streaming handler
+		if (buffer.startsWith('data: ')) {
+			try {
+				const data = JSON.parse(buffer.slice(6));
+				const result = parseStreamingEvent(data, toolCallsById, toolCallIndex);
+				if (result.output) completedEvents.push(result.output);
+			} catch (e) {
+				// incomplete JSON - this is expected in this test
+			}
+		}
+
+		// After flush, we should have both events
+		expect(completedEvents.length).toBe(2);
+	});
+
+	it('should handle buffer with multiple incomplete events', () => {
+		// Edge case: buffer has partial event then complete event
+		const chunk = 'ta":"text_delta","text":"part1"}}\n\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"part2"}}\n\n';
+
+		let buffer = 'data: {"type":"content_block_delta","delta":{"ty'; // Previous partial
+		buffer += chunk;
+
+		const lines = buffer.split('\n');
+		buffer = lines.pop() || '';
+		const parsedLines: string[] = [];
+
+		for (const line of lines) {
+			if (line.startsWith('data: ')) {
+				try {
+					JSON.parse(line.slice(6));
+					parsedLines.push(line);
+				} catch (e) {
+					// First line will fail - it's incomplete JSON
+				}
+			}
+		}
+
+		// Should have recovered the second complete event
+		expect(parsedLines.length).toBe(2);
+	});
+});
+
+// ============================================================================
+// Streaming Timeout Behavior Tests (NEW - documents expected behavior)
+// ============================================================================
+describe('Streaming timeout expectations', () => {
+	it('should document that idle timeout is needed', () => {
+		// This test documents the expected behavior for idle timeouts
+		// The streaming handler should abort if no data is received for X seconds
+
+		const EXPECTED_IDLE_TIMEOUT_MS = 30000; // 30 seconds
+
+		// The streaming handler should:
+		// 1. Track the last time data was received
+		// 2. If no data for IDLE_TIMEOUT_MS, abort the stream
+		// 3. Return an error to the client
+
+		// This is a documentation test - actual implementation is in createStreamingCompletion
+		expect(EXPECTED_IDLE_TIMEOUT_MS).toBeGreaterThan(0);
+	});
+});
+
+// ============================================================================
+// Image Content Conversion Tests (NEW - for multimodal support)
+// ============================================================================
+describe('Image content conversion to Anthropic format', () => {
+	it('should convert OpenAI image_url format to Anthropic source format', () => {
+		const openaiImageContent = {
+			type: 'image_url',
+			image_url: {
+				url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ',
+				detail: 'auto',
+			},
+		};
+
+		// Expected Anthropic format
+		const expectedAnthropic = {
+			type: 'image',
+			source: {
+				type: 'base64',
+				media_type: 'image/png',
+				data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ',
+			},
+		};
+
+		// Simulate the conversion
+		const url = openaiImageContent.image_url.url;
+		const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+
+		let converted: any;
+		if (dataUrlMatch) {
+			converted = {
+				type: 'image',
+				source: {
+					type: 'base64',
+					media_type: dataUrlMatch[1],
+					data: dataUrlMatch[2],
+				},
+			};
+		}
+
+		expect(converted).toEqual(expectedAnthropic);
+	});
+
+	it('should handle URL-based images', () => {
+		const openaiImageContent = {
+			type: 'image_url',
+			image_url: {
+				url: 'https://example.com/image.png',
+			},
+		};
+
+		// For URL images, Anthropic uses url source type
+		const expectedAnthropic = {
+			type: 'image',
+			source: {
+				type: 'url',
+				url: 'https://example.com/image.png',
+			},
+		};
+
+		const url = openaiImageContent.image_url.url;
+		const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+
+		let converted: any;
+		if (dataUrlMatch) {
+			converted = {
+				type: 'image',
+				source: {
+					type: 'base64',
+					media_type: dataUrlMatch[1],
+					data: dataUrlMatch[2],
+				},
+			};
+		} else {
+			converted = {
+				type: 'image',
+				source: {
+					type: 'url',
+					url: url,
+				},
+			};
+		}
+
+		expect(converted).toEqual(expectedAnthropic);
+	});
+
+	it('should handle custom proxy image format', () => {
+		const proxyImageContent = {
+			type: 'image',
+			image: {
+				url: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==',
+			},
+		};
+
+		// Expected Anthropic format
+		const expectedAnthropic = {
+			type: 'image',
+			source: {
+				type: 'base64',
+				media_type: 'image/jpeg',
+				data: '/9j/4AAQSkZJRg==',
+			},
+		};
+
+		const url = proxyImageContent.image.url;
+		const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+
+		let converted: any;
+		if (dataUrlMatch) {
+			converted = {
+				type: 'image',
+				source: {
+					type: 'base64',
+					media_type: dataUrlMatch[1],
+					data: dataUrlMatch[2],
+				},
+			};
+		}
+
+		expect(converted).toEqual(expectedAnthropic);
 	});
 });

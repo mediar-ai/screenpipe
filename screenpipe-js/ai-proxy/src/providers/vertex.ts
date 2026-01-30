@@ -238,44 +238,93 @@ export class VertexAIProvider implements AIProvider {
 		const toolCallIndexRef = { value: 0 };
 		let buffer = ''; // Buffer for incomplete lines
 
+		// Idle timeout configuration - abort if no data received for this duration
+		const IDLE_TIMEOUT_MS = 30000; // 30 seconds
+
 		return new ReadableStream({
 			async start(controller) {
+				let lastDataTime = Date.now();
+				let streamEnded = false;
+
+				// Helper to process a line
+				const processLine = (line: string): boolean => {
+					if (line.startsWith('data: ')) {
+						try {
+							const data = JSON.parse(line.slice(6));
+							const result = parseStreamingEvent(data, toolCallsById, toolCallIndexRef);
+
+							if (result.output) {
+								controller.enqueue(new TextEncoder().encode(result.output));
+							}
+							if (result.done) {
+								return true; // Signal stream should end
+							}
+						} catch (e) {
+							// Skip invalid JSON (might be incomplete)
+						}
+					}
+					return false;
+				};
+
 				try {
-					while (true) {
-						const { done, value } = await reader.read();
-						if (done) {
+					while (!streamEnded) {
+						// Create a timeout promise
+						const timeoutPromise = new Promise<{ done: true; value: undefined; timedOut: true }>((resolve) => {
+							setTimeout(() => resolve({ done: true, value: undefined, timedOut: true }), IDLE_TIMEOUT_MS);
+						});
+
+						// Race between read and timeout
+						const readPromise = reader.read().then((result) => ({ ...result, timedOut: false as const }));
+						const result = await Promise.race([readPromise, timeoutPromise]);
+
+						if (result.timedOut) {
+							// Idle timeout - no data received for too long
+							console.warn(`Stream idle timeout after ${IDLE_TIMEOUT_MS}ms`);
+							controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({
+								error: { type: 'timeout', message: `Stream idle timeout: no data received for ${IDLE_TIMEOUT_MS / 1000} seconds` },
+								choices: [{ delta: {}, finish_reason: 'error' }],
+							})}\n\n`));
 							controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
 							controller.close();
 							return;
 						}
 
+						lastDataTime = Date.now();
+
+						if (result.done) {
+							// Stream ended - flush remaining buffer
+							if (buffer.trim()) {
+								const done = processLine(buffer);
+								if (done) {
+									streamEnded = true;
+								}
+							}
+							// Always send [DONE] when stream ends
+							if (!streamEnded) {
+								controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+							}
+							controller.close();
+							return;
+						}
+
 						// Append chunk to buffer and split by newlines
-						buffer += decoder.decode(value, { stream: true });
+						buffer += decoder.decode(result.value, { stream: true });
 						const lines = buffer.split('\n');
 
 						// Keep the last potentially incomplete line in buffer
 						buffer = lines.pop() || '';
 
 						for (const line of lines) {
-							if (line.startsWith('data: ')) {
-								try {
-									const data = JSON.parse(line.slice(6));
-									const result = parseStreamingEvent(data, toolCallsById, toolCallIndexRef);
-
-									if (result.output) {
-										controller.enqueue(new TextEncoder().encode(result.output));
-									}
-									if (result.done) {
-										controller.close();
-										return;
-									}
-								} catch (e) {
-									// Skip invalid JSON (might be incomplete)
-								}
+							const done = processLine(line);
+							if (done) {
+								streamEnded = true;
+								controller.close();
+								return;
 							}
 						}
 					}
 				} catch (error) {
+					console.error('Streaming error:', error);
 					controller.error(error);
 				}
 			},
@@ -666,9 +715,50 @@ export function parseStreamingEvent(
 		}
 	}
 
+	// Handle message_delta with stop_reason - emit finish_reason so clients know response is complete
+	if (data.type === 'message_delta' && data.delta?.stop_reason) {
+		// Map Anthropic stop_reason to OpenAI finish_reason
+		let finishReason: string;
+		switch (data.delta.stop_reason) {
+			case 'tool_use':
+				finishReason = 'tool_calls';
+				break;
+			case 'max_tokens':
+				finishReason = 'length';
+				break;
+			case 'end_turn':
+			case 'stop_sequence':
+			default:
+				finishReason = 'stop';
+				break;
+		}
+		return {
+			output: `data: ${JSON.stringify({
+				choices: [{ delta: {}, finish_reason: finishReason }],
+			})}\n\n`,
+			done: false, // Not done yet, message_stop will follow
+		};
+	}
+
 	// Handle message_stop
 	if (data.type === 'message_stop') {
 		return { output: 'data: [DONE]\n\n', done: true };
+	}
+
+	// Handle error events from Anthropic
+	if (data.type === 'error') {
+		const errorType = data.error?.type || 'unknown_error';
+		const errorMessage = data.error?.message || 'An error occurred';
+		return {
+			output: `data: ${JSON.stringify({
+				error: {
+					type: errorType,
+					message: errorMessage,
+				},
+				choices: [{ delta: {}, finish_reason: 'error' }],
+			})}\n\n`,
+			done: true, // Error terminates the stream
+		};
 	}
 
 	// Ignore other events (message_start, ping, content_block_stop, etc.)
