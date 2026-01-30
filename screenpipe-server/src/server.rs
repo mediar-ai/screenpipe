@@ -110,6 +110,8 @@ pub struct AppState {
     pub ws_connection_count: Arc<AtomicUsize>,
     /// LRU cache for search results (10x faster for repeated queries)
     pub search_cache: SearchCache,
+    /// Enable PII removal from text content
+    pub use_pii_removal: bool,
 }
 
 // Update the SearchQuery struct
@@ -1197,6 +1199,7 @@ pub struct SCServer {
     vision_disabled: bool,
     audio_disabled: bool,
     enable_pipe: bool,
+    use_pii_removal: bool,
 }
 
 impl SCServer {
@@ -1210,6 +1213,7 @@ impl SCServer {
         audio_disabled: bool,
         audio_manager: Arc<AudioManager>,
         enable_pipe: bool,
+        use_pii_removal: bool,
     ) -> Self {
         SCServer {
             db,
@@ -1220,6 +1224,7 @@ impl SCServer {
             audio_disabled,
             audio_manager,
             enable_pipe,
+            use_pii_removal,
         }
     }
 
@@ -1274,6 +1279,7 @@ impl SCServer {
                 .max_capacity(1000)
                 .time_to_live(Duration::from_secs(60))
                 .build(),
+            use_pii_removal: self.use_pii_removal,
         });
 
         let cors = CorsLayer::new()
@@ -1519,13 +1525,22 @@ async fn add_transcription_to_db(
     transcription: &AudioTranscription,
     device_name: &str,
 ) -> Result<(), anyhow::Error> {
+    use screenpipe_core::pii_removal::remove_pii;
+
     let db = &state.db;
+
+    // Apply PII removal if enabled
+    let sanitized_transcription = if state.use_pii_removal {
+        remove_pii(&transcription.transcription)
+    } else {
+        transcription.transcription.clone()
+    };
 
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
 
     db.insert_audio_transcription(
         dummy_audio_chunk_id, // No associated audio chunk
-        &transcription.transcription,
+        &sanitized_transcription,
         -1,
         &transcription.transcription_engine,
         &screenpipe_db::AudioDevice {

@@ -80,6 +80,7 @@ pub async fn handle_new_transcript(
     db: Arc<DatabaseManager>,
     transcription_receiver: Arc<crossbeam::channel::Receiver<TranscriptionResult>>,
     transcription_engine: Arc<AudioTranscriptionEngine>,
+    use_pii_removal: bool,
 ) {
     let mut previous_transcript = "".to_string();
     let mut previous_transcript_id: Option<i64> = None;
@@ -152,6 +153,7 @@ pub async fn handle_new_transcript(
             transcription_engine.clone(),
             processed_previous,
             previous_transcript_id,
+            use_pii_removal,
         )
         .await
         {

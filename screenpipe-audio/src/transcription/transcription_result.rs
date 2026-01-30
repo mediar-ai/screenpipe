@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_db::{DatabaseManager, Speaker};
 use tracing::{debug, error, info};
 
@@ -54,6 +55,7 @@ pub async fn process_transcription_result(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     previous_transcript: Option<String>,
     previous_transcript_id: Option<i64>,
+    use_pii_removal: bool,
 ) -> Result<Option<i64>, anyhow::Error> {
     if result.error.is_some() || result.transcription.is_none() {
         error!(
@@ -67,7 +69,13 @@ pub async fn process_transcription_result(
 
     info!("Detected speaker: {:?}", speaker);
 
-    let transcription = result.transcription.unwrap();
+    let raw_transcription = result.transcription.unwrap();
+    // Apply PII removal if enabled
+    let transcription = if use_pii_removal {
+        remove_pii(&raw_transcription)
+    } else {
+        raw_transcription
+    };
     let transcription_engine = audio_transcription_engine.to_string();
     let mut chunk_id: Option<i64> = None;
 
@@ -77,8 +85,14 @@ pub async fn process_transcription_result(
     );
     if let Some(id) = previous_transcript_id {
         if let Some(prev_transcript) = previous_transcript {
+            // Apply PII removal to previous transcript update as well
+            let sanitized_prev = if use_pii_removal {
+                remove_pii(&prev_transcript)
+            } else {
+                prev_transcript
+            };
             match db
-                .update_audio_transcription(id, prev_transcript.as_str())
+                .update_audio_transcription(id, sanitized_prev.as_str())
                 .await
             {
                 Ok(_) => {}
@@ -149,5 +163,144 @@ async fn get_or_create_speaker_from_embedding(
     } else {
         let speaker = db.insert_speaker(embedding).await?;
         Ok(speaker)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that PII removal works correctly on transcription text
+    #[test]
+    fn test_pii_removal_on_transcription() {
+        // Email addresses
+        let input = "Please contact me at john.doe@example.com for more info";
+        let result = remove_pii(input);
+        assert_eq!(result, "Please contact me at [EMAIL] for more info");
+        assert!(!result.contains("john.doe@example.com"));
+
+        // SSN
+        let input = "My social security number is 123-45-6789";
+        let result = remove_pii(input);
+        assert_eq!(result, "My social security number is [SSN]");
+        assert!(!result.contains("123-45-6789"));
+
+        // Credit card with dashes
+        let input = "Charge it to 4532-1234-5678-9012";
+        let result = remove_pii(input);
+        assert_eq!(result, "Charge it to [CREDIT_CARD]");
+        assert!(!result.contains("4532"));
+
+        // Credit card with spaces
+        let input = "Card number is 4532 1234 5678 9012";
+        let result = remove_pii(input);
+        assert_eq!(result, "Card number is [CREDIT_CARD]");
+
+        // Credit card without separators
+        let input = "Use card 4532123456789012 please";
+        let result = remove_pii(input);
+        assert_eq!(result, "Use card [CREDIT_CARD] please");
+    }
+
+    /// Test that PII removal handles multiple PII types in one transcription
+    #[test]
+    fn test_pii_removal_multiple_types() {
+        let input = "Hi, I'm at john@work.com, my SSN is 111-22-3333 and card 1234-5678-9012-3456";
+        let result = remove_pii(input);
+
+        assert!(result.contains("[EMAIL]"));
+        assert!(result.contains("[SSN]"));
+        assert!(result.contains("[CREDIT_CARD]"));
+        assert!(!result.contains("john@work.com"));
+        assert!(!result.contains("111-22-3333"));
+        assert!(!result.contains("1234-5678-9012-3456"));
+    }
+
+    /// Test that PII removal preserves non-PII content
+    #[test]
+    fn test_pii_removal_preserves_non_pii() {
+        let input = "The meeting is at 3 PM in conference room 42. We'll discuss the quarterly report.";
+        let result = remove_pii(input);
+        assert_eq!(result, input); // No changes - no PII present
+    }
+
+    /// Test edge cases for transcription PII removal
+    #[test]
+    fn test_pii_removal_edge_cases() {
+        // Empty string
+        assert_eq!(remove_pii(""), "");
+
+        // Only whitespace
+        assert_eq!(remove_pii("   "), "   ");
+
+        // Multiple emails in a row
+        let input = "Contact a@b.com or c@d.com";
+        let result = remove_pii(input);
+        assert_eq!(result, "Contact [EMAIL] or [EMAIL]");
+
+        // PII at start and end
+        let input = "123-45-6789 is my SSN and email is test@test.com";
+        let result = remove_pii(input);
+        assert!(result.starts_with("[SSN]"));
+        assert!(result.ends_with("[EMAIL]"));
+    }
+
+    /// Test that common false positives are NOT redacted
+    #[test]
+    fn test_pii_removal_no_false_positives() {
+        // Regular numbers should not be redacted
+        assert_eq!(remove_pii("Call me at 555-1234"), "Call me at 555-1234");
+
+        // Short number sequences
+        assert_eq!(remove_pii("Room 1234"), "Room 1234");
+
+        // Dates that look like SSNs but aren't (different format)
+        assert_eq!(remove_pii("Date: 12/34/5678"), "Date: 12/34/5678");
+
+        // URLs that aren't emails
+        assert_eq!(remove_pii("Visit example.com"), "Visit example.com");
+    }
+
+    /// Test realistic transcription scenarios
+    #[test]
+    fn test_pii_removal_realistic_transcriptions() {
+        // Meeting transcription with email mention
+        let input = "So Sarah said to email her at sarah.johnson@company.org about the proposal";
+        let result = remove_pii(input);
+        assert_eq!(result, "So Sarah said to email her at [EMAIL] about the proposal");
+
+        // Customer service call with card number
+        let input = "I'll read you the card number: 4111 1111 1111 1111";
+        let result = remove_pii(input);
+        assert!(result.contains("[CREDIT_CARD]"));
+        assert!(!result.contains("4111"));
+
+        // Medical context with SSN (HIPAA sensitive)
+        let input = "Patient SSN for records is 987-65-4321";
+        let result = remove_pii(input);
+        assert!(result.contains("[SSN]"));
+        assert!(!result.contains("987-65-4321"));
+    }
+
+    /// Benchmark-style test to ensure PII removal is fast
+    #[test]
+    fn test_pii_removal_performance() {
+        use std::time::Instant;
+
+        let input = "Contact john@example.com about SSN 123-45-6789 and card 4532-1234-5678-9012";
+
+        let start = Instant::now();
+        for _ in 0..1000 {
+            let _ = remove_pii(input);
+        }
+        let duration = start.elapsed();
+
+        // Should process 1000 iterations in under 100ms (very conservative)
+        // Actual should be ~1-5ms for 1000 iterations
+        assert!(
+            duration.as_millis() < 100,
+            "PII removal too slow: {:?} for 1000 iterations",
+            duration
+        );
     }
 }

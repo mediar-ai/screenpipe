@@ -37,6 +37,7 @@ async fn setup_test_app() -> (Router, Arc<DatabaseManager>) {
         false,
         audio_manager,
         true,
+        false, // use_pii_removal
     );
 
     let router = app.create_router(true).await;
