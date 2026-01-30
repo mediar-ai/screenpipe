@@ -9617,7 +9617,10 @@ function parseArgs() {
     format: "markdown",
     verbose: false,
     dbSync: false,
-    dbPath: process.env.SCREENPIPE_DB || `${home}/.screenpipe/db.sqlite`
+    dbPath: process.env.SCREENPIPE_DB || `${home}/.screenpipe/db.sqlite`,
+    daemon: false,
+    daemonInterval: 3600,
+    daemonStop: false
   };
   for (let i2 = 0;i2 < args.length; i2++) {
     const arg = args[i2];
@@ -9652,6 +9655,17 @@ function parseArgs() {
       case "--db-path":
         config.dbPath = args[++i2];
         break;
+      case "--daemon":
+      case "-d":
+        config.daemon = true;
+        config.dbSync = true;
+        break;
+      case "--interval":
+        config.daemonInterval = parseInt(args[++i2]) || 3600;
+        break;
+      case "--stop":
+        config.daemonStop = true;
+        break;
       case "--help":
         printHelp();
         process.exit(0);
@@ -9681,6 +9695,10 @@ OPTIONS:
   --db, --db-sync       Sync raw SQLite database instead of summary
   --db-path <path>      Path to Screenpipe DB (default: ~/.screenpipe/db.sqlite)
 
+  -d, --daemon          Install persistent background sync (survives reboot)
+  --interval <secs>     Sync interval in seconds (default: 3600 = 1 hour)
+  --stop                Stop and remove the daemon
+
 ENVIRONMENT:
   SCREENPIPE_URL        Screenpipe API URL (default: http://localhost:3030)
   SCREENPIPE_DB         Path to Screenpipe database
@@ -9698,6 +9716,12 @@ EXAMPLES:
 
   # Full sync: DB + daily summary
   bunx screenpipe-sync --db -r clawdbot:~/.screenpipe && bunx screenpipe-sync -o ~/context -g
+
+  # ONE-LINER: Permanent background sync (survives reboot)
+  bunx screenpipe-sync --daemon --remote user@server:~/.screenpipe/
+
+  # Stop the daemon
+  bunx screenpipe-sync --stop
 
 OUTPUT (summary mode):
   - Todo items extracted from screen content
@@ -9949,6 +9973,132 @@ async function writeOutput(content, config, filename) {
     }
   }
 }
+async function setupDaemon(config) {
+  const fs2 = await import("fs/promises");
+  const { execSync } = await import("child_process");
+  const os = await import("os");
+  const path = await import("path");
+  const home = os.homedir();
+  const platform = os.platform();
+  if (!config.remote && !config.outputDir) {
+    console.error(`[error] --daemon requires --remote or --output`);
+    console.error(`        Example: bunx screenpipe-sync --daemon -r user@host:~/.screenpipe/`);
+    process.exit(1);
+  }
+  const remotePart = config.remote ? `--remote ${config.remote}` : "";
+  const outputPart = config.outputDir ? `--output ${config.outputDir}` : "";
+  const gitPart = config.gitPush ? "--git" : "";
+  if (platform === "darwin") {
+    const plistPath = path.join(home, "Library/LaunchAgents/com.screenpipe.sync.plist");
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.screenpipe.sync</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>export PATH="$HOME/.bun/bin:/usr/local/bin:/opt/homebrew/bin:$PATH" &amp;&amp; bunx screenpipe-sync --db ${remotePart} ${outputPart} ${gitPart}</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>${config.daemonInterval}</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/screenpipe-sync.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/screenpipe-sync.err</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>${home}</string>
+    </dict>
+</dict>
+</plist>`;
+    await fs2.mkdir(path.dirname(plistPath), { recursive: true });
+    await fs2.writeFile(plistPath, plist);
+    try {
+      execSync(`launchctl unload "${plistPath}" 2>/dev/null || true`);
+      execSync(`launchctl load "${plistPath}"`);
+    } catch (e2) {
+      console.error(`[error] Failed to load LaunchAgent: ${e2}`);
+      process.exit(1);
+    }
+    console.log(`[ok] Daemon installed (macOS LaunchAgent)`);
+    console.log(`     Syncs every ${config.daemonInterval}s to: ${config.remote || config.outputDir}`);
+    console.log(`     Logs: /tmp/screenpipe-sync.log`);
+    console.log(`     Stop: bunx screenpipe-sync --stop`);
+  } else if (platform === "linux") {
+    const serviceDir = path.join(home, ".config/systemd/user");
+    const servicePath = path.join(serviceDir, "screenpipe-sync.service");
+    const timerPath = path.join(serviceDir, "screenpipe-sync.timer");
+    const service = `[Unit]
+Description=Screenpipe Sync
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'export PATH="$HOME/.bun/bin:$PATH" && bunx screenpipe-sync --db ${remotePart} ${outputPart} ${gitPart}'
+Environment=HOME=${home}
+
+[Install]
+WantedBy=default.target`;
+    const timer = `[Unit]
+Description=Screenpipe Sync Timer
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=${config.daemonInterval}s
+Persistent=true
+
+[Install]
+WantedBy=timers.target`;
+    await fs2.mkdir(serviceDir, { recursive: true });
+    await fs2.writeFile(servicePath, service);
+    await fs2.writeFile(timerPath, timer);
+    try {
+      execSync("systemctl --user daemon-reload");
+      execSync("systemctl --user enable --now screenpipe-sync.timer");
+    } catch (e2) {
+      console.error(`[error] Failed to enable systemd timer: ${e2}`);
+      process.exit(1);
+    }
+    console.log(`[ok] Daemon installed (systemd user timer)`);
+    console.log(`     Syncs every ${config.daemonInterval}s to: ${config.remote || config.outputDir}`);
+    console.log(`     Status: systemctl --user status screenpipe-sync.timer`);
+    console.log(`     Stop: bunx screenpipe-sync --stop`);
+  } else {
+    console.error(`[error] Daemon not supported on ${platform}`);
+    console.error(`        Use cron instead: */60 * * * * bunx screenpipe-sync --db ${remotePart}`);
+    process.exit(1);
+  }
+}
+async function stopDaemon() {
+  const { execSync } = await import("child_process");
+  const os = await import("os");
+  const fs2 = await import("fs/promises");
+  const path = await import("path");
+  const home = os.homedir();
+  const platform = os.platform();
+  if (platform === "darwin") {
+    const plistPath = path.join(home, "Library/LaunchAgents/com.screenpipe.sync.plist");
+    try {
+      execSync(`launchctl unload "${plistPath}" 2>/dev/null`);
+      await fs2.unlink(plistPath);
+      console.log(`[ok] Daemon stopped and removed`);
+    } catch {
+      console.log(`[ok] Daemon was not running`);
+    }
+  } else if (platform === "linux") {
+    try {
+      execSync("systemctl --user disable --now screenpipe-sync.timer 2>/dev/null");
+      console.log(`[ok] Daemon stopped and disabled`);
+    } catch {
+      console.log(`[ok] Daemon was not running`);
+    }
+  }
+}
 async function syncDatabase(config) {
   const fs2 = await import("fs/promises");
   const { execSync } = await import("child_process");
@@ -10013,6 +10163,14 @@ async function syncDatabase(config) {
 async function main() {
   const config = parseArgs();
   const today = new Date().toISOString().split("T")[0];
+  if (config.daemonStop) {
+    await stopDaemon();
+    return;
+  }
+  if (config.daemon) {
+    await setupDaemon(config);
+    return;
+  }
   if (config.dbSync) {
     await syncDatabase(config);
     return;

@@ -1,6 +1,6 @@
 {
   "name": "screenpipe-sync",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Sync Screenpipe activity to structured daily summaries. Extract todos, goals, decisions from your screen history.",
   "type": "module",
   "bin": {

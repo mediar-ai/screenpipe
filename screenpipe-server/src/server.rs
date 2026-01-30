@@ -3296,6 +3296,25 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
     // This ensures audio is displayed once per frame, not once per OCR text region
     if let Some(first_frame) = device_frames.first_mut() {
         first_frame.audio_entries = audio_entries;
+    } else if !audio_entries.is_empty() {
+        // If there are no OCR-based device frames but we have audio,
+        // create a placeholder frame to hold the audio entries.
+        // This ensures audio is not silently dropped when screen capture
+        // produced no visible windows or all windows were filtered out.
+        device_frames.push(DeviceFrame {
+            device_id: "audio-only".to_string(),
+            frame_id: chunk.frame_id,
+            image_data: vec![],
+            metadata: FrameMetadata {
+                file_path: String::new(),
+                app_name: "Audio Recording".to_string(),
+                window_name: String::new(),
+                transcription: transcription_text,
+                ocr_text: String::new(),
+                browser_url: None,
+            },
+            audio_entries,
+        });
     }
 
     TimeSeriesFrame {
@@ -3979,5 +3998,40 @@ mod tests {
 
         assert_eq!(total_audio_entries, 0, "Should have no audio entries");
         assert_eq!(result.frame_data.len(), 5, "Should have 5 DeviceFrames");
+    }
+
+    /// TEST: Audio entries with no OCR entries should create a placeholder frame
+    #[test]
+    fn test_audio_only_frame_creates_placeholder() {
+        // 0 OCR entries, 2 audio entries
+        let frame_data = create_test_frame_data(0, 2);
+
+        let result = create_time_series_frame(frame_data);
+
+        let total_audio_entries: usize = result
+            .frame_data
+            .iter()
+            .map(|df| df.audio_entries.len())
+            .sum();
+
+        println!("OCR entries: 0, Audio entries: 2");
+        println!("DeviceFrames: {}", result.frame_data.len());
+        println!("Total audio entries in result: {}", total_audio_entries);
+
+        // Should have 1 placeholder DeviceFrame with 2 audio entries
+        assert_eq!(
+            result.frame_data.len(),
+            1,
+            "Should have 1 placeholder DeviceFrame for audio"
+        );
+        assert_eq!(
+            total_audio_entries, 2,
+            "Should have 2 audio entries in the placeholder frame"
+        );
+
+        // Verify the placeholder frame has the expected metadata
+        let placeholder = &result.frame_data[0];
+        assert_eq!(placeholder.device_id, "audio-only");
+        assert_eq!(placeholder.metadata.app_name, "Audio Recording");
     }
 }

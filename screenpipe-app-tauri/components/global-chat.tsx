@@ -698,6 +698,7 @@ export function GlobalChat() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnTimeline, isExporting, selectionRange]);
 
   // Fetch speakers dynamically when filter changes
