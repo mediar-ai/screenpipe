@@ -127,6 +127,30 @@ const createWindowOptions = (
   return [...windowOptions, ...customOptions];
 };
 
+const createUrlOptions = (
+  urlItems: { name: string }[],
+  existingUrls: string[]
+) => {
+  const urlOptions = urlItems
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((item) => ({
+      value: item.name,
+      label: item.name,
+      icon: Globe,
+    }));
+
+  // Add existing custom URLs that aren't in the suggestions
+  const customOptions = existingUrls
+    .filter((url) => !urlItems.some((item) => item.name === url))
+    .map((url) => ({
+      value: url,
+      label: url,
+      icon: Asterisk,
+    }));
+
+  return [...urlOptions, ...customOptions];
+};
+
 export function RecordingSettings() {
   const { settings, updateSettings, getDataDir, loadUser } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);

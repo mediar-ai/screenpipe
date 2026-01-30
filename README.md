@@ -102,27 +102,14 @@ or [download the desktop app](https://screenpi.pe)
 
 ## use with claude code
 
-give claude code access to your screen history:
-
 ```bash
-npx @screenpipe/claude-code
+claude mcp add screenpipe -- npx -y screenpipe-mcp
 ```
 
-that's it. now ask claude:
+now ask claude:
 - "what was i working on yesterday?"
 - "find when i saw that error message"
 - "search my screen for mentions of API"
-
-### what it does
-
-1. checks screenpipe is running
-2. adds screenpipe-mcp to claude code config
-3. done - claude can now search your screen history
-
-### requirements
-
-- [screenpipe](https://screenpi.pe) running
-- [claude code cli](https://docs.anthropic.com/en/docs/claude-code) installed
 
 ---
 
