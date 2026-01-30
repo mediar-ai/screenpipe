@@ -78,11 +78,15 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
   // Focus input when modal opens
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
+    if (isOpen) {
       setSelectedIndex(0);
       setQuery("");
       resetSearch();
+      // Use setTimeout to ensure focus happens after the modal is fully rendered
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isOpen, resetSearch]);
 
@@ -206,6 +210,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck={false}
+            autoFocus
           />
           {isSearching && <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />}
           {query && (
