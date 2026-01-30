@@ -11,6 +11,8 @@ export const TIER_CONFIG: Record<UserTier, TierLimits> = {
     allowedModels: [
       'claude-haiku-4-5@20251001',
       'claude-3-haiku-20240307',
+      'gemini-3-flash',
+      'gemini-2.5-flash',
     ],
   },
   logged_in: {
@@ -22,6 +24,9 @@ export const TIER_CONFIG: Record<UserTier, TierLimits> = {
       'claude-sonnet-4-20250514',
       'claude-3-5-sonnet-20241022',
       'gpt-4o-mini',
+      'gemini-3-flash',
+      'gemini-2.5-flash',
+      'gemini-3-pro',
     ],
   },
   subscribed: {

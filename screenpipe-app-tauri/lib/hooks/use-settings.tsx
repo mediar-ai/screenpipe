@@ -113,8 +113,19 @@ const DEFAULT_FREE_PRESET: AIPreset = {
 	prompt: DEFAULT_PROMPT,
 };
 
+// Second default preset with Gemini Flash 3 (also free, supports web search)
+const DEFAULT_GEMINI_PRESET: AIPreset = {
+	id: "gemini-flash",
+	provider: "screenpipe-cloud",
+	url: "https://api.screenpi.pe/v1",
+	model: "gemini-3-flash",
+	maxContextChars: 128000,
+	defaultPreset: false,
+	prompt: DEFAULT_PROMPT,
+};
+
 let DEFAULT_SETTINGS: Settings = {
-			aiPresets: [DEFAULT_FREE_PRESET as any],
+			aiPresets: [DEFAULT_FREE_PRESET as any, DEFAULT_GEMINI_PRESET as any],
 			deviceId: crypto.randomUUID(),
 			deepgramApiKey: "",
 			isLoading: false,
@@ -233,7 +244,16 @@ function createSettingsStore() {
 
 		// Migration: Add default free preset if user has no presets
 		if (!settings.aiPresets || settings.aiPresets.length === 0) {
-			settings.aiPresets = [DEFAULT_FREE_PRESET as any];
+			settings.aiPresets = [DEFAULT_FREE_PRESET as any, DEFAULT_GEMINI_PRESET as any];
+			needsUpdate = true;
+		}
+
+		// Migration: Add Gemini preset for existing users who don't have it
+		const hasGeminiPreset = settings.aiPresets?.some(
+			(p: any) => p.id === "gemini-flash" || p.model?.includes("gemini")
+		);
+		if (settings.aiPresets && settings.aiPresets.length > 0 && !hasGeminiPreset) {
+			settings.aiPresets = [...settings.aiPresets, DEFAULT_GEMINI_PRESET as any];
 			needsUpdate = true;
 		}
 
