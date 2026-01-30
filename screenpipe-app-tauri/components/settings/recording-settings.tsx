@@ -1452,9 +1452,9 @@ export function RecordingSettings() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <Label htmlFor="usePiiRemoval">PII removal</Label>
+              <Label htmlFor="usePiiRemoval">PII removal (recommended)</Label>
               <p className="text-sm text-muted-foreground">
-                Redact emails, phone numbers, and addresses from screen text
+                Redact sensitive data from OCR and audio: emails, phones, SSNs, credit cards, IP addresses, API keys
               </p>
             </div>
             <Switch

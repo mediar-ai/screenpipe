@@ -235,8 +235,9 @@ pub struct Cli {
     #[arg(short = 'l', long, value_enum)]
     pub language: Vec<Language>,
 
-    /// Enable PII removal from OCR text property that is saved to db and returned in search results
-    #[arg(long, default_value_t = false)]
+    /// Enable PII removal from OCR text and audio transcriptions saved to db and returned in search results.
+    /// When enabled, sensitive data like emails, phone numbers, credit cards, SSNs, and API keys are redacted.
+    #[arg(long, default_value_t = true)]
     pub use_pii_removal: bool,
 
     /// Disable vision recording
