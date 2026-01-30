@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { PipeAIIcon, PipeAIIconLarge } from "@/components/pipe-ai-icon";
 import { MemoizedReactMarkdown } from "@/components/markdown";
 import { VideoComponent } from "@/components/rewind/video";
+import { MermaidDiagram } from "@/components/rewind/mermaid-diagram";
 import { AIPresetsSelector } from "@/components/rewind/ai-presets-selector";
 import { AIPreset } from "@/lib/utils/tauri";
 import remarkGfm from "remark-gfm";
@@ -114,6 +115,15 @@ Rules for showing videos/audio:
 - Use the exact, absolute file_path from search results
 
 Be concise. Cite timestamps when relevant. Always display times in the user's local timezone.
+
+VISUALIZATION:
+When the user asks for diagrams, flowcharts, or visualizations, generate Mermaid diagrams using fenced code blocks with the "mermaid" language tag. Example:
+\`\`\`mermaid
+graph TD
+    A[Start] --> B[Process]
+    B --> C[End]
+\`\`\`
+Use flowcharts (graph TD/LR), sequence diagrams, pie charts, etc. as appropriate.
 
 Current time: ${now.toISOString()}
 User's timezone: ${timezone} (UTC${offsetStr})
@@ -1422,7 +1432,14 @@ export function StandaloneChat() {
                     code({ className, children, ...props }) {
                       const content = String(children).replace(/\n$/, "");
                       const isMedia = content.trim().toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
+                      const match = /language-(\w+)/.exec(className || "");
+                      const language = match?.[1] || "";
                       const isCodeBlock = className?.includes("language-");
+
+                      // Render mermaid diagrams
+                      if (language === "mermaid") {
+                        return <MermaidDiagram chart={content} />;
+                      }
 
                       if (isMedia) {
                         return <VideoComponent filePath={content.trim()} className="my-2" />;
