@@ -2,6 +2,7 @@ use crate::commands::show_main_window;
 use crate::health::{get_recording_status, RecordingStatus};
 use crate::sidecar::SidecarState;
 use crate::store::{get_store, OnboardingStore};
+use crate::updates::is_source_build;
 use crate::window_api::ShowRewindWindow;
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -13,6 +14,8 @@ use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     AppHandle, Manager, Wry,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+use tauri_plugin_opener::OpenerExt;
 
 use tracing::{debug, error, info};
 
@@ -71,11 +74,11 @@ fn create_dynamic_menu(
     }
 
     // Full menu after onboarding is complete
-    // Get the show shortcut from store
+    // Get the show shortcut from store (must match frontend defaults in use-settings.tsx)
     let default_shortcut = if cfg!(target_os = "windows") {
         "Alt+S"
     } else {
-        "Super+Ctrl+S"
+        "Control+Super+S"
     };
     let show_shortcut = store
         .get("showScreenpipeShortcut")
@@ -161,6 +164,36 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         }
         "stop_recording" => {
             let _ = app_handle.emit("shortcut-stop-recording", ());
+        }
+        "update_now" => {
+            // For source builds, show info dialog about updates
+            if is_source_build(app_handle) {
+                let app = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let dialog = app
+                        .dialog()
+                        .message(
+                            "auto-updates are only available in the pre-built version.\n\n\
+                            source builds require manual updates from github.",
+                        )
+                        .title("source build detected")
+                        .buttons(MessageDialogButtons::OkCancelCustom(
+                            "download pre-built".to_string(),
+                            "view on github".to_string(),
+                        ));
+
+                    dialog.show(move |clicked_download| {
+                        if clicked_download {
+                            let _ = app.opener().open_url("https://screenpi.pe/download", None::<&str>);
+                        } else {
+                            let _ = app.opener().open_url("https://github.com/mediar-ai/screenpipe/releases", None::<&str>);
+                        }
+                    });
+                });
+            } else {
+                // For production builds, emit event to trigger update
+                let _ = app_handle.emit("update-now-clicked", ());
+            }
         }
         "settings" => {
             let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
@@ -264,7 +297,14 @@ pub fn setup_tray_menu_updater(app: AppHandle, update_item: &tauri::menu::MenuIt
 }
 
 fn format_shortcut(shortcut: &str) -> String {
-    // Add parentheses inside the formatting to ensure consistent styling
+    // Format shortcut for display in tray menu
+    // Handle both "control" and "ctrl" variants since frontend uses "Control"
+    let ctrl_symbol = if cfg!(target_os = "macos") {
+        "⌃"
+    } else {
+        "ctrl"
+    };
+
     shortcut
         .to_lowercase()
         .replace(
@@ -275,6 +315,9 @@ fn format_shortcut(shortcut: &str) -> String {
                 "win"
             },
         )
+        .replace("commandorcontrol", ctrl_symbol)
+        .replace("control", ctrl_symbol)
+        .replace("ctrl", ctrl_symbol)
         .replace(
             "alt",
             if cfg!(target_os = "macos") {
@@ -289,14 +332,6 @@ fn format_shortcut(shortcut: &str) -> String {
                 "⇧"
             } else {
                 "shift"
-            },
-        )
-        .replace(
-            "ctrl",
-            if cfg!(target_os = "macos") {
-                "⌃"
-            } else {
-                "ctrl"
             },
         )
         .replace("+", " ")
