@@ -10,16 +10,16 @@ Also extracts structured daily summaries: todos, goals, decisions, and AI insigh
 
 ```bash
 # One-liner - AI summary to stdout
-bunx screenpipe-sync
+bunx @screenpipe/sync
 
 # Save daily summaries locally
-bunx screenpipe-sync --output ~/Documents/brain/context --git
+bunx @screenpipe/sync --output ~/Documents/brain/context --git
 
 # Sync raw SQLite database to remote (full history!)
-bunx screenpipe-sync --db --remote user@host:~/.screenpipe/
+bunx @screenpipe/sync --db --remote user@host:~/.screenpipe/
 
 # Full sync: DB + daily summary
-bunx screenpipe-sync --db -r clawdbot:~/.screenpipe && bunx screenpipe-sync -o ~/context -g
+bunx @screenpipe/sync --db -r clawdbot:~/.screenpipe && bunx @screenpipe/sync -o ~/context -g
 ```
 
 ## What It Extracts

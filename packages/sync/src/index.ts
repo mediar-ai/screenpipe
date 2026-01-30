@@ -142,7 +142,7 @@ function printHelp() {
 screenpipe-sync - Extract daily context from Screenpipe
 
 USAGE:
-  bunx screenpipe-sync [options]
+  bunx @screenpipe/sync [options]
 
 MODES:
   Summary mode (default):  AI-powered daily summary extraction
@@ -170,22 +170,22 @@ ENVIRONMENT:
 
 EXAMPLES:
   # AI summary to stdout
-  bunx screenpipe-sync
+  bunx @screenpipe/sync
 
   # Save daily summaries locally
-  bunx screenpipe-sync --output ~/Documents/brain/context --git
+  bunx @screenpipe/sync --output ~/Documents/brain/context --git
 
   # Sync raw database to remote (e.g., Clawdbot)
-  bunx screenpipe-sync --db --remote user@clawdbot:~/.screenpipe/
+  bunx @screenpipe/sync --db --remote user@clawdbot:~/.screenpipe/
 
   # Full sync: DB + daily summary
-  bunx screenpipe-sync --db -r clawdbot:~/.screenpipe && bunx screenpipe-sync -o ~/context -g
+  bunx @screenpipe/sync --db -r clawdbot:~/.screenpipe && bunx @screenpipe/sync -o ~/context -g
 
   # ONE-LINER: Permanent background sync (survives reboot)
-  bunx screenpipe-sync --daemon --remote user@server:~/.screenpipe/
+  bunx @screenpipe/sync --daemon --remote user@server:~/.screenpipe/
 
   # Stop the daemon
-  bunx screenpipe-sync --stop
+  bunx @screenpipe/sync --stop
 
 OUTPUT (summary mode):
   - Todo items extracted from screen content
@@ -503,7 +503,7 @@ async function setupDaemon(config: Config) {
 
   if (!config.remote && !config.outputDir) {
     console.error(`[error] --daemon requires --remote or --output`);
-    console.error(`        Example: bunx screenpipe-sync --daemon -r user@host:~/.screenpipe/`);
+    console.error(`        Example: bunx @screenpipe/sync --daemon -r user@host:~/.screenpipe/`);
     process.exit(1);
   }
 
@@ -524,7 +524,7 @@ async function setupDaemon(config: Config) {
     <array>
         <string>/bin/bash</string>
         <string>-c</string>
-        <string>export PATH="$HOME/.bun/bin:/usr/local/bin:/opt/homebrew/bin:$PATH" &amp;&amp; bunx screenpipe-sync --db ${remotePart} ${outputPart} ${gitPart}</string>
+        <string>export PATH="$HOME/.bun/bin:/usr/local/bin:/opt/homebrew/bin:$PATH" &amp;&amp; bunx @screenpipe/sync --db ${remotePart} ${outputPart} ${gitPart}</string>
     </array>
     <key>StartInterval</key>
     <integer>${config.daemonInterval}</integer>
@@ -556,7 +556,7 @@ async function setupDaemon(config: Config) {
     console.log(`[ok] Daemon installed (macOS LaunchAgent)`);
     console.log(`     Syncs every ${config.daemonInterval}s to: ${config.remote || config.outputDir}`);
     console.log(`     Logs: /tmp/screenpipe-sync.log`);
-    console.log(`     Stop: bunx screenpipe-sync --stop`);
+    console.log(`     Stop: bunx @screenpipe/sync --stop`);
 
   } else if (platform === "linux") {
     // Linux: systemd user service
@@ -569,7 +569,7 @@ Description=Screenpipe Sync
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'export PATH="$HOME/.bun/bin:$PATH" && bunx screenpipe-sync --db ${remotePart} ${outputPart} ${gitPart}'
+ExecStart=/bin/bash -c 'export PATH="$HOME/.bun/bin:$PATH" && bunx @screenpipe/sync --db ${remotePart} ${outputPart} ${gitPart}'
 Environment=HOME=${home}
 
 [Install]
@@ -601,11 +601,11 @@ WantedBy=timers.target`;
     console.log(`[ok] Daemon installed (systemd user timer)`);
     console.log(`     Syncs every ${config.daemonInterval}s to: ${config.remote || config.outputDir}`);
     console.log(`     Status: systemctl --user status screenpipe-sync.timer`);
-    console.log(`     Stop: bunx screenpipe-sync --stop`);
+    console.log(`     Stop: bunx @screenpipe/sync --stop`);
 
   } else {
     console.error(`[error] Daemon not supported on ${platform}`);
-    console.error(`        Use cron instead: */60 * * * * bunx screenpipe-sync --db ${remotePart}`);
+    console.error(`        Use cron instead: */60 * * * * bunx @screenpipe/sync --db ${remotePart}`);
     process.exit(1);
   }
 }

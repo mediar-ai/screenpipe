@@ -106,13 +106,13 @@ sync your screenpipe data to a remote server (e.g., [clawdbot](https://github.co
 
 ```bash
 # one-liner: permanent background sync (survives reboot)
-bunx screenpipe-sync --daemon --remote user@server:~/.screenpipe/
+bunx @screenpipe/sync --daemon --remote user@server:~/.screenpipe/
 
 # manual sync
-bunx screenpipe-sync --db --remote user@server:~/.screenpipe/
+bunx @screenpipe/sync --db --remote user@server:~/.screenpipe/
 
 # stop daemon
-bunx screenpipe-sync --stop
+bunx @screenpipe/sync --stop
 ```
 
 your ai agent can then query your full screen history via sqlite:
