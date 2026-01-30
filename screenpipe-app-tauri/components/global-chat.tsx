@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, Zap } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { parseInt } from "lodash";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1926,6 +1926,18 @@ export function GlobalChat() {
                   >
                     {message.content}
                   </MemoizedReactMarkdown>
+                  {/* Upgrade button for daily limit errors */}
+                  {message.role === "assistant" &&
+                   (message.content.includes("used all your free queries") ||
+                    message.content.includes("requires an upgrade")) && (
+                    <button
+                      onClick={() => setShowUpgradeDialog(true)}
+                      className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
+                    >
+                      <Zap className="h-4 w-4" />
+                      upgrade now
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ))}

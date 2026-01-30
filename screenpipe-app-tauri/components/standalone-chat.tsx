@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, Settings, ExternalLink, X } from "lucide-react";
+import { Loader2, Send, Square, User, Settings, ExternalLink, X, ImageIcon } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { PipeAIIcon, PipeAIIconLarge } from "@/components/pipe-ai-icon";
@@ -165,6 +165,66 @@ export function StandaloneChat() {
   const [prefillContext, setPrefillContext] = useState<string | null>(null);
   const [prefillFrameId, setPrefillFrameId] = useState<number | null>(null);
   const [pastedImage, setPastedImage] = useState<string | null>(null); // Base64 data URL
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  // Process an image file to base64
+  const processImageFile = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setPastedImage(base64);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  // Handle drag events for image drop
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+
+    // Check if dragging files that include images
+    const hasFiles = e.dataTransfer.types.includes("Files");
+    if (hasFiles) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      // Find first image file
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith("image/")) {
+          processImageFile(file);
+          break;
+        }
+      }
+    }
+  }, [processImageFile]);
 
   // Handle paste events to capture images
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -179,12 +239,7 @@ export function StandaloneChat() {
           e.preventDefault();
           const file = item.getAsFile();
           if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-              const base64 = event.target?.result as string;
-              setPastedImage(base64);
-            };
-            reader.readAsDataURL(file);
+            processImageFile(file);
           }
           return;
         }
@@ -197,17 +252,12 @@ export function StandaloneChat() {
         const file = files[i];
         if (file.type.startsWith("image/")) {
           e.preventDefault();
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const base64 = event.target?.result as string;
-            setPastedImage(base64);
-          };
-          reader.readAsDataURL(file);
+          processImageFile(file);
           return;
         }
       }
     }
-  }, []);
+  }, [processImageFile]);
 
   // Listen for chat-prefill events from search modal
   useEffect(() => {
@@ -1201,7 +1251,54 @@ export function StandaloneChat() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="p-3" onPaste={handlePaste}>
+        <form
+          onSubmit={handleSubmit}
+          className="p-3 relative"
+          onPaste={handlePaste}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          {/* Drop zone overlay */}
+          <AnimatePresence>
+            {isDragging && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="absolute inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg border-2 border-dashed border-primary m-1"
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  transition={{ duration: 0.15, delay: 0.05 }}
+                  className="flex flex-col items-center gap-3 p-6"
+                >
+                  <motion.div
+                    animate={{
+                      y: [0, -8, 0],
+                    }}
+                    transition={{
+                      duration: 1.5,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="p-4 rounded-2xl bg-primary/10 border border-primary/20"
+                  >
+                    <ImageIcon className="w-8 h-8 text-primary" />
+                  </motion.div>
+                  <div className="text-center">
+                    <p className="font-semibold text-foreground">Drop your image here</p>
+                    <p className="text-xs text-muted-foreground mt-1">PNG, JPG, GIF, or WebP</p>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Input
