@@ -311,7 +311,7 @@ export function AccountSection() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
-                higher quality transcription (deepgram)
+                higher quality transcription
               </div>
             </div>
             <Separator className="my-2" />
