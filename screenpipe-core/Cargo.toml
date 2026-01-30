@@ -47,7 +47,6 @@ cron = "0.13.0"
 chrono = "0.4.38"
 sentry = { workspace = true }
 zip = "0.6.2"
-thiserror = "2.0.12"
 
 [dev-dependencies]
 reqwest = { workspace = true }
