@@ -563,6 +563,7 @@ export function GlobalChat() {
   const [opencodeSessionId, setOpencodeSessionId] = useState<string | null>(null);
   const [opencodeProjectDir, setOpencodeProjectDir] = useState<string>("");
   const [opencodeStarting, setOpencodeStarting] = useState(false);
+  const [opencodeAvailable, setOpencodeAvailable] = useState<boolean | null>(null);
 
   const appMentionSuggestions = React.useMemo(
     () => buildAppMentionSuggestions(appItems, APP_SUGGESTION_LIMIT),
@@ -878,9 +879,10 @@ export function GlobalChat() {
   const hasValidModel = activePreset?.provider === "opencode" || (activePreset?.model && activePreset.model.trim() !== "");
   const needsLogin = (activePreset?.provider === "screenpipe-cloud" || activePreset?.provider === "opencode") && !settings.user?.token;
   const isOpencode = activePreset?.provider === "opencode";
-  const needsProjectDir = isOpencode && !opencodeProjectDir;
-  const opencodeReady = isOpencode ? (opencodeInfo?.running && opencodeClient && opencodeSessionId && !needsProjectDir) : true;
-  const canChat = hasPresets && hasValidModel && !needsLogin && opencodeReady;
+  const opencodeUnavailable = isOpencode && opencodeAvailable === false;
+  const needsProjectDir = isOpencode && !opencodeUnavailable && !opencodeProjectDir;
+  const opencodeReady = isOpencode ? (!opencodeUnavailable && opencodeInfo?.running && opencodeClient && opencodeSessionId && !needsProjectDir) : true;
+  const canChat = hasPresets && hasValidModel && !needsLogin && opencodeReady && !opencodeUnavailable;
 
   // Debug: log why chat might be disabled
   useEffect(() => {
@@ -896,6 +898,15 @@ export function GlobalChat() {
       });
     }
   }, [open, activePreset, hasValidModel, needsLogin, canChat]);
+
+  // Check OpenCode availability on mount
+  useEffect(() => {
+    commands.opencodeCheck().then((result) => {
+      if (result.status === "ok") {
+        setOpencodeAvailable(result.data.available);
+      }
+    });
+  }, []);
 
   // Load saved project directory on mount
   useEffect(() => {
@@ -982,6 +993,7 @@ export function GlobalChat() {
     if (!hasPresets) return "No AI presets configured";
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset - click edit to add one`;
+    if (opencodeUnavailable) return "OpenCode is not available on Windows";
     if (needsLogin) return "Login required";
     if (isOpencode && needsProjectDir) return "Select a project folder";
     if (isOpencode && opencodeStarting) return "Starting OpenCode...";

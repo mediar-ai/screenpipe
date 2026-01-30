@@ -17,8 +17,16 @@ const cwd = process.cwd()
 console.log('cwd', cwd)
 
 
+// OpenCode version to download
+const OPENCODE_VERSION = 'v0.0.55';
+
 const config = {
 	ffmpegRealname: 'ffmpeg',
+	opencode: {
+		macosArm64: `https://github.com/opencode-ai/opencode/releases/download/${OPENCODE_VERSION}/opencode-mac-arm64.tar.gz`,
+		macosX86_64: `https://github.com/opencode-ai/opencode/releases/download/${OPENCODE_VERSION}/opencode-mac-x86_64.tar.gz`,
+		linuxX86_64: `https://github.com/opencode-ai/opencode/releases/download/${OPENCODE_VERSION}/opencode-linux-x86_64.tar.gz`,
+	},
 	windows: {
 		ffmpegName: 'ffmpeg-8.0.1-full_build-shared',
 		ffmpegUrl: 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.0.1-full_build-shared.7z',
@@ -202,6 +210,55 @@ async function copyFile(src, dest) {
 	await fs.chmod(dest, 0o755); // ensure the binary is executable
 }
 
+// Download and setup OpenCode binary
+async function setupOpencode(platform, arch) {
+	let url, destName;
+
+	if (platform === 'macos') {
+		if (arch === 'arm64') {
+			url = config.opencode.macosArm64;
+			destName = 'opencode-aarch64-apple-darwin';
+		} else {
+			url = config.opencode.macosX86_64;
+			destName = 'opencode-x86_64-apple-darwin';
+		}
+	} else if (platform === 'linux') {
+		url = config.opencode.linuxX86_64;
+		destName = 'opencode-x86_64-unknown-linux-gnu';
+	} else {
+		console.log('OpenCode not available for this platform');
+		return;
+	}
+
+	const destPath = path.join(cwd, destName);
+
+	if (await fs.exists(destPath)) {
+		console.log(`OpenCode binary already exists: ${destName}`);
+		return;
+	}
+
+	console.log(`Downloading OpenCode for ${platform} ${arch}...`);
+	const tarName = `opencode-${platform}-${arch}.tar.gz`;
+
+	try {
+		await $`wget --no-config -q ${url} -O ${tarName}`;
+		await $`tar -xzf ${tarName}`;
+
+		// The tarball extracts to 'opencode' binary
+		if (await fs.exists('opencode')) {
+			await fs.rename('opencode', destPath);
+			await fs.chmod(destPath, 0o755);
+			console.log(`OpenCode binary installed: ${destName}`);
+		} else {
+			console.error('OpenCode binary not found after extraction');
+		}
+
+		await fs.rm(tarName, { force: true });
+	} catch (error) {
+		console.error(`Failed to download/extract OpenCode: ${error.message}`);
+	}
+}
+
 /* ########## Linux ########## */
 if (platform == 'linux') {
 	// Check and install APT packages
@@ -288,6 +345,9 @@ if (platform == 'linux') {
 	} else {
 		console.log('TESSERACT already exists');
 	}
+
+	// Setup OpenCode
+	await setupOpencode('linux', 'x86_64');
 }
 
 /* ########## Windows ########## */
@@ -437,6 +497,10 @@ if (platform == 'macos') {
 
   console.log('FFMPEG and FFPROBE checks completed');
 	console.log('Moved and renamed ffmpeg binary for externalBin');
+
+	// Setup OpenCode for both architectures
+	await setupOpencode('macos', 'arm64');
+	await setupOpencode('macos', 'x86_64');
 
 	// Strip extended attributes from all binaries to prevent codesign failures
 	console.log('Stripping extended attributes from binaries...');
