@@ -7,17 +7,17 @@ Turn hours of screen recordings into actionable context: todos, goals, decisions
 ## Quick Start
 
 ```bash
-# One-liner - outputs to stdout
-bunx @screenpipe/sync
+# One-liner - AI summary to stdout
+bunx screenpipe-sync
 
-# Save to a folder (creates YYYY-MM-DD.md files)
-bunx @screenpipe/sync --output ~/Documents/brain/context
+# Save daily summaries locally
+bunx screenpipe-sync --output ~/Documents/brain/context --git
 
-# Auto commit and push
-bunx @screenpipe/sync --output ~/notes --git
+# Sync raw SQLite database to remote (full history!)
+bunx screenpipe-sync --db --remote user@host:~/.screenpipe/
 
-# Sync to remote server (e.g., Clawdbot)
-bunx @screenpipe/sync --remote user@host:~/brain/context
+# Full sync: DB + daily summary
+bunx screenpipe-sync --db -r clawdbot:~/.screenpipe && bunx screenpipe-sync -o ~/context -g
 ```
 
 ## What It Extracts
@@ -114,11 +114,22 @@ bunx @screenpipe/sync --hours 168 --json > week.json
 
 ## How It Works
 
+### Summary Mode (default)
 1. **Query** - Fetches OCR data from local Screenpipe API
 2. **Dedupe** - Removes duplicate/similar screen captures
 3. **Extract** - Claude analyzes content for structured data
 4. **Format** - Outputs markdown or JSON
 5. **Sync** - Optionally git pushes or SCPs to remote
+
+### DB Sync Mode (`--db`)
+1. **Copy** - Copies `~/.screenpipe/db.sqlite` (your full history)
+2. **Sync** - Uses rsync/scp to transfer to remote
+3. **Query** - Remote can query SQLite directly
+
+```bash
+# On remote, query your full history:
+sqlite3 ~/.screenpipe/db.sqlite "SELECT text FROM ocr_text WHERE text LIKE '%meeting%' LIMIT 10;"
+```
 
 ## Requirements
 

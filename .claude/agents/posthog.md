@@ -341,6 +341,183 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 
 ---
 
+## Audio Transcription Quality Insights
+
+These insights track audio deduplication performance across versions. Use them to verify fixes and catch regressions.
+
+### Available Metrics (in `resource_usage` event)
+
+| Property | Description | Healthy Range |
+|----------|-------------|---------------|
+| `audio_transcripts_total` | Total transcriptions received | >0 means audio active |
+| `audio_transcripts_inserted` | Successfully stored | Should match unique speech |
+| `audio_duplicates_blocked` | Exact duplicates caught | 20-50% of total for dual-device |
+| `audio_overlaps_trimmed` | Partial overlaps cleaned | Low numbers expected |
+| `audio_duplicate_rate` | `blocked / total` | 0.2-0.5 is healthy |
+| `audio_avg_word_count` | Average words per transcript | 5-20 typical |
+
+### Query: Audio Dedup Rate by Version
+
+Compare deduplication performance across releases:
+
+```bash
+PROJECT_ID="YOUR_PROJECT_ID"
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": {
+      "kind": "HogQLQuery",
+      "query": "SELECT properties.release as version, avg(properties.audio_duplicate_rate) as avg_dup_rate, sum(properties.audio_duplicates_blocked) as total_blocked, sum(properties.audio_transcripts_total) as total_transcripts, count() as sample_count FROM events WHERE event = '\''resource_usage'\'' AND properties.audio_transcripts_total > 0 AND timestamp > now() - INTERVAL 30 DAY GROUP BY version ORDER BY version DESC LIMIT 20"
+    }
+  }' \
+  "https://eu.i.posthog.com/api/projects/$PROJECT_ID/query/" | \
+  python3 -c "
+import sys,json
+r=json.load(sys.stdin)
+print('Version | Avg Dup Rate | Total Blocked | Total Transcripts | Samples')
+print('-' * 75)
+for row in r.get('results', []):
+    rate = row[1] * 100 if row[1] else 0
+    print(f'{row[0]:<12} | {rate:>10.1f}% | {row[2]:>13} | {row[3]:>17} | {row[4]:>7}')
+"
+```
+
+### Query: Audio Quality Trend Over Time
+
+Track dedup rate over the past 7 days:
+
+```bash
+PROJECT_ID="YOUR_PROJECT_ID"
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": {
+      "kind": "HogQLQuery",
+      "query": "SELECT toDate(timestamp) as day, avg(properties.audio_duplicate_rate) as avg_dup_rate, sum(properties.audio_duplicates_blocked) as blocked, sum(properties.audio_transcripts_inserted) as inserted FROM events WHERE event = '\''resource_usage'\'' AND properties.audio_transcripts_total > 0 AND timestamp > now() - INTERVAL 7 DAY GROUP BY day ORDER BY day"
+    }
+  }' \
+  "https://eu.i.posthog.com/api/projects/$PROJECT_ID/query/" | \
+  python3 -c "
+import sys,json
+r=json.load(sys.stdin)
+print('Date | Avg Dup Rate | Blocked | Inserted')
+print('-' * 50)
+for row in r.get('results', []):
+    rate = row[1] * 100 if row[1] else 0
+    print(f'{row[0]} | {rate:>10.1f}% | {row[2]:>7} | {row[3]:>8}')
+"
+```
+
+### Query: Users with Zero Dedup (Potential Bug)
+
+Find users where deduplication might not be working:
+
+```bash
+PROJECT_ID="YOUR_PROJECT_ID"
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": {
+      "kind": "HogQLQuery",
+      "query": "SELECT distinct_id, properties.release as version, properties.`$os` as os, sum(properties.audio_transcripts_total) as total, sum(properties.audio_duplicates_blocked) as blocked FROM events WHERE event = '\''resource_usage'\'' AND properties.audio_transcripts_total > 10 AND timestamp > now() - INTERVAL 7 DAY GROUP BY distinct_id, version, os HAVING blocked = 0 ORDER BY total DESC LIMIT 20"
+    }
+  }' \
+  "https://eu.i.posthog.com/api/projects/$PROJECT_ID/query/"
+```
+
+### Query: Audio Quality by OS
+
+Compare dedup performance across operating systems:
+
+```bash
+PROJECT_ID="YOUR_PROJECT_ID"
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": {
+      "kind": "HogQLQuery",
+      "query": "SELECT properties.`$os` as os, avg(properties.audio_duplicate_rate) as avg_dup_rate, avg(properties.audio_avg_word_count) as avg_words, count() as samples FROM events WHERE event = '\''resource_usage'\'' AND properties.audio_transcripts_total > 0 AND timestamp > now() - INTERVAL 14 DAY GROUP BY os ORDER BY samples DESC"
+    }
+  }' \
+  "https://eu.i.posthog.com/api/projects/$PROJECT_ID/query/" | \
+  python3 -c "
+import sys,json
+r=json.load(sys.stdin)
+print('OS | Avg Dup Rate | Avg Words | Samples')
+print('-' * 50)
+for row in r.get('results', []):
+    rate = row[1] * 100 if row[1] else 0
+    words = row[2] if row[2] else 0
+    print(f'{row[0]:<12} | {rate:>10.1f}% | {words:>9.1f} | {row[3]:>7}')
+"
+```
+
+### Create Audio Quality Dashboard
+
+Create a dashboard with audio quality insights:
+
+```bash
+PROJECT_ID="YOUR_PROJECT_ID"
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Audio Transcription Quality",
+    "description": "Track audio deduplication performance and transcription quality across versions"
+  }' \
+  "https://eu.i.posthog.com/api/projects/$PROJECT_ID/dashboards/"
+```
+
+### Create Audio Dedup Rate Trend Insight
+
+```bash
+PROJECT_ID="YOUR_PROJECT_ID"
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Audio Duplicate Rate Trend",
+    "filters": {
+      "insight": "TRENDS",
+      "events": [{"id": "resource_usage", "type": "events", "math": "avg", "math_property": "audio_duplicate_rate"}],
+      "date_from": "-14d",
+      "interval": "day"
+    }
+  }' \
+  "https://eu.i.posthog.com/api/projects/$PROJECT_ID/insights/"
+```
+
+### Create Audio Quality by Version Insight
+
+```bash
+PROJECT_ID="YOUR_PROJECT_ID"
+curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Audio Dedup Rate by Version",
+    "filters": {
+      "insight": "TRENDS",
+      "events": [{"id": "resource_usage", "type": "events", "math": "avg", "math_property": "audio_duplicate_rate"}],
+      "breakdown": "release",
+      "breakdown_type": "event",
+      "date_from": "-30d",
+      "interval": "week"
+    }
+  }' \
+  "https://eu.i.posthog.com/api/projects/$PROJECT_ID/insights/"
+```
+
+### Alert Thresholds
+
+Monitor these conditions:
+
+| Condition | Query | Action |
+|-----------|-------|--------|
+| Zero dedup rate | `audio_duplicate_rate = 0` with `total > 10` | Bug - dedup not working |
+| Very high dedup | `audio_duplicate_rate > 0.7` | Too aggressive - blocking real content |
+| Low word count | `audio_avg_word_count < 3` | Transcription quality issue |
+| Sudden drop | Rate drops >20% vs previous version | Regression |
+
+---
+
 ## Important Notes
 
 1. **API Key required:** Personal API key needed (not the public project key)
@@ -349,3 +526,4 @@ curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" \
 4. **HogQL:** Use for complex queries not supported by filters
 5. **Rate limits:** 240 requests/min for analytics endpoints
 6. **Privacy:** Never log or expose user IDs, emails, or PII in queries
+7. **Audio metrics:** Only aggregate counts sent - no transcript content, fully privacy-safe
