@@ -345,14 +345,30 @@ export class GeminiProvider implements AIProvider {
 		}
 
 		// Build tools - Vertex AI Gemini doesn't support mixing function tools with Google Search
-		// If web_search is requested, use ONLY Google Search grounding (most useful for external queries)
-		// Otherwise, use function declarations
-		if (hasWebSearch) {
-			// Use Google Search grounding only
+		// Strategy: Detect user intent from the last message to decide which mode to use
+		const lastUserMessage = body.messages.filter(m => m.role === 'user').pop();
+		const userQuery = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content.toLowerCase() : '';
+
+		// Check if user explicitly wants web/internet search
+		const wantsWebSearch = hasWebSearch && (
+			userQuery.includes('internet') ||
+			userQuery.includes('web search') ||
+			userQuery.includes('search the web') ||
+			userQuery.includes('search online') ||
+			userQuery.includes('latest news') ||
+			userQuery.includes('current news') ||
+			userQuery.includes('recent news') ||
+			userQuery.includes('what is happening') ||
+			userQuery.includes('today\'s') ||
+			userQuery.includes('this week')
+		);
+
+		if (wantsWebSearch) {
+			// User explicitly wants web search - use Google Search grounding
 			requestBody.tools = [{ googleSearch: {} }];
-			console.log('[Gemini Vertex] Using Google Search grounding (function tools disabled)');
+			console.log('[Gemini Vertex] User requested web search, using Google Search grounding');
 		} else if (body.tools && body.tools.length > 0) {
-			// Convert and use function declarations only
+			// Use function declarations for local search
 			const functionDeclarations = this.convertToolsToGeminiFormat(body.tools);
 			if (functionDeclarations.length > 0) {
 				requestBody.tools = [{ functionDeclarations }];
