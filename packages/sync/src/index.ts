@@ -10,7 +10,7 @@
  *   bunx @screenpipe/sync --remote host:path # Sync to remote
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { execSync } from "child_process";
 
 // ============================================================================
 // Types
@@ -45,10 +45,6 @@ interface Config {
   hours: number;
   gitPush: boolean;
   remote: string | null;
-  anthropicKey: string | null;
-  openaiKey: string | null;
-  ollamaUrl: string | null;
-  ollamaModel: string;
   format: "markdown" | "json";
   verbose: boolean;
   dbSync: boolean;
@@ -71,10 +67,6 @@ function parseArgs(): Config {
     hours: 12,
     gitPush: false,
     remote: null,
-    anthropicKey: process.env.ANTHROPIC_API_KEY || null,
-    openaiKey: process.env.OPENAI_API_KEY || null,
-    ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434",
-    ollamaModel: process.env.OLLAMA_MODEL || "llama3.2",
     format: "markdown",
     verbose: false,
     dbSync: false,
@@ -166,7 +158,10 @@ OPTIONS:
 ENVIRONMENT:
   SCREENPIPE_URL        Screenpipe API URL (default: http://localhost:3030)
   SCREENPIPE_DB         Path to Screenpipe database
-  ANTHROPIC_API_KEY     For AI summarization (or OPENAI_API_KEY)
+
+AI SUMMARIZATION:
+  Uses Claude Code CLI if available (claude --print)
+  Falls back to structured extraction if no AI CLI found
 
 EXAMPLES:
   # AI summary to stdout
@@ -300,6 +295,15 @@ RULES:
 Analyze this screen data:
 `;
 
+function hasClaudeCli(): boolean {
+  try {
+    execSync("which claude", { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function extractWithAI(
   byApp: Record<string, string[]>,
   config: Config
@@ -315,81 +319,48 @@ async function extractWithAI(
 
   const prompt = EXTRACTION_PROMPT + condensed;
 
-  // Try providers in order: Anthropic > OpenAI > Ollama > fallback
-  if (config.anthropicKey) {
-    if (config.verbose) console.error(`[ai] Using Claude (${condensed.length} chars)`);
+  // Use Claude Code CLI if available
+  if (hasClaudeCli()) {
+    if (config.verbose) console.error(`[ai] Using Claude Code CLI (${condensed.length} chars)`);
     try {
-      const client = new Anthropic({ apiKey: config.anthropicKey });
-      const response = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }],
+      // Write prompt to temp file to avoid shell escaping issues
+      const fs = await import("fs/promises");
+      const os = await import("os");
+      const path = await import("path");
+      const tmpFile = path.join(os.tmpdir(), `screenpipe-prompt-${Date.now()}.txt`);
+      await fs.writeFile(tmpFile, prompt);
+
+      const result = execSync(`cat "${tmpFile}" | claude --print`, {
+        encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 120000, // 2 min timeout
       });
-      const text = response.content[0].type === "text" ? response.content[0].text : "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) return JSON.parse(jsonMatch[0]);
-    } catch (e) {
-      console.error(`[error] Claude failed: ${e}`);
+
+      await fs.unlink(tmpFile).catch(() => {});
+
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (e: any) {
+      console.error(`[error] Claude CLI failed: ${e.message}`);
     }
+  } else {
+    if (config.verbose) console.error(`[ai] Claude CLI not found`);
   }
 
-  if (config.openaiKey) {
-    if (config.verbose) console.error(`[ai] Using OpenAI`);
-    try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${config.openaiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: prompt }],
-          max_tokens: 2000,
-        }),
-      });
-      const data = await res.json();
-      const text = data.choices?.[0]?.message?.content || "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) return JSON.parse(jsonMatch[0]);
-    } catch (e) {
-      console.error(`[error] OpenAI failed: ${e}`);
-    }
-  }
+  // Fallback: structured extraction (no AI)
+  console.error("[info] No AI CLI found - using structured extraction");
+  console.error("       Install Claude Code CLI for AI summaries: npm install -g @anthropic-ai/claude-code");
 
-  // Try Ollama (local)
-  try {
-    if (config.verbose) console.error(`[ai] Trying Ollama at ${config.ollamaUrl}`);
-    const res = await fetch(`${config.ollamaUrl}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: config.ollamaModel,
-        prompt: prompt,
-        stream: false,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const text = data.response || "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) return JSON.parse(jsonMatch[0]);
-    }
-  } catch (e) {
-    if (config.verbose) console.error(`[warn] Ollama not available`);
-  }
-
-  // Fallback: no AI
-  console.error("[warn] No AI provider available - returning basic summary");
-  console.error("       Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or run Ollama locally");
   return {
     todos: [],
     goals: [],
     decisions: [],
-    activities: Object.keys(byApp).map((app) => `Used ${app}`),
+    activities: Object.keys(byApp).slice(0, 10).map((app) => `Used ${app}`),
     meetings: [],
     blockers: [],
-    insights: ["No AI provider configured - set ANTHROPIC_API_KEY or OPENAI_API_KEY"],
+    insights: ["Structured extraction only - install Claude Code CLI for AI insights"],
   };
 }
 

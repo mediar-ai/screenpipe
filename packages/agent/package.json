@@ -1,7 +1,7 @@
 {
   "name": "@screenpipe/agent",
-  "version": "0.1.0",
-  "description": "One-liner to connect Screenpipe to your AI agent. Sync screen data, install skills, schedule morning summaries.",
+  "version": "0.2.0",
+  "description": "One-liner to connect Screenpipe to your AI agent. Uses Claude Code CLI for AI summaries. Sync screen data, install skills, schedule morning summaries.",
   "type": "module",
   "bin": {
     "screenpipe-agent": "dist/index.js"
