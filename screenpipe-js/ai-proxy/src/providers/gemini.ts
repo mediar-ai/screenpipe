@@ -291,8 +291,9 @@ export class GeminiProvider implements AIProvider {
 		const hasWebSearch = this.hasWebSearchTool(body.tools);
 
 		// Check for explicit web search intent - bypass model and search directly
+		// Always allow web search when intent is detected, even if web_search tool isn't in request
 		const webSearchQuery = this.detectWebSearchIntent(body.messages);
-		if (webSearchQuery && hasWebSearch) {
+		if (webSearchQuery) {
 			console.log('[Gemini Vertex] Direct web search for:', webSearchQuery);
 			return this.createDirectWebSearchStream(body, webSearchQuery);
 		}

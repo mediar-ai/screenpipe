@@ -980,6 +980,7 @@ export default function Timeline() {
 							startAndEndDates={startAndEndDates}
 							newFramesCount={newFramesCount}
 							lastFlushTimestamp={lastFlushTimestamp}
+							isSearchModalOpen={showSearchModal}
 						/>
 					) : (
 						<div className="bg-card/80 backdrop-blur-sm p-4 border-t border-border">
