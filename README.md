@@ -100,6 +100,26 @@ or [download the desktop app](https://screenpi.pe)
 - ~15gb storage/month
 - works offline
 
+## sync to remote ai agents
+
+sync your screenpipe data to a remote server (e.g., [clawdbot](https://github.com/moltinginstar/moltbot), [claude code](https://claude.ai/code)):
+
+```bash
+# one-liner: permanent background sync (survives reboot)
+bunx screenpipe-sync --daemon --remote user@server:~/.screenpipe/
+
+# manual sync
+bunx screenpipe-sync --db --remote user@server:~/.screenpipe/
+
+# stop daemon
+bunx screenpipe-sync --stop
+```
+
+your ai agent can then query your full screen history via sqlite:
+```bash
+sqlite3 ~/.screenpipe/db.sqlite "SELECT text FROM ocr_text WHERE text LIKE '%meeting%' LIMIT 10;"
+```
+
 ---
 
 <p align="center">

@@ -1,8 +1,10 @@
-# @screenpipe/sync
+# screenpipe-sync
 
-**Extract structured daily summaries from your Screenpipe history.**
+**Sync your Screenpipe data to remote AI agents.**
 
-Turn hours of screen recordings into actionable context: todos, goals, decisions, and AI insights.
+One-liner to permanently sync your screen memory to a remote server (e.g., [Clawdbot](https://github.com/moltinginstar/moltbot), any SSH server). Your AI agent can then query your full history via SQLite.
+
+Also extracts structured daily summaries: todos, goals, decisions, and AI insights.
 
 ## Quick Start
 
