@@ -6,7 +6,7 @@
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../out",
-    "devUrl": "http://localhost:3000"
+    "devUrl": "http://localhost:1420"
   },
   "bundle": {
     "active": true,

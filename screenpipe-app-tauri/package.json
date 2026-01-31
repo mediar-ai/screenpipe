@@ -2,7 +2,7 @@
   "name": "screenpipe",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 1420",
     "test": "bunx vitest run --config vitest.config.ts",
     "test:watch": "bunx vitest --config vitest.config.ts",
     "test:e2e": "wdio run wdio.conf.js",

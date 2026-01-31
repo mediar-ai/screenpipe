@@ -169,7 +169,7 @@ function SyncBenefits() {
 }
 
 // Onboarding/upgrade prompt
-function SyncOnboarding({ onSubscribe, isLoading }: { onSubscribe: () => void; isLoading: boolean }) {
+function SyncOnboarding({ onSubscribe, onRefresh, isLoading }: { onSubscribe: () => void; onRefresh: () => void; isLoading: boolean }) {
   return (
     <div className="space-y-6">
       <div className="text-center">
@@ -217,6 +217,16 @@ function SyncOnboarding({ onSubscribe, isLoading }: { onSubscribe: () => void; i
           ask chatgpt about the encryption source code
         </a>
       </Card>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onRefresh}
+        className="mx-auto flex items-center gap-2 text-muted-foreground"
+      >
+        <RefreshCw className="w-3 h-3" />
+        already subscribed? refresh
+      </Button>
     </div>
   );
 }
@@ -644,7 +654,7 @@ export function SyncSettings() {
     }
   }, [isSettingsLoaded]);
 
-  const checkSubscriptionAndLoad = async () => {
+  const checkSubscriptionAndLoad = async (): Promise<boolean> => {
     try {
       const token = settings.user?.token;
       const userId = settings.user?.id;
@@ -652,7 +662,7 @@ export function SyncSettings() {
       if (!token || !userId) {
         console.log("no token or userId, showing onboarding");
         setStep("onboarding");
-        return;
+        return false;
       }
 
       const response = await fetch("https://screenpi.pe/api/cloud-sync/subscription?userId=" + userId, {
@@ -690,16 +700,20 @@ export function SyncSettings() {
             console.error("sync backend not ready:", backendError);
             setStep("password");
           }
+          return true;
         } else {
           setStep("onboarding");
+          return false;
         }
       } else {
         console.log("subscription API returned non-ok status:", response.status);
         setStep("onboarding");
+        return false;
       }
     } catch (error) {
       console.error("failed to check subscription:", error);
       setStep("onboarding");
+      return false;
     }
   };
 
@@ -743,14 +757,25 @@ export function SyncSettings() {
           description: "complete your purchase in the browser, then return here",
         });
 
+        // Poll for subscription status - stop when subscription is detected
+        let pollCount = 0;
+        const maxPolls = 100; // 5 minutes at 3 second intervals
         const checkInterval = setInterval(async () => {
-          await checkSubscriptionAndLoad();
-          if (subscription?.hasSubscription) {
+          pollCount++;
+          console.log(`polling for subscription... attempt ${pollCount}`);
+          const hasSubscription = await checkSubscriptionAndLoad();
+          if (hasSubscription) {
+            console.log("subscription detected, stopping poll");
+            clearInterval(checkInterval);
+            toast({
+              title: "subscription activated",
+              description: "you can now set up your encryption password",
+            });
+          } else if (pollCount >= maxPolls) {
+            console.log("stopping subscription poll - max attempts reached");
             clearInterval(checkInterval);
           }
         }, 3000);
-
-        setTimeout(() => clearInterval(checkInterval), 300000);
       } else {
         throw new Error(data.error || "failed to create checkout");
       }
@@ -904,7 +929,7 @@ export function SyncSettings() {
   }
 
   if (step === "onboarding") {
-    return <SyncOnboarding onSubscribe={handleSubscribe} isLoading={isLoading} />;
+    return <SyncOnboarding onSubscribe={handleSubscribe} onRefresh={checkSubscriptionAndLoad} isLoading={isLoading} />;
   }
 
   if (step === "password") {
