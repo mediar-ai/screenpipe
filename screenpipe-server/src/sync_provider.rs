@@ -1,0 +1,580 @@
+//! Sync data provider implementation for screenpipe database.
+//!
+//! This module bridges the screenpipe database with the cloud sync service,
+//! providing data to upload and importing data from other machines.
+
+use async_trait::async_trait;
+use chrono::Utc;
+use screenpipe_core::sync::{BlobType, PendingBlob, SyncDataProvider, SyncError, SyncResult};
+use screenpipe_db::DatabaseManager;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tracing::debug;
+use uuid::Uuid;
+
+/// Sync chunk containing DB records for a time window.
+/// This is what gets encrypted and uploaded to the cloud.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncChunk {
+    /// Schema version for forward compatibility
+    pub schema_version: u32,
+    /// Machine that created this chunk
+    pub machine_id: String,
+    /// Start of time range (ISO 8601)
+    pub time_start: String,
+    /// End of time range (ISO 8601)
+    pub time_end: String,
+    /// Frame records
+    #[serde(default)]
+    pub frames: Vec<FrameRecord>,
+    /// OCR text records
+    #[serde(default)]
+    pub ocr_records: Vec<OcrRecord>,
+    /// Audio transcription records
+    #[serde(default)]
+    pub transcriptions: Vec<TranscriptionRecord>,
+}
+
+/// Frame record for sync
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FrameRecord {
+    pub sync_id: String,
+    pub timestamp: String,
+    pub offset_index: i64,
+    pub app_name: Option<String>,
+    pub window_name: Option<String>,
+    pub browser_url: Option<String>,
+    pub device_name: String,
+    /// Path to frame in cloud storage (for on-demand download)
+    pub cloud_frame_path: Option<String>,
+}
+
+/// OCR record for sync
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OcrRecord {
+    pub sync_id: String,
+    pub frame_sync_id: String,
+    pub text: String,
+    pub focused: bool,
+}
+
+/// Audio transcription record for sync
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranscriptionRecord {
+    pub sync_id: String,
+    pub timestamp: String,
+    pub transcription: String,
+    pub device: String,
+    pub is_input_device: bool,
+    pub speaker_id: Option<i64>,
+}
+
+/// Current schema version for sync chunks
+const SCHEMA_VERSION: u32 = 1;
+
+/// Data provider implementation for screenpipe database.
+pub struct ScreenpipeSyncProvider {
+    db: Arc<DatabaseManager>,
+    machine_id: String,
+}
+
+impl ScreenpipeSyncProvider {
+    /// Create a new sync provider.
+    pub fn new(db: Arc<DatabaseManager>, machine_id: String) -> Self {
+        Self { db, machine_id }
+    }
+
+    /// Get unsynced frames and their OCR data for a time window.
+    async fn get_unsynced_ocr_chunk(
+        &self,
+        limit: usize,
+    ) -> SyncResult<Option<(SyncChunk, String, String)>> {
+        // Find the oldest unsynced frame
+        let pool = &self.db.pool;
+
+        // Get unsynced frames
+        let frames: Vec<(i64, String, i64, Option<String>, Option<String>, Option<String>, String)> = sqlx::query_as(
+            r#"
+            SELECT f.id, f.timestamp, f.offset_index, f.app_name, f.window_name, f.browser_url, f.device_name
+            FROM frames f
+            WHERE f.synced_at IS NULL
+            ORDER BY f.timestamp ASC
+            LIMIT ?
+            "#,
+        )
+        .bind(limit as i64)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| SyncError::Database(format!("failed to query frames: {}", e)))?;
+
+        if frames.is_empty() {
+            return Ok(None);
+        }
+
+        let frame_ids: Vec<i64> = frames.iter().map(|f| f.0).collect();
+        let time_start = frames.first().map(|f| f.1.clone()).unwrap();
+        let time_end = frames.last().map(|f| f.1.clone()).unwrap();
+
+        // Get OCR for these frames
+        let ocr_results: Vec<(i64, String, bool)> = sqlx::query_as(
+            r#"
+            SELECT frame_id, text, focused
+            FROM ocr_text
+            WHERE frame_id IN (SELECT value FROM json_each(?))
+            "#,
+        )
+        .bind(serde_json::to_string(&frame_ids).unwrap())
+        .fetch_all(pool)
+        .await
+        .map_err(|e| SyncError::Database(format!("failed to query OCR: {}", e)))?;
+
+        // Build frame records with sync_ids
+        let mut frame_records = Vec::new();
+        let mut frame_sync_map = std::collections::HashMap::new();
+
+        for (id, timestamp, offset_index, app_name, window_name, browser_url, device_name) in frames {
+            let sync_id = Uuid::new_v4().to_string();
+            frame_sync_map.insert(id, sync_id.clone());
+
+            frame_records.push(FrameRecord {
+                sync_id,
+                timestamp,
+                offset_index,
+                app_name,
+                window_name,
+                browser_url,
+                device_name,
+                cloud_frame_path: None, // Will be set during upload
+            });
+        }
+
+        // Build OCR records
+        let ocr_records: Vec<OcrRecord> = ocr_results
+            .into_iter()
+            .filter_map(|(frame_id, text, focused)| {
+                frame_sync_map.get(&frame_id).map(|frame_sync_id| OcrRecord {
+                    sync_id: Uuid::new_v4().to_string(),
+                    frame_sync_id: frame_sync_id.clone(),
+                    text,
+                    focused,
+                })
+            })
+            .collect();
+
+        let chunk = SyncChunk {
+            schema_version: SCHEMA_VERSION,
+            machine_id: self.machine_id.clone(),
+            time_start: time_start.clone(),
+            time_end: time_end.clone(),
+            frames: frame_records,
+            ocr_records,
+            transcriptions: Vec::new(),
+        };
+
+        Ok(Some((chunk, time_start, time_end)))
+    }
+
+    /// Get unsynced audio transcriptions.
+    async fn get_unsynced_transcriptions_chunk(
+        &self,
+        limit: usize,
+    ) -> SyncResult<Option<(SyncChunk, String, String)>> {
+        let pool = &self.db.pool;
+
+        let transcriptions: Vec<(i64, String, String, String, bool, Option<i64>)> = sqlx::query_as(
+            r#"
+            SELECT at.id, at.timestamp, at.transcription, at.device, at.is_input_device, at.speaker_id
+            FROM audio_transcriptions at
+            WHERE at.synced_at IS NULL
+            ORDER BY at.timestamp ASC
+            LIMIT ?
+            "#,
+        )
+        .bind(limit as i64)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| SyncError::Database(format!("failed to query transcriptions: {}", e)))?;
+
+        if transcriptions.is_empty() {
+            return Ok(None);
+        }
+
+        let time_start = transcriptions.first().map(|t| t.1.clone()).unwrap();
+        let time_end = transcriptions.last().map(|t| t.1.clone()).unwrap();
+
+        let records: Vec<TranscriptionRecord> = transcriptions
+            .into_iter()
+            .map(|(_, timestamp, transcription, device, is_input, speaker_id)| TranscriptionRecord {
+                sync_id: Uuid::new_v4().to_string(),
+                timestamp,
+                transcription,
+                device,
+                is_input_device: is_input,
+                speaker_id,
+            })
+            .collect();
+
+        let chunk = SyncChunk {
+            schema_version: SCHEMA_VERSION,
+            machine_id: self.machine_id.clone(),
+            time_start: time_start.clone(),
+            time_end: time_end.clone(),
+            frames: Vec::new(),
+            ocr_records: Vec::new(),
+            transcriptions: records,
+        };
+
+        Ok(Some((chunk, time_start, time_end)))
+    }
+
+    /// Import a sync chunk from another machine into the local database.
+    pub async fn import_chunk(&self, chunk: &SyncChunk) -> SyncResult<ImportResult> {
+        let pool = &self.db.pool;
+        let mut imported_frames = 0;
+        let mut imported_ocr = 0;
+        let mut imported_transcriptions = 0;
+        let mut skipped = 0;
+
+        // Skip if this is our own machine
+        if chunk.machine_id == self.machine_id {
+            debug!("skipping own chunk from machine {}", self.machine_id);
+            return Ok(ImportResult {
+                imported_frames: 0,
+                imported_ocr: 0,
+                imported_transcriptions: 0,
+                skipped: chunk.frames.len() + chunk.ocr_records.len() + chunk.transcriptions.len(),
+            });
+        }
+
+        // Import frames
+        for frame in &chunk.frames {
+            // Check if already exists
+            let exists: Option<(i64,)> = sqlx::query_as(
+                "SELECT id FROM frames WHERE sync_id = ?"
+            )
+            .bind(&frame.sync_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| SyncError::Database(format!("failed to check frame: {}", e)))?;
+
+            if exists.is_some() {
+                skipped += 1;
+                continue;
+            }
+
+            // We need a video_chunk for this frame - create a virtual one for synced data
+            let video_chunk_id: i64 = sqlx::query_scalar(
+                r#"
+                INSERT INTO video_chunks (file_path, device_name, sync_id, machine_id)
+                VALUES ('cloud://' || ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
+                RETURNING id
+                "#
+            )
+            .bind(&frame.sync_id)
+            .bind(&frame.device_name)
+            .bind(&frame.sync_id)
+            .bind(&chunk.machine_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| SyncError::Database(format!("failed to create video_chunk: {}", e)))?
+            .unwrap_or(0);
+
+            if video_chunk_id == 0 {
+                skipped += 1;
+                continue;
+            }
+
+            // Insert frame
+            sqlx::query(
+                r#"
+                INSERT INTO frames (video_chunk_id, offset_index, timestamp, app_name, window_name, browser_url, device_name, sync_id, machine_id, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#
+            )
+            .bind(video_chunk_id)
+            .bind(frame.offset_index)
+            .bind(&frame.timestamp)
+            .bind(&frame.app_name)
+            .bind(&frame.window_name)
+            .bind(&frame.browser_url)
+            .bind(&frame.device_name)
+            .bind(&frame.sync_id)
+            .bind(&chunk.machine_id)
+            .bind(Utc::now().to_rfc3339())
+            .execute(pool)
+            .await
+            .map_err(|e| SyncError::Database(format!("failed to insert frame: {}", e)))?;
+
+            imported_frames += 1;
+        }
+
+        // Build sync_id to local frame_id map
+        let frame_sync_ids: Vec<String> = chunk.frames.iter().map(|f| f.sync_id.clone()).collect();
+        let frame_id_map: std::collections::HashMap<String, i64> = if !frame_sync_ids.is_empty() {
+            sqlx::query_as::<_, (String, i64)>(
+                "SELECT sync_id, id FROM frames WHERE sync_id IN (SELECT value FROM json_each(?))"
+            )
+            .bind(serde_json::to_string(&frame_sync_ids).unwrap())
+            .fetch_all(pool)
+            .await
+            .map_err(|e| SyncError::Database(format!("failed to get frame IDs: {}", e)))?
+            .into_iter()
+            .collect()
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        // Import OCR
+        for ocr in &chunk.ocr_records {
+            if let Some(&frame_id) = frame_id_map.get(&ocr.frame_sync_id) {
+                // Check if already exists
+                let exists: Option<(i64,)> = sqlx::query_as(
+                    "SELECT 1 FROM ocr_text WHERE sync_id = ?"
+                )
+                .bind(&ocr.sync_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| SyncError::Database(format!("failed to check OCR: {}", e)))?;
+
+                if exists.is_some() {
+                    skipped += 1;
+                    continue;
+                }
+
+                sqlx::query(
+                    r#"
+                    INSERT INTO ocr_text (frame_id, text, focused, sync_id, synced_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    "#
+                )
+                .bind(frame_id)
+                .bind(&ocr.text)
+                .bind(ocr.focused)
+                .bind(&ocr.sync_id)
+                .bind(Utc::now().to_rfc3339())
+                .execute(pool)
+                .await
+                .map_err(|e| SyncError::Database(format!("failed to insert OCR: {}", e)))?;
+
+                imported_ocr += 1;
+            } else {
+                skipped += 1;
+            }
+        }
+
+        // Import transcriptions
+        for trans in &chunk.transcriptions {
+            // Check if already exists
+            let exists: Option<(i64,)> = sqlx::query_as(
+                "SELECT 1 FROM audio_transcriptions WHERE sync_id = ?"
+            )
+            .bind(&trans.sync_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| SyncError::Database(format!("failed to check transcription: {}", e)))?;
+
+            if exists.is_some() {
+                skipped += 1;
+                continue;
+            }
+
+            // Create audio chunk for synced transcription
+            let audio_chunk_id: i64 = sqlx::query_scalar(
+                r#"
+                INSERT INTO audio_chunks (file_path, device_name, sync_id, machine_id)
+                VALUES ('cloud://' || ?, ?, ?, ?)
+                RETURNING id
+                "#
+            )
+            .bind(&trans.sync_id)
+            .bind(&trans.device)
+            .bind(&trans.sync_id)
+            .bind(&chunk.machine_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| SyncError::Database(format!("failed to create audio_chunk: {}", e)))?;
+
+            sqlx::query(
+                r#"
+                INSERT INTO audio_transcriptions (audio_chunk_id, offset_index, timestamp, transcription, device, is_input_device, speaker_id, sync_id, synced_at)
+                VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?)
+                "#
+            )
+            .bind(audio_chunk_id)
+            .bind(&trans.timestamp)
+            .bind(&trans.transcription)
+            .bind(&trans.device)
+            .bind(trans.is_input_device)
+            .bind(trans.speaker_id)
+            .bind(&trans.sync_id)
+            .bind(Utc::now().to_rfc3339())
+            .execute(pool)
+            .await
+            .map_err(|e| SyncError::Database(format!("failed to insert transcription: {}", e)))?;
+
+            imported_transcriptions += 1;
+        }
+
+        Ok(ImportResult {
+            imported_frames,
+            imported_ocr,
+            imported_transcriptions,
+            skipped,
+        })
+    }
+
+    /// Mark records as synced after successful upload.
+    async fn mark_records_synced(
+        &self,
+        blob_type: BlobType,
+        time_start: &str,
+        time_end: &str,
+    ) -> SyncResult<()> {
+        let pool = &self.db.pool;
+        let now = Utc::now().to_rfc3339();
+
+        match blob_type {
+            BlobType::Ocr => {
+                // Mark frames and their OCR as synced
+                sqlx::query(
+                    r#"
+                    UPDATE frames SET synced_at = ?
+                    WHERE timestamp >= ? AND timestamp <= ? AND synced_at IS NULL
+                    "#
+                )
+                .bind(&now)
+                .bind(time_start)
+                .bind(time_end)
+                .execute(pool)
+                .await
+                .map_err(|e| SyncError::Database(format!("failed to mark frames synced: {}", e)))?;
+            }
+            BlobType::Transcripts => {
+                sqlx::query(
+                    r#"
+                    UPDATE audio_transcriptions SET synced_at = ?
+                    WHERE timestamp >= ? AND timestamp <= ? AND synced_at IS NULL
+                    "#
+                )
+                .bind(&now)
+                .bind(time_start)
+                .bind(time_end)
+                .execute(pool)
+                .await
+                .map_err(|e| SyncError::Database(format!("failed to mark transcriptions synced: {}", e)))?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Get combined text from a chunk for search token generation.
+    fn get_chunk_text(chunk: &SyncChunk) -> String {
+        let mut text_parts = Vec::new();
+
+        for ocr in &chunk.ocr_records {
+            text_parts.push(ocr.text.clone());
+        }
+
+        for trans in &chunk.transcriptions {
+            text_parts.push(trans.transcription.clone());
+        }
+
+        text_parts.join(" ")
+    }
+}
+
+#[async_trait]
+impl SyncDataProvider for ScreenpipeSyncProvider {
+    async fn get_pending_data(
+        &self,
+        blob_type: BlobType,
+        limit: usize,
+    ) -> SyncResult<Vec<PendingBlob>> {
+        let chunk_result = match blob_type {
+            BlobType::Ocr => self.get_unsynced_ocr_chunk(limit).await?,
+            BlobType::Transcripts => self.get_unsynced_transcriptions_chunk(limit).await?,
+            _ => return Ok(Vec::new()),
+        };
+
+        match chunk_result {
+            Some((chunk, time_start, time_end)) => {
+                let text_content = Self::get_chunk_text(&chunk);
+                let data = serde_json::to_vec(&chunk)
+                    .map_err(|e| SyncError::Database(format!("failed to serialize chunk: {}", e)))?;
+
+                Ok(vec![PendingBlob {
+                    data,
+                    time_start,
+                    time_end,
+                    text_content: if text_content.is_empty() {
+                        None
+                    } else {
+                        Some(text_content)
+                    },
+                }])
+            }
+            None => Ok(Vec::new()),
+        }
+    }
+
+    async fn mark_synced(
+        &self,
+        blob_type: BlobType,
+        time_start: &str,
+        time_end: &str,
+        _blob_id: &str,
+    ) -> SyncResult<()> {
+        self.mark_records_synced(blob_type, time_start, time_end).await
+    }
+}
+
+/// Result of importing a sync chunk.
+#[derive(Debug, Clone)]
+pub struct ImportResult {
+    pub imported_frames: usize,
+    pub imported_ocr: usize,
+    pub imported_transcriptions: usize,
+    pub skipped: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sync_chunk_serialization() {
+        let chunk = SyncChunk {
+            schema_version: 1,
+            machine_id: "test-machine".to_string(),
+            time_start: "2024-01-28T14:00:00Z".to_string(),
+            time_end: "2024-01-28T14:05:00Z".to_string(),
+            frames: vec![FrameRecord {
+                sync_id: "abc-123".to_string(),
+                timestamp: "2024-01-28T14:00:00Z".to_string(),
+                offset_index: 0,
+                app_name: Some("Chrome".to_string()),
+                window_name: Some("Meeting".to_string()),
+                browser_url: None,
+                device_name: "MacBook".to_string(),
+                cloud_frame_path: None,
+            }],
+            ocr_records: vec![OcrRecord {
+                sync_id: "def-456".to_string(),
+                frame_sync_id: "abc-123".to_string(),
+                text: "Hello world".to_string(),
+                focused: true,
+            }],
+            transcriptions: Vec::new(),
+        };
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        let parsed: SyncChunk = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.machine_id, "test-machine");
+        assert_eq!(parsed.frames.len(), 1);
+        assert_eq!(parsed.ocr_records.len(), 1);
+    }
+}

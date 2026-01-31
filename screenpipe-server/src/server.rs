@@ -112,6 +112,8 @@ pub struct AppState {
     pub search_cache: SearchCache,
     /// Enable PII removal from text content
     pub use_pii_removal: bool,
+    /// Cloud search client for hybrid local + cloud queries
+    pub cloud_search: Arc<crate::cloud_search::CloudSearchClient>,
 }
 
 // Update the SearchQuery struct
@@ -150,6 +152,9 @@ pub(crate) struct SearchQuery {
     /// Filter audio transcriptions by speaker name (case-insensitive partial match)
     #[serde(default)]
     speaker_name: Option<String>,
+    /// Include cloud-synced data in search results (requires cloud sync to be enabled)
+    #[serde(default)]
+    include_cloud: bool,
 }
 
 #[derive(OaSchema, Deserialize)]
@@ -337,6 +342,9 @@ pub struct HealthCheckResponse {
 pub struct SearchResponse {
     pub data: Vec<ContentItem>,
     pub pagination: PaginationInfo,
+    /// Metadata about cloud search availability (only present when cloud sync is available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cloud: Option<crate::cloud_search::CloudSearchMetadata>,
 }
 
 /// Compute a cache key for a search query by hashing its parameters
@@ -357,6 +365,7 @@ fn compute_search_cache_key(query: &SearchQuery) -> u64 {
     query.focused.hash(&mut hasher);
     query.browser_url.hash(&mut hasher);
     query.speaker_name.hash(&mut hasher);
+    query.include_cloud.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -538,6 +547,20 @@ pub(crate) async fn search(
         }),
     );
 
+    // Get cloud search metadata
+    let time_range = match (query.start_time, query.end_time) {
+        (Some(start), Some(end)) => Some(crate::cloud_search::TimeRange { start, end }),
+        _ => None,
+    };
+    let cloud_metadata = state.cloud_search.get_metadata(query_str, time_range).await;
+
+    // Only include cloud metadata if cloud search is available or was requested
+    let cloud = if cloud_metadata.cloud_search_available || query.include_cloud {
+        Some(cloud_metadata)
+    } else {
+        None
+    };
+
     let response = SearchResponse {
         data: content_items,
         pagination: PaginationInfo {
@@ -545,6 +568,7 @@ pub(crate) async fn search(
             offset: query.pagination.offset,
             total: total as i64,
         },
+        cloud,
     };
 
     // Cache the result (only for queries without frame extraction)
@@ -1280,6 +1304,8 @@ impl SCServer {
                 .time_to_live(Duration::from_secs(60))
                 .build(),
             use_pii_removal: self.use_pii_removal,
+            // Cloud search client (disabled by default, can be enabled via API)
+            cloud_search: Arc::new(crate::cloud_search::CloudSearchClient::new()),
         });
 
         let cors = CorsLayer::new()
@@ -3902,6 +3928,7 @@ mod tests {
             focused: None,
             browser_url: None,
             speaker_name: None,
+            include_cloud: false,
         };
 
         let query2 = SearchQuery {
@@ -3923,6 +3950,7 @@ mod tests {
             focused: None,
             browser_url: None,
             speaker_name: None,
+            include_cloud: false,
         };
 
         let key1 = compute_search_cache_key(&query1);
@@ -3952,6 +3980,7 @@ mod tests {
             focused: None,
             browser_url: None,
             speaker_name: None,
+            include_cloud: false,
         };
 
         let query2 = SearchQuery {
@@ -3973,6 +4002,7 @@ mod tests {
             focused: None,
             browser_url: None,
             speaker_name: None,
+            include_cloud: false,
         };
 
         let key1 = compute_search_cache_key(&query1);

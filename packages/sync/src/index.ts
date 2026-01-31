@@ -330,7 +330,7 @@ async function extractWithAI(
       const tmpFile = path.join(os.tmpdir(), `screenpipe-prompt-${Date.now()}.txt`);
       await fs.writeFile(tmpFile, prompt);
 
-      const result = execSync(`cat "${tmpFile}" | claude --print`, {
+      const result = execSync(`claude --print < "${tmpFile}"`, {
         encoding: "utf-8",
         maxBuffer: 10 * 1024 * 1024,
         timeout: 120000, // 2 min timeout
