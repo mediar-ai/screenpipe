@@ -29,17 +29,72 @@ interface AppGroup {
 	iconSrc?: string;
 }
 
+// App category definitions for semantic grayscale coloring
+const APP_CATEGORIES: Record<string, string[]> = {
+	// Browsers - darkest (most common, need clear distinction)
+	browser: [
+		'chrome', 'google chrome', 'firefox', 'safari', 'edge', 'microsoft edge',
+		'brave', 'opera', 'vivaldi', 'arc', 'zen', 'orion', 'chromium'
+	],
+	// Development tools - dark gray
+	dev: [
+		'code', 'vs code', 'visual studio', 'cursor', 'terminal', 'iterm',
+		'warp', 'xcode', 'android studio', 'intellij', 'webstorm', 'pycharm',
+		'sublime', 'atom', 'vim', 'neovim', 'emacs', 'github', 'gitlab',
+		'postman', 'insomnia', 'docker', 'figma', 'sketch', 'zed'
+	],
+	// Communication - medium gray
+	communication: [
+		'slack', 'discord', 'zoom', 'teams', 'microsoft teams', 'messages',
+		'whatsapp', 'telegram', 'signal', 'skype', 'webex', 'meet', 'facetime',
+		'mail', 'outlook', 'gmail', 'thunderbird', 'spark', 'notion', 'linear',
+		'loom', 'around', 'gather'
+	],
+	// Media & Entertainment - light gray
+	media: [
+		'spotify', 'youtube', 'music', 'apple music', 'vlc', 'netflix', 'tv',
+		'prime video', 'disney', 'hulu', 'twitch', 'podcasts', 'audible',
+		'photos', 'preview', 'quicktime', 'iina', 'plex', 'mpv'
+	],
+	// Productivity - medium-light gray
+	productivity: [
+		'notes', 'obsidian', 'roam', 'bear', 'evernote', 'onenote',
+		'word', 'excel', 'powerpoint', 'pages', 'numbers', 'keynote',
+		'google docs', 'sheets', 'slides', 'calendar', 'reminders', 'todoist',
+		'things', 'fantastical', 'craft', 'ulysses', 'ia writer'
+	],
+};
+
+// Grayscale colors for each category (from dark to light)
+const CATEGORY_COLORS: Record<string, string> = {
+	browser: '#1a1a1a',      // Very dark - browsers are most common
+	dev: '#3d3d3d',          // Dark gray - dev tools
+	communication: '#666666', // Medium gray - communication
+	productivity: '#8a8a8a',  // Medium-light - productivity
+	media: '#ababab',        // Light gray - media
+	other: '#cccccc',        // Lightest - unknown/other apps
+};
+
+// Get category for an app name
+function getAppCategory(appName: string): string {
+	const lowerName = appName.toLowerCase();
+	for (const [category, apps] of Object.entries(APP_CATEGORIES)) {
+		if (apps.some(app => lowerName.includes(app) || app.includes(lowerName))) {
+			return category;
+		}
+	}
+	return 'other';
+}
+
+// Get grayscale color based on app category
+export function getAppCategoryColor(appName: string): string {
+	const category = getAppCategory(appName);
+	return CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
+}
+
+// Legacy function name for backwards compatibility
 export function stringToColor(str: string): string {
-	let hash = 0;
-	for (let i = 0; i < str.length; i++) {
-		hash = str.charCodeAt(i) + ((hash << 5) - hash);
-	}
-	let color = "#";
-	for (let i = 0; i < 3; i++) {
-		const value = (hash >> (i * 8)) & 0xff;
-		color += ("00" + value.toString(16)).substr(-2);
-	}
-	return color;
+	return getAppCategoryColor(str);
 }
 
 // Get the app name from a frame, preferring devices with non-empty app names
@@ -529,108 +584,36 @@ export const TimelineSlider = ({
 									borderLeft: groupIndex > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none',
 								}}
 							>
-								{/* Stacked app icons - vertical stack, hover to expand */}
-								<motion.div
-									className="absolute top-0 left-1/2 -translate-x-1/2 z-20"
-									style={{ direction: 'ltr' }}
-									initial={false}
-								>
+								{/* Vertical stacked app icons - max 2 icons, hover to expand */}
+								{groupWidth > 30 && (
 									<motion.div
-										className="relative flex flex-col items-start pointer-events-auto cursor-pointer"
+										className="absolute top-1 left-1/2 -translate-x-1/2 z-10 flex flex-col cursor-pointer"
+										style={{ direction: 'ltr' }}
 										whileHover="expanded"
 										initial="collapsed"
 									>
-										{/* Vertical stack of icons */}
-										<div className="relative">
-											{group.appNames.slice(0, 4).map((appName, idx) => (
-												<motion.div
-													key={`${appName}-${idx}`}
-													className="flex items-center"
-													style={{ zIndex: 20 - idx }}
-													variants={{
-														collapsed: {
-															marginTop: idx === 0 ? 0 : -10,
-															height: 20,
-														},
-														expanded: {
-															marginTop: idx === 0 ? 0 : 2,
-															height: 20,
-														}
-													}}
-													transition={{ type: "spring", stiffness: 400, damping: 25 }}
-												>
-													{/* Icon */}
-													<motion.div
-														className={cn(
-															"w-5 h-5 rounded-md bg-card border p-0.5 shadow-md flex-shrink-0",
-															idx === 0 ? "border-foreground/40" : "border-border/50"
-														)}
-														variants={{
-															collapsed: {
-																scale: 1,
-																opacity: idx < 3 ? 1 : 0.5,
-															},
-															expanded: {
-																scale: 1,
-																opacity: 1,
-															}
-														}}
-														whileHover={{ scale: 1.1 }}
-														transition={{ type: "spring", stiffness: 400, damping: 25 }}
-													>
-														<img
-															src={`http://localhost:11435/app-icon?name=${encodeURIComponent(appName)}`}
-															className="w-full h-full rounded-sm"
-															alt={appName}
-															loading="lazy"
-															decoding="async"
-														/>
-													</motion.div>
-													{/* App name label - appears on hover */}
-													<motion.span
-														className="ml-2 text-[9px] font-medium text-foreground bg-background/95 backdrop-blur-sm px-1.5 py-0.5 rounded shadow-md whitespace-nowrap border border-border/30"
-														variants={{
-															collapsed: { opacity: 0, width: 0, marginLeft: 0 },
-															expanded: { opacity: 1, width: "auto", marginLeft: 8 }
-														}}
-														transition={{ type: "spring", stiffness: 400, damping: 25, delay: idx * 0.02 }}
-													>
-														{appName.length > 15 ? appName.slice(0, 12) + '…' : appName}
-													</motion.span>
-												</motion.div>
-											))}
-											{/* +N indicator for overflow */}
-											{group.appNames.length > 4 && (
-												<motion.div
-													className="flex items-center"
-													style={{ zIndex: 15 }}
-													variants={{
-														collapsed: { marginTop: -10, height: 20 },
-														expanded: { marginTop: 2, height: 20 }
-													}}
-													transition={{ type: "spring", stiffness: 400, damping: 25 }}
-												>
-													<div className="w-5 h-5 rounded-md bg-muted border border-border/50 flex items-center justify-center text-[8px] font-medium text-foreground/70">
-														+{group.appNames.length - 4}
-													</div>
-												</motion.div>
-											)}
-										</div>
-										{/* Badge showing total app count - only in collapsed state */}
-										{group.appNames.length > 1 && (
+										{group.appNames.slice(0, 2).map((appName, idx) => (
 											<motion.div
-												className="absolute -right-2 -top-1 min-w-[14px] h-[14px] rounded-full bg-foreground text-background text-[8px] font-bold flex items-center justify-center shadow-sm"
+												key={`${appName}-${idx}`}
+												className="w-4 h-4 rounded bg-background/90 p-0.5 shadow-sm border border-background/50"
+												style={{ zIndex: 10 - idx }}
 												variants={{
-													collapsed: { scale: 1, opacity: 1 },
-													expanded: { scale: 0, opacity: 0 }
+													collapsed: { marginTop: idx === 0 ? 0 : -6 },
+													expanded: { marginTop: idx === 0 ? 0 : 2 }
 												}}
 												transition={{ type: "spring", stiffness: 400, damping: 25 }}
 											>
-												{group.appNames.length}
+												<img
+													src={`http://localhost:11435/app-icon?name=${encodeURIComponent(appName)}`}
+													className="w-full h-full rounded-sm"
+													alt={appName}
+													loading="lazy"
+													decoding="async"
+												/>
 											</motion.div>
-										)}
+										))}
 									</motion.div>
-								</motion.div>
+								)}
 
 								{group.frames.map((frame, frameIdx) => {
 									// O(1) lookup instead of O(n) indexOf

@@ -187,17 +187,72 @@ export const removeDuplicateSelections = (
 	return newSelectedResults;
 };
 
+// App category definitions for semantic grayscale coloring
+const APP_CATEGORIES: Record<string, string[]> = {
+	// Browsers - darkest (most common, need clear distinction)
+	browser: [
+		'chrome', 'google chrome', 'firefox', 'safari', 'edge', 'microsoft edge',
+		'brave', 'opera', 'vivaldi', 'arc', 'zen', 'orion', 'chromium'
+	],
+	// Development tools - dark gray
+	dev: [
+		'code', 'vs code', 'visual studio', 'cursor', 'terminal', 'iterm',
+		'warp', 'xcode', 'android studio', 'intellij', 'webstorm', 'pycharm',
+		'sublime', 'atom', 'vim', 'neovim', 'emacs', 'github', 'gitlab',
+		'postman', 'insomnia', 'docker', 'figma', 'sketch', 'zed'
+	],
+	// Communication - medium gray
+	communication: [
+		'slack', 'discord', 'zoom', 'teams', 'microsoft teams', 'messages',
+		'whatsapp', 'telegram', 'signal', 'skype', 'webex', 'meet', 'facetime',
+		'mail', 'outlook', 'gmail', 'thunderbird', 'spark', 'notion', 'linear',
+		'loom', 'around', 'gather'
+	],
+	// Media & Entertainment - light gray
+	media: [
+		'spotify', 'youtube', 'music', 'apple music', 'vlc', 'netflix', 'tv',
+		'prime video', 'disney', 'hulu', 'twitch', 'podcasts', 'audible',
+		'photos', 'preview', 'quicktime', 'iina', 'plex', 'mpv'
+	],
+	// Productivity - medium-light gray
+	productivity: [
+		'notes', 'obsidian', 'roam', 'bear', 'evernote', 'onenote',
+		'word', 'excel', 'powerpoint', 'pages', 'numbers', 'keynote',
+		'google docs', 'sheets', 'slides', 'calendar', 'reminders', 'todoist',
+		'things', 'fantastical', 'craft', 'ulysses', 'ia writer'
+	],
+};
+
+// Grayscale colors for each category (from dark to light)
+const CATEGORY_COLORS: Record<string, string> = {
+	browser: '#1a1a1a',      // Very dark - browsers are most common
+	dev: '#3d3d3d',          // Dark gray - dev tools
+	communication: '#666666', // Medium gray - communication
+	productivity: '#8a8a8a',  // Medium-light - productivity
+	media: '#ababab',        // Light gray - media
+	other: '#cccccc',        // Lightest - unknown/other apps
+};
+
+// Get category for an app name
+function getAppCategory(appName: string): string {
+	const lowerName = appName.toLowerCase();
+	for (const [category, apps] of Object.entries(APP_CATEGORIES)) {
+		if (apps.some(app => lowerName.includes(app) || app.includes(lowerName))) {
+			return category;
+		}
+	}
+	return 'other';
+}
+
+// Get grayscale color based on app category
+export function getAppCategoryColor(appName: string): string {
+	const category = getAppCategory(appName);
+	return CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
+}
+
+// Semantic grayscale coloring based on app category
 export function stringToColor(str: string): string {
-	let hash = 0;
-	for (let i = 0; i < str.length; i++) {
-		hash = str.charCodeAt(i) + ((hash << 5) - hash);
-	}
-	let color = "#";
-	for (let i = 0; i < 3; i++) {
-		const value = (hash >> (i * 8)) & 0xff;
-		color += ("00" + value.toString(16)).substr(-2);
-	}
-	return color;
+	return getAppCategoryColor(str);
 }
 
 export const queryParser = {
