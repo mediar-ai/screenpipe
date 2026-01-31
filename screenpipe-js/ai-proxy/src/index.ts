@@ -128,6 +128,19 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 			return await handleVertexProxy(request, env);
 		}
 
+		// Anthropic-compatible endpoint for OpenCode integration
+		// OpenCode sends requests to baseURL/v1/messages when configured with api: "anthropic"
+		if (path === '/anthropic/v1/messages' && request.method === 'POST') {
+			console.log('OpenCode Anthropic proxy request to /anthropic/v1/messages');
+			return await handleVertexProxy(request, env);
+		}
+
+		// Anthropic models endpoint for OpenCode
+		if (path === '/anthropic/v1/models' && request.method === 'GET') {
+			console.log('OpenCode Anthropic models request');
+			return await handleVertexModels(env);
+		}
+
 		return createErrorResponse(404, 'not found');
 	} catch (error: any) {
 		console.error('error in fetch:', error?.message, error?.stack);
