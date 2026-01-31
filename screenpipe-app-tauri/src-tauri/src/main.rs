@@ -50,6 +50,7 @@ mod window_api;
 mod windows_overlay;
 #[cfg(target_os = "macos")]
 mod space_monitor;
+mod sync;
 
 pub use server::*;
 
@@ -790,9 +791,23 @@ async fn main() {
                 // Commands from tray.rs
                 set_tray_unhealth_icon,
                 set_tray_health_icon,
+                // Commands from sync.rs
+                sync::get_sync_status,
+                sync::set_sync_enabled,
+                sync::trigger_sync,
+                sync::get_sync_config,
+                sync::update_sync_config,
+                sync::get_sync_devices,
+                sync::remove_sync_device,
+                sync::init_sync,
+                sync::lock_sync,
+                sync::delete_cloud_data,
             ])
             .typ::<SettingsStore>()
-            .typ::<OnboardingStore>();
+            .typ::<OnboardingStore>()
+            .typ::<sync::SyncStatusResponse>()
+            .typ::<sync::SyncDeviceInfo>()
+            .typ::<sync::SyncConfig>();
 
         builder
             .export(
@@ -898,7 +913,18 @@ async fn main() {
             update_global_shortcuts,
             suspend_global_shortcuts,
             resume_global_shortcuts,
-            get_env
+            get_env,
+            // Sync commands
+            sync::get_sync_status,
+            sync::set_sync_enabled,
+            sync::trigger_sync,
+            sync::get_sync_config,
+            sync::update_sync_config,
+            sync::get_sync_devices,
+            sync::remove_sync_device,
+            sync::init_sync,
+            sync::lock_sync,
+            sync::delete_cloud_data,
         ])
         .setup(move |app| {
             //deep link register_all
@@ -1024,6 +1050,9 @@ async fn main() {
                 store::SettingsStore::default()
             });
             app.manage(store.clone());
+
+            // Initialize sync state
+            app.manage(sync::SyncState::default());
 
             // Initialize onboarding store
             let onboarding_store = store::init_onboarding_store(&app.handle()).unwrap_or_else(|e| {
