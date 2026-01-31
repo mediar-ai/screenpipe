@@ -270,7 +270,7 @@ async fn should_skip_frame(
         current_average
     };
 
-    if current_average < 0.006 {
+    if current_average < 0.02 {
         debug!(
             "Skipping frame {} due to low average difference: {:.3}",
             frame_counter, current_average
