@@ -273,6 +273,47 @@ async resumeGlobalShortcuts() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+// OpenCode commands
+async opencodeInfo() : Promise<Result<OpencodeInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("opencode_info") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async opencodeStart(projectDir: string, userToken?: string) : Promise<Result<OpencodeInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("opencode_start", { projectDir, userToken }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async opencodeStop() : Promise<Result<OpencodeInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("opencode_stop") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async opencodeCheck() : Promise<Result<OpencodeCheckResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("opencode_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async opencodeInstall() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("opencode_install") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -287,7 +328,7 @@ async resumeGlobalShortcuts() : Promise<Result<null, string>> {
 /** user-defined types **/
 
 export type AIPreset = { id: string; prompt: string; provider: AIProviderType; url?: string; model?: string; defaultPreset: boolean; apiKey: string | null; maxContextChars: number }
-export type AIProviderType = "openai" | "native-ollama" | "custom" | "screenpipe-cloud"
+export type AIProviderType = "openai" | "native-ollama" | "custom" | "screenpipe-cloud" | "opencode"
 export type Credits = { amount: number }
 export type EmbeddedLLM = { enabled: boolean; model: string; port: number }
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key in string]: JsonValue }
@@ -312,6 +353,10 @@ analyticsId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngi
 deviceId?: string }
 export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding" | "Chat" | "PermissionRecovery"
 export type User = { id: string | null; name: string | null; email: string | null; image: string | null; token: string | null; clerk_id: string | null; api_key: string | null; credits: Credits | null; stripe_connected: boolean | null; stripe_account_status: string | null; github_username: string | null; bio: string | null; website: string | null; contact: string | null; cloud_subscribed: boolean | null }
+
+// OpenCode types
+export type OpencodeInfo = { running: boolean; baseUrl: string | null; port: number | null; projectDir: string | null; pid: number | null }
+export type OpencodeCheckResult = { available: boolean; sidecarAvailable: boolean; pathAvailable: boolean }
 
 /** tauri-specta globals **/
 

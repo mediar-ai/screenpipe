@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings, ChatMessage, ChatConversation } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, Zap, History, Search, Trash2, ChevronLeft, Copy, Check } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, FolderOpen, Zap, History, Search, Trash2, ChevronLeft, Copy, Check } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { parseInt } from "lodash";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,11 +23,15 @@ import remarkGfm from "remark-gfm";
 import OpenAI from "openai";
 import { ChatCompletionTool } from "openai/resources/chat/completions";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
-import { commands } from "@/lib/utils/tauri";
+import { commands, OpencodeInfo } from "@/lib/utils/tauri";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
+
+type OpencodeClient = ReturnType<typeof createOpencodeClient>;
 
 const SCREENPIPE_API = "http://localhost:3030";
 
@@ -555,6 +559,13 @@ export function GlobalChat() {
   const [upgradeReason, setUpgradeReason] = useState<"daily_limit" | "model_not_allowed">("daily_limit");
   const [upgradeResetsAt, setUpgradeResetsAt] = useState<string | undefined>();
 
+  // OpenCode state
+  const [opencodeInfo, setOpencodeInfo] = useState<OpencodeInfo | null>(null);
+  const [opencodeClient, setOpencodeClient] = useState<OpencodeClient | null>(null);
+  const [opencodeSessionId, setOpencodeSessionId] = useState<string | null>(null);
+  const [opencodeProjectDir, setOpencodeProjectDir] = useState<string>("");
+  const [opencodeStarting, setOpencodeStarting] = useState(false);
+
   // Chat history state
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -1039,9 +1050,12 @@ export function GlobalChat() {
 
   // Check if we have valid AI setup
   const hasPresets = settings.aiPresets && settings.aiPresets.length > 0;
-  const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
-  const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
-  const canChat = hasPresets && hasValidModel && !needsLogin;
+  const hasValidModel = activePreset?.provider === "opencode" || (activePreset?.model && activePreset.model.trim() !== "");
+  const needsLogin = (activePreset?.provider === "screenpipe-cloud" || activePreset?.provider === "opencode") && !settings.user?.token;
+  const isOpencode = activePreset?.provider === "opencode";
+  const needsProjectDir = isOpencode && !opencodeProjectDir;
+  const opencodeReady = isOpencode ? (opencodeInfo?.running && opencodeClient && opencodeSessionId && !needsProjectDir) : true;
+  const canChat = hasPresets && hasValidModel && !needsLogin && opencodeReady;
 
   // Debug: log why chat might be disabled
   useEffect(() => {
@@ -1058,15 +1072,110 @@ export function GlobalChat() {
     }
   }, [open, activePreset, hasValidModel, needsLogin, canChat]);
 
+  // Load saved project directory on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("opencode_project_dir");
+    if (saved) setOpencodeProjectDir(saved);
+  }, []);
+
+  // Save project directory when changed
+  useEffect(() => {
+    if (opencodeProjectDir) {
+      localStorage.setItem("opencode_project_dir", opencodeProjectDir);
+    }
+  }, [opencodeProjectDir]);
+
+  // Start OpenCode when preset is selected, dialog is open, and project dir is set
+  useEffect(() => {
+    if (!isOpencode || !open || needsLogin || !opencodeProjectDir || opencodeStarting) return;
+
+    const initOpencode = async () => {
+      setOpencodeStarting(true);
+
+      try {
+        // Check current status
+        const infoResult = await commands.opencodeInfo();
+        if (infoResult.status === "ok") {
+          setOpencodeInfo(infoResult.data);
+
+          // Check if already running with same project
+          if (infoResult.data.running && infoResult.data.baseUrl && infoResult.data.projectDir === opencodeProjectDir) {
+            // Already running with correct project, set up client
+            const client = createOpencodeClient({ baseUrl: infoResult.data.baseUrl });
+            setOpencodeClient(client);
+
+            // Get or create a session
+            try {
+              const sessions = await client.session.list();
+              if (sessions.data && sessions.data.length > 0) {
+                setOpencodeSessionId(sessions.data[0].id);
+              } else {
+                const newSession = await client.session.create({ directory: opencodeProjectDir });
+                if (newSession.data) {
+                  setOpencodeSessionId(newSession.data.id);
+                }
+              }
+            } catch (e) {
+              console.error("Failed to get/create opencode session:", e);
+            }
+          } else {
+            // Not running or different project, start with selected directory
+            const startResult = await commands.opencodeStart(opencodeProjectDir, settings.user?.token || undefined);
+            if (startResult.status === "ok" && startResult.data.running && startResult.data.baseUrl) {
+              setOpencodeInfo(startResult.data);
+              const client = createOpencodeClient({ baseUrl: startResult.data.baseUrl });
+              setOpencodeClient(client);
+
+              // Create initial session
+              try {
+                const newSession = await client.session.create({ directory: opencodeProjectDir });
+                if (newSession.data) {
+                  setOpencodeSessionId(newSession.data.id);
+                }
+              } catch (e) {
+                console.error("Failed to create opencode session:", e);
+              }
+            } else if (startResult.status === "error") {
+              toast({
+                title: "OpenCode failed to start",
+                description: startResult.error,
+                variant: "destructive",
+              });
+            }
+          }
+        }
+      } finally {
+        setOpencodeStarting(false);
+      }
+    };
+
+    initOpencode();
+  }, [isOpencode, open, needsLogin, opencodeProjectDir, settings.user?.token]);
+
   // Get error message for why chat is disabled
   const getDisabledReason = (): string | null => {
     if (!hasPresets) return "No AI presets configured";
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset - click edit to add one`;
-    if (needsLogin) return "Login required for Screenpipe Cloud";
+    if (needsLogin) return "Login required";
+    if (isOpencode && needsProjectDir) return "Select a project folder";
+    if (isOpencode && opencodeStarting) return "Starting OpenCode...";
+    if (isOpencode && !opencodeReady) return "Connecting to OpenCode...";
     return null;
   };
   const disabledReason = getDisabledReason();
+
+  // Project directory picker for OpenCode
+  const selectOpencodeProject = async () => {
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Select Project Folder for OpenCode",
+    });
+    if (selected) {
+      setOpencodeProjectDir(selected as string);
+    }
+  };
 
   // Listen for Rust-level open-chat event (Cmd+L / Ctrl+L global shortcut)
   useEffect(() => {
@@ -1252,9 +1361,136 @@ export function GlobalChat() {
     });
   }
 
+  // Send message using OpenCode SDK
+  async function sendOpencodeMessage(userMessage: string) {
+    if (!opencodeClient || !opencodeSessionId) return;
+
+    const newUserMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: userMessage,
+    };
+
+    const assistantMessageId = (Date.now() + 1).toString();
+    setMessages((prev) => [...prev, newUserMessage]);
+    setInput("");
+    setIsLoading(true);
+    setIsStreaming(true);
+
+    try {
+      // Add placeholder for streaming response
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantMessageId, role: "assistant", content: "" },
+      ]);
+
+      // Send to OpenCode
+      await opencodeClient.session.promptAsync({
+        sessionID: opencodeSessionId,
+        parts: [{ type: "text", text: userMessage }],
+      });
+
+      // Poll for updates with smart completion detection
+      let accumulatedText = "";
+      let stableCount = 0;
+      let lastMessageCount = 0;
+      const maxStablePolls = 5; // Stop if no changes for 5 polls
+      const maxPolls = 120; // Max 2 minutes at 1s intervals
+      let pollCount = 0;
+
+      const poll = async (): Promise<void> => {
+        if (!opencodeClient || !opencodeSessionId || pollCount >= maxPolls) {
+          setIsLoading(false);
+          setIsStreaming(false);
+          return;
+        }
+
+        pollCount++;
+
+        try {
+          const msgs = await opencodeClient.session.messages({ sessionID: opencodeSessionId });
+          if (msgs.data && msgs.data.length > 0) {
+            const assistantMsgs = msgs.data.filter((m: any) => m.info.role === "assistant");
+            const lastAssistantMsg = assistantMsgs[assistantMsgs.length - 1];
+
+            if (lastAssistantMsg) {
+              const textParts = lastAssistantMsg.parts
+                .filter((p: any) => p.type === "text")
+                .map((p: any) => p.text)
+                .join("\n");
+
+              // Also show tool usage
+              const toolParts = lastAssistantMsg.parts
+                .filter((p: any) => p.type === "tool")
+                .map((p: any) => `\n\`${p.tool}\``)
+                .join("");
+
+              const fullText = textParts + toolParts;
+
+              if (fullText !== accumulatedText) {
+                accumulatedText = fullText;
+                stableCount = 0;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMessageId
+                      ? { ...m, content: accumulatedText }
+                      : m
+                  )
+                );
+              } else {
+                stableCount++;
+              }
+
+              // Check if we have more messages than before (response complete)
+              if (assistantMsgs.length > lastMessageCount && stableCount >= 2) {
+                // New message appeared and stabilized - likely complete
+                setIsLoading(false);
+                setIsStreaming(false);
+                return;
+              }
+              lastMessageCount = assistantMsgs.length;
+
+              // Stop if content hasn't changed for maxStablePolls
+              if (stableCount >= maxStablePolls && accumulatedText.length > 0) {
+                setIsLoading(false);
+                setIsStreaming(false);
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error polling opencode messages:", e);
+        }
+
+        // Continue polling
+        setTimeout(poll, 1000);
+      };
+
+      // Start polling after a brief delay
+      setTimeout(poll, 500);
+
+    } catch (error) {
+      console.error("OpenCode error:", error);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMessageId
+            ? { ...m, content: `Error: ${error instanceof Error ? error.message : "Unknown error"}` }
+            : m
+        )
+      );
+      setIsLoading(false);
+      setIsStreaming(false);
+    }
+  }
+
   // Send message using OpenAI SDK with streaming
   async function sendMessage(userMessage: string) {
     if (!canChat || !activePreset) return;
+
+    // Use OpenCode if that's the active provider
+    if (isOpencode) {
+      return sendOpencodeMessage(userMessage);
+    }
 
     const openai = getOpenAIClient();
     if (!openai) return;
@@ -1880,10 +2116,25 @@ export function GlobalChat() {
             <div className="relative z-10 p-1.5 rounded-lg bg-foreground/5 border border-border/50">
               <PipeAIIcon size={18} animated={false} className="text-foreground" />
             </div>
-            <div className="flex-1">
-              <h2 className="font-semibold text-sm tracking-tight">Pipe AI</h2>
-              <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold text-sm tracking-tight">
+                {isOpencode ? "OpenCode" : "Pipe AI"}
+              </h2>
+              <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider truncate">
+                {isOpencode && opencodeProjectDir
+                  ? opencodeProjectDir.split("/").pop() || opencodeProjectDir
+                  : "Screen Activity Assistant"}
+              </p>
             </div>
+            {isOpencode && opencodeProjectDir && (
+              <button
+                onClick={selectOpencodeProject}
+                className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
+                title="Change project folder"
+              >
+                <FolderOpen size={16} />
+              </button>
+            )}
             <Button
               variant={showHistory ? "secondary" : "ghost"}
               size="sm"
@@ -2012,7 +2263,7 @@ export function GlobalChat() {
               <div className="relative flex flex-col items-center justify-center py-12 space-y-4">
                 <div className={cn(
                   "relative p-6 rounded-2xl border",
-                  needsLogin
+                  needsLogin || needsProjectDir
                     ? "bg-muted/50 border-border/50"
                     : "bg-destructive/5 border-destructive/20"
                 )}>
@@ -2022,21 +2273,35 @@ export function GlobalChat() {
                   <div className="absolute bottom-0 left-0 w-4 h-4 border-l-2 border-b-2 border-current opacity-20 rounded-bl" />
                   <div className="absolute bottom-0 right-0 w-4 h-4 border-r-2 border-b-2 border-current opacity-20 rounded-br" />
 
-                  {needsLogin ? (
+                  {needsProjectDir ? (
+                    <FolderOpen className="h-12 w-12 text-muted-foreground" />
+                  ) : needsLogin ? (
                     <PipeAIIconLarge size={48} className="text-muted-foreground" />
+                  ) : opencodeStarting ? (
+                    <Loader2 className="h-12 w-12 text-muted-foreground animate-spin" />
                   ) : (
                     <Settings className="h-12 w-12 text-destructive/70" />
                   )}
                 </div>
                 <div className="text-center space-y-2">
                   <h3 className="font-semibold tracking-tight">
-                    {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : "Login Required"}
+                    {needsProjectDir ? "Select Project" : !hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : opencodeStarting ? "Starting OpenCode" : "Login Required"}
                   </h3>
                   <p className="text-sm text-muted-foreground max-w-sm">
-                    {disabledReason}
+                    {needsProjectDir ? "Choose a folder for OpenCode to work with" : disabledReason}
                   </p>
                 </div>
-                {needsLogin && (
+                {needsProjectDir && (
+                  <Button
+                    variant="default"
+                    onClick={selectOpencodeProject}
+                    className="gap-2 font-medium bg-foreground text-background hover:bg-foreground/90"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                    Select Folder
+                  </Button>
+                )}
+                {needsLogin && !needsProjectDir && (
                   <Button
                     variant="default"
                     onClick={() => openUrl("https://screenpi.pe/login")}

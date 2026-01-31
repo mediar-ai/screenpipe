@@ -39,6 +39,7 @@ use crate::store::SettingsStore;
 
 mod commands;
 mod disk_usage;
+mod opencode;
 mod permissions;
 mod server;
 mod sidecar;
@@ -802,6 +803,12 @@ async fn main() {
                 sync::init_sync,
                 sync::lock_sync,
                 sync::delete_cloud_data,
+                // OpenCode commands
+                opencode::opencode_info,
+                opencode::opencode_start,
+                opencode::opencode_stop,
+                opencode::opencode_check,
+                opencode::opencode_install,
             ])
             .typ::<SettingsStore>()
             .typ::<OnboardingStore>()
@@ -819,6 +826,7 @@ async fn main() {
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     let sidecar_state_for_init = sidecar_state.0.clone(); // Clone for initial spawn
+    let opencode_state = opencode::OpencodeState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -870,6 +878,7 @@ async fn main() {
         let app = app.plugin(tauri_nspanel::init());
 
         let app = app.manage(sidecar_state)
+        .manage(opencode_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             stop_screenpipe,
@@ -925,6 +934,12 @@ async fn main() {
             sync::init_sync,
             sync::lock_sync,
             sync::delete_cloud_data,
+            // OpenCode commands
+            opencode::opencode_info,
+            opencode::opencode_start,
+            opencode::opencode_stop,
+            opencode::opencode_check,
+            opencode::opencode_install
         ])
         .setup(move |app| {
             //deep link register_all
@@ -1259,6 +1274,14 @@ async fn main() {
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
                 drop(server_shutdown_tx.send(()));
             }
+
+            // Cleanup OpenCode sidecar
+            let app_handle_opencode = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(opencode_state) = app_handle_opencode.try_state::<opencode::OpencodeState>() {
+                    opencode::cleanup_opencode(&opencode_state).await;
+                }
+            });
         }
 
         tauri::RunEvent::WindowEvent {
