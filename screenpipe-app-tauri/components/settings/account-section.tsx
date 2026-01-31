@@ -144,7 +144,7 @@ export function AccountSection() {
         ? [
             "cloud sync - 50GB storage, 3 devices",
             "unlimited ai queries, all models",
-            "cloud transcription (save RAM & CPU)",
+            "cloud transcription (better quality, saves RAM)",
             "priority support",
             <a
               key="portal"
@@ -167,7 +167,7 @@ export function AccountSection() {
         : [
             "cloud sync - 50GB storage, 3 devices",
             "unlimited ai queries, all models",
-            "cloud transcription (save RAM & CPU)",
+            "cloud transcription (better quality, saves RAM)",
             "priority support",
             isAnnual ? "2 months free" : "switch to annual for 2 months free",
           ],
