@@ -5,14 +5,15 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettings, ChatMessage, ChatConversation } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, Settings, ExternalLink, X } from "lucide-react";
+import { Loader2, Send, Square, User, Settings, ExternalLink, X, ImageIcon, Zap, History, Search, Trash2, ChevronLeft, Plus, Copy, Check } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { PipeAIIcon, PipeAIIconLarge } from "@/components/pipe-ai-icon";
 import { MemoizedReactMarkdown } from "@/components/markdown";
 import { VideoComponent } from "@/components/rewind/video";
+import { MermaidDiagram } from "@/components/rewind/mermaid-diagram";
 import { AIPresetsSelector } from "@/components/rewind/ai-presets-selector";
 import { AIPreset } from "@/lib/utils/tauri";
 import remarkGfm from "remark-gfm";
@@ -28,6 +29,7 @@ import {
   parseMentions,
   buildAppMentionSuggestions,
   normalizeAppTag,
+  formatShortcutDisplay,
 } from "@/components/global-chat";
 
 const SCREENPIPE_API = "http://localhost:3030";
@@ -114,6 +116,15 @@ Rules for showing videos/audio:
 
 Be concise. Cite timestamps when relevant. Always display times in the user's local timezone.
 
+VISUALIZATION:
+When the user asks for diagrams, flowcharts, or visualizations, generate Mermaid diagrams using fenced code blocks with the "mermaid" language tag. Example:
+\`\`\`mermaid
+graph TD
+    A[Start] --> B[Process]
+    B --> C[End]
+\`\`\`
+Use flowcharts (graph TD/LR), sequence diagrams, pie charts, etc. as appropriate.
+
 Current time: ${now.toISOString()}
 User's timezone: ${timezone} (UTC${offsetStr})
 User's local time: ${now.toLocaleString()}`;
@@ -137,10 +148,11 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  timestamp: number;
 }
 
 export function StandaloneChat() {
-  const { settings } = useSettings();
+  const { settings, updateSettings, isSettingsLoaded } = useSettings();
   const { isMac } = usePlatform();
   const { items: appItems } = useSqlAutocomplete("app");
 
@@ -148,6 +160,7 @@ export function StandaloneChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [activePreset, setActivePreset] = useState<AIPreset | undefined>();
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
@@ -165,29 +178,269 @@ export function StandaloneChat() {
   const [prefillContext, setPrefillContext] = useState<string | null>(null);
   const [prefillFrameId, setPrefillFrameId] = useState<number | null>(null);
   const [pastedImage, setPastedImage] = useState<string | null>(null); // Base64 data URL
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  // Chat history state
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+
+  // Process an image file to base64
+  const processImageFile = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setPastedImage(base64);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  // Load active conversation from settings on mount
+  useEffect(() => {
+    if (!isSettingsLoaded) return;
+
+    const history = settings.chatHistory;
+    if (history?.activeConversationId && history.historyEnabled !== false) {
+      const activeConv = history.conversations.find(
+        c => c.id === history.activeConversationId
+      );
+      if (activeConv && activeConv.messages.length > 0) {
+        setMessages(activeConv.messages.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        })));
+        setConversationId(activeConv.id);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSettingsLoaded]);
+
+  // Save conversation to settings
+  const saveConversation = async (msgs: Message[]) => {
+    if (!settings.chatHistory?.historyEnabled) return;
+    if (msgs.length === 0) return;
+
+    const history = settings.chatHistory || { conversations: [], activeConversationId: null, historyEnabled: true };
+    const convId = conversationId || crypto.randomUUID();
+
+    const existingIndex = history.conversations.findIndex(c => c.id === convId);
+    const firstUserMsg = msgs.find(m => m.role === "user");
+    const title = firstUserMsg?.content.slice(0, 50) || "New Chat";
+
+    const conversation: ChatConversation = {
+      id: convId,
+      title,
+      messages: msgs.slice(-100).map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+      })),
+      createdAt: existingIndex >= 0 ? history.conversations[existingIndex].createdAt : Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    let newConversations = [...history.conversations];
+    if (existingIndex >= 0) {
+      newConversations[existingIndex] = conversation;
+    } else {
+      newConversations = [conversation, ...newConversations].slice(0, 50);
+    }
+
+    await updateSettings({
+      chatHistory: {
+        ...history,
+        conversations: newConversations,
+        activeConversationId: convId,
+      }
+    });
+
+    if (!conversationId) {
+      setConversationId(convId);
+    }
+  };
+
+  // Delete a conversation
+  const deleteConversation = async (convId: string) => {
+    const history = settings.chatHistory;
+    if (!history) return;
+
+    const newConversations = history.conversations.filter(c => c.id !== convId);
+    const newActiveId = history.activeConversationId === convId ? null : history.activeConversationId;
+
+    await updateSettings({
+      chatHistory: {
+        ...history,
+        conversations: newConversations,
+        activeConversationId: newActiveId,
+      }
+    });
+
+    if (conversationId === convId) {
+      setMessages([]);
+      setConversationId(null);
+    }
+  };
+
+  // Load a specific conversation
+  const loadConversation = (conv: ChatConversation) => {
+    setMessages(conv.messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+    })));
+    setConversationId(conv.id);
+    setShowHistory(false);
+
+    if (settings.chatHistory) {
+      updateSettings({
+        chatHistory: {
+          ...settings.chatHistory,
+          activeConversationId: conv.id,
+        }
+      });
+    }
+  };
+
+  // Start a new conversation
+  const startNewConversation = () => {
+    setMessages([]);
+    setConversationId(null);
+    setInput("");
+    setShowHistory(false);
+    setPastedImage(null);
+  };
+
+  // Filter conversations by search
+  const filteredConversations = React.useMemo(() => {
+    const convs = settings.chatHistory?.conversations || [];
+    if (!historySearch.trim()) return convs;
+
+    const search = historySearch.toLowerCase();
+    return convs.filter(c =>
+      c.title.toLowerCase().includes(search) ||
+      c.messages.some(m => m.content.toLowerCase().includes(search))
+    );
+  }, [settings.chatHistory?.conversations, historySearch]);
+
+  // Group conversations by date
+  const groupedConversations = React.useMemo(() => {
+    const groups: { label: string; conversations: ChatConversation[] }[] = [];
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const todayConvs: ChatConversation[] = [];
+    const yesterdayConvs: ChatConversation[] = [];
+    const lastWeekConvs: ChatConversation[] = [];
+    const olderConvs: ChatConversation[] = [];
+
+    for (const conv of filteredConversations) {
+      const convDate = new Date(conv.updatedAt);
+      if (convDate >= today) {
+        todayConvs.push(conv);
+      } else if (convDate >= yesterday) {
+        yesterdayConvs.push(conv);
+      } else if (convDate >= lastWeek) {
+        lastWeekConvs.push(conv);
+      } else {
+        olderConvs.push(conv);
+      }
+    }
+
+    if (todayConvs.length > 0) groups.push({ label: "Today", conversations: todayConvs });
+    if (yesterdayConvs.length > 0) groups.push({ label: "Yesterday", conversations: yesterdayConvs });
+    if (lastWeekConvs.length > 0) groups.push({ label: "Last 7 Days", conversations: lastWeekConvs });
+    if (olderConvs.length > 0) groups.push({ label: "Older", conversations: olderConvs });
+
+    return groups;
+  }, [filteredConversations]);
+
+  // Handle drag events for image drop
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+
+    // Check if dragging files that include images
+    const hasFiles = e.dataTransfer.types.includes("Files");
+    if (hasFiles) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      // Find first image file
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith("image/")) {
+          processImageFile(file);
+          break;
+        }
+      }
+    }
+  }, [processImageFile]);
 
   // Handle paste events to capture images
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
-    if (!items) return;
+    const files = e.clipboardData?.files;
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.startsWith("image/")) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const base64 = event.target?.result as string;
-            setPastedImage(base64);
-          };
-          reader.readAsDataURL(file);
+    // Try items first (works in most browsers)
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            processImageFile(file);
+          }
+          return;
         }
-        break; // Only handle first image
       }
     }
-  }, []);
+
+    // Fallback: try files array (some browsers put images here)
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith("image/")) {
+          e.preventDefault();
+          processImageFile(file);
+          return;
+        }
+      }
+    }
+  }, [processImageFile]);
 
   // Listen for chat-prefill events from search modal
   useEffect(() => {
@@ -555,6 +808,7 @@ export function StandaloneChat() {
       id: Date.now().toString(),
       role: "user",
       content: displayMessage,
+      timestamp: Date.now(),
     };
 
     const assistantMessageId = (Date.now() + 1).toString();
@@ -669,9 +923,20 @@ export function StandaloneChat() {
         { role: "user", content: userMessageContent },
       ];
 
+      // Debug: log if image is being sent
+      if (hasAnyImage) {
+        console.log("[Chat] Sending multimodal message with image(s):", {
+          hasFrameImage: !!frameImageBase64,
+          hasPastedImage: !!pastedImageBase64,
+          contentParts: Array.isArray(userMessageContent) ? userMessageContent.length : 1,
+          model: activePreset?.model,
+          provider: activePreset?.provider,
+        });
+      }
+
       setMessages((prev) => [
         ...prev,
-        { id: assistantMessageId, role: "assistant", content: "" },
+        { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() },
       ]);
 
       let accumulatedText = "";
@@ -849,6 +1114,7 @@ export function StandaloneChat() {
             id: Date.now().toString(),
             role: "assistant",
             content: `Error: ${errorMessage}`,
+            timestamp: Date.now(),
           },
         ];
       });
@@ -856,6 +1122,16 @@ export function StandaloneChat() {
       setIsLoading(false);
       setIsStreaming(false);
       abortControllerRef.current = null;
+
+      // Save conversation after state updates
+      setTimeout(() => {
+        setMessages((currentMsgs) => {
+          if (currentMsgs.length > 0) {
+            saveConversation(currentMsgs);
+          }
+          return currentMsgs;
+        });
+      }, 100);
     }
   }
 
@@ -903,13 +1179,131 @@ export function StandaloneChat() {
           <h2 className="font-semibold text-sm tracking-tight">Pipe AI</h2>
           <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Screen Activity Assistant</p>
         </div>
+        <Button
+          variant={showHistory ? "secondary" : "ghost"}
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowHistory(!showHistory);
+          }}
+          className="h-7 px-2 gap-1 text-xs"
+          title="Chat history"
+        >
+          <History size={14} />
+          <span className="hidden sm:inline">History</span>
+        </Button>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            startNewConversation();
+          }}
+          className="h-7 px-3 gap-1.5 text-xs bg-foreground text-background hover:bg-foreground/90"
+          title="New chat"
+        >
+          <Plus size={14} />
+          <span>New</span>
+        </Button>
         <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
-          {isMac ? "⌘⌥" : "Alt+"}L
+          {formatShortcutDisplay(settings.showChatShortcut || (isMac ? "Control+Super+L" : "Alt+L"), isMac)}
         </kbd>
       </div>
 
-      {/* Messages */}
-      <div className="relative flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Main content area with optional history sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* History Sidebar */}
+        <AnimatePresence>
+          {showHistory && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 280, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="border-r border-border/50 bg-muted/30 flex flex-col overflow-hidden"
+            >
+              {/* History Header */}
+              <div className="p-3 border-b border-border/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Chat History</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowHistory(false)}
+                    className="h-6 w-6 p-0"
+                  >
+                    <ChevronLeft size={14} />
+                  </Button>
+                </div>
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search conversations..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="h-8 pl-8 text-xs bg-background/50"
+                  />
+                </div>
+              </div>
+
+              {/* Conversations List */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                {groupedConversations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <History className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-xs text-muted-foreground">
+                      {historySearch ? "No matching conversations" : "No chat history yet"}
+                    </p>
+                  </div>
+                ) : (
+                  groupedConversations.map((group) => (
+                    <div key={group.label} className="space-y-1">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-2 py-1">
+                        {group.label}
+                      </p>
+                      {group.conversations.map((conv) => (
+                        <div
+                          key={conv.id}
+                          className={cn(
+                            "group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors",
+                            conv.id === conversationId
+                              ? "bg-foreground/10"
+                              : "hover:bg-foreground/5"
+                          )}
+                          onClick={() => loadConversation(conv)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">
+                              {conv.title}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {conv.messages.length} messages
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteConversation(conv.id);
+                            }}
+                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 size={12} />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Messages */}
+        <div className="relative flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && disabledReason && (
           <div className="relative flex flex-col items-center justify-center py-12 space-y-4">
             <div className={cn(
@@ -1000,9 +1394,10 @@ export function StandaloneChat() {
                   <PipeAIIcon size={16} animated={false} />
                 )}
               </div>
+              <div className="group/message flex-1 flex flex-col">
               <div
                 className={cn(
-                  "relative flex-1 rounded-xl px-4 py-3 text-sm border",
+                  "relative rounded-xl px-4 py-3 text-sm border",
                   message.role === "user"
                     ? "bg-foreground text-background border-foreground"
                     : "bg-muted/30 border-border/50"
@@ -1029,16 +1424,41 @@ export function StandaloneChat() {
                         </a>
                       );
                     },
+                    pre({ children, ...props }) {
+                      return (
+                        <pre className="overflow-x-auto rounded-lg bg-neutral-900 dark:bg-neutral-950 text-neutral-100 p-3 my-2 text-xs" style={{ maxWidth: 'calc(100% - 0px)' }} {...props}>
+                          {children}
+                        </pre>
+                      );
+                    },
                     code({ className, children, ...props }) {
                       const content = String(children).replace(/\n$/, "");
                       const isMedia = content.trim().toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
+                      const match = /language-(\w+)/.exec(className || "");
+                      const language = match?.[1] || "";
+                      const isCodeBlock = className?.includes("language-");
+
+                      // Render mermaid diagrams
+                      if (language === "mermaid") {
+                        return <MermaidDiagram chart={content} />;
+                      }
 
                       if (isMedia) {
                         return <VideoComponent filePath={content.trim()} className="my-2" />;
                       }
 
+                      // Code block (inside pre) - just the code, pre handles styling
+                      if (isCodeBlock) {
+                        return (
+                          <code className="font-mono text-xs block whitespace-pre text-neutral-100" {...props}>
+                            {content}
+                          </code>
+                        );
+                      }
+
+                      // Inline code
                       return (
-                        <code className="px-1.5 py-0.5 rounded bg-background/50 border border-border/50 font-mono text-xs" {...props}>
+                        <code className="px-1.5 py-0.5 rounded bg-neutral-800 dark:bg-neutral-900 text-neutral-100 font-mono text-xs" {...props}>
                           {content}
                         </code>
                       );
@@ -1047,6 +1467,39 @@ export function StandaloneChat() {
                 >
                   {message.content}
                 </MemoizedReactMarkdown>
+                {/* Upgrade button for daily limit errors */}
+                {message.role === "assistant" &&
+                 (message.content.includes("used all your free queries") ||
+                  message.content.includes("requires an upgrade")) && (
+                  <button
+                    onClick={() => setShowUpgradeDialog(true)}
+                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
+                  >
+                    <Zap className="h-4 w-4" />
+                    upgrade now
+                  </button>
+                )}
+              </div>
+                {/* Copy button - appears on hover, outside the message box */}
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(message.content);
+                    setCopiedMessageId(message.id);
+                    setTimeout(() => setCopiedMessageId(null), 2000);
+                  }}
+                  className={cn(
+                    "self-end mt-1 p-1 rounded-md transition-all duration-200",
+                    "opacity-0 group-hover/message:opacity-100",
+                    "hover:bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                  title="Copy message"
+                >
+                  {copiedMessageId === message.id ? (
+                    <Check className="h-3 w-3" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </button>
               </div>
             </motion.div>
           ))}
@@ -1063,6 +1516,7 @@ export function StandaloneChat() {
         )}
         <div ref={messagesEndRef} />
       </div>
+      </div> {/* End of main content area with history sidebar */}
 
       {/* Input */}
       <div className="relative border-t border-border/50 bg-gradient-to-t from-muted/20 to-transparent">
@@ -1170,7 +1624,54 @@ export function StandaloneChat() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="p-3">
+        <form
+          onSubmit={handleSubmit}
+          className="p-3 relative"
+          onPaste={handlePaste}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          {/* Drop zone overlay */}
+          <AnimatePresence>
+            {isDragging && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="absolute inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg border-2 border-dashed border-primary m-1"
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  transition={{ duration: 0.15, delay: 0.05 }}
+                  className="flex flex-col items-center gap-3 p-6"
+                >
+                  <motion.div
+                    animate={{
+                      y: [0, -8, 0],
+                    }}
+                    transition={{
+                      duration: 1.5,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="p-4 rounded-2xl bg-primary/10 border border-primary/20"
+                  >
+                    <ImageIcon className="w-8 h-8 text-primary" />
+                  </motion.div>
+                  <div className="text-center">
+                    <p className="font-semibold text-foreground">Drop your image here</p>
+                    <p className="text-xs text-muted-foreground mt-1">PNG, JPG, GIF, or WebP</p>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Input
@@ -1178,7 +1679,6 @@ export function StandaloneChat() {
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
                 placeholder={
                   disabledReason
                     ? disabledReason

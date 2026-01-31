@@ -32,6 +32,7 @@ import {
   AlertCircle,
   RefreshCw,
   Loader2,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -48,6 +49,7 @@ import { commands, SettingsStore } from "@/lib/utils/tauri";
 import {
   useSettings,
   VadSensitivity,
+  Settings,
 } from "@/lib/hooks/use-settings";
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
@@ -126,6 +128,30 @@ const createWindowOptions = (
   return [...windowOptions, ...customOptions];
 };
 
+const createUrlOptions = (
+  urlItems: { name: string }[],
+  existingUrls: string[]
+) => {
+  const urlOptions = urlItems
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((item) => ({
+      value: item.name,
+      label: item.name,
+      icon: Globe,
+    }));
+
+  // Add existing custom URLs that aren't in the suggestions
+  const customOptions = existingUrls
+    .filter((url) => !urlItems.some((item) => item.name === url))
+    .map((url) => ({
+      value: url,
+      label: url,
+      icon: Asterisk,
+    }));
+
+  return [...urlOptions, ...customOptions];
+};
+
 export function RecordingSettings() {
   const { settings, updateSettings, getDataDir, loadUser } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
@@ -141,6 +167,9 @@ export function RecordingSettings() {
 
   const { items: windowItems, isLoading: isWindowItemsLoading } =
     useSqlAutocomplete("window");
+
+  const { items: urlItems, isLoading: isUrlItemsLoading } =
+    useSqlAutocomplete("url");
 
   const [availableMonitors, setAvailableMonitors] = useState<MonitorDevice[]>(
     []
@@ -207,13 +236,13 @@ export function RecordingSettings() {
 
   // Enhanced settings change handler with validation
   const handleSettingsChange = useCallback((
-    newSettings: Partial<SettingsStore>,
+    newSettings: Partial<Settings>,
     restart: boolean = true
   ) => {
     // Sanitize values
-    const sanitizedSettings: Partial<SettingsStore> = {};
+    const sanitizedSettings: Partial<Settings> = {};
     for (const [key, value] of Object.entries(newSettings)) {
-      sanitizedSettings[key as keyof SettingsStore] = sanitizeValue(key as keyof SettingsStore, value);
+      sanitizedSettings[key as keyof Settings] = sanitizeValue(key as keyof SettingsStore, value);
     }
     
     // Update pending changes
@@ -705,6 +734,39 @@ export function RecordingSettings() {
           includedWindows: settings.includedWindows.filter(
             (w) => w !== removedValue
           ),
+        },
+        true
+      );
+    }
+  };
+
+  const handleIgnoredUrlsChange = (values: string[]) => {
+    const currentUrls = settings.ignoredUrls || [];
+    const lowerCaseValues = values.map((v) => v.toLowerCase());
+    const currentLowerCase = currentUrls.map((v) => v.toLowerCase());
+
+    // Find added values
+    const addedValues = values.filter(
+      (v) => !currentLowerCase.includes(v.toLowerCase())
+    );
+    // Find removed values
+    const removedValues = currentUrls.filter(
+      (v) => !lowerCaseValues.includes(v.toLowerCase())
+    );
+
+    if (addedValues.length > 0) {
+      const newValue = addedValues[0];
+      handleSettingsChange(
+        {
+          ignoredUrls: [...currentUrls, newValue],
+        },
+        true
+      );
+    } else if (removedValues.length > 0) {
+      const removedValue = removedValues[0];
+      handleSettingsChange(
+        {
+          ignoredUrls: currentUrls.filter((u) => u !== removedValue),
         },
         true
       );
@@ -1452,9 +1514,9 @@ export function RecordingSettings() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <Label htmlFor="usePiiRemoval">PII removal</Label>
+              <Label htmlFor="usePiiRemoval">PII removal (recommended)</Label>
               <p className="text-sm text-muted-foreground">
-                Redact emails, phone numbers, and addresses from screen text
+                Redact sensitive data from OCR and audio: emails, phones, SSNs, credit cards, IP addresses, API keys
               </p>
             </div>
             <Switch
@@ -1524,6 +1586,46 @@ export function RecordingSettings() {
             onValueChange={handleIncludedWindowsChange}
             placeholder="Select windows to include (optional)..."
           />
+        </div>
+
+        <div className="flex flex-col space-y-2">
+          <Label htmlFor="ignoredUrls" className="flex items-center space-x-2">
+            <span>Ignored URLs (privacy)</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 cursor-default" />
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  <p className="font-semibold mb-1">Block browser URLs from recording</p>
+                  <p className="text-xs mb-2">
+                    Use domain patterns like "wellsfargo.com" or "chase.com".
+                    Works best with the active browser tab. For background tabs,
+                    we also check window titles as a fallback.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Tip: Use specific domains, not generic words like "bank" which may over-match.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
+          <MultiSelect
+            options={createUrlOptions(urlItems || [], settings.ignoredUrls || [])}
+            defaultValue={settings.ignoredUrls || []}
+            value={settings.ignoredUrls || []}
+            onValueChange={handleIgnoredUrlsChange}
+            placeholder="Type domain patterns (e.g., wellsfargo.com, chase.com)..."
+            allowCustomValues={true}
+          />
+          {(settings.ignoredUrls || []).some((url) =>
+            url.length < 5 || ['bank', 'pay', 'money', 'finance'].includes(url.toLowerCase())
+          ) && (
+            <p className="text-xs text-yellow-600 dark:text-yellow-500 flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Short or generic patterns may block unintended sites. Use specific domains.
+            </p>
+          )}
         </div>
       </div>
 

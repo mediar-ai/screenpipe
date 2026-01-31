@@ -8,6 +8,7 @@ import { format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { commands } from "@/lib/utils/tauri";
 import { emit } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -76,13 +77,48 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
     resetSearch,
   } = useKeywordSearchStore();
 
-  // Focus input when modal opens
+  // Focus input when modal opens - use multiple strategies to ensure focus works
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
+    if (isOpen) {
       setSelectedIndex(0);
       setQuery("");
       resetSearch();
+
+      // Multiple focus attempts to handle various timing scenarios
+      const focusInput = () => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          // Also set selection to end of any existing text
+          const len = inputRef.current.value.length;
+          inputRef.current.setSelectionRange(len, len);
+        }
+      };
+
+      // First, ensure the Tauri window has focus (important for global shortcuts)
+      getCurrentWindow().setFocus().catch(() => {});
+
+      // Immediate attempt
+      focusInput();
+
+      // After microtask (React state updates)
+      queueMicrotask(focusInput);
+
+      // After paint (requestAnimationFrame)
+      const rafId = requestAnimationFrame(() => {
+        focusInput();
+        // And once more after another frame for good measure
+        requestAnimationFrame(focusInput);
+      });
+
+      // Fallback with longer delay for Tauri window focus scenarios
+      const timer = setTimeout(focusInput, 100);
+      const timer2 = setTimeout(focusInput, 200);
+
+      return () => {
+        cancelAnimationFrame(rafId);
+        clearTimeout(timer);
+        clearTimeout(timer2);
+      };
     }
   }, [isOpen, resetSearch]);
 
@@ -183,15 +219,27 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
   const activeIndex = hoveredIndex ?? selectedIndex;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
-      {/* Backdrop */}
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] isolate"
+      onWheel={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+      }}
+      onTouchMove={(e) => e.stopPropagation()}
+    >
+      {/* Backdrop - captures all pointer events to prevent interaction with timeline */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
+        onWheel={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+        onTouchMove={(e) => e.stopPropagation()}
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-4xl mx-4 bg-card border border-border shadow-2xl overflow-hidden rounded-lg">
+      <div className="relative w-full max-w-4xl mx-4 bg-card border border-border shadow-2xl overflow-hidden rounded-lg isolate">
         {/* Search Input */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
           <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
@@ -206,6 +254,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck={false}
+            autoFocus
           />
           {isSearching && <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />}
           {query && (
@@ -218,11 +267,26 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
           )}
         </div>
 
-        {/* Results Grid */}
+        {/* Results Grid - isolate scroll to prevent timeline from scrolling */}
         <div
           ref={gridRef}
-          className="max-h-[60vh] overflow-y-auto p-4"
-          onWheel={(e) => e.stopPropagation()}
+          className="max-h-[60vh] overflow-y-auto p-4 overscroll-contain touch-pan-y"
+          onWheel={(e) => {
+            // Stop event from reaching timeline, but allow scrolling within this container
+            e.stopPropagation();
+
+            // Check if we're at scroll boundaries - if so, prevent default to avoid
+            // the event from propagating and scrolling the timeline
+            const target = e.currentTarget;
+            const isAtTop = target.scrollTop === 0 && e.deltaY < 0;
+            const isAtBottom = target.scrollTop + target.clientHeight >= target.scrollHeight && e.deltaY > 0;
+
+            if (isAtTop || isAtBottom) {
+              e.preventDefault();
+            }
+          }}
+          onTouchMove={(e) => e.stopPropagation()}
+          onScroll={(e) => e.stopPropagation()}
         >
           {/* Empty state */}
           {showEmpty && (
@@ -279,15 +343,15 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
                       <p className="text-xs font-medium text-foreground truncate">
                         {result.app_name}
                       </p>
-                      {/* Expanded details on hover/select */}
+                      {/* Expanded details on hover/select - hide noisy OCR, show useful metadata */}
                       {isActive && (
-                        <div className="mt-1 pt-1 border-t border-border">
+                        <div className="mt-1 pt-1 border-t border-border space-y-1">
                           <p className="text-xs text-muted-foreground line-clamp-2">
                             {result.window_name}
                           </p>
-                          {result.text && (
-                            <p className="text-xs text-muted-foreground/70 line-clamp-2 mt-1">
-                              {result.text}
+                          {result.url && (
+                            <p className="text-xs text-muted-foreground/70 truncate">
+                              {result.url}
                             </p>
                           )}
                         </div>

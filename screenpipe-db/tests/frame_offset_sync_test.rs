@@ -40,7 +40,10 @@ mod tests {
         let db = setup_test_db().await;
 
         // Create a video chunk
-        let chunk_id = db.insert_video_chunk("/tmp/test.mp4", "test_monitor").await.unwrap();
+        let chunk_id = db
+            .insert_video_chunk("/tmp/test.mp4", "test_monitor")
+            .await
+            .unwrap();
         assert!(chunk_id > 0, "Video chunk should be created");
 
         // First call should return 0 (no frames yet)
@@ -99,7 +102,10 @@ mod tests {
         println!("\n=== FRAME OFFSET DESYNC DEMONSTRATION ===\n");
 
         // Create a video chunk
-        let _chunk_id = db.insert_video_chunk("/tmp/monitor1.mp4", "monitor_1").await.unwrap();
+        let _chunk_id = db
+            .insert_video_chunk("/tmp/monitor1.mp4", "monitor_1")
+            .await
+            .unwrap();
 
         // Simulate: Capture produces frames with frame_numbers 0, 1, 2, 3, 4
         // But video queue drops frame 2 (due to queue full)
@@ -153,10 +159,7 @@ mod tests {
             "User searches for 'App3' (frame_number={})",
             searched_frame_number
         );
-        println!(
-            "DB returns offset={} for this frame",
-            db_offset_for_frame_3
-        );
+        println!("DB returns offset={} for this frame", db_offset_for_frame_3);
         println!(
             "Video position {} actually contains frame {} (App{})",
             db_offset_for_frame_3, actual_frame_at_video_pos_3, actual_frame_at_video_pos_3
@@ -180,7 +183,10 @@ mod tests {
         println!("\n=== SOLUTION: Use frame_number as offset ===\n");
 
         // Create a video chunk
-        let _chunk_id = db.insert_video_chunk("/tmp/monitor2.mp4", "monitor_2").await.unwrap();
+        let _chunk_id = db
+            .insert_video_chunk("/tmp/monitor2.mp4", "monitor_2")
+            .await
+            .unwrap();
 
         // Same scenario: Video drops frame 2
         // But now we store frames with their actual frame_number as offset
@@ -265,7 +271,10 @@ mod tests {
     async fn test_multiple_windows_same_offset() {
         let db = setup_test_db().await;
 
-        let _chunk_id = db.insert_video_chunk("/tmp/multi.mp4", "multi_window_monitor").await.unwrap();
+        let _chunk_id = db
+            .insert_video_chunk("/tmp/multi.mp4", "multi_window_monitor")
+            .await
+            .unwrap();
 
         // Single capture cycle produces 3 windows
         // All should share the same video offset since they're from same screenshot
@@ -326,7 +335,10 @@ mod tests {
         let db = setup_test_db().await;
 
         // First chunk
-        let _chunk1 = db.insert_video_chunk("/tmp/chunk1.mp4", "reset_test").await.unwrap();
+        let _chunk1 = db
+            .insert_video_chunk("/tmp/chunk1.mp4", "reset_test")
+            .await
+            .unwrap();
         let offset1 = db.get_next_frame_offset("reset_test").await.unwrap();
         assert_eq!(offset1, 0, "First chunk should start at offset 0");
 
@@ -354,7 +366,10 @@ mod tests {
         );
 
         // Create new chunk
-        let _chunk2 = db.insert_video_chunk("/tmp/chunk2.mp4", "reset_test").await.unwrap();
+        let _chunk2 = db
+            .insert_video_chunk("/tmp/chunk2.mp4", "reset_test")
+            .await
+            .unwrap();
 
         // Offset should reset to 0 for new chunk
         let offset_after_new_chunk = db.get_next_frame_offset("reset_test").await.unwrap();
@@ -371,7 +386,10 @@ mod tests {
     async fn test_none_offset_uses_db_fallback() {
         let db = setup_test_db().await;
 
-        let _chunk = db.insert_video_chunk("/tmp/fallback.mp4", "fallback_test").await.unwrap();
+        let _chunk = db
+            .insert_video_chunk("/tmp/fallback.mp4", "fallback_test")
+            .await
+            .unwrap();
 
         // Insert with explicit offset
         let _ = db
@@ -403,12 +421,11 @@ mod tests {
         assert!(frame2_id > 0);
 
         // Verify it got offset 1
-        let offset: (i64,) =
-            sqlx::query_as("SELECT offset_index FROM frames WHERE id = ?1")
-                .bind(frame2_id)
-                .fetch_one(&db.pool)
-                .await
-                .unwrap();
+        let offset: (i64,) = sqlx::query_as("SELECT offset_index FROM frames WHERE id = ?1")
+            .bind(frame2_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
 
         assert_eq!(offset.0, 1, "None offset should fallback to MAX+1");
 

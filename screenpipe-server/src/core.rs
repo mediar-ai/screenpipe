@@ -1,7 +1,7 @@
 use crate::VideoCapture;
 use anyhow::Result;
 use futures::future::join_all;
-use screenpipe_core::pii_removal::remove_pii;
+use screenpipe_core::pii_removal::{remove_pii, remove_pii_from_text_json};
 use screenpipe_core::Language;
 use screenpipe_db::{DatabaseManager, Speaker};
 use screenpipe_events::{poll_meetings_events, send_event};
@@ -25,6 +25,7 @@ pub async fn start_continuous_recording(
     vision_handle: &Handle,
     ignored_windows: &[String],
     include_windows: &[String],
+    ignored_urls: &[String],
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
     realtime_vision: bool,
@@ -39,6 +40,7 @@ pub async fn start_continuous_recording(
                 let ocr_engine = Arc::clone(&ocr_engine);
                 let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
+                let ignored_urls_video = ignored_urls.to_vec();
 
                 let languages = languages.clone();
 
@@ -56,6 +58,7 @@ pub async fn start_continuous_recording(
                             use_pii_removal,
                             &ignored_windows_video,
                             &include_windows_video,
+                            &ignored_urls_video,
                             video_chunk_duration,
                             languages.clone(),
                             capture_unfocused_windows,
@@ -120,6 +123,7 @@ pub async fn record_video(
     use_pii_removal: bool,
     ignored_windows: &[String],
     include_windows: &[String],
+    ignored_urls: &[String],
     video_chunk_duration: Duration,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
@@ -168,6 +172,7 @@ pub async fn record_video(
         monitor_id,
         ignored_windows,
         include_windows,
+        ignored_urls,
         languages,
         capture_unfocused_windows,
     );
@@ -238,14 +243,19 @@ pub async fn record_video(
 
             // Check if this frame was actually written to video
             // If not, skip DB insertion to prevent offset mismatch
-            let frame_write_info = video_capture.frame_write_tracker.get_offset(frame.frame_number);
+            let frame_write_info = video_capture
+                .frame_write_tracker
+                .get_offset(frame.frame_number);
             let video_frame_offset = match frame_write_info {
                 Some(info) => info.offset as i64,
                 None => {
                     // Frame wasn't written to video (likely dropped from video queue)
                     // Wait a bit and retry - the video encoder might not have processed it yet
                     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                    match video_capture.frame_write_tracker.get_offset(frame.frame_number) {
+                    match video_capture
+                        .frame_write_tracker
+                        .get_offset(frame.frame_number)
+                    {
                         Some(info) => info.offset as i64,
                         None => {
                             debug!(
@@ -287,14 +297,18 @@ pub async fn record_video(
                             frame_id,
                             insert_duration.as_millis()
                         );
-                        let text_json =
-                            serde_json::to_string(&window_result.text_json).unwrap_or_default();
 
-                        let text = if use_pii_removal {
-                            &remove_pii(&window_result.text)
+                        // Apply PII removal if enabled
+                        let (text, sanitized_text_json) = if use_pii_removal {
+                            let sanitized_text = remove_pii(&window_result.text);
+                            let sanitized_json =
+                                remove_pii_from_text_json(&window_result.text_json);
+                            (sanitized_text, sanitized_json)
                         } else {
-                            &window_result.text
+                            (window_result.text.clone(), window_result.text_json.clone())
                         };
+                        let text_json =
+                            serde_json::to_string(&sanitized_text_json).unwrap_or_default();
 
                         if realtime_vision {
                             let send_event_start = std::time::Instant::now();
@@ -303,7 +317,7 @@ pub async fn record_video(
                                 WindowOcr {
                                     image: Some(frame.image.clone()),
                                     text: text.clone(),
-                                    text_json: window_result.text_json.clone(),
+                                    text_json: sanitized_text_json.clone(),
                                     app_name: window_result.app_name.clone(),
                                     window_name: window_result.window_name.clone(),
                                     focused: window_result.focused,
@@ -329,7 +343,7 @@ pub async fn record_video(
                         if let Err(e) = db
                             .insert_ocr_text(
                                 frame_id,
-                                text,
+                                &text,
                                 &text_json,
                                 Arc::new((*ocr_engine).clone().into()),
                             )

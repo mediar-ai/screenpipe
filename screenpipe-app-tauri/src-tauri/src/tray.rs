@@ -2,6 +2,7 @@ use crate::commands::show_main_window;
 use crate::health::{get_recording_status, RecordingStatus};
 use crate::sidecar::SidecarState;
 use crate::store::{get_store, OnboardingStore};
+use crate::updates::is_source_build;
 use crate::window_api::ShowRewindWindow;
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -13,6 +14,8 @@ use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     AppHandle, Manager, Wry,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+use tauri_plugin_opener::OpenerExt;
 
 use tracing::{debug, error, info};
 
@@ -71,11 +74,11 @@ fn create_dynamic_menu(
     }
 
     // Full menu after onboarding is complete
-    // Get the show shortcut from store
+    // Get the show shortcut from store (must match frontend defaults in use-settings.tsx)
     let default_shortcut = if cfg!(target_os = "windows") {
         "Alt+S"
     } else {
-        "Super+Ctrl+S"
+        "Control+Super+S"
     };
     let show_shortcut = store
         .get("showScreenpipeShortcut")
@@ -161,6 +164,36 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         }
         "stop_recording" => {
             let _ = app_handle.emit("shortcut-stop-recording", ());
+        }
+        "update_now" => {
+            // For source builds, show info dialog about updates
+            if is_source_build(app_handle) {
+                let app = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let dialog = app
+                        .dialog()
+                        .message(
+                            "auto-updates are only available in the pre-built version.\n\n\
+                            source builds require manual updates from github.",
+                        )
+                        .title("source build detected")
+                        .buttons(MessageDialogButtons::OkCancelCustom(
+                            "download pre-built".to_string(),
+                            "view on github".to_string(),
+                        ));
+
+                    dialog.show(move |clicked_download| {
+                        if clicked_download {
+                            let _ = app.opener().open_url("https://screenpi.pe/download", None::<&str>);
+                        } else {
+                            let _ = app.opener().open_url("https://github.com/mediar-ai/screenpipe/releases", None::<&str>);
+                        }
+                    });
+                });
+            } else {
+                // For production builds, emit event to trigger update
+                let _ = app_handle.emit("update-now-clicked", ());
+            }
         }
         "settings" => {
             let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
@@ -264,40 +297,45 @@ pub fn setup_tray_menu_updater(app: AppHandle, update_item: &tauri::menu::MenuIt
 }
 
 fn format_shortcut(shortcut: &str) -> String {
-    // Add parentheses inside the formatting to ensure consistent styling
-    shortcut
-        .to_lowercase()
-        .replace(
-            "super",
-            if cfg!(target_os = "macos") {
-                "⌘"
-            } else {
-                "win"
-            },
-        )
-        .replace(
-            "alt",
-            if cfg!(target_os = "macos") {
-                "⌥"
-            } else {
-                "alt"
-            },
-        )
-        .replace(
-            "shift",
-            if cfg!(target_os = "macos") {
-                "⇧"
-            } else {
-                "shift"
-            },
-        )
-        .replace(
-            "ctrl",
-            if cfg!(target_os = "macos") {
-                "⌃"
-            } else {
-                "ctrl"
-            },
-        )
-        .replace("+", " ")
+    // Format shortcut for display in tray menu
+    // macOS convention: ⌘ (Command) → ⌃ (Control) → ⌥ (Option) → ⇧ (Shift) → Key
+
+    let parts: Vec<&str> = shortcut.split('+').collect();
+
+    let mut has_cmd = false;
+    let mut has_ctrl = false;
+    let mut has_alt = false;
+    let mut has_shift = false;
+    let mut key = String::new();
+
+    for part in parts {
+        let lower = part.trim().to_lowercase();
+        match lower.as_str() {
+            "super" | "command" | "cmd" | "meta" => has_cmd = true,
+            "control" | "ctrl" | "commandorcontrol" => has_ctrl = true,
+            "alt" | "option" => has_alt = true,
+            "shift" => has_shift = true,
+            _ => key = part.trim().to_uppercase(),
+        }
+    }
+
+    if cfg!(target_os = "macos") {
+        // macOS: Use symbols in correct order (⌘⌃⌥⇧Key)
+        let mut result = String::new();
+        if has_cmd { result.push_str("⌘"); }
+        if has_ctrl { result.push_str("⌃"); }
+        if has_alt { result.push_str("⌥"); }
+        if has_shift { result.push_str("⇧"); }
+        result.push_str(&key);
+        result
+    } else {
+        // Windows/Linux: Use text with + separator
+        let mut parts_out = Vec::new();
+        if has_ctrl { parts_out.push("Ctrl"); }
+        if has_cmd { parts_out.push("Win"); }
+        if has_alt { parts_out.push("Alt"); }
+        if has_shift { parts_out.push("Shift"); }
+        parts_out.push(&key);
+        parts_out.join("+")
+    }
 }

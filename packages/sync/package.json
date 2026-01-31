@@ -1,7 +1,7 @@
 {
   "name": "@screenpipe/sync",
-  "version": "0.4.0",
-  "description": "Sync Screenpipe activity to structured daily summaries. Extract todos, goals, decisions from your screen history.",
+  "version": "0.5.0",
+  "description": "Sync Screenpipe activity to structured daily summaries. Uses Claude Code CLI for AI extraction.",
   "type": "module",
   "bin": {
     "screenpipe-sync": "dist/index.js"
@@ -17,7 +17,7 @@
     "ai",
     "screen-recording",
     "daily-summary",
-    "todo",
+    "claude-code",
     "context-sync"
   ],
   "author": "Louis Beaumont <louis@screenpi.pe>",
@@ -26,9 +26,6 @@
     "type": "git",
     "url": "https://github.com/mediar-ai/screenpipe",
     "directory": "packages/sync"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

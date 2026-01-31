@@ -1,0 +1,36 @@
+{
+  "name": "@screenpipe/agent",
+  "version": "0.2.0",
+  "description": "One-liner to connect Screenpipe to your AI agent. Uses Claude Code CLI for AI summaries. Sync screen data, install skills, schedule morning summaries.",
+  "type": "module",
+  "bin": {
+    "screenpipe-agent": "dist/index.js"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "dev": "bun run src/index.ts",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "screenpipe",
+    "ai-agent",
+    "clawdbot",
+    "moltbot",
+    "memory",
+    "morning-summary"
+  ],
+  "author": "Louis Beaumont <louis@screenpi.pe>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mediar-ai/screenpipe",
+    "directory": "packages/agent"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}

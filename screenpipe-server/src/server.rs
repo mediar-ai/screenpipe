@@ -110,6 +110,8 @@ pub struct AppState {
     pub ws_connection_count: Arc<AtomicUsize>,
     /// LRU cache for search results (10x faster for repeated queries)
     pub search_cache: SearchCache,
+    /// Enable PII removal from text content
+    pub use_pii_removal: bool,
 }
 
 // Update the SearchQuery struct
@@ -1197,6 +1199,7 @@ pub struct SCServer {
     vision_disabled: bool,
     audio_disabled: bool,
     enable_pipe: bool,
+    use_pii_removal: bool,
 }
 
 impl SCServer {
@@ -1210,6 +1213,7 @@ impl SCServer {
         audio_disabled: bool,
         audio_manager: Arc<AudioManager>,
         enable_pipe: bool,
+        use_pii_removal: bool,
     ) -> Self {
         SCServer {
             db,
@@ -1220,6 +1224,7 @@ impl SCServer {
             audio_disabled,
             audio_manager,
             enable_pipe,
+            use_pii_removal,
         }
     }
 
@@ -1274,6 +1279,7 @@ impl SCServer {
                 .max_capacity(1000)
                 .time_to_live(Duration::from_secs(60))
                 .build(),
+            use_pii_removal: self.use_pii_removal,
         });
 
         let cors = CorsLayer::new()
@@ -1302,6 +1308,7 @@ impl SCServer {
             .post("/pipes/purge", purge_pipe_handler)
             .get("/frames/:frame_id", get_frame_data)
             .get("/frames/:frame_id/ocr", get_frame_ocr_data)
+            .get("/frames/next-valid", get_next_valid_frame)
             .get("/health", health_check)
             .post("/raw_sql", execute_raw_sql)
             .post("/add", add_to_database)
@@ -1519,13 +1526,22 @@ async fn add_transcription_to_db(
     transcription: &AudioTranscription,
     device_name: &str,
 ) -> Result<(), anyhow::Error> {
+    use screenpipe_core::pii_removal::remove_pii;
+
     let db = &state.db;
+
+    // Apply PII removal if enabled
+    let sanitized_transcription = if state.use_pii_removal {
+        remove_pii(&transcription.transcription)
+    } else {
+        transcription.transcription.clone()
+    };
 
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
 
     db.insert_audio_transcription(
         dummy_audio_chunk_id, // No associated audio chunk
-        &transcription.transcription,
+        &sanitized_transcription,
         -1,
         &transcription.transcription_engine,
         &screenpipe_db::AudioDevice {
@@ -2479,7 +2495,6 @@ async fn stop_audio_device(
     }))
 }
 
-
 #[derive(Debug, Serialize)]
 struct ExportProgress {
     status: String,
@@ -2550,16 +2565,16 @@ async fn handle_video_export(
     if payload.frame_ids.is_empty() {
         info!("No frame_ids in URL, waiting for WebSocket message...");
         // Wait for frame_ids message with timeout
-        let timeout = tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            socket.recv()
-        ).await;
+        let timeout = tokio::time::timeout(std::time::Duration::from_secs(30), socket.recv()).await;
 
         match timeout {
             Ok(Some(Ok(Message::Text(text)))) => {
                 match serde_json::from_str::<VideoExportMessage>(&text) {
                     Ok(msg) => {
-                        info!("Received {} frame_ids via WebSocket message", msg.frame_ids.len());
+                        info!(
+                            "Received {} frame_ids via WebSocket message",
+                            msg.frame_ids.len()
+                        );
                         payload.frame_ids = msg.frame_ids;
                     }
                     Err(e) => {
@@ -3097,6 +3112,87 @@ pub async fn get_frame_data(
             ))
         }
     }
+}
+
+/// Query parameters for finding the next valid frame
+#[derive(Debug, Deserialize, OaSchema)]
+pub struct NextValidFrameQuery {
+    /// Current frame_id that failed to load
+    pub frame_id: i64,
+    /// Direction: "forward" (default) or "backward"
+    #[serde(default = "default_direction")]
+    pub direction: String,
+    /// Maximum number of frames to check (default: 50)
+    #[serde(default = "default_frame_check_limit")]
+    pub limit: i32,
+}
+
+fn default_direction() -> String {
+    "forward".to_string()
+}
+
+fn default_frame_check_limit() -> i32 {
+    50
+}
+
+/// Response for next valid frame endpoint
+#[derive(OaSchema, Serialize)]
+pub struct NextValidFrameResponse {
+    /// The frame_id of the next valid frame
+    pub frame_id: i64,
+    /// Timestamp of the valid frame
+    pub timestamp: DateTime<Utc>,
+    /// Number of invalid frames that were skipped
+    pub skipped_count: i32,
+}
+
+/// Find the next frame that has a valid video file on disk.
+/// This allows the frontend to skip directly to a valid frame instead of
+/// trying each frame one-by-one when frames fail to load.
+#[oasgen]
+pub async fn get_next_valid_frame(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<NextValidFrameQuery>,
+) -> Result<JsonResponse<NextValidFrameResponse>, (StatusCode, JsonResponse<Value>)> {
+    let forward = query.direction.to_lowercase() != "backward";
+
+    // Get candidate frames from database
+    let candidates = match state.db.get_frames_near(query.frame_id, forward, query.limit).await {
+        Ok(frames) => frames,
+        Err(e) => {
+            error!("Failed to get frames near {}: {}", query.frame_id, e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Database error: {}", e),
+                    "frame_id": query.frame_id
+                })),
+            ));
+        }
+    };
+
+    // Check each frame's video file exists on disk
+    let mut skipped = 0;
+    for (frame_id, file_path, _offset_index, timestamp) in candidates {
+        if std::path::Path::new(&file_path).exists() {
+            return Ok(JsonResponse(NextValidFrameResponse {
+                frame_id,
+                timestamp,
+                skipped_count: skipped,
+            }));
+        }
+        skipped += 1;
+    }
+
+    // No valid frames found
+    Err((
+        StatusCode::NOT_FOUND,
+        JsonResponse(json!({
+            "error": "No valid frames found",
+            "frame_id": query.frame_id,
+            "checked_count": skipped
+        })),
+    ))
 }
 
 /// Response type for frame OCR data endpoint

@@ -347,11 +347,15 @@ impl AudioManager {
     async fn start_transcription_receiver_handler(&self) -> Result<JoinHandle<()>> {
         let transcription_receiver = self.transcription_receiver.clone();
         let db = self.db.clone();
-        let transcription_engine = self.options.read().await.transcription_engine.clone();
+        let options = self.options.read().await;
+        let transcription_engine = options.transcription_engine.clone();
+        let use_pii_removal = options.use_pii_removal;
+        drop(options); // Release lock before spawning
         Ok(tokio::spawn(handle_new_transcript(
             db,
             transcription_receiver,
             transcription_engine,
+            use_pii_removal,
         )))
     }
 
@@ -422,10 +426,7 @@ impl AudioManager {
         // Stop the device in device manager (clears streams and states)
         let _ = self.device_manager.stop_device(&device).await;
 
-        info!(
-            "cleaned up stale device {} for restart",
-            device_name
-        );
+        info!("cleaned up stale device {} for restart", device_name);
 
         Ok(())
     }

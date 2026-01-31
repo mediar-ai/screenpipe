@@ -160,13 +160,46 @@ export class AnthropicProvider implements AIProvider {
 		return messages.map((msg) => {
 			const content: ContentBlockParam[] = Array.isArray(msg.content)
 				? msg.content.map((part) => {
-						if (part.type === 'image') {
+						// Handle OpenAI vision format (image_url)
+						if (part.type === 'image_url' && part.image_url?.url) {
+							const url = part.image_url.url;
+							const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+							if (dataUrlMatch) {
+								return {
+									type: 'image',
+									source: {
+										type: 'base64',
+										media_type: dataUrlMatch[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+										data: dataUrlMatch[2],
+									},
+								} as ImageBlockParam;
+							}
+							// For non-base64 URLs, Anthropic requires base64 so we can't support external URLs directly
+							return {
+								type: 'text',
+								text: `[Image URL: ${url}]`,
+							} as TextBlock;
+						}
+						// Legacy format support
+						if (part.type === 'image' && part.image?.url) {
+							const url = part.image.url;
+							const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+							if (dataUrlMatch) {
+								return {
+									type: 'image',
+									source: {
+										type: 'base64',
+										media_type: dataUrlMatch[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+										data: dataUrlMatch[2],
+									},
+								} as ImageBlockParam;
+							}
 							return {
 								type: 'image',
 								source: {
 									type: 'base64',
 									media_type: 'image/jpeg',
-									data: part.image?.url || '',
+									data: url,
 								},
 							} as ImageBlockParam;
 						}

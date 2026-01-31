@@ -92,7 +92,7 @@ impl SimSpeaker {
         Self {
             id,
             name: name.to_string(),
-            wpm: 150.0,      // Average speaking rate
+            wpm: 150.0, // Average speaking rate
             filler_rate: 0.05,
             repetition_rate: 0.02,
         }

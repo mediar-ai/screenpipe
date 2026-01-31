@@ -93,17 +93,17 @@ jobs:
           - platform: "macos-latest"
             args: "--target aarch64-apple-darwin --features metal"
             target: aarch64-apple-darwin
-            tauri-args: "--target aarch64-apple-darwin"
+            tauri-args: "--target aarch64-apple-darwin --features official-build"
             os_type: "macos"
           - platform: "macos-latest"
             args: "--target x86_64-apple-darwin --features metal"
             target: x86_64-apple-darwin
-            tauri-args: "--target x86_64-apple-darwin"
+            tauri-args: "--target x86_64-apple-darwin --features official-build"
             os_type: "macos"
           - platform: "windows-2019"
             args: "--target x86_64-pc-windows-msvc --features mkl"
             pre-build-args: ""
-            tauri-args: "--target x86_64-pc-windows-msvc"
+            tauri-args: "--target x86_64-pc-windows-msvc --features official-build"
             os_type: "windows"
           # Linux disabled - too many bundling issues
           # - platform: "ubuntu-22.04"

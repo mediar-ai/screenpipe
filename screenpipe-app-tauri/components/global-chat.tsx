@@ -8,9 +8,9 @@ import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettings, ChatMessage, ChatConversation } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, FolderOpen } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, FolderOpen, Zap, History, Search, Trash2, ChevronLeft, Copy, Check } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { parseInt } from "lodash";
 import { motion, AnimatePresence } from "framer-motion";
@@ -443,18 +443,15 @@ EXAMPLES:
     type: "function",
     function: {
       name: "web_search",
-      description: `Search the web for current, up-to-date information. Use this when:
-- User asks about recent news, events, or current information
-- User wants to verify or supplement screen data with web sources
-- User asks about topics that need real-time data (stocks, weather, news)
-- Combining screen context with external web information
+      description: `Search the internet for current information using Google Search. YOU MUST CALL THIS FUNCTION when:
+- User says "search", "look up", "find", "google", or "search the web/internet"
+- User asks about news, current events, people, companies, or real-time data
+- User asks "what is [topic]" where the topic is a public person, company, or concept
+- User wants to combine screen context with external information
 
-This tool uses Google Search to ground responses in current web data and provides cited sources.
+IMPORTANT: When user asks to search the internet/web, ALWAYS call this function - do NOT say you cannot search.
 
-EXAMPLES:
-- "What's the latest news about [topic from my screen]?"
-- "Search the web for current ECB rates"
-- "Find recent articles about [something I was researching]"`,
+Returns search results with cited sources from the web.`,
       parameters: {
         type: "object",
         properties: {
@@ -469,17 +466,20 @@ EXAMPLES:
   },
 ];
 
-const SYSTEM_PROMPT = `You are a helpful AI assistant that can search through the user's Screenpipe data - their screen recordings, audio transcriptions, and UI interactions. You also have access to web search for current information.
+const SYSTEM_PROMPT = `You are a helpful AI assistant with two powerful tools:
 
-CAPABILITIES:
-1. **Screen/Audio Search** (search_content): Search user's captured screen text, audio transcriptions, UI elements
-2. **Web Search** (web_search): Search the internet for current news, real-time data, and external information
+1. **search_content**: Search the user's Screenpipe data (screen recordings, audio transcriptions, UI interactions)
+2. **web_search**: Search the LIVE INTERNET via Google Search (you CAN do this!)
 
-WHEN TO USE WEB SEARCH:
-- User asks about current events, news, or real-time information
-- User wants to combine screen context with external web data (e.g., "based on what I was looking at, search for...")
-- Topics that need up-to-date information (stock prices, news, weather, recent developments)
-- Verifying or supplementing information from screen captures
+IMPORTANT - WEB SEARCH CAPABILITY:
+You HAVE the ability to search the internet. When the user asks you to "search the internet", "look up", "google", or find information about a person, company, news, or any topic - YOU MUST call the web_search function. Do NOT say you cannot search the internet.
+
+WHEN TO USE web_search (CALL THE FUNCTION):
+- User says "search", "look up", "find", "google something"
+- User asks about people (e.g., "Sam Altman", "Elon Musk")
+- User asks about companies, products, news, current events
+- User asks "what is X" where X is a public topic
+- Any request that requires current/real-time information from the web
 
 CRITICAL SCREEN SEARCH RULES (database has 600k+ entries - ALWAYS use time filters):
 1. ALWAYS include start_time in EVERY search - NEVER search without a time range
@@ -519,11 +519,12 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  timestamp: number;
 }
 
 export function GlobalChat() {
   const [open, setOpen] = useState(false);
-  const { settings } = useSettings();
+  const { settings, updateSettings, isSettingsLoaded } = useSettings();
   const pathname = usePathname();
   const { isMac } = usePlatform();
   const { selectionRange, setSelectionRange } = useTimelineSelection();
@@ -537,6 +538,7 @@ export function GlobalChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [activePreset, setActivePreset] = useState<AIPreset | undefined>();
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
@@ -563,6 +565,11 @@ export function GlobalChat() {
   const [opencodeSessionId, setOpencodeSessionId] = useState<string | null>(null);
   const [opencodeProjectDir, setOpencodeProjectDir] = useState<string>("");
   const [opencodeStarting, setOpencodeStarting] = useState(false);
+
+  // Chat history state
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
 
   const appMentionSuggestions = React.useMemo(
     () => buildAppMentionSuggestions(appItems, APP_SUGGESTION_LIMIT),
@@ -749,6 +756,174 @@ export function GlobalChat() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnTimeline, isExporting, selectionRange]);
+
+  // Load active conversation from settings on mount
+  useEffect(() => {
+    if (!isSettingsLoaded) return;
+
+    const history = settings.chatHistory;
+    if (history?.activeConversationId && history.historyEnabled !== false) {
+      const activeConv = history.conversations.find(
+        c => c.id === history.activeConversationId
+      );
+      if (activeConv && activeConv.messages.length > 0) {
+        setMessages(activeConv.messages.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        })));
+        setConversationId(activeConv.id);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSettingsLoaded]);
+
+  // Save conversation to settings
+  const saveConversation = async (msgs: Message[]) => {
+    if (!settings.chatHistory?.historyEnabled) return;
+    if (msgs.length === 0) return;
+
+    const history = settings.chatHistory || { conversations: [], activeConversationId: null, historyEnabled: true };
+    const convId = conversationId || crypto.randomUUID();
+
+    const existingIndex = history.conversations.findIndex(c => c.id === convId);
+    // Use first user message for title, truncated to 50 chars
+    const firstUserMsg = msgs.find(m => m.role === "user");
+    const title = firstUserMsg?.content.slice(0, 50) || "New Chat";
+
+    const conversation: ChatConversation = {
+      id: convId,
+      title,
+      messages: msgs.slice(-100).map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+      })),
+      createdAt: existingIndex >= 0 ? history.conversations[existingIndex].createdAt : Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    let newConversations = [...history.conversations];
+    if (existingIndex >= 0) {
+      newConversations[existingIndex] = conversation;
+    } else {
+      // Add new conversation at the beginning, limit to 50
+      newConversations = [conversation, ...newConversations].slice(0, 50);
+    }
+
+    await updateSettings({
+      chatHistory: {
+        ...history,
+        conversations: newConversations,
+        activeConversationId: convId,
+      }
+    });
+
+    if (!conversationId) {
+      setConversationId(convId);
+    }
+  };
+
+  // Delete a conversation
+  const deleteConversation = async (convId: string) => {
+    const history = settings.chatHistory;
+    if (!history) return;
+
+    const newConversations = history.conversations.filter(c => c.id !== convId);
+    const newActiveId = history.activeConversationId === convId ? null : history.activeConversationId;
+
+    await updateSettings({
+      chatHistory: {
+        ...history,
+        conversations: newConversations,
+        activeConversationId: newActiveId,
+      }
+    });
+
+    // If we deleted the current conversation, clear the chat
+    if (conversationId === convId) {
+      setMessages([]);
+      setConversationId(null);
+    }
+  };
+
+  // Load a specific conversation
+  const loadConversation = (conv: ChatConversation) => {
+    setMessages(conv.messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+    })));
+    setConversationId(conv.id);
+    setShowHistory(false);
+
+    // Update active conversation
+    if (settings.chatHistory) {
+      updateSettings({
+        chatHistory: {
+          ...settings.chatHistory,
+          activeConversationId: conv.id,
+        }
+      });
+    }
+  };
+
+  // Start a new conversation
+  const startNewConversation = () => {
+    setMessages([]);
+    setConversationId(null);
+    setInput("");
+    setShowHistory(false);
+  };
+
+  // Filter conversations by search
+  const filteredConversations = React.useMemo(() => {
+    const convs = settings.chatHistory?.conversations || [];
+    if (!historySearch.trim()) return convs;
+
+    const search = historySearch.toLowerCase();
+    return convs.filter(c =>
+      c.title.toLowerCase().includes(search) ||
+      c.messages.some(m => m.content.toLowerCase().includes(search))
+    );
+  }, [settings.chatHistory?.conversations, historySearch]);
+
+  // Group conversations by date
+  const groupedConversations = React.useMemo(() => {
+    const groups: { label: string; conversations: ChatConversation[] }[] = [];
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const todayConvs: ChatConversation[] = [];
+    const yesterdayConvs: ChatConversation[] = [];
+    const lastWeekConvs: ChatConversation[] = [];
+    const olderConvs: ChatConversation[] = [];
+
+    for (const conv of filteredConversations) {
+      const convDate = new Date(conv.updatedAt);
+      if (convDate >= today) {
+        todayConvs.push(conv);
+      } else if (convDate >= yesterday) {
+        yesterdayConvs.push(conv);
+      } else if (convDate >= lastWeek) {
+        lastWeekConvs.push(conv);
+      } else {
+        olderConvs.push(conv);
+      }
+    }
+
+    if (todayConvs.length > 0) groups.push({ label: "Today", conversations: todayConvs });
+    if (yesterdayConvs.length > 0) groups.push({ label: "Yesterday", conversations: yesterdayConvs });
+    if (lastWeekConvs.length > 0) groups.push({ label: "Last 7 Days", conversations: lastWeekConvs });
+    if (olderConvs.length > 0) groups.push({ label: "Older", conversations: olderConvs });
+
+    return groups;
+  }, [filteredConversations]);
 
   // Fetch speakers dynamically when filter changes
   useEffect(() => {
@@ -1329,6 +1504,7 @@ export function GlobalChat() {
       id: Date.now().toString(),
       role: "user",
       content: displayMessage,
+      timestamp: Date.now(),
     };
 
     const assistantMessageId = (Date.now() + 1).toString();
@@ -1392,7 +1568,7 @@ export function GlobalChat() {
       // Add placeholder for streaming response
       setMessages((prev) => [
         ...prev,
-        { id: assistantMessageId, role: "assistant", content: "" },
+        { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() },
       ]);
 
       let accumulatedText = "";
@@ -1836,6 +2012,7 @@ export function GlobalChat() {
             id: Date.now().toString(),
             role: "assistant",
             content: `Error: ${errorMessage}`,
+            timestamp: Date.now(),
           },
         ];
       });
@@ -1843,6 +2020,16 @@ export function GlobalChat() {
       setIsLoading(false);
       setIsStreaming(false);
       abortControllerRef.current = null;
+
+      // Save conversation after state updates
+      setTimeout(() => {
+        setMessages((currentMsgs) => {
+          if (currentMsgs.length > 0) {
+            saveConversation(currentMsgs);
+          }
+          return currentMsgs;
+        });
+      }, 100);
     }
   }
 
@@ -1948,23 +2135,125 @@ export function GlobalChat() {
                 <FolderOpen size={16} />
               </button>
             )}
-            <button
-              onClick={() => {
-                setMessages([]);
-                setInput("");
-              }}
-              className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
+            <Button
+              variant={showHistory ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setShowHistory(!showHistory)}
+              className="h-7 px-2 gap-1 text-xs"
+              title="Chat history"
+            >
+              <History size={14} />
+              <span className="hidden sm:inline">History</span>
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={startNewConversation}
+              className="h-7 px-3 gap-1.5 text-xs bg-foreground text-background hover:bg-foreground/90"
               title="New chat"
             >
-              <Plus size={16} />
-            </button>
+              <Plus size={14} />
+              <span>New</span>
+            </Button>
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/50 border border-border/50 rounded">
               {formatShortcutDisplay(settings.showChatShortcut || (isMac ? DEFAULT_CHAT_SHORTCUT_MAC : DEFAULT_CHAT_SHORTCUT_OTHER), isMac)}
             </kbd>
           </div>
 
-          {/* Messages - with subtle pattern background */}
-          <div className="relative flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Main content area with optional history sidebar */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* History Sidebar */}
+            <AnimatePresence>
+              {showHistory && (
+                <motion.div
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 280, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="border-r border-border/50 bg-muted/30 flex flex-col overflow-hidden"
+                >
+                  {/* History Header */}
+                  <div className="p-3 border-b border-border/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Chat History</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowHistory(false)}
+                        className="h-6 w-6 p-0"
+                      >
+                        <ChevronLeft size={14} />
+                      </Button>
+                    </div>
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Search conversations..."
+                        value={historySearch}
+                        onChange={(e) => setHistorySearch(e.target.value)}
+                        className="h-8 pl-8 text-xs bg-background/50"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Conversations List */}
+                  <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                    {groupedConversations.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <History className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                        <p className="text-xs text-muted-foreground">
+                          {historySearch ? "No matching conversations" : "No chat history yet"}
+                        </p>
+                      </div>
+                    ) : (
+                      groupedConversations.map((group) => (
+                        <div key={group.label} className="space-y-1">
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-2 py-1">
+                            {group.label}
+                          </p>
+                          {group.conversations.map((conv) => (
+                            <div
+                              key={conv.id}
+                              className={cn(
+                                "group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors",
+                                conv.id === conversationId
+                                  ? "bg-foreground/10"
+                                  : "hover:bg-foreground/5"
+                              )}
+                              onClick={() => loadConversation(conv)}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">
+                                  {conv.title}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {conv.messages.length} messages
+                                </p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteConversation(conv.id);
+                                }}
+                                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Messages - with subtle pattern background */}
+            <div className="relative flex-1 overflow-y-auto p-4 space-y-4">
             {/* Subtle geometric background pattern */}
             <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/svg%3E")`,
@@ -2122,9 +2411,10 @@ export function GlobalChat() {
                     <PipeAIIcon size={16} animated={false} />
                   )}
                 </div>
+                <div className="group/message flex-1 flex flex-col min-w-0">
                 <div
                   className={cn(
-                    "relative flex-1 rounded-xl px-4 py-3 text-sm border",
+                    "relative rounded-xl px-4 py-3 text-sm border overflow-hidden",
                     message.role === "user"
                       ? "bg-foreground text-background border-foreground"
                       : "bg-muted/30 border-border/50"
@@ -2155,16 +2445,34 @@ export function GlobalChat() {
                           </a>
                         );
                       },
+                      pre({ children, ...props }) {
+                        return (
+                          <pre className="overflow-x-auto rounded-lg bg-neutral-900 dark:bg-neutral-950 text-neutral-100 p-3 my-2 text-xs" style={{ maxWidth: 'calc(100% - 0px)' }} {...props}>
+                            {children}
+                          </pre>
+                        );
+                      },
                       code({ className, children, ...props }) {
                         const content = String(children).replace(/\n$/, "");
                         const isMedia = content.trim().toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
+                        const isCodeBlock = className?.includes("language-");
 
                         if (isMedia) {
                           return <VideoComponent filePath={content.trim()} className="my-2" />;
                         }
 
+                        // Code block (inside pre) - just the code, pre handles styling
+                        if (isCodeBlock) {
+                          return (
+                            <code className="font-mono text-xs block whitespace-pre text-neutral-100" {...props}>
+                              {content}
+                            </code>
+                          );
+                        }
+
+                        // Inline code
                         return (
-                          <code className="px-1.5 py-0.5 rounded bg-background/50 border border-border/50 font-mono text-xs" {...props}>
+                          <code className="px-1.5 py-0.5 rounded bg-neutral-800 dark:bg-neutral-900 text-neutral-100 font-mono text-xs" {...props}>
                             {content}
                           </code>
                         );
@@ -2173,6 +2481,39 @@ export function GlobalChat() {
                   >
                     {message.content}
                   </MemoizedReactMarkdown>
+                  {/* Upgrade button for daily limit errors */}
+                  {message.role === "assistant" &&
+                   (message.content.includes("used all your free queries") ||
+                    message.content.includes("requires an upgrade")) && (
+                    <button
+                      onClick={() => setShowUpgradeDialog(true)}
+                      className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
+                    >
+                      <Zap className="h-4 w-4" />
+                      upgrade now
+                    </button>
+                  )}
+                </div>
+                  {/* Copy button - appears on hover, outside the message box */}
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(message.content);
+                      setCopiedMessageId(message.id);
+                      setTimeout(() => setCopiedMessageId(null), 2000);
+                    }}
+                    className={cn(
+                      "self-end mt-1 p-1 rounded-md transition-all duration-200",
+                      "opacity-0 group-hover/message:opacity-100",
+                      "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    )}
+                    title="Copy message"
+                  >
+                    {copiedMessageId === message.id ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                  </button>
                 </div>
               </motion.div>
             ))}
@@ -2189,6 +2530,7 @@ export function GlobalChat() {
             )}
             <div ref={messagesEndRef} />
           </div>
+          </div> {/* End of main content area with history sidebar */}
 
           {/* AI Preset Selector & Input - refined styling */}
           <div className="relative border-t border-border/50 bg-gradient-to-t from-muted/20 to-transparent">

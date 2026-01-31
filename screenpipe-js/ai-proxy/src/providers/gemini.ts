@@ -51,6 +51,42 @@ export class GeminiProvider implements AIProvider {
 	}
 
 	/**
+	 * Detect if user is explicitly asking for web search
+	 * Fallback for when frontend doesn't send web_search tool
+	 */
+	private detectWebSearchIntent(messages: Message[]): string | null {
+		const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+		if (!lastUserMsg) return null;
+
+		const content = typeof lastUserMsg.content === 'string'
+			? lastUserMsg.content.toLowerCase()
+			: '';
+
+		const webSearchPatterns = [
+			/search\s+(.+?)\s+on\s+(?:the\s+)?(?:internet|web)/i,
+			/search\s+(?:the\s+)?(?:internet|web)\s+(?:for|about)\s+(.+)/i,
+			/(?:use\s+)?(?:internet|web)\s+search/i,
+			/search\s+(?:the\s+)?(?:internet|web)/i,
+		];
+
+		for (const pattern of webSearchPatterns) {
+			const match = content.match(pattern);
+			if (match) {
+				// Extract query from match or use full content
+				const query = match[1]?.trim().replace(/[?.!]+$/, '') ||
+					content.replace(/search|internet|web|the|for|about|use/gi, '').trim();
+				if (query.length > 2) {
+					console.log('[Gemini Vertex] Web search intent detected:', query);
+					return query;
+				}
+			}
+		}
+
+		return null;
+	}
+
+
+	/**
 	 * Generate a JWT for service account authentication
 	 */
 	private async generateJWT(): Promise<string> {
@@ -153,11 +189,14 @@ export class GeminiProvider implements AIProvider {
 	private mapModelToVertex(model: string): string {
 		// Map common model names to Vertex AI format
 		const modelMap: Record<string, string> = {
+			'gemini-flash': 'gemini-2.0-flash',
 			'gemini-3-flash': 'gemini-2.0-flash',
+			'gemini-pro': 'gemini-2.0-pro-exp-02-05',
 			'gemini-3-pro': 'gemini-2.0-pro-exp-02-05',
 			'gemini-2.5-flash': 'gemini-2.0-flash',
 			'gemini-2.5-pro': 'gemini-2.0-pro-exp-02-05',
 		};
+		console.log('[Gemini Vertex] Model mapping:', model, '->', modelMap[model] || model);
 		return modelMap[model] || model;
 	}
 
@@ -166,12 +205,9 @@ export class GeminiProvider implements AIProvider {
 		const url = this.getEndpointUrl(body.model, false);
 		const hasWebSearch = this.hasWebSearchTool(body.tools);
 
-		const requestBody = this.buildRequestBody(body, hasWebSearch);
+		let requestBody = this.buildRequestBody(body, hasWebSearch);
 
 		console.log('[Gemini Vertex] Request to:', url);
-		if (hasWebSearch) {
-			console.log('[Gemini Vertex] Web search grounding enabled');
-		}
 
 		const response = await fetch(url, {
 			method: 'POST',
@@ -188,20 +224,88 @@ export class GeminiProvider implements AIProvider {
 			throw new Error(`Gemini Vertex AI request failed: ${response.status} ${error}`);
 		}
 
-		const result = await response.json();
-		return new Response(JSON.stringify(this.formatResponse(result, hasWebSearch)), {
+		let result = await response.json();
+
+		// Check if model called web_search - if so, execute it and continue
+		const parts = result.candidates?.[0]?.content?.parts || [];
+		const webSearchCall = parts.find((p: any) =>
+			p.functionCall?.name === 'web_search' || p.functionCall?.name === 'google_search'
+		);
+
+		if (webSearchCall) {
+			const query = webSearchCall.functionCall.args?.query || webSearchCall.functionCall.args?.q || '';
+			console.log('[Gemini Vertex] Model called web_search, executing for:', query);
+
+			try {
+				const searchResult = await this.executeWebSearch(query);
+
+				// Build follow-up request with the search result
+				const followUpContents = [
+					...requestBody.contents,
+					{
+						role: 'model',
+						parts: [{ functionCall: webSearchCall.functionCall }],
+					},
+					{
+						role: 'user',
+						parts: [{
+							functionResponse: {
+								name: 'web_search',
+								response: { result: searchResult.content },
+							},
+						}],
+					},
+				];
+
+				const followUpResponse = await fetch(url, {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${accessToken}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify({
+						contents: followUpContents,
+						generationConfig: requestBody.generationConfig,
+					}),
+				});
+
+				if (followUpResponse.ok) {
+					result = await followUpResponse.json();
+				}
+			} catch (error) {
+				console.error('[Gemini Vertex] Web search execution failed:', error);
+				// Return the original response with the tool call
+			}
+		}
+
+		return new Response(JSON.stringify(this.formatResponse(result, false)), {
 			headers: { 'Content-Type': 'application/json' },
 		});
 	}
 
 	async createStreamingCompletion(body: RequestBody): Promise<ReadableStream> {
 		const accessToken = await this.getAccessToken();
-		const url = this.getEndpointUrl(body.model, true) + '?alt=sse';
 		const hasWebSearch = this.hasWebSearchTool(body.tools);
 
+		// Fallback: detect web search intent when frontend doesn't send web_search tool
+		if (!hasWebSearch) {
+			const webSearchQuery = this.detectWebSearchIntent(body.messages);
+			if (webSearchQuery) {
+				console.log('[Gemini Vertex] Fallback web search for:', webSearchQuery);
+				return this.createDirectWebSearchStream(webSearchQuery);
+			}
+		}
+
+		const url = this.getEndpointUrl(body.model, true) + '?alt=sse';
 		const requestBody = this.buildRequestBody(body, hasWebSearch);
 
 		console.log('[Gemini Vertex] Streaming request to:', url);
+		console.log('[Gemini Vertex] Request body:', JSON.stringify({
+			hasSystemInstruction: !!requestBody.systemInstruction,
+			hasTools: !!(requestBody.tools?.length),
+			toolNames: requestBody.tools?.[0]?.functionDeclarations?.map((f: any) => f.name) || [],
+			hasToolConfig: !!requestBody.toolConfig,
+		}));
 
 		const response = await fetch(url, {
 			method: 'POST',
@@ -223,12 +327,61 @@ export class GeminiProvider implements AIProvider {
 		let buffer = '';
 		const self = this;
 
+		let toolCallIndex = 0;
+		let pendingWebSearch: { name: string; args: any } | null = null;
+
 		return new ReadableStream({
 			async start(controller) {
 				try {
 					while (true) {
 						const { done, value } = await reader.read();
 						if (done) {
+							// Before closing, check if we have a pending web search to execute
+							if (pendingWebSearch) {
+								const query = pendingWebSearch.args?.query || pendingWebSearch.args?.q || '';
+								console.log('[Gemini Vertex] Executing pending web_search:', query);
+
+								// Stream a searching indicator
+								controller.enqueue(
+									new TextEncoder().encode(
+										`data: ${JSON.stringify({
+											choices: [{ delta: { content: `\n\n*Searching the web for "${query}"...*\n\n` } }],
+										})}\n\n`
+									)
+								);
+
+								try {
+									const searchResult = await self.executeWebSearch(query);
+
+									// Stream the search result as content
+									controller.enqueue(
+										new TextEncoder().encode(
+											`data: ${JSON.stringify({
+												choices: [{ delta: { content: '\n\n' + searchResult.content } }],
+											})}\n\n`
+										)
+									);
+								} catch (error) {
+									console.error('[Gemini Vertex] Web search failed:', error);
+									controller.enqueue(
+										new TextEncoder().encode(
+											`data: ${JSON.stringify({
+												choices: [{ delta: { content: '\n\nWeb search failed. Please try again.' } }],
+											})}\n\n`
+										)
+									);
+								}
+
+								// Send proper finish_reason after web search completes
+								controller.enqueue(
+									new TextEncoder().encode(
+										`data: ${JSON.stringify({
+											choices: [{ delta: {}, finish_reason: 'stop' }],
+										})}\n\n`
+									)
+								);
+							}
+
 							controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
 							controller.close();
 							return;
@@ -242,25 +395,76 @@ export class GeminiProvider implements AIProvider {
 							if (line.startsWith('data: ')) {
 								try {
 									const data = JSON.parse(line.slice(6));
-									const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-									if (text) {
-										controller.enqueue(
-											new TextEncoder().encode(
-												`data: ${JSON.stringify({
-													choices: [{ delta: { content: text } }],
-												})}\n\n`
-											)
-										);
-									}
+									const parts = data.candidates?.[0]?.content?.parts || [];
 
-									// Check for grounding metadata at the end
-									if (hasWebSearch && data.candidates?.[0]?.groundingMetadata) {
-										const sourcesText = self.formatGroundingSources(data.candidates[0].groundingMetadata);
-										if (sourcesText) {
+									for (const part of parts) {
+										// Handle text content
+										if (part.text) {
 											controller.enqueue(
 												new TextEncoder().encode(
 													`data: ${JSON.stringify({
-														choices: [{ delta: { content: sourcesText } }],
+														choices: [{ delta: { content: part.text } }],
+													})}\n\n`
+												)
+											);
+										}
+
+										// Handle function calls
+										if (part.functionCall) {
+											const funcName = part.functionCall.name;
+											console.log('[Gemini Vertex] Model called function:', funcName, JSON.stringify(part.functionCall.args || {}));
+
+											// If it's web_search, save it for execution after stream ends
+											if (funcName === 'web_search' || funcName === 'google_search') {
+												pendingWebSearch = {
+													name: funcName,
+													args: part.functionCall.args || {},
+												};
+												console.log('[Gemini Vertex] Saving web_search for execution after stream ends');
+												// Don't emit the tool call - we'll handle it ourselves
+											} else {
+												// For other tools, emit the tool call for client to handle
+												const toolCallId = `call_${Date.now()}_${toolCallIndex}`;
+												controller.enqueue(
+													new TextEncoder().encode(
+														`data: ${JSON.stringify({
+															choices: [{
+																delta: {
+																	tool_calls: [{
+																		index: toolCallIndex,
+																		id: toolCallId,
+																		type: 'function',
+																		function: {
+																			name: funcName,
+																			arguments: JSON.stringify(part.functionCall.args || {}),
+																		},
+																	}],
+																},
+															}],
+														})}\n\n`
+													)
+												);
+												toolCallIndex++;
+											}
+										}
+									}
+
+									// Check for finish reason
+									const finishReason = data.candidates?.[0]?.finishReason;
+									if (finishReason) {
+										// If we have a pending web search, don't send 'tool_calls' finish reason
+										// because we'll handle the tool ourselves
+										if (pendingWebSearch && finishReason === 'TOOL_USE') {
+											console.log('[Gemini Vertex] Suppressing tool_calls finish_reason for web_search');
+											// Don't emit finish_reason yet - we'll send 'stop' after web search completes
+										} else {
+											const mappedReason = finishReason === 'STOP' ? 'stop' :
+												finishReason === 'MAX_TOKENS' ? 'length' :
+												finishReason === 'TOOL_USE' ? 'tool_calls' : 'stop';
+											controller.enqueue(
+												new TextEncoder().encode(
+													`data: ${JSON.stringify({
+														choices: [{ delta: {}, finish_reason: mappedReason }],
 													})}\n\n`
 												)
 											);
@@ -280,7 +484,9 @@ export class GeminiProvider implements AIProvider {
 		});
 	}
 
-	private buildRequestBody(body: RequestBody, hasWebSearch: boolean): any {
+	private buildRequestBody(body: RequestBody, _hasWebSearch: boolean): any {
+		// Extract system message for systemInstruction
+		const systemMsg = body.messages.find(m => m.role === 'system');
 		const contents = this.formatMessages(body.messages);
 
 		const requestBody: any = {
@@ -290,6 +496,17 @@ export class GeminiProvider implements AIProvider {
 			},
 		};
 
+		// Add system instruction properly (Gemini's native way)
+		if (systemMsg) {
+			const systemText = typeof systemMsg.content === 'string' ? systemMsg.content : '';
+			if (systemText) {
+				requestBody.systemInstruction = {
+					parts: [{ text: systemText }],
+				};
+				console.log('[Gemini Vertex] System instruction set');
+			}
+		}
+
 		// Add response format if specified
 		if (body.response_format?.type === 'json_schema' && body.response_format.schema) {
 			requestBody.generationConfig.responseMimeType = 'application/json';
@@ -298,12 +515,186 @@ export class GeminiProvider implements AIProvider {
 			requestBody.generationConfig.responseMimeType = 'application/json';
 		}
 
-		// Add Google Search grounding if web_search tool is requested
-		if (hasWebSearch) {
-			requestBody.tools = [{ googleSearch: {} }];
+		// Always send function declarations - let the model decide which tool to use
+		// When model calls web_search, we'll execute it via Google Search grounding in a follow-up
+		if (body.tools && body.tools.length > 0) {
+			const functionDeclarations = this.convertToolsToGeminiFormat(body.tools);
+			if (functionDeclarations.length > 0) {
+				requestBody.tools = [{ functionDeclarations }];
+				// Enable automatic function calling mode
+				requestBody.toolConfig = {
+					functionCallingConfig: {
+						mode: 'AUTO',
+					},
+				};
+				console.log('[Gemini Vertex] Tools available:', functionDeclarations.map(f => f.name));
+			}
 		}
 
 		return requestBody;
+	}
+
+	/**
+	 * Convert OpenAI-style function tools to Gemini functionDeclarations format
+	 */
+	private convertToolsToGeminiFormat(tools: any[]): any[] {
+		const functionDeclarations: any[] = [];
+
+		for (const tool of tools) {
+			// Convert OpenAI function format to Gemini format
+			if (tool.type === 'function' && tool.function) {
+				functionDeclarations.push({
+					name: tool.function.name,
+					description: tool.function.description || '',
+					parameters: this.convertParametersToGeminiSchema(tool.function.parameters),
+				});
+			}
+		}
+
+		return functionDeclarations;
+	}
+
+	/**
+	 * Execute a web search using Google Search grounding
+	 * Called when the model decides to use the web_search tool
+	 */
+	async executeWebSearch(query: string): Promise<{ content: string; sources: any[] }> {
+		const accessToken = await this.getAccessToken();
+		const url = this.getEndpointUrl('gemini-2.0-flash', false);
+
+		const requestBody = {
+			contents: [{
+				role: 'user',
+				parts: [{ text: `Search the web and provide information about: ${query}` }],
+			}],
+			tools: [{ googleSearch: {} }],
+			generationConfig: {
+				temperature: 0.7,
+			},
+		};
+
+		console.log('[Gemini Vertex] Executing web search for:', query);
+
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: {
+				'Authorization': `Bearer ${accessToken}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify(requestBody),
+		});
+
+		if (!response.ok) {
+			const error = await response.text();
+			console.error('[Gemini Vertex] Web search error:', error);
+			throw new Error(`Web search failed: ${response.status}`);
+		}
+
+		const result = await response.json();
+		const parts = result.candidates?.[0]?.content?.parts || [];
+		const groundingMetadata = result.candidates?.[0]?.groundingMetadata;
+
+		let content = parts.map((p: any) => p.text || '').join('');
+
+		// Append sources
+		if (groundingMetadata?.groundingChunks?.length) {
+			content += '\n\n**Sources:**\n';
+			for (const chunk of groundingMetadata.groundingChunks) {
+				if (chunk.web?.uri) {
+					content += `- [${chunk.web.title || chunk.web.uri}](${chunk.web.uri})\n`;
+				}
+			}
+		}
+
+		const sources = (groundingMetadata?.groundingChunks || []).map((chunk: any) => ({
+			title: chunk.web?.title,
+			url: chunk.web?.uri,
+		}));
+
+		return { content, sources };
+	}
+
+	/**
+	 * Create a streaming response for direct web search (fallback)
+	 */
+	private async createDirectWebSearchStream(query: string): Promise<ReadableStream> {
+		const self = this;
+		return new ReadableStream({
+			async start(controller) {
+				try {
+					controller.enqueue(
+						new TextEncoder().encode(
+							`data: ${JSON.stringify({
+								choices: [{ delta: { content: `*Searching the web for "${query}"...*\n\n` } }],
+							})}\n\n`
+						)
+					);
+
+					const searchResult = await self.executeWebSearch(query);
+
+					controller.enqueue(
+						new TextEncoder().encode(
+							`data: ${JSON.stringify({
+								choices: [{ delta: { content: searchResult.content } }],
+							})}\n\n`
+						)
+					);
+
+					controller.enqueue(
+						new TextEncoder().encode(
+							`data: ${JSON.stringify({
+								choices: [{ delta: {}, finish_reason: 'stop' }],
+							})}\n\n`
+						)
+					);
+
+					controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+					controller.close();
+				} catch (error) {
+					console.error('[Gemini Vertex] Direct web search failed:', error);
+					controller.enqueue(
+						new TextEncoder().encode(
+							`data: ${JSON.stringify({
+								choices: [{ delta: { content: 'Web search failed. Please try again.' } }],
+							})}\n\n`
+						)
+					);
+					controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+					controller.close();
+				}
+			},
+		});
+	}
+
+	/**
+	 * Convert OpenAI JSON Schema parameters to Gemini schema format
+	 */
+	private convertParametersToGeminiSchema(params: any): any {
+		if (!params) return { type: 'OBJECT', properties: {} };
+
+		const converted: any = {
+			type: (params.type || 'object').toUpperCase(),
+		};
+
+		if (params.properties) {
+			converted.properties = {};
+			for (const [key, value] of Object.entries(params.properties as Record<string, any>)) {
+				converted.properties[key] = {
+					type: (value.type || 'string').toUpperCase(),
+					description: value.description || '',
+				};
+				// Handle enum
+				if (value.enum) {
+					converted.properties[key].enum = value.enum;
+				}
+			}
+		}
+
+		if (params.required && Array.isArray(params.required)) {
+			converted.required = params.required;
+		}
+
+		return converted;
 	}
 
 	formatMessages(messages: Message[]): any[] {
@@ -311,21 +702,59 @@ export class GeminiProvider implements AIProvider {
 
 		for (const msg of messages) {
 			if (msg.role === 'system') {
-				// Gemini doesn't have a system role, prepend to first user message
+				// System messages are handled via systemInstruction in buildRequestBody
+				continue;
+			}
+
+			// Handle tool results - convert to Gemini functionResponse format
+			if (msg.role === 'tool') {
+				const toolMsg = msg as any;
+				formatted.push({
+					role: 'user',
+					parts: [{
+						functionResponse: {
+							name: toolMsg.name || 'unknown_function',
+							response: {
+								result: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+							},
+						},
+					}],
+				});
 				continue;
 			}
 
 			const role = msg.role === 'assistant' ? 'model' : 'user';
 			const parts: any[] = [];
 
+			// Handle text content
 			if (typeof msg.content === 'string') {
 				parts.push({ text: msg.content });
 			} else if (Array.isArray(msg.content)) {
 				for (const part of msg.content) {
 					if (part.type === 'text') {
 						parts.push({ text: part.text || '' });
+					} else if (part.type === 'image_url' && part.image_url?.url) {
+						// Handle OpenAI vision format (image_url with base64 or URL)
+						const url = part.image_url.url;
+						const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+						if (dataUrlMatch) {
+							parts.push({
+								inlineData: {
+									mimeType: dataUrlMatch[1],
+									data: dataUrlMatch[2],
+								},
+							});
+						} else {
+							// Handle external URLs
+							parts.push({
+								fileData: {
+									mimeType: 'image/jpeg', // Default, Gemini will detect
+									fileUri: url,
+								},
+							});
+						}
 					} else if (part.type === 'image' && part.image?.url) {
-						// Handle base64 images
+						// Legacy format support
 						const url = part.image.url;
 						const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
 						if (dataUrlMatch) {
@@ -340,19 +769,27 @@ export class GeminiProvider implements AIProvider {
 				}
 			}
 
+			// Handle assistant messages with tool calls - convert to Gemini functionCall format
+			if (msg.role === 'assistant' && (msg as any).tool_calls) {
+				for (const toolCall of (msg as any).tool_calls) {
+					parts.push({
+						functionCall: {
+							name: toolCall.function?.name || toolCall.name,
+							args: typeof toolCall.function?.arguments === 'string'
+								? JSON.parse(toolCall.function.arguments)
+								: toolCall.function?.arguments || {},
+						},
+					});
+				}
+			}
+
 			if (parts.length > 0) {
 				formatted.push({ role, parts });
 			}
 		}
 
-		// Handle system message by prepending to first user message
-		const systemMsg = messages.find(m => m.role === 'system');
-		if (systemMsg && formatted.length > 0 && formatted[0].role === 'user') {
-			const systemText = typeof systemMsg.content === 'string' ? systemMsg.content : '';
-			if (systemText) {
-				formatted[0].parts.unshift({ text: `System: ${systemText}\n\n` });
-			}
-		}
+		// Note: System message is now handled via systemInstruction in buildRequestBody
+		// No need to prepend to first user message anymore
 
 		return formatted;
 	}
@@ -370,7 +807,28 @@ export class GeminiProvider implements AIProvider {
 	}
 
 	formatResponse(response: any, includeGrounding: boolean = false): any {
-		let content = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+		const parts = response.candidates?.[0]?.content?.parts || [];
+
+		// Extract text content
+		let content = '';
+		const toolCalls: any[] = [];
+
+		for (const part of parts) {
+			if (part.text) {
+				content += part.text;
+			}
+			// Handle Gemini function calls - convert to OpenAI format
+			if (part.functionCall) {
+				toolCalls.push({
+					id: `call_${Date.now()}_${toolCalls.length}`,
+					type: 'function',
+					function: {
+						name: part.functionCall.name,
+						arguments: JSON.stringify(part.functionCall.args || {}),
+					},
+				});
+			}
+		}
 
 		// If grounding was used, append sources
 		if (includeGrounding) {
@@ -378,15 +836,18 @@ export class GeminiProvider implements AIProvider {
 			content += this.formatGroundingSources(groundingMetadata);
 		}
 
+		const message: any = {
+			content: content || null,
+			role: 'assistant',
+		};
+
+		// Add tool_calls if any function calls were made
+		if (toolCalls.length > 0) {
+			message.tool_calls = toolCalls;
+		}
+
 		const result: any = {
-			choices: [
-				{
-					message: {
-						content,
-						role: 'assistant',
-					},
-				},
-			],
+			choices: [{ message }],
 		};
 
 		// Include grounding metadata in response for clients that want it

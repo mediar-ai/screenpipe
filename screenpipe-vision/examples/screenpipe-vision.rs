@@ -50,7 +50,7 @@ async fn main() {
             .await
             .unwrap();
 
-    let window_filters = Arc::new(WindowFilters::new(&[], &[]));
+    let window_filters = Arc::new(WindowFilters::new(&[], &[], &[]));
 
     let _ = continuous_capture(
         result_tx,

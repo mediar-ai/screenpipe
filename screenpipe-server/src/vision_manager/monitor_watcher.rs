@@ -1,9 +1,9 @@
 //! Monitor Watcher - Polls for monitor connect/disconnect events
 
+use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
@@ -43,7 +43,8 @@ pub async fn start_monitor_watcher(vision_manager: Arc<VisionManager>) -> anyhow
             let current_ids: HashSet<u32> = current_monitors.iter().map(|m| m.id()).collect();
 
             // Get currently recording monitors
-            let active_ids: HashSet<u32> = vision_manager.active_monitors().await.into_iter().collect();
+            let active_ids: HashSet<u32> =
+                vision_manager.active_monitors().await.into_iter().collect();
 
             // Detect newly connected monitors
             for monitor_id in &current_ids {
@@ -56,7 +57,10 @@ pub async fn start_monitor_watcher(vision_manager: Arc<VisionManager>) -> anyhow
                     }
 
                     if let Err(e) = vision_manager.start_monitor(*monitor_id).await {
-                        warn!("Failed to start recording on monitor {}: {:?}", monitor_id, e);
+                        warn!(
+                            "Failed to start recording on monitor {}: {:?}",
+                            monitor_id, e
+                        );
                     }
                 }
             }
@@ -66,7 +70,10 @@ pub async fn start_monitor_watcher(vision_manager: Arc<VisionManager>) -> anyhow
                 if !current_ids.contains(monitor_id) {
                     info!("Monitor {} disconnected, stopping recording", monitor_id);
                     if let Err(e) = vision_manager.stop_monitor(*monitor_id).await {
-                        warn!("Failed to stop recording on monitor {}: {:?}", monitor_id, e);
+                        warn!(
+                            "Failed to stop recording on monitor {}: {:?}",
+                            monitor_id, e
+                        );
                     }
                 }
             }

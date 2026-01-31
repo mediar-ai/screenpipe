@@ -54,18 +54,45 @@ export type AIPreset = {
 
 export type UpdateChannel = "stable" | "beta";
 
-// Extend SettingsStore with deviceId (for AI free tier tracking)
-// This is added here until the Rust types are regenerated
+// Chat history types
+export interface ChatMessage {
+	id: string;
+	role: "user" | "assistant";
+	content: string;
+	timestamp: number;
+}
+
+export interface ChatConversation {
+	id: string;
+	title: string;
+	messages: ChatMessage[];
+	createdAt: number;
+	updatedAt: number;
+}
+
+export interface ChatHistoryStore {
+	conversations: ChatConversation[];
+	activeConversationId: string | null;
+	historyEnabled: boolean;
+}
+
+// Extend SettingsStore with fields added before Rust types are regenerated
 export type Settings = SettingsStore & {
 	deviceId?: string;
 	updateChannel?: UpdateChannel;
+	chatHistory?: ChatHistoryStore;
+	ignoredUrls?: string[];
+	searchShortcut?: string;
 }
 
 export const DEFAULT_PROMPT = `Rules:
-- You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
-- Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
-- Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
-- Always answer my question/intent, do not make up things
+- Videos: use inline code \`/path/to/video.mp4\` (not links or multiline blocks)
+- Diagrams: use \`\`\`mermaid blocks for visual summaries (flowchart, gantt, mindmap, graph)
+- Activity summaries: gantt charts with apps/duration
+- Workflows: flowcharts showing steps taken
+- Knowledge sources: graph diagrams showing where info came from (apps, times, conversations)
+- Meetings: extract speakers, decisions, action items
+- Stay factual, use only provided data
 `;
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -144,7 +171,8 @@ let DEFAULT_SETTINGS: Settings = {
 			ignoredWindows: [
 			],
 			includedWindows: [],
-		
+			ignoredUrls: [],
+
 			fps: 0.5,
 			vadSensitivity: "high",
 			analyticsEnabled: true,
@@ -186,12 +214,18 @@ let DEFAULT_SETTINGS: Settings = {
 			startAudioShortcut: "",
 			stopAudioShortcut: "",
 			showChatShortcut: "Control+Super+L",
+			searchShortcut: "Control+Super+K",
 			enableRealtimeAudioTranscription: false,
 			realtimeAudioTranscriptionEngine: "deepgram",
 			disableVision: false,
 			useAllMonitors: true,
 			enableRealtimeVision: true,
 			showShortcutOverlay: true,
+			chatHistory: {
+				conversations: [],
+				activeConversationId: null,
+				historyEnabled: true,
+			},
 		};
 
 export function createDefaultSettingsObject(): Settings {
@@ -204,6 +238,7 @@ export function createDefaultSettingsObject(): Settings {
 		DEFAULT_SETTINGS.fps = p === "macos" ? 0.5 : 1;
 		DEFAULT_SETTINGS.showScreenpipeShortcut = p === "windows" ? "Alt+S" : "Control+Super+S";
 		DEFAULT_SETTINGS.showChatShortcut = p === "windows" ? "Alt+L" : "Control+Super+L";
+		DEFAULT_SETTINGS.searchShortcut = p === "windows" ? "Control+Alt+K" : "Control+Super+K";
 
 		return DEFAULT_SETTINGS;
 	} catch (e) {
@@ -254,6 +289,23 @@ function createSettingsStore() {
 		);
 		if (settings.aiPresets && settings.aiPresets.length > 0 && !hasGeminiPreset) {
 			settings.aiPresets = [...settings.aiPresets, DEFAULT_GEMINI_PRESET as any];
+			needsUpdate = true;
+		}
+
+		// Migration: Add chat history for existing users
+		if (!settings.chatHistory) {
+			settings.chatHistory = {
+				conversations: [],
+				activeConversationId: null,
+				historyEnabled: true,
+			};
+			needsUpdate = true;
+		}
+
+		// Migration: Fill empty showChatShortcut with platform default
+		if (!settings.showChatShortcut || settings.showChatShortcut.trim() === "") {
+			const p = platform();
+			settings.showChatShortcut = p === "windows" ? "Alt+L" : "Control+Super+L";
 			needsUpdate = true;
 		}
 

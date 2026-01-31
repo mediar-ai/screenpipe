@@ -56,6 +56,7 @@ interface TimelineState {
 	onWindowFocus: () => void;
 	clearNewFramesCount: () => void;
 	clearSentRequestForDate: (date: Date) => void;
+	clearFramesForNavigation: () => void; // Clear frames when navigating to new date
 }
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
@@ -84,6 +85,24 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			const newSentRequests = new Set(state.sentRequests);
 			newSentRequests.delete(dateKey);
 			return { sentRequests: newSentRequests };
+		});
+	},
+
+	// Clear frames when navigating to a new date to avoid confusion between old/new frames
+	clearFramesForNavigation: () => {
+		// Clear the frame buffer too
+		frameBuffer = [];
+		if (flushTimer) {
+			clearTimeout(flushTimer);
+			flushTimer = null;
+		}
+		set({
+			frames: [],
+			frameTimestamps: new Set<string>(),
+			isLoading: true,
+			loadingProgress: { loaded: 0, isStreaming: false },
+			error: null,
+			message: null,
 		});
 	},
 

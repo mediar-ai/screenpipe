@@ -17,6 +17,7 @@ interface TimelineSliderProps {
 	onSelectionChange?: (selectedFrames: StreamTimeSeriesResponse[]) => void;
 	newFramesCount?: number; // Number of new frames added (for animation)
 	lastFlushTimestamp?: number; // When frames were last added (to trigger animation)
+	isSearchModalOpen?: boolean; // When true, disable wheel/focus handling to not interfere with modal
 }
 
 interface AppGroup {
@@ -57,6 +58,7 @@ export const TimelineSlider = ({
 	onSelectionChange,
 	newFramesCount = 0,
 	lastFlushTimestamp = 0,
+	isSearchModalOpen = false,
 }: TimelineSliderProps) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const observerTargetRef = useRef<HTMLDivElement>(null);
@@ -103,6 +105,9 @@ export const TimelineSlider = ({
 
 	// Handle pinch-to-zoom (trackpad) and Cmd+Scroll (mouse)
 	const handleWheel = useCallback((e: WheelEvent) => {
+		// Don't handle wheel events when search modal is open
+		if (isSearchModalOpen) return;
+
 		// Pinch gesture on trackpad sends ctrlKey=true
 		// Cmd+Scroll on mouse sends metaKey=true
 		if (e.ctrlKey || e.metaKey) {
@@ -138,7 +143,7 @@ export const TimelineSlider = ({
 				}
 			}
 		}
-	}, [zoomLevel, currentIndex, frames.length, onFrameChange]);
+	}, [zoomLevel, currentIndex, frames.length, onFrameChange, isSearchModalOpen]);
 
 	// Attach wheel event listener for zoom
 	useEffect(() => {
@@ -154,7 +159,10 @@ export const TimelineSlider = ({
 	}, [handleWheel]);
 
 	// Auto-focus container on mount so zoom works immediately
+	// But skip when search modal is open to not steal focus from modal input
 	useEffect(() => {
+		if (isSearchModalOpen) return;
+
 		const container = containerRef.current;
 		if (container) {
 			// Small delay to ensure DOM is ready
@@ -162,7 +170,7 @@ export const TimelineSlider = ({
 				container.focus();
 			});
 		}
-	}, []);
+	}, [isSearchModalOpen]);
 
 	// Calculate frame width based on zoom level
 	const frameWidth = useMemo(() => {

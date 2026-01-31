@@ -7,9 +7,10 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { Sparkles, Zap, Clock } from "lucide-react";
+import { Sparkles, Zap, Clock, Star } from "lucide-react";
 
 interface UpgradeDialogProps {
   open: boolean;
@@ -27,8 +28,10 @@ export function UpgradeDialog({
   const { settings } = useSettings();
   const isLoggedIn = !!settings.user?.token;
 
-  const handleSubscribe = async () => {
-    const baseUrl = "https://buy.stripe.com/5kA6p79qefweacg5kJ";
+  const handleSubscribe = async (isAnnual: boolean) => {
+    const baseUrl = isAnnual
+      ? "https://buy.stripe.com/eVadRzfOCgAi5W0fZu"
+      : "https://buy.stripe.com/5kA6p79qefweacg5kJ";
     const params = new URLSearchParams();
     if (settings.user?.id) {
       params.set("client_reference_id", settings.user.id);
@@ -61,15 +64,17 @@ export function UpgradeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-[420px]">
+      <DialogContent className="w-full max-w-[480px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            {reason === "daily_limit"
-              ? "you've used all your free queries today"
-              : "this model requires an upgrade"}
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <Sparkles className="h-5 w-5 shrink-0" />
+            <span>
+              {reason === "daily_limit"
+                ? "you've used all your free queries today"
+                : "this model requires an upgrade"}
+            </span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm">
             {reason === "daily_limit"
               ? `your free queries reset ${formatResetTime()}, or upgrade for unlimited access`
               : "upgrade to access smarter models like claude sonnet and gpt-4"}
@@ -77,14 +82,35 @@ export function UpgradeDialog({
         </DialogHeader>
 
         <div className="space-y-3 pt-2">
+          {/* Annual - Primary/Preferred Option */}
           <Button
-            className="w-full justify-start gap-3 h-auto py-3"
-            onClick={handleSubscribe}
+            className="w-full justify-start gap-3 h-auto py-4 relative"
+            onClick={() => handleSubscribe(true)}
           >
-            <Zap className="h-5 w-5" />
-            <div className="text-left">
-              <div className="font-medium">subscribe for $30/mo</div>
+            <Star className="h-5 w-5 shrink-0" />
+            <div className="text-left flex-1 min-w-0">
+              <div className="font-medium flex items-center gap-2 flex-wrap">
+                <span>$200/year</span>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                  save 17%
+                </Badge>
+              </div>
               <div className="text-xs opacity-80">
+                unlimited queries, all models, priority support
+              </div>
+            </div>
+          </Button>
+
+          {/* Monthly Option */}
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 h-auto py-3"
+            onClick={() => handleSubscribe(false)}
+          >
+            <Zap className="h-5 w-5 shrink-0" />
+            <div className="text-left flex-1 min-w-0">
+              <div className="font-medium">$30/mo</div>
+              <div className="text-xs text-muted-foreground">
                 unlimited queries, all models, priority support
               </div>
             </div>
@@ -96,8 +122,8 @@ export function UpgradeDialog({
               className="w-full justify-start gap-3 h-auto py-3"
               onClick={handleLogin}
             >
-              <Sparkles className="h-5 w-5" />
-              <div className="text-left">
+              <Sparkles className="h-5 w-5 shrink-0" />
+              <div className="text-left flex-1 min-w-0">
                 <div className="font-medium">sign in for more</div>
                 <div className="text-xs text-muted-foreground">
                   get 50 queries/day + access to sonnet
@@ -111,8 +137,8 @@ export function UpgradeDialog({
             className="w-full justify-start gap-3 h-auto py-3"
             onClick={() => onOpenChange(false)}
           >
-            <Clock className="h-5 w-5" />
-            <div className="text-left">
+            <Clock className="h-5 w-5 shrink-0" />
+            <div className="text-left flex-1 min-w-0">
               <div className="font-medium">wait until {formatResetTime()}</div>
               <div className="text-xs text-muted-foreground">
                 your free queries will reset automatically

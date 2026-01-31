@@ -9,58 +9,33 @@ icon: "robot"
 
 with screenpipe, Moltbot can recall what you've seen on screen, reference past conversations, and answer questions about your digital history.
 
-## quick start (one-liners)
+## quick start (one command)
 
 ```bash
-# 1. sync your screen data to moltbot (runs permanently, survives reboot)
+# full setup with morning summaries at 8am
+bunx @screenpipe/agent --setup user@your-server --morning 08:00
+
+# that's it! you'll get daily briefings via telegram/whatsapp/etc
+```
+
+this single command:
+1. syncs your screen data (permanent daemon, survives reboot)
+2. installs screenpipe skills (recall, search, digest, context)
+3. schedules morning summary cron job
+
+### manual setup (if you prefer)
+
+```bash
+# step 1: sync data
 bunx @screenpipe/sync --daemon --remote user@your-server:~/.screenpipe/
 
-# 2. install screenpipe skills
+# step 2: install skills
 bunx @screenpipe/skills install --remote user@your-server
-
-# 3. done! ask moltbot: "what was I working on yesterday?"
 ```
 
 ## setup options
 
-### option 1: auto-sync + skills (recommended)
-
-the easiest way to connect screenpipe to moltbot. your screen history syncs automatically, and pre-built skills let moltbot query it.
-
-**step 1: sync your data**
-
-```bash
-# one-time setup - syncs ~/.screenpipe/db.sqlite to your server every hour
-bunx @screenpipe/sync --daemon --remote user@moltbot-server:~/.screenpipe/
-
-# check daemon status
-launchctl list | grep screenpipe  # macos
-systemctl --user status screenpipe-sync  # linux
-
-# stop daemon
-bunx @screenpipe/sync --stop
-```
-
-**step 2: install skills**
-
-```bash
-bunx @screenpipe/skills install --remote user@moltbot-server
-
-# skills installed:
-# - recall: "what was I doing at 3pm?"
-# - search: "find when I saw error 404"
-# - digest: "summarize my work today"
-# - context: "context for the auth refactor"
-```
-
-**step 3: query via chat**
-
-message moltbot from any chat app:
-- "what was I reading about yesterday afternoon?"
-- "find the slack message from john about the deployment"
-- "summarize my meetings from last week"
-
-### option 2: custom skill (manual)
+### option 1: custom skill (advanced)
 
 if you prefer manual setup, create a skill that queries screenpipe's SQLite database directly.
 
@@ -183,5 +158,6 @@ once configured, message Moltbot from any chat app:
 
 | Package | Description |
 |---------|-------------|
+| [@screenpipe/agent](https://www.npmjs.com/package/@screenpipe/agent) | One-liner full setup (recommended) |
 | [@screenpipe/sync](https://www.npmjs.com/package/@screenpipe/sync) | Sync screen data to remote servers |
 | [@screenpipe/skills](https://www.npmjs.com/package/@screenpipe/skills) | Pre-built skills for AI agents |

@@ -2,13 +2,14 @@ import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import React, { FC, useState, useRef } from "react";
 import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
 import { TextOverlay } from "@/components/text-overlay";
-import { FileX, ImageOff, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { ImageOff, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 interface CurrentFrameTimelineProps {
 	currentFrame: StreamTimeSeriesResponse;
 	onNavigate?: (direction: "prev" | "next") => void;
 	canNavigatePrev?: boolean;
 	canNavigateNext?: boolean;
+	onFrameUnavailable?: () => void;
 }
 
 export const SkeletonLoader: FC = () => {
@@ -30,6 +31,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	onNavigate,
 	canNavigatePrev = true,
 	canNavigateNext = true,
+	onFrameUnavailable,
 }) => {
 	const [isLoading, setIsLoading] = useState(true);
 	const [hasError, setHasError] = useState(false);
@@ -113,6 +115,17 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 			setHasError(false);
 		}
 	};
+
+	// Auto-skip to next frame when error occurs - instant, no delay
+	React.useEffect(() => {
+		if (hasError && !isLoading && onFrameUnavailable) {
+			// Minimal delay just to batch multiple errors
+			const timer = setTimeout(() => {
+				onFrameUnavailable();
+			}, 50);
+			return () => clearTimeout(timer);
+		}
+	}, [hasError, isLoading, onFrameUnavailable]);
 
 	if (!frameId) {
 		return (
@@ -229,75 +242,10 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					</div>
 				</div>
 			)}
+			{/* When frame is unavailable, just show skeleton - skip happens silently */}
 			{hasError && !isLoading && (
-				<div className="absolute inset-0 z-10 overflow-hidden bg-background">
-					<div className="absolute inset-0 flex items-center justify-center">
-						<div className="max-w-sm w-full mx-4">
-							<div className="bg-card border border-border p-8">
-								<div className="flex justify-center mb-6">
-									<div className="w-16 h-16 border border-destructive/50 flex items-center justify-center">
-										<FileX className="w-8 h-8 text-destructive" />
-									</div>
-								</div>
-
-								<div className="text-center space-y-3">
-									<h3 className="text-xl font-mono font-semibold text-foreground uppercase tracking-wide">
-										Frame Unavailable
-									</h3>
-									<p className="text-sm font-mono text-muted-foreground leading-relaxed">
-										This recording could not be loaded. The video file may be temporarily unavailable or still processing.
-									</p>
-
-									<div className="inline-flex items-center gap-2 px-3 py-1.5 bg-muted border border-border">
-										<span className="text-xs font-mono text-muted-foreground uppercase">Frame</span>
-										<span className="text-xs font-mono text-foreground">{frameId}</span>
-									</div>
-								</div>
-
-								<div className="mt-8 space-y-3">
-									{retryCount < 3 ? (
-										<button
-											onClick={handleRetry}
-											className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent border border-border text-foreground text-sm font-mono uppercase transition-colors"
-										>
-											<RefreshCw className="w-4 h-4" />
-											Try Again
-											<span className="text-muted-foreground text-xs">({3 - retryCount} left)</span>
-										</button>
-									) : (
-										<div className="text-center text-sm font-mono text-muted-foreground py-2 uppercase">
-											Retries exhausted
-										</div>
-									)}
-
-									{onNavigate && (
-										<div className="flex gap-2">
-											<button
-												onClick={() => onNavigate("prev")}
-												disabled={!canNavigatePrev}
-												className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors"
-											>
-												<ChevronLeft className="w-4 h-4" />
-												Previous
-											</button>
-											<button
-												onClick={() => onNavigate("next")}
-												disabled={!canNavigateNext}
-												className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors"
-											>
-												Next
-												<ChevronRight className="w-4 h-4" />
-											</button>
-										</div>
-									)}
-								</div>
-							</div>
-
-							<p className="text-center text-xs font-mono text-muted-foreground mt-4">
-								If this persists, try restarting the screenpipe server
-							</p>
-						</div>
-					</div>
+				<div className="absolute inset-0 z-10">
+					<SkeletonLoader />
 				</div>
 			)}
 		</div>

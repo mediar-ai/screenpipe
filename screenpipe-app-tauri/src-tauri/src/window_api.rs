@@ -362,6 +362,10 @@ impl ShowRewindWindow {
 
                                 // Use order_front_regardless to show above fullscreen apps without switching spaces
                                 panel.order_front_regardless();
+
+                                // Manually emit window-focused event since order_front_regardless doesn't trigger WindowEvent::Focused
+                                // This ensures the timeline refreshes data when the overlay is shown
+                                let _ = app_clone.emit("window-focused", true);
                             }
                         }).ok();
                     }
@@ -372,10 +376,14 @@ impl ShowRewindWindow {
                         if let Err(e) = crate::windows_overlay::bring_to_front(&window) {
                             error!("Failed to bring window to front: {}", e);
                         }
+                        // Manually emit window-focused event to refresh timeline data
+                        let _ = app.emit("window-focused", true);
                     }
                     #[cfg(target_os = "linux")]
                     {
                         window.show().ok();
+                        // Manually emit window-focused event to refresh timeline data
+                        let _ = app.emit("window-focused", true);
                     }
                     return Ok(window);
             }

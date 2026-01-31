@@ -307,7 +307,7 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     )
     .await?;
 
-    // NOTE: Escape, Cmd+K, Cmd+L shortcuts are now registered dynamically
+    // NOTE: Escape, Ctrl+Cmd+K shortcuts are now registered dynamically
     // via register_window_shortcuts/unregister_window_shortcuts commands
     // This prevents them from blocking other apps when the overlay is closed
 
@@ -447,35 +447,76 @@ use tokio::time::{sleep, Duration};
 async fn get_media_file(file_path: &str) -> Result<serde_json::Value, String> {
     use std::path::Path;
 
+    const MAX_RETRIES: u32 = 3;
+    const INITIAL_DELAY_MS: u64 = 100;
+
     debug!("Reading media file: {}", file_path);
 
     let path = Path::new(file_path);
-    if !path.exists() {
-        return Err(format!("File does not exist: {}", file_path));
+
+    // Retry loop to handle files that may be in the process of being written
+    let mut last_error = String::new();
+    for attempt in 0..=MAX_RETRIES {
+        if attempt > 0 {
+            let delay = INITIAL_DELAY_MS * (1 << (attempt - 1)); // exponential backoff
+            debug!(
+                "Retry attempt {} for {}, waiting {}ms",
+                attempt, file_path, delay
+            );
+            sleep(Duration::from_millis(delay)).await;
+        }
+
+        if !path.exists() {
+            last_error = format!("File does not exist: {}", file_path);
+            if attempt < MAX_RETRIES {
+                continue;
+            }
+            return Err(last_error);
+        }
+
+        // Read file contents
+        match tokio::fs::read(path).await {
+            Ok(contents) => {
+                // Check for empty or suspiciously small files (might still be writing)
+                if contents.is_empty() {
+                    last_error = "File is empty (may still be writing)".to_string();
+                    debug!("{}: {}", last_error, file_path);
+                    if attempt < MAX_RETRIES {
+                        continue;
+                    }
+                    return Err(last_error);
+                }
+
+                debug!(
+                    "Successfully read file of size: {} bytes (attempt {})",
+                    contents.len(),
+                    attempt + 1
+                );
+
+                // Convert to base64
+                let data = base64::prelude::BASE64_STANDARD.encode(&contents);
+
+                // Determine MIME type
+                let mime_type = get_mime_type(file_path);
+
+                return Ok(serde_json::json!({
+                    "data": data,
+                    "mimeType": mime_type
+                }));
+            }
+            Err(e) => {
+                last_error = format!("Failed to read file: {}", e);
+                debug!("{} (attempt {})", last_error, attempt + 1);
+                if attempt < MAX_RETRIES {
+                    continue;
+                }
+                error!("{}", last_error);
+                return Err(last_error);
+            }
+        }
     }
 
-    // Read file contents
-    let file_contents = match tokio::fs::read(path).await {
-        Ok(contents) => {
-            debug!("Successfully read file of size: {} bytes", contents.len());
-            contents
-        }
-        Err(e) => {
-            error!("Failed to read file: {}", e);
-            return Err(format!("Failed to read file: {}", e));
-        }
-    };
-
-    // Convert to base64
-    let data = base64::prelude::BASE64_STANDARD.encode(&file_contents);
-
-    // Determine MIME type
-    let mime_type = get_mime_type(file_path);
-
-    Ok(serde_json::json!({
-        "data": data,
-        "mimeType": mime_type
-    }))
+    Err(last_error)
 }
 
 fn get_mime_type(path: &str) -> String {
@@ -558,7 +599,7 @@ async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, St
 }
 
 // Helper function to parse shortcut string
-fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
+pub fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
     let parts: Vec<&str> = shortcut_str.split('+').collect();
     let key = parts.last().ok_or("Invalid shortcut format")?;
 

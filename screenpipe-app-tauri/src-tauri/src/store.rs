@@ -137,7 +137,9 @@ pub struct SettingsStore {
     pub ignored_windows: Vec<String>,
     #[serde(rename = "includedWindows")]
     pub included_windows: Vec<String>,
- 
+    #[serde(rename = "ignoredUrls", default)]
+    pub ignored_urls: Vec<String>,
+
     #[serde(rename = "fps")]
     pub fps: f32,
     #[serde(rename = "vadSensitivity")]
@@ -178,6 +180,8 @@ pub struct SettingsStore {
     pub stop_audio_shortcut: String,
     #[serde(rename = "showChatShortcut")]
     pub show_chat_shortcut: String,
+    #[serde(rename = "searchShortcut")]
+    pub search_shortcut: String,
     #[serde(rename = "enableRealtimeAudioTranscription")]
     pub enable_realtime_audio_transcription: bool,
     #[serde(rename = "realtimeAudioTranscriptionEngine")]
@@ -409,14 +413,15 @@ impl Default for SettingsStore {
             ocr_engine: "tesseract".to_string(),
             monitor_ids: vec!["default".to_string()],
             audio_devices: vec!["default".to_string()],
-            use_pii_removal: false,
+            use_pii_removal: true,
             restart_interval: 0,
             port: 3030,
             data_dir: "default".to_string(),
             disable_audio: false,
             ignored_windows,
             included_windows: vec![],
-           
+            ignored_urls: vec![],
+
             fps: 0.5,
             vad_sensitivity: "high".to_string(),
             analytics_enabled: true,
@@ -459,6 +464,10 @@ impl Default for SettingsStore {
             show_chat_shortcut: "Alt+L".to_string(),
             #[cfg(not(target_os = "windows"))]
             show_chat_shortcut: "Control+Super+L".to_string(),
+            #[cfg(target_os = "windows")]
+            search_shortcut: "Control+Alt+K".to_string(),
+            #[cfg(not(target_os = "windows"))]
+            search_shortcut: "Control+Super+K".to_string(),
             enable_realtime_audio_transcription: false,
             realtime_audio_transcription_engine: "deepgram".to_string(),
             disable_vision: false,

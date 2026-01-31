@@ -6,6 +6,7 @@ use crate::custom_ocr::perform_ocr_custom;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;
 use crate::monitor::get_monitor_by_id;
+use crate::ocr_cache::{WindowCacheKey, WindowOcrCache};
 use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
@@ -28,6 +29,7 @@ use std::{
     time::{Duration, Instant, UNIX_EPOCH},
 };
 use tokio::sync::mpsc::Sender;
+use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 
 fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
@@ -156,6 +158,13 @@ pub async fn continuous_capture(
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
+    // Initialize OCR cache for skipping unchanged windows
+    // Cache entries expire after 5 minutes, max 100 windows cached
+    let ocr_cache = Arc::new(Mutex::new(WindowOcrCache::new(
+        Duration::from_secs(300),
+        100,
+    )));
+
     debug!(
         "continuous_capture: Starting using monitor: {:?}",
         monitor_id
@@ -209,8 +218,13 @@ pub async fn continuous_capture(
 
         // 5. Process max average frame if available
         if let Some(max_avg_frame) = max_average.take() {
-            if let Err(e) =
-                process_max_average_frame(max_avg_frame, &ocr_engine, languages.clone()).await
+            if let Err(e) = process_max_average_frame(
+                max_avg_frame,
+                &ocr_engine,
+                languages.clone(),
+                ocr_cache.clone(),
+            )
+            .await
             {
                 error!("Error processing max average frame: {}", e);
             }
@@ -284,6 +298,7 @@ async fn process_max_average_frame(
     max_avg_frame: MaxAverageFrame,
     ocr_engine: &OcrEngine,
     languages: Vec<Language>,
+    ocr_cache: Arc<Mutex<WindowOcrCache>>,
 ) -> Result<(), ContinuousCaptureError> {
     let ocr_task_data = OcrTaskData {
         image: max_avg_frame.image,
@@ -294,7 +309,7 @@ async fn process_max_average_frame(
         result_tx: max_avg_frame.result_tx,
     };
 
-    if let Err(e) = process_ocr_task(ocr_task_data, ocr_engine, languages).await {
+    if let Err(e) = process_ocr_task(ocr_task_data, ocr_engine, languages, ocr_cache).await {
         error!("Error processing OCR task: {}", e);
         return Err(ContinuousCaptureError::ErrorProcessingOcr(e.to_string()));
     }
@@ -318,6 +333,7 @@ pub async fn process_ocr_task(
     ocr_task_data: OcrTaskData,
     ocr_engine: &OcrEngine,
     languages: Vec<Language>,
+    ocr_cache: Arc<Mutex<WindowOcrCache>>,
 ) -> Result<(), ContinuousCaptureError> {
     let OcrTaskData {
         image,
@@ -337,24 +353,103 @@ pub async fn process_ocr_task(
     let mut window_ocr_results = Vec::new();
     let mut total_confidence = 0.0;
     let mut window_count = 0;
+    let mut cache_hits = 0;
+    let mut cache_misses = 0;
 
     // Get screen dimensions for coordinate transformation
     let (screen_width, screen_height) = image.dimensions();
 
     for captured_window in window_images {
-        let ocr_result = process_window_ocr(
-            captured_window,
-            ocr_engine,
-            &languages,
-            &mut total_confidence,
-            &mut window_count,
-            screen_width,
-            screen_height,
-        )
-        .await
-        .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string()))?;
+        // Calculate hash for this window's image
+        let window_image_hash =
+            WindowOcrCache::calculate_image_hash(captured_window.image.as_bytes());
+        let window_id =
+            WindowOcrCache::make_window_id(&captured_window.app_name, &captured_window.window_name);
+        let cache_key = WindowCacheKey {
+            window_id: window_id.clone(),
+            image_hash: window_image_hash,
+        };
+
+        // Check cache first
+        let cached_result = {
+            let mut cache = ocr_cache.lock().await;
+            cache.get(&cache_key)
+        };
+
+        let ocr_result = if let Some(cached) = cached_result {
+            // Cache hit - reuse previous OCR result
+            cache_hits += 1;
+            debug!(
+                "OCR cache hit for window '{}' (hash: {})",
+                window_id, window_image_hash
+            );
+
+            // Still need to transform coordinates for the current position
+            let parsed_json = parse_json_output(&cached.text_json);
+            let transformed_json = transform_ocr_coordinates_to_screen(
+                parsed_json,
+                captured_window.window_x,
+                captured_window.window_y,
+                captured_window.window_width,
+                captured_window.window_height,
+                screen_width,
+                screen_height,
+            );
+
+            total_confidence += cached.confidence;
+            window_count += 1;
+
+            WindowOcrResult {
+                image: captured_window.image,
+                window_name: captured_window.window_name,
+                app_name: captured_window.app_name,
+                text: cached.text.clone(),
+                text_json: transformed_json,
+                focused: captured_window.is_focused,
+                confidence: cached.confidence,
+                browser_url: captured_window.browser_url,
+            }
+        } else {
+            // Cache miss - perform OCR
+            cache_misses += 1;
+            let result = process_window_ocr(
+                captured_window,
+                ocr_engine,
+                &languages,
+                &mut total_confidence,
+                &mut window_count,
+                screen_width,
+                screen_height,
+            )
+            .await
+            .map_err(|e| ContinuousCaptureError::ErrorProcessingOcr(e.to_string()))?;
+
+            // Cache the result for future use (serialize JSON for storage)
+            {
+                let mut cache = ocr_cache.lock().await;
+                let json_str = serde_json::to_string(&result.text_json).unwrap_or_default();
+                cache.insert(cache_key, result.text.clone(), json_str, result.confidence);
+            }
+
+            result
+        };
 
         window_ocr_results.push(ocr_result);
+    }
+
+    // Log cache performance
+    if cache_hits > 0 || cache_misses > 0 {
+        debug!(
+            "OCR cache stats for frame {}: {} hits, {} misses ({:.1}% hit rate)",
+            frame_number,
+            cache_hits,
+            cache_misses,
+            if cache_hits + cache_misses > 0 {
+                (cache_hits as f64 / (cache_hits + cache_misses) as f64) * 100.0
+            } else {
+                0.0
+            }
+        );
     }
 
     // Create and send the result

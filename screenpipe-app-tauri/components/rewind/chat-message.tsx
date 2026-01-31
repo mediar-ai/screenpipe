@@ -15,6 +15,7 @@ import {
 import { ChatMessageActions } from "@/components/rewind/chat-message-actions";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { VideoComponent } from "./video";
+import { MermaidDiagram } from "./mermaid-diagram";
 import { ChevronDown } from "lucide-react";
 
 export interface ChatMessageProps {
@@ -176,8 +177,14 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 						code({ node, className, children, ...props }) {
 							const content = String(children).replace(/\n$/, "");
 							const match = /language-(\w+)/.exec(className || "");
+							const language = match?.[1] || "";
 
 							const isMP4File = hasMP4File(content);
+
+							// Render mermaid diagrams
+							if (language === "mermaid") {
+								return <MermaidDiagram chart={content} />;
+							}
 
 							if (isMP4File || !match) {
 								if (isMP4File) {
@@ -196,7 +203,7 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 							return (
 								<CodeBlock
 									key={Math.random()}
-									language={(match && match[1]) || ""}
+									language={language}
 									value={content}
 									{...props}
 								/>

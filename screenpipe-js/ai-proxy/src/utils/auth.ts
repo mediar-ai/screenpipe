@@ -191,15 +191,16 @@ async function validateScreenpipeToken(token: string): Promise<{ isValid: boolea
 
   try {
     const response = await fetch('https://screenpi.pe/api/user', {
-      method: 'GET',
+      method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ token }),
     });
 
     if (response.ok) {
-      const userData = await response.json() as ScreenpipeUserData;
+      const data = await response.json() as { success?: boolean; user?: ScreenpipeUserData };
+      const userData = data.user;
       console.log('Valid screenpipe user token, user:', userData?.email);
       return {
         isValid: true,

@@ -90,11 +90,11 @@ pub struct SpeakerProfile {
 
 #[derive(Debug, Clone, Copy)]
 pub enum SpeakingStyle {
-    Formal,      // Business-like, complete sentences
-    Casual,      // Relaxed, informal
-    Technical,   // Precise, jargon-heavy
-    Verbose,     // Long explanations
-    Concise,     // Short, to the point
+    Formal,    // Business-like, complete sentences
+    Casual,    // Relaxed, informal
+    Technical, // Precise, jargon-heavy
+    Verbose,   // Long explanations
+    Concise,   // Short, to the point
 }
 
 pub const SPEAKER_PROFILES: &[SpeakerProfile] = &[
@@ -230,7 +230,10 @@ pub const OVERLAP_PATTERNS: &[(&str, &str)] = &[
     // Subset overlap
     ("the meeting starts at three", "at three oclock sharp"),
     // No overlap
-    ("the weather is nice today", "lets go for a walk in the park"),
+    (
+        "the weather is nice today",
+        "lets go for a walk in the park",
+    ),
 ];
 
 // =============================================================================
@@ -310,7 +313,8 @@ pub fn generate_intermittent_scenario(
 
     let mut rng = StdRng::seed_from_u64(seed);
     let total_secs = total_duration_minutes * 60.0;
-    let silence_between = (total_secs - (burst_count as f64 * avg_burst_duration_secs)) / burst_count as f64;
+    let silence_between =
+        (total_secs - (burst_count as f64 * avg_burst_duration_secs)) / burst_count as f64;
 
     let speaker = SimSpeaker::new(0, "Speaker");
     let mut session = RecordingSession::new(seed)
@@ -330,7 +334,8 @@ pub fn generate_intermittent_scenario(
         let segments_in_burst = rng.random_range(2..6);
         for _ in 0..segments_in_burst {
             let text = *CASUAL_SEGMENTS.choose(&mut rng).unwrap();
-            session = session.add_segment(SpeechSegment::speech(text, speaker.clone(), current_time));
+            session =
+                session.add_segment(SpeechSegment::speech(text, speaker.clone(), current_time));
             let duration = session.segments.last().map(|s| s.duration()).unwrap_or(2.0);
             current_time += duration + rng.random_range(0.2..0.8);
         }
@@ -378,13 +383,13 @@ pub fn generate_24h_scenario(seed: u64) -> RecordingSession {
 
         // Activity probability varies by hour
         let activity_prob = match hour_of_day as usize {
-            0..=5 => 0.05,   // Night: very low activity
-            6..=8 => 0.3,    // Morning: moderate
-            9..=11 => 0.7,   // Work hours: high
-            12..=13 => 0.5,  // Lunch: moderate
-            14..=17 => 0.7,  // Afternoon: high
-            18..=21 => 0.4,  // Evening: moderate
-            _ => 0.1,        // Late night: low
+            0..=5 => 0.05,  // Night: very low activity
+            6..=8 => 0.3,   // Morning: moderate
+            9..=11 => 0.7,  // Work hours: high
+            12..=13 => 0.5, // Lunch: moderate
+            14..=17 => 0.7, // Afternoon: high
+            18..=21 => 0.4, // Evening: moderate
+            _ => 0.1,       // Late night: low
         };
 
         if rng.random::<f64>() < activity_prob {

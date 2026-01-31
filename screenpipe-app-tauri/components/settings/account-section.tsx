@@ -268,29 +268,58 @@ export function AccountSection() {
         </div>
       </div>
 
-      {/* AI tier info - only show for non-subscribers */}
+      {/* Cloud features info - only show for non-subscribers */}
       {!settings.user?.cloud_subscribed && (
-        <Card className="p-4 space-y-3 bg-secondary/5">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            <h4 className="font-medium">screenpipe cloud ai</h4>
-          </div>
-          <div className="grid gap-2 text-sm text-muted-foreground">
+        <div className="space-y-4">
+          {/* AI tier */}
+          <Card className="p-4 space-y-3 bg-secondary/5">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-              {settings.user?.token ? "50 free ai queries per day" : "25 free ai queries per day"}
+              <Sparkles className="h-5 w-5 text-primary" />
+              <h4 className="font-medium">screenpipe cloud ai</h4>
             </div>
+            <div className="grid gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                {settings.user?.token ? "50 free ai queries per day" : "25 free ai queries per day"}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                {settings.user?.token ? "access to claude haiku & sonnet" : "access to claude haiku"}
+              </div>
+            </div>
+            <Separator className="my-2" />
+            <div className="text-sm">
+              <span className="text-muted-foreground">upgrade benefits: </span>
+              <span className="text-foreground">unlimited queries, all models (claude opus), priority support</span>
+            </div>
+          </Card>
+
+          {/* Cloud transcription */}
+          <Card className="p-4 space-y-3 bg-secondary/5">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-              {settings.user?.token ? "access to claude haiku & sonnet" : "access to claude haiku"}
+              <Zap className="h-5 w-5 text-primary" />
+              <h4 className="font-medium">cloud audio transcription</h4>
             </div>
-          </div>
-          <Separator className="my-2" />
-          <div className="text-sm">
-            <span className="text-muted-foreground">upgrade benefits: </span>
-            <span className="text-foreground">unlimited queries, all models (claude opus), priority support</span>
-          </div>
-        </Card>
+            <div className="grid gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+                save 2-3 GB of RAM
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+                ~50% less CPU usage
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+                higher quality transcription
+              </div>
+            </div>
+            <Separator className="my-2" />
+            <div className="text-sm text-muted-foreground">
+              local whisper model uses significant resources. cloud transcription offloads this to our servers.
+            </div>
+          </Card>
+        </div>
       )}
 
       <div className="space-y-8">

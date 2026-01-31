@@ -257,7 +257,12 @@ impl fmt::Display for BenchmarkResult {
         writeln!(f, "Description: {}", self.description)?;
         writeln!(f)?;
         writeln!(f, "Configuration:")?;
-        writeln!(f, "  Duration:        {:.1}s ({:.1} min)", self.duration_secs, self.duration_secs / 60.0)?;
+        writeln!(
+            f,
+            "  Duration:        {:.1}s ({:.1} min)",
+            self.duration_secs,
+            self.duration_secs / 60.0
+        )?;
         writeln!(f, "  Devices:         {}", self.num_devices)?;
         writeln!(f, "  Speakers:        {}", self.num_speakers)?;
         writeln!(f, "  Total inputs:    {}", self.total_inputs)?;
@@ -271,11 +276,7 @@ impl fmt::Display for BenchmarkResult {
         writeln!(f, "{}", self.fixed_metrics)?;
 
         writeln!(f, "{:->15} IMPROVEMENT {:->15}", "", "")?;
-        writeln!(
-            f,
-            "  F1 Score:   {:+.2}%",
-            self.f1_improvement() * 100.0
-        )?;
+        writeln!(f, "  F1 Score:   {:+.2}%", self.f1_improvement() * 100.0)?;
         writeln!(
             f,
             "  Recall:     {:+.2}%",

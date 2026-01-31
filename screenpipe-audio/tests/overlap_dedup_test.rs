@@ -417,7 +417,10 @@ mod tests {
             if i > 0 && i < ground_truth_segments.len() - 1 {
                 let overlap = format!(
                     "{} {}",
-                    ground_truth_segments[i - 1].split_whitespace().last().unwrap_or(""),
+                    ground_truth_segments[i - 1]
+                        .split_whitespace()
+                        .last()
+                        .unwrap_or(""),
                     segment.split_whitespace().next().unwrap_or("")
                 );
                 if overlap.split_whitespace().count() >= 2 {
@@ -450,10 +453,7 @@ mod tests {
         println!("Blocked (duplicates): {}", blocked);
         println!("Expected unique: {}", expected_unique);
         println!("Dedup rate: {:.1}%", dedup_rate);
-        println!(
-            "Accuracy (inserted/expected): {:.1}%",
-            accuracy
-        );
+        println!("Accuracy (inserted/expected): {:.1}%", accuracy);
         println!("================================\n");
 
         // We should block at least 30% as duplicates
@@ -501,8 +501,14 @@ mod tests {
 
         println!("\n=== BUGGY vs FIXED COMPARISON ===");
         println!("Input: {} unique transcripts, each sent twice", expected);
-        println!("Buggy logic inserted: {} (should be {})", buggy_count, expected);
-        println!("Fixed logic inserted: {} (should be {})", fixed_count, expected);
+        println!(
+            "Buggy logic inserted: {} (should be {})",
+            buggy_count, expected
+        );
+        println!(
+            "Fixed logic inserted: {} (should be {})",
+            fixed_count, expected
+        );
         println!(
             "Buggy duplicate rate: {:.1}%",
             (buggy_count as f64 / (expected * 2) as f64) * 100.0

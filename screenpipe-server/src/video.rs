@@ -54,10 +54,8 @@ impl FrameWriteTracker {
             "FrameWriteTracker: recorded frame {} at offset {} in {}",
             frame_number, offset, video_path
         );
-        self.writes.insert(
-            frame_number,
-            FrameWriteInfo { offset, video_path },
-        );
+        self.writes
+            .insert(frame_number, FrameWriteInfo { offset, video_path });
     }
 
     /// Get the video offset for a frame. Returns None if frame wasn't written to video.
@@ -126,6 +124,7 @@ impl VideoCapture {
         monitor_id: u32,
         ignore_list: &[String],
         include_list: &[String],
+        ignored_urls: &[String],
         languages: Vec<Language>,
         capture_unfocused_windows: bool,
     ) -> Self {
@@ -152,7 +151,7 @@ impl VideoCapture {
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(512);
-        let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list));
+        let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list, ignored_urls));
 
         // Add parameters for monitoring restart
         let capture_ocr_engine = ocr_engine.clone();
@@ -706,7 +705,9 @@ async fn process_frames(
                 *frame_count += 1;
                 debug!(
                     "Wrote frame {} (frame_number={}) to FFmpeg at offset {}",
-                    frame_count, frame_number, *frame_count - 1
+                    frame_count,
+                    frame_number,
+                    *frame_count - 1
                 );
 
                 flush_ffmpeg_input(stdin, *frame_count, fps).await;

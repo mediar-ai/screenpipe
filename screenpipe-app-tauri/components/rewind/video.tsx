@@ -1,6 +1,9 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { getMediaFile } from '@/lib/actions/video-actions'
+
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 500; // ms
 
 export const VideoComponent = memo(function VideoComponent({
   filePath,
@@ -14,6 +17,8 @@ export const VideoComponent = memo(function VideoComponent({
   const [mediaSrc, setMediaSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isAudio, setIsAudio] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const mediaSrcRef = useRef<string | null>(null);
 
   const sanitizeFilePath = useCallback((path: string): string => {
     const isWindows = navigator.userAgent.includes("Windows");
@@ -32,60 +37,87 @@ export const VideoComponent = memo(function VideoComponent({
     </div>
   );
 
-  const getMimeType = (path: string): string => {
-    const ext = path.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "mp4":
-        return "video/mp4";
-      case "webm":
-        return "video/webm";
-      case "ogg":
-        return "video/ogg";
-      case "mp3":
-        return "audio/mpeg";
-      case "wav":
-        return "audio/wav";
-      default:
-        return isAudio ? "audio/mpeg" : "video/mp4";
-    }
-  };
-
   useEffect(() => {
-    async function loadMedia() {
+    let isCancelled = false;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    async function loadMedia(attempt: number = 0) {
       try {
-        console.log("Loading media:", filePath);
+        console.log(`Loading media (attempt ${attempt + 1}/${MAX_RETRIES + 1}):`, filePath);
         const sanitizedPath = sanitizeFilePath(filePath);
         console.log("Sanitized path:", sanitizedPath);
         if (!sanitizedPath) {
           throw new Error("Invalid file path");
         }
 
-        setIsAudio(
-          sanitizedPath.toLowerCase().includes("input") ||
-            sanitizedPath.toLowerCase().includes("output")
-        );
+        const isAudioFile = sanitizedPath.toLowerCase().includes("input") ||
+          sanitizedPath.toLowerCase().includes("output");
+
+        if (!isCancelled) {
+          setIsAudio(isAudioFile);
+        }
 
         const { data, mimeType } = await getMediaFile(sanitizedPath);
+
+        if (isCancelled) return;
+
         const binaryData = atob(data);
         const bytes = new Uint8Array(binaryData.length);
         for (let i = 0; i < binaryData.length; i++) {
           bytes[i] = binaryData.charCodeAt(i);
         }
         const blob = new Blob([bytes], { type: mimeType });
-        setMediaSrc(URL.createObjectURL(blob));
+        const blobUrl = URL.createObjectURL(blob);
+
+        // Clean up previous blob URL before setting new one
+        if (mediaSrcRef.current) {
+          URL.revokeObjectURL(mediaSrcRef.current);
+        }
+        mediaSrcRef.current = blobUrl;
+        setMediaSrc(blobUrl);
+        setError(null);
+        setRetryCount(0);
+        console.log("Media loaded successfully:", filePath);
       } catch (error) {
-        console.warn("Failed to load media:", error);
-        setError(
-          `Failed to load media: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
-        );
+        if (isCancelled) return;
+
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.warn(`Failed to load media (attempt ${attempt + 1}):`, errorMessage);
+
+        // Retry with exponential backoff for transient errors
+        if (attempt < MAX_RETRIES) {
+          const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
+          console.log(`Retrying in ${delay}ms...`);
+          setRetryCount(attempt + 1);
+          retryTimeout = setTimeout(() => {
+            if (!isCancelled) {
+              loadMedia(attempt + 1);
+            }
+          }, delay);
+        } else {
+          setError(`Failed to load media: ${errorMessage}`);
+          setRetryCount(0);
+        }
       }
     }
 
+    // Reset state when filePath changes
+    setError(null);
+    setMediaSrc(null);
+    setRetryCount(0);
+
     loadMedia();
+
     return () => {
-      if (mediaSrc) URL.revokeObjectURL(mediaSrc);
+      isCancelled = true;
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+      // Clean up blob URL using ref (avoids stale closure)
+      if (mediaSrcRef.current) {
+        URL.revokeObjectURL(mediaSrcRef.current);
+        mediaSrcRef.current = null;
+      }
     };
   }, [filePath, sanitizeFilePath]);
 

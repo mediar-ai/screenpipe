@@ -235,8 +235,9 @@ pub struct Cli {
     #[arg(short = 'l', long, value_enum)]
     pub language: Vec<Language>,
 
-    /// Enable PII removal from OCR text property that is saved to db and returned in search results
-    #[arg(long, default_value_t = false)]
+    /// Enable PII removal from OCR text and audio transcriptions saved to db and returned in search results.
+    /// When enabled, sensitive data like emails, phone numbers, credit cards, SSNs, and API keys are redacted.
+    #[arg(long, default_value_t = true)]
     pub use_pii_removal: bool,
 
     /// Disable vision recording
@@ -258,6 +259,12 @@ pub struct Cli {
     /// --included-windows "WhatsApp" will include "WhatsApp"
     #[arg(long)]
     pub included_windows: Vec<String>,
+
+    /// List of URLs to ignore for browser privacy filtering - we use contains to match, example:
+    /// --ignored-urls "wellsfargo.com" --ignored-urls "chase.com" will ignore banking sites
+    /// --ignored-urls ".bank" will ignore any URL containing ".bank"
+    #[arg(long)]
+    pub ignored_urls: Vec<String>,
 
     /// Video chunk duration in seconds
     #[arg(long, default_value_t = 60)]
