@@ -149,7 +149,7 @@ mod tests {
             )
             .unwrap(),
         ));
-        let embedding_manager = EmbeddingManager::new(usize::MAX);
+        let embedding_manager = Arc::new(Mutex::new(EmbeddingManager::new(usize::MAX)));
 
         let multiple_speakers_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("test_data/speaker_identification/6_speakers.wav");

@@ -89,7 +89,7 @@ async fn test_transcription_accuracy() {
         let vad_engine = Arc::clone(&vad_engine);
 
         let embedding_extractor = Arc::clone(&embedding_extractor);
-        let embedding_manager = EmbeddingManager::new(usize::MAX);
+        let embedding_manager = Arc::new(std::sync::Mutex::new(EmbeddingManager::new(usize::MAX)));
         let segmentation_model_path = segmentation_model_path.clone();
 
         let task = tokio::spawn(async move {

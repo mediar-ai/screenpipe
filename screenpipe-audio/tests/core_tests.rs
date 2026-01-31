@@ -256,7 +256,7 @@ mod tests {
             )
             .unwrap(),
         ));
-        let embedding_manager = EmbeddingManager::new(usize::MAX);
+        let embedding_manager = Arc::new(std::sync::Mutex::new(EmbeddingManager::new(usize::MAX)));
 
         let (mut segments, _) = prepare_segments(
             &audio_input.data,
@@ -339,7 +339,7 @@ mod tests {
             .unwrap(),
         ));
 
-        let embedding_manager = EmbeddingManager::new(usize::MAX);
+        let embedding_manager = Arc::new(std::sync::Mutex::new(EmbeddingManager::new(usize::MAX)));
 
         let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
 
