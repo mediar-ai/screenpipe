@@ -438,7 +438,9 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "-i",
         "-",
         "-vf",
-        "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
+        // Scale to even dimensions (required for H.265/yuv420p). Use trunc to scale down
+        // by at most 1 pixel, avoiding black bars that pad would add.
+        "scale=trunc(iw/2)*2:trunc(ih/2)*2",
     ];
 
     args.extend_from_slice(&[
@@ -769,5 +771,222 @@ pub async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
             }
         }
         Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{ImageBuffer, Rgba};
+    use std::io::Cursor;
+    use tempfile::tempdir;
+    use tokio::process::Command;
+
+    /// Helper to create a synthetic PNG image of given dimensions
+    fn create_test_png(width: u32, height: u32) -> Vec<u8> {
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_fn(width, height, |x, y| {
+                // Create a simple gradient pattern for visual verification
+                Rgba([
+                    (x % 256) as u8,
+                    (y % 256) as u8,
+                    ((x + y) % 256) as u8,
+                    255,
+                ])
+            });
+
+        let mut buffer = Vec::new();
+        let mut cursor = Cursor::new(&mut buffer);
+        img.write_to(&mut cursor, image::ImageFormat::Png)
+            .expect("Failed to encode PNG");
+        buffer
+    }
+
+    /// Get video dimensions using ffprobe
+    async fn get_video_dimensions(video_path: &str) -> Result<(u32, u32), anyhow::Error> {
+        let output = Command::new("ffprobe")
+            .args([
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height",
+                "-of", "csv=s=x:p=0",
+                video_path,
+            ])
+            .output()
+            .await?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parts: Vec<&str> = stdout.trim().split('x').collect();
+        if parts.len() == 2 {
+            let width = parts[0].parse::<u32>()?;
+            let height = parts[1].parse::<u32>()?;
+            Ok((width, height))
+        } else {
+            Err(anyhow::anyhow!("Failed to parse dimensions: {}", stdout))
+        }
+    }
+
+    /// Test that FFmpeg correctly scales odd dimensions to even
+    #[tokio::test]
+    async fn test_ffmpeg_scales_odd_dimensions_to_even() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let output_path = temp_dir.path().join("test_odd.mp4");
+        let output_str = output_path.to_str().unwrap();
+
+        // Create image with odd dimensions (1921x1081)
+        let png_data = create_test_png(1921, 1081);
+
+        // Start FFmpeg and write frame
+        let mut child = start_ffmpeg_process(output_str, 1.0)
+            .await
+            .expect("Failed to start FFmpeg");
+
+        let mut stdin = child.stdin.take().expect("Failed to get stdin");
+        write_frame_to_ffmpeg(&mut stdin, &png_data)
+            .await
+            .expect("Failed to write frame");
+        drop(stdin);
+
+        let output = child.wait_with_output().await.expect("FFmpeg failed");
+        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+
+        // Verify output dimensions are even (1920x1080)
+        let (width, height) = get_video_dimensions(output_str)
+            .await
+            .expect("Failed to get video dimensions");
+
+        assert_eq!(width % 2, 0, "Width should be even, got {}", width);
+        assert_eq!(height % 2, 0, "Height should be even, got {}", height);
+        assert_eq!(width, 1920, "Expected width 1920, got {}", width);
+        assert_eq!(height, 1080, "Expected height 1080, got {}", height);
+    }
+
+    /// Test ultrawide monitor dimensions (5120x1440)
+    #[tokio::test]
+    async fn test_ffmpeg_ultrawide_dimensions() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let output_path = temp_dir.path().join("test_ultrawide.mp4");
+        let output_str = output_path.to_str().unwrap();
+
+        // 5120x1440 - common ultrawide resolution (even dimensions)
+        let png_data = create_test_png(5120, 1440);
+
+        let mut child = start_ffmpeg_process(output_str, 1.0)
+            .await
+            .expect("Failed to start FFmpeg");
+
+        let mut stdin = child.stdin.take().expect("Failed to get stdin");
+        write_frame_to_ffmpeg(&mut stdin, &png_data)
+            .await
+            .expect("Failed to write frame");
+        drop(stdin);
+
+        let output = child.wait_with_output().await.expect("FFmpeg failed");
+        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+
+        let (width, height) = get_video_dimensions(output_str)
+            .await
+            .expect("Failed to get video dimensions");
+
+        // Even dimensions should remain unchanged
+        assert_eq!(width, 5120, "Expected width 5120, got {}", width);
+        assert_eq!(height, 1440, "Expected height 1440, got {}", height);
+    }
+
+    /// Test odd ultrawide dimensions (5119x1439)
+    #[tokio::test]
+    async fn test_ffmpeg_odd_ultrawide_dimensions() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let output_path = temp_dir.path().join("test_odd_ultrawide.mp4");
+        let output_str = output_path.to_str().unwrap();
+
+        // Odd dimensions that might occur with DPI scaling
+        let png_data = create_test_png(5119, 1439);
+
+        let mut child = start_ffmpeg_process(output_str, 1.0)
+            .await
+            .expect("Failed to start FFmpeg");
+
+        let mut stdin = child.stdin.take().expect("Failed to get stdin");
+        write_frame_to_ffmpeg(&mut stdin, &png_data)
+            .await
+            .expect("Failed to write frame");
+        drop(stdin);
+
+        let output = child.wait_with_output().await.expect("FFmpeg failed");
+        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+
+        let (width, height) = get_video_dimensions(output_str)
+            .await
+            .expect("Failed to get video dimensions");
+
+        // Should scale down to nearest even (5118x1438)
+        assert_eq!(width % 2, 0, "Width should be even, got {}", width);
+        assert_eq!(height % 2, 0, "Height should be even, got {}", height);
+        assert_eq!(width, 5118, "Expected width 5118, got {}", width);
+        assert_eq!(height, 1438, "Expected height 1438, got {}", height);
+    }
+
+    /// Test vertical/rotated monitor dimensions (1440x2560)
+    #[tokio::test]
+    async fn test_ffmpeg_vertical_monitor_dimensions() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let output_path = temp_dir.path().join("test_vertical.mp4");
+        let output_str = output_path.to_str().unwrap();
+
+        // Vertical monitor (rotated 2560x1440)
+        let png_data = create_test_png(1440, 2560);
+
+        let mut child = start_ffmpeg_process(output_str, 1.0)
+            .await
+            .expect("Failed to start FFmpeg");
+
+        let mut stdin = child.stdin.take().expect("Failed to get stdin");
+        write_frame_to_ffmpeg(&mut stdin, &png_data)
+            .await
+            .expect("Failed to write frame");
+        drop(stdin);
+
+        let output = child.wait_with_output().await.expect("FFmpeg failed");
+        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+
+        let (width, height) = get_video_dimensions(output_str)
+            .await
+            .expect("Failed to get video dimensions");
+
+        // Even dimensions should remain unchanged
+        assert_eq!(width, 1440, "Expected width 1440, got {}", width);
+        assert_eq!(height, 2560, "Expected height 2560, got {}", height);
+    }
+
+    /// Test super ultrawide with forced scaling (3840x1080 forced to 1440 height scenario)
+    #[tokio::test]
+    async fn test_ffmpeg_forced_scaling_dimensions() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let output_path = temp_dir.path().join("test_forced.mp4");
+        let output_str = output_path.to_str().unwrap();
+
+        // Simulating 3840x1080 monitor forced to 1440 height (would be 3840x1440 after OS scaling)
+        let png_data = create_test_png(3840, 1440);
+
+        let mut child = start_ffmpeg_process(output_str, 1.0)
+            .await
+            .expect("Failed to start FFmpeg");
+
+        let mut stdin = child.stdin.take().expect("Failed to get stdin");
+        write_frame_to_ffmpeg(&mut stdin, &png_data)
+            .await
+            .expect("Failed to write frame");
+        drop(stdin);
+
+        let output = child.wait_with_output().await.expect("FFmpeg failed");
+        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+
+        let (width, height) = get_video_dimensions(output_str)
+            .await
+            .expect("Failed to get video dimensions");
+
+        assert_eq!(width, 3840, "Expected width 3840, got {}", width);
+        assert_eq!(height, 1440, "Expected height 1440, got {}", height);
     }
 }
