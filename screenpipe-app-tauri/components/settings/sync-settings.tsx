@@ -621,7 +621,8 @@ export function SyncSettings() {
         return false;
       }
 
-      const response = await fetch("https://screenpi.pe/api/cloud-sync/subscription?userId=" + userId, {
+      const email = settings.user?.email || "";
+      const response = await fetch(`https://screenpi.pe/api/cloud-sync/subscription?userId=${userId}&email=${encodeURIComponent(email)}`, {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
