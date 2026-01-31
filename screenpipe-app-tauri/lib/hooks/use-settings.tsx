@@ -83,6 +83,7 @@ export type Settings = SettingsStore & {
 	chatHistory?: ChatHistoryStore;
 	ignoredUrls?: string[];
 	searchShortcut?: string;
+	adaptiveFps?: boolean;
 }
 
 export const DEFAULT_PROMPT = `Rules:
