@@ -287,6 +287,8 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
 
     let audio_devices = store.audio_devices.clone();
 
+    let use_system_default_audio = store.use_system_default_audio;
+
     let use_pii_removal = store.use_pii_removal;
 
     let port = store.port;
@@ -417,6 +419,11 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
             args.push("--audio-device");
             args.push(device.as_str());
         }
+    }
+
+    // Pass use-system-default-audio flag (defaults to true in CLI, only pass when false)
+    if !use_system_default_audio {
+        args.push("--use-system-default-audio=false");
     }
 
     if use_pii_removal {

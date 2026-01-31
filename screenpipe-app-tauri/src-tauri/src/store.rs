@@ -123,6 +123,9 @@ pub struct SettingsStore {
     pub monitor_ids: Vec<String>,
     #[serde(rename = "audioDevices")]
     pub audio_devices: Vec<String>,
+    /// When true, automatically follow system default audio devices
+    #[serde(rename = "useSystemDefaultAudio", default = "default_true")]
+    pub use_system_default_audio: bool,
     #[serde(rename = "usePiiRemoval")]
     pub use_pii_removal: bool,
     #[serde(rename = "restartInterval")]
@@ -411,6 +414,7 @@ impl Default for SettingsStore {
             ocr_engine: "tesseract".to_string(),
             monitor_ids: vec!["default".to_string()],
             audio_devices: vec!["default".to_string()],
+            use_system_default_audio: true,
             use_pii_removal: true,
             restart_interval: 0,
             port: 3030,
