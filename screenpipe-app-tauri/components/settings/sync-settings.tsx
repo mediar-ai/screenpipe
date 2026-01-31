@@ -130,18 +130,18 @@ function SyncBenefits() {
   const benefits = [
     {
       icon: <Shield className="w-5 h-5" />,
-      title: "zero-knowledge encryption",
-      description: "your data is encrypted before it leaves your device. we can never see your data.",
+      title: "Zero-Knowledge Encryption",
+      description: "Your data is encrypted before it leaves your device. We can never see your data.",
     },
     {
       icon: <Smartphone className="w-5 h-5" />,
-      title: "access anywhere",
-      description: "search and access your memory from any device - desktop, phone, or web.",
+      title: "Access Anywhere",
+      description: "Search and access your memory from any device.",
     },
     {
       icon: <Zap className="w-5 h-5" />,
-      title: "automatic backup",
-      description: "never lose your data. continuous sync keeps everything safe in the cloud.",
+      title: "Automatic Backup",
+      description: "Never lose your data. Continuous sync keeps everything safe.",
     },
   ];
 
@@ -169,14 +169,14 @@ function SyncBenefits() {
 }
 
 // Onboarding/upgrade prompt
-function SyncOnboarding({ onSubscribe, onRefresh, isLoading }: { onSubscribe: () => void; onRefresh: () => void; isLoading: boolean }) {
+function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing }: { onSubscribe: () => void; onRefresh: () => void; isLoading: boolean; isRefreshing: boolean }) {
   return (
     <div className="space-y-6">
       <div className="text-center">
         <CloudSyncAnimation />
-        <h3 className="text-xl font-semibold mt-4">cloud sync</h3>
+        <h3 className="text-xl font-semibold mt-4">Cloud Sync</h3>
         <p className="text-sm text-muted-foreground mt-2">
-          sync your screenpipe data across all your devices with end-to-end encryption
+          Sync your Screenpipe data across all your devices with end-to-end encryption
         </p>
       </div>
 
@@ -187,10 +187,10 @@ function SyncOnboarding({ onSubscribe, onRefresh, isLoading }: { onSubscribe: ()
           <div>
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-primary" />
-              <span className="font-medium">screenpipe pro</span>
+              <span className="font-medium">Screenpipe Pro</span>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              50GB storage - 3 devices - priority support
+              50GB storage · 3 devices · Priority support
             </p>
           </div>
           <div className="text-right">
@@ -205,16 +205,16 @@ function SyncOnboarding({ onSubscribe, onRefresh, isLoading }: { onSubscribe: ()
           {isLoading ? (
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
           ) : null}
-          get cloud sync
+          Get Cloud Sync
           <ArrowRight className="w-4 h-4 ml-2" />
         </Button>
         <a
-          href={`https://chatgpt.com/?hints=search&q=${encodeURIComponent("analyze this encryption code and verify it's true end-to-end encryption where the server cannot see user data: https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/sync.rs")}`}
+          href="https://screenpi.pe/docs/cloud-sync"
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-center text-muted-foreground mt-3 block hover:text-primary underline"
         >
-          ask chatgpt about the encryption source code
+          Learn how encryption works →
         </a>
       </Card>
 
@@ -222,10 +222,11 @@ function SyncOnboarding({ onSubscribe, onRefresh, isLoading }: { onSubscribe: ()
         variant="ghost"
         size="sm"
         onClick={onRefresh}
+        disabled={isRefreshing}
         className="mx-auto flex items-center gap-2 text-muted-foreground"
       >
-        <RefreshCw className="w-3 h-3" />
-        already subscribed? refresh
+        <RefreshCw className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`} />
+        {isRefreshing ? "Checking..." : "Already subscribed? Refresh"}
       </Button>
     </div>
   );
@@ -239,16 +240,16 @@ function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) =
   const handleSubmit = () => {
     if (password !== confirmPassword) {
       toast({
-        title: "passwords don't match",
-        description: "please make sure your passwords match",
+        title: "Passwords don't match",
+        description: "Please make sure your passwords match",
         variant: "destructive",
       });
       return;
     }
     if (password.length < 8) {
       toast({
-        title: "password too short",
-        description: "password must be at least 8 characters",
+        title: "Password too short",
+        description: "Password must be at least 8 characters",
         variant: "destructive",
       });
       return;
@@ -260,30 +261,30 @@ function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) =
     <div className="space-y-6">
       <div className="text-center">
         <CloudSyncAnimation />
-        <h3 className="text-xl font-semibold mt-4">set your encryption password</h3>
+        <h3 className="text-xl font-semibold mt-4">Set Your Encryption Password</h3>
         <p className="text-sm text-muted-foreground mt-2">
-          this password encrypts your data locally before syncing.
-          we never see your password or your data.
+          This password encrypts your data locally before syncing.
+          We never see your password or your data.
         </p>
       </div>
 
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="password">encryption password</Label>
+          <Label htmlFor="password">Encryption Password</Label>
           <Input
             id="password"
             type="password"
-            placeholder="enter a strong password"
+            placeholder="Enter a strong password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="confirm-password">confirm password</Label>
+          <Label htmlFor="confirm-password">Confirm Password</Label>
           <Input
             id="confirm-password"
             type="password"
-            placeholder="confirm your password"
+            placeholder="Confirm your password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             onKeyDown={(e) => {
@@ -293,12 +294,12 @@ function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) =
         </div>
       </div>
 
-      <Card className="p-3 bg-yellow-500/10 border-yellow-500/20">
+      <Card className="p-3 border-muted">
         <div className="flex gap-2">
-          <AlertCircle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-yellow-700 dark:text-yellow-400">
-            <strong>important:</strong> if you forget this password, your cloud data cannot be recovered.
-            consider using a password manager.
+          <AlertCircle className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground">
+            <strong>Important:</strong> If you forget this password, your cloud data cannot be recovered.
+            Consider using a password manager.
           </p>
         </div>
       </Card>
@@ -313,7 +314,7 @@ function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) =
         ) : (
           <Unlock className="w-4 h-4 mr-2" />
         )}
-        {isLoading ? "setting up..." : "enable cloud sync"}
+        {isLoading ? "Setting up..." : "Enable Cloud Sync"}
       </Button>
     </div>
   );
@@ -322,25 +323,19 @@ function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) =
 // Main sync settings (shown when subscribed and initialized)
 function ActiveSyncSettings({
   status,
-  config,
   devices,
   onToggleSync,
   onTriggerSync,
-  onUpdateConfig,
   onRemoveDevice,
   onDeleteCloudData,
-  onLockSync,
   isSyncing,
 }: {
   status: SyncStatus;
-  config: SyncConfig;
   devices: SyncDevice[];
   onToggleSync: (enabled: boolean) => void;
   onTriggerSync: () => void;
-  onUpdateConfig: (updates: Partial<SyncConfig>) => void;
   onRemoveDevice: (deviceId: string) => void;
   onDeleteCloudData: () => void;
-  onLockSync: () => void;
   isSyncing: boolean;
 }) {
   const storagePercent =
@@ -359,9 +354,9 @@ function ActiveSyncSettings({
             <CloudOff className="h-5 w-5 text-muted-foreground" />
           )}
           <div>
-            <h3 className="text-lg font-medium">cloud sync</h3>
+            <h3 className="text-lg font-medium">Cloud Sync</h3>
             <p className="text-sm text-muted-foreground">
-              sync your data across devices with end-to-end encryption
+              Sync your data across devices with end-to-end encryption
             </p>
           </div>
         </div>
@@ -382,7 +377,7 @@ function ActiveSyncSettings({
                 {status.isSyncing || isSyncing ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    <span className="text-sm">syncing...</span>
+                    <span className="text-sm">Syncing your data...</span>
                   </>
                 ) : status.lastError ? (
                   <>
@@ -393,11 +388,11 @@ function ActiveSyncSettings({
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="h-4 w-4 text-foreground" />
                     <span className="text-sm text-muted-foreground">
                       {status.lastSync
-                        ? `last synced ${formatRelativeTime(status.lastSync)}`
-                        : "never synced"}
+                        ? `Last synced ${formatRelativeTime(status.lastSync)}`
+                        : "Ready to sync"}
                     </span>
                   </>
                 )}
@@ -413,7 +408,7 @@ function ActiveSyncSettings({
                     isSyncing || status.isSyncing ? "animate-spin" : ""
                   }`}
                 />
-                sync now
+                Sync Now
               </Button>
             </div>
 
@@ -445,192 +440,108 @@ function ActiveSyncSettings({
             )}
           </Card>
 
-          {/* Sync Options */}
-          <Separator />
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium">sync options</h4>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="sync-transcripts" className="text-sm">
-                  transcripts
-                </Label>
-                <Switch
-                  id="sync-transcripts"
-                  checked={config.syncTranscripts}
-                  onCheckedChange={(checked) =>
-                    onUpdateConfig({ syncTranscripts: checked })
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Label htmlFor="sync-ocr" className="text-sm">
-                  OCR text
-                </Label>
-                <Switch
-                  id="sync-ocr"
-                  checked={config.syncOcr}
-                  onCheckedChange={(checked) =>
-                    onUpdateConfig({ syncOcr: checked })
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Label htmlFor="sync-audio" className="text-sm">
-                  audio recordings
-                </Label>
-                <Switch
-                  id="sync-audio"
-                  checked={config.syncAudio}
-                  onCheckedChange={(checked) =>
-                    onUpdateConfig({ syncAudio: checked })
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Label htmlFor="sync-frames" className="text-sm">
-                  screen frames
-                </Label>
-                <Switch
-                  id="sync-frames"
-                  checked={config.syncFrames}
-                  onCheckedChange={(checked) =>
-                    onUpdateConfig({ syncFrames: checked })
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label htmlFor="sync-interval" className="text-sm">
-                sync frequency
-              </Label>
-              <Select
-                value={String(config.syncIntervalMinutes)}
-                onValueChange={(value) =>
-                  onUpdateConfig({ syncIntervalMinutes: parseInt(value) })
-                }
-              >
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1 minute</SelectItem>
-                  <SelectItem value="5">5 minutes</SelectItem>
-                  <SelectItem value="15">15 minutes</SelectItem>
-                  <SelectItem value="30">30 minutes</SelectItem>
-                  <SelectItem value="60">1 hour</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* What's synced */}
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Everything syncs automatically in the background. Screen recordings, audio, and transcriptions.
+              Uses ~0.8 GB per monitor per day.
+            </p>
+            <a
+              href="https://screenpi.pe/docs/cloud-sync"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:text-primary underline"
+            >
+              Learn how encryption works →
+            </a>
           </div>
 
+
           {/* Devices */}
-          {devices.length > 0 && (
-            <>
-              <Separator />
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium">connected devices</h4>
-                <div className="space-y-2">
-                  {devices.map((device) => (
-                    <Card
-                      key={device.deviceId}
-                      className="p-3 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Laptop className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">
-                            {device.deviceName || device.deviceId}
-                            {device.isCurrent && (
-                              <Badge variant="outline" className="ml-2 text-xs">
-                                this device
-                              </Badge>
-                            )}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {device.deviceOs}
-                            {device.lastSyncAt &&
-                              ` - last synced ${formatRelativeTime(device.lastSyncAt)}`}
-                          </p>
-                        </div>
+          <Separator />
+          <div className="space-y-4">
+            <h4 className="text-sm font-medium">Your Devices</h4>
+            {devices.length > 0 ? (
+              <div className="space-y-2">
+                {devices.map((device) => (
+                  <Card
+                    key={device.deviceId}
+                    className="p-3 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Laptop className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">
+                          {device.deviceName || device.deviceId}
+                          {device.isCurrent && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              This device
+                            </Badge>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {device.deviceOs}
+                          {device.lastSyncAt &&
+                            ` - last synced ${formatRelativeTime(device.lastSyncAt)}`}
+                        </p>
                       </div>
-                      {!device.isCurrent && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onRemoveDevice(device.deviceId)}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      )}
-                    </Card>
-                  ))}
-                </div>
+                    </div>
+                    {!device.isCurrent && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onRemoveDevice(device.deviceId)}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
+                  </Card>
+                ))}
               </div>
-            </>
-          )}
+            ) : (
+              <Card className="p-4 border-dashed">
+                <div className="text-center text-sm text-muted-foreground">
+                  <Laptop className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>This is your first synced device</p>
+                  <p className="text-xs mt-1">
+                    Install Screenpipe on another device and log in with the same account to see it here
+                  </p>
+                </div>
+              </Card>
+            )}
+          </div>
 
           {/* Danger Zone */}
           <Separator />
           <div className="space-y-4">
-            <h4 className="text-sm font-medium text-destructive">danger zone</h4>
-            <div className="flex gap-2">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Lock className="h-4 w-4 mr-2" />
-                    lock sync
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>lock sync?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      this will clear your encryption keys from memory. you'll
-                      need to enter your password again to access synced data.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={onLockSync}>
-                      lock
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm">
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    delete cloud data
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>delete all cloud data?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      this will permanently delete all your synced data from the
-                      cloud. this action cannot be undone. your local data will
-                      not be affected.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={onDeleteCloudData}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      delete forever
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
+            <h4 className="text-sm font-medium">Danger Zone</h4>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Cloud Data
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete All Cloud Data?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete all your synced data from the
+                    cloud. This action cannot be undone. Your local data will
+                    not be affected.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={onDeleteCloudData}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete Forever
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </>
       )}
@@ -647,12 +558,32 @@ export function SyncSettings() {
   const [config, setConfig] = useState<SyncConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (isSettingsLoaded) {
       checkSubscriptionAndLoad();
     }
   }, [isSettingsLoaded]);
+
+  // Auto-poll for subscription when on onboarding step
+  useEffect(() => {
+    if (step !== "onboarding") return;
+
+    const pollInterval = setInterval(async () => {
+      console.log("auto-polling for subscription...");
+      const hasSubscription = await checkSubscriptionAndLoad();
+      if (hasSubscription) {
+        clearInterval(pollInterval);
+        toast({
+          title: "subscription detected",
+          description: "you can now set up your encryption password",
+        });
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [step]);
 
   const checkSubscriptionAndLoad = async (): Promise<boolean> => {
     try {
@@ -920,6 +851,15 @@ export function SyncSettings() {
     await checkSubscriptionAndLoad();
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await checkSubscriptionAndLoad();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   if (step === "loading") {
     return (
       <div className="flex items-center justify-center p-8">
@@ -929,25 +869,22 @@ export function SyncSettings() {
   }
 
   if (step === "onboarding") {
-    return <SyncOnboarding onSubscribe={handleSubscribe} onRefresh={checkSubscriptionAndLoad} isLoading={isLoading} />;
+    return <SyncOnboarding onSubscribe={handleSubscribe} onRefresh={handleRefresh} isLoading={isLoading} isRefreshing={isRefreshing} />;
   }
 
   if (step === "password") {
     return <PasswordSetup onSubmit={handlePasswordSubmit} isLoading={isLoading} />;
   }
 
-  if (step === "active" && status && config) {
+  if (step === "active" && status) {
     return (
       <ActiveSyncSettings
         status={status}
-        config={config}
         devices={devices}
         onToggleSync={handleToggleSync}
         onTriggerSync={handleTriggerSync}
-        onUpdateConfig={handleUpdateConfig}
         onRemoveDevice={handleRemoveDevice}
         onDeleteCloudData={handleDeleteCloudData}
-        onLockSync={handleLockSync}
         isSyncing={isSyncing}
       />
     );
