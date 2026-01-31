@@ -2,7 +2,7 @@
 
 **Sync your Screenpipe data to remote AI agents.**
 
-One-liner to sync daily summaries to a remote server (e.g., [OpenClaw](https://openclaw.ai)). Uses Claude Code CLI for AI-powered extraction.
+One-liner to sync daily summaries to a remote server (e.g., [OpenClaw](https://github.com/openclaw/openclaw)). Uses Claude Code CLI for AI-powered extraction.
 
 ## Quick Start
 
@@ -92,13 +92,13 @@ For daily digests via Telegram:
 
 1. **Local Mac** syncs summaries hourly:
 ```bash
-bunx @screenpipe/sync --daemon --output /tmp/summaries --remote openclaw:~/openclaw/screenpipe-pkm
+bunx @screenpipe/sync --daemon --output /tmp/summaries --remote openclaw:~/clawd/screenpipe-pkm
 ```
 
 2. **OpenClaw** has native cron that reads files and sends digest:
 ```bash
 # Already configured - runs at 9pm PT
-openclaw cron list
+sudo docker exec openclaw-gateway node dist/index.js cron list
 ```
 
 ## Use Cases

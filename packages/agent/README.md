@@ -2,7 +2,7 @@
 
 **One-liner to connect Screenpipe to your AI agent.**
 
-Set up full Screenpipe integration with any AI agent (OpenClaw, etc.) in one command. Includes data sync, skills, and optional morning summaries.
+Set up full Screenpipe integration with any AI agent (OpenClaw, OpenClaw, etc.) in one command. Includes data sync, skills, and optional morning summaries.
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ bunx @screenpipe/agent --remove user@server
 
 - [Screenpipe](https://screenpi.pe) running locally
 - SSH access to your agent server
-- AI agent that supports skills (OpenClaw, etc.)
+- AI agent that supports skills (OpenClaw, OpenClaw, etc.)
 
 ## What You Get
 
