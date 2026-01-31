@@ -223,7 +223,7 @@ function SyncOnboarding({ onSubscribe, isLoading }: { onSubscribe: () => void; i
 }
 
 // Password setup step
-function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) => void; isLoading: boolean }) {
+function PasswordSetup({ onSubmit, isLoading, backendReady = true }: { onSubmit: (password: string) => void; isLoading: boolean; backendReady?: boolean }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
@@ -250,9 +250,7 @@ function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) =
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
-          <Lock className="w-8 h-8 text-primary" />
-        </div>
+        <CloudSyncAnimation />
         <h3 className="text-xl font-semibold mt-4">set your encryption password</h3>
         <p className="text-sm text-muted-foreground mt-2">
           this password encrypts your data locally before syncing.
@@ -632,7 +630,7 @@ function ActiveSyncSettings({
 }
 
 export function SyncSettings() {
-  const { settings } = useSettings();
+  const { settings, isSettingsLoaded } = useSettings();
   const [step, setStep] = useState<"loading" | "onboarding" | "password" | "active">("loading");
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [status, setStatus] = useState<SyncStatus | null>(null);
@@ -640,21 +638,29 @@ export function SyncSettings() {
   const [config, setConfig] = useState<SyncConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [backendReady, setBackendReady] = useState(true);
 
   useEffect(() => {
-    checkSubscriptionAndLoad();
-  }, []);
+    // Wait for settings to be fully loaded before checking subscription
+    if (isSettingsLoaded) {
+      checkSubscriptionAndLoad();
+    }
+  }, [isSettingsLoaded]);
 
   const checkSubscriptionAndLoad = async () => {
     try {
       // Check subscription status via API
       const token = settings.user?.token;
-      if (!token) {
+      const userId = settings.user?.id;
+
+      // Must have both token and userId to check subscription
+      if (!token || !userId) {
+        console.log("no token or userId, showing onboarding");
         setStep("onboarding");
         return;
       }
 
-      const response = await fetch("https://screenpi.pe/api/cloud-sync/checkout?userId=" + settings.user?.id, {
+      const response = await fetch("https://screenpi.pe/api/cloud-sync/checkout?userId=" + userId, {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -662,6 +668,7 @@ export function SyncSettings() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log("cloud sync subscription check:", data);
         setSubscription({
           hasSubscription: data.hasSubscription,
           tier: data.subscription?.tier || null,
@@ -669,27 +676,35 @@ export function SyncSettings() {
         });
 
         if (data.hasSubscription) {
-          // Load sync data
-          const [statusResult, configResult, devicesResult] = await Promise.all([
-            invoke<SyncStatus>("get_sync_status"),
-            invoke<SyncConfig>("get_sync_config"),
-            invoke<SyncDevice[]>("get_sync_devices"),
-          ]);
-          setStatus(statusResult);
-          setConfig(configResult);
-          setDevices(devicesResult);
+          // Try to load sync data from backend
+          try {
+            const [statusResult, configResult, devicesResult] = await Promise.all([
+              invoke<SyncStatus>("get_sync_status"),
+              invoke<SyncConfig>("get_sync_config"),
+              invoke<SyncDevice[]>("get_sync_devices"),
+            ]);
+            setStatus(statusResult);
+            setConfig(configResult);
+            setDevices(devicesResult);
 
-          // If sync is already enabled, show active view
-          // Otherwise show password setup
-          if (statusResult.enabled) {
-            setStep("active");
-          } else {
+            // If sync is already enabled, show active view
+            // Otherwise show password setup
+            if (statusResult.enabled) {
+              setStep("active");
+            } else {
+              setStep("password");
+            }
+          } catch (backendError) {
+            // Backend sync commands not available yet - show password setup
+            console.error("sync backend not ready:", backendError);
+            setBackendReady(false);
             setStep("password");
           }
         } else {
           setStep("onboarding");
         }
       } else {
+        console.log("subscription API returned non-ok status:", response.status);
         setStep("onboarding");
       }
     } catch (error) {
@@ -906,7 +921,7 @@ export function SyncSettings() {
   }
 
   if (step === "password") {
-    return <PasswordSetup onSubmit={handlePasswordSubmit} isLoading={isLoading} />;
+    return <PasswordSetup onSubmit={handlePasswordSubmit} isLoading={isLoading} backendReady={backendReady} />;
   }
 
   if (step === "active" && status && config) {
