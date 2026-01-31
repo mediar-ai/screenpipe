@@ -1394,9 +1394,10 @@ export function StandaloneChat() {
                   <PipeAIIcon size={16} animated={false} />
                 )}
               </div>
+              <div className="group/message flex-1 flex flex-col">
               <div
                 className={cn(
-                  "group/message relative flex-1 rounded-xl px-4 py-3 text-sm border",
+                  "relative rounded-xl px-4 py-3 text-sm border",
                   message.role === "user"
                     ? "bg-foreground text-background border-foreground"
                     : "bg-muted/30 border-border/50"
@@ -1478,7 +1479,8 @@ export function StandaloneChat() {
                     upgrade now
                   </button>
                 )}
-                {/* Copy button - appears on hover */}
+              </div>
+                {/* Copy button - appears on hover, outside the message box */}
                 <button
                   onClick={async () => {
                     await navigator.clipboard.writeText(message.content);
@@ -1486,18 +1488,16 @@ export function StandaloneChat() {
                     setTimeout(() => setCopiedMessageId(null), 2000);
                   }}
                   className={cn(
-                    "absolute top-2 right-2 p-1.5 rounded-md transition-all duration-200",
+                    "self-end mt-1 p-1 rounded-md transition-all duration-200",
                     "opacity-0 group-hover/message:opacity-100",
-                    message.role === "user"
-                      ? "hover:bg-background/20 text-background"
-                      : "hover:bg-foreground/10 text-muted-foreground hover:text-foreground"
+                    "hover:bg-muted text-muted-foreground hover:text-foreground"
                   )}
                   title="Copy message"
                 >
                   {copiedMessageId === message.id ? (
-                    <Check className="h-3.5 w-3.5" />
+                    <Check className="h-3 w-3" />
                   ) : (
-                    <Copy className="h-3.5 w-3.5" />
+                    <Copy className="h-3 w-3" />
                   )}
                 </button>
               </div>

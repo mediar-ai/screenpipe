@@ -1,4 +1,4 @@
-use crate::{get_data_dir, window_api::ShowRewindWindow, store::OnboardingStore};
+use crate::{get_data_dir, window_api::ShowRewindWindow, store::OnboardingStore, store::SettingsStore, parse_shortcut};
 use tauri::{Manager, Emitter};
 use tracing::{error, info};
 
@@ -43,7 +43,7 @@ pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
                error!("Failed to set focus on main window: {}", e);
            }
 
-           // Register window-specific shortcuts (Escape, Cmd+K, Cmd+L) on a separate task
+           // Register window-specific shortcuts (Escape, Ctrl+Cmd+K) on a separate task
            // IMPORTANT: This MUST be spawned async to avoid deadlock when called from
            // within a global shortcut callback (the callback holds the shortcut manager lock)
            let app_clone = app_handle.clone();
@@ -62,7 +62,7 @@ pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
 #[tauri::command]
 #[specta::specta]
 pub fn hide_main_window(app_handle: &tauri::AppHandle) {
-    // Unregister window-specific shortcuts (Escape, Cmd+K, Cmd+L) on a separate task
+    // Unregister window-specific shortcuts (Escape, Ctrl+Cmd+K) on a separate task
     // IMPORTANT: This MUST be spawned async to avoid deadlock when called from
     // within a global shortcut callback (e.g., Escape key handler)
     let app_clone = app_handle.clone();
@@ -564,12 +564,12 @@ pub async fn hide_shortcut_reminder(app_handle: tauri::AppHandle) -> Result<(), 
     Ok(())
 }
 
-/// Register window-specific shortcuts (Escape, Cmd+K, Cmd+L) when main window is visible
+/// Register window-specific shortcuts (Escape, search shortcut) when main window is visible
 /// These should only be active when the overlay is open to avoid blocking other apps
 #[tauri::command]
 #[specta::specta]
 pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
     use tauri::Emitter;
 
     let global_shortcut = app_handle.global_shortcut();
@@ -588,36 +588,54 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
         }
     }
 
-    // Register Cmd+K (macOS) / Ctrl+K (Windows/Linux) to open search
-    #[cfg(target_os = "macos")]
-    let search_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyK);
-    #[cfg(not(target_os = "macos"))]
-    let search_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyK);
+    // Get search shortcut from settings
+    let settings = SettingsStore::get(&app_handle).unwrap_or_default().unwrap_or_default();
+    let search_shortcut_str = settings.search_shortcut;
 
-    if let Err(e) = global_shortcut.on_shortcut(search_shortcut, |app, _, event| {
-        if matches!(event.state, ShortcutState::Pressed) {
-            info!("Search shortcut triggered (Cmd+K / Ctrl+K)");
-            let _ = app.emit("open-search", ());
+    // Default fallback if empty or parse fails
+    #[cfg(target_os = "windows")]
+    let default_search = "Control+Alt+K";
+    #[cfg(not(target_os = "windows"))]
+    let default_search = "Control+Super+K";
+
+    let shortcut_to_use = if search_shortcut_str.is_empty() {
+        default_search.to_string()
+    } else {
+        search_shortcut_str
+    };
+
+    // Parse and register the search shortcut
+    match parse_shortcut(&shortcut_to_use) {
+        Ok(search_shortcut) => {
+            if let Err(e) = global_shortcut.on_shortcut(search_shortcut, |app, _, event| {
+                if matches!(event.state, ShortcutState::Pressed) {
+                    info!("Search shortcut triggered");
+                    let _ = app.emit("open-search", ());
+                }
+            }) {
+                if !e.to_string().contains("already registered") {
+                    error!("Failed to register search shortcut: {}", e);
+                }
+            }
         }
-    }) {
-        if !e.to_string().contains("already registered") {
-            error!("Failed to register search shortcut: {}", e);
+        Err(e) => {
+            error!("Failed to parse search shortcut '{}': {}", shortcut_to_use, e);
         }
     }
 
     // Note: Chat shortcut (Ctrl+Cmd+L) is now global-only, not window-specific
     // This allows one consistent shortcut for chat everywhere
 
-    info!("Window-specific shortcuts registered (Escape, Cmd+K)");
+    info!("Window-specific shortcuts registered (Escape, {})", shortcut_to_use);
     Ok(())
 }
 
 /// Unregister window-specific shortcuts when main window is hidden
-/// This allows Escape, Cmd+K, Cmd+L to work normally in other apps
+/// This allows Escape and search shortcut to work normally in other apps
 #[tauri::command]
 #[specta::specta]
 pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut};
 
     let global_shortcut = app_handle.global_shortcut();
 
@@ -625,12 +643,26 @@ pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), S
     let escape_shortcut = Shortcut::new(None, Code::Escape);
     let _ = global_shortcut.unregister(escape_shortcut);
 
-    // Unregister Cmd+K / Ctrl+K
-    #[cfg(target_os = "macos")]
-    let search_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyK);
-    #[cfg(not(target_os = "macos"))]
-    let search_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyK);
-    let _ = global_shortcut.unregister(search_shortcut);
+    // Get search shortcut from settings to unregister the correct one
+    let settings = SettingsStore::get(&app_handle).unwrap_or_default().unwrap_or_default();
+    let search_shortcut_str = settings.search_shortcut;
+
+    // Default fallback if empty
+    #[cfg(target_os = "windows")]
+    let default_search = "Control+Alt+K";
+    #[cfg(not(target_os = "windows"))]
+    let default_search = "Control+Super+K";
+
+    let shortcut_to_use = if search_shortcut_str.is_empty() {
+        default_search.to_string()
+    } else {
+        search_shortcut_str
+    };
+
+    // Parse and unregister the search shortcut
+    if let Ok(search_shortcut) = parse_shortcut(&shortcut_to_use) {
+        let _ = global_shortcut.unregister(search_shortcut);
+    }
 
     // Note: Chat shortcut (Ctrl+Cmd+L) is global-only, no need to unregister here
 

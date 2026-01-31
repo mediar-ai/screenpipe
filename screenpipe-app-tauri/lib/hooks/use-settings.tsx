@@ -213,6 +213,7 @@ let DEFAULT_SETTINGS: Settings = {
 			startAudioShortcut: "",
 			stopAudioShortcut: "",
 			showChatShortcut: "Control+Super+L",
+			searchShortcut: "Control+Super+K",
 			enableRealtimeAudioTranscription: false,
 			realtimeAudioTranscriptionEngine: "deepgram",
 			disableVision: false,
@@ -236,6 +237,7 @@ export function createDefaultSettingsObject(): Settings {
 		DEFAULT_SETTINGS.fps = p === "macos" ? 0.5 : 1;
 		DEFAULT_SETTINGS.showScreenpipeShortcut = p === "windows" ? "Alt+S" : "Control+Super+S";
 		DEFAULT_SETTINGS.showChatShortcut = p === "windows" ? "Alt+L" : "Control+Super+L";
+		DEFAULT_SETTINGS.searchShortcut = p === "windows" ? "Control+Alt+K" : "Control+Super+K";
 
 		return DEFAULT_SETTINGS;
 	} catch (e) {

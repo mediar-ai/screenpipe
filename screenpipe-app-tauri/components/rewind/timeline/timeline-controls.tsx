@@ -13,12 +13,56 @@ import {
 import { cn } from "@/lib/utils";
 import { useMemo, useState } from "react";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { Calendar } from "@/components/ui/calendar";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+
+// Helper to format shortcut string for display
+function formatShortcutForDisplay(shortcut: string, isMac: boolean): string {
+	if (!shortcut) return isMac ? "⌃⌘K" : "Ctrl+Alt+K";
+
+	const parts = shortcut.split("+");
+	const formatted = parts.map((part) => {
+		const upper = part.toUpperCase();
+		if (isMac) {
+			switch (upper) {
+				case "CONTROL":
+				case "CTRL":
+					return "⌃";
+				case "SUPER":
+				case "CMD":
+				case "COMMAND":
+					return "⌘";
+				case "ALT":
+				case "OPTION":
+					return "⌥";
+				case "SHIFT":
+					return "⇧";
+				default:
+					return part.toUpperCase();
+			}
+		} else {
+			switch (upper) {
+				case "SUPER":
+				case "CMD":
+				case "COMMAND":
+					return "Win";
+				case "CONTROL":
+					return "Ctrl";
+				case "OPTION":
+					return "Alt";
+				default:
+					return part;
+			}
+		}
+	});
+
+	return isMac ? formatted.join("") : formatted.join("+");
+}
 
 interface TimeRange {
 	start: Date;
@@ -43,7 +87,13 @@ export function TimelineControls({
 	className,
 }: TimelineControlsProps) {
 	const { isMac } = usePlatform();
+	const { settings } = useSettings();
 	const [calendarOpen, setCalendarOpen] = useState(false);
+
+	const searchShortcutDisplay = useMemo(
+		() => formatShortcutForDisplay(settings.searchShortcut, isMac),
+		[settings.searchShortcut, isMac]
+	);
 
 	const jumpDay = async (days: number) => {
 		const today = new Date();
@@ -160,7 +210,7 @@ export function TimelineControls({
 					onClick={onSearchClick}
 					className="flex items-center h-10 gap-1.5 bg-background border border-border px-4 font-mono hover:bg-foreground hover:text-background transition-colors duration-150 cursor-pointer"
 				>
-					<span className="text-xs text-muted-foreground">{isMac ? "⌘K" : "Ctrl+K"}</span>
+					<span className="text-xs text-muted-foreground">{searchShortcutDisplay}</span>
 					<span className="text-xs text-foreground">search</span>
 				</button>
 			</div>

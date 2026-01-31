@@ -306,7 +306,7 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     )
     .await?;
 
-    // NOTE: Escape, Cmd+K, Cmd+L shortcuts are now registered dynamically
+    // NOTE: Escape, Ctrl+Cmd+K shortcuts are now registered dynamically
     // via register_window_shortcuts/unregister_window_shortcuts commands
     // This prevents them from blocking other apps when the overlay is closed
 
@@ -598,7 +598,7 @@ async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, St
 }
 
 // Helper function to parse shortcut string
-fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
+pub fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
     let parts: Vec<&str> = shortcut_str.split('+').collect();
     let key = parts.last().ok_or("Invalid shortcut format")?;
 

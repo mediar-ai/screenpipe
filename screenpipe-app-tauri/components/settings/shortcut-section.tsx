@@ -39,6 +39,14 @@ const ShortcutSection = () => {
 
         <ShortcutRow
           type="global"
+          shortcut="searchShortcut"
+          title="open search"
+          description="shortcut to open search when overlay is visible"
+          value={settings.searchShortcut}
+        />
+
+        <ShortcutRow
+          type="global"
           shortcut="startRecordingShortcut"
           title="start recording"
           description="global shortcut to start screen recording"
