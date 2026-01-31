@@ -220,6 +220,8 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] isolate"
       onWheel={(e) => {
         e.stopPropagation();
