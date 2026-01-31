@@ -34,6 +34,9 @@ pub struct AudioManagerOptions {
     pub output_path: Option<PathBuf>,
     /// Enable PII removal from audio transcriptions
     pub use_pii_removal: bool,
+    /// When true, automatically follow system default audio devices
+    /// and switch when the system default changes (e.g., device plug/unplug)
+    pub use_system_default_audio: bool,
 }
 
 impl Default for AudioManagerOptions {
@@ -59,6 +62,7 @@ impl Default for AudioManagerOptions {
             deepgram_url,
             deepgram_websocket_url,
             use_pii_removal: false,
+            use_system_default_audio: true,
         }
     }
 }
@@ -142,6 +146,11 @@ impl AudioManagerBuilder {
 
     pub fn use_pii_removal(mut self, use_pii_removal: bool) -> Self {
         self.options.use_pii_removal = use_pii_removal;
+        self
+    }
+
+    pub fn use_system_default_audio(mut self, use_system_default_audio: bool) -> Self {
+        self.options.use_system_default_audio = use_system_default_audio;
         self
     }
 

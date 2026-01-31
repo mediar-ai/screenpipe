@@ -234,6 +234,11 @@ impl AudioManager {
         self.options.read().await.use_all_devices
     }
 
+    /// Returns whether to follow system default audio devices
+    pub async fn use_system_default_audio(&self) -> bool {
+        self.options.read().await.use_system_default_audio
+    }
+
     async fn record_device(&self, device: &AudioDevice) -> Result<JoinHandle<Result<()>>> {
         let options = self.options.read().await;
         let stream = self.device_manager.stream(device).unwrap();

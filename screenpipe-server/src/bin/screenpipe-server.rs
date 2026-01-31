@@ -759,7 +759,8 @@ async fn main() -> anyhow::Result<()> {
         .enabled_devices(audio_devices)
         .deepgram_api_key(cli.deepgram_api_key.clone())
         .output_path(PathBuf::from(output_path_clone.clone().to_string()))
-        .use_pii_removal(cli.use_pii_removal);
+        .use_pii_removal(cli.use_pii_removal)
+        .use_system_default_audio(cli.use_system_default_audio);
 
     let audio_manager = match audio_manager_builder.build(db.clone()).await {
         Ok(manager) => Arc::new(manager),

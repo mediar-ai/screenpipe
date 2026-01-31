@@ -83,6 +83,8 @@ export type Settings = SettingsStore & {
 	chatHistory?: ChatHistoryStore;
 	ignoredUrls?: string[];
 	searchShortcut?: string;
+	/** When true, audio devices follow system default and auto-switch on changes */
+	useSystemDefaultAudio?: boolean;
 }
 
 export const DEFAULT_PROMPT = `Rules:
@@ -163,6 +165,7 @@ let DEFAULT_SETTINGS: Settings = {
 			ocrEngine: "default",
 			monitorIds: ["default"],
 			audioDevices: ["default"],
+			useSystemDefaultAudio: true,
 			usePiiRemoval: false,
 			restartInterval: 0,
 			port: 3030,

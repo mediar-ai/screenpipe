@@ -1084,7 +1084,43 @@ export function RecordingSettings() {
 
       <Separator />
 
+      {/* Follow System Default Audio */}
+      <div className="flex flex-col space-y-2">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="useSystemDefaultAudio" className="flex items-center space-x-2">
+            <span>Follow system default</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 cursor-default" />
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>
+                    Automatically use system default audio devices. When you plug in a new microphone
+                    or change the default in System Settings, screenpipe will automatically switch to it.
+                    This handles device disconnects, sleep/wake, and app conflicts gracefully.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
+          <Switch
+            id="useSystemDefaultAudio"
+            checked={settings.useSystemDefaultAudio ?? true}
+            onCheckedChange={(checked) =>
+              handleSettingsChange({ useSystemDefaultAudio: checked }, true)
+            }
+          />
+        </div>
+        {settings.useSystemDefaultAudio && (
+          <p className="text-sm text-muted-foreground">
+            Using system default input and output devices. Changes are detected automatically.
+          </p>
+        )}
+      </div>
+
       {/* Audio Devices */}
+      {!settings.useSystemDefaultAudio && (
       <div className="flex flex-col space-y-2">
         <Label htmlFor="audioDevices" className="flex items-center space-x-2">
           <span>Audio devices</span>
@@ -1149,6 +1185,7 @@ export function RecordingSettings() {
           </PopoverContent>
         </Popover>
       </div>
+      )}
 
       {/* Languages */}
       <div className="flex flex-col space-y-2">
