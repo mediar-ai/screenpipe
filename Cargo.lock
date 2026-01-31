@@ -6749,6 +6749,7 @@ name = "screenpipe-server"
 version = "0.3.5"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "base64 0.22.1",
  "bincode",

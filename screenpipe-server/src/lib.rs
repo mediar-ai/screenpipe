@@ -5,6 +5,7 @@ pub mod chunking;
 pub mod cli;
 pub mod cloud_search;
 pub mod core;
+pub mod sync_provider;
 pub mod filtering;
 pub mod pipe_manager;
 mod resource_monitor;

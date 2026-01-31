@@ -55,6 +55,10 @@ pub enum SyncError {
     /// IO error
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// Database/storage error
+    #[error("database error: {0}")]
+    Database(String),
 }
 
 impl From<reqwest::Error> for SyncError {
