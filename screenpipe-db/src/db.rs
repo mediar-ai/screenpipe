@@ -1092,6 +1092,50 @@ impl DatabaseManager {
         .await
     }
 
+    /// Get frames after a given frame_id for validation checking
+    /// Returns frame_id, file_path, offset_index, and timestamp
+    /// Direction: true = forward (newer frames), false = backward (older frames)
+    pub async fn get_frames_near(
+        &self,
+        frame_id: i64,
+        forward: bool,
+        limit: i32,
+    ) -> Result<Vec<(i64, String, i64, DateTime<Utc>)>, sqlx::Error> {
+        let query = if forward {
+            r#"
+            SELECT
+                frames.id,
+                video_chunks.file_path,
+                frames.offset_index,
+                frames.timestamp
+            FROM frames
+            JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
+            WHERE frames.id > ?1
+            ORDER BY frames.id ASC
+            LIMIT ?2
+            "#
+        } else {
+            r#"
+            SELECT
+                frames.id,
+                video_chunks.file_path,
+                frames.offset_index,
+                frames.timestamp
+            FROM frames
+            JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
+            WHERE frames.id < ?1
+            ORDER BY frames.id DESC
+            LIMIT ?2
+            "#
+        };
+
+        sqlx::query_as::<_, (i64, String, i64, DateTime<Utc>)>(query)
+            .bind(frame_id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+    }
+
     /// Get the OCR text_json for a frame, which contains bounding box information
     /// needed for PII redaction
     pub async fn get_frame_ocr_text_json(

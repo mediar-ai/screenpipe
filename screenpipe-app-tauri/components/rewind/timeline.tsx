@@ -789,21 +789,51 @@ export default function Timeline() {
 							}}
 							canNavigatePrev={currentIndex > 0}
 							canNavigateNext={currentIndex < frames.length - 1}
-							onFrameUnavailable={() => {
-								// Auto-skip to next available frame
+							onFrameUnavailable={async () => {
+								// Get the current frame's frame_id
+								const failedFrameId = frames[currentIndex]?.devices?.[0]?.frame_id;
+								if (!failedFrameId) {
+									// Fallback to old behavior if no frame_id
+									if (currentIndex < frames.length - 1) {
+										setCurrentIndex(currentIndex + 1);
+										setCurrentFrame(frames[currentIndex + 1]);
+									}
+									return;
+								}
+
+								try {
+									// Query the server for the next valid frame
+									const response = await fetch(
+										`http://localhost:3030/frames/next-valid?frame_id=${failedFrameId}&direction=forward&limit=50`
+									);
+
+									if (response.ok) {
+										const data = await response.json();
+										const validFrameId = String(data.frame_id);
+
+										// Find this frame in our local frames array
+										const validIndex = frames.findIndex(
+											(f) => f.devices?.[0]?.frame_id === validFrameId
+										);
+
+										if (validIndex !== -1) {
+											// Jump directly to the valid frame
+											setCurrentIndex(validIndex);
+											setCurrentFrame(frames[validIndex]);
+											return;
+										}
+									}
+								} catch (error) {
+									console.error("Failed to find next valid frame:", error);
+								}
+
+								// Fallback: try the old sequential approach
 								if (currentIndex < frames.length - 1) {
-									const newIndex = currentIndex + 1;
-									setCurrentIndex(newIndex);
-									if (frames[newIndex]) {
-										setCurrentFrame(frames[newIndex]);
-									}
+									setCurrentIndex(currentIndex + 1);
+									setCurrentFrame(frames[currentIndex + 1]);
 								} else if (currentIndex > 0) {
-									// If at end, try previous
-									const newIndex = currentIndex - 1;
-									setCurrentIndex(newIndex);
-									if (frames[newIndex]) {
-										setCurrentFrame(frames[newIndex]);
-									}
+									setCurrentIndex(currentIndex - 1);
+									setCurrentFrame(frames[currentIndex - 1]);
 								}
 							}}
 						/>

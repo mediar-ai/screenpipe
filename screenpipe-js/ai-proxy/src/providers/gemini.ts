@@ -52,10 +52,9 @@ export class GeminiProvider implements AIProvider {
 
 	/**
 	 * Detect if user is explicitly asking for web search
-	 * Returns the search query if detected, null otherwise
+	 * Fallback for when frontend doesn't send web_search tool
 	 */
 	private detectWebSearchIntent(messages: Message[]): string | null {
-		// Get the last user message
 		const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
 		if (!lastUserMsg) return null;
 
@@ -63,31 +62,29 @@ export class GeminiProvider implements AIProvider {
 			? lastUserMsg.content.toLowerCase()
 			: '';
 
-		// Patterns that indicate explicit web search request
 		const webSearchPatterns = [
-			// "search X on internet/web" or "search X on the internet"
-			/search\s+(.+?)\s+on\s+(?:the\s+)?(?:internet|web|online)/i,
-			// "search internet/web for X" or "search the internet for X"
-			/search\s+(?:the\s+)?(?:internet|web|online|google)\s+(?:for\s+)?(.+)/i,
-			// "google X", "look up X", "find online X"
-			/(?:google|look\s*up|find\s+online|search\s+online)\s+(.+)/i,
-			// "what's the latest news on X"
-			/(?:what(?:'s| is) the latest|current|recent)\s+(?:news|info|information)\s+(?:on|about)\s+(.+)/i,
-			// "search internet X"
-			/search\s+(?:internet|web)\s+(.+)/i,
+			/search\s+(.+?)\s+on\s+(?:the\s+)?(?:internet|web)/i,
+			/search\s+(?:the\s+)?(?:internet|web)\s+(?:for|about)\s+(.+)/i,
+			/(?:use\s+)?(?:internet|web)\s+search/i,
+			/search\s+(?:the\s+)?(?:internet|web)/i,
 		];
 
 		for (const pattern of webSearchPatterns) {
 			const match = content.match(pattern);
-			if (match && match[1]) {
-				const query = match[1].trim().replace(/[?.!]+$/, '');
-				console.log('[Gemini Vertex] Web search intent detected:', query);
-				return query;
+			if (match) {
+				// Extract query from match or use full content
+				const query = match[1]?.trim().replace(/[?.!]+$/, '') ||
+					content.replace(/search|internet|web|the|for|about|use/gi, '').trim();
+				if (query.length > 2) {
+					console.log('[Gemini Vertex] Web search intent detected:', query);
+					return query;
+				}
 			}
 		}
 
 		return null;
 	}
+
 
 	/**
 	 * Generate a JWT for service account authentication
@@ -290,12 +287,13 @@ export class GeminiProvider implements AIProvider {
 		const accessToken = await this.getAccessToken();
 		const hasWebSearch = this.hasWebSearchTool(body.tools);
 
-		// Check for explicit web search intent - bypass model and search directly
-		// Always allow web search when intent is detected, even if web_search tool isn't in request
-		const webSearchQuery = this.detectWebSearchIntent(body.messages);
-		if (webSearchQuery) {
-			console.log('[Gemini Vertex] Direct web search for:', webSearchQuery);
-			return this.createDirectWebSearchStream(body, webSearchQuery);
+		// Fallback: detect web search intent when frontend doesn't send web_search tool
+		if (!hasWebSearch) {
+			const webSearchQuery = this.detectWebSearchIntent(body.messages);
+			if (webSearchQuery) {
+				console.log('[Gemini Vertex] Fallback web search for:', webSearchQuery);
+				return this.createDirectWebSearchStream(webSearchQuery);
+			}
 		}
 
 		const url = this.getEndpointUrl(body.model, true) + '?alt=sse';
@@ -617,16 +615,13 @@ export class GeminiProvider implements AIProvider {
 	}
 
 	/**
-	 * Create a streaming response that directly performs web search
-	 * Used when we detect explicit web search intent from the user
+	 * Create a streaming response for direct web search (fallback)
 	 */
-	private async createDirectWebSearchStream(body: RequestBody, query: string): Promise<ReadableStream> {
+	private async createDirectWebSearchStream(query: string): Promise<ReadableStream> {
 		const self = this;
-
 		return new ReadableStream({
 			async start(controller) {
 				try {
-					// Stream a searching indicator
 					controller.enqueue(
 						new TextEncoder().encode(
 							`data: ${JSON.stringify({
@@ -635,10 +630,8 @@ export class GeminiProvider implements AIProvider {
 						)
 					);
 
-					// Execute web search
 					const searchResult = await self.executeWebSearch(query);
 
-					// Stream the result
 					controller.enqueue(
 						new TextEncoder().encode(
 							`data: ${JSON.stringify({
@@ -647,7 +640,6 @@ export class GeminiProvider implements AIProvider {
 						)
 					);
 
-					// Send finish reason
 					controller.enqueue(
 						new TextEncoder().encode(
 							`data: ${JSON.stringify({
@@ -664,13 +656,6 @@ export class GeminiProvider implements AIProvider {
 						new TextEncoder().encode(
 							`data: ${JSON.stringify({
 								choices: [{ delta: { content: 'Web search failed. Please try again.' } }],
-							})}\n\n`
-						)
-					);
-					controller.enqueue(
-						new TextEncoder().encode(
-							`data: ${JSON.stringify({
-								choices: [{ delta: {}, finish_reason: 'stop' }],
 							})}\n\n`
 						)
 					);

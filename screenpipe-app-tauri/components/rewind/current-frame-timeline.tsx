@@ -116,13 +116,13 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		}
 	};
 
-	// Auto-skip to next frame when error occurs
+	// Auto-skip to next frame when error occurs - instant, no delay
 	React.useEffect(() => {
 		if (hasError && !isLoading && onFrameUnavailable) {
-			// Small delay to avoid rapid skipping
+			// Minimal delay just to batch multiple errors
 			const timer = setTimeout(() => {
 				onFrameUnavailable();
-			}, 300);
+			}, 50);
 			return () => clearTimeout(timer);
 		}
 	}, [hasError, isLoading, onFrameUnavailable]);
@@ -242,16 +242,10 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					</div>
 				</div>
 			)}
-			{/* When frame is unavailable, show skeleton while auto-skipping */}
+			{/* When frame is unavailable, just show skeleton - skip happens silently */}
 			{hasError && !isLoading && (
 				<div className="absolute inset-0 z-10">
 					<SkeletonLoader />
-					<div className="absolute inset-0 flex items-center justify-center">
-						<div className="flex items-center gap-2 px-4 py-2 bg-card/90 backdrop-blur-sm rounded-lg border border-border">
-							<Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-							<span className="text-sm text-muted-foreground">Finding next frame...</span>
-						</div>
-					</div>
 				</div>
 			)}
 		</div>

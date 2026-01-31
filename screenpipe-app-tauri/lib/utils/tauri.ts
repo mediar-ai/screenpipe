@@ -221,7 +221,7 @@ async hideShortcutReminder() : Promise<Result<null, string>> {
 }
 },
 /**
- * Register window-specific shortcuts (Escape, Cmd+K, Cmd+L) when main window is visible
+ * Register window-specific shortcuts (Escape, Ctrl+Cmd+K) when main window is visible
  * These should only be active when the overlay is open to avoid blocking other apps
  */
 async registerWindowShortcuts() : Promise<Result<null, string>> {
@@ -234,7 +234,7 @@ async registerWindowShortcuts() : Promise<Result<null, string>> {
 },
 /**
  * Unregister window-specific shortcuts when main window is hidden
- * This allows Escape, Cmd+K, Cmd+L to work normally in other apps
+ * This allows Escape, Ctrl+Cmd+K to work normally in other apps
  */
 async unregisterWindowShortcuts() : Promise<Result<null, string>> {
     try {
