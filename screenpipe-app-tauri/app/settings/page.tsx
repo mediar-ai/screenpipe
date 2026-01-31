@@ -11,6 +11,7 @@ import {
   HardDrive,
   Plug,
   MessageSquare,
+  Cloud,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccountSection } from "@/components/settings/account-section";
@@ -21,6 +22,7 @@ import GeneralSettings from "@/components/settings/general-settings";
 import { DiskUsageSection } from "@/components/settings/disk-usage-section";
 import { ConnectionsSection } from "@/components/settings/connections-section";
 import { FeedbackSection } from "@/components/settings/feedback-section";
+import { SyncSettings } from "@/components/settings/sync-settings";
 import { useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
 import { listen } from "@tauri-apps/api/event";
@@ -33,6 +35,7 @@ type SettingsSection =
   | "account"
   | "disk-usage"
   | "connections"
+  | "cloud-sync"
   | "feedback";
 
 function SettingsPageContent() {
@@ -40,7 +43,7 @@ function SettingsPageContent() {
   const [activeSection, setActiveSection] = useQueryState("section", {
     defaultValue: "general" as SettingsSection,
     parse: (value) => {
-      if (["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections", "feedback"].includes(value)) {
+      if (["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections", "cloud-sync", "feedback"].includes(value)) {
         return value as SettingsSection;
       }
       return "general" as SettingsSection;
@@ -66,6 +69,8 @@ function SettingsPageContent() {
         return <DiskUsageSection />;
       case "connections":
         return <ConnectionsSection />;
+      case "cloud-sync":
+        return <SyncSettings />;
       case "feedback":
         return <FeedbackSection />;
     }
@@ -113,6 +118,12 @@ function SettingsPageContent() {
       label: "Connections",
       icon: <Plug className="h-4 w-4" />,
       description: "Connect to AI assistants like Claude",
+    },
+    {
+      id: "cloud-sync",
+      label: "Cloud Sync",
+      icon: <Cloud className="h-4 w-4" />,
+      description: "Sync your data across devices",
     },
     {
       id: "feedback",

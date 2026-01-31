@@ -229,7 +229,8 @@ impl UpdatesManager {
         loop {
             interval.tick().await;
             if !*self.update_available.lock().await {
-                if let Err(e) = self.check_for_updates(true).await {
+                // Don't show dialog for periodic checks - only for manual checks
+                if let Err(e) = self.check_for_updates(false).await {
                     error!("Failed to check for updates: {}", e);
                 }
             }
