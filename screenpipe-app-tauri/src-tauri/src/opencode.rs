@@ -123,16 +123,11 @@ fn ensure_opencode_config(user_token: Option<&str>) -> Result<(), String> {
         "provider": {
             "screenpipe": {
                 "api": "anthropic",
-                "baseURL": "https://ai-proxy.i.screenpi.pe/anthropic",
+                "baseURL": "https://api.screenpi.pe/anthropic",
                 "models": {
                     "claude-sonnet-4-20250514": {
                         "name": "Claude Sonnet 4",
-                        "attachments": true,
-                        "reasoning": false
-                    },
-                    "claude-opus-4-20250514": {
-                        "name": "Claude Opus 4",
-                        "attachments": true,
+                        "attachment": true,
                         "reasoning": false
                     }
                 }
