@@ -91,7 +91,7 @@ export function TimelineControls({
 	const [calendarOpen, setCalendarOpen] = useState(false);
 
 	const searchShortcutDisplay = useMemo(
-		() => formatShortcutForDisplay(settings.searchShortcut, isMac),
+		() => formatShortcutForDisplay(settings.searchShortcut ?? "Control+Super+K", isMac),
 		[settings.searchShortcut, isMac]
 	);
 
