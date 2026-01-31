@@ -133,16 +133,18 @@ export function AccountSection() {
   const plans = [
     {
       title: settings.user?.cloud_subscribed
-        ? "your subscription"
-        : "subscription",
+        ? "screenpipe pro"
+        : "screenpipe pro",
       price: settings.user?.cloud_subscribed
         ? "active"
         : isAnnual
-        ? "$200/year"
-        : "$20/mo",
+        ? "$400/year"
+        : "$50/mo",
       features: settings.user?.cloud_subscribed
         ? [
-            "unlimited screenpipe cloud",
+            "cloud sync - 50GB storage, 3 devices",
+            "unlimited ai queries, all models",
+            "cloud transcription (save RAM & CPU)",
             "priority support",
             <a
               key="portal"
@@ -163,15 +165,12 @@ export function AccountSection() {
             </a>,
           ]
         : [
-            "unlimited screenpipe cloud",
+            "cloud sync - 50GB storage, 3 devices",
+            "unlimited ai queries, all models",
+            "cloud transcription (save RAM & CPU)",
             "priority support",
-            isAnnual ? "17% discount applied" : "switch to annual for 17% off",
+            isAnnual ? "2 months free" : "switch to annual for 2 months free",
           ],
-      url: isAnnual
-        ? "https://buy.stripe.com/eVadRzfOCgAi5W0fZu" +
-          `?client_reference_id=${clientRefId}`
-        : "https://buy.stripe.com/7sIdRzbym4RA98c7sX" +
-          `?client_reference_id=${clientRefId}`,
     },
   ];
 
@@ -347,8 +346,34 @@ export function AccountSection() {
                         return;
                       }
                       if (!settings.user?.cloud_subscribed) {
-                        posthog.capture("cloud_plan_selected");
-                        openUrl(plan.url);
+                        posthog.capture("cloud_plan_selected", { billing: isAnnual ? "yearly" : "monthly" });
+                        try {
+                          const response = await fetch("https://screenpi.pe/api/cloud-sync/checkout", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              "Authorization": `Bearer ${settings.user?.token}`,
+                            },
+                            body: JSON.stringify({
+                              tier: "pro",
+                              billingPeriod: isAnnual ? "yearly" : "monthly",
+                              userId: settings.user?.id,
+                              email: settings.user?.email,
+                            }),
+                          });
+                          const data = await response.json();
+                          if (data.url) {
+                            openUrl(data.url);
+                          } else {
+                            throw new Error(data.error || "failed to create checkout");
+                          }
+                        } catch (error) {
+                          toast({
+                            title: "failed to start checkout",
+                            description: String(error),
+                            variant: "destructive",
+                          });
+                        }
                       }
                     }}
                   />

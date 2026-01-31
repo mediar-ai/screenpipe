@@ -169,7 +169,9 @@ function SyncBenefits() {
 }
 
 // Onboarding/upgrade prompt
-function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing }: { onSubscribe: () => void; onRefresh: () => void; isLoading: boolean; isRefreshing: boolean }) {
+function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing }: { onSubscribe: (isAnnual: boolean) => void; onRefresh: () => void; isLoading: boolean; isRefreshing: boolean }) {
+  const [isAnnual, setIsAnnual] = useState(true);
+
   return (
     <div className="space-y-6">
       <div className="text-center">
@@ -194,12 +196,35 @@ function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing }: { o
             </p>
           </div>
           <div className="text-right">
-            <div className="text-lg font-bold">$49<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+            <div className="text-lg font-bold">
+              {isAnnual ? "$400" : "$50"}
+              <span className="text-sm font-normal text-muted-foreground">
+                {isAnnual ? "/year" : "/mo"}
+              </span>
+            </div>
+            {isAnnual && (
+              <p className="text-xs text-primary">2 months free</p>
+            )}
           </div>
         </div>
+
+        {/* Billing toggle */}
+        <div className="flex items-center justify-center gap-3 mt-4">
+          <span className={`text-sm ${!isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
+            Monthly
+          </span>
+          <Switch
+            checked={isAnnual}
+            onCheckedChange={setIsAnnual}
+          />
+          <span className={`text-sm ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
+            Annual
+          </span>
+        </div>
+
         <Button
           className="w-full mt-4"
-          onClick={onSubscribe}
+          onClick={() => onSubscribe(isAnnual)}
           disabled={isLoading}
         >
           {isLoading ? (
@@ -648,7 +673,7 @@ export function SyncSettings() {
     }
   };
 
-  const handleSubscribe = async () => {
+  const handleSubscribe = async (isAnnual: boolean = true) => {
     try {
       setIsLoading(true);
       const token = settings.user?.token;
@@ -671,7 +696,7 @@ export function SyncSettings() {
         },
         body: JSON.stringify({
           tier: "pro",
-          billingPeriod: "monthly",
+          billingPeriod: isAnnual ? "yearly" : "monthly",
           userId,
           email: settings.user?.email,
         }),
