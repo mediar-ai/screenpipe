@@ -426,6 +426,7 @@ export function AIProviderConfig({
             <Icons.settings className="h-8 w-8" />
             <span>custom</span>
           </Button>
+
         </div>
 
         {selectedProvider === "openai" && (
