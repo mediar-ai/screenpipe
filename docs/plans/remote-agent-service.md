@@ -6,7 +6,7 @@
 
 Turn screenpipe from "search your screen history" into "AI assistant that knows everything you do and can act on it."
 
-Every user gets their own Clawdbot-like agent:
+Every user gets their own OpenClaw-like agent:
 - Runs 24/7 on a VM (not their laptop)
 - Has full context from their daily screenpipe summaries
 - Chat via Telegram/WhatsApp/SMS from phone
@@ -28,7 +28,7 @@ Every user gets their own Clawdbot-like agent:
 ```
 ┌─────────────────┐      hourly sync       ┌─────────────────────┐
 │  User's Mac     │ ───────────────────▶   │  User's Agent VM    │
-│  (screenpipe)   │      summaries.md      │  (clawdbot)         │
+│  (screenpipe)   │      summaries.md      │  (openclaw)         │
 └─────────────────┘                        └──────────┬──────────┘
                                                       │
                                                       │ chat
@@ -45,7 +45,7 @@ Every user gets their own Clawdbot-like agent:
 - API to create/destroy agent VMs
 - Options: Hetzner ($4/mo), Fly.io, Railway, or self-hosted
 - Each user gets isolated container/VM
-- Pre-configured with clawdbot + Telegram bot
+- Pre-configured with openclaw + Telegram bot
 
 ### 2. Onboarding Flow (in screenpipe app)
 ```
@@ -80,7 +80,7 @@ Margin: ~$15/user (VM costs ~$5/mo)
 ## Implementation Phases
 
 ### Phase 1: MVP (2 weeks)
-- [ ] Agent provisioning API (create VM, deploy clawdbot)
+- [ ] Agent provisioning API (create VM, deploy openclaw)
 - [ ] Telegram bot setup flow in screenpipe app
 - [ ] Sync to user's agent VM
 - [ ] Basic chat working
@@ -113,7 +113,7 @@ Margin: ~$15/user (VM costs ~$5/mo)
 - Alternative: Hetzner for cost ($4/mo vs $7/mo)
 
 ### Agent Runtime
-**Recommendation: Clawdbot/OpenClaw**
+**Recommendation: OpenClaw/OpenClaw**
 - Already battle-tested (Louis uses it)
 - Native Telegram/WhatsApp support
 - Cron, memory, skills system

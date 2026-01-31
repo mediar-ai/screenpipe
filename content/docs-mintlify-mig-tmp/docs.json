@@ -31,7 +31,7 @@
           },
           {
             "group": "integrations",
-            "pages": ["claude-code", "opencode", "moltbot", "cline", "continue", "gemini-cli", "obsidian"]
+            "pages": ["claude-code", "opencode", "openclaw", "cline", "continue", "gemini-cli", "obsidian"]
           },
           {
             "group": "reference",

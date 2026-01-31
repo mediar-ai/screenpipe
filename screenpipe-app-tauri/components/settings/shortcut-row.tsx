@@ -36,11 +36,6 @@ const ShortcutRow = ({
   useEffect(() => {
     if (!isRecording) return;
 
-    // Suspend global shortcuts while recording to prevent them from triggering
-    commands.suspendGlobalShortcuts().catch((e) => {
-      console.error("failed to suspend shortcuts:", e);
-    });
-
     const handleKeyDown = (event: KeyboardEvent) => {
       event.preventDefault();
 
@@ -86,10 +81,6 @@ const ShortcutRow = ({
           target.tagName === "TEXTAREA"
         );
       };
-      // Resume global shortcuts after recording ends
-      commands.resumeGlobalShortcuts().catch((e) => {
-        console.error("failed to resume shortcuts:", e);
-      });
     };
   }, [isRecording]);
 

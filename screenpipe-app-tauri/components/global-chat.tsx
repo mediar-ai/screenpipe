@@ -1120,7 +1120,7 @@ export function GlobalChat() {
             }
           } else {
             // Not running or different project, start with selected directory
-            const startResult = await commands.opencodeStart(opencodeProjectDir, settings.user?.token || undefined);
+            const startResult = await commands.opencodeStart(opencodeProjectDir, settings.user?.token ?? null);
             if (startResult.status === "ok" && startResult.data.running && startResult.data.baseUrl) {
               setOpencodeInfo(startResult.data);
               const client = createOpencodeClient({ baseUrl: startResult.data.baseUrl });
@@ -1382,7 +1382,7 @@ export function GlobalChat() {
       // Add placeholder for streaming response
       setMessages((prev) => [
         ...prev,
-        { id: assistantMessageId, role: "assistant", content: "" },
+        { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() },
       ]);
 
       // Send to OpenCode

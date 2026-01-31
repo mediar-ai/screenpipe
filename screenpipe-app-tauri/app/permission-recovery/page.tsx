@@ -172,7 +172,7 @@ export default function PermissionRecoveryPage() {
     posthog.capture("permission_recovery_reset_fix", { permission });
     setFixingPermission(permission);
     try {
-      await commands.resetAndRequestPermission(permission);
+      await commands.requestPermission(permission);
       // The polling will detect when it's fixed
       // Add timeout fallback - if not fixed after 10s, clear the fixing state
       setTimeout(() => {

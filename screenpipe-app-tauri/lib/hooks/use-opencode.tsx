@@ -53,7 +53,7 @@ export function useOpencode(): UseOpencodeResult {
     setError(null);
     setLogs([]);
     try {
-      const result = await commands.opencodeStart(projectDir);
+      const result = await commands.opencodeStart(projectDir, null);
       if (result.status === "ok") {
         setInfo(result.data);
         return result.data;

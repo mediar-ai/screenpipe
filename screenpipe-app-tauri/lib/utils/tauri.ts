@@ -28,35 +28,6 @@ async checkMicrophonePermission() : Promise<OSPermissionStatus> {
 async checkAccessibilityPermissionCmd() : Promise<OSPermissionStatus> {
     return await TAURI_INVOKE("check_accessibility_permission_cmd");
 },
-/**
- * Reset a permission using tccutil and re-request it
- * This removes the app from the TCC database and triggers a fresh permission request
- */
-async resetAndRequestPermission(permission: OSPermission) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("reset_and_request_permission", { permission }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Get list of missing permissions
- */
-async getMissingPermissions() : Promise<OSPermission[]> {
-    return await TAURI_INVOKE("get_missing_permissions");
-},
-/**
- * Show the permission recovery window
- */
-async showPermissionRecoveryWindow() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("show_permission_recovery_window") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async getEnv(name: string) : Promise<string> {
     return await TAURI_INVOKE("get_env", { name });
 },
@@ -108,9 +79,9 @@ async stopScreenpipe() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async getDiskUsage() : Promise<Result<JsonValue, string>> {
+async getDiskUsage(forceRefresh: boolean | null) : Promise<Result<JsonValue, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("get_disk_usage") };
+    return { status: "ok", data: await TAURI_INVOKE("get_disk_usage", { forceRefresh }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -221,7 +192,7 @@ async hideShortcutReminder() : Promise<Result<null, string>> {
 }
 },
 /**
- * Register window-specific shortcuts (Escape, Ctrl+Cmd+K) when main window is visible
+ * Register window-specific shortcuts (Escape, search shortcut) when main window is visible
  * These should only be active when the overlay is open to avoid blocking other apps
  */
 async registerWindowShortcuts() : Promise<Result<null, string>> {
@@ -234,7 +205,7 @@ async registerWindowShortcuts() : Promise<Result<null, string>> {
 },
 /**
  * Unregister window-specific shortcuts when main window is hidden
- * This allows Escape, Ctrl+Cmd+K to work normally in other apps
+ * This allows Escape and search shortcut to work normally in other apps
  */
 async unregisterWindowShortcuts() : Promise<Result<null, string>> {
     try {
@@ -251,30 +222,118 @@ async setTrayHealthIcon() : Promise<void> {
     await TAURI_INVOKE("set_tray_health_icon");
 },
 /**
- * Suspend all global shortcuts (for shortcut recording mode)
- * Call this before entering shortcut recording to prevent existing shortcuts from triggering
+ * Get current sync status.
  */
-async suspendGlobalShortcuts() : Promise<Result<null, string>> {
+async getSyncStatus() : Promise<Result<SyncStatusResponse, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("suspend_global_shortcuts") };
+    return { status: "ok", data: await TAURI_INVOKE("get_sync_status") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
 /**
- * Resume all global shortcuts (after shortcut recording mode)
- * Call this after exiting shortcut recording to re-register all shortcuts
+ * Enable or disable sync.
  */
-async resumeGlobalShortcuts() : Promise<Result<null, string>> {
+async setSyncEnabled(enabled: boolean) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("resume_global_shortcuts") };
+    return { status: "ok", data: await TAURI_INVOKE("set_sync_enabled", { enabled }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
-// OpenCode commands
+/**
+ * Trigger an immediate sync.
+ */
+async triggerSync() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("trigger_sync") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Get sync configuration.
+ */
+async getSyncConfig() : Promise<Result<SyncConfig, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_sync_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update sync configuration.
+ */
+async updateSyncConfig(config: SyncConfig) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_sync_config", { config }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Get list of registered devices.
+ */
+async getSyncDevices() : Promise<Result<SyncDeviceInfo[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_sync_devices") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Remove a device from sync.
+ */
+async removeSyncDevice(deviceId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_sync_device", { deviceId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Initialize sync with password.
+ */
+async initSync(password: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("init_sync", { password }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Lock sync (clear keys from memory).
+ */
+async lockSync() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("lock_sync") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Delete all cloud data.
+ */
+async deleteCloudData() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_cloud_data") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Get OpenCode info
+ */
 async opencodeInfo() : Promise<Result<OpencodeInfo, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("opencode_info") };
@@ -283,7 +342,11 @@ async opencodeInfo() : Promise<Result<OpencodeInfo, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async opencodeStart(projectDir: string, userToken?: string) : Promise<Result<OpencodeInfo, string>> {
+/**
+ * Start the OpenCode sidecar
+ * user_token: The user's screenpipe auth token for API access
+ */
+async opencodeStart(projectDir: string, userToken: string | null) : Promise<Result<OpencodeInfo, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("opencode_start", { projectDir, userToken }) };
 } catch (e) {
@@ -291,6 +354,9 @@ async opencodeStart(projectDir: string, userToken?: string) : Promise<Result<Ope
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Stop the OpenCode sidecar
+ */
 async opencodeStop() : Promise<Result<OpencodeInfo, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("opencode_stop") };
@@ -299,6 +365,9 @@ async opencodeStop() : Promise<Result<OpencodeInfo, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Check if opencode is available (either as sidecar or in PATH)
+ */
 async opencodeCheck() : Promise<Result<OpencodeCheckResult, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("opencode_check") };
@@ -307,6 +376,10 @@ async opencodeCheck() : Promise<Result<OpencodeCheckResult, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Install opencode via bun (runs in background)
+ * Returns immediately, installation happens async
+ */
 async opencodeInstall() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("opencode_install") };
@@ -342,21 +415,31 @@ export type OnboardingStore = { isCompleted: boolean; completedAt: string | null
  * Used to resume after app restart (e.g., after granting permissions)
  */
 currentStep?: string | null }
+export type OpencodeCheckResult = { available: boolean; sidecarAvailable: boolean; pathAvailable: boolean }
+export type OpencodeInfo = { running: boolean; baseUrl: string | null; port: number | null; projectDir: string | null; pid: number | null }
 export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; userId: string; 
 /**
  * Persistent analytics ID used for PostHog tracking (both frontend and backend)
  */
-analyticsId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngine: string; monitorIds: string[]; audioDevices: string[]; usePiiRemoval: boolean; restartInterval: number; port: number; dataDir: string; disableAudio: boolean; ignoredWindows: string[]; includedWindows: string[]; fps: number; vadSensitivity: string; analyticsEnabled: boolean; audioChunkDuration: number; useChineseMirror: boolean; languages: string[]; embeddedLLM: EmbeddedLLM; enableBeta: boolean; isFirstTimeUser: boolean; autoStartEnabled: boolean; enableFrameCache: boolean; platform: string; disabledShortcuts: string[]; user: User; showScreenpipeShortcut: string; startRecordingShortcut: string; stopRecordingShortcut: string; startAudioShortcut: string; stopAudioShortcut: string; showChatShortcut: string; enableRealtimeAudioTranscription: boolean; realtimeAudioTranscriptionEngine: string; disableVision: boolean; useAllMonitors: boolean; enableRealtimeVision: boolean; showShortcutOverlay?: boolean; 
+analyticsId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngine: string; monitorIds: string[]; audioDevices: string[]; usePiiRemoval: boolean; restartInterval: number; port: number; dataDir: string; disableAudio: boolean; ignoredWindows: string[]; includedWindows: string[]; ignoredUrls?: string[]; fps: number; vadSensitivity: string; analyticsEnabled: boolean; audioChunkDuration: number; useChineseMirror: boolean; languages: string[]; embeddedLLM: EmbeddedLLM; enableBeta: boolean; isFirstTimeUser: boolean; autoStartEnabled: boolean; enableFrameCache: boolean; platform: string; disabledShortcuts: string[]; user: User; showScreenpipeShortcut: string; startRecordingShortcut: string; stopRecordingShortcut: string; startAudioShortcut: string; stopAudioShortcut: string; showChatShortcut: string; searchShortcut: string; enableRealtimeAudioTranscription: boolean; realtimeAudioTranscriptionEngine: string; disableVision: boolean; useAllMonitors: boolean; enableRealtimeVision: boolean; showShortcutOverlay?: boolean; 
 /**
  * Unique device ID for AI usage tracking (generated on first launch)
  */
 deviceId?: string }
 export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding" | "Chat" | "PermissionRecovery"
+/**
+ * Sync configuration.
+ */
+export type SyncConfig = { enabled: boolean; syncIntervalMinutes: number; syncTranscripts: boolean; syncOcr: boolean; syncAudio: boolean; syncFrames: boolean }
+/**
+ * Device information.
+ */
+export type SyncDeviceInfo = { id: string; deviceId: string; deviceName: string | null; deviceOs: string; lastSyncAt: string | null; createdAt: string; isCurrent: boolean }
+/**
+ * Sync status response.
+ */
+export type SyncStatusResponse = { enabled: boolean; isSyncing: boolean; lastSync: string | null; lastError: string | null; storageUsed: bigint | null; storageLimit: bigint | null; deviceCount: number | null; deviceLimit: number | null; syncTier: string | null; machineId: string }
 export type User = { id: string | null; name: string | null; email: string | null; image: string | null; token: string | null; clerk_id: string | null; api_key: string | null; credits: Credits | null; stripe_connected: boolean | null; stripe_account_status: string | null; github_username: string | null; bio: string | null; website: string | null; contact: string | null; cloud_subscribed: boolean | null }
-
-// OpenCode types
-export type OpencodeInfo = { running: boolean; baseUrl: string | null; port: number | null; projectDir: string | null; pid: number | null }
-export type OpencodeCheckResult = { available: boolean; sidecarAvailable: boolean; pathAvailable: boolean }
 
 /** tauri-specta globals **/
 

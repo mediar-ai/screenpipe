@@ -4,7 +4,7 @@
  *
  * Usage:
  *   bunx @screenpipe/skills install                    # Install locally
- *   bunx @screenpipe/skills install --remote clawdbot  # Install to remote
+ *   bunx @screenpipe/skills install --remote openclaw  # Install to remote
  *   bunx @screenpipe/skills list                       # List available skills
  */
 
@@ -76,16 +76,16 @@ COMMANDS:
   list                List available skills
 
 OPTIONS:
-  -r, --remote <host> Install to remote server via SSH (e.g., clawdbot)
+  -r, --remote <host> Install to remote server via SSH (e.g., openclaw)
   -o, --output <dir>  Local output directory (default: ~/clawd/skills/screenpipe)
   -v, --verbose       Show debug output
 
 EXAMPLES:
-  # Install to local Clawdbot
+  # Install to local OpenClaw
   bunx @screenpipe/skills install
 
   # Install to remote server
-  bunx @screenpipe/skills install --remote clawdbot
+  bunx @screenpipe/skills install --remote openclaw
 
   # Install to custom directory
   bunx @screenpipe/skills install --output ~/.claude/skills/screenpipe

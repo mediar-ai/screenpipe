@@ -61,7 +61,7 @@ export function usePermissionMonitor() {
 
       // Show the permission recovery window
       try {
-        await commands.showPermissionRecoveryWindow();
+        await commands.showWindow("PermissionRecovery");
       } catch (error) {
         console.error("Failed to show permission recovery window:", error);
       }
