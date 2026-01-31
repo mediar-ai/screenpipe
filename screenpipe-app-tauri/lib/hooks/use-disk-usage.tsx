@@ -9,8 +9,14 @@ export interface DiskUsedByMedia {
   total_media_size: string;
 }
 
+export interface DiskUsedByOther {
+  database_size: string;
+  logs_size: string;
+}
+
 export interface DiskUsage {
   media: DiskUsedByMedia;
+  other: DiskUsedByOther;
   total_data_size: string;
   total_cache_size: string;
   available_space: string;

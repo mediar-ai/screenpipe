@@ -6,7 +6,7 @@ import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
 import { Badge } from "../ui/badge";
 import { useDiskUsage } from "@/lib/hooks/use-disk-usage";
-import { RefreshCw, HardDrive, Folder, Video, Mic, Database, Calculator } from "lucide-react";
+import { RefreshCw, HardDrive, Folder, Video, Mic, Database, Calculator, FileText } from "lucide-react";
 import { Skeleton } from "../ui/skeleton";
 import { Progress } from "../ui/progress";
 
@@ -47,7 +47,7 @@ export function DiskUsageSection() {
         <div>
           <h3 className="text-lg font-medium">Disk Usage</h3>
           <p className="text-sm text-muted-foreground">
-            Monitor storage usage for your Screenpipe data at ~/.screenpipe/data
+            Monitor storage usage for your Screenpipe data at ~/.screenpipe
           </p>
         </div>
         <Button
@@ -209,10 +209,62 @@ export function DiskUsageSection() {
                 <span>Total Media Size</span>
                 <Badge className="bg-primary">{diskUsage?.media.total_media_size || "0 KB"}</Badge>
               </div>
-              {diskUsage && (
-                <div className="mt-3 p-3 bg-muted/50 rounded-lg">
-                  <p className="text-xs text-muted-foreground">
-                    ✓ Values calculated from recursive directory scan including all subdirectories
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Other Files Breakdown */}
+      <Card className={isLoading ? "opacity-75" : ""}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className={`h-5 w-5 ${isLoading ? "animate-pulse" : ""}`} />
+            Other Files
+          </CardTitle>
+          <CardDescription>
+            Database and log files
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-4 rounded" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-4 rounded" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Database</span>
+                </div>
+                <Badge variant="secondary">{diskUsage?.other?.database_size || "0 KB"}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Log Files</span>
+                </div>
+                <Badge variant={
+                  diskUsage?.other?.logs_size?.includes("GB") ? "destructive" : "secondary"
+                }>{diskUsage?.other?.logs_size || "0 KB"}</Badge>
+              </div>
+              {diskUsage?.other?.logs_size?.includes("GB") && (
+                <div className="mt-3 p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+                  <p className="text-xs text-destructive">
+                    ⚠️ Log files are unusually large. Consider deleting old logs at ~/.screenpipe/*.log
                   </p>
                 </div>
               )}

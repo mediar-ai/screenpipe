@@ -30,7 +30,7 @@ pub async fn start_continuous_recording(
     capture_unfocused_windows: bool,
     realtime_vision: bool,
 ) -> Result<()> {
-    info!("Starting video recording for monitors {:?}", monitor_ids);
+    debug!("Starting video recording for monitors {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
         monitor_ids
             .iter()
@@ -44,11 +44,11 @@ pub async fn start_continuous_recording(
 
                 let languages = languages.clone();
 
-                info!("Starting video recording for monitor {}", monitor_id);
+                debug!("Starting video recording for monitor {}", monitor_id);
                 vision_handle.spawn(async move {
                     // Wrap in a loop with recovery logic
                     loop {
-                        info!("Starting/restarting vision capture for monitor {}", monitor_id);
+                        debug!("Starting/restarting vision capture for monitor {}", monitor_id);
                         match record_video(
                             db_manager_video.clone(),
                             output_path_video.clone(),
@@ -129,7 +129,7 @@ pub async fn record_video(
     capture_unfocused_windows: bool,
     realtime_vision: bool,
 ) -> Result<()> {
-    info!("record_video: Starting for monitor {}", monitor_id);
+    debug!("record_video: Starting for monitor {}", monitor_id);
     let device_name = Arc::new(format!("monitor_{}", monitor_id));
 
     // Add heartbeat counter

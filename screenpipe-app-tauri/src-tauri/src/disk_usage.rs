@@ -10,6 +10,7 @@ use tracing::{info, warn};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiskUsage {
     pub media: DiskUsedByMedia,
+    pub other: DiskUsedByOther,
     pub total_data_size: String,
     pub total_cache_size: String,
     pub available_space: String,
@@ -20,6 +21,12 @@ pub struct DiskUsedByMedia {
     pub videos_size: String,
     pub audios_size: String,
     pub total_media_size: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DiskUsedByOther {
+    pub database_size: String,
+    pub logs_size: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -216,6 +223,37 @@ pub async fn disk_usage(
     let total_media_size_calculated = total_video_size + total_audio_size;
     let total_media_size_str = readable(total_media_size_calculated);
 
+    // Calculate database size (db.sqlite and related files)
+    info!("Calculating database size");
+    let mut database_size: u64 = 0;
+    for file_name in ["db.sqlite", "db.sqlite-wal", "db.sqlite-shm"] {
+        let db_path = screenpipe_dir.join(file_name);
+        if db_path.exists() {
+            if let Ok(metadata) = fs::metadata(&db_path) {
+                database_size += metadata.len();
+            }
+        }
+    }
+    info!("Database size: {} bytes", database_size);
+
+    // Calculate log files size
+    info!("Calculating log files size");
+    let mut logs_size: u64 = 0;
+    if let Ok(entries) = fs::read_dir(screenpipe_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+                if file_name.ends_with(".log") {
+                    if let Ok(metadata) = entry.metadata() {
+                        logs_size += metadata.len();
+                    }
+                }
+            }
+        }
+    }
+    info!("Logs size: {} bytes", logs_size);
+
     // Calculate available space
     info!("Calculating available disk space");
     let available_space = {
@@ -237,6 +275,10 @@ pub async fn disk_usage(
             videos_size: videos_size_str,
             audios_size: audios_size_str,
             total_media_size: total_media_size_str,
+        },
+        other: DiskUsedByOther {
+            database_size: readable(database_size),
+            logs_size: readable(logs_size),
         },
         total_data_size,
         total_cache_size,
