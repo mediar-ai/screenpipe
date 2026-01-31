@@ -1,3 +1,5 @@
+#[cfg(feature = "adaptive-fps")]
+pub mod activity;
 #[cfg(target_os = "macos")]
 pub mod apple;
 pub mod core;

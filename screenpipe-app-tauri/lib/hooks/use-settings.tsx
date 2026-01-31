@@ -219,6 +219,7 @@ let DEFAULT_SETTINGS: Settings = {
 			realtimeAudioTranscriptionEngine: "deepgram",
 			disableVision: false,
 			useAllMonitors: true,
+			adaptiveFps: false,
 			enableRealtimeVision: true,
 			showShortcutOverlay: true,
 			chatHistory: {

@@ -785,6 +785,7 @@ async fn main() -> anyhow::Result<()> {
             languages: languages_clone.clone(),
             capture_unfocused_windows: cli.capture_unfocused_windows,
             realtime_vision: cli.enable_realtime_audio_transcription,
+            adaptive_fps: cli.adaptive_fps,
         };
         Some(Arc::new(VisionManager::new(
             config,
@@ -846,6 +847,7 @@ async fn main() -> anyhow::Result<()> {
                     languages_clone.clone(),
                     cli.capture_unfocused_windows,
                     cli.enable_realtime_audio_transcription,
+                    cli.adaptive_fps,
                 );
 
                 let result = tokio::select! {

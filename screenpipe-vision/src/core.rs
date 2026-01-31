@@ -152,11 +152,25 @@ pub async fn continuous_capture(
     window_filters: Arc<WindowFilters>,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
+    adaptive_fps: bool,
 ) -> Result<(), ContinuousCaptureError> {
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<DynamicImage> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
+
+    // Initialize activity monitor for adaptive FPS if enabled
+    #[cfg(feature = "adaptive-fps")]
+    let activity_monitor = if adaptive_fps {
+        Some(crate::activity::ActivityMonitor::new(interval))
+    } else {
+        None
+    };
+
+    #[cfg(feature = "adaptive-fps")]
+    if adaptive_fps {
+        debug!("Adaptive FPS enabled - will adjust capture rate based on input activity");
+    }
 
     // Initialize OCR cache for skipping unchanged windows
     // Cache entries expire after 5 minutes, max 100 windows cached
@@ -177,6 +191,10 @@ pub async fn continuous_capture(
             return Err(ContinuousCaptureError::MonitorNotFound);
         }
     };
+
+    // Suppress unused variable warning when feature is disabled
+    #[cfg(not(feature = "adaptive-fps"))]
+    let _ = adaptive_fps;
 
     loop {
         // 3. Capture screenshot and wall-clock time atomically
@@ -210,7 +228,15 @@ pub async fn continuous_capture(
 
         if should_skip {
             frame_counter += 1;
-            tokio::time::sleep(interval).await;
+            // Use adaptive interval if enabled, otherwise use base interval
+            #[cfg(feature = "adaptive-fps")]
+            let sleep_interval = activity_monitor
+                .as_ref()
+                .map(|m| m.get_interval())
+                .unwrap_or(interval);
+            #[cfg(not(feature = "adaptive-fps"))]
+            let sleep_interval = interval;
+            tokio::time::sleep(sleep_interval).await;
             continue;
         }
 
@@ -233,7 +259,15 @@ pub async fn continuous_capture(
         }
 
         frame_counter += 1;
-        tokio::time::sleep(interval).await;
+        // Use adaptive interval if enabled, otherwise use base interval
+        #[cfg(feature = "adaptive-fps")]
+        let sleep_interval = activity_monitor
+            .as_ref()
+            .map(|m| m.get_interval())
+            .unwrap_or(interval);
+        #[cfg(not(feature = "adaptive-fps"))]
+        let sleep_interval = interval;
+        tokio::time::sleep(sleep_interval).await;
     }
 }
 

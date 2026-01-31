@@ -190,6 +190,8 @@ pub struct SettingsStore {
     pub disable_vision: bool,
     #[serde(rename = "useAllMonitors")]
     pub use_all_monitors: bool,
+    #[serde(rename = "adaptiveFps", default)]
+    pub adaptive_fps: bool,
     #[serde(rename = "enableRealtimeVision")]
     pub enable_realtime_vision: bool,
     #[serde(rename = "showShortcutOverlay", default = "default_true")]
@@ -465,7 +467,7 @@ impl Default for SettingsStore {
             #[cfg(not(target_os = "windows"))]
             show_chat_shortcut: "Control+Super+L".to_string(),
             #[cfg(target_os = "windows")]
-            search_shortcut: "Control+Alt+K".to_string(),
+            search_shortcut: "Alt+K".to_string(),
             #[cfg(not(target_os = "windows"))]
             search_shortcut: "Control+Super+K".to_string(),
             enable_realtime_audio_transcription: false,

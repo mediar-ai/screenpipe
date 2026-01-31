@@ -900,6 +900,39 @@ export function RecordingSettings() {
         )}
       </div>
 
+      {/* Adaptive FPS Toggle */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <Label htmlFor="adaptiveFps" className="flex items-center space-x-2">
+            <span>Adaptive FPS</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 cursor-default" />
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>
+                    Automatically increase capture rate during mouse/keyboard activity
+                    (up to 5 FPS) and decrease during idle periods. Helps capture fast
+                    workflows without missing data.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
+          <p className="text-sm text-muted-foreground">
+            Boost FPS during activity, reduce when idle
+          </p>
+        </div>
+        <Switch
+          id="adaptiveFps"
+          checked={settings.adaptiveFps}
+          onCheckedChange={(checked) =>
+            handleSettingsChange({ adaptiveFps: checked }, true)
+          }
+        />
+      </div>
+
       {/* Enhanced Audio Chunk Duration Section */}
       <div className="flex flex-col space-y-2">
         <Label

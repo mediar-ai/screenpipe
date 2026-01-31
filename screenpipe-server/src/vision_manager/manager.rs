@@ -29,6 +29,7 @@ pub struct VisionManagerConfig {
     pub languages: Vec<Language>,
     pub capture_unfocused_windows: bool,
     pub realtime_vision: bool,
+    pub adaptive_fps: bool,
 }
 
 /// Status of the VisionManager
@@ -163,6 +164,7 @@ impl VisionManager {
         let languages = self.config.languages.clone();
         let capture_unfocused_windows = self.config.capture_unfocused_windows;
         let realtime_vision = self.config.realtime_vision;
+        let adaptive_fps = self.config.adaptive_fps;
 
         // Spawn the recording task using the existing record_video function
         let handle = self.vision_handle.spawn(async move {
@@ -181,6 +183,7 @@ impl VisionManager {
                     languages.clone(),
                     capture_unfocused_windows,
                     realtime_vision,
+                    adaptive_fps,
                 )
                 .await
                 {

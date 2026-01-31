@@ -160,6 +160,13 @@ pub struct Cli {
     #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))]
     pub fps: f64, // ! not crazy about this (inconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
 
+    /// Enable adaptive FPS based on input activity.
+    /// When enabled, capture rate increases during mouse/keyboard activity (up to 5 FPS)
+    /// and decreases during idle periods (down to base FPS).
+    /// Requires the 'adaptive-fps' feature to be enabled.
+    #[arg(long, default_value_t = false)]
+    pub adaptive_fps: bool,
+
     /// Audio chunk duration in seconds
     #[arg(short = 'd', long, default_value_t = 30)]
     pub audio_chunk_duration: u64,

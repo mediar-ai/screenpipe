@@ -594,7 +594,7 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
 
     // Default fallback if empty or parse fails
     #[cfg(target_os = "windows")]
-    let default_search = "Control+Alt+K";
+    let default_search = "Alt+K";
     #[cfg(not(target_os = "windows"))]
     let default_search = "Control+Super+K";
 
@@ -649,7 +649,7 @@ pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), S
 
     // Default fallback if empty
     #[cfg(target_os = "windows")]
-    let default_search = "Control+Alt+K";
+    let default_search = "Alt+K";
     #[cfg(not(target_os = "windows"))]
     let default_search = "Control+Super+K";
 

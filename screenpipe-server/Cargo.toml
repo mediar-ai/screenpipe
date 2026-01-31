@@ -135,6 +135,7 @@ mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 llm = []
 experimental = []
 debug-console = ["console-subscriber"]
+adaptive-fps = ["screenpipe-vision/adaptive-fps"]
 
 [[bin]]
 name = "screenpipe"
