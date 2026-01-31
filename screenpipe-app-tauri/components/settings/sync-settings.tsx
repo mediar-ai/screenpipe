@@ -260,17 +260,8 @@ function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing }: { o
 // Password setup step
 function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) => void; isLoading: boolean }) {
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
 
   const handleSubmit = () => {
-    if (password !== confirmPassword) {
-      toast({
-        title: "Passwords don't match",
-        description: "Please make sure your passwords match",
-        variant: "destructive",
-      });
-      return;
-    }
     if (password.length < 8) {
       toast({
         title: "Password too short",
@@ -286,10 +277,10 @@ function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) =
     <div className="space-y-6">
       <div className="text-center">
         <CloudSyncAnimation />
-        <h3 className="text-xl font-semibold mt-4">Set Your Encryption Password</h3>
+        <h3 className="text-xl font-semibold mt-4">Enter Your Encryption Password</h3>
         <p className="text-sm text-muted-foreground mt-2">
-          This password encrypts your data locally before syncing.
-          We never see your password or your data.
+          Enter the password you use for Cloud Sync.
+          If this is your first device, create a new password.
         </p>
       </div>
 
@@ -299,19 +290,9 @@ function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) =
           <Input
             id="password"
             type="password"
-            placeholder="Enter a strong password"
+            placeholder="Enter your encryption password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="confirm-password">Confirm Password</Label>
-          <Input
-            id="confirm-password"
-            type="password"
-            placeholder="Confirm your password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSubmit();
             }}
