@@ -1308,6 +1308,7 @@ impl SCServer {
             .post("/pipes/purge", purge_pipe_handler)
             .get("/frames/:frame_id", get_frame_data)
             .get("/frames/:frame_id/ocr", get_frame_ocr_data)
+            .get("/frames/next-valid", get_next_valid_frame)
             .get("/health", health_check)
             .post("/raw_sql", execute_raw_sql)
             .post("/add", add_to_database)
@@ -3111,6 +3112,87 @@ pub async fn get_frame_data(
             ))
         }
     }
+}
+
+/// Query parameters for finding the next valid frame
+#[derive(Debug, Deserialize, OaSchema)]
+pub struct NextValidFrameQuery {
+    /// Current frame_id that failed to load
+    pub frame_id: i64,
+    /// Direction: "forward" (default) or "backward"
+    #[serde(default = "default_direction")]
+    pub direction: String,
+    /// Maximum number of frames to check (default: 50)
+    #[serde(default = "default_frame_check_limit")]
+    pub limit: i32,
+}
+
+fn default_direction() -> String {
+    "forward".to_string()
+}
+
+fn default_frame_check_limit() -> i32 {
+    50
+}
+
+/// Response for next valid frame endpoint
+#[derive(OaSchema, Serialize)]
+pub struct NextValidFrameResponse {
+    /// The frame_id of the next valid frame
+    pub frame_id: i64,
+    /// Timestamp of the valid frame
+    pub timestamp: DateTime<Utc>,
+    /// Number of invalid frames that were skipped
+    pub skipped_count: i32,
+}
+
+/// Find the next frame that has a valid video file on disk.
+/// This allows the frontend to skip directly to a valid frame instead of
+/// trying each frame one-by-one when frames fail to load.
+#[oasgen]
+pub async fn get_next_valid_frame(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<NextValidFrameQuery>,
+) -> Result<JsonResponse<NextValidFrameResponse>, (StatusCode, JsonResponse<Value>)> {
+    let forward = query.direction.to_lowercase() != "backward";
+
+    // Get candidate frames from database
+    let candidates = match state.db.get_frames_near(query.frame_id, forward, query.limit).await {
+        Ok(frames) => frames,
+        Err(e) => {
+            error!("Failed to get frames near {}: {}", query.frame_id, e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Database error: {}", e),
+                    "frame_id": query.frame_id
+                })),
+            ));
+        }
+    };
+
+    // Check each frame's video file exists on disk
+    let mut skipped = 0;
+    for (frame_id, file_path, _offset_index, timestamp) in candidates {
+        if std::path::Path::new(&file_path).exists() {
+            return Ok(JsonResponse(NextValidFrameResponse {
+                frame_id,
+                timestamp,
+                skipped_count: skipped,
+            }));
+        }
+        skipped += 1;
+    }
+
+    // No valid frames found
+    Err((
+        StatusCode::NOT_FOUND,
+        JsonResponse(json!({
+            "error": "No valid frames found",
+            "frame_id": query.frame_id,
+            "checked_count": skipped
+        })),
+    ))
 }
 
 /// Response type for frame OCR data endpoint
