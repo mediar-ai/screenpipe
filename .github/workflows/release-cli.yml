@@ -45,7 +45,8 @@ jobs:
           echo "Commit message: $COMMIT_MSG"
 
           # Release CLI when app is released or explicitly requested
-          if echo "$COMMIT_MSG" | grep -qE "(release-app|release-cli)"; then
+          # Match: "release-app", "release-cli", "Bump app to vX.Y.Z", "Bump CLI to vX.Y.Z"
+          if echo "$COMMIT_MSG" | grep -qiE "(release-app|release-cli|Bump app to v|Bump CLI to v)"; then
             echo "should_release=true" >> $GITHUB_OUTPUT
             echo "Commit message contains release trigger - will release"
           else
