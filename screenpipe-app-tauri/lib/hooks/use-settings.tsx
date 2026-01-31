@@ -82,6 +82,7 @@ export type Settings = SettingsStore & {
 	updateChannel?: UpdateChannel;
 	chatHistory?: ChatHistoryStore;
 	ignoredUrls?: string[];
+	searchShortcut?: string;
 }
 
 export const DEFAULT_PROMPT = `Rules:
