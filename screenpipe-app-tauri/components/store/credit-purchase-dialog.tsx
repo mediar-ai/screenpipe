@@ -63,7 +63,7 @@ export function CreditPurchaseDialog({
                       monthly
                     </Badge>
                     <span className="text-sm font-mono">
-                      15 credits/m, unlimited screenpipe cloud, priority support
+                      unlimited screenpipe cloud, priority support
                     </span>
                   </div>
                   <Button
@@ -71,7 +71,7 @@ export function CreditPurchaseDialog({
                     variant="outline"
                     onClick={() =>
                       handlePurchase(
-                        `https://buy.stripe.com/5kA6p79qefweacg5kJ?client_reference_id=${settings.user?.id}&customer_email=${encodeURIComponent(settings.user?.email ?? '')}`
+                        `https://buy.stripe.com/7sIdRzbym4RA98c7sX?client_reference_id=${settings.user?.id}&customer_email=${encodeURIComponent(settings.user?.email ?? '')}`
                       )
                     }
                     disabled={isLoading}
@@ -79,7 +79,7 @@ export function CreditPurchaseDialog({
                     {isLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     ) : null}
-                    $30/mo
+                    $20/mo
                   </Button>
                 </div>
               </div>
