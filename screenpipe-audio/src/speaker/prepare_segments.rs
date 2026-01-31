@@ -17,7 +17,7 @@ pub async fn prepare_segments(
     audio_data: &[f32],
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     segmentation_model_path: &PathBuf,
-    embedding_manager: EmbeddingManager,
+    embedding_manager: Arc<StdMutex<EmbeddingManager>>,
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
     device: &str,
 ) -> Result<(tokio::sync::mpsc::Receiver<SpeechSegment>, bool)> {

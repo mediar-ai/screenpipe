@@ -21,9 +21,11 @@ interface TimelineSliderProps {
 }
 
 interface AppGroup {
-	appName: string;
+	appName: string; // Primary app (for backwards compatibility)
+	appNames: string[]; // All unique apps in this group
 	frames: StreamTimeSeriesResponse[];
 	color: string;
+	colors: string[]; // Colors for all apps
 	iconSrc?: string;
 }
 
@@ -46,6 +48,15 @@ export function getFrameAppName(frame: StreamTimeSeriesResponse | undefined): st
 	// Find first device with a non-empty app_name
 	const deviceWithApp = frame.devices.find(d => d.metadata?.app_name);
 	return deviceWithApp?.metadata?.app_name || 'Unknown';
+}
+
+// Get ALL app names from a frame (for multi-app display)
+export function getFrameAppNames(frame: StreamTimeSeriesResponse | undefined): string[] {
+	if (!frame?.devices?.length) return ['Unknown'];
+	const appNames = frame.devices
+		.map(d => d.metadata?.app_name)
+		.filter((name): name is string => Boolean(name));
+	return appNames.length > 0 ? [...new Set(appNames)] : ['Unknown'];
 }
 
 export const TimelineSlider = ({
@@ -226,31 +237,43 @@ export const TimelineSlider = ({
 		const groups: AppGroup[] = [];
 		let currentApp = "";
 		let currentGroup: StreamTimeSeriesResponse[] = [];
+		let currentGroupAllApps = new Set<string>();
 
 		visibleFrames.forEach((frame) => {
 			const appName = getFrameAppName(frame);
+			const allAppsInFrame = getFrameAppNames(frame);
+
 			if (appName !== currentApp) {
 				if (currentGroup.length > 0) {
+					const allApps = [...currentGroupAllApps];
 					groups.push({
 						appName: currentApp,
+						appNames: allApps,
 						frames: currentGroup,
 						color: stringToColor(currentApp),
+						colors: allApps.map(app => stringToColor(app)),
 					});
 				}
 				currentApp = appName;
 				currentGroup = [frame];
+				currentGroupAllApps = new Set(allAppsInFrame);
 			} else {
 				currentGroup.push(frame);
+				allAppsInFrame.forEach(app => currentGroupAllApps.add(app));
 			}
 		});
 
 		if (currentGroup.length > 0) {
+			const allApps = [...currentGroupAllApps];
 			groups.push({
 				appName: currentApp,
+				appNames: allApps,
 				frames: currentGroup,
 				color: stringToColor(currentApp),
+				colors: allApps.map(app => stringToColor(app)),
 			});
 		}
+
 		return groups;
 	}, [visibleFrames]);
 
@@ -506,31 +529,108 @@ export const TimelineSlider = ({
 									borderLeft: groupIndex > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none',
 								}}
 							>
-								{/* App icon and label - improved visibility */}
-								<div
-									className="absolute top-0 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 pointer-events-none"
+								{/* Stacked app icons - vertical stack, hover to expand */}
+								<motion.div
+									className="absolute top-0 left-1/2 -translate-x-1/2 z-20"
 									style={{ direction: 'ltr' }}
+									initial={false}
 								>
-									<div className="w-5 h-5 rounded-md bg-card/90 border border-border/50 p-0.5 shadow-sm">
-										<img
-											src={`http://localhost:11435/app-icon?name=${encodeURIComponent(group.appName)}`}
-											className="w-full h-full opacity-80 rounded-sm"
-											alt={group.appName}
-											loading="lazy"
-											decoding="async"
-										/>
-									</div>
-									{showLabel && (
-										<span
-											className={cn(
-												"text-[10px] font-medium text-foreground/70 bg-background/60 backdrop-blur-sm px-1.5 py-0.5 rounded truncate",
-												showFullLabel ? "max-w-[100px]" : "max-w-[50px]"
+									<motion.div
+										className="relative flex flex-col items-start pointer-events-auto cursor-pointer"
+										whileHover="expanded"
+										initial="collapsed"
+									>
+										{/* Vertical stack of icons */}
+										<div className="relative">
+											{group.appNames.slice(0, 4).map((appName, idx) => (
+												<motion.div
+													key={`${appName}-${idx}`}
+													className="flex items-center"
+													style={{ zIndex: 20 - idx }}
+													variants={{
+														collapsed: {
+															marginTop: idx === 0 ? 0 : -10,
+															height: 20,
+														},
+														expanded: {
+															marginTop: idx === 0 ? 0 : 2,
+															height: 20,
+														}
+													}}
+													transition={{ type: "spring", stiffness: 400, damping: 25 }}
+												>
+													{/* Icon */}
+													<motion.div
+														className={cn(
+															"w-5 h-5 rounded-md bg-card border p-0.5 shadow-md flex-shrink-0",
+															idx === 0 ? "border-foreground/40" : "border-border/50"
+														)}
+														variants={{
+															collapsed: {
+																scale: 1,
+																opacity: idx < 3 ? 1 : 0.5,
+															},
+															expanded: {
+																scale: 1,
+																opacity: 1,
+															}
+														}}
+														whileHover={{ scale: 1.1 }}
+														transition={{ type: "spring", stiffness: 400, damping: 25 }}
+													>
+														<img
+															src={`http://localhost:11435/app-icon?name=${encodeURIComponent(appName)}`}
+															className="w-full h-full rounded-sm"
+															alt={appName}
+															loading="lazy"
+															decoding="async"
+														/>
+													</motion.div>
+													{/* App name label - appears on hover */}
+													<motion.span
+														className="ml-2 text-[9px] font-medium text-foreground bg-background/95 backdrop-blur-sm px-1.5 py-0.5 rounded shadow-md whitespace-nowrap border border-border/30"
+														variants={{
+															collapsed: { opacity: 0, width: 0, marginLeft: 0 },
+															expanded: { opacity: 1, width: "auto", marginLeft: 8 }
+														}}
+														transition={{ type: "spring", stiffness: 400, damping: 25, delay: idx * 0.02 }}
+													>
+														{appName.length > 15 ? appName.slice(0, 12) + '…' : appName}
+													</motion.span>
+												</motion.div>
+											))}
+											{/* +N indicator for overflow */}
+											{group.appNames.length > 4 && (
+												<motion.div
+													className="flex items-center"
+													style={{ zIndex: 15 }}
+													variants={{
+														collapsed: { marginTop: -10, height: 20 },
+														expanded: { marginTop: 2, height: 20 }
+													}}
+													transition={{ type: "spring", stiffness: 400, damping: 25 }}
+												>
+													<div className="w-5 h-5 rounded-md bg-muted border border-border/50 flex items-center justify-center text-[8px] font-medium text-foreground/70">
+														+{group.appNames.length - 4}
+													</div>
+												</motion.div>
 											)}
-										>
-											{group.appName}
-										</span>
-									)}
-								</div>
+										</div>
+										{/* Badge showing total app count - only in collapsed state */}
+										{group.appNames.length > 1 && (
+											<motion.div
+												className="absolute -right-2 -top-1 min-w-[14px] h-[14px] rounded-full bg-foreground text-background text-[8px] font-bold flex items-center justify-center shadow-sm"
+												variants={{
+													collapsed: { scale: 1, opacity: 1 },
+													expanded: { scale: 0, opacity: 0 }
+												}}
+												transition={{ type: "spring", stiffness: 400, damping: 25 }}
+											>
+												{group.appNames.length}
+											</motion.div>
+										)}
+									</motion.div>
+								</motion.div>
 
 								{group.frames.map((frame, frameIdx) => {
 									// O(1) lookup instead of O(n) indexOf
@@ -555,7 +655,7 @@ export const TimelineSlider = ({
 
 									return (
 										<motion.div
-											key={frame.timestamp}
+											key={`${frame.timestamp}-${frameIdx}`}
 											data-timestamp={frame.timestamp}
 											className={cn(
 												"flex-shrink-0 cursor-ew-resize rounded-t relative hover:z-50 transition-all duration-200",

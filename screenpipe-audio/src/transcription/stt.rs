@@ -94,7 +94,7 @@ pub async fn process_audio_input(
     audio: AudioInput,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     segmentation_model_path: PathBuf,
-    embedding_manager: EmbeddingManager,
+    embedding_manager: Arc<StdMutex<EmbeddingManager>>,
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
     output_path: &PathBuf,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,

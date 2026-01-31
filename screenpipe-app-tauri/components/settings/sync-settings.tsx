@@ -209,7 +209,7 @@ function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing }: { o
           <ArrowRight className="w-4 h-4 ml-2" />
         </Button>
         <a
-          href="https://screenpi.pe/docs/cloud-sync"
+          href="https://docs.screenpi.pe/cloud-sync"
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-center text-muted-foreground mt-3 block hover:text-primary underline"
@@ -447,7 +447,7 @@ function ActiveSyncSettings({
               Uses ~0.8 GB per monitor per day.
             </p>
             <a
-              href="https://screenpi.pe/docs/cloud-sync"
+              href="https://docs.screenpi.pe/cloud-sync"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-muted-foreground hover:text-primary underline"

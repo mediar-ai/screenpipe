@@ -11,7 +11,7 @@ use crate::speaker::{
 };
 
 pub struct SegmentationManager {
-    pub embedding_manager: EmbeddingManager,
+    pub embedding_manager: Arc<StdMutex<EmbeddingManager>>,
     pub embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
     pub segmentation_model_path: PathBuf,
 }
@@ -27,7 +27,7 @@ impl SegmentationManager {
                 .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
         )?));
 
-        let embedding_manager = EmbeddingManager::new(usize::MAX);
+        let embedding_manager = Arc::new(StdMutex::new(EmbeddingManager::new(usize::MAX)));
         Ok(SegmentationManager {
             embedding_manager,
             embedding_extractor,
