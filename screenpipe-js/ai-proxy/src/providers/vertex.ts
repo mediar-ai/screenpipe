@@ -500,14 +500,12 @@ export class VertexAIProvider implements AIProvider {
 	}
 
 	/**
-	 * List available models - all get mapped to claude-sonnet-4@20250514
+	 * List available models - haiku-4.5 and opus-4.5
 	 */
 	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
 		const models = [
-			{ id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', provider: 'google' },
-			{ id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'google' },
-			{ id: 'claude-opus-4-5@20251101', name: 'Claude Opus 4.5', provider: 'vertex' },
 			{ id: 'claude-haiku-4-5@20251001', name: 'Claude Haiku 4.5', provider: 'vertex' },
+			{ id: 'claude-opus-4-5@20251101', name: 'Claude Opus 4.5', provider: 'vertex' },
 		];
 		return models;
 	}
@@ -557,7 +555,7 @@ export async function proxyToVertex(
 		console.log('proxyToVertex: got access token');
 
 		// Map model to Vertex format
-		const model = body.model || 'claude-sonnet-4@20250514';
+		const model = body.model || 'claude-haiku-4-5@20251001';
 		const vertexModel = mapModelToVertex(model);
 		console.log('proxyToVertex: mapped model', model, '->', vertexModel);
 		const method = isStreaming ? 'streamRawPredict' : 'rawPredict';
@@ -619,23 +617,23 @@ export async function proxyToVertex(
 	}
 }
 
-// Model aliases - map requested models to what's actually available in the GCP project
-// Currently only claude-sonnet-4@20250514 is enabled
+// Model aliases - map requested models to what's available in the GCP project
+// Available: claude-haiku-4-5@20251001, claude-opus-4-5@20251101
 const MODEL_ALIASES: Record<string, string> = {
-	// Map all Claude models to the one that works
-	'claude-sonnet-4-5@20250929': 'claude-sonnet-4@20250514',
-	'claude-sonnet-4-5': 'claude-sonnet-4@20250514',
-	'claude-opus-4-5@20251101': 'claude-sonnet-4@20250514',
-	'claude-opus-4-5': 'claude-sonnet-4@20250514',
-	'claude-haiku-4-5@20251001': 'claude-sonnet-4@20250514',
-	'claude-haiku-4-5': 'claude-sonnet-4@20250514',
-	'claude-opus-4@20250514': 'claude-sonnet-4@20250514',
-	'claude-opus-4': 'claude-sonnet-4@20250514',
-	'claude-haiku-4': 'claude-sonnet-4@20250514',
-	// Simple aliases
-	'claude-haiku': 'claude-sonnet-4@20250514',
-	'claude-sonnet': 'claude-sonnet-4@20250514',
-	'claude-opus': 'claude-sonnet-4@20250514',
+	// Haiku 4.5 aliases
+	'claude-haiku-4-5': 'claude-haiku-4-5@20251001',
+	'claude-haiku-4': 'claude-haiku-4-5@20251001',
+	'claude-haiku': 'claude-haiku-4-5@20251001',
+	'claude-3-haiku-20240307': 'claude-haiku-4-5@20251001',
+	// Opus 4.5 aliases
+	'claude-opus-4-5': 'claude-opus-4-5@20251101',
+	'claude-opus-4': 'claude-opus-4-5@20251101',
+	'claude-opus': 'claude-opus-4-5@20251101',
+	// Sonnet -> Haiku (sonnet is outdated, use haiku as default)
+	'claude-sonnet-4-5@20250929': 'claude-haiku-4-5@20251001',
+	'claude-sonnet-4-5': 'claude-haiku-4-5@20251001',
+	'claude-sonnet-4@20250514': 'claude-haiku-4-5@20251001',
+	'claude-sonnet': 'claude-haiku-4-5@20251001',
 };
 
 // Convert model ID format and apply aliases
@@ -662,9 +660,9 @@ export function mapModelToVertex(model: string): string {
 		return converted;
 	}
 
-	// Default fallback to the working model for any claude request
+	// Default fallback to haiku for any claude request
 	if (model.toLowerCase().includes('claude')) {
-		return 'claude-sonnet-4@20250514';
+		return 'claude-haiku-4-5@20251001';
 	}
 
 	return model;

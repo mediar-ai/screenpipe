@@ -130,8 +130,32 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 
 		// Anthropic-compatible endpoint for OpenCode integration
 		// OpenCode sends requests to baseURL/v1/messages when configured with api: "anthropic"
+		// Requires logged-in user (not anonymous)
 		if (path === '/anthropic/v1/messages' && request.method === 'POST') {
 			console.log('OpenCode Anthropic proxy request to /anthropic/v1/messages');
+
+			// Require authentication for OpenCode
+			if (authResult.tier === 'anonymous') {
+				return addCorsHeaders(createErrorResponse(401, JSON.stringify({
+					error: 'authentication_required',
+					message: 'OpenCode requires authentication. Please log in to screenpipe.',
+				})));
+			}
+
+			// Track usage for OpenCode requests
+			const ipAddress = request.headers.get('cf-connecting-ip') || undefined;
+			const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId, ipAddress);
+			if (!usage.allowed) {
+				return addCorsHeaders(createErrorResponse(429, JSON.stringify({
+					error: 'daily_limit_exceeded',
+					message: `You've used all ${usage.limit} AI queries for today. Resets at ${usage.resetsAt}`,
+					used_today: usage.used,
+					limit_today: usage.limit,
+					resets_at: usage.resetsAt,
+					tier: authResult.tier,
+				})));
+			}
+
 			return await handleVertexProxy(request, env);
 		}
 
