@@ -91,7 +91,7 @@ accessibility = { git = "https://github.com/eiz/accessibility.git", branch = "ma
 objc = "0.2.7"
 objc-foundation = "0.1.1"
 
-core-foundation = "=0.10.0"
+core-foundation = "0.10"
 core-graphics = { version = "0.24.0", features = ["highsierra"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

@@ -8,8 +8,8 @@ use tokio::sync::RwLock;
 
 use super::blob::{decrypt_blob, encrypt_blob, BlobMetadata, BlobType, DecryptedBlob};
 use super::client::{
-    DownloadBlob, DownloadRequest, SearchRequest, SyncClient, SyncClientConfig, SyncStatus,
-    TimeRange,
+    DownloadBlob, DownloadRequest, SearchRequest, SyncClient, SyncClientConfig, SyncDevice,
+    SyncStatus, TimeRange,
 };
 use super::crypto::generate_search_token;
 use super::error::{SyncError, SyncResult};
@@ -267,6 +267,25 @@ impl SyncManager {
     /// Get sync status and quota information.
     pub async fn get_status(&self) -> SyncResult<SyncStatus> {
         self.client.get_status().await
+    }
+
+    // =========================================================================
+    // Device Operations
+    // =========================================================================
+
+    /// Get list of registered devices.
+    pub async fn get_devices(&self) -> SyncResult<Vec<SyncDevice>> {
+        self.client.list_devices().await
+    }
+
+    /// Remove a device from sync.
+    pub async fn remove_device(&self, device_id: &str) -> SyncResult<()> {
+        self.client.remove_device(device_id).await
+    }
+
+    /// Delete all cloud data for this user.
+    pub async fn delete_all_data(&self) -> SyncResult<()> {
+        self.client.delete_all_data().await
     }
 
     /// Get the client for advanced operations.

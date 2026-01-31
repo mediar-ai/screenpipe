@@ -411,6 +411,35 @@ impl SyncClient {
     }
 
     // =========================================================================
+    // Data Management
+    // =========================================================================
+
+    /// Delete all cloud data for this user.
+    pub async fn delete_all_data(&self) -> SyncResult<()> {
+        let url = format!("{}/data", self.config.api_url);
+
+        let response = self
+            .http
+            .delete(&url)
+            .header("Authorization", format!("Bearer {}", self.config.auth_token))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_body: ApiError = response.json().await.unwrap_or(ApiError {
+                success: false,
+                error: Some("unknown error".to_string()),
+                code: None,
+            });
+            return Err(SyncError::Server(
+                error_body.error.unwrap_or_else(|| "delete all data failed".to_string()),
+            ));
+        }
+
+        Ok(())
+    }
+
+    // =========================================================================
     // HTTP Helpers
     // =========================================================================
 
