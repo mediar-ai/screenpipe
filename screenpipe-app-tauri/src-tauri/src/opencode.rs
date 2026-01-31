@@ -118,6 +118,7 @@ fn ensure_opencode_config(user_token: Option<&str>) -> Result<(), String> {
 
     // Create config that uses screenpipe-cloud as the provider
     // This leverages the $200k Vertex AI credits through screenpipe's proxy
+    // Available models: claude-haiku-4-5 (fast), claude-opus-4-5 (powerful)
     let config = json!({
         "$schema": "https://opencode.ai/config.json",
         "provider": {
@@ -125,17 +126,22 @@ fn ensure_opencode_config(user_token: Option<&str>) -> Result<(), String> {
                 "api": "anthropic",
                 "baseURL": "https://api.screenpi.pe/anthropic",
                 "models": {
-                    "claude-sonnet-4-20250514": {
-                        "name": "Claude Sonnet 4",
+                    "claude-haiku-4-5@20251001": {
+                        "name": "Claude Haiku 4.5",
                         "attachment": true,
                         "reasoning": false
+                    },
+                    "claude-opus-4-5@20251101": {
+                        "name": "Claude Opus 4.5",
+                        "attachment": true,
+                        "reasoning": true
                     }
                 }
             }
         },
         "model": {
-            "default": "screenpipe/claude-sonnet-4-20250514",
-            "reasoning": "screenpipe/claude-sonnet-4-20250514"
+            "default": "screenpipe/claude-haiku-4-5@20251001",
+            "reasoning": "screenpipe/claude-opus-4-5@20251101"
         }
     });
 
