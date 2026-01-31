@@ -170,11 +170,11 @@ EXAMPLES:
   # Save daily summaries locally
   bunx @screenpipe/sync --output ~/Documents/brain/context --git
 
-  # Sync raw database to remote (e.g., Clawdbot)
-  bunx @screenpipe/sync --db --remote user@clawdbot:~/.screenpipe/
+  # Sync raw database to remote (e.g., OpenClaw)
+  bunx @screenpipe/sync --db --remote user@openclaw:~/.screenpipe/
 
   # Full sync: DB + daily summary
-  bunx @screenpipe/sync --db -r clawdbot:~/.screenpipe && bunx @screenpipe/sync -o ~/context -g
+  bunx @screenpipe/sync --db -r openclaw:~/.screenpipe && bunx @screenpipe/sync -o ~/context -g
 
   # ONE-LINER: Permanent background sync (survives reboot)
   bunx @screenpipe/sync --daemon --remote user@server:~/.screenpipe/

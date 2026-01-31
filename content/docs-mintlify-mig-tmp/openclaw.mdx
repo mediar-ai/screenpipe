@@ -1,13 +1,13 @@
 ---
-title: "moltbot (clawdbot) - AI assistant with screenpipe memory"
-sidebarTitle: "moltbot"
-description: "Connect screenpipe to Moltbot (formerly Clawdbot) to give your personal AI assistant access to everything you've seen and heard."
+title: "OpenClaw - AI assistant with screenpipe memory"
+sidebarTitle: "OpenClaw"
+description: "Connect screenpipe to OpenClaw (formerly Moltbot/Clawdbot) to give your personal AI assistant access to everything you've seen and heard."
 icon: "robot"
 ---
 
-[Moltbot](https://molt.bot) (formerly Clawdbot) is a self-hosted personal AI assistant that connects to your messaging apps (WhatsApp, Telegram, Discord, iMessage, etc.) and can take actions on your behalf.
+[OpenClaw](https://openclaw.ai) (formerly Moltbot/Clawdbot) is a self-hosted personal AI assistant that connects to your messaging apps (WhatsApp, Telegram, Discord, iMessage, etc.) and can take actions on your behalf.
 
-with screenpipe, Moltbot can recall what you've seen on screen, reference past conversations, and answer questions about your digital history.
+with screenpipe, OpenClaw can recall what you've seen on screen, reference past conversations, and answer questions about your digital history.
 
 ## quick start (one command)
 
@@ -39,7 +39,7 @@ bunx @screenpipe/skills install --remote user@your-server
 
 if you prefer manual setup, create a skill that queries screenpipe's SQLite database directly.
 
-1. create `~/clawd/skills/screenpipe/skill.md`:
+1. create `~/openclaw/skills/screenpipe/skill.md`:
 
 ```markdown
 ---
@@ -78,11 +78,11 @@ sqlite3 ~/.screenpipe/db.sqlite "
 ```
 ```
 
-2. restart Moltbot to load the skill
+2. restart OpenClaw to load the skill
 
 ### option 3: REST API (requires tunnel)
 
-if moltbot runs on the same machine as screenpipe, query the REST API directly:
+if OpenClaw runs on the same machine as screenpipe, query the REST API directly:
 
 ```bash
 # search content
@@ -99,14 +99,14 @@ for remote setups, use a secure tunnel (tailscale, cloudflare tunnel).
 
 ### option 4: MCP
 
-Moltbot supports MCP via the mcporter skill:
+OpenClaw supports MCP via the mcporter skill:
 
 ```bash
 # test the MCP server
 npx @modelcontextprotocol/inspector npx screenpipe-mcp
 ```
 
-add to your Moltbot MCP config:
+add to your OpenClaw MCP config:
 
 ```json
 {
@@ -118,12 +118,12 @@ add to your Moltbot MCP config:
 ```
 
 <Note>
-MCP uses more context tokens than skills. the Moltbot team recommends skills for most use cases.
+MCP uses more context tokens than skills. the OpenClaw team recommends skills for most use cases.
 </Note>
 
 ## example prompts
 
-once configured, message Moltbot from any chat app:
+once configured, message OpenClaw from any chat app:
 
 - "what was I reading about yesterday afternoon?"
 - "find the slack message from john about the deployment"
@@ -135,19 +135,19 @@ once configured, message Moltbot from any chat app:
 ## requirements
 
 - screenpipe running locally on your computer
-- SSH access to your Moltbot server (for sync)
-- or: screenpipe + Moltbot on same machine (for REST API)
+- SSH access to your OpenClaw server (for sync)
+- or: screenpipe + OpenClaw on same machine (for REST API)
 
 ## troubleshooting
 
 **sync not working?**
-- check SSH access: `ssh user@moltbot-server "echo ok"`
+- check SSH access: `ssh user@openclaw-server "echo ok"`
 - check daemon: `launchctl list | grep screenpipe`
 - check logs: `tail /tmp/screenpipe-sync.log`
 
 **skills not loading?**
-- check files exist: `ssh server "ls ~/clawd/skills/screenpipe/"`
-- restart moltbot to reload skills
+- check files exist: `ssh server "ls ~/openclaw/skills/screenpipe/"`
+- restart OpenClaw to reload skills
 
 **no results from queries?**
 - verify screenpipe is running locally: `curl http://localhost:3030/health`

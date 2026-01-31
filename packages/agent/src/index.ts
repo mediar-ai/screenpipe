@@ -3,8 +3,8 @@
  * @screenpipe/agent - One-liner to connect Screenpipe to your AI agent
  *
  * Usage:
- *   bunx @screenpipe/agent --setup clawdbot --morning 08:00
- *   bunx @screenpipe/agent --remove clawdbot
+ *   bunx @screenpipe/agent --setup openclaw --morning 08:00
+ *   bunx @screenpipe/agent --remove openclaw
  */
 
 import { execSync, spawn } from "child_process";
@@ -100,13 +100,13 @@ OPTIONS:
 
 EXAMPLES:
   # Full setup with morning summaries at 8am
-  bunx @screenpipe/agent --setup clawdbot --morning 08:00
+  bunx @screenpipe/agent --setup openclaw --morning 08:00
 
   # Setup with custom sync interval (30 min)
   bunx @screenpipe/agent --setup user@1.2.3.4 --morning 07:30 --sync-interval 1800
 
   # Remove integration
-  bunx @screenpipe/agent --remove clawdbot
+  bunx @screenpipe/agent --remove openclaw
 
 WHAT IT DOES:
   1. Sets up screen data sync daemon (survives reboot)
@@ -249,7 +249,7 @@ chmod +x ~/clawd/screenpipe-morning-trigger.sh"`,
 
 async function setup(config: Config) {
   if (!config.remote) {
-    console.error("Error: --setup requires a host (e.g., --setup clawdbot)");
+    console.error("Error: --setup requires a host (e.g., --setup openclaw)");
     process.exit(1);
   }
 
