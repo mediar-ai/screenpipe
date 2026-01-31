@@ -313,7 +313,7 @@ function PasswordSetup({ onSubmit, isLoading }: { onSubmit: (password: string) =
       <Button
         className="w-full"
         onClick={handleSubmit}
-        disabled={isLoading || !password || !confirmPassword}
+        disabled={isLoading || !password}
       >
         {isLoading ? (
           <Loader2 className="w-4 h-4 animate-spin mr-2" />
