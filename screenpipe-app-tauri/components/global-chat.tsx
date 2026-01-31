@@ -1369,6 +1369,7 @@ export function GlobalChat() {
       id: Date.now().toString(),
       role: "user",
       content: userMessage,
+      timestamp: Date.now(),
     };
 
     const assistantMessageId = (Date.now() + 1).toString();
