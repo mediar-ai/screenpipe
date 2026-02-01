@@ -98,20 +98,28 @@ impl UiRecorder {
 
         let mut threads = Vec::new();
 
+        // Shared state for current app/window between threads
+        let current_app = Arc::new(Mutex::new(None::<String>));
+        let current_window = Arc::new(Mutex::new(None::<String>));
+
         // Thread 1: rdev event listener
         let tx1 = tx.clone();
         let stop1 = stop.clone();
         let config1 = self.config.clone();
+        let app1 = current_app.clone();
+        let window1 = current_window.clone();
         threads.push(thread::spawn(move || {
-            run_rdev_listener(tx1, stop1, start_time, config1);
+            run_rdev_listener(tx1, stop1, start_time, config1, app1, window1);
         }));
 
         // Thread 2: App/window observer
         let tx2 = tx.clone();
         let stop2 = stop.clone();
         let config2 = self.config.clone();
+        let app2 = current_app.clone();
+        let window2 = current_window.clone();
         threads.push(thread::spawn(move || {
-            run_app_observer(tx2, stop2, start_time, config2);
+            run_app_observer(tx2, stop2, start_time, config2, app2, window2);
         }));
 
         Ok(RecordingHandle {
@@ -133,6 +141,8 @@ struct ListenerState {
     last_mouse: (f64, f64),
     text_buf: String,
     last_text_time: Option<Instant>,
+    current_app: Arc<Mutex<Option<String>>>,
+    current_window: Arc<Mutex<Option<String>>>,
 }
 
 fn run_rdev_listener(
@@ -140,6 +150,8 @@ fn run_rdev_listener(
     stop: Arc<AtomicBool>,
     start: Instant,
     config: UiCaptureConfig,
+    current_app: Arc<Mutex<Option<String>>>,
+    current_window: Arc<Mutex<Option<String>>>,
 ) {
     let state = Arc::new(Mutex::new(ListenerState {
         tx,
@@ -148,6 +160,8 @@ fn run_rdev_listener(
         last_mouse: (0.0, 0.0),
         text_buf: String::new(),
         last_text_time: None,
+        current_app,
+        current_window,
     }));
 
     let state_clone = state.clone();
@@ -176,7 +190,12 @@ fn run_rdev_listener(
                     _ => 0,
                 };
 
-                let ui_event = UiEvent::click(timestamp, t, x as i32, y as i32, btn, 1, 0);
+                let app_name = s.current_app.lock().clone();
+                let window_title = s.current_window.lock().clone();
+
+                let mut ui_event = UiEvent::click(timestamp, t, x as i32, y as i32, btn, 1, 0);
+                ui_event.app_name = app_name;
+                ui_event.window_title = window_title;
                 let _ = s.tx.try_send(ui_event);
             }
 
@@ -192,6 +211,8 @@ fn run_rdev_listener(
 
                 if dist >= s.config.mouse_move_threshold {
                     s.last_mouse = (x, y);
+                    let app_name = s.current_app.lock().clone();
+                    let window_title = s.current_window.lock().clone();
                     let ui_event = UiEvent {
                         id: None,
                         timestamp,
@@ -200,8 +221,8 @@ fn run_rdev_listener(
                             x: x as i32,
                             y: y as i32,
                         },
-                        app_name: None,
-                        window_title: None,
+                        app_name,
+                        window_title,
                         browser_url: None,
                         element: None,
                         frame_id: None,
@@ -214,6 +235,8 @@ fn run_rdev_listener(
 
             EventType::Wheel { delta_x, delta_y } => {
                 let (x, y) = s.last_mouse;
+                let app_name = s.current_app.lock().clone();
+                let window_title = s.current_window.lock().clone();
                 let ui_event = UiEvent {
                     id: None,
                     timestamp,
@@ -224,8 +247,8 @@ fn run_rdev_listener(
                         delta_x: delta_x as i16,
                         delta_y: delta_y as i16,
                     },
-                    app_name: None,
-                    window_title: None,
+                    app_name,
+                    window_title,
                     browser_url: None,
                     element: None,
                     frame_id: None,
@@ -263,6 +286,8 @@ fn run_rdev_listener(
 
                 // Record as key event for special keys
                 if s.config.capture_keystrokes {
+                    let app_name = s.current_app.lock().clone();
+                    let window_title = s.current_window.lock().clone();
                     let ui_event = UiEvent {
                         id: None,
                         timestamp,
@@ -271,8 +296,8 @@ fn run_rdev_listener(
                             key_code: keycode,
                             modifiers: 0,
                         },
-                        app_name: None,
-                        window_title: None,
+                        app_name,
+                        window_title,
                         browser_url: None,
                         element: None,
                         frame_id: None,
@@ -384,6 +409,8 @@ fn run_app_observer(
     stop: Arc<AtomicBool>,
     start: Instant,
     config: UiCaptureConfig,
+    current_app: Arc<Mutex<Option<String>>>,
+    current_window: Arc<Mutex<Option<String>>>,
 ) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -429,6 +456,10 @@ fn run_app_observer(
                         continue;
                     }
                 }
+
+                // Update shared state for event listener thread
+                *current_app.lock() = Some(app_name.clone());
+                *current_window.lock() = title.clone();
 
                 // Send app switch event
                 if config.capture_app_switch {
