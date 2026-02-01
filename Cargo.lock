@@ -6828,6 +6828,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "chrono",
+ "cidre",
  "clap",
  "clap_complete",
  "colored",

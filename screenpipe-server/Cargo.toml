@@ -153,3 +153,6 @@ windows = { version = "0.58", features = [
     "Win32_System_Threading",
     "Win32_Foundation",
 ] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cidre = { git = "https://github.com/yury/cidre.git", features = ["ns"] }

@@ -1,6 +1,7 @@
 mod add;
 pub mod analytics;
 mod auto_destruct;
+pub mod sleep_monitor;
 pub mod chunking;
 pub mod cli;
 pub mod cloud_search;
@@ -17,6 +18,7 @@ pub mod video_utils;
 pub mod vision_manager;
 pub use add::handle_index_command;
 pub use auto_destruct::watch_pid;
+pub use sleep_monitor::start_sleep_monitor;
 pub use axum::Json as JsonResponse;
 pub use cli::Cli;
 pub use core::{record_video, start_continuous_recording};

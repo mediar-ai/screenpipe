@@ -28,7 +28,7 @@ use screenpipe_server::{
     vision_manager::{
         start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
     },
-    watch_pid, PipeManager, ResourceMonitor, SCServer,
+    watch_pid, PipeManager, ResourceMonitor, SCServer, start_sleep_monitor,
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;
@@ -697,6 +697,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize analytics for API tracking
     analytics::init(!cli.disable_telemetry);
+
+    // Start sleep/wake monitor for telemetry (macOS only)
+    // This tracks sleep/wake events and checks if recording is degraded after wake
+    start_sleep_monitor();
 
     let db = Arc::new(
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir.to_string_lossy()))
