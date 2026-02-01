@@ -1,5 +1,7 @@
+// Re-export activity feed types when adaptive-fps is enabled
 #[cfg(feature = "adaptive-fps")]
-pub mod activity;
+pub use screenpipe_accessibility::{ActivityFeed, ActivityKind, CaptureParams};
+
 #[cfg(target_os = "macos")]
 pub mod apple;
 pub mod core;

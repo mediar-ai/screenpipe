@@ -12,11 +12,13 @@ edition = { workspace = true }
 
 [features]
 default = []
-adaptive-fps = ["rdev"]
+# Adaptive FPS based on input activity (requires screenpipe-accessibility)
+# Only supported on macOS and Windows
+adaptive-fps = ["screenpipe-accessibility"]
 
 [dependencies]
-# Input activity monitoring for adaptive FPS (optional)
-rdev = { version = "0.5", optional = true }
+# Activity feed for adaptive FPS (optional, macOS/Windows only)
+screenpipe-accessibility = { path = "../screenpipe-accessibility", optional = true }
 serde_json = "1.0"
 chrono = { version = "0.4.31", features = ["serde"] }
 

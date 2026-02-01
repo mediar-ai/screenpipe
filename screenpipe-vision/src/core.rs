@@ -144,6 +144,13 @@ impl std::fmt::Display for ContinuousCaptureError {
     }
 }
 
+/// Activity feed for adaptive FPS (optional, from screenpipe-accessibility)
+#[cfg(feature = "adaptive-fps")]
+pub type ActivityFeedOption = Option<screenpipe_accessibility::ActivityFeed>;
+
+#[cfg(not(feature = "adaptive-fps"))]
+pub type ActivityFeedOption = Option<()>;
+
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
@@ -152,23 +159,15 @@ pub async fn continuous_capture(
     window_filters: Arc<WindowFilters>,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
-    adaptive_fps: bool,
+    activity_feed: ActivityFeedOption,
 ) -> Result<(), ContinuousCaptureError> {
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<DynamicImage> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
-    // Initialize activity monitor for adaptive FPS if enabled
     #[cfg(feature = "adaptive-fps")]
-    let activity_monitor = if adaptive_fps {
-        Some(crate::activity::ActivityMonitor::new(interval))
-    } else {
-        None
-    };
-
-    #[cfg(feature = "adaptive-fps")]
-    if adaptive_fps {
+    if activity_feed.is_some() {
         debug!("Adaptive FPS enabled - will adjust capture rate based on input activity");
     }
 
@@ -194,7 +193,7 @@ pub async fn continuous_capture(
 
     // Suppress unused variable warning when feature is disabled
     #[cfg(not(feature = "adaptive-fps"))]
-    let _ = adaptive_fps;
+    let _ = activity_feed;
 
     loop {
         // 3. Capture screenshot and wall-clock time atomically
@@ -230,9 +229,9 @@ pub async fn continuous_capture(
             frame_counter += 1;
             // Use adaptive interval if enabled, otherwise use base interval
             #[cfg(feature = "adaptive-fps")]
-            let sleep_interval = activity_monitor
+            let sleep_interval = activity_feed
                 .as_ref()
-                .map(|m| m.get_interval())
+                .map(|f| f.get_capture_params().interval)
                 .unwrap_or(interval);
             #[cfg(not(feature = "adaptive-fps"))]
             let sleep_interval = interval;
@@ -261,9 +260,9 @@ pub async fn continuous_capture(
         frame_counter += 1;
         // Use adaptive interval if enabled, otherwise use base interval
         #[cfg(feature = "adaptive-fps")]
-        let sleep_interval = activity_monitor
+        let sleep_interval = activity_feed
             .as_ref()
-            .map(|m| m.get_interval())
+            .map(|f| f.get_capture_params().interval)
             .unwrap_or(interval);
         #[cfg(not(feature = "adaptive-fps"))]
         let sleep_interval = interval;

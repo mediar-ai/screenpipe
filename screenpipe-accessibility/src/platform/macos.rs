@@ -1,7 +1,8 @@
 //! macOS UI event capture using CGEventTap and Accessibility APIs
 //!
-//! Based on bigbrother's implementation with screenpipe-specific enhancements.
+//! Uses native macOS APIs - no rdev dependency.
 
+use crate::activity_feed::{ActivityFeed, ActivityKind};
 use crate::config::UiCaptureConfig;
 use crate::events::{ElementContext, EventData, Modifiers, UiEvent};
 use anyhow::Result;
@@ -109,8 +110,44 @@ impl UiRecorder {
         }
     }
 
-    /// Start capturing events
+    /// Start capturing events (without activity feed)
     pub fn start(&self) -> Result<RecordingHandle> {
+        let (handle, _) = self.start_internal(None)?;
+        Ok(handle)
+    }
+
+    /// Start capturing with activity feed for adaptive FPS
+    pub fn start_with_activity_feed(&self) -> Result<(RecordingHandle, ActivityFeed)> {
+        let activity_feed = ActivityFeed::new();
+        let (handle, _) = self.start_internal(Some(activity_feed.clone()))?;
+        Ok((handle, activity_feed))
+    }
+
+    /// Start activity feed only (minimal hooks, no full event capture)
+    pub fn start_activity_only(&self) -> Result<ActivityFeed> {
+        let perms = self.check_permissions();
+        if !perms.input_monitoring {
+            anyhow::bail!("Missing input monitoring permission");
+        }
+
+        let activity_feed = ActivityFeed::new();
+        let stop = Arc::new(AtomicBool::new(false));
+
+        let feed_clone = activity_feed.clone();
+        let stop_clone = stop.clone();
+
+        // Spawn minimal event tap thread (activity only)
+        thread::spawn(move || {
+            run_activity_only_tap(feed_clone, stop_clone);
+        });
+
+        Ok(activity_feed)
+    }
+
+    fn start_internal(
+        &self,
+        activity_feed: Option<ActivityFeed>,
+    ) -> Result<(RecordingHandle, Option<ActivityFeed>)> {
         let perms = self.check_permissions();
         if !perms.all_granted() {
             anyhow::bail!(
@@ -136,8 +173,9 @@ impl UiRecorder {
         let config1 = self.config.clone();
         let app1 = current_app.clone();
         let window1 = current_window.clone();
+        let feed1 = activity_feed.clone();
         threads.push(thread::spawn(move || {
-            run_event_tap(tx1, stop1, start_time, config1, app1, window1);
+            run_event_tap(tx1, stop1, start_time, config1, app1, window1, feed1);
         }));
 
         // Thread 2: App/window observer
@@ -150,11 +188,14 @@ impl UiRecorder {
             run_app_observer(tx2, stop2, start_time, config2, app2, window2);
         }));
 
-        Ok(RecordingHandle {
-            stop,
-            events_rx: rx,
-            threads,
-        })
+        Ok((
+            RecordingHandle {
+                stop,
+                events_rx: rx,
+                threads,
+            },
+            activity_feed,
+        ))
     }
 }
 
@@ -170,6 +211,7 @@ struct TapState {
     text_buf: Mutex<TextBuffer>,
     current_app: Arc<Mutex<Option<String>>>,
     current_window: Arc<Mutex<Option<String>>>,
+    activity_feed: Option<ActivityFeed>,
 }
 
 struct TextBuffer {
@@ -220,16 +262,18 @@ fn run_event_tap(
     config: UiCaptureConfig,
     current_app: Arc<Mutex<Option<String>>>,
     current_window: Arc<Mutex<Option<String>>>,
+    activity_feed: Option<ActivityFeed>,
 ) {
-    // Build event mask
+    // Build event mask - always include KEY_UP for activity tracking
     let mut mask = cg::EventType::LEFT_MOUSE_DOWN.mask()
         | cg::EventType::LEFT_MOUSE_UP.mask()
         | cg::EventType::RIGHT_MOUSE_DOWN.mask()
         | cg::EventType::RIGHT_MOUSE_UP.mask()
         | cg::EventType::KEY_DOWN.mask()
+        | cg::EventType::KEY_UP.mask()
         | cg::EventType::SCROLL_WHEEL.mask();
 
-    if config.capture_mouse_move {
+    if config.capture_mouse_move || activity_feed.is_some() {
         mask |= cg::EventType::MOUSE_MOVED.mask()
             | cg::EventType::LEFT_MOUSE_DRAGGED.mask()
             | cg::EventType::RIGHT_MOUSE_DRAGGED.mask();
@@ -243,6 +287,7 @@ fn run_event_tap(
         text_buf: Mutex::new(TextBuffer::new(config.text_timeout_ms)),
         current_app,
         current_window,
+        activity_feed,
     }));
 
     let tap = cg::EventTap::new(
@@ -324,6 +369,11 @@ extern "C" fn tap_callback(
 
     match event_type {
         cg::EventType::LEFT_MOUSE_DOWN | cg::EventType::RIGHT_MOUSE_DOWN => {
+            // Record activity
+            if let Some(ref feed) = state.activity_feed {
+                feed.record(ActivityKind::MouseClick);
+            }
+
             if !state.config.capture_clicks {
                 return Some(event);
             }
@@ -388,36 +438,45 @@ extern "C" fn tap_callback(
         cg::EventType::MOUSE_MOVED
         | cg::EventType::LEFT_MOUSE_DRAGGED
         | cg::EventType::RIGHT_MOUSE_DRAGGED => {
-            if !state.config.capture_mouse_move {
-                return Some(event);
-            }
-
             let mut last = state.last_mouse.lock();
             let dx = loc.x - last.0;
             let dy = loc.y - last.1;
             let dist = (dx * dx + dy * dy).sqrt();
 
             if dist >= state.config.mouse_move_threshold {
+                // Record activity (throttled by distance)
+                if let Some(ref feed) = state.activity_feed {
+                    feed.record(ActivityKind::MouseMove);
+                }
+
                 *last = (loc.x, loc.y);
-                let ui_event = UiEvent {
-                    id: None,
-                    timestamp,
-                    relative_ms: t,
-                    data: EventData::Move {
-                        x: loc.x as i32,
-                        y: loc.y as i32,
-                    },
-                    app_name,
-                    window_title,
-                    browser_url: None,
-                    element: None,
-                    frame_id: None,
-                };
-                let _ = state.tx.try_send(ui_event);
+
+                if state.config.capture_mouse_move {
+                    let ui_event = UiEvent {
+                        id: None,
+                        timestamp,
+                        relative_ms: t,
+                        data: EventData::Move {
+                            x: loc.x as i32,
+                            y: loc.y as i32,
+                        },
+                        app_name,
+                        window_title,
+                        browser_url: None,
+                        element: None,
+                        frame_id: None,
+                    };
+                    let _ = state.tx.try_send(ui_event);
+                }
             }
         }
 
         cg::EventType::SCROLL_WHEEL => {
+            // Record activity
+            if let Some(ref feed) = state.activity_feed {
+                feed.record(ActivityKind::Scroll);
+            }
+
             let dy = event.field_i64(cg::EventField::SCROLL_WHEEL_EVENT_DELTA_AXIS1) as i16;
             let dx = event.field_i64(cg::EventField::SCROLL_WHEEL_EVENT_DELTA_AXIS2) as i16;
             if dx != 0 || dy != 0 {
@@ -441,7 +500,18 @@ extern "C" fn tap_callback(
             }
         }
 
+        cg::EventType::KEY_UP => {
+            // Record key release activity
+            if let Some(ref feed) = state.activity_feed {
+                feed.record(ActivityKind::KeyRelease);
+            }
+        }
+
         cg::EventType::KEY_DOWN => {
+            // Record key press activity
+            if let Some(ref feed) = state.activity_feed {
+                feed.record(ActivityKind::KeyPress);
+            }
             let keycode = event.field_i64(cg::EventField::KEYBOARD_EVENT_KEYCODE) as u16;
 
             // Check for clipboard operations (Cmd+C, Cmd+X, Cmd+V)
@@ -976,6 +1046,99 @@ fn keycode_to_char(keycode: u16, mods: Modifiers) -> Option<char> {
     } else {
         Some(c)
     }
+}
+
+// ============================================================================
+// Activity-Only Event Tap (minimal, for adaptive FPS without full event capture)
+// ============================================================================
+
+fn run_activity_only_tap(activity_feed: ActivityFeed, stop: Arc<AtomicBool>) {
+    debug!("Starting activity-only event tap");
+
+    // Minimal event mask for activity detection
+    let mask = cg::EventType::KEY_DOWN.mask()
+        | cg::EventType::KEY_UP.mask()
+        | cg::EventType::LEFT_MOUSE_DOWN.mask()
+        | cg::EventType::RIGHT_MOUSE_DOWN.mask()
+        | cg::EventType::MOUSE_MOVED.mask()
+        | cg::EventType::SCROLL_WHEEL.mask();
+
+    // Store activity feed in a box for the callback
+    let feed_ptr = Box::into_raw(Box::new(activity_feed));
+
+    let tap = cg::EventTap::new(
+        cg::EventTapLocation::Session,
+        cg::EventTapPlacement::TailAppend,
+        cg::EventTapOpts::LISTEN_ONLY,
+        mask,
+        activity_only_callback,
+        feed_ptr as *mut ActivityFeed,
+    );
+
+    let Some(tap) = tap else {
+        error!("Failed to create activity-only CGEventTap");
+        // Clean up the leaked box
+        unsafe {
+            let _ = Box::from_raw(feed_ptr);
+        }
+        return;
+    };
+
+    let Some(src) = cf::MachPort::run_loop_src(&tap, 0) else {
+        error!("Failed to create run loop source");
+        unsafe {
+            let _ = Box::from_raw(feed_ptr);
+        }
+        return;
+    };
+
+    let rl = cf::RunLoop::current();
+    rl.add_src(&src, cf::RunLoopMode::default());
+
+    debug!("Activity-only event tap started");
+
+    while !stop.load(Ordering::Relaxed) {
+        cf::RunLoop::run_in_mode(cf::RunLoopMode::default(), 0.05, true);
+    }
+
+    rl.remove_src(&src, cf::RunLoopMode::default());
+
+    // Clean up
+    unsafe {
+        let _ = Box::from_raw(feed_ptr);
+    }
+
+    debug!("Activity-only event tap stopped");
+}
+
+extern "C" fn activity_only_callback(
+    _proxy: *mut cg::EventTapProxy,
+    event_type: cg::EventType,
+    event: &mut cg::Event,
+    user_info: *mut ActivityFeed,
+) -> Option<&cg::Event> {
+    let feed = unsafe { &*user_info };
+
+    match event_type {
+        cg::EventType::KEY_DOWN => {
+            feed.record(ActivityKind::KeyPress);
+        }
+        cg::EventType::KEY_UP => {
+            feed.record(ActivityKind::KeyRelease);
+        }
+        cg::EventType::LEFT_MOUSE_DOWN | cg::EventType::RIGHT_MOUSE_DOWN => {
+            feed.record(ActivityKind::MouseClick);
+        }
+        cg::EventType::MOUSE_MOVED => {
+            feed.record(ActivityKind::MouseMove);
+        }
+        cg::EventType::SCROLL_WHEEL => {
+            feed.record(ActivityKind::Scroll);
+        }
+        _ => {}
+    }
+
+    Some(event)
 }
 
 #[cfg(test)]

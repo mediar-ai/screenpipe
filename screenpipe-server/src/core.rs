@@ -29,7 +29,7 @@ pub async fn start_continuous_recording(
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
     realtime_vision: bool,
-    adaptive_fps: bool,
+    activity_feed: screenpipe_vision::ActivityFeedOption,
 ) -> Result<()> {
     debug!("Starting video recording for monitors {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -44,6 +44,7 @@ pub async fn start_continuous_recording(
                 let ignored_urls_video = ignored_urls.to_vec();
 
                 let languages = languages.clone();
+                let activity_feed = activity_feed.clone();
 
                 debug!("Starting video recording for monitor {}", monitor_id);
                 vision_handle.spawn(async move {
@@ -64,7 +65,7 @@ pub async fn start_continuous_recording(
                             languages.clone(),
                             capture_unfocused_windows,
                             realtime_vision,
-                            adaptive_fps,
+                            activity_feed.clone(),
                         )
                         .await
                         {
@@ -130,7 +131,7 @@ pub async fn record_video(
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
     realtime_vision: bool,
-    adaptive_fps: bool,
+    activity_feed: screenpipe_vision::ActivityFeedOption,
 ) -> Result<()> {
     debug!("record_video: Starting for monitor {}", monitor_id);
     let device_name = Arc::new(format!("monitor_{}", monitor_id));
@@ -178,7 +179,7 @@ pub async fn record_video(
         ignored_urls,
         languages,
         capture_unfocused_windows,
-        adaptive_fps,
+        activity_feed,
     );
 
     info!(

@@ -127,7 +127,7 @@ impl VideoCapture {
         ignored_urls: &[String],
         languages: Vec<Language>,
         capture_unfocused_windows: bool,
-        adaptive_fps: bool,
+        activity_feed: screenpipe_vision::ActivityFeedOption,
     ) -> Self {
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
@@ -162,7 +162,7 @@ impl VideoCapture {
         let capture_result_sender = result_sender.clone();
         let capture_interval = interval;
         let capture_unfocused = capture_unfocused_windows;
-        let capture_adaptive_fps = adaptive_fps;
+        let capture_activity_feed = activity_feed;
 
         // Store task handles for health monitoring
         let capture_thread = tokio::spawn(async move {
@@ -192,7 +192,7 @@ impl VideoCapture {
                     capture_window_filters.clone(),
                     capture_languages.clone(),
                     capture_unfocused,
-                    capture_adaptive_fps,
+                    capture_activity_feed.clone(),
                 )
                 .await
                 {

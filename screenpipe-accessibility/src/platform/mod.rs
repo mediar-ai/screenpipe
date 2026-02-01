@@ -13,9 +13,10 @@ pub use macos::{PermissionStatus, RecordingHandle, UiRecorder};
 #[cfg(target_os = "windows")]
 pub use windows::{PermissionStatus, RecordingHandle, UiRecorder};
 
-// Stub for unsupported platforms
+// Stub for unsupported platforms (Linux, etc.)
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub mod stub {
+    use crate::activity_feed::ActivityFeed;
     use crate::config::UiCaptureConfig;
     use crate::events::UiEvent;
     use anyhow::Result;
@@ -82,6 +83,14 @@ pub mod stub {
 
         pub fn start(&self) -> Result<RecordingHandle> {
             anyhow::bail!("UI event capture not supported on this platform")
+        }
+
+        pub fn start_with_activity_feed(&self) -> Result<(RecordingHandle, ActivityFeed)> {
+            anyhow::bail!("UI event capture not supported on this platform")
+        }
+
+        pub fn start_activity_only(&self) -> Result<ActivityFeed> {
+            anyhow::bail!("Activity feed not supported on this platform")
         }
     }
 }

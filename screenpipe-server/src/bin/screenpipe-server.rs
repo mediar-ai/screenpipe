@@ -779,6 +779,28 @@ async fn main() -> anyhow::Result<()> {
     let vision_manager: Option<Arc<VisionManager>> = if cli.use_all_monitors && !cli.disable_vision
     {
         info!("Using dynamic monitor detection (--use-all-monitors)");
+        
+        // Create activity feed for adaptive FPS if enabled
+        #[cfg(feature = "adaptive-fps")]
+        let activity_feed: screenpipe_vision::ActivityFeedOption = if cli.adaptive_fps {
+            info!("Starting activity feed for adaptive FPS");
+            match screenpipe_accessibility::UiRecorder::with_defaults().start_activity_only() {
+                Ok(feed) => {
+                    info!("Activity feed started successfully");
+                    Some(feed)
+                }
+                Err(e) => {
+                    warn!("Failed to start activity feed: {:?}. Adaptive FPS will be disabled.", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        
+        #[cfg(not(feature = "adaptive-fps"))]
+        let activity_feed: screenpipe_vision::ActivityFeedOption = None;
+        
         let config = VisionManagerConfig {
             output_path: output_path_clone.to_string(),
             fps,
@@ -791,7 +813,7 @@ async fn main() -> anyhow::Result<()> {
             languages: languages_clone.clone(),
             capture_unfocused_windows: cli.capture_unfocused_windows,
             realtime_vision: cli.enable_realtime_audio_transcription,
-            adaptive_fps: cli.adaptive_fps,
+            activity_feed: activity_feed.clone(),
         };
         Some(Arc::new(VisionManager::new(
             config,
@@ -832,6 +854,27 @@ async fn main() -> anyhow::Result<()> {
             }
         })
     } else {
+        // Create activity feed for adaptive FPS if enabled (for non-VisionManager path)
+        #[cfg(feature = "adaptive-fps")]
+        let activity_feed_legacy: screenpipe_vision::ActivityFeedOption = if cli.adaptive_fps {
+            info!("Starting activity feed for adaptive FPS (legacy path)");
+            match screenpipe_accessibility::UiRecorder::with_defaults().start_activity_only() {
+                Ok(feed) => {
+                    info!("Activity feed started successfully");
+                    Some(feed)
+                }
+                Err(e) => {
+                    warn!("Failed to start activity feed: {:?}. Adaptive FPS will be disabled.", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        
+        #[cfg(not(feature = "adaptive-fps"))]
+        let activity_feed_legacy: screenpipe_vision::ActivityFeedOption = None;
+        
         // Use traditional start_continuous_recording
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -853,7 +896,7 @@ async fn main() -> anyhow::Result<()> {
                     languages_clone.clone(),
                     cli.capture_unfocused_windows,
                     cli.enable_realtime_audio_transcription,
-                    cli.adaptive_fps,
+                    activity_feed_legacy.clone(),
                 );
 
                 let result = tokio::select! {
