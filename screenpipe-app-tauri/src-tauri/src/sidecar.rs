@@ -644,10 +644,29 @@ impl SidecarManager {
     pub async fn spawn(&mut self, app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<(), String> {
         info!("Spawning sidecar with override args: {:?}", override_args);
 
-        // Check if sidecar is already running
+        // Check if sidecar is already running - but verify it's actually alive
         if self.child.is_some() {
-            info!("Sidecar already running, skipping spawn");
-            return Ok(());
+            // Do a quick health check to verify the process is still running
+            let store = app.state::<SettingsStore>();
+            let port = store.port;
+            let health_url = format!("http://localhost:{}/health", port);
+
+            match reqwest::Client::new()
+                .get(&health_url)
+                .timeout(std::time::Duration::from_secs(2))
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    info!("Sidecar already running and healthy, skipping spawn");
+                    return Ok(());
+                }
+                _ => {
+                    // Process died but handle still exists - clear it and respawn
+                    warn!("Sidecar handle exists but process is not responding, clearing stale state and respawning");
+                    self.child = None;
+                }
+            }
         }
 
         // Update settings from store first to get audio settings
