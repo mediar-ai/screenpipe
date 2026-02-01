@@ -2,7 +2,7 @@
 
 import React from "react";
 import { ShareLogsButton } from "@/components/share-logs-button";
-import { MessageSquare, Github } from "lucide-react";
+import { MessageSquare, Github, Lightbulb } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 
 export function FeedbackSection() {
@@ -46,12 +46,32 @@ export function FeedbackSection() {
         <div className="p-6 bg-card rounded-xl border border-border">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-primary/10 rounded-lg">
+              <Lightbulb className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold mb-1">Feature Ideas</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Vote on existing ideas or submit your own feature requests.
+              </p>
+              <button
+                onClick={() => open("https://screenpi.pe/ideas")}
+                className="text-sm text-primary hover:underline"
+              >
+                screenpi.pe/ideas →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 bg-card rounded-xl border border-border">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-primary/10 rounded-lg">
               <Github className="h-6 w-6 text-primary" />
             </div>
             <div>
               <h3 className="text-lg font-semibold mb-1">GitHub Issues</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                For product ideas, bugs, suggestions, or feature requests, you can also open an issue on GitHub.
+                For bugs or technical issues, you can open an issue on GitHub.
               </p>
               <button
                 onClick={() => open("https://github.com/mediar-ai/screenpipe/issues")}

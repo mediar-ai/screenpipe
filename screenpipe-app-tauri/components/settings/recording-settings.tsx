@@ -859,47 +859,6 @@ export function RecordingSettings() {
 
       {/* Rest of the existing UI sections remain the same but with improved validation feedback */}
       
-      {/* Enhanced FPS Section */}
-      <div className="flex flex-col space-y-2">
-        <Label htmlFor="fps" className="flex items-center space-x-2">
-          <span>Frames per second (FPS)</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 cursor-default" />
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>
-                  Adjust the recording frame rate. Lower values save resources,
-                  higher values provide smoother recordings and are less likely to miss activity.
-                  We optimize resource usage when your screen doesn&apos;t change much.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          {validationErrors.fps && (
-            <AlertCircle className="h-4 w-4 text-destructive" />
-          )}
-        </Label>
-        <div className="flex items-center space-x-4">
-          <Slider
-            id="fps"
-            min={0.1}
-            max={10}
-            step={0.1}
-            value={[settings.fps]}
-            onValueChange={handleFpsChange}
-            className="flex-grow"
-          />
-          <span className="w-12 text-right">
-            {settings.fps.toFixed(1)}
-          </span>
-        </div>
-        {validationErrors.fps && (
-          <p className="text-sm text-destructive">{validationErrors.fps}</p>
-        )}
-      </div>
-
       {/* Adaptive FPS Toggle */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
@@ -932,6 +891,49 @@ export function RecordingSettings() {
           }
         />
       </div>
+
+      {/* FPS Section - hidden when adaptive FPS is enabled */}
+      {!settings.adaptiveFps && (
+        <div className="flex flex-col space-y-2">
+          <Label htmlFor="fps" className="flex items-center space-x-2">
+            <span>Frames per second (FPS)</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 cursor-default" />
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>
+                    Adjust the recording frame rate. Lower values save resources,
+                    higher values provide smoother recordings and are less likely to miss activity.
+                    We optimize resource usage when your screen doesn&apos;t change much.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            {validationErrors.fps && (
+              <AlertCircle className="h-4 w-4 text-destructive" />
+            )}
+          </Label>
+          <div className="flex items-center space-x-4">
+            <Slider
+              id="fps"
+              min={0.1}
+              max={10}
+              step={0.1}
+              value={[settings.fps]}
+              onValueChange={handleFpsChange}
+              className="flex-grow"
+            />
+            <span className="w-12 text-right">
+              {settings.fps.toFixed(1)}
+            </span>
+          </div>
+          {validationErrors.fps && (
+            <p className="text-sm text-destructive">{validationErrors.fps}</p>
+          )}
+        </div>
+      )}
 
       {/* Enhanced Audio Chunk Duration Section */}
       <div className="flex flex-col space-y-2">

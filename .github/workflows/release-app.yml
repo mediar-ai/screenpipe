@@ -449,7 +449,7 @@ jobs:
         if: matrix.os_type == 'windows'
         shell: powershell
         env:
-          CARGO_PROFILE_RELEASE_STRIP: symbols
+          CARGO_PROFILE_RELEASE_STRIP: none
           CARGO_PROFILE_RELEASE_PANIC: abort
           CARGO_PROFILE_RELEASE_INCREMENTAL: false
         run: cargo build --release -p screenpipe-server ${{ matrix.args }}
@@ -549,8 +549,8 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.os_type == 'windows' && '16' || '16' }}
           # Enable incremental compilation for Windows
           CARGO_INCREMENTAL: ${{ matrix.os_type == 'windows' && 'true' || 'false' }}
-          # Windows specific optimizations
-          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.os_type == 'windows' && 'symbols' || 'none' }}
+          # Windows: keep symbols for Sentry upload, macOS: none
+          CARGO_PROFILE_RELEASE_STRIP: none
           CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.os_type == 'windows' && 'abort' || 'unwind' }}
           CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.os_type == 'windows' && 'false' || 'true' }}
           RUSTFLAGS: ${{ matrix.os_type == 'windows' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
@@ -565,6 +565,40 @@ jobs:
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -vvv
           retryAttempts: 3
+
+      - name: Upload debug symbols to Sentry (Windows)
+        if: matrix.os_type == 'windows'
+        shell: powershell
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: mediar
+        run: |
+          # Install sentry-cli
+          Invoke-WebRequest -Uri "https://release-registry.services.sentry.io/apps/sentry-cli/latest?response=download&arch=x86_64&platform=Windows&package=sentry-cli" -OutFile sentry-cli.exe
+
+          # Upload debug symbols (.pdb files) for screenpipe-cli project
+          Write-Host "Uploading debug symbols to Sentry..."
+          .\sentry-cli.exe debug-files upload --org $env:SENTRY_ORG --project screenpipe-cli target/x86_64-pc-windows-msvc/release/
+
+          # Also upload for the app
+          .\sentry-cli.exe debug-files upload --org $env:SENTRY_ORG --project screenpipe-app screenpipe-app-tauri/src-tauri/target/release/
+
+      - name: Upload debug symbols to Sentry (macOS)
+        if: matrix.os_type == 'macos'
+        shell: bash
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: mediar
+        run: |
+          # Install sentry-cli
+          curl -sL https://sentry.io/get-cli/ | bash
+
+          # Upload debug symbols (dSYM files) for screenpipe-cli project
+          echo "Uploading debug symbols to Sentry..."
+          sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-cli target/${{ matrix.target }}/release/
+
+          # Also upload for the app
+          sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-app screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/
 
       - name: Download and Run CLI Manually (Windows)
         if: matrix.os_type == 'windows'
