@@ -719,11 +719,12 @@ fn get_element_at_position(x: f64, y: f64, config: &UiCaptureConfig) -> Option<E
         });
     }
 
-    let value = if role.contains("TextField") || role.contains("TextArea") || role.contains("ComboBox") {
-        get_string_attr(&elem, ax::attr::value())
-    } else {
-        None
-    };
+    let value =
+        if role.contains("TextField") || role.contains("TextArea") || role.contains("ComboBox") {
+            get_string_attr(&elem, ax::attr::value())
+        } else {
+            None
+        };
     let description = get_string_attr(&elem, ax::attr::desc());
 
     Some(ElementContext {
