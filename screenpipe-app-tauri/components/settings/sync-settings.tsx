@@ -169,7 +169,7 @@ function SyncBenefits() {
 }
 
 // Onboarding/upgrade prompt
-function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing }: { onSubscribe: (isAnnual: boolean) => void; onRefresh: () => void; isLoading: boolean; isRefreshing: boolean }) {
+function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing, isLoggedIn }: { onSubscribe: (isAnnual: boolean) => void; onRefresh: () => void; isLoading: boolean; isRefreshing: boolean; isLoggedIn: boolean }) {
   const [isAnnual, setIsAnnual] = useState(true);
 
   return (
@@ -222,17 +222,36 @@ function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing }: { o
           </span>
         </div>
 
-        <Button
-          className="w-full mt-4"
-          onClick={() => onSubscribe(isAnnual)}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : null}
-          Get Cloud Sync
-          <ArrowRight className="w-4 h-4 ml-2" />
-        </Button>
+        {isLoggedIn ? (
+          <Button
+            className="w-full mt-4"
+            onClick={() => onSubscribe(isAnnual)}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : null}
+            Get Cloud Sync
+            <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
+        ) : (
+          <div className="mt-4 space-y-2">
+            <p className="text-sm text-center text-muted-foreground">
+              Please log in to subscribe
+            </p>
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={async () => {
+                const { open } = await import("@tauri-apps/plugin-shell");
+                await open("https://screenpi.pe/login");
+              }}
+            >
+              Log in to continue
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+        )}
         <a
           href="https://docs.screenpi.pe/cloud-sync"
           target="_blank"
@@ -876,7 +895,8 @@ export function SyncSettings() {
   }
 
   if (step === "onboarding") {
-    return <SyncOnboarding onSubscribe={handleSubscribe} onRefresh={handleRefresh} isLoading={isLoading} isRefreshing={isRefreshing} />;
+    const isLoggedIn = !!(settings.user?.token && settings.user?.id);
+    return <SyncOnboarding onSubscribe={handleSubscribe} onRefresh={handleRefresh} isLoading={isLoading} isRefreshing={isRefreshing} isLoggedIn={isLoggedIn} />;
   }
 
   if (step === "password") {
