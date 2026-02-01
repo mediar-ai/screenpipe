@@ -470,7 +470,7 @@ impl UiEvent {
                 Some(content.clone()),
                 None,
             ),
-            EventData::AppSwitch { name: _, pid } => (
+            EventData::AppSwitch { name, pid } => (
                 UiEventType::AppSwitch,
                 None,
                 None,
@@ -480,10 +480,10 @@ impl UiEvent {
                 None,
                 None,
                 None,
-                None,
+                Some(name.clone()), // Store app name in text_content
                 Some(*pid),
             ),
-            EventData::WindowFocus { app: _, title } => (
+            EventData::WindowFocus { app, title } => (
                 UiEventType::WindowFocus,
                 None,
                 None,
@@ -493,7 +493,7 @@ impl UiEvent {
                 None,
                 None,
                 None,
-                title.clone(),
+                title.clone().or_else(|| Some(app.clone())), // Use title, fallback to app name
                 None,
             ),
             EventData::Clipboard { operation, content } => (
@@ -539,6 +539,13 @@ impl UiEvent {
             (None, None, None, None, None, None)
         };
 
+        // Extract app_name and window_title from EventData for certain event types
+        let (final_app_name, final_window_title) = match &self.data {
+            EventData::AppSwitch { name, .. } => (Some(name.clone()), self.window_title.clone()),
+            EventData::WindowFocus { app, title } => (Some(app.clone()), title.clone()),
+            _ => (self.app_name.clone(), self.window_title.clone()),
+        };
+
         InsertUiEvent {
             timestamp: self.timestamp,
             session_id,
@@ -553,9 +560,9 @@ impl UiEvent {
             key_code,
             modifiers,
             text_content,
-            app_name: self.app_name.clone(),
+            app_name: final_app_name,
             app_pid,
-            window_title: self.window_title.clone(),
+            window_title: final_window_title,
             browser_url: self.browser_url.clone(),
             element_role,
             element_name,

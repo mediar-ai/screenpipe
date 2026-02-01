@@ -126,20 +126,28 @@ impl UiRecorder {
 
         let mut threads = Vec::new();
 
+        // Shared state for current app/window between threads
+        let current_app = Arc::new(Mutex::new(None::<String>));
+        let current_window = Arc::new(Mutex::new(None::<String>));
+
         // Thread 1: CGEventTap for input events
         let tx1 = tx.clone();
         let stop1 = stop.clone();
         let config1 = self.config.clone();
+        let app1 = current_app.clone();
+        let window1 = current_window.clone();
         threads.push(thread::spawn(move || {
-            run_event_tap(tx1, stop1, start_time, config1);
+            run_event_tap(tx1, stop1, start_time, config1, app1, window1);
         }));
 
         // Thread 2: App/window observer
         let tx2 = tx.clone();
         let stop2 = stop.clone();
         let config2 = self.config.clone();
+        let app2 = current_app.clone();
+        let window2 = current_window.clone();
         threads.push(thread::spawn(move || {
-            run_app_observer(tx2, stop2, start_time, config2);
+            run_app_observer(tx2, stop2, start_time, config2, app2, window2);
         }));
 
         Ok(RecordingHandle {
@@ -160,8 +168,8 @@ struct TapState {
     config: UiCaptureConfig,
     last_mouse: Mutex<(f64, f64)>,
     text_buf: Mutex<TextBuffer>,
-    current_app: Mutex<Option<String>>,
-    current_window: Mutex<Option<String>>,
+    current_app: Arc<Mutex<Option<String>>>,
+    current_window: Arc<Mutex<Option<String>>>,
 }
 
 struct TextBuffer {
@@ -210,6 +218,8 @@ fn run_event_tap(
     stop: Arc<AtomicBool>,
     start: Instant,
     config: UiCaptureConfig,
+    current_app: Arc<Mutex<Option<String>>>,
+    current_window: Arc<Mutex<Option<String>>>,
 ) {
     // Build event mask
     let mut mask = cg::EventType::LEFT_MOUSE_DOWN.mask()
@@ -231,8 +241,8 @@ fn run_event_tap(
         config: config.clone(),
         last_mouse: Mutex::new((0.0, 0.0)),
         text_buf: Mutex::new(TextBuffer::new(config.text_timeout_ms)),
-        current_app: Mutex::new(None),
-        current_window: Mutex::new(None),
+        current_app,
+        current_window,
     }));
 
     let tap = cg::EventTap::new(
@@ -576,6 +586,8 @@ fn run_app_observer(
     stop: Arc<AtomicBool>,
     start: Instant,
     config: UiCaptureConfig,
+    current_app: Arc<Mutex<Option<String>>>,
+    current_window: Arc<Mutex<Option<String>>>,
 ) {
     let workspace = ns::Workspace::shared();
 
@@ -602,14 +614,19 @@ fn run_app_observer(
 
             let app_changed = last_app.as_ref() != Some(&name) || last_pid != pid;
 
-            if app_changed && config.capture_app_switch {
-                let event = UiEvent::app_switch(
-                    Utc::now(),
-                    start.elapsed().as_millis() as u64,
-                    name.clone(),
-                    pid,
-                );
-                let _ = tx.try_send(event);
+            if app_changed {
+                // Update shared state for event tap thread
+                *current_app.lock() = Some(name.clone());
+
+                if config.capture_app_switch {
+                    let event = UiEvent::app_switch(
+                        Utc::now(),
+                        start.elapsed().as_millis() as u64,
+                        name.clone(),
+                        pid,
+                    );
+                    let _ = tx.try_send(event);
+                }
                 last_app = Some(name.clone());
                 last_pid = pid;
             }
@@ -623,25 +640,27 @@ fn run_app_observer(
                 .map(|w| config.should_capture_window(w))
                 .unwrap_or(true);
 
-            if should_capture
-                && (window_title != last_window || app_changed)
-                && config.capture_window_focus
-            {
-                let event = UiEvent {
-                    id: None,
-                    timestamp: Utc::now(),
-                    relative_ms: start.elapsed().as_millis() as u64,
-                    data: EventData::WindowFocus {
-                        app: name,
-                        title: window_title.clone().map(|s| truncate(&s, 200)),
-                    },
-                    app_name: None,
-                    window_title: None,
-                    browser_url: None,
-                    element: None,
-                    frame_id: None,
-                };
-                let _ = tx.try_send(event);
+            if should_capture && (window_title != last_window || app_changed) {
+                // Update shared state for event tap thread
+                *current_window.lock() = window_title.clone();
+
+                if config.capture_window_focus {
+                    let event = UiEvent {
+                        id: None,
+                        timestamp: Utc::now(),
+                        relative_ms: start.elapsed().as_millis() as u64,
+                        data: EventData::WindowFocus {
+                            app: name,
+                            title: window_title.clone().map(|s| truncate(&s, 200)),
+                        },
+                        app_name: None,
+                        window_title: None,
+                        browser_url: None,
+                        element: None,
+                        frame_id: None,
+                    };
+                    let _ = tx.try_send(event);
+                }
                 last_window = window_title;
             }
         }
@@ -671,9 +690,22 @@ fn get_element_at_position(x: f64, y: f64, config: &UiCaptureConfig) -> Option<E
         }
     })?;
 
-    // Check if this is a password field
+    // Try multiple attributes to get the element name/label
+    // Different elements use different attributes for their label
     let name = get_string_attr(&elem, ax::attr::title())
-        .or_else(|| get_string_attr(&elem, ax::attr::desc()));
+        .or_else(|| get_string_attr(&elem, ax::attr::desc()))
+        .or_else(|| {
+            // For buttons and many controls, the value contains the label
+            if role.contains("Button") || role.contains("MenuItem") || role.contains("Link") {
+                get_string_attr(&elem, ax::attr::value())
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            // Try to get the title from role description
+            elem.role_desc().ok().map(|s| s.to_string())
+        });
 
     if config.is_password_field(Some(&role), name.as_deref()) {
         // Don't capture value for password fields
@@ -687,7 +719,11 @@ fn get_element_at_position(x: f64, y: f64, config: &UiCaptureConfig) -> Option<E
         });
     }
 
-    let value = get_string_attr(&elem, ax::attr::value());
+    let value = if role.contains("TextField") || role.contains("TextArea") || role.contains("ComboBox") {
+        get_string_attr(&elem, ax::attr::value())
+    } else {
+        None
+    };
     let description = get_string_attr(&elem, ax::attr::desc());
 
     Some(ElementContext {
