@@ -96,7 +96,11 @@ impl CloudSearchClient {
     }
 
     /// Get cloud search metadata (for including in search responses).
-    pub async fn get_metadata(&self, query: &str, time_range: Option<TimeRange>) -> CloudSearchMetadata {
+    pub async fn get_metadata(
+        &self,
+        query: &str,
+        time_range: Option<TimeRange>,
+    ) -> CloudSearchMetadata {
         let enabled = self.is_enabled().await;
 
         let status = if !enabled {
@@ -112,7 +116,10 @@ impl CloudSearchClient {
             cloud_search_available: enabled && matches!(status, CloudStatus::Available),
             cloud_has_relevant_data: time_range.is_some(), // Assume cloud has data if time range specified
             cloud_query_hint: if enabled && !query.is_empty() {
-                Some(format!("Add include_cloud=true to include cloud results for '{}'", query))
+                Some(format!(
+                    "Add include_cloud=true to include cloud results for '{}'",
+                    query
+                ))
             } else {
                 None
             },
@@ -227,13 +234,16 @@ mod tests {
     #[tokio::test]
     async fn test_cloud_search_returns_disabled_status() {
         let client = CloudSearchClient::new();
-        let result = client.search(CloudSearchParams {
-            query: "test".to_string(),
-            content_type: CloudContentType::All,
-            time_range: None,
-            limit: 10,
-            offset: 0,
-        }).await.unwrap();
+        let result = client
+            .search(CloudSearchParams {
+                query: "test".to_string(),
+                content_type: CloudContentType::All,
+                time_range: None,
+                limit: 10,
+                offset: 0,
+            })
+            .await
+            .unwrap();
 
         assert!(result.items.is_empty());
         assert_eq!(result.cloud_status, CloudStatus::Disabled);

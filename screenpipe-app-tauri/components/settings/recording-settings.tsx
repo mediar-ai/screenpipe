@@ -1566,6 +1566,50 @@ export function RecordingSettings() {
 
       <Separator />
 
+      {/* UI Events (Accessibility) - macOS and Windows */}
+      {(isMacOS || platform() === "windows") && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Key className="h-5 w-5" />
+            <h3 className="text-lg font-semibold">UI Events (Accessibility)</h3>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="enableUiEvents" className="flex items-center space-x-2">
+                <span>Enable UI event capture</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p>
+                        Capture keyboard shortcuts, mouse clicks, and clipboard activity.
+                        {isMacOS && " Requires Accessibility and Input Monitoring permissions in System Settings."}
+                        {platform() === "windows" && " Uses Windows UI Automation for context capture."}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Track keyboard, mouse, and clipboard events for enhanced context
+              </p>
+            </div>
+            <Switch
+              id="enableUiEvents"
+              checked={settings.enableUiEvents ?? false}
+              onCheckedChange={(checked) =>
+                handleSettingsChange({ enableUiEvents: checked }, true)
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      <Separator />
+
       {/* Window Filtering */}
       <div className="space-y-4">
         <div className="flex items-center gap-2 mb-2">

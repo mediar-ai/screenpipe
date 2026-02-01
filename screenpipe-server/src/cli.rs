@@ -334,6 +334,23 @@ impl Cli {
         generate(shell, &mut cmd, "screenpipe", &mut std::io::stdout());
         Ok(())
     }
+
+    /// Create UI recorder configuration from CLI arguments
+    #[cfg(feature = "ui-events")]
+    pub fn to_ui_recorder_config(&self) -> crate::ui_recorder::UiRecorderConfig {
+        // Use sensible defaults - the single enable_ui_events flag controls everything
+        let mut config = crate::ui_recorder::UiRecorderConfig::default();
+        config.enabled = self.enable_ui_events;
+        // Reuse ignored_windows for UI exclusion
+        config.excluded_windows = self.ignored_windows.clone();
+        config
+    }
+
+    /// Create UI recorder configuration (stub when ui-events feature is disabled)
+    #[cfg(not(feature = "ui-events"))]
+    pub fn to_ui_recorder_config(&self) -> crate::ui_recorder::UiRecorderConfig {
+        crate::ui_recorder::UiRecorderConfig { enabled: false }
+    }
 }
 
 #[derive(Subcommand)]

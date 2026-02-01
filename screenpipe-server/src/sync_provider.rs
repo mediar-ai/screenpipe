@@ -33,6 +33,12 @@ pub struct SyncChunk {
     /// Audio transcription records
     #[serde(default)]
     pub transcriptions: Vec<TranscriptionRecord>,
+    /// Accessibility records (UI element text)
+    #[serde(default)]
+    pub accessibility_records: Vec<AccessibilityRecord>,
+    /// UI event records (user input actions)
+    #[serde(default)]
+    pub ui_events: Vec<UiEventSyncRecord>,
 }
 
 /// Frame record for sync
@@ -69,8 +75,37 @@ pub struct TranscriptionRecord {
     pub speaker_id: Option<i64>,
 }
 
+/// Accessibility record for sync (UI element text from accessibility APIs)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessibilityRecord {
+    pub sync_id: String,
+    pub timestamp: String,
+    pub app_name: String,
+    pub window_name: String,
+    pub text_content: String,
+    pub browser_url: Option<String>,
+}
+
+/// UI event record for sync (user input actions)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiEventSyncRecord {
+    pub sync_id: String,
+    pub timestamp: String,
+    pub event_type: String,
+    pub app_name: Option<String>,
+    pub window_title: Option<String>,
+    pub browser_url: Option<String>,
+    pub text_content: Option<String>,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub key_code: Option<i32>,
+    pub modifiers: Option<i32>,
+    pub element_role: Option<String>,
+    pub element_name: Option<String>,
+}
+
 /// Current schema version for sync chunks
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
 
 /// Data provider implementation for screenpipe database.
 pub struct ScreenpipeSyncProvider {
@@ -132,7 +167,8 @@ impl ScreenpipeSyncProvider {
         let mut frame_records = Vec::new();
         let mut frame_sync_map = std::collections::HashMap::new();
 
-        for (id, timestamp, offset_index, app_name, window_name, browser_url, device_name) in frames {
+        for (id, timestamp, offset_index, app_name, window_name, browser_url, device_name) in frames
+        {
             let sync_id = Uuid::new_v4().to_string();
             frame_sync_map.insert(id, sync_id.clone());
 
@@ -152,12 +188,14 @@ impl ScreenpipeSyncProvider {
         let ocr_records: Vec<OcrRecord> = ocr_results
             .into_iter()
             .filter_map(|(frame_id, text, focused)| {
-                frame_sync_map.get(&frame_id).map(|frame_sync_id| OcrRecord {
-                    sync_id: Uuid::new_v4().to_string(),
-                    frame_sync_id: frame_sync_id.clone(),
-                    text,
-                    focused,
-                })
+                frame_sync_map
+                    .get(&frame_id)
+                    .map(|frame_sync_id| OcrRecord {
+                        sync_id: Uuid::new_v4().to_string(),
+                        frame_sync_id: frame_sync_id.clone(),
+                        text,
+                        focused,
+                    })
             })
             .collect();
 
@@ -169,6 +207,8 @@ impl ScreenpipeSyncProvider {
             frames: frame_records,
             ocr_records,
             transcriptions: Vec::new(),
+            accessibility_records: Vec::new(),
+            ui_events: Vec::new(),
         };
 
         Ok(Some((chunk, time_start, time_end)))
@@ -204,14 +244,16 @@ impl ScreenpipeSyncProvider {
 
         let records: Vec<TranscriptionRecord> = transcriptions
             .into_iter()
-            .map(|(_, timestamp, transcription, device, is_input, speaker_id)| TranscriptionRecord {
-                sync_id: Uuid::new_v4().to_string(),
-                timestamp,
-                transcription,
-                device,
-                is_input_device: is_input,
-                speaker_id,
-            })
+            .map(
+                |(_, timestamp, transcription, device, is_input, speaker_id)| TranscriptionRecord {
+                    sync_id: Uuid::new_v4().to_string(),
+                    timestamp,
+                    transcription,
+                    device,
+                    is_input_device: is_input,
+                    speaker_id,
+                },
+            )
             .collect();
 
         let chunk = SyncChunk {
@@ -222,6 +264,160 @@ impl ScreenpipeSyncProvider {
             frames: Vec::new(),
             ocr_records: Vec::new(),
             transcriptions: records,
+            accessibility_records: Vec::new(),
+            ui_events: Vec::new(),
+        };
+
+        Ok(Some((chunk, time_start, time_end)))
+    }
+
+    /// Get unsynced accessibility records.
+    async fn get_unsynced_accessibility_chunk(
+        &self,
+        limit: usize,
+    ) -> SyncResult<Option<(SyncChunk, String, String)>> {
+        let pool = &self.db.pool;
+
+        let records: Vec<(i64, String, String, String, String, Option<String>)> = sqlx::query_as(
+            r#"
+            SELECT id, timestamp, app_name, window_name, text_content, browser_url
+            FROM accessibility
+            WHERE synced_at IS NULL
+            ORDER BY timestamp ASC
+            LIMIT ?
+            "#,
+        )
+        .bind(limit as i64)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| SyncError::Database(format!("failed to query accessibility: {}", e)))?;
+
+        if records.is_empty() {
+            return Ok(None);
+        }
+
+        let time_start = records.first().map(|r| r.1.clone()).unwrap();
+        let time_end = records.last().map(|r| r.1.clone()).unwrap();
+
+        let accessibility_records: Vec<AccessibilityRecord> = records
+            .into_iter()
+            .map(
+                |(_, timestamp, app_name, window_name, text_content, browser_url)| {
+                    AccessibilityRecord {
+                        sync_id: Uuid::new_v4().to_string(),
+                        timestamp,
+                        app_name,
+                        window_name,
+                        text_content,
+                        browser_url,
+                    }
+                },
+            )
+            .collect();
+
+        let chunk = SyncChunk {
+            schema_version: SCHEMA_VERSION,
+            machine_id: self.machine_id.clone(),
+            time_start: time_start.clone(),
+            time_end: time_end.clone(),
+            frames: Vec::new(),
+            ocr_records: Vec::new(),
+            transcriptions: Vec::new(),
+            accessibility_records,
+            ui_events: Vec::new(),
+        };
+
+        Ok(Some((chunk, time_start, time_end)))
+    }
+
+    /// Get unsynced UI events (user input actions).
+    async fn get_unsynced_input_chunk(
+        &self,
+        limit: usize,
+    ) -> SyncResult<Option<(SyncChunk, String, String)>> {
+        let pool = &self.db.pool;
+
+        let records: Vec<(
+            i64,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<i32>,
+            Option<i32>,
+            Option<i32>,
+            Option<i32>,
+            Option<String>,
+            Option<String>,
+        )> = sqlx::query_as(
+            r#"
+            SELECT id, timestamp, event_type, app_name, window_title, browser_url,
+                   text_content, x, y, key_code, modifiers, element_role, element_name
+            FROM ui_events
+            WHERE synced_at IS NULL
+            ORDER BY timestamp ASC
+            LIMIT ?
+            "#,
+        )
+        .bind(limit as i64)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| SyncError::Database(format!("failed to query ui_events: {}", e)))?;
+
+        if records.is_empty() {
+            return Ok(None);
+        }
+
+        let time_start = records.first().map(|r| r.1.clone()).unwrap();
+        let time_end = records.last().map(|r| r.1.clone()).unwrap();
+
+        let ui_events: Vec<UiEventSyncRecord> = records
+            .into_iter()
+            .map(
+                |(
+                    _,
+                    timestamp,
+                    event_type,
+                    app_name,
+                    window_title,
+                    browser_url,
+                    text_content,
+                    x,
+                    y,
+                    key_code,
+                    modifiers,
+                    element_role,
+                    element_name,
+                )| UiEventSyncRecord {
+                    sync_id: Uuid::new_v4().to_string(),
+                    timestamp,
+                    event_type,
+                    app_name,
+                    window_title,
+                    browser_url,
+                    text_content,
+                    x,
+                    y,
+                    key_code,
+                    modifiers,
+                    element_role,
+                    element_name,
+                },
+            )
+            .collect();
+
+        let chunk = SyncChunk {
+            schema_version: SCHEMA_VERSION,
+            machine_id: self.machine_id.clone(),
+            time_start: time_start.clone(),
+            time_end: time_end.clone(),
+            frames: Vec::new(),
+            ocr_records: Vec::new(),
+            transcriptions: Vec::new(),
+            accessibility_records: Vec::new(),
+            ui_events,
         };
 
         Ok(Some((chunk, time_start, time_end)))
@@ -242,20 +438,24 @@ impl ScreenpipeSyncProvider {
                 imported_frames: 0,
                 imported_ocr: 0,
                 imported_transcriptions: 0,
-                skipped: chunk.frames.len() + chunk.ocr_records.len() + chunk.transcriptions.len(),
+                imported_accessibility: 0,
+                imported_ui_events: 0,
+                skipped: chunk.frames.len()
+                    + chunk.ocr_records.len()
+                    + chunk.transcriptions.len()
+                    + chunk.accessibility_records.len()
+                    + chunk.ui_events.len(),
             });
         }
 
         // Import frames
         for frame in &chunk.frames {
             // Check if already exists
-            let exists: Option<(i64,)> = sqlx::query_as(
-                "SELECT id FROM frames WHERE sync_id = ?"
-            )
-            .bind(&frame.sync_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| SyncError::Database(format!("failed to check frame: {}", e)))?;
+            let exists: Option<(i64,)> = sqlx::query_as("SELECT id FROM frames WHERE sync_id = ?")
+                .bind(&frame.sync_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| SyncError::Database(format!("failed to check frame: {}", e)))?;
 
             if exists.is_some() {
                 skipped += 1;
@@ -269,7 +469,7 @@ impl ScreenpipeSyncProvider {
                 VALUES ('cloud://' || ?, ?, ?, ?)
                 ON CONFLICT DO NOTHING
                 RETURNING id
-                "#
+                "#,
             )
             .bind(&frame.sync_id)
             .bind(&frame.device_name)
@@ -313,7 +513,7 @@ impl ScreenpipeSyncProvider {
         let frame_sync_ids: Vec<String> = chunk.frames.iter().map(|f| f.sync_id.clone()).collect();
         let frame_id_map: std::collections::HashMap<String, i64> = if !frame_sync_ids.is_empty() {
             sqlx::query_as::<_, (String, i64)>(
-                "SELECT sync_id, id FROM frames WHERE sync_id IN (SELECT value FROM json_each(?))"
+                "SELECT sync_id, id FROM frames WHERE sync_id IN (SELECT value FROM json_each(?))",
             )
             .bind(serde_json::to_string(&frame_sync_ids).unwrap())
             .fetch_all(pool)
@@ -329,13 +529,12 @@ impl ScreenpipeSyncProvider {
         for ocr in &chunk.ocr_records {
             if let Some(&frame_id) = frame_id_map.get(&ocr.frame_sync_id) {
                 // Check if already exists
-                let exists: Option<(i64,)> = sqlx::query_as(
-                    "SELECT 1 FROM ocr_text WHERE sync_id = ?"
-                )
-                .bind(&ocr.sync_id)
-                .fetch_optional(pool)
-                .await
-                .map_err(|e| SyncError::Database(format!("failed to check OCR: {}", e)))?;
+                let exists: Option<(i64,)> =
+                    sqlx::query_as("SELECT 1 FROM ocr_text WHERE sync_id = ?")
+                        .bind(&ocr.sync_id)
+                        .fetch_optional(pool)
+                        .await
+                        .map_err(|e| SyncError::Database(format!("failed to check OCR: {}", e)))?;
 
                 if exists.is_some() {
                     skipped += 1;
@@ -346,7 +545,7 @@ impl ScreenpipeSyncProvider {
                     r#"
                     INSERT INTO ocr_text (frame_id, text, focused, sync_id, synced_at)
                     VALUES (?, ?, ?, ?, ?)
-                    "#
+                    "#,
                 )
                 .bind(frame_id)
                 .bind(&ocr.text)
@@ -366,13 +565,14 @@ impl ScreenpipeSyncProvider {
         // Import transcriptions
         for trans in &chunk.transcriptions {
             // Check if already exists
-            let exists: Option<(i64,)> = sqlx::query_as(
-                "SELECT 1 FROM audio_transcriptions WHERE sync_id = ?"
-            )
-            .bind(&trans.sync_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| SyncError::Database(format!("failed to check transcription: {}", e)))?;
+            let exists: Option<(i64,)> =
+                sqlx::query_as("SELECT 1 FROM audio_transcriptions WHERE sync_id = ?")
+                    .bind(&trans.sync_id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|e| {
+                        SyncError::Database(format!("failed to check transcription: {}", e))
+                    })?;
 
             if exists.is_some() {
                 skipped += 1;
@@ -385,7 +585,7 @@ impl ScreenpipeSyncProvider {
                 INSERT INTO audio_chunks (file_path, device_name, sync_id, machine_id)
                 VALUES ('cloud://' || ?, ?, ?, ?)
                 RETURNING id
-                "#
+                "#,
             )
             .bind(&trans.sync_id)
             .bind(&trans.device)
@@ -416,10 +616,97 @@ impl ScreenpipeSyncProvider {
             imported_transcriptions += 1;
         }
 
+        // Import accessibility records
+        let mut imported_accessibility = 0;
+        for acc in &chunk.accessibility_records {
+            // Check if already exists
+            let exists: Option<(i64,)> =
+                sqlx::query_as("SELECT 1 FROM accessibility WHERE sync_id = ?")
+                    .bind(&acc.sync_id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|e| {
+                        SyncError::Database(format!("failed to check accessibility: {}", e))
+                    })?;
+
+            if exists.is_some() {
+                skipped += 1;
+                continue;
+            }
+
+            sqlx::query(
+                r#"
+                INSERT INTO accessibility (timestamp, app_name, window_name, text_content, browser_url, sync_id, machine_id, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                "#
+            )
+            .bind(&acc.timestamp)
+            .bind(&acc.app_name)
+            .bind(&acc.window_name)
+            .bind(&acc.text_content)
+            .bind(&acc.browser_url)
+            .bind(&acc.sync_id)
+            .bind(&chunk.machine_id)
+            .bind(Utc::now().to_rfc3339())
+            .execute(pool)
+            .await
+            .map_err(|e| SyncError::Database(format!("failed to insert accessibility: {}", e)))?;
+
+            imported_accessibility += 1;
+        }
+
+        // Import UI events
+        let mut imported_ui_events = 0;
+        for event in &chunk.ui_events {
+            // Check if already exists
+            let exists: Option<(i64,)> =
+                sqlx::query_as("SELECT 1 FROM ui_events WHERE sync_id = ?")
+                    .bind(&event.sync_id)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|e| SyncError::Database(format!("failed to check ui_event: {}", e)))?;
+
+            if exists.is_some() {
+                skipped += 1;
+                continue;
+            }
+
+            sqlx::query(
+                r#"
+                INSERT INTO ui_events (timestamp, event_type, app_name, window_title, browser_url,
+                    text_content, x, y, key_code, modifiers, element_role, element_name,
+                    sync_id, machine_id, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(&event.timestamp)
+            .bind(&event.event_type)
+            .bind(&event.app_name)
+            .bind(&event.window_title)
+            .bind(&event.browser_url)
+            .bind(&event.text_content)
+            .bind(event.x)
+            .bind(event.y)
+            .bind(event.key_code)
+            .bind(event.modifiers)
+            .bind(&event.element_role)
+            .bind(&event.element_name)
+            .bind(&event.sync_id)
+            .bind(&chunk.machine_id)
+            .bind(Utc::now().to_rfc3339())
+            .execute(pool)
+            .await
+            .map_err(|e| SyncError::Database(format!("failed to insert ui_event: {}", e)))?;
+
+            imported_ui_events += 1;
+        }
+
         Ok(ImportResult {
             imported_frames,
             imported_ocr,
             imported_transcriptions,
+            imported_accessibility,
+            imported_ui_events,
             skipped,
         })
     }
@@ -441,7 +728,7 @@ impl ScreenpipeSyncProvider {
                     r#"
                     UPDATE frames SET synced_at = ?
                     WHERE timestamp >= ? AND timestamp <= ? AND synced_at IS NULL
-                    "#
+                    "#,
                 )
                 .bind(&now)
                 .bind(time_start)
@@ -455,14 +742,48 @@ impl ScreenpipeSyncProvider {
                     r#"
                     UPDATE audio_transcriptions SET synced_at = ?
                     WHERE timestamp >= ? AND timestamp <= ? AND synced_at IS NULL
-                    "#
+                    "#,
                 )
                 .bind(&now)
                 .bind(time_start)
                 .bind(time_end)
                 .execute(pool)
                 .await
-                .map_err(|e| SyncError::Database(format!("failed to mark transcriptions synced: {}", e)))?;
+                .map_err(|e| {
+                    SyncError::Database(format!("failed to mark transcriptions synced: {}", e))
+                })?;
+            }
+            BlobType::Accessibility => {
+                sqlx::query(
+                    r#"
+                    UPDATE accessibility SET synced_at = ?
+                    WHERE timestamp >= ? AND timestamp <= ? AND synced_at IS NULL
+                    "#,
+                )
+                .bind(&now)
+                .bind(time_start)
+                .bind(time_end)
+                .execute(pool)
+                .await
+                .map_err(|e| {
+                    SyncError::Database(format!("failed to mark accessibility synced: {}", e))
+                })?;
+            }
+            BlobType::Input => {
+                sqlx::query(
+                    r#"
+                    UPDATE ui_events SET synced_at = ?
+                    WHERE timestamp >= ? AND timestamp <= ? AND synced_at IS NULL
+                    "#,
+                )
+                .bind(&now)
+                .bind(time_start)
+                .bind(time_end)
+                .execute(pool)
+                .await
+                .map_err(|e| {
+                    SyncError::Database(format!("failed to mark ui_events synced: {}", e))
+                })?;
             }
             _ => {}
         }
@@ -482,6 +803,19 @@ impl ScreenpipeSyncProvider {
             text_parts.push(trans.transcription.clone());
         }
 
+        for acc in &chunk.accessibility_records {
+            text_parts.push(acc.text_content.clone());
+        }
+
+        for event in &chunk.ui_events {
+            if let Some(text) = &event.text_content {
+                text_parts.push(text.clone());
+            }
+            if let Some(app) = &event.app_name {
+                text_parts.push(app.clone());
+            }
+        }
+
         text_parts.join(" ")
     }
 }
@@ -496,14 +830,17 @@ impl SyncDataProvider for ScreenpipeSyncProvider {
         let chunk_result = match blob_type {
             BlobType::Ocr => self.get_unsynced_ocr_chunk(limit).await?,
             BlobType::Transcripts => self.get_unsynced_transcriptions_chunk(limit).await?,
+            BlobType::Accessibility => self.get_unsynced_accessibility_chunk(limit).await?,
+            BlobType::Input => self.get_unsynced_input_chunk(limit).await?,
             _ => return Ok(Vec::new()),
         };
 
         match chunk_result {
             Some((chunk, time_start, time_end)) => {
                 let text_content = Self::get_chunk_text(&chunk);
-                let data = serde_json::to_vec(&chunk)
-                    .map_err(|e| SyncError::Database(format!("failed to serialize chunk: {}", e)))?;
+                let data = serde_json::to_vec(&chunk).map_err(|e| {
+                    SyncError::Database(format!("failed to serialize chunk: {}", e))
+                })?;
 
                 Ok(vec![PendingBlob {
                     data,
@@ -527,7 +864,8 @@ impl SyncDataProvider for ScreenpipeSyncProvider {
         time_end: &str,
         _blob_id: &str,
     ) -> SyncResult<()> {
-        self.mark_records_synced(blob_type, time_start, time_end).await
+        self.mark_records_synced(blob_type, time_start, time_end)
+            .await
     }
 }
 
@@ -537,6 +875,8 @@ pub struct ImportResult {
     pub imported_frames: usize,
     pub imported_ocr: usize,
     pub imported_transcriptions: usize,
+    pub imported_accessibility: usize,
+    pub imported_ui_events: usize,
     pub skipped: usize,
 }
 
@@ -568,6 +908,8 @@ mod tests {
                 focused: true,
             }],
             transcriptions: Vec::new(),
+            accessibility_records: Vec::new(),
+            ui_events: Vec::new(),
         };
 
         let json = serde_json::to_string(&chunk).unwrap();

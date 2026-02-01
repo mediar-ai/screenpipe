@@ -153,7 +153,13 @@ pub trait SyncDataProvider: Send + Sync {
     ) -> SyncResult<Vec<PendingBlob>>;
 
     /// Mark data as synced.
-    async fn mark_synced(&self, blob_type: BlobType, time_start: &str, time_end: &str, blob_id: &str) -> SyncResult<()>;
+    async fn mark_synced(
+        &self,
+        blob_type: BlobType,
+        time_start: &str,
+        time_end: &str,
+        blob_id: &str,
+    ) -> SyncResult<()>;
 }
 
 /// Data pending sync.
@@ -314,7 +320,12 @@ impl SyncService {
                         // Mark as synced
                         if let Err(e) = self
                             .data_provider
-                            .mark_synced(*blob_type, &blob.time_start, &blob.time_end, &result.blob_id)
+                            .mark_synced(
+                                *blob_type,
+                                &blob.time_start,
+                                &blob.time_end,
+                                &result.blob_id,
+                            )
                             .await
                         {
                             tracing::error!("failed to mark blob as synced: {}", e);

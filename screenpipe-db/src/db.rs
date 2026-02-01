@@ -21,9 +21,9 @@ use futures::future::try_join_all;
 
 use crate::{
     text_similarity::is_similar_transcription, AudioChunksResponse, AudioDevice, AudioEntry,
-    AudioResult, AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, OCREntry, OCRResult,
-    OCRResultRaw, OcrEngine, OcrTextBlock, Order, SearchMatch, SearchResult, Speaker,
-    TagContentType, TextBounds, TextPosition, TimeSeriesChunk, UiContent, UiEventRecord,
+    AudioResult, AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, InsertUiEvent,
+    OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock, Order, SearchMatch, SearchResult,
+    Speaker, TagContentType, TextBounds, TextPosition, TimeSeriesChunk, UiContent, UiEventRecord,
     UiEventRow, VideoMetadata,
 };
 
@@ -3161,6 +3161,208 @@ LIMIT ? OFFSET ?
         tx.commit().await?;
 
         Ok((target_speaker.id, transcriptions_updated, embeddings_moved))
+    }
+
+    // ============================================================================
+    // UI Events (Input Capture Modality)
+    // ============================================================================
+
+    /// Insert a UI event into the database
+    pub async fn insert_ui_event(&self, event: &InsertUiEvent) -> Result<i64, sqlx::Error> {
+        let text_length = event.text_content.as_ref().map(|s| s.len() as i32);
+
+        let result = sqlx::query(
+            r#"
+            INSERT INTO ui_events (
+                timestamp, session_id, relative_ms, event_type,
+                x, y, delta_x, delta_y,
+                button, click_count, key_code, modifiers,
+                text_content, text_length,
+                app_name, app_pid, window_title, browser_url,
+                element_role, element_name, element_value, element_description,
+                element_automation_id, element_bounds, frame_id
+            ) VALUES (
+                ?1, ?2, ?3, ?4,
+                ?5, ?6, ?7, ?8,
+                ?9, ?10, ?11, ?12,
+                ?13, ?14,
+                ?15, ?16, ?17, ?18,
+                ?19, ?20, ?21, ?22,
+                ?23, ?24, ?25
+            )
+            "#,
+        )
+        .bind(&event.timestamp)
+        .bind(&event.session_id)
+        .bind(event.relative_ms)
+        .bind(event.event_type.to_string())
+        .bind(event.x)
+        .bind(event.y)
+        .bind(event.delta_x.map(|v| v as i32))
+        .bind(event.delta_y.map(|v| v as i32))
+        .bind(event.button.map(|v| v as i32))
+        .bind(event.click_count.map(|v| v as i32))
+        .bind(event.key_code.map(|v| v as i32))
+        .bind(event.modifiers.map(|v| v as i32))
+        .bind(&event.text_content)
+        .bind(text_length)
+        .bind(&event.app_name)
+        .bind(event.app_pid)
+        .bind(&event.window_title)
+        .bind(&event.browser_url)
+        .bind(&event.element_role)
+        .bind(&event.element_name)
+        .bind(&event.element_value)
+        .bind(&event.element_description)
+        .bind(&event.element_automation_id)
+        .bind(&event.element_bounds)
+        .bind(event.frame_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    /// Insert multiple UI events in a batch
+    pub async fn insert_ui_events_batch(
+        &self,
+        events: &[InsertUiEvent],
+    ) -> Result<usize, sqlx::Error> {
+        if events.is_empty() {
+            return Ok(0);
+        }
+
+        let mut tx = self.pool.begin().await?;
+        let mut count = 0;
+
+        for event in events {
+            let text_length = event.text_content.as_ref().map(|s| s.len() as i32);
+
+            sqlx::query(
+                r#"
+                INSERT INTO ui_events (
+                    timestamp, session_id, relative_ms, event_type,
+                    x, y, delta_x, delta_y,
+                    button, click_count, key_code, modifiers,
+                    text_content, text_length,
+                    app_name, app_pid, window_title, browser_url,
+                    element_role, element_name, element_value, element_description,
+                    element_automation_id, element_bounds, frame_id
+                ) VALUES (
+                    ?1, ?2, ?3, ?4,
+                    ?5, ?6, ?7, ?8,
+                    ?9, ?10, ?11, ?12,
+                    ?13, ?14,
+                    ?15, ?16, ?17, ?18,
+                    ?19, ?20, ?21, ?22,
+                    ?23, ?24, ?25
+                )
+                "#,
+            )
+            .bind(&event.timestamp)
+            .bind(&event.session_id)
+            .bind(event.relative_ms)
+            .bind(event.event_type.to_string())
+            .bind(event.x)
+            .bind(event.y)
+            .bind(event.delta_x.map(|v| v as i32))
+            .bind(event.delta_y.map(|v| v as i32))
+            .bind(event.button.map(|v| v as i32))
+            .bind(event.click_count.map(|v| v as i32))
+            .bind(event.key_code.map(|v| v as i32))
+            .bind(event.modifiers.map(|v| v as i32))
+            .bind(&event.text_content)
+            .bind(text_length)
+            .bind(&event.app_name)
+            .bind(event.app_pid)
+            .bind(&event.window_title)
+            .bind(&event.browser_url)
+            .bind(&event.element_role)
+            .bind(&event.element_name)
+            .bind(&event.element_value)
+            .bind(&event.element_description)
+            .bind(&event.element_automation_id)
+            .bind(&event.element_bounds)
+            .bind(event.frame_id)
+            .execute(&mut *tx)
+            .await?;
+
+            count += 1;
+        }
+
+        tx.commit().await?;
+        debug!("Inserted {} UI events in batch", count);
+        Ok(count)
+    }
+
+    /// Get recent UI events for a specific app
+    pub async fn get_recent_ui_events_by_app(
+        &self,
+        app_name: &str,
+        limit: u32,
+    ) -> Result<Vec<UiEventRecord>, sqlx::Error> {
+        let rows: Vec<UiEventRow> = sqlx::query_as(
+            r#"
+            SELECT *
+            FROM ui_events
+            WHERE app_name = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(app_name)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(UiEventRecord::from).collect())
+    }
+
+    /// Get text events (aggregated keystrokes) for semantic search
+    pub async fn search_ui_text_events(
+        &self,
+        query: &str,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        limit: u32,
+    ) -> Result<Vec<UiEventRecord>, sqlx::Error> {
+        let mut conditions = vec!["event_type = 'text'".to_string()];
+
+        if let Some(start) = start_time {
+            conditions.push(format!(
+                "timestamp >= '{}'",
+                start.format("%Y-%m-%d %H:%M:%S")
+            ));
+        }
+        if let Some(end) = end_time {
+            conditions.push(format!(
+                "timestamp <= '{}'",
+                end.format("%Y-%m-%d %H:%M:%S")
+            ));
+        }
+
+        let where_clause = conditions.join(" AND ");
+
+        let sql = format!(
+            r#"
+            SELECT ui_events.*
+            FROM ui_events_fts
+            JOIN ui_events ON ui_events_fts.rowid = ui_events.id
+            WHERE ui_events_fts MATCH ?
+            AND {}
+            ORDER BY ui_events.timestamp DESC
+            LIMIT ?
+            "#,
+            where_clause
+        );
+
+        let rows: Vec<UiEventRow> = sqlx::query_as(&sql)
+            .bind(query)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows.into_iter().map(UiEventRecord::from).collect())
     }
 }
 

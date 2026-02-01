@@ -509,8 +509,8 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
         args.push("--adaptive-fps");
     }
 
+    // Enable UI events capture (macOS and Windows)
     let enable_ui_events = store.enable_ui_events;
-
     if enable_ui_events {
         args.push("--enable-ui-events");
     }

@@ -787,16 +787,10 @@ mod tests {
 
     /// Helper to create a synthetic PNG image of given dimensions
     fn create_test_png(width: u32, height: u32) -> Vec<u8> {
-        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
-            ImageBuffer::from_fn(width, height, |x, y| {
-                // Create a simple gradient pattern for visual verification
-                Rgba([
-                    (x % 256) as u8,
-                    (y % 256) as u8,
-                    ((x + y) % 256) as u8,
-                    255,
-                ])
-            });
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_fn(width, height, |x, y| {
+            // Create a simple gradient pattern for visual verification
+            Rgba([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8, 255])
+        });
 
         let mut buffer = Vec::new();
         let mut cursor = Cursor::new(&mut buffer);
@@ -809,10 +803,14 @@ mod tests {
     async fn get_video_dimensions(video_path: &str) -> Result<(u32, u32), anyhow::Error> {
         let output = Command::new("ffprobe")
             .args([
-                "-v", "error",
-                "-select_streams", "v:0",
-                "-show_entries", "stream=width,height",
-                "-of", "csv=s=x:p=0",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=s=x:p=0",
                 video_path,
             ])
             .output()
@@ -851,7 +849,11 @@ mod tests {
         drop(stdin);
 
         let output = child.wait_with_output().await.expect("FFmpeg failed");
-        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "FFmpeg exited with error: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Verify output dimensions are even (1920x1080)
         let (width, height) = get_video_dimensions(output_str)
@@ -885,7 +887,11 @@ mod tests {
         drop(stdin);
 
         let output = child.wait_with_output().await.expect("FFmpeg failed");
-        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "FFmpeg exited with error: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         let (width, height) = get_video_dimensions(output_str)
             .await
@@ -917,7 +923,11 @@ mod tests {
         drop(stdin);
 
         let output = child.wait_with_output().await.expect("FFmpeg failed");
-        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "FFmpeg exited with error: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         let (width, height) = get_video_dimensions(output_str)
             .await
@@ -951,7 +961,11 @@ mod tests {
         drop(stdin);
 
         let output = child.wait_with_output().await.expect("FFmpeg failed");
-        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "FFmpeg exited with error: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         let (width, height) = get_video_dimensions(output_str)
             .await
@@ -983,7 +997,11 @@ mod tests {
         drop(stdin);
 
         let output = child.wait_with_output().await.expect("FFmpeg failed");
-        assert!(output.status.success(), "FFmpeg exited with error: {:?}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "FFmpeg exited with error: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         let (width, height) = get_video_dimensions(output_str)
             .await

@@ -25,6 +25,10 @@ pub enum BlobType {
     Transcripts,
     /// OCR text from screen captures
     Ocr,
+    /// Accessibility text from screen (UI element traversal)
+    Accessibility,
+    /// User input events (clicks, keystrokes, clipboard)
+    Input,
 }
 
 impl BlobType {
@@ -34,6 +38,8 @@ impl BlobType {
             BlobType::Audio => "audio",
             BlobType::Transcripts => "transcripts",
             BlobType::Ocr => "ocr",
+            BlobType::Accessibility => "accessibility",
+            BlobType::Input => "input",
         }
     }
 }
@@ -69,7 +75,10 @@ impl EncryptedBlob {
 
     /// Get search tokens as base64 strings.
     pub fn search_tokens_base64(&self) -> Vec<String> {
-        self.search_tokens.iter().map(|t| BASE64.encode(t)).collect()
+        self.search_tokens
+            .iter()
+            .map(|t| BASE64.encode(t))
+            .collect()
     }
 }
 

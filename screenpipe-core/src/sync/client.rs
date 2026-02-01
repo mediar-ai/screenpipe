@@ -140,14 +140,18 @@ impl SyncClient {
 
         // For existing users, server returns the key data
         let key_data = ExistingUserKeyData {
-            salt: response.salt.ok_or_else(|| SyncError::Key("missing salt".to_string()))?,
+            salt: response
+                .salt
+                .ok_or_else(|| SyncError::Key("missing salt".to_string()))?,
             encrypted_master_key: response
                 .encrypted_master_key
                 .ok_or_else(|| SyncError::Key("missing encrypted_master_key".to_string()))?,
             master_key_nonce: response
                 .master_key_nonce
                 .ok_or_else(|| SyncError::Key("missing master_key_nonce".to_string()))?,
-            kdf_algorithm: response.kdf_algorithm.unwrap_or_else(|| "argon2id".to_string()),
+            kdf_algorithm: response
+                .kdf_algorithm
+                .unwrap_or_else(|| "argon2id".to_string()),
             kdf_iterations: response.kdf_iterations.unwrap_or(3),
             kdf_memory: response.kdf_memory.unwrap_or(65536),
             key_version: response.key_version.unwrap_or(1),
@@ -191,14 +195,18 @@ impl SyncClient {
         } else {
             // Existing user - derive keys from server response
             let key_data = ExistingUserKeyData {
-                salt: response.salt.ok_or_else(|| SyncError::Key("missing salt".to_string()))?,
+                salt: response
+                    .salt
+                    .ok_or_else(|| SyncError::Key("missing salt".to_string()))?,
                 encrypted_master_key: response
                     .encrypted_master_key
                     .ok_or_else(|| SyncError::Key("missing encrypted_master_key".to_string()))?,
                 master_key_nonce: response
                     .master_key_nonce
                     .ok_or_else(|| SyncError::Key("missing master_key_nonce".to_string()))?,
-                kdf_algorithm: response.kdf_algorithm.unwrap_or_else(|| "argon2id".to_string()),
+                kdf_algorithm: response
+                    .kdf_algorithm
+                    .unwrap_or_else(|| "argon2id".to_string()),
                 kdf_iterations: response.kdf_iterations.unwrap_or(3),
                 kdf_memory: response.kdf_memory.unwrap_or(65536),
                 key_version: response.key_version.unwrap_or(1),
@@ -214,10 +222,7 @@ impl SyncClient {
     // =========================================================================
 
     /// Request a presigned URL for uploading a blob.
-    pub async fn request_upload(
-        &self,
-        metadata: &BlobMetadata,
-    ) -> SyncResult<UploadUrlResponse> {
+    pub async fn request_upload(&self, metadata: &BlobMetadata) -> SyncResult<UploadUrlResponse> {
         let request = UploadRequest {
             blob_type: metadata.blob_type,
             time_start: metadata.time_start.clone(),
@@ -240,17 +245,25 @@ impl SyncClient {
             let code = response.code.as_deref();
             if code == Some("QUOTA_EXCEEDED") {
                 return Err(SyncError::QuotaExceeded(
-                    response.error.unwrap_or_else(|| "quota exceeded".to_string()),
+                    response
+                        .error
+                        .unwrap_or_else(|| "quota exceeded".to_string()),
                 ));
             }
             return Err(SyncError::Server(
-                response.error.unwrap_or_else(|| "upload request failed".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "upload request failed".to_string()),
             ));
         }
 
         Ok(UploadUrlResponse {
-            blob_id: response.blob_id.ok_or_else(|| SyncError::Server("missing blob_id".to_string()))?,
-            upload_url: response.upload_url.ok_or_else(|| SyncError::Server("missing upload_url".to_string()))?,
+            blob_id: response
+                .blob_id
+                .ok_or_else(|| SyncError::Server("missing blob_id".to_string()))?,
+            upload_url: response
+                .upload_url
+                .ok_or_else(|| SyncError::Server("missing upload_url".to_string()))?,
             expires_in: response.expires_in.unwrap_or(300),
         })
     }
@@ -285,7 +298,9 @@ impl SyncClient {
 
         if !response.success {
             return Err(SyncError::Server(
-                response.error.unwrap_or_else(|| "complete upload failed".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "complete upload failed".to_string()),
             ));
         }
 
@@ -300,12 +315,17 @@ impl SyncClient {
     // =========================================================================
 
     /// Get presigned download URLs for blobs.
-    pub async fn get_download_urls(&self, request: DownloadRequest) -> SyncResult<Vec<DownloadBlob>> {
+    pub async fn get_download_urls(
+        &self,
+        request: DownloadRequest,
+    ) -> SyncResult<Vec<DownloadBlob>> {
         let response: DownloadResponse = self.post("/download", &request).await?;
 
         if !response.success {
             return Err(SyncError::Server(
-                response.error.unwrap_or_else(|| "download request failed".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "download request failed".to_string()),
             ));
         }
 
@@ -337,7 +357,9 @@ impl SyncClient {
 
         if !response.success {
             return Err(SyncError::Server(
-                response.error.unwrap_or_else(|| "search failed".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "search failed".to_string()),
             ));
         }
 
@@ -357,13 +379,19 @@ impl SyncClient {
 
         if !response.success {
             return Err(SyncError::Server(
-                response.error.unwrap_or_else(|| "status request failed".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "status request failed".to_string()),
             ));
         }
 
         Ok(SyncStatus {
-            quota: response.quota.ok_or_else(|| SyncError::Server("missing quota".to_string()))?,
-            stats: response.stats.ok_or_else(|| SyncError::Server("missing stats".to_string()))?,
+            quota: response
+                .quota
+                .ok_or_else(|| SyncError::Server("missing quota".to_string()))?,
+            stats: response
+                .stats
+                .ok_or_else(|| SyncError::Server("missing stats".to_string()))?,
             storage_breakdown: response.storage_breakdown,
         })
     }
@@ -378,7 +406,9 @@ impl SyncClient {
 
         if !response.success {
             return Err(SyncError::Server(
-                response.error.unwrap_or_else(|| "list devices failed".to_string()),
+                response
+                    .error
+                    .unwrap_or_else(|| "list devices failed".to_string()),
             ));
         }
 
@@ -392,7 +422,10 @@ impl SyncClient {
         let response = self
             .http
             .delete(&url)
-            .header("Authorization", format!("Bearer {}", self.config.auth_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.auth_token),
+            )
             .send()
             .await?;
 
@@ -403,7 +436,9 @@ impl SyncClient {
                 code: None,
             });
             return Err(SyncError::Server(
-                error_body.error.unwrap_or_else(|| "remove device failed".to_string()),
+                error_body
+                    .error
+                    .unwrap_or_else(|| "remove device failed".to_string()),
             ));
         }
 
@@ -421,7 +456,10 @@ impl SyncClient {
         let response = self
             .http
             .delete(&url)
-            .header("Authorization", format!("Bearer {}", self.config.auth_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.auth_token),
+            )
             .send()
             .await?;
 
@@ -432,7 +470,9 @@ impl SyncClient {
                 code: None,
             });
             return Err(SyncError::Server(
-                error_body.error.unwrap_or_else(|| "delete all data failed".to_string()),
+                error_body
+                    .error
+                    .unwrap_or_else(|| "delete all data failed".to_string()),
             ));
         }
 
@@ -453,7 +493,10 @@ impl SyncClient {
         let response = self
             .http
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.auth_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.auth_token),
+            )
             .header("X-Device-Id", &self.config.device_id)
             .json(body)
             .send()
@@ -468,7 +511,10 @@ impl SyncClient {
         let response = self
             .http
             .get(&url)
-            .header("Authorization", format!("Bearer {}", self.config.auth_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.auth_token),
+            )
             .header("X-Device-Id", &self.config.device_id)
             .send()
             .await?;
@@ -499,7 +545,9 @@ impl SyncClient {
             }
             if error_body.code.as_deref() == Some("QUOTA_EXCEEDED") {
                 return Err(SyncError::QuotaExceeded(
-                    error_body.error.unwrap_or_else(|| "quota exceeded".to_string()),
+                    error_body
+                        .error
+                        .unwrap_or_else(|| "quota exceeded".to_string()),
                 ));
             }
             if error_body.code.as_deref() == Some("DEVICE_LIMIT_EXCEEDED") {

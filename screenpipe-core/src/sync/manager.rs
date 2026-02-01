@@ -99,12 +99,8 @@ impl SyncManager {
         let encrypted = encrypt_blob(data, blob_type, keys, text_content)?;
 
         // Create metadata
-        let metadata = BlobMetadata::from_encrypted_blob(
-            &encrypted,
-            time_start,
-            time_end,
-            keys.key_version(),
-        );
+        let metadata =
+            BlobMetadata::from_encrypted_blob(&encrypted, time_start, time_end, keys.key_version());
 
         // Request upload URL
         let upload_info = self.client.request_upload(&metadata).await?;
@@ -230,13 +226,17 @@ impl SyncManager {
 
         Ok(SearchResult {
             blob_ids: response.matches.iter().map(|m| m.blob_id.clone()).collect(),
-            matches: response.matches.into_iter().map(|m| SearchMatchInfo {
-                blob_id: m.blob_id,
-                blob_type: m.blob_type,
-                time_start: m.time_start,
-                time_end: m.time_end,
-                match_count: m.match_count,
-            }).collect(),
+            matches: response
+                .matches
+                .into_iter()
+                .map(|m| SearchMatchInfo {
+                    blob_id: m.blob_id,
+                    blob_type: m.blob_type,
+                    time_start: m.time_start,
+                    time_end: m.time_end,
+                    match_count: m.match_count,
+                })
+                .collect(),
             total: response.total_matches,
         })
     }
