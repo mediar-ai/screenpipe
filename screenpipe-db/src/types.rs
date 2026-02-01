@@ -329,3 +329,201 @@ impl Default for CustomOcrConfig {
         }
     }
 }
+
+// ============================================================================
+// UI Events Types (Input Capture Modality)
+// ============================================================================
+
+/// Types of UI input events
+#[derive(OaSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum UiEventType {
+    Click,
+    Move,
+    Scroll,
+    Key,
+    Text,
+    AppSwitch,
+    WindowFocus,
+    Clipboard,
+}
+
+impl Display for UiEventType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UiEventType::Click => write!(f, "click"),
+            UiEventType::Move => write!(f, "move"),
+            UiEventType::Scroll => write!(f, "scroll"),
+            UiEventType::Key => write!(f, "key"),
+            UiEventType::Text => write!(f, "text"),
+            UiEventType::AppSwitch => write!(f, "app_switch"),
+            UiEventType::WindowFocus => write!(f, "window_focus"),
+            UiEventType::Clipboard => write!(f, "clipboard"),
+        }
+    }
+}
+
+impl std::str::FromStr for UiEventType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "click" => Ok(UiEventType::Click),
+            "move" => Ok(UiEventType::Move),
+            "scroll" => Ok(UiEventType::Scroll),
+            "key" => Ok(UiEventType::Key),
+            "text" => Ok(UiEventType::Text),
+            "app_switch" => Ok(UiEventType::AppSwitch),
+            "window_focus" => Ok(UiEventType::WindowFocus),
+            "clipboard" => Ok(UiEventType::Clipboard),
+            _ => Err(format!("Unknown UI event type: {}", s)),
+        }
+    }
+}
+
+/// Element context from accessibility APIs
+#[derive(OaSchema, Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UiElementContext {
+    pub role: Option<String>,
+    pub name: Option<String>,
+    pub value: Option<String>,
+    pub description: Option<String>,
+    pub automation_id: Option<String>,
+    pub bounds: Option<String>, // JSON: {"x":0,"y":0,"width":100,"height":50}
+}
+
+/// A UI input event stored in the database
+#[derive(OaSchema, Debug, Clone, Serialize, Deserialize)]
+pub struct UiEventRecord {
+    pub id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub session_id: Option<String>,
+    pub relative_ms: i64,
+    pub event_type: UiEventType,
+    // Position
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub delta_x: Option<i16>,
+    pub delta_y: Option<i16>,
+    // Mouse/key
+    pub button: Option<u8>,
+    pub click_count: Option<u8>,
+    pub key_code: Option<u16>,
+    pub modifiers: Option<u8>,
+    // Text
+    pub text_content: Option<String>,
+    pub text_length: Option<i32>,
+    // App context
+    pub app_name: Option<String>,
+    pub app_pid: Option<i32>,
+    pub window_title: Option<String>,
+    pub browser_url: Option<String>,
+    // Element context
+    pub element: Option<UiElementContext>,
+    // Frame correlation
+    pub frame_id: Option<i64>,
+}
+
+/// Raw row from ui_events table
+#[derive(Debug, FromRow)]
+pub struct UiEventRow {
+    pub id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub session_id: Option<String>,
+    pub relative_ms: i64,
+    pub event_type: String,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub delta_x: Option<i32>,
+    pub delta_y: Option<i32>,
+    pub button: Option<i32>,
+    pub click_count: Option<i32>,
+    pub key_code: Option<i32>,
+    pub modifiers: Option<i32>,
+    pub text_content: Option<String>,
+    pub text_length: Option<i32>,
+    pub app_name: Option<String>,
+    pub app_pid: Option<i32>,
+    pub window_title: Option<String>,
+    pub browser_url: Option<String>,
+    pub element_role: Option<String>,
+    pub element_name: Option<String>,
+    pub element_value: Option<String>,
+    pub element_description: Option<String>,
+    pub element_automation_id: Option<String>,
+    pub element_bounds: Option<String>,
+    pub frame_id: Option<i64>,
+}
+
+impl From<UiEventRow> for UiEventRecord {
+    fn from(row: UiEventRow) -> Self {
+        let element = if row.element_role.is_some()
+            || row.element_name.is_some()
+            || row.element_value.is_some()
+        {
+            Some(UiElementContext {
+                role: row.element_role,
+                name: row.element_name,
+                value: row.element_value,
+                description: row.element_description,
+                automation_id: row.element_automation_id,
+                bounds: row.element_bounds,
+            })
+        } else {
+            None
+        };
+
+        UiEventRecord {
+            id: row.id,
+            timestamp: row.timestamp,
+            session_id: row.session_id,
+            relative_ms: row.relative_ms,
+            event_type: row.event_type.parse().unwrap_or(UiEventType::Click),
+            x: row.x,
+            y: row.y,
+            delta_x: row.delta_x.map(|v| v as i16),
+            delta_y: row.delta_y.map(|v| v as i16),
+            button: row.button.map(|v| v as u8),
+            click_count: row.click_count.map(|v| v as u8),
+            key_code: row.key_code.map(|v| v as u16),
+            modifiers: row.modifiers.map(|v| v as u8),
+            text_content: row.text_content,
+            text_length: row.text_length,
+            app_name: row.app_name,
+            app_pid: row.app_pid,
+            window_title: row.window_title,
+            browser_url: row.browser_url,
+            element,
+            frame_id: row.frame_id,
+        }
+    }
+}
+
+/// Parameters for inserting a UI event
+#[derive(Debug, Clone)]
+pub struct InsertUiEvent {
+    pub timestamp: DateTime<Utc>,
+    pub session_id: Option<String>,
+    pub relative_ms: i64,
+    pub event_type: UiEventType,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub delta_x: Option<i16>,
+    pub delta_y: Option<i16>,
+    pub button: Option<u8>,
+    pub click_count: Option<u8>,
+    pub key_code: Option<u16>,
+    pub modifiers: Option<u8>,
+    pub text_content: Option<String>,
+    pub app_name: Option<String>,
+    pub app_pid: Option<i32>,
+    pub window_title: Option<String>,
+    pub browser_url: Option<String>,
+    pub element_role: Option<String>,
+    pub element_name: Option<String>,
+    pub element_value: Option<String>,
+    pub element_description: Option<String>,
+    pub element_automation_id: Option<String>,
+    pub element_bounds: Option<String>,
+    pub frame_id: Option<i64>,
+}

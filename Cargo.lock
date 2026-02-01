@@ -1178,6 +1178,18 @@ dependencies = [
 [[package]]
 name = "cidre"
 version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aeb5b1ace98faf1a55e3631d63427f267897cfab7b65b1d5928cb0b8e6a4a194"
+dependencies = [
+ "cidre-macros",
+ "half",
+ "parking_lot",
+ "tokio",
+]
+
+[[package]]
+name = "cidre"
+version = "0.13.1"
 source = "git+https://github.com/yury/cidre.git#0146b38468898cb779e6798e0ac01752b399652d"
 dependencies = [
  "cidre-macros",
@@ -1612,7 +1624,7 @@ version = "0.15.3"
 source = "git+https://github.com/louis030195/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
 dependencies = [
  "alsa",
- "cidre",
+ "cidre 0.13.1 (git+https://github.com/yury/cidre.git)",
  "core-foundation-sys 0.8.7",
  "coreaudio-rs",
  "dasp_sample",
@@ -6632,7 +6644,7 @@ name = "sck-rs"
 version = "0.1.0"
 source = "git+https://github.com/louis030195/sck-rs#f3667badac256c097ee616e452c9acf0708b6516"
 dependencies = [
- "cidre",
+ "cidre 0.13.1 (git+https://github.com/yury/cidre.git)",
  "core-foundation 0.10.0",
  "core-graphics 0.24.0",
  "image",
@@ -6881,6 +6893,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "screenpipe-ui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "cidre 0.13.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "crossbeam-channel",
+ "parking_lot",
+ "rdev",
+ "regex",
+ "screenpipe-db",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "windows 0.58.0",
+]
+
+[[package]]
 name = "screenpipe-vision"
 version = "0.3.6"
 dependencies = [
@@ -6891,7 +6923,7 @@ dependencies = [
  "atspi-proxies",
  "base64 0.22.1",
  "chrono",
- "cidre",
+ "cidre 0.13.1 (git+https://github.com/yury/cidre.git)",
  "clap",
  "core-foundation 0.10.0",
  "criterion",
