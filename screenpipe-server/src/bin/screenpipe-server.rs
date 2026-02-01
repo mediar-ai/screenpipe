@@ -25,6 +25,7 @@ use screenpipe_server::{
     handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording,
+    start_ui_recording,
     vision_manager::{
         start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
     },
@@ -739,6 +740,8 @@ async fn main() -> anyhow::Result<()> {
     let ignored_windows_clone = cli.ignored_windows.clone();
     let included_windows_clone = cli.included_windows.clone();
     let realtime_audio_devices_clone = realtime_audio_devices.clone();
+    // Create UI recorder config early before cli is moved
+    let ui_recorder_config = cli.to_ui_recorder_config();
 
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps
@@ -1204,6 +1207,23 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Start UI event recording
+    let ui_recorder_handle = {
+        if ui_recorder_config.enabled {
+            info!("starting UI event capture");
+            match start_ui_recording(db.clone(), ui_recorder_config).await {
+                Ok(handle) => Some(handle),
+                Err(e) => {
+                    error!("failed to start UI event recording: {}", e);
+                    None
+                }
+            }
+        } else {
+            debug!("UI event capture is disabled");
+            None
+        }
+    };
+
     let server_future = server.start(cli.enable_frame_cache);
     pin_mut!(server_future);
 
@@ -1260,8 +1280,18 @@ async fn main() -> anyhow::Result<()> {
         _ = ctrl_c_future => {
             info!("received ctrl+c, initiating shutdown");
             audio_manager.shutdown().await?;
+            // Stop UI recorder if running
+            if let Some(ref handle) = ui_recorder_handle {
+                info!("stopping UI event capture");
+                handle.stop();
+            }
             let _ = shutdown_tx.send(());
         }
+    }
+
+    // Wait for UI recorder to finish
+    if let Some(handle) = ui_recorder_handle {
+        handle.join().await;
     }
 
     tokio::task::block_in_place(|| {

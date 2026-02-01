@@ -309,6 +309,49 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_pipe_manager: bool,
 
+    // === UI Events Settings ===
+    /// Enable UI event capture (keyboard, mouse, clipboard).
+    /// Requires accessibility and input monitoring permissions.
+    /// Note: Requires the 'ui-events' feature to be enabled at compile time.
+    #[arg(long, default_value_t = false)]
+    pub enable_ui_events: bool,
+
+    /// Capture mouse clicks in UI events
+    #[arg(long, default_value_t = true)]
+    pub ui_capture_clicks: bool,
+
+    /// Capture text input in UI events (aggregated, not per-keystroke)
+    #[arg(long, default_value_t = true)]
+    pub ui_capture_text: bool,
+
+    /// Capture individual keystrokes (privacy sensitive, off by default)
+    #[arg(long, default_value_t = false)]
+    pub ui_capture_keystrokes: bool,
+
+    /// Capture clipboard operations (copy/cut/paste)
+    #[arg(long, default_value_t = true)]
+    pub ui_capture_clipboard: bool,
+
+    /// Capture clipboard content (privacy sensitive, off by default)
+    #[arg(long, default_value_t = false)]
+    pub ui_capture_clipboard_content: bool,
+
+    /// Capture app switches
+    #[arg(long, default_value_t = true)]
+    pub ui_capture_app_switch: bool,
+
+    /// Capture window focus changes
+    #[arg(long, default_value_t = true)]
+    pub ui_capture_window_focus: bool,
+
+    /// Capture element context via accessibility APIs
+    #[arg(long, default_value_t = true)]
+    pub ui_capture_context: bool,
+
+    /// Apps to exclude from UI capture (can be specified multiple times)
+    #[arg(long)]
+    pub ui_excluded_apps: Vec<String>,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -327,6 +370,35 @@ impl Cli {
         let mut cmd = Self::command();
         generate(shell, &mut cmd, "screenpipe", &mut std::io::stdout());
         Ok(())
+    }
+
+    /// Create UI recorder configuration from CLI arguments
+    #[cfg(feature = "ui-events")]
+    pub fn to_ui_recorder_config(&self) -> crate::ui_recorder::UiRecorderConfig {
+        crate::ui_recorder::UiRecorderConfig {
+            enabled: self.enable_ui_events,
+            capture_clicks: self.ui_capture_clicks,
+            capture_mouse_move: false,
+            capture_text: self.ui_capture_text,
+            capture_keystrokes: self.ui_capture_keystrokes,
+            capture_clipboard: self.ui_capture_clipboard,
+            capture_clipboard_content: self.ui_capture_clipboard_content,
+            capture_app_switch: self.ui_capture_app_switch,
+            capture_window_focus: self.ui_capture_window_focus,
+            capture_context: self.ui_capture_context,
+            excluded_apps: self.ui_excluded_apps.clone(),
+            excluded_windows: self.ignored_windows.clone(), // Reuse ignored_windows
+            batch_size: 100,
+            batch_timeout_ms: 1000,
+        }
+    }
+
+    /// Create UI recorder configuration (stub when ui-events feature is disabled)
+    #[cfg(not(feature = "ui-events"))]
+    pub fn to_ui_recorder_config(&self) -> crate::ui_recorder::UiRecorderConfig {
+        crate::ui_recorder::UiRecorderConfig {
+            enabled: false,
+        }
     }
 }
 

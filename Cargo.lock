@@ -6869,6 +6869,7 @@ dependencies = [
  "screenpipe-core",
  "screenpipe-db",
  "screenpipe-events",
+ "screenpipe-ui",
  "screenpipe-vision",
  "sentry",
  "serde",
