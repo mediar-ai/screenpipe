@@ -477,6 +477,7 @@ impl Default for SettingsStore {
             enable_realtime_vision: true,
             show_shortcut_overlay: true,
             device_id: uuid::Uuid::new_v4().to_string(),
+            adaptive_fps: false,
         }
     }
 }
