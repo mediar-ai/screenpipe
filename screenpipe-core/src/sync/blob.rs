@@ -25,6 +25,10 @@ pub enum BlobType {
     Transcripts,
     /// OCR text from screen captures
     Ocr,
+    /// Accessibility text from screen (UI element traversal)
+    Accessibility,
+    /// User input events (clicks, keystrokes, clipboard)
+    Input,
 }
 
 impl BlobType {
@@ -34,6 +38,8 @@ impl BlobType {
             BlobType::Audio => "audio",
             BlobType::Transcripts => "transcripts",
             BlobType::Ocr => "ocr",
+            BlobType::Accessibility => "accessibility",
+            BlobType::Input => "input",
         }
     }
 }
