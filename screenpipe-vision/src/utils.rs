@@ -102,6 +102,17 @@ pub async fn capture_screenshot(
     Ok((image, window_images, image_hash, capture_duration))
 }
 
+/// Compare current image with previous image using both histogram and SSIM.
+///
+/// **DEPRECATED**: Use `frame_comparison::FrameComparer` instead, which includes
+/// optimizations like hash-based early exit and downscaled comparison.
+///
+/// This function is kept for backwards compatibility but is no longer used
+/// in the main capture loop.
+#[deprecated(
+    since = "0.4.0",
+    note = "Use frame_comparison::FrameComparer for optimized comparison"
+)]
 pub async fn compare_with_previous_image(
     previous_image: Option<&DynamicImage>,
     current_image: &DynamicImage,

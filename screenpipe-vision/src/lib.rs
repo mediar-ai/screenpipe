@@ -9,6 +9,7 @@ pub use crate::core::ActivityFeedOption;
 pub mod apple;
 pub mod core;
 pub mod custom_ocr;
+pub mod frame_comparison;
 #[cfg(target_os = "windows")]
 pub mod microsoft;
 pub mod monitor;

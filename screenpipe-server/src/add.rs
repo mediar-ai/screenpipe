@@ -1,8 +1,8 @@
 use anyhow::Result;
-use image::DynamicImage;
 use regex::Regex;
 use screenpipe_db::DatabaseManager;
-use screenpipe_vision::utils::{compare_with_previous_image, OcrEngine};
+use screenpipe_vision::frame_comparison::{calculate_image_hash, FrameComparer, FrameComparisonConfig};
+use screenpipe_vision::utils::OcrEngine;
 
 #[cfg(target_os = "macos")]
 use screenpipe_vision::perform_ocr_apple;
@@ -141,29 +141,24 @@ pub async fn handle_index_command(
             )
             .await?;
 
-        let mut previous_image: Option<DynamicImage> = None;
+        // Use optimized frame comparison (hash early exit + downscaled + histogram only)
+        let mut frame_comparer = FrameComparer::new(FrameComparisonConfig::default());
         let mut frame_counter: i64 = 0;
 
         for (idx, frame) in frames.iter().enumerate() {
-            // Compare with previous frame to skip similar ones
-            let current_average = if let Some(prev) = &previous_image {
-                compare_with_previous_image(Some(prev), frame, &mut None, idx as u64, &mut 0.0)
-                    .await?
-            } else {
-                1.0
-            };
+            // Compare with previous frame to skip similar ones using optimized comparer
+            let frame_hash = calculate_image_hash(frame);
+            let current_diff = frame_comparer.compare(frame, frame_hash);
 
             // Skip if frames are too similar (threshold from core.rs)
-            if current_average < 0.006 && previous_image.is_some() {
+            if current_diff < 0.006 && idx > 0 {
                 info!(
-                    "skipping frame {} due to low average difference: {:.3}",
-                    frame_counter, current_average
+                    "skipping frame {} due to low difference: {:.3}",
+                    frame_counter, current_diff
                 );
                 frame_counter += 1;
                 continue;
             }
-
-            previous_image = Some(frame.clone());
 
             // Use specified OCR engine or fall back to platform default
             let engine = match ocr_engine {

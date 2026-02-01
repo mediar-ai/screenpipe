@@ -103,6 +103,7 @@ async fn main() -> Result<()> {
             window_filters,
             vec![],
             false,
+            None, // activity_feed - None disables adaptive FPS
         )
         .await
     });

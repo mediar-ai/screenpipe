@@ -372,8 +372,8 @@ const AISection = ({
         newUrl = settingsPreset?.url || "";
         break;
       case "opencode":
-        newUrl = "opencode://local";
-        newModel = "claude-sonnet-4";
+        newUrl = ""; // URL is dynamic - set at runtime
+        newModel = "claude-haiku-4-5@20251001";
         break;
     }
 

@@ -463,8 +463,8 @@ export function AIProviderConfig({
                 setFormData({
                   ...formData,
                   provider: "opencode",
-                  url: "opencode://local",
-                  model: "claude-sonnet-4",
+                  url: "", // URL is dynamic - set at runtime
+                  model: "claude-haiku-4-5@20251001",
                 });
               }}
             >
@@ -696,24 +696,21 @@ export function AIProviderConfig({
 
         {selectedProvider === "opencode" && (
           <div className="space-y-1">
-            <Label htmlFor="model" className="text-sm">model</Label>
+            <Label htmlFor="model" className="text-xs">model</Label>
             <Select
               value={formData.model}
               onValueChange={(value) =>
                 setFormData({ ...formData, model: value })
               }
             >
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-8">
                 <SelectValue placeholder="select model" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="claude-sonnet-4">claude-sonnet-4</SelectItem>
-                <SelectItem value="claude-opus-4">claude-opus-4</SelectItem>
+                <SelectItem value="claude-haiku-4-5@20251001">Haiku 4.5 (fast)</SelectItem>
+                <SelectItem value="claude-opus-4-5@20251101">Opus 4.5 (powerful)</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground mt-1">
-              OpenCode uses Claude models via screenpipe-cloud
-            </p>
           </div>
         )}
 

@@ -60,6 +60,7 @@ async fn main() {
         window_filters,
         languages.clone(),
         false,
+        None, // activity_feed - None disables adaptive FPS
     )
     .await;
 
