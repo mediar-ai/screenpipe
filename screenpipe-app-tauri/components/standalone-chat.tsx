@@ -1390,13 +1390,13 @@ export function StandaloneChat() {
             </div>
             <div className="text-center space-y-2">
               <h3 className="font-semibold tracking-tight">
-                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : "Login Required"}
+                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : (isStartingOpencode ? "Starting OpenCode..." : (opencodeNotReady ? "OpenCode Not Ready" : (needsLogin || needsOpencodeLogin ? "Login Required" : "Setup Required")))}
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
                 {disabledReason}
               </p>
             </div>
-            {needsLogin && (
+            {(needsLogin || needsOpencodeLogin) && (
               <Button
                 variant="default"
                 onClick={() => openUrl("https://screenpi.pe/login")}

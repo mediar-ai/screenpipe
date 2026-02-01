@@ -337,9 +337,9 @@ export function AIProviderConfig({
   }
 
   return (
-    <div className="w-full space-y-4 rounded-lg bg-card p-4">
+    <div className="w-full space-y-3 rounded-lg bg-card p-3">
       <div>
-        <h2 className="text-base font-semibold">
+        <h2 className="text-sm font-semibold">
           {defaultPreset?.id ? "edit ai provider" : "ai provider"}
         </h2>
         <p className="text-xs text-muted-foreground">
@@ -349,7 +349,7 @@ export function AIProviderConfig({
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3">
+      <form onSubmit={handleSubmit} className="space-y-2">
         <div className="space-y-1">
           <Label htmlFor="name" className="flex items-center gap-2 text-sm">
             name
@@ -380,20 +380,20 @@ export function AIProviderConfig({
         </div>
 
         <div className={cn(
-          "grid gap-2",
-          opencodeAvailable ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"
+          "grid gap-1.5",
+          opencodeAvailable ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"
         )}>
           <Button
             type="button"
             variant={selectedProvider === "openai" ? "default" : "outline"}
-            className="flex h-16 flex-col items-center justify-center gap-1"
+            className="flex h-10 flex-col items-center justify-center gap-0.5 text-xs"
             onClick={() => {
               setSelectedProvider("openai");
               setFormData({ ...formData, provider: "openai" });
             }}
           >
-            <Icons.openai className="h-5 w-5" />
-            <span className="text-xs">openai</span>
+            <Icons.openai className="h-4 w-4" />
+            <span>openai</span>
           </Button>
 
           <Button
@@ -401,7 +401,7 @@ export function AIProviderConfig({
             variant={
               selectedProvider === "native-ollama" ? "default" : "outline"
             }
-            className="flex h-16 flex-col items-center justify-center gap-1"
+            className="flex h-10 flex-col items-center justify-center gap-0.5 text-xs"
             onClick={() => {
               setSelectedProvider("native-ollama");
               setFormData({
@@ -411,8 +411,8 @@ export function AIProviderConfig({
               });
             }}
           >
-            <Icons.terminal className="h-5 w-5" />
-            <span className="text-xs">ollama</span>
+            <Icons.terminal className="h-4 w-4" />
+            <span>ollama</span>
           </Button>
 
           <Button
@@ -421,7 +421,7 @@ export function AIProviderConfig({
             variant={
               selectedProvider === "screenpipe-cloud" ? "default" : "outline"
             }
-            className="flex h-16 flex-col items-center justify-center gap-1 relative"
+            className="flex h-10 flex-col items-center justify-center gap-0.5 text-xs"
             onClick={() => {
               setSelectedProvider("screenpipe-cloud");
               setFormData({
@@ -431,19 +431,14 @@ export function AIProviderConfig({
               });
             }}
           >
-            <Icons.terminal className="h-5 w-5" />
-            <span className="text-xs">screenpipe</span>
-            {!settings?.user?.token && (
-              <span className="absolute -bottom-5 text-[10px] text-destructive font-normal whitespace-nowrap">
-                login required
-              </span>
-            )}
+            <Icons.terminal className="h-4 w-4" />
+            <span>cloud</span>
           </Button>
 
           <Button
             type="button"
             variant={selectedProvider === "custom" ? "default" : "outline"}
-            className="flex h-16 flex-col items-center justify-center gap-1"
+            className="flex h-10 flex-col items-center justify-center gap-0.5 text-xs"
             onClick={() => {
               setSelectedProvider("custom");
               setFormData({
@@ -453,8 +448,8 @@ export function AIProviderConfig({
               });
             }}
           >
-            <Icons.settings className="h-5 w-5" />
-            <span className="text-xs">custom</span>
+            <Icons.settings className="h-4 w-4" />
+            <span>custom</span>
           </Button>
 
           {opencodeAvailable && (
@@ -462,7 +457,7 @@ export function AIProviderConfig({
               type="button"
               disabled={!settings?.user?.token}
               variant={selectedProvider === "opencode" ? "default" : "outline"}
-              className="flex h-16 flex-col items-center justify-center gap-1 relative"
+              className="flex h-10 flex-col items-center justify-center gap-0.5 text-xs"
               onClick={() => {
                 setSelectedProvider("opencode");
                 setFormData({
@@ -473,13 +468,8 @@ export function AIProviderConfig({
                 });
               }}
             >
-              <Icons.terminal className="h-5 w-5" />
-              <span className="text-xs">opencode</span>
-              {!settings?.user?.token && (
-                <span className="absolute -bottom-5 text-[10px] text-destructive font-normal whitespace-nowrap">
-                  login required
-                </span>
-              )}
+              <Icons.terminal className="h-4 w-4" />
+              <span>opencode</span>
             </Button>
           )}
         </div>
@@ -727,9 +717,9 @@ export function AIProviderConfig({
           </div>
         )}
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           <div className="space-y-1">
-            <Label htmlFor="maxContextChars" className="flex items-center text-sm">
+            <Label htmlFor="maxContextChars" className="flex items-center text-xs">
               max context{" "}
               <TooltipProvider>
                 <Tooltip>
@@ -738,16 +728,13 @@ export function AIProviderConfig({
                   </TooltipTrigger>
                   <TooltipContent side="right">
                     <p>
-                      maximum number of characters (think 4 characters per
-                      token) to send to the ai model. <br />
-                      usually, openai models support up to 200k tokens, which is
-                      roughly 1m characters.
+                      maximum number of characters to send to the ai model.
                     </p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </Label>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Slider
                 id="maxContextChars"
                 min={10000}
@@ -759,14 +746,14 @@ export function AIProviderConfig({
                 }
                 className="flex-grow"
               />
-              <span className="min-w-[50px] text-right text-sm">
+              <span className="min-w-[40px] text-right text-xs">
                 {((formData.maxContextChars || 512000) / 1000).toFixed(0)}k
               </span>
             </div>
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="prompt" className="text-sm">prompt</Label>
+            <Label htmlFor="prompt" className="text-xs">prompt</Label>
             <Textarea
               id="prompt"
               value={formData.prompt || DEFAULT_PROMPT}
@@ -774,7 +761,7 @@ export function AIProviderConfig({
                 setFormData({ ...formData, prompt: e.target.value })
               }
               placeholder="enter your custom prompt here"
-              className="min-h-[80px] text-sm"
+              className="min-h-[50px] max-h-[80px] text-xs resize-none"
             />
           </div>
         </div>
@@ -856,7 +843,7 @@ export const AIPresetDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-lg sm:max-w-xl">
+      <DialogContent className="w-full max-w-md sm:max-w-lg max-h-[80vh] overflow-y-auto p-0">
         <DialogHeader className="sr-only">
           <DialogTitle>
             {preset ? "Edit Preset" : "Create New Preset"}
