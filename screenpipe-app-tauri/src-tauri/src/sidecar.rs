@@ -245,7 +245,7 @@ pub async fn spawn_screenpipe(
 ) -> Result<(), String> {
     // Check permissions before spawning
     let permissions_check = do_permissions_check(false);
-    let store = app.state::<SettingsStore>();
+    let store = SettingsStore::get(&app).ok().flatten().unwrap_or_default();
     let disable_audio = store.disable_audio;
     
     // Always check screen recording permission - this is required and needs restart
@@ -275,7 +275,10 @@ pub async fn spawn_screenpipe(
 }
 
 async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>>) -> Result<CommandChild, String> {
-    let store = app.state::<SettingsStore>();
+    // Read from persisted store instead of managed state to get latest settings
+    let store = SettingsStore::get(app)
+        .map_err(|e| format!("Failed to get settings: {}", e))?
+        .unwrap_or_default();
 
     let audio_transcription_engine = store.audio_transcription_engine.clone();
 
@@ -647,7 +650,7 @@ impl SidecarManager {
         // Check if sidecar is already running - but verify it's actually alive
         if self.child.is_some() {
             // Do a quick health check to verify the process is still running
-            let store = app.state::<SettingsStore>();
+            let store = SettingsStore::get(app).ok().flatten().unwrap_or_default();
             let port = store.port;
             let health_url = format!("http://localhost:{}/health", port);
 
@@ -674,7 +677,7 @@ impl SidecarManager {
         
         // Check permissions before spawning
         let permissions_check = do_permissions_check(false);
-        let store = app.state::<SettingsStore>();
+        let store = SettingsStore::get(app).ok().flatten().unwrap_or_default();
         let disable_audio = store.disable_audio;
         
         // Always check screen recording permission - this is required and needs restart
