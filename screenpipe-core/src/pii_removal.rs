@@ -836,7 +836,9 @@ mod tests {
     #[test]
     fn test_auth_token_detection() {
         // Authorization headers
-        assert!(contains_pii("Authorization: Bearer abc123def456ghi789jkl012"));
+        assert!(contains_pii(
+            "Authorization: Bearer abc123def456ghi789jkl012"
+        ));
         assert!(contains_pii("bearer eyJhbGciOiJIUzI1NiIsInR5cCI"));
 
         let result = remove_pii("Authorization: Bearer abc123def456ghi789jkl012mno");
@@ -884,7 +886,10 @@ mod tests {
 
         assert!(!result.contains("eyJ"), "JWT not redacted");
         assert!(!result.contains("whsec_"), "Stripe key not redacted");
-        assert!(!result.contains("sb_publishable_"), "Supabase key not redacted");
+        assert!(
+            !result.contains("sb_publishable_"),
+            "Supabase key not redacted"
+        );
         assert!(!result.contains("••••"), "Password dots not redacted");
     }
 
@@ -932,27 +937,37 @@ mod tests {
     #[test]
     fn test_connection_string_detection() {
         // PostgreSQL
-        assert!(contains_pii("postgres://user:password123@localhost:5432/mydb"));
-        assert!(contains_pii("postgresql://admin:secret@db.example.com/prod"));
+        assert!(contains_pii(
+            "postgres://user:password123@localhost:5432/mydb"
+        ));
+        assert!(contains_pii(
+            "postgresql://admin:secret@db.example.com/prod"
+        ));
 
         // MySQL
         assert!(contains_pii("mysql://root:pass@127.0.0.1:3306/database"));
 
         // MongoDB
         assert!(contains_pii("mongodb://user:pass@cluster.mongodb.net/db"));
-        assert!(contains_pii("mongodb+srv://admin:secret@cluster.mongodb.net"));
+        assert!(contains_pii(
+            "mongodb+srv://admin:secret@cluster.mongodb.net"
+        ));
 
         // Redis
         assert!(contains_pii("redis://:password@redis.example.com:6379"));
         assert!(contains_pii("rediss://:secret@secure-redis.com:6380"));
 
         let result = remove_pii("DATABASE_URL=postgres://user:secret@host/db");
-        assert!(result.contains("[CONNECTION_STRING]") || result.contains("[URL_WITH_CREDENTIALS]"));
+        assert!(
+            result.contains("[CONNECTION_STRING]") || result.contains("[URL_WITH_CREDENTIALS]")
+        );
     }
 
     #[test]
     fn test_url_with_credentials() {
-        assert!(contains_pii("https://user:password@api.example.com/endpoint"));
+        assert!(contains_pii(
+            "https://user:password@api.example.com/endpoint"
+        ));
         assert!(contains_pii("ftp://admin:secret@ftp.server.com/files"));
 
         let result = remove_pii("API: https://apikey:secret@service.com/v1");
@@ -963,8 +978,12 @@ mod tests {
 
     #[test]
     fn test_slack_token_detection() {
-        assert!(contains_pii("xoxb-123456789012-1234567890123-abcdefghijklmnop"));
-        assert!(contains_pii("xoxp-123456789012-1234567890123-abcdefghijklmnop"));
+        assert!(contains_pii(
+            "xoxb-123456789012-1234567890123-abcdefghijklmnop"
+        ));
+        assert!(contains_pii(
+            "xoxp-123456789012-1234567890123-abcdefghijklmnop"
+        ));
         assert!(contains_pii("xapp-1-A12345678-1234567890123-abcdef"));
 
         let result = remove_pii("SLACK_TOKEN=xoxb-123456789012-1234567890123-abc");
@@ -976,7 +995,9 @@ mod tests {
         // Discord token format: base64.timestamp.hmac
         let discord_token = "MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4";
         // Note: This is a fake token format
-        assert!(contains_pii("NTk0NzU2NTIxMzc3Nzk2NDEy.XQ0bXQ.vHc7MzY3NDk0NzU2NTIxMzc3Nzk"));
+        assert!(contains_pii(
+            "NTk0NzU2NTIxMzc3Nzk2NDEy.XQ0bXQ.vHc7MzY3NDk0NzU2NTIxMzc3Nzk"
+        ));
     }
 
     #[test]
@@ -1001,7 +1022,9 @@ mod tests {
     #[test]
     fn test_telegram_token_detection() {
         // Format: bot_id:secret
-        assert!(contains_pii("123456789:ABCdefGHIjklMNOpqrsTUVwxyz123456789"));
+        assert!(contains_pii(
+            "123456789:ABCdefGHIjklMNOpqrsTUVwxyz123456789"
+        ));
         assert!(contains_pii("9876543210:abcdefghijklmnopqrstuvwxyz12345"));
     }
 

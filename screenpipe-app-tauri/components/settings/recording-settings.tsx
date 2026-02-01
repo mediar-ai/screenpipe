@@ -1566,8 +1566,8 @@ export function RecordingSettings() {
 
       <Separator />
 
-      {/* UI Events (Accessibility) - macOS only */}
-      {isMacOS && (
+      {/* UI Events (Accessibility) - macOS and Windows */}
+      {(isMacOS || platform() === "windows") && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-2">
             <Key className="h-5 w-5" />
@@ -1586,8 +1586,8 @@ export function RecordingSettings() {
                     <TooltipContent side="right" className="max-w-xs">
                       <p>
                         Capture keyboard shortcuts, mouse clicks, and clipboard activity.
-                        Requires Accessibility and Input Monitoring permissions in System Settings.
-                        Currently supported on macOS only.
+                        {isMacOS && " Requires Accessibility and Input Monitoring permissions in System Settings."}
+                        {platform() === "windows" && " Uses Windows UI Automation for context capture."}
                       </p>
                     </TooltipContent>
                   </Tooltip>

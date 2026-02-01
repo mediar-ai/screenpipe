@@ -24,12 +24,11 @@ use screenpipe_server::{
     },
     handle_index_command,
     pipe_manager::PipeInfo,
-    start_continuous_recording,
-    start_ui_recording,
+    start_continuous_recording, start_sleep_monitor, start_ui_recording,
     vision_manager::{
         start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
     },
-    watch_pid, PipeManager, ResourceMonitor, SCServer, start_sleep_monitor,
+    watch_pid, PipeManager, ResourceMonitor, SCServer,
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;

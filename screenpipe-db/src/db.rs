@@ -3329,10 +3329,16 @@ LIMIT ? OFFSET ?
         let mut conditions = vec!["event_type = 'text'".to_string()];
 
         if let Some(start) = start_time {
-            conditions.push(format!("timestamp >= '{}'", start.format("%Y-%m-%d %H:%M:%S")));
+            conditions.push(format!(
+                "timestamp >= '{}'",
+                start.format("%Y-%m-%d %H:%M:%S")
+            ));
         }
         if let Some(end) = end_time {
-            conditions.push(format!("timestamp <= '{}'", end.format("%Y-%m-%d %H:%M:%S")));
+            conditions.push(format!(
+                "timestamp <= '{}'",
+                end.format("%Y-%m-%d %H:%M:%S")
+            ));
         }
 
         let where_clause = conditions.join(" AND ");

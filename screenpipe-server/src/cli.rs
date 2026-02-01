@@ -350,9 +350,7 @@ impl Cli {
     /// Create UI recorder configuration (stub when ui-events feature is disabled)
     #[cfg(not(feature = "ui-events"))]
     pub fn to_ui_recorder_config(&self) -> crate::ui_recorder::UiRecorderConfig {
-        crate::ui_recorder::UiRecorderConfig {
-            enabled: false,
-        }
+        crate::ui_recorder::UiRecorderConfig { enabled: false }
     }
 }
 

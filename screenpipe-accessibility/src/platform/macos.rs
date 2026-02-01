@@ -672,7 +672,8 @@ fn get_element_at_position(x: f64, y: f64, config: &UiCaptureConfig) -> Option<E
     })?;
 
     // Check if this is a password field
-    let name = get_string_attr(&elem, ax::attr::title()).or_else(|| get_string_attr(&elem, ax::attr::desc()));
+    let name = get_string_attr(&elem, ax::attr::title())
+        .or_else(|| get_string_attr(&elem, ax::attr::desc()));
 
     if config.is_password_field(Some(&role), name.as_deref()) {
         // Don't capture value for password fields
@@ -956,10 +957,7 @@ mod tests {
     #[test]
     fn test_keycode_mapping() {
         assert_eq!(keycode_to_char(0, Modifiers::new()), Some('a'));
-        assert_eq!(
-            keycode_to_char(0, Modifiers(Modifiers::SHIFT)),
-            Some('A')
-        );
+        assert_eq!(keycode_to_char(0, Modifiers(Modifiers::SHIFT)), Some('A'));
         assert_eq!(keycode_to_char(49, Modifiers::new()), Some(' '));
         assert_eq!(keycode_to_char(36, Modifiers::new()), Some('\n'));
     }

@@ -39,7 +39,11 @@ mod tests {
 
         // In the clone, add a new speaker (simulating a new voice detected)
         let speaker2_in_clone = cloned.search_speaker(embedding2.clone(), 0.5);
-        assert_eq!(speaker2_in_clone, Some(2), "Second speaker should be ID 2 in clone");
+        assert_eq!(
+            speaker2_in_clone,
+            Some(2),
+            "Second speaker should be ID 2 in clone"
+        );
 
         // BUG: The original doesn't see the new speaker!
         // When cloned goes out of scope (function returns), speaker 2 is LOST
@@ -102,7 +106,11 @@ mod tests {
         {
             let mut manager = shared.lock().unwrap();
             let speaker2_again = manager.search_speaker(embedding2.clone(), 0.5);
-            assert_eq!(speaker2_again, Some(2), "Same embedding should return same speaker");
+            assert_eq!(
+                speaker2_again,
+                Some(2),
+                "Same embedding should return same speaker"
+            );
         }
 
         // Verify: shared state has both speakers

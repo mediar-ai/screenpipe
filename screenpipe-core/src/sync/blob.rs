@@ -75,7 +75,10 @@ impl EncryptedBlob {
 
     /// Get search tokens as base64 strings.
     pub fn search_tokens_base64(&self) -> Vec<String> {
-        self.search_tokens.iter().map(|t| BASE64.encode(t)).collect()
+        self.search_tokens
+            .iter()
+            .map(|t| BASE64.encode(t))
+            .collect()
     }
 }
 

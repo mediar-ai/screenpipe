@@ -487,9 +487,10 @@ pub(crate) async fn search(
             SearchResult::OCR(ocr) => !is_screenpipe_app(&ocr.app_name),
             SearchResult::Audio(_) => true, // Audio doesn't have app_name
             SearchResult::UI(ui) => !is_screenpipe_app(&ui.app_name),
-            SearchResult::Input(input) => {
-                input.app_name.as_ref().map_or(true, |app| !is_screenpipe_app(app))
-            }
+            SearchResult::Input(input) => input
+                .app_name
+                .as_ref()
+                .map_or(true, |app| !is_screenpipe_app(app)),
         })
         .map(|result| match result {
             SearchResult::OCR(ocr) => ContentItem::OCR(OCRContent {
@@ -3230,7 +3231,11 @@ pub async fn get_next_valid_frame(
     let forward = query.direction.to_lowercase() != "backward";
 
     // Get candidate frames from database
-    let candidates = match state.db.get_frames_near(query.frame_id, forward, query.limit).await {
+    let candidates = match state
+        .db
+        .get_frames_near(query.frame_id, forward, query.limit)
+        .await
+    {
         Ok(frames) => frames,
         Err(e) => {
             error!("Failed to get frames near {}: {}", query.frame_id, e);

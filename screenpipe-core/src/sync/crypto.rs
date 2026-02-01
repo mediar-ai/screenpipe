@@ -71,7 +71,10 @@ pub fn generate_key() -> Zeroizing<[u8; KEY_SIZE]> {
 ///
 /// # Returns
 /// A 256-bit derived key
-pub fn derive_key_from_password(password: &str, salt: &[u8; SALT_SIZE]) -> SyncResult<Zeroizing<[u8; KEY_SIZE]>> {
+pub fn derive_key_from_password(
+    password: &str,
+    salt: &[u8; SALT_SIZE],
+) -> SyncResult<Zeroizing<[u8; KEY_SIZE]>> {
     let params = Params::new(
         ARGON2_MEMORY_KB,
         ARGON2_ITERATIONS,
@@ -102,7 +105,11 @@ pub fn derive_key_from_password(password: &str, salt: &[u8; SALT_SIZE]) -> SyncR
 ///
 /// # Returns
 /// The ciphertext with authentication tag appended
-pub fn encrypt(plaintext: &[u8], key: &[u8; KEY_SIZE], nonce: &[u8; NONCE_SIZE]) -> SyncResult<Vec<u8>> {
+pub fn encrypt(
+    plaintext: &[u8],
+    key: &[u8; KEY_SIZE],
+    nonce: &[u8; NONCE_SIZE],
+) -> SyncResult<Vec<u8>> {
     let cipher = ChaCha20Poly1305::new_from_slice(key)
         .map_err(|e| SyncError::Crypto(format!("invalid key: {}", e)))?;
 
@@ -124,7 +131,11 @@ pub fn encrypt(plaintext: &[u8], key: &[u8; KEY_SIZE], nonce: &[u8; NONCE_SIZE])
 ///
 /// # Returns
 /// The decrypted plaintext, or an error if authentication fails
-pub fn decrypt(ciphertext: &[u8], key: &[u8; KEY_SIZE], nonce: &[u8; NONCE_SIZE]) -> SyncResult<Vec<u8>> {
+pub fn decrypt(
+    ciphertext: &[u8],
+    key: &[u8; KEY_SIZE],
+    nonce: &[u8; NONCE_SIZE],
+) -> SyncResult<Vec<u8>> {
     let cipher = ChaCha20Poly1305::new_from_slice(key)
         .map_err(|e| SyncError::Crypto(format!("invalid key: {}", e)))?;
 
@@ -176,7 +187,10 @@ pub fn generate_search_token(keyword: &str, key: &[u8; KEY_SIZE]) -> SyncResult<
 ///
 /// # Returns
 /// A list of unique HMAC tokens
-pub fn generate_search_tokens_from_text(text: &str, key: &[u8; KEY_SIZE]) -> SyncResult<Vec<[u8; HMAC_SIZE]>> {
+pub fn generate_search_tokens_from_text(
+    text: &str,
+    key: &[u8; KEY_SIZE],
+) -> SyncResult<Vec<[u8; HMAC_SIZE]>> {
     let keywords = extract_keywords(text);
     let mut tokens = Vec::with_capacity(keywords.len());
 
