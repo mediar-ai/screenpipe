@@ -509,6 +509,12 @@ async fn spawn_sidecar(app: &tauri::AppHandle, override_args: Option<Vec<String>
         args.push("--adaptive-fps");
     }
 
+    let enable_ui_events = store.enable_ui_events;
+
+    if enable_ui_events {
+        args.push("--enable-ui-events");
+    }
+
     // args.push("--debug");
 
     let override_args_as_vec = override_args.unwrap_or_default();

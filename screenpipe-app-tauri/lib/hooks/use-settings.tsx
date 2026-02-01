@@ -84,6 +84,7 @@ export type Settings = SettingsStore & {
 	ignoredUrls?: string[];
 	searchShortcut?: string;
 	adaptiveFps?: boolean;
+	enableUiEvents?: boolean;
 }
 
 export const DEFAULT_PROMPT = `Rules:
@@ -228,6 +229,7 @@ let DEFAULT_SETTINGS: Settings = {
 				activeConversationId: null,
 				historyEnabled: true,
 			},
+			enableUiEvents: false,
 		};
 
 export function createDefaultSettingsObject(): Settings {

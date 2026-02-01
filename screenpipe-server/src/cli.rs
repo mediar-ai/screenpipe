@@ -309,6 +309,12 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_pipe_manager: bool,
 
+    /// Enable UI event capture (keyboard, mouse, clipboard).
+    /// Requires accessibility and input monitoring permissions on macOS.
+    /// Currently supported on macOS only.
+    #[arg(long, default_value_t = false)]
+    pub enable_ui_events: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }

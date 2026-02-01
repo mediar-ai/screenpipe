@@ -199,6 +199,10 @@ pub struct SettingsStore {
     /// Unique device ID for AI usage tracking (generated on first launch)
     #[serde(rename = "deviceId", default = "generate_device_id")]
     pub device_id: String,
+    /// Enable UI event capture (keyboard, mouse, clipboard).
+    /// Requires accessibility and input monitoring permissions on macOS.
+    #[serde(rename = "enableUiEvents", default)]
+    pub enable_ui_events: bool,
 }
 
 fn generate_device_id() -> String {
@@ -478,6 +482,7 @@ impl Default for SettingsStore {
             show_shortcut_overlay: true,
             device_id: uuid::Uuid::new_v4().to_string(),
             adaptive_fps: false,
+            enable_ui_events: false,
         }
     }
 }

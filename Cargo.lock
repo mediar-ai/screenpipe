@@ -6828,7 +6828,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "chrono",
- "cidre 0.13.1 (git+https://github.com/yury/cidre.git)",
+ "cidre",
  "clap",
  "clap_complete",
  "colored",
