@@ -149,13 +149,6 @@ CREATE TRIGGER IF NOT EXISTS ui_events_au AFTER UPDATE ON ui_events BEGIN
 END;
 
 -- =============================================================================
--- ADD SYNC COLUMNS TO UI_MONITORING (for backwards compatibility)
+-- Note: ui_monitoring table is deprecated in favor of ui_events
+-- Sync columns are only on the new ui_events table
 -- =============================================================================
-
-ALTER TABLE ui_monitoring ADD COLUMN sync_id TEXT;
-ALTER TABLE ui_monitoring ADD COLUMN machine_id TEXT;
-ALTER TABLE ui_monitoring ADD COLUMN synced_at DATETIME;
-
-CREATE INDEX IF NOT EXISTS idx_ui_monitoring_sync_id ON ui_monitoring(sync_id);
-CREATE INDEX IF NOT EXISTS idx_ui_monitoring_synced_at ON ui_monitoring(synced_at);
-CREATE INDEX IF NOT EXISTS idx_ui_monitoring_unsynced ON ui_monitoring(synced_at) WHERE synced_at IS NULL;
