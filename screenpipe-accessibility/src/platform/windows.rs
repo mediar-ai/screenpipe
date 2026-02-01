@@ -492,7 +492,7 @@ unsafe extern "system" fn keyboard_hook_proc(
     // Call next hook
     KEYBOARD_HOOK.with(|h| {
         let hook = h.borrow();
-        CallNextHookEx(hook.as_ref().copied(), code, wparam, lparam)
+        CallNextHookEx(hook.unwrap_or_default(), code, wparam, lparam)
     })
 }
 
@@ -609,7 +609,7 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
     // Call next hook
     MOUSE_HOOK.with(|h| {
         let hook = h.borrow();
-        CallNextHookEx(hook.as_ref().copied(), code, wparam, lparam)
+        CallNextHookEx(hook.unwrap_or_default(), code, wparam, lparam)
     })
 }
 
@@ -688,7 +688,7 @@ unsafe extern "system" fn activity_keyboard_hook(
 
     ACTIVITY_KB_HOOK.with(|h| {
         let hook = h.borrow();
-        CallNextHookEx(hook.as_ref().copied(), code, wparam, lparam)
+        CallNextHookEx(hook.unwrap_or_default(), code, wparam, lparam)
     })
 }
 
@@ -718,7 +718,7 @@ unsafe extern "system" fn activity_mouse_hook(
 
     ACTIVITY_MOUSE_HOOK.with(|h| {
         let hook = h.borrow();
-        CallNextHookEx(hook.as_ref().copied(), code, wparam, lparam)
+        CallNextHookEx(hook.unwrap_or_default(), code, wparam, lparam)
     })
 }
 
