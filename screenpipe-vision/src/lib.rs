@@ -2,6 +2,9 @@
 #[cfg(feature = "adaptive-fps")]
 pub use screenpipe_accessibility::{ActivityFeed, ActivityKind, CaptureParams};
 
+// Export the ActivityFeedOption type alias
+pub use crate::core::ActivityFeedOption;
+
 #[cfg(target_os = "macos")]
 pub mod apple;
 pub mod core;
