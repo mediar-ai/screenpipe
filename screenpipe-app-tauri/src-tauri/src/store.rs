@@ -201,7 +201,6 @@ pub struct SettingsStore {
     pub device_id: String,
     /// Enable UI event capture (keyboard, mouse, clipboard).
     /// Requires accessibility and input monitoring permissions on macOS.
-    /// Currently supported on macOS only.
     #[serde(rename = "enableUiEvents", default)]
     pub enable_ui_events: bool,
 }

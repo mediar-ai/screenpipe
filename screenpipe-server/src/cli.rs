@@ -309,7 +309,6 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_pipe_manager: bool,
 
-    // === UI Events Settings ===
     /// Enable UI event capture (keyboard, mouse, clipboard).
     /// Requires accessibility and input monitoring permissions on macOS.
     /// Currently supported on macOS only.
