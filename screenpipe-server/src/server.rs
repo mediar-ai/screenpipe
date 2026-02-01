@@ -1363,6 +1363,9 @@ impl SCServer {
         // Build the main router with all routes
         Router::new()
             .merge(server.into_router())
+            // UI Events API routes
+            .route("/ui-events", get(ui_events_search_handler))
+            .route("/ui-events/stats", get(ui_events_stats_handler))
             // NOTE: websockerts and sse is not supported by openapi so we move it down here
             .route("/stream/frames", get(stream_frames_handler))
             .route("/ws/events", get(ws_events_handler))
@@ -3809,6 +3812,34 @@ async fn send_batch(
     buffer.clear();
     Ok(())
 }
+
+// UI Events API handlers
+async fn ui_events_search_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<crate::ui_events_api::UiEventsQuery>,
+) -> Result<Json<crate::ui_events_api::UiEventsResponse>, (StatusCode, String)> {
+    match crate::ui_events_api::search_ui_events_handler(state.db.clone(), params).await {
+        Ok(response) => Ok(Json(response)),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
+    }
+}
+
+async fn ui_events_stats_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<crate::ui_events_api::UiEventsQuery>,
+) -> Result<Json<Vec<crate::ui_events_api::UiEventStats>>, (StatusCode, String)> {
+    match crate::ui_events_api::get_ui_event_stats_handler(
+        state.db.clone(),
+        params.start_time,
+        params.end_time,
+    )
+    .await
+    {
+        Ok(stats) => Ok(Json(stats)),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
+    }
+}
+
 async fn stream_frames_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,

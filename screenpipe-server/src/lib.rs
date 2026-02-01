@@ -16,6 +16,7 @@ pub mod video_cache;
 pub mod video_utils;
 pub mod vision_manager;
 pub mod ui_recorder;
+pub mod ui_events_api;
 pub use add::handle_index_command;
 pub use auto_destruct::watch_pid;
 pub use axum::Json as JsonResponse;
