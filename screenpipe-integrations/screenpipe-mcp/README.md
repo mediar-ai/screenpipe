@@ -64,15 +64,30 @@ npx @modelcontextprotocol/inspector npx screenpipe-mcp
 
 ## Available Tools
 
-- **search-content** - Search through recorded screen content, audio transcriptions, and UI elements
-  - Full text search with content type filtering (OCR/Audio/UI)
-  - Time range and app/window filtering
-  - Speaker filtering (by ID or name)
-  - Pagination support
+### search-content
+Search through recorded screen content (OCR) and audio transcriptions:
+- Full text search with content type filtering (OCR/Audio/UI)
+- Time range and app/window filtering
+- Speaker filtering (by ID or name)
+- Pagination support
 
-- **export-video** - Export screen recordings as video files
-  - Specify time range with start/end times
-  - Configurable FPS for output video
+### search-ui-events (macOS)
+Search UI input events captured via accessibility APIs. This is the third data modality alongside vision and audio:
+- **Event types**: `click`, `text`, `scroll`, `key`, `app_switch`, `window_focus`, `clipboard`
+- Filter by app, window, time range
+- `text` events show aggregated keyboard input (what was typed)
+- `click` events include accessibility element labels
+- `clipboard` events show copy/paste content
+
+### get-ui-event-stats (macOS)
+Get aggregated statistics of UI events:
+- Event counts grouped by app and event type
+- Useful for productivity analysis and app usage tracking
+
+### export-video
+Export screen recordings as video files:
+- Specify time range with start/end times
+- Configurable FPS for output video
 
 ## Example Queries in Claude
 
@@ -81,6 +96,10 @@ npx @modelcontextprotocol/inspector npx screenpipe-mcp
 - "Show me what was on my screen in VSCode yesterday"
 - "Export a video of my screen from 2-3pm today"
 - "Find what John said in our meeting about the database"
+- "What did I type in Slack today?" (uses search-ui-events)
+- "Show me my app usage statistics for the past 3 hours"
+- "What did I copy to clipboard recently?"
+- "Which apps did I switch between most today?"
 
 ## Requirements
 

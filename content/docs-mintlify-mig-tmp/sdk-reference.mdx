@@ -98,6 +98,47 @@ const results = await pipe.queryScreenpipe({
 })
 ```
 
+### ui events api (accessibility data - macOS)
+
+screenpipe captures UI events via accessibility APIs on macOS. this is the third data modality alongside vision (OCR) and audio.
+
+```typescript
+// search UI events via REST API
+const response = await fetch('http://localhost:3030/ui-events?' + new URLSearchParams({
+  event_type: 'text',      // click, text, scroll, key, app_switch, window_focus, clipboard
+  app_name: 'Slack',       // filter by app
+  limit: '50',
+  start_time: '2024-03-10T12:00:00Z',
+  end_time: '2024-03-10T13:00:00Z',
+}));
+const data = await response.json();
+
+// each event contains:
+// - event_type: click, text, scroll, key, app_switch, window_focus, clipboard
+// - timestamp: ISO 8601 timestamp
+// - app_name, window_title: context
+// - text_content: for text/clipboard events, what was typed/copied
+// - x, y: for click events, coordinates
+// - element: accessibility element info (label, role) for click events
+```
+
+**event types:**
+- `text` - aggregated keyboard input (what was typed)
+- `click` - mouse clicks with element accessibility labels  
+- `app_switch` / `window_focus` - app and window changes
+- `clipboard` - copy/paste operations with content
+- `scroll` - scroll events with delta values
+
+```typescript
+// get UI event statistics (app usage analysis)
+const statsResponse = await fetch('http://localhost:3030/ui-events/stats?' + new URLSearchParams({
+  start_time: '2024-03-10T00:00:00Z',
+  end_time: '2024-03-10T23:59:59Z',
+}));
+const stats = await statsResponse.json();
+// returns: [{ app_name, event_type, count }, ...]
+```
+
 ### common usage patterns
 
 #### fetching recent screen activity

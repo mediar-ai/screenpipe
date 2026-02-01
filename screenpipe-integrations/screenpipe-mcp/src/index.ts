@@ -45,7 +45,7 @@ const SCREENPIPE_API = `http://localhost:${port}`;
 const server = new Server(
   {
     name: "screenpipe",
-    version: "0.5.0",
+    version: "0.7.0",
   },
   {
     capabilities: {
@@ -79,7 +79,7 @@ const BASE_TOOLS: Tool[] = [
         content_type: {
           type: "string",
           enum: ["all", "ocr", "audio", "ui"],
-          description: "Content type filter. Default: 'all'",
+          description: "Content type filter: 'ocr' (screen text), 'audio' (transcriptions), 'ui' (legacy UI monitoring), 'all'. Default: 'all'. For keyboard/mouse/accessibility events, use search-ui-events tool instead.",
           default: "all",
         },
         limit: {
@@ -172,6 +172,86 @@ const BASE_TOOLS: Tool[] = [
       required: ["start_time", "end_time"],
     },
   },
+  {
+    name: "search-ui-events",
+    description:
+      "Search UI input events captured via accessibility APIs (macOS). " +
+      "This is the third modality alongside vision (OCR) and audio. " +
+      "Captures: mouse clicks, keyboard text input, scroll events, app/window switches, clipboard operations. " +
+      "Events include app context, element info (accessibility labels), and precise timestamps. " +
+      "Great for understanding user workflow, what was typed, clicked, or copied.",
+    annotations: {
+      title: "Search UI Events (Accessibility)",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      properties: {
+        q: {
+          type: "string",
+          description: "Search query for text content, app name, window title. Optional - omit to return recent events.",
+        },
+        event_type: {
+          type: "string",
+          enum: ["click", "text", "scroll", "key", "app_switch", "window_focus", "clipboard"],
+          description: "Filter by event type. 'text' = aggregated keyboard input, 'click' = mouse clicks with element context, 'app_switch'/'window_focus' = app usage tracking, 'clipboard' = copy/paste events.",
+        },
+        app_name: {
+          type: "string",
+          description: "Filter by application name (e.g., 'Google Chrome', 'Slack', 'Code')",
+        },
+        window_name: {
+          type: "string",
+          description: "Filter by window title",
+        },
+        start_time: {
+          type: "string",
+          format: "date-time",
+          description: "ISO 8601 UTC start time (e.g., 2024-01-15T10:00:00Z)",
+        },
+        end_time: {
+          type: "string",
+          format: "date-time",
+          description: "ISO 8601 UTC end time (e.g., 2024-01-15T18:00:00Z)",
+        },
+        limit: {
+          type: "integer",
+          description: "Max results. Default: 50",
+          default: 50,
+        },
+        offset: {
+          type: "integer",
+          description: "Skip N results for pagination. Default: 0",
+          default: 0,
+        },
+      },
+    },
+  },
+  {
+    name: "get-ui-event-stats",
+    description:
+      "Get aggregated statistics of UI events by app and event type. " +
+      "Useful for understanding app usage patterns, productivity analysis, or finding which apps were used most.",
+    annotations: {
+      title: "UI Event Statistics",
+      readOnlyHint: true,
+    },
+    inputSchema: {
+      type: "object",
+      properties: {
+        start_time: {
+          type: "string",
+          format: "date-time",
+          description: "ISO 8601 UTC start time for stats period",
+        },
+        end_time: {
+          type: "string",
+          format: "date-time",
+          description: "ISO 8601 UTC end time for stats period",
+        },
+      },
+    },
+  },
 ];
 
 // List tools handler
@@ -245,18 +325,20 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             mimeType: "text/markdown",
             text: `# Screenpipe Search Guide
 
+## Three Data Modalities
+
+Screenpipe captures three types of data:
+1. **Vision (OCR)** - Screen text from screenshots
+2. **Audio** - Transcribed speech from microphone/system audio
+3. **UI Events (Accessibility)** - Keyboard input, mouse clicks, app switches, clipboard (macOS)
+
 ## Quick Start
 - **Get recent activity**: Call search-content with no parameters
 - **Search text**: \`{"q": "search term", "content_type": "ocr"}\`
-- **Time filter**: Use start_time/end_time with ISO 8601 UTC timestamps
+- **Get keyboard input**: Use search-ui-events with \`event_type: "text"\`
+- **Track app usage**: Use get-ui-event-stats for aggregated data
 
-## Content Types
-- \`ocr\`: Screen text (what you see)
-- \`audio\`: Transcribed speech
-- \`ui\`: UI element interactions
-- \`all\`: Everything (default)
-
-## Key Parameters
+## search-content (Vision + Audio)
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | q | Search query | (none - returns all) |
@@ -267,11 +349,27 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 | app_name | Filter by app | (no filter) |
 | include_frames | Include screenshots | false |
 
+## search-ui-events (Accessibility Data)
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| q | Search text content, app, window | (none) |
+| event_type | click/text/scroll/key/app_switch/window_focus/clipboard | (all types) |
+| app_name | Filter by application | (no filter) |
+| limit | Max results | 50 |
+
+### Event Types
+- \`text\`: Aggregated keyboard input (what was typed)
+- \`click\`: Mouse clicks with element context (accessibility labels)
+- \`app_switch\`: When user switched applications
+- \`window_focus\`: When window focus changed
+- \`clipboard\`: Copy/paste operations
+- \`scroll\`: Scroll events with delta values
+
 ## Tips
 1. Read screenpipe://context first to get current timestamps
-2. Omit \`q\` to get all content (useful for "what was I doing?")
-3. Use \`limit: 50-100\` for comprehensive searches
-4. Combine app_name + time filters for focused results`,
+2. Use search-ui-events for "what did I type?" queries
+3. Use get-ui-event-stats to understand app usage patterns
+4. Combine search-content (what was on screen) with search-ui-events (what was done)`,
           },
         ],
       };
@@ -736,6 +834,136 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             ],
           };
         }
+      }
+
+      case "search-ui-events": {
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(args)) {
+          if (value !== null && value !== undefined) {
+            // Map event_type to the API parameter
+            params.append(key, String(value));
+          }
+        }
+
+        const response = await fetchAPI(`/ui-events?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const events = data.data || [];
+        const pagination = data.pagination || {};
+
+        if (events.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "No UI events found. This feature requires:\n" +
+                  "1. macOS with Accessibility permissions granted\n" +
+                  "2. UI Events enabled in screenpipe settings\n" +
+                  "Try: broader time range or different event_type filter.",
+              },
+            ],
+          };
+        }
+
+        const formattedEvents: string[] = [];
+        for (const event of events) {
+          const parts = [
+            `[${event.event_type?.toUpperCase() || "?"}]`,
+            event.app_name || "?",
+            event.window_title ? `| ${event.window_title}` : "",
+          ];
+          
+          let details = "";
+          if (event.event_type === "text" && event.text_content) {
+            details = `Text: "${event.text_content}"`;
+          } else if (event.event_type === "click") {
+            details = `Click at (${event.x || 0}, ${event.y || 0})`;
+            if (event.element?.label) {
+              details += ` on "${event.element.label}"`;
+            }
+          } else if (event.event_type === "clipboard" && event.text_content) {
+            details = `Clipboard: "${event.text_content.substring(0, 100)}${event.text_content.length > 100 ? "..." : ""}"`;
+          } else if (event.event_type === "app_switch" || event.event_type === "window_focus") {
+            details = `Switched to: ${event.app_name}${event.window_title ? ` - ${event.window_title}` : ""}`;
+          } else if (event.event_type === "scroll") {
+            details = `Scroll: dx=${event.delta_x || 0}, dy=${event.delta_y || 0}`;
+          }
+
+          formattedEvents.push(
+            `${parts.join(" ")}\n` +
+            `${event.timestamp || ""}\n` +
+            `${details}`
+          );
+        }
+
+        const header = `UI Events: ${events.length}/${pagination.total || "?"}` +
+          (pagination.total > events.length ? ` (use offset=${(pagination.offset || 0) + events.length} for more)` : "");
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: header + "\n\n" + formattedEvents.join("\n---\n"),
+            },
+          ],
+        };
+      }
+
+      case "get-ui-event-stats": {
+        const params = new URLSearchParams();
+        if (args.start_time) params.append("start_time", String(args.start_time));
+        if (args.end_time) params.append("end_time", String(args.end_time));
+
+        const response = await fetchAPI(`/ui-events/stats?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status}`);
+        }
+
+        const stats = await response.json();
+
+        if (!stats || stats.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "No UI event statistics available. UI Events may not be enabled or no events have been captured yet.",
+              },
+            ],
+          };
+        }
+
+        // Group by app
+        const byApp: Record<string, { app: string; events: Record<string, number>; total: number }> = {};
+        for (const stat of stats) {
+          const app = stat.app_name || "Unknown";
+          if (!byApp[app]) {
+            byApp[app] = { app, events: {}, total: 0 };
+          }
+          byApp[app].events[stat.event_type] = stat.count;
+          byApp[app].total += stat.count;
+        }
+
+        // Sort by total events
+        const sorted = Object.values(byApp).sort((a, b) => b.total - a.total);
+
+        const lines = sorted.map(({ app, events, total }) => {
+          const eventDetails = Object.entries(events)
+            .map(([type, count]) => `${type}: ${count}`)
+            .join(", ");
+          return `${app}: ${total} events (${eventDetails})`;
+        });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `UI Event Statistics:\n\n${lines.join("\n")}`,
+            },
+          ],
+        };
       }
 
       default:

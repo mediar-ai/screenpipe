@@ -56,7 +56,9 @@ once connected, Claude Code has access to these tools:
 
 | tool | description |
 |------|-------------|
-| `search-content` | search screen OCR, audio transcriptions, UI elements with time/app filters |
+| `search-content` | search screen OCR, audio transcriptions with time/app filters |
+| `search-ui-events` | search accessibility data: keyboard input, mouse clicks, app switches, clipboard (macOS) |
+| `get-ui-event-stats` | get aggregated UI event statistics by app and event type |
 | `export-video` | create video exports from screen recordings |
 
 ## usage examples
@@ -73,11 +75,19 @@ ask Claude Code to use screenpipe naturally:
 > what code was I reading in VS Code yesterday about async?
 
 > export a video of my screen from 2-3pm today
+
+> what did I type in Slack today?
+
+> show me my app usage stats for the past 2 hours
+
+> what did I copy to clipboard recently?
+
+> which apps did I switch between most today?
 ```
 
 ## search parameters
 
-the `search-content` tool supports these parameters:
+### search-content (screen OCR + audio)
 
 | parameter | description |
 |-----------|-------------|
@@ -92,6 +102,27 @@ the `search-content` tool supports these parameters:
 | `include_frames` | include base64 screenshots |
 | `speaker_ids` | comma-separated speaker IDs for audio filtering |
 | `speaker_name` | filter audio by speaker name |
+
+### search-ui-events (accessibility data - macOS)
+
+| parameter | description |
+|-----------|-------------|
+| `q` | search text content, app name, window title |
+| `event_type` | `click`, `text`, `scroll`, `key`, `app_switch`, `window_focus`, `clipboard` |
+| `app_name` | filter by application |
+| `window_name` | filter by window title |
+| `start_time` | ISO 8601 UTC start time |
+| `end_time` | ISO 8601 UTC end time |
+| `limit` | max results (default: 50) |
+| `offset` | pagination offset |
+
+<Tip>
+**event types explained:**
+- `text` - aggregated keyboard input (what was typed)
+- `click` - mouse clicks with element labels from accessibility APIs
+- `app_switch` / `window_focus` - track which apps you used
+- `clipboard` - copy/paste operations with content
+</Tip>
 
 ## example workflows
 
@@ -117,6 +148,24 @@ the `search-content` tool supports these parameters:
 ```
 > search screenpipe for the python code I was looking at
 > in the browser yesterday about asyncio patterns
+```
+
+**track what you typed:**
+```
+> what did I write in Notion this morning? use ui-events
+> to find my keyboard input
+```
+
+**analyze productivity:**
+```
+> get my app usage stats for today and tell me which apps
+> I spent the most time in
+```
+
+**recall clipboard history:**
+```
+> I copied something important earlier, search clipboard
+> events to find it
 ```
 
 ## requirements

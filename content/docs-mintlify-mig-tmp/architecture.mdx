@@ -15,7 +15,7 @@ at its core, screenpipe acts as a bridge between your digital activities and ai 
 
 - **screen recording**: captures visual content at configurable frame rates
 - **audio recording**: captures spoken content from multiple sources
-- **ui monitoring**: (experimental) captures accessibility metadata about ui elements
+- **ui events (accessibility)**: captures keyboard input, mouse clicks, app switches, clipboard events via accessibility APIs (macOS)
 
 ### processing layer
 
@@ -61,7 +61,7 @@ here's the typical data flow through the screenpipe system:
 1. **capture**
    - screen is captured at the configured fps (default 1.0, or 0.5 on macos)
    - audio is captured in chunks (default 30 seconds)
-   - ui events are optionally captured (macos only currently)
+   - ui events (keyboard, mouse, app switches, clipboard) are captured via accessibility APIs (macos, enable in settings)
 2. **processing**
    - captured frames are processed through ocr to extract text
    - audio chunks are processed through stt to generate transcriptions
