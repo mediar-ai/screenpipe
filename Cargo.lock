@@ -6667,6 +6667,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "screenpipe-accessibility"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "cidre 0.13.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "crossbeam-channel",
+ "parking_lot",
+ "rdev",
+ "regex",
+ "screenpipe-db",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "windows 0.58.0",
+]
+
+[[package]]
 name = "screenpipe-audio"
 version = "0.3.6"
 dependencies = [
@@ -6865,11 +6885,11 @@ dependencies = [
  "regex",
  "reqwest 0.12.12",
  "rust-stemmers",
+ "screenpipe-accessibility",
  "screenpipe-audio",
  "screenpipe-core",
  "screenpipe-db",
  "screenpipe-events",
- "screenpipe-ui",
  "screenpipe-vision",
  "sentry",
  "serde",
@@ -6890,26 +6910,6 @@ dependencies = [
  "url",
  "uuid",
  "walkdir",
- "windows 0.58.0",
-]
-
-[[package]]
-name = "screenpipe-ui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "cidre 0.13.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "crossbeam-channel",
- "parking_lot",
- "rdev",
- "regex",
- "screenpipe-db",
- "serde",
- "serde_json",
- "thiserror 2.0.12",
- "tokio",
- "tracing",
  "windows 0.58.0",
 ]
 

@@ -1,13 +1,13 @@
 //! UI Event Recording Integration
 //!
-//! Integrates screenpipe-ui capture with the server's recording loop.
+//! Integrates screenpipe-accessibility capture with the server's recording loop.
 
 #[cfg(feature = "ui-events")]
 use anyhow::Result;
 #[cfg(feature = "ui-events")]
 use screenpipe_db::{DatabaseManager, InsertUiEvent};
 #[cfg(feature = "ui-events")]
-use screenpipe_ui::{UiCaptureConfig, UiRecorder};
+use screenpipe_accessibility::{UiCaptureConfig, UiRecorder};
 #[cfg(feature = "ui-events")]
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(feature = "ui-events")]

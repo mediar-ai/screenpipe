@@ -1,8 +1,8 @@
 [package]
-name = "screenpipe-ui"
+name = "screenpipe-accessibility"
 version = "0.1.0"
 edition = "2021"
-description = "UI event capture for screenpipe - keyboard, mouse, accessibility"
+description = "Accessibility and UI event capture for screenpipe - keyboard, mouse, clipboard"
 license = "MIT"
 
 [features]
