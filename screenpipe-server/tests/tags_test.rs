@@ -152,6 +152,9 @@ async fn test_add_tags_and_search() {
             ContentItem::UI(_) => {
                 unreachable!()
             }
+            ContentItem::Input(_) => {
+                unreachable!()
+            }
         }
     }
 }
@@ -351,6 +354,9 @@ async fn test_search_by_multiple_tags() {
             }
             ContentItem::UI(_) => {
                 panic!("UI content should not be included in the results");
+            }
+            ContentItem::Input(_) => {
+                panic!("Input content should not be included in the results");
             }
         }
     }
