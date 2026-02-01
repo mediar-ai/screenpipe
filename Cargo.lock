@@ -650,7 +650,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
  "log",
@@ -1181,7 +1181,7 @@ version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aeb5b1ace98faf1a55e3631d63427f267897cfab7b65b1d5928cb0b8e6a4a194"
 dependencies = [
- "cidre-macros",
+ "cidre-macros 0.4.0",
  "half",
  "parking_lot",
  "tokio",
@@ -1189,10 +1189,10 @@ dependencies = [
 
 [[package]]
 name = "cidre"
-version = "0.13.1"
-source = "git+https://github.com/yury/cidre.git#0146b38468898cb779e6798e0ac01752b399652d"
+version = "0.14.0"
+source = "git+https://github.com/yury/cidre.git#ad90c615195256f08530364055b95fd80c7591b5"
 dependencies = [
- "cidre-macros",
+ "cidre-macros 0.5.0",
  "half",
  "parking_lot",
  "tokio",
@@ -1203,6 +1203,12 @@ name = "cidre-macros"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5da2cdee573cf967cf4fec1f95f12a16dce31efb6d104238a8cb114cbdae1780"
+
+[[package]]
+name = "cidre-macros"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6facfeffa8b9792dc014bb4e65e364d13518b74e06783d56249810a3e48cfad7"
 
 [[package]]
 name = "cipher"
@@ -1624,7 +1630,7 @@ version = "0.15.3"
 source = "git+https://github.com/louis030195/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
 dependencies = [
  "alsa",
- "cidre 0.13.1 (git+https://github.com/yury/cidre.git)",
+ "cidre 0.14.0",
  "core-foundation-sys 0.8.7",
  "coreaudio-rs",
  "dasp_sample",
@@ -4032,7 +4038,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -6642,9 +6648,9 @@ dependencies = [
 [[package]]
 name = "sck-rs"
 version = "0.1.0"
-source = "git+https://github.com/louis030195/sck-rs#f3667badac256c097ee616e452c9acf0708b6516"
+source = "git+https://github.com/louis030195/sck-rs#4bb14e4e18722fad1bdc8a105f568dbc30acfe8a"
 dependencies = [
- "cidre 0.13.1 (git+https://github.com/yury/cidre.git)",
+ "cidre 0.14.0",
  "core-foundation 0.10.0",
  "core-graphics 0.24.0",
  "image",
@@ -6672,7 +6678,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "cidre 0.13.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cidre 0.13.1",
  "crossbeam-channel",
  "parking_lot",
  "rdev",
@@ -6859,7 +6865,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "chrono",
- "cidre 0.13.1 (git+https://github.com/yury/cidre.git)",
+ "cidre 0.14.0",
  "clap",
  "clap_complete",
  "colored",
@@ -6924,7 +6930,7 @@ dependencies = [
  "atspi-proxies",
  "base64 0.22.1",
  "chrono",
- "cidre 0.13.1 (git+https://github.com/yury/cidre.git)",
+ "cidre 0.14.0",
  "clap",
  "core-foundation 0.10.0",
  "criterion",
