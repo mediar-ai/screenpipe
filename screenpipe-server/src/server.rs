@@ -236,7 +236,10 @@ struct MarkAsHallucinationRequest {
 pub enum ContentItem {
     OCR(OCRContent),
     Audio(AudioContent),
+    /// @deprecated Use Vision for text, Input for events
     UI(UiContent),
+    /// User input actions (clicks, keystrokes, clipboard)
+    Input(InputContent),
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Debug, Clone)]
@@ -283,6 +286,29 @@ pub struct UiContent {
     pub offset_index: i64,
     pub frame_name: Option<String>,
     pub browser_url: Option<String>,
+}
+
+/// User input event content (clicks, keystrokes, clipboard, etc.)
+#[derive(OaSchema, Serialize, Deserialize, Debug, Clone)]
+pub struct InputContent {
+    pub id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub event_type: String,
+    pub app_name: Option<String>,
+    pub window_title: Option<String>,
+    pub browser_url: Option<String>,
+    /// Text content for text/clipboard events
+    pub text_content: Option<String>,
+    /// Position for mouse events
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    /// Key code for keyboard events
+    pub key_code: Option<u16>,
+    /// Modifier keys (shift, ctrl, alt, etc.)
+    pub modifiers: Option<u8>,
+    /// Element context from accessibility APIs
+    pub element_role: Option<String>,
+    pub element_name: Option<String>,
 }
 
 #[derive(OaSchema, Serialize)]
@@ -461,6 +487,9 @@ pub(crate) async fn search(
             SearchResult::OCR(ocr) => !is_screenpipe_app(&ocr.app_name),
             SearchResult::Audio(_) => true, // Audio doesn't have app_name
             SearchResult::UI(ui) => !is_screenpipe_app(&ui.app_name),
+            SearchResult::Input(input) => {
+                input.app_name.as_ref().map_or(true, |app| !is_screenpipe_app(app))
+            }
         })
         .map(|result| match result {
             SearchResult::OCR(ocr) => ContentItem::OCR(OCRContent {
@@ -502,6 +531,21 @@ pub(crate) async fn search(
                 offset_index: ui.offset_index,
                 frame_name: ui.frame_name.clone(),
                 browser_url: ui.browser_url.clone(),
+            }),
+            SearchResult::Input(input) => ContentItem::Input(InputContent {
+                id: input.id,
+                timestamp: input.timestamp,
+                event_type: input.event_type.to_string(),
+                app_name: input.app_name.clone(),
+                window_title: input.window_title.clone(),
+                browser_url: input.browser_url.clone(),
+                text_content: input.text_content.clone(),
+                x: input.x,
+                y: input.y,
+                key_code: input.key_code,
+                modifiers: input.modifiers,
+                element_role: input.element.as_ref().and_then(|e| e.role.clone()),
+                element_name: input.element.as_ref().and_then(|e| e.name.clone()),
             }),
         })
         .collect();

@@ -418,16 +418,27 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
 }
 
 fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
-    // Create a new runtime for this synchronous function
-
-    let store = get_store(app, None)?;
-
     let default_path = app.path().home_dir().unwrap().join(".screenpipe");
 
-    let data_dir = store
-        .get("dataDir")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("default"));
+    // Try to get dataDir from settings in store
+    // The store structure is: { "settings": { "dataDir": "default", ... }, ... }
+    let data_dir = match get_store(app, None) {
+        Ok(store) => {
+            if let Some(settings) = store.get("settings") {
+                settings
+                    .get("dataDir")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                    .unwrap_or_else(|| "default".to_string())
+            } else {
+                "default".to_string()
+            }
+        }
+        Err(e) => {
+            warn!("Failed to get store for data dir, using default: {}", e);
+            "default".to_string()
+        }
+    };
 
     if data_dir == "default" || data_dir.is_empty() {
         Ok(default_path)
