@@ -1,4 +1,4 @@
-//! screenpipe-ui: Cross-platform UI event capture for screenpipe
+//! screenpipe-accessibility: Cross-platform UI event capture for screenpipe
 //!
 //! This crate provides keyboard, mouse, and accessibility-based UI event capture
 //! as a third modality for screenpipe, complementing vision (OCR) and audio.
@@ -28,7 +28,7 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use screenpipe_ui::{UiRecorder, UiCaptureConfig};
+//! use screenpipe_accessibility::{UiRecorder, UiCaptureConfig};
 //!
 //! let config = UiCaptureConfig::new();
 //! let recorder = UiRecorder::new(config);
