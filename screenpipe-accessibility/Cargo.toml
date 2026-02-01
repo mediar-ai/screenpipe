@@ -31,12 +31,13 @@ regex = "1.10"
 cidre = { version = "0.13", features = ["ax", "cg", "blocks", "ns", "app"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-rdev = "0.5"
+# Native Windows APIs - no rdev dependency
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_System_Com",
     "Win32_System_Threading",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_LibraryLoader",
     "Win32_UI_Accessibility",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",

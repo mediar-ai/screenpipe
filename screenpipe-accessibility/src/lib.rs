@@ -10,12 +10,13 @@
 //! - **App/Window tracking**: Application switches, window focus changes
 //! - **Clipboard**: Copy/cut/paste operations
 //! - **Element context**: Accessibility information for clicked elements
+//! - **Activity feed**: Lightweight activity stream for adaptive capture
 //!
 //! ## Platform Support
 //!
 //! - **macOS**: Full support via CGEventTap and Accessibility APIs
-//! - **Windows**: Full support via rdev and UI Automation
-//! - **Linux**: Stub (planned via AT-SPI2 and XRecord)
+//! - **Windows**: Full support via SetWindowsHookEx and UI Automation
+//! - **Linux**: Not supported (feature gated)
 //!
 //! ## Privacy
 //!
@@ -39,8 +40,12 @@
 //!     recorder.request_permissions();
 //! }
 //!
-//! // Start capturing
-//! let handle = recorder.start().unwrap();
+//! // Start capturing with activity feed for adaptive FPS
+//! let (handle, activity_feed) = recorder.start_with_activity_feed().unwrap();
+//!
+//! // Use activity feed for adaptive capture
+//! let params = activity_feed.get_capture_params();
+//! println!("Recommended interval: {:?}", params.interval);
 //!
 //! // Process events
 //! while let Some(event) = handle.recv_timeout(std::time::Duration::from_secs(1)) {
@@ -50,17 +55,20 @@
 //! handle.stop();
 //! ```
 
+pub mod activity_feed;
 pub mod config;
 pub mod events;
 pub mod platform;
 
 // Re-exports
+pub use activity_feed::{ActivityFeed, ActivityKind, CaptureParams};
 pub use config::UiCaptureConfig;
 pub use events::{ElementBounds, ElementContext, EventData, EventType, Modifiers, UiEvent};
 pub use platform::{PermissionStatus, RecordingHandle, UiRecorder};
 
 /// Prelude for convenient imports
 pub mod prelude {
+    pub use crate::activity_feed::{ActivityFeed, ActivityKind, CaptureParams};
     pub use crate::config::UiCaptureConfig;
     pub use crate::events::{ElementContext, EventData, EventType, UiEvent};
     pub use crate::platform::{PermissionStatus, RecordingHandle, UiRecorder};

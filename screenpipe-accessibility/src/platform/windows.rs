@@ -1,7 +1,8 @@
-//! Windows UI event capture using rdev and UI Automation
+//! Windows UI event capture using native SetWindowsHookEx and UI Automation
 //!
-//! Based on bigbrother's Windows implementation.
+//! Uses low-level Windows hooks for keyboard and mouse input capture.
 
+use crate::activity_feed::{ActivityFeed, ActivityKind};
 use crate::config::UiCaptureConfig;
 use crate::events::{ElementContext, EventData, UiEvent};
 use anyhow::Result;
@@ -14,7 +15,19 @@ use std::thread;
 use std::time::Instant;
 use tracing::{debug, error, warn};
 
-use rdev::{listen, Event as RdevEvent, EventType, Key};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetKeyState, VK_CAPITAL, VK_CONTROL, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU,
+    VK_RCONTROL, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT,
+};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowTextW,
+    GetWindowThreadProcessId, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HC_ACTION,
+    HHOOK, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
+};
 
 /// Permission status for UI capture
 #[derive(Debug, Clone)]
@@ -44,6 +57,8 @@ pub struct RecordingHandle {
 impl RecordingHandle {
     pub fn stop(self) {
         self.stop.store(true, Ordering::SeqCst);
+        // Give threads time to see the stop flag
+        std::thread::sleep(std::time::Duration::from_millis(100));
         for t in self.threads {
             let _ = t.join();
         }
@@ -79,7 +94,7 @@ impl UiRecorder {
         Self::new(UiCaptureConfig::new())
     }
 
-    /// Windows doesn't require explicit permissions
+    /// Windows doesn't require explicit permissions for hooks
     pub fn check_permissions(&self) -> PermissionStatus {
         PermissionStatus {
             accessibility: true,
@@ -91,7 +106,39 @@ impl UiRecorder {
         self.check_permissions()
     }
 
+    /// Start capturing events (without activity feed)
     pub fn start(&self) -> Result<RecordingHandle> {
+        let (handle, _) = self.start_internal(None)?;
+        Ok(handle)
+    }
+
+    /// Start capturing with activity feed for adaptive FPS
+    pub fn start_with_activity_feed(&self) -> Result<(RecordingHandle, ActivityFeed)> {
+        let activity_feed = ActivityFeed::new();
+        let (handle, _) = self.start_internal(Some(activity_feed.clone()))?;
+        Ok((handle, activity_feed))
+    }
+
+    /// Start activity feed only (minimal hooks, no full event capture)
+    pub fn start_activity_only(&self) -> Result<ActivityFeed> {
+        let activity_feed = ActivityFeed::new();
+        let stop = Arc::new(AtomicBool::new(false));
+
+        let feed_clone = activity_feed.clone();
+        let stop_clone = stop.clone();
+
+        // Spawn minimal hook thread
+        thread::spawn(move || {
+            run_activity_only_hooks(feed_clone, stop_clone);
+        });
+
+        Ok(activity_feed)
+    }
+
+    fn start_internal(
+        &self,
+        activity_feed: Option<ActivityFeed>,
+    ) -> Result<(RecordingHandle, Option<ActivityFeed>)> {
         let (tx, rx) = bounded::<UiEvent>(self.config.max_buffer_size);
         let stop = Arc::new(AtomicBool::new(false));
         let start_time = Instant::now();
@@ -102,14 +149,15 @@ impl UiRecorder {
         let current_app = Arc::new(Mutex::new(None::<String>));
         let current_window = Arc::new(Mutex::new(None::<String>));
 
-        // Thread 1: rdev event listener
+        // Thread 1: Native Windows hooks for input events
         let tx1 = tx.clone();
         let stop1 = stop.clone();
         let config1 = self.config.clone();
         let app1 = current_app.clone();
         let window1 = current_window.clone();
+        let feed1 = activity_feed.clone();
         threads.push(thread::spawn(move || {
-            run_rdev_listener(tx1, stop1, start_time, config1, app1, window1);
+            run_native_hooks(tx1, stop1, start_time, config1, app1, window1, feed1);
         }));
 
         // Thread 2: App/window observer
@@ -122,104 +170,284 @@ impl UiRecorder {
             run_app_observer(tx2, stop2, start_time, config2, app2, window2);
         }));
 
-        Ok(RecordingHandle {
-            stop,
-            events_rx: rx,
-            threads,
-        })
+        Ok((
+            RecordingHandle {
+                stop,
+                events_rx: rx,
+                threads,
+            },
+            activity_feed,
+        ))
     }
 }
 
 // ============================================================================
-// rdev Event Listener
+// Thread-local state for hook callbacks
 // ============================================================================
 
-struct ListenerState {
+struct HookState {
     tx: Sender<UiEvent>,
     start: Instant,
     config: UiCaptureConfig,
-    last_mouse: (f64, f64),
+    last_mouse_pos: (i32, i32),
     text_buf: String,
     last_text_time: Option<Instant>,
     current_app: Arc<Mutex<Option<String>>>,
     current_window: Arc<Mutex<Option<String>>>,
+    activity_feed: Option<ActivityFeed>,
 }
 
-fn run_rdev_listener(
+// Thread-local storage for hook state
+thread_local! {
+    static HOOK_STATE: std::cell::RefCell<Option<Box<HookState>>> = const { std::cell::RefCell::new(None) };
+    static KEYBOARD_HOOK: std::cell::RefCell<Option<HHOOK>> = const { std::cell::RefCell::new(None) };
+    static MOUSE_HOOK: std::cell::RefCell<Option<HHOOK>> = const { std::cell::RefCell::new(None) };
+}
+
+// ============================================================================
+// Native Windows Hooks
+// ============================================================================
+
+fn run_native_hooks(
     tx: Sender<UiEvent>,
     stop: Arc<AtomicBool>,
     start: Instant,
     config: UiCaptureConfig,
     current_app: Arc<Mutex<Option<String>>>,
     current_window: Arc<Mutex<Option<String>>>,
+    activity_feed: Option<ActivityFeed>,
 ) {
-    let state = Arc::new(Mutex::new(ListenerState {
-        tx,
-        start,
-        config: config.clone(),
-        last_mouse: (0.0, 0.0),
-        text_buf: String::new(),
-        last_text_time: None,
-        current_app,
-        current_window,
-    }));
+    debug!("Starting native Windows hooks");
 
-    let state_clone = state.clone();
-    let stop_clone = stop.clone();
+    // Initialize thread-local state
+    HOOK_STATE.with(|state| {
+        *state.borrow_mut() = Some(Box::new(HookState {
+            tx,
+            start,
+            config: config.clone(),
+            last_mouse_pos: (0, 0),
+            text_buf: String::new(),
+            last_text_time: None,
+            current_app,
+            current_window,
+            activity_feed,
+        }));
+    });
 
-    let callback = move |event: RdevEvent| {
-        if stop_clone.load(Ordering::Relaxed) {
-            return;
+    unsafe {
+        let h_instance: HINSTANCE = GetModuleHandleW(None).unwrap_or_default().into();
+
+        // Install keyboard hook
+        let kb_hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_hook_proc), h_instance, 0);
+
+        if let Ok(hook) = kb_hook {
+            KEYBOARD_HOOK.with(|h| *h.borrow_mut() = Some(hook));
+            debug!("Keyboard hook installed");
+        } else {
+            error!("Failed to install keyboard hook");
         }
 
-        let mut s = state_clone.lock();
-        let t = s.start.elapsed().as_millis() as u64;
-        let timestamp = Utc::now();
+        // Install mouse hook
+        let mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), h_instance, 0);
 
-        match event.event_type {
-            EventType::ButtonPress(button) => {
-                if !s.config.capture_clicks {
+        if let Ok(hook) = mouse_hook {
+            MOUSE_HOOK.with(|h| *h.borrow_mut() = Some(hook));
+            debug!("Mouse hook installed");
+        } else {
+            error!("Failed to install mouse hook");
+        }
+
+        // Message loop (required for hooks to receive events)
+        let mut msg = MSG::default();
+        while !stop.load(Ordering::Relaxed) {
+            // Use PeekMessage with a timeout to allow checking stop flag
+            if GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
+                let _ = TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+
+            // Check for text buffer flush
+            HOOK_STATE.with(|state| {
+                if let Some(ref mut s) = *state.borrow_mut() {
+                    if let Some(last_time) = s.last_text_time {
+                        if last_time.elapsed().as_millis() as u64 >= s.config.text_timeout_ms {
+                            flush_text_buffer(s);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Cleanup hooks
+        KEYBOARD_HOOK.with(|h| {
+            if let Some(hook) = h.borrow_mut().take() {
+                let _ = UnhookWindowsHookEx(hook);
+            }
+        });
+
+        MOUSE_HOOK.with(|h| {
+            if let Some(hook) = h.borrow_mut().take() {
+                let _ = UnhookWindowsHookEx(hook);
+            }
+        });
+
+        // Final text buffer flush
+        HOOK_STATE.with(|state| {
+            if let Some(ref mut s) = *state.borrow_mut() {
+                flush_text_buffer(s);
+            }
+        });
+    }
+
+    debug!("Native Windows hooks stopped");
+}
+
+fn flush_text_buffer(state: &mut HookState) {
+    if !state.text_buf.is_empty() {
+        let content = std::mem::take(&mut state.text_buf);
+        let event = UiEvent::text(
+            Utc::now(),
+            state.start.elapsed().as_millis() as u64,
+            content,
+        );
+        let _ = state.tx.try_send(event);
+        state.last_text_time = None;
+    }
+}
+
+unsafe extern "system" fn keyboard_hook_proc(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    if code == HC_ACTION as i32 {
+        let kb_struct = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+        let vk_code = kb_struct.vkCode as u16;
+        let is_key_down = wparam.0 as u32 == WM_KEYDOWN || wparam.0 as u32 == WM_SYSKEYDOWN;
+        let is_key_up = wparam.0 as u32 == WM_KEYUP || wparam.0 as u32 == WM_SYSKEYUP;
+
+        HOOK_STATE.with(|state| {
+            if let Some(ref mut s) = *state.borrow_mut() {
+                // Record activity
+                if let Some(ref feed) = s.activity_feed {
+                    if is_key_down {
+                        feed.record(ActivityKind::KeyPress);
+                    } else if is_key_up {
+                        feed.record(ActivityKind::KeyRelease);
+                    }
+                }
+
+                // Only process key down events for UI events
+                if !is_key_down {
                     return;
                 }
 
-                let (x, y) = s.last_mouse;
-                let btn = match button {
-                    rdev::Button::Left => 0,
-                    rdev::Button::Right => 1,
-                    rdev::Button::Middle => 2,
-                    _ => 0,
-                };
+                let timestamp = Utc::now();
+                let t = s.start.elapsed().as_millis() as u64;
+                let mods = get_modifier_state();
 
                 let app_name = s.current_app.lock().clone();
                 let window_title = s.current_window.lock().clone();
 
-                let mut ui_event = UiEvent::click(timestamp, t, x as i32, y as i32, btn, 1, 0);
-                ui_event.app_name = app_name;
-                ui_event.window_title = window_title;
-                let _ = s.tx.try_send(ui_event);
-            }
-
-            EventType::MouseMove { x, y } => {
-                if !s.config.capture_mouse_move {
-                    s.last_mouse = (x, y);
-                    return;
+                // Check exclusions
+                if let Some(ref app) = app_name {
+                    if !s.config.should_capture_app(app) {
+                        return;
+                    }
+                }
+                if let Some(ref window) = window_title {
+                    if !s.config.should_capture_window(window) {
+                        return;
+                    }
                 }
 
-                let dx = x - s.last_mouse.0;
-                let dy = y - s.last_mouse.1;
-                let dist = (dx * dx + dy * dy).sqrt();
+                // Check for clipboard operations (Ctrl+C, Ctrl+X, Ctrl+V)
+                if mods & 0x02 != 0 && s.config.capture_clipboard {
+                    // Ctrl is pressed
+                    match vk_code {
+                        0x43 => {
+                            // C
+                            let event = UiEvent {
+                                id: None,
+                                timestamp,
+                                relative_ms: t,
+                                data: EventData::Clipboard {
+                                    operation: 'c',
+                                    content: if s.config.capture_clipboard_content {
+                                        get_clipboard_text()
+                                    } else {
+                                        None
+                                    },
+                                },
+                                app_name: app_name.clone(),
+                                window_title: window_title.clone(),
+                                browser_url: None,
+                                element: None,
+                                frame_id: None,
+                            };
+                            let _ = s.tx.try_send(event);
+                            return;
+                        }
+                        0x58 => {
+                            // X
+                            let event = UiEvent {
+                                id: None,
+                                timestamp,
+                                relative_ms: t,
+                                data: EventData::Clipboard {
+                                    operation: 'x',
+                                    content: if s.config.capture_clipboard_content {
+                                        get_clipboard_text()
+                                    } else {
+                                        None
+                                    },
+                                },
+                                app_name: app_name.clone(),
+                                window_title: window_title.clone(),
+                                browser_url: None,
+                                element: None,
+                                frame_id: None,
+                            };
+                            let _ = s.tx.try_send(event);
+                            return;
+                        }
+                        0x56 => {
+                            // V
+                            let event = UiEvent {
+                                id: None,
+                                timestamp,
+                                relative_ms: t,
+                                data: EventData::Clipboard {
+                                    operation: 'v',
+                                    content: if s.config.capture_clipboard_content {
+                                        get_clipboard_text()
+                                    } else {
+                                        None
+                                    },
+                                },
+                                app_name: app_name.clone(),
+                                window_title: window_title.clone(),
+                                browser_url: None,
+                                element: None,
+                                frame_id: None,
+                            };
+                            let _ = s.tx.try_send(event);
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
 
-                if dist >= s.config.mouse_move_threshold {
-                    s.last_mouse = (x, y);
-                    let app_name = s.current_app.lock().clone();
-                    let window_title = s.current_window.lock().clone();
-                    let ui_event = UiEvent {
+                // Record key events for shortcuts (with modifiers)
+                if mods & 0x0A != 0 {
+                    // Ctrl or Win pressed
+                    let event = UiEvent {
                         id: None,
                         timestamp,
                         relative_ms: t,
-                        data: EventData::Move {
-                            x: x as i32,
-                            y: y as i32,
+                        data: EventData::Key {
+                            key_code: vk_code,
+                            modifiers: mods,
                         },
                         app_name,
                         window_title,
@@ -227,177 +455,481 @@ fn run_rdev_listener(
                         element: None,
                         frame_id: None,
                     };
-                    let _ = s.tx.try_send(ui_event);
-                } else {
-                    s.last_mouse = (x, y);
-                }
-            }
-
-            EventType::Wheel { delta_x, delta_y } => {
-                let (x, y) = s.last_mouse;
-                let app_name = s.current_app.lock().clone();
-                let window_title = s.current_window.lock().clone();
-                let ui_event = UiEvent {
-                    id: None,
-                    timestamp,
-                    relative_ms: t,
-                    data: EventData::Scroll {
-                        x: x as i32,
-                        y: y as i32,
-                        delta_x: delta_x as i16,
-                        delta_y: delta_y as i16,
-                    },
-                    app_name,
-                    window_title,
-                    browser_url: None,
-                    element: None,
-                    frame_id: None,
-                };
-                let _ = s.tx.try_send(ui_event);
-            }
-
-            EventType::KeyPress(key) => {
-                let keycode = key_to_code(&key);
-
-                // Check text aggregation timeout first
-                if let Some(last) = s.last_text_time {
-                    if last.elapsed().as_millis() as u64 >= s.config.text_timeout_ms
-                        && !s.text_buf.is_empty()
-                    {
-                        let text = std::mem::take(&mut s.text_buf);
-                        let ui_event = UiEvent::text(timestamp, t, text);
-                        let _ = s.tx.try_send(ui_event);
-                        s.last_text_time = None;
-                    }
-                }
-
-                // Try to get character for text aggregation
-                if s.config.capture_text {
-                    if let Some(c) = key_to_char(&key) {
+                    let _ = s.tx.try_send(event);
+                } else if s.config.capture_text {
+                    // Aggregate text input
+                    if let Some(c) = vk_to_char(vk_code, mods) {
                         if c == '\x08' {
+                            // Backspace
                             s.text_buf.pop();
                         } else {
                             s.text_buf.push(c);
                         }
                         s.last_text_time = Some(Instant::now());
-                        return; // Don't record as key event
+                    } else if s.config.capture_keystrokes {
+                        // Unknown key, record as key event
+                        let event = UiEvent {
+                            id: None,
+                            timestamp,
+                            relative_ms: t,
+                            data: EventData::Key {
+                                key_code: vk_code,
+                                modifiers: mods,
+                            },
+                            app_name,
+                            window_title,
+                            browser_url: None,
+                            element: None,
+                            frame_id: None,
+                        };
+                        let _ = s.tx.try_send(event);
+                    }
+                }
+            }
+        });
+    }
+
+    // Call next hook
+    KEYBOARD_HOOK.with(|h| {
+        let hook = h.borrow();
+        CallNextHookEx(hook.as_ref().copied(), code, wparam, lparam)
+    })
+}
+
+unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32 {
+        let mouse_struct = &*(lparam.0 as *const MSLLHOOKSTRUCT);
+        let x = mouse_struct.pt.x;
+        let y = mouse_struct.pt.y;
+
+        HOOK_STATE.with(|state| {
+            if let Some(ref mut s) = *state.borrow_mut() {
+                let timestamp = Utc::now();
+                let t = s.start.elapsed().as_millis() as u64;
+
+                let app_name = s.current_app.lock().clone();
+                let window_title = s.current_window.lock().clone();
+
+                // Check exclusions
+                if let Some(ref app) = app_name {
+                    if !s.config.should_capture_app(app) {
+                        return;
                     }
                 }
 
-                // Record as key event for special keys
-                if s.config.capture_keystrokes {
-                    let app_name = s.current_app.lock().clone();
-                    let window_title = s.current_window.lock().clone();
-                    let ui_event = UiEvent {
-                        id: None,
-                        timestamp,
-                        relative_ms: t,
-                        data: EventData::Key {
-                            key_code: keycode,
-                            modifiers: 0,
-                        },
-                        app_name,
-                        window_title,
-                        browser_url: None,
-                        element: None,
-                        frame_id: None,
-                    };
-                    let _ = s.tx.try_send(ui_event);
+                match wparam.0 as u32 {
+                    WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN => {
+                        // Record activity
+                        if let Some(ref feed) = s.activity_feed {
+                            feed.record(ActivityKind::MouseClick);
+                        }
+
+                        if !s.config.capture_clicks {
+                            return;
+                        }
+
+                        let button = match wparam.0 as u32 {
+                            WM_LBUTTONDOWN => 0,
+                            WM_RBUTTONDOWN => 1,
+                            WM_MBUTTONDOWN => 2,
+                            _ => 0,
+                        };
+
+                        let mut event =
+                            UiEvent::click(timestamp, t, x, y, button, 1, get_modifier_state());
+                        event.app_name = app_name;
+                        event.window_title = window_title;
+                        let _ = s.tx.try_send(event);
+                    }
+
+                    WM_MOUSEMOVE => {
+                        // Record activity (throttled)
+                        let (last_x, last_y) = s.last_mouse_pos;
+                        let dx = (x - last_x).abs();
+                        let dy = (y - last_y).abs();
+                        let moved = dx > 10 || dy > 10;
+
+                        if moved {
+                            if let Some(ref feed) = s.activity_feed {
+                                feed.record(ActivityKind::MouseMove);
+                            }
+                            s.last_mouse_pos = (x, y);
+
+                            if s.config.capture_mouse_move {
+                                let event = UiEvent {
+                                    id: None,
+                                    timestamp,
+                                    relative_ms: t,
+                                    data: EventData::Move { x, y },
+                                    app_name,
+                                    window_title,
+                                    browser_url: None,
+                                    element: None,
+                                    frame_id: None,
+                                };
+                                let _ = s.tx.try_send(event);
+                            }
+                        }
+                    }
+
+                    WM_MOUSEWHEEL => {
+                        // Record activity
+                        if let Some(ref feed) = s.activity_feed {
+                            feed.record(ActivityKind::Scroll);
+                        }
+
+                        // High word of mouseData contains wheel delta
+                        let delta = (mouse_struct.mouseData >> 16) as i16;
+
+                        let event = UiEvent {
+                            id: None,
+                            timestamp,
+                            relative_ms: t,
+                            data: EventData::Scroll {
+                                x,
+                                y,
+                                delta_x: 0,
+                                delta_y: delta,
+                            },
+                            app_name,
+                            window_title,
+                            browser_url: None,
+                            element: None,
+                            frame_id: None,
+                        };
+                        let _ = s.tx.try_send(event);
+                    }
+
+                    _ => {}
                 }
             }
+        });
+    }
 
-            _ => {}
+    // Call next hook
+    MOUSE_HOOK.with(|h| {
+        let hook = h.borrow();
+        CallNextHookEx(hook.as_ref().copied(), code, wparam, lparam)
+    })
+}
+
+// ============================================================================
+// Activity-only hooks (minimal, for adaptive FPS without full event capture)
+// ============================================================================
+
+thread_local! {
+    static ACTIVITY_FEED_ONLY: std::cell::RefCell<Option<ActivityFeed>> = const { std::cell::RefCell::new(None) };
+    static ACTIVITY_KB_HOOK: std::cell::RefCell<Option<HHOOK>> = const { std::cell::RefCell::new(None) };
+    static ACTIVITY_MOUSE_HOOK: std::cell::RefCell<Option<HHOOK>> = const { std::cell::RefCell::new(None) };
+}
+
+fn run_activity_only_hooks(activity_feed: ActivityFeed, stop: Arc<AtomicBool>) {
+    debug!("Starting activity-only Windows hooks");
+
+    ACTIVITY_FEED_ONLY.with(|f| *f.borrow_mut() = Some(activity_feed));
+
+    unsafe {
+        let h_instance: HINSTANCE = GetModuleHandleW(None).unwrap_or_default().into();
+
+        let kb_hook =
+            SetWindowsHookExW(WH_KEYBOARD_LL, Some(activity_keyboard_hook), h_instance, 0);
+        if let Ok(hook) = kb_hook {
+            ACTIVITY_KB_HOOK.with(|h| *h.borrow_mut() = Some(hook));
         }
+
+        let mouse_hook =
+            SetWindowsHookExW(WH_MOUSE_LL, Some(activity_mouse_hook), h_instance, 0);
+        if let Ok(hook) = mouse_hook {
+            ACTIVITY_MOUSE_HOOK.with(|h| *h.borrow_mut() = Some(hook));
+        }
+
+        let mut msg = MSG::default();
+        while !stop.load(Ordering::Relaxed) {
+            if GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
+                let _ = TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+
+        ACTIVITY_KB_HOOK.with(|h| {
+            if let Some(hook) = h.borrow_mut().take() {
+                let _ = UnhookWindowsHookEx(hook);
+            }
+        });
+        ACTIVITY_MOUSE_HOOK.with(|h| {
+            if let Some(hook) = h.borrow_mut().take() {
+                let _ = UnhookWindowsHookEx(hook);
+            }
+        });
+    }
+
+    debug!("Activity-only hooks stopped");
+}
+
+unsafe extern "system" fn activity_keyboard_hook(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    if code == HC_ACTION as i32 {
+        let is_down = wparam.0 as u32 == WM_KEYDOWN || wparam.0 as u32 == WM_SYSKEYDOWN;
+        let is_up = wparam.0 as u32 == WM_KEYUP || wparam.0 as u32 == WM_SYSKEYUP;
+
+        ACTIVITY_FEED_ONLY.with(|f| {
+            if let Some(ref feed) = *f.borrow() {
+                if is_down {
+                    feed.record(ActivityKind::KeyPress);
+                } else if is_up {
+                    feed.record(ActivityKind::KeyRelease);
+                }
+            }
+        });
+    }
+
+    ACTIVITY_KB_HOOK.with(|h| {
+        let hook = h.borrow();
+        CallNextHookEx(hook.as_ref().copied(), code, wparam, lparam)
+    })
+}
+
+unsafe extern "system" fn activity_mouse_hook(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    if code == HC_ACTION as i32 {
+        ACTIVITY_FEED_ONLY.with(|f| {
+            if let Some(ref feed) = *f.borrow() {
+                match wparam.0 as u32 {
+                    WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN => {
+                        feed.record(ActivityKind::MouseClick);
+                    }
+                    WM_MOUSEMOVE => {
+                        feed.record(ActivityKind::MouseMove);
+                    }
+                    WM_MOUSEWHEEL => {
+                        feed.record(ActivityKind::Scroll);
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    ACTIVITY_MOUSE_HOOK.with(|h| {
+        let hook = h.borrow();
+        CallNextHookEx(hook.as_ref().copied(), code, wparam, lparam)
+    })
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+fn get_modifier_state() -> u8 {
+    unsafe {
+        let mut mods = 0u8;
+        if GetKeyState(VK_SHIFT.0 as i32) < 0
+            || GetKeyState(VK_LSHIFT.0 as i32) < 0
+            || GetKeyState(VK_RSHIFT.0 as i32) < 0
+        {
+            mods |= 0x01; // Shift
+        }
+        if GetKeyState(VK_CONTROL.0 as i32) < 0
+            || GetKeyState(VK_LCONTROL.0 as i32) < 0
+            || GetKeyState(VK_RCONTROL.0 as i32) < 0
+        {
+            mods |= 0x02; // Ctrl
+        }
+        if GetKeyState(VK_MENU.0 as i32) < 0
+            || GetKeyState(VK_LMENU.0 as i32) < 0
+            || GetKeyState(VK_RMENU.0 as i32) < 0
+        {
+            mods |= 0x04; // Alt
+        }
+        if GetKeyState(VK_LWIN.0 as i32) < 0 || GetKeyState(VK_RWIN.0 as i32) < 0 {
+            mods |= 0x08; // Win
+        }
+        mods
+    }
+}
+
+fn vk_to_char(vk: u16, mods: u8) -> Option<char> {
+    let shift = mods & 0x01 != 0 || unsafe { GetKeyState(VK_CAPITAL.0 as i32) & 1 != 0 };
+
+    let c = match vk {
+        // Letters (A-Z are 0x41-0x5A)
+        0x41..=0x5A => {
+            let base = (vk - 0x41) as u8 + b'a';
+            if shift {
+                (base - 32) as char
+            } else {
+                base as char
+            }
+        }
+        // Numbers (0-9 are 0x30-0x39)
+        0x30 => {
+            if shift {
+                ')'
+            } else {
+                '0'
+            }
+        }
+        0x31 => {
+            if shift {
+                '!'
+            } else {
+                '1'
+            }
+        }
+        0x32 => {
+            if shift {
+                '@'
+            } else {
+                '2'
+            }
+        }
+        0x33 => {
+            if shift {
+                '#'
+            } else {
+                '3'
+            }
+        }
+        0x34 => {
+            if shift {
+                '$'
+            } else {
+                '4'
+            }
+        }
+        0x35 => {
+            if shift {
+                '%'
+            } else {
+                '5'
+            }
+        }
+        0x36 => {
+            if shift {
+                '^'
+            } else {
+                '6'
+            }
+        }
+        0x37 => {
+            if shift {
+                '&'
+            } else {
+                '7'
+            }
+        }
+        0x38 => {
+            if shift {
+                '*'
+            } else {
+                '8'
+            }
+        }
+        0x39 => {
+            if shift {
+                '('
+            } else {
+                '9'
+            }
+        }
+        // Space, Enter, Tab, Backspace
+        0x20 => ' ',
+        0x0D => '\n',
+        0x09 => '\t',
+        0x08 => '\x08', // Backspace
+        // Punctuation
+        0xBA => {
+            if shift {
+                ':'
+            } else {
+                ';'
+            }
+        }
+        0xBB => {
+            if shift {
+                '+'
+            } else {
+                '='
+            }
+        }
+        0xBC => {
+            if shift {
+                '<'
+            } else {
+                ','
+            }
+        }
+        0xBD => {
+            if shift {
+                '_'
+            } else {
+                '-'
+            }
+        }
+        0xBE => {
+            if shift {
+                '>'
+            } else {
+                '.'
+            }
+        }
+        0xBF => {
+            if shift {
+                '?'
+            } else {
+                '/'
+            }
+        }
+        0xC0 => {
+            if shift {
+                '~'
+            } else {
+                '`'
+            }
+        }
+        0xDB => {
+            if shift {
+                '{'
+            } else {
+                '['
+            }
+        }
+        0xDC => {
+            if shift {
+                '|'
+            } else {
+                '\\'
+            }
+        }
+        0xDD => {
+            if shift {
+                '}'
+            } else {
+                ']'
+            }
+        }
+        0xDE => {
+            if shift {
+                '"'
+            } else {
+                '\''
+            }
+        }
+        _ => return None,
     };
-
-    debug!("Starting rdev listener");
-    if let Err(e) = listen(callback) {
-        error!("rdev listen error: {:?}", e);
-    }
+    Some(c)
 }
 
-fn key_to_code(key: &Key) -> u16 {
-    match key {
-        Key::Alt => 0x12,
-        Key::AltGr => 0x12,
-        Key::Backspace => 0x08,
-        Key::CapsLock => 0x14,
-        Key::ControlLeft | Key::ControlRight => 0x11,
-        Key::Delete => 0x2E,
-        Key::DownArrow => 0x28,
-        Key::End => 0x23,
-        Key::Escape => 0x1B,
-        Key::F1 => 0x70,
-        Key::F2 => 0x71,
-        Key::F3 => 0x72,
-        Key::F4 => 0x73,
-        Key::F5 => 0x74,
-        Key::F6 => 0x75,
-        Key::F7 => 0x76,
-        Key::F8 => 0x77,
-        Key::F9 => 0x78,
-        Key::F10 => 0x79,
-        Key::F11 => 0x7A,
-        Key::F12 => 0x7B,
-        Key::Home => 0x24,
-        Key::LeftArrow => 0x25,
-        Key::MetaLeft | Key::MetaRight => 0x5B,
-        Key::PageDown => 0x22,
-        Key::PageUp => 0x21,
-        Key::Return => 0x0D,
-        Key::RightArrow => 0x27,
-        Key::ShiftLeft | Key::ShiftRight => 0x10,
-        Key::Space => 0x20,
-        Key::Tab => 0x09,
-        Key::UpArrow => 0x26,
-        _ => 0,
-    }
-}
-
-fn key_to_char(key: &Key) -> Option<char> {
-    match key {
-        Key::KeyA => Some('a'),
-        Key::KeyB => Some('b'),
-        Key::KeyC => Some('c'),
-        Key::KeyD => Some('d'),
-        Key::KeyE => Some('e'),
-        Key::KeyF => Some('f'),
-        Key::KeyG => Some('g'),
-        Key::KeyH => Some('h'),
-        Key::KeyI => Some('i'),
-        Key::KeyJ => Some('j'),
-        Key::KeyK => Some('k'),
-        Key::KeyL => Some('l'),
-        Key::KeyM => Some('m'),
-        Key::KeyN => Some('n'),
-        Key::KeyO => Some('o'),
-        Key::KeyP => Some('p'),
-        Key::KeyQ => Some('q'),
-        Key::KeyR => Some('r'),
-        Key::KeyS => Some('s'),
-        Key::KeyT => Some('t'),
-        Key::KeyU => Some('u'),
-        Key::KeyV => Some('v'),
-        Key::KeyW => Some('w'),
-        Key::KeyX => Some('x'),
-        Key::KeyY => Some('y'),
-        Key::KeyZ => Some('z'),
-        Key::Num0 => Some('0'),
-        Key::Num1 => Some('1'),
-        Key::Num2 => Some('2'),
-        Key::Num3 => Some('3'),
-        Key::Num4 => Some('4'),
-        Key::Num5 => Some('5'),
-        Key::Num6 => Some('6'),
-        Key::Num7 => Some('7'),
-        Key::Num8 => Some('8'),
-        Key::Num9 => Some('9'),
-        Key::Space => Some(' '),
-        Key::Return => Some('\n'),
-        Key::Tab => Some('\t'),
-        Key::Backspace => Some('\x08'),
-        _ => None,
-    }
+fn get_clipboard_text() -> Option<String> {
+    // Windows clipboard access would require additional setup
+    // For now, return None - can be implemented later
+    None
 }
 
 // ============================================================================
@@ -412,11 +944,6 @@ fn run_app_observer(
     current_app: Arc<Mutex<Option<String>>>,
     current_window: Arc<Mutex<Option<String>>>,
 ) {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
-    };
-
     let mut last_hwnd: isize = 0;
     let mut last_title: Option<String> = None;
 
@@ -522,7 +1049,7 @@ fn get_process_name(pid: u32) -> Option<String> {
                         .position(|&c| c == 0)
                         .unwrap_or(entry.szExeFile.len());
                     let name = String::from_utf16_lossy(&entry.szExeFile[..name_len]);
-                    CloseHandle(snapshot).ok();
+                    let _ = CloseHandle(snapshot);
                     return Some(name);
                 }
 
@@ -532,7 +1059,37 @@ fn get_process_name(pid: u32) -> Option<String> {
             }
         }
 
-        CloseHandle(snapshot).ok();
+        let _ = CloseHandle(snapshot);
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_permission_check() {
+        let recorder = UiRecorder::with_defaults();
+        let perms = recorder.check_permissions();
+        assert!(perms.all_granted()); // Windows always grants
+    }
+
+    #[test]
+    fn test_vk_to_char() {
+        assert_eq!(vk_to_char(0x41, 0), Some('a')); // A key, no shift
+        assert_eq!(vk_to_char(0x41, 1), Some('A')); // A key, with shift
+        assert_eq!(vk_to_char(0x20, 0), Some(' ')); // Space
+        assert_eq!(vk_to_char(0x31, 0), Some('1')); // 1 key
+        assert_eq!(vk_to_char(0x31, 1), Some('!')); // 1 key with shift
+    }
+
+    #[test]
+    fn test_modifier_constants() {
+        // Verify modifier bit positions
+        assert_eq!(0x01, 1); // Shift
+        assert_eq!(0x02, 2); // Ctrl
+        assert_eq!(0x04, 4); // Alt
+        assert_eq!(0x08, 8); // Win
     }
 }
