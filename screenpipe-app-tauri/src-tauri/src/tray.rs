@@ -12,7 +12,7 @@ use tauri::tray::TrayIcon;
 use tauri::Emitter;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
-    AppHandle, Manager, Wry,
+    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, Wry,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_opener::OpenerExt;
@@ -120,7 +120,8 @@ fn create_dynamic_menu(
                 .enabled(false)
                 .build(app)?,
         )
-        .item(update_item);
+        .item(update_item)
+        .item(&MenuItemBuilder::with_id("releases", "what's new").build(app)?);
 
     // Only show recording controls if not in dev mode
     let dev_mode = store
@@ -164,6 +165,26 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         }
         "stop_recording" => {
             let _ = app_handle.emit("shortcut-stop-recording", ());
+        }
+        "releases" => {
+            // Open GitHub releases in a webview window
+            if let Some(window) = app_handle.get_webview_window("releases") {
+                let _ = window.set_focus();
+            } else {
+                let _ = WebviewWindowBuilder::new(
+                    app_handle,
+                    "releases",
+                    WebviewUrl::External(
+                        "https://github.com/mediar-ai/screenpipe/releases"
+                            .parse()
+                            .unwrap(),
+                    ),
+                )
+                .title("what's new")
+                .inner_size(900.0, 700.0)
+                .min_inner_size(600.0, 400.0)
+                .build();
+            }
         }
         "update_now" => {
             // For source builds, show info dialog about updates
