@@ -197,13 +197,13 @@ function SyncOnboarding({ onSubscribe, onRefresh, isLoading, isRefreshing }: { o
           </div>
           <div className="text-right">
             <div className="text-lg font-bold">
-              {isAnnual ? "$400" : "$50"}
+              ${isAnnual ? "49" : "99"}
               <span className="text-sm font-normal text-muted-foreground">
-                {isAnnual ? "/year" : "/mo"}
+                /mo
               </span>
             </div>
             {isAnnual && (
-              <p className="text-xs text-primary">2 months free</p>
+              <p className="text-xs text-primary">$588/year - Save 50%</p>
             )}
           </div>
         </div>

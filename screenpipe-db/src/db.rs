@@ -746,6 +746,189 @@ impl DatabaseManager {
                 results.extend(audio_results.into_iter().map(SearchResult::Audio));
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
             }
+            ContentType::Vision => {
+                // Vision = OCR + UI monitoring (accessibility text)
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                        frame_name,
+                        browser_url,
+                        focused,
+                    )
+                    .await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 2,
+                        offset,
+                    )
+                    .await?;
+
+                results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+                results.extend(ui_results.into_iter().map(SearchResult::UI));
+            }
+            ContentType::Input => {
+                // Input = UI events (clicks, keystrokes, etc.)
+                let input_results = self
+                    .search_ui_events(
+                        Some(query),
+                        None, // event_type
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit,
+                        offset,
+                    )
+                    .await?;
+                results.extend(input_results.into_iter().map(SearchResult::Input));
+            }
+            ContentType::VisionAndInput => {
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit / 3,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                        frame_name,
+                        browser_url,
+                        focused,
+                    )
+                    .await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 3,
+                        offset,
+                    )
+                    .await?;
+                let input_results = self
+                    .search_ui_events(
+                        Some(query),
+                        None,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 3,
+                        offset,
+                    )
+                    .await?;
+
+                results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+                results.extend(ui_results.into_iter().map(SearchResult::UI));
+                results.extend(input_results.into_iter().map(SearchResult::Input));
+            }
+            ContentType::AudioAndInput => {
+                let audio_results = self
+                    .search_audio(
+                        query,
+                        limit / 2,
+                        offset,
+                        start_time,
+                        end_time,
+                        min_length,
+                        max_length,
+                        speaker_ids,
+                        speaker_name,
+                    )
+                    .await?;
+                let input_results = self
+                    .search_ui_events(
+                        Some(query),
+                        None,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 2,
+                        offset,
+                    )
+                    .await?;
+
+                results.extend(audio_results.into_iter().map(SearchResult::Audio));
+                results.extend(input_results.into_iter().map(SearchResult::Input));
+            }
+            ContentType::VisionAudioInput => {
+                let ocr_results = self
+                    .search_ocr(
+                        query,
+                        limit / 4,
+                        offset,
+                        start_time,
+                        end_time,
+                        app_name,
+                        window_name,
+                        min_length,
+                        max_length,
+                        frame_name,
+                        browser_url,
+                        focused,
+                    )
+                    .await?;
+                let ui_results = self
+                    .search_ui_monitoring(
+                        query,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 4,
+                        offset,
+                    )
+                    .await?;
+                let audio_results = self
+                    .search_audio(
+                        query,
+                        limit / 4,
+                        offset,
+                        start_time,
+                        end_time,
+                        min_length,
+                        max_length,
+                        speaker_ids,
+                        speaker_name,
+                    )
+                    .await?;
+                let input_results = self
+                    .search_ui_events(
+                        Some(query),
+                        None,
+                        app_name,
+                        window_name,
+                        start_time,
+                        end_time,
+                        limit / 4,
+                        offset,
+                    )
+                    .await?;
+
+                results.extend(ocr_results.into_iter().map(SearchResult::OCR));
+                results.extend(ui_results.into_iter().map(SearchResult::UI));
+                results.extend(audio_results.into_iter().map(SearchResult::Audio));
+                results.extend(input_results.into_iter().map(SearchResult::Input));
+            }
         }
 
         // Sort results by timestamp in descending order
@@ -754,11 +937,13 @@ impl DatabaseManager {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
                 SearchResult::UI(ui) => ui.timestamp,
+                SearchResult::Input(input) => input.timestamp,
             };
             let timestamp_b = match b {
                 SearchResult::OCR(ocr) => ocr.timestamp,
                 SearchResult::Audio(audio) => audio.timestamp,
                 SearchResult::UI(ui) => ui.timestamp,
+                SearchResult::Input(input) => input.timestamp,
             };
             timestamp_b.cmp(&timestamp_a)
         });
@@ -1885,6 +2070,106 @@ impl DatabaseManager {
             .await
     }
 
+    /// Search UI events (user input actions)
+    #[allow(clippy::too_many_arguments)]
+    pub async fn search_ui_events(
+        &self,
+        query: Option<&str>,
+        event_type: Option<&str>,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<UiEventRecord>, sqlx::Error> {
+        let mut conditions = vec!["1=1".to_string()];
+
+        if let Some(q) = query {
+            if !q.is_empty() {
+                conditions.push(format!(
+                    "(text_content LIKE '%{}%' OR app_name LIKE '%{}%' OR window_title LIKE '%{}%')",
+                    q, q, q
+                ));
+            }
+        }
+        if let Some(et) = event_type {
+            if !et.is_empty() {
+                conditions.push(format!("event_type = '{}'", et));
+            }
+        }
+        if let Some(app) = app_name {
+            if !app.is_empty() {
+                conditions.push(format!("app_name LIKE '%{}%'", app));
+            }
+        }
+        if let Some(window) = window_name {
+            if !window.is_empty() {
+                conditions.push(format!("window_title LIKE '%{}%'", window));
+            }
+        }
+
+        let where_clause = conditions.join(" AND ");
+
+        let sql = format!(
+            r#"
+            SELECT
+                id, timestamp, session_id, relative_ms, event_type,
+                x, y, delta_x, delta_y, button, click_count,
+                key_code, modifiers, text_content, text_length,
+                app_name, app_pid, window_title, browser_url,
+                element_role, element_name, element_value,
+                element_description, element_automation_id, element_bounds,
+                frame_id
+            FROM ui_events
+            WHERE {}
+                AND (?1 IS NULL OR timestamp >= ?1)
+                AND (?2 IS NULL OR timestamp <= ?2)
+            ORDER BY timestamp DESC
+            LIMIT ?3 OFFSET ?4
+            "#,
+            where_clause
+        );
+
+        let rows: Vec<UiEventRow> = sqlx::query_as(&sql)
+            .bind(start_time)
+            .bind(end_time)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows.into_iter().map(|r| r.into()).collect())
+    }
+
+    /// Get UI event statistics grouped by app and event type
+    pub async fn get_ui_event_stats(
+        &self,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Vec<(String, String, i64)>, sqlx::Error> {
+        let sql = r#"
+            SELECT
+                COALESCE(app_name, 'unknown') as app,
+                event_type,
+                COUNT(*) as count
+            FROM ui_events
+            WHERE (?1 IS NULL OR timestamp >= ?1)
+                AND (?2 IS NULL OR timestamp <= ?2)
+            GROUP BY app_name, event_type
+            ORDER BY count DESC
+            LIMIT 100
+        "#;
+
+        let rows: Vec<(String, String, i64)> = sqlx::query_as(sql)
+            .bind(start_time)
+            .bind(end_time)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows)
+    }
+
     // Add tags to UI monitoring entry
     pub async fn add_tags_to_ui_monitoring(
         &self,
@@ -3008,132 +3293,6 @@ LIMIT ? OFFSET ?
         tx.commit().await?;
         debug!("Inserted {} UI events in batch", count);
         Ok(count)
-    }
-
-    /// Search UI events
-    #[allow(clippy::too_many_arguments)]
-    pub async fn search_ui_events(
-        &self,
-        query: Option<&str>,
-        event_type: Option<&str>,
-        app_name: Option<&str>,
-        window_name: Option<&str>,
-        start_time: Option<DateTime<Utc>>,
-        end_time: Option<DateTime<Utc>>,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<UiEventRecord>, sqlx::Error> {
-        let mut conditions = vec!["1=1".to_string()];
-        let mut use_fts = false;
-
-        // Build FTS query if text search is needed
-        if let Some(q) = query {
-            if !q.is_empty() {
-                use_fts = true;
-            }
-        }
-
-        if let Some(et) = event_type {
-            conditions.push(format!("event_type = '{}'", et));
-        }
-        if let Some(app) = app_name {
-            conditions.push(format!("app_name LIKE '%{}%'", app.replace('\'', "''")));
-        }
-        if let Some(window) = window_name {
-            conditions.push(format!(
-                "window_title LIKE '%{}%'",
-                window.replace('\'', "''")
-            ));
-        }
-        if let Some(start) = start_time {
-            conditions.push(format!("timestamp >= '{}'", start.format("%Y-%m-%d %H:%M:%S")));
-        }
-        if let Some(end) = end_time {
-            conditions.push(format!("timestamp <= '{}'", end.format("%Y-%m-%d %H:%M:%S")));
-        }
-
-        let where_clause = conditions.join(" AND ");
-
-        let sql = if use_fts {
-            format!(
-                r#"
-                SELECT ui_events.*
-                FROM ui_events_fts
-                JOIN ui_events ON ui_events_fts.rowid = ui_events.id
-                WHERE ui_events_fts MATCH ?
-                AND {}
-                ORDER BY ui_events.timestamp DESC
-                LIMIT ? OFFSET ?
-                "#,
-                where_clause
-            )
-        } else {
-            format!(
-                r#"
-                SELECT *
-                FROM ui_events
-                WHERE {}
-                ORDER BY timestamp DESC
-                LIMIT ? OFFSET ?
-                "#,
-                where_clause
-            )
-        };
-
-        let rows: Vec<UiEventRow> = if use_fts {
-            sqlx::query_as(&sql)
-                .bind(query.unwrap_or(""))
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&self.pool)
-                .await?
-        } else {
-            sqlx::query_as(&sql)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&self.pool)
-                .await?
-        };
-
-        Ok(rows.into_iter().map(UiEventRecord::from).collect())
-    }
-
-    /// Get UI event stats for dashboard
-    pub async fn get_ui_event_stats(
-        &self,
-        start_time: Option<DateTime<Utc>>,
-        end_time: Option<DateTime<Utc>>,
-    ) -> Result<Vec<(String, String, i64)>, sqlx::Error> {
-        let mut conditions = Vec::new();
-
-        if let Some(start) = start_time {
-            conditions.push(format!("timestamp >= '{}'", start.format("%Y-%m-%d %H:%M:%S")));
-        }
-        if let Some(end) = end_time {
-            conditions.push(format!("timestamp <= '{}'", end.format("%Y-%m-%d %H:%M:%S")));
-        }
-
-        let where_clause = if conditions.is_empty() {
-            "1=1".to_string()
-        } else {
-            conditions.join(" AND ")
-        };
-
-        let sql = format!(
-            r#"
-            SELECT COALESCE(app_name, 'unknown') as app, event_type, COUNT(*) as cnt
-            FROM ui_events
-            WHERE {}
-            GROUP BY app_name, event_type
-            ORDER BY cnt DESC
-            LIMIT 100
-            "#,
-            where_clause
-        );
-
-        let rows: Vec<(String, String, i64)> = sqlx::query_as(&sql).fetch_all(&self.pool).await?;
-
-        Ok(rows)
     }
 
     /// Get recent UI events for a specific app

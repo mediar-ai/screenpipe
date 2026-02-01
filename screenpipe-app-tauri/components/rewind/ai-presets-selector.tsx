@@ -54,6 +54,7 @@ import {
 import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
 import { AIPreset, commands } from "@/lib/utils/tauri";
+import { listen } from "@tauri-apps/api/event";
 
 // Helper to detect UUID-like strings and format preset names nicely
 const formatPresetName = (name: string): string => {
@@ -134,6 +135,32 @@ export function AIProviderConfig({
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [idError, setIdError] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [opencodeAvailable, setOpencodeAvailable] = useState(false);
+
+  // Check OpenCode availability
+  useEffect(() => {
+    const checkOpencode = async () => {
+      try {
+        const result = await commands.opencodeCheck();
+        if (result.status === "ok" && result.data.available) {
+          setOpencodeAvailable(true);
+        }
+      } catch (e) {
+        console.error("Failed to check opencode:", e);
+      }
+    };
+    checkOpencode();
+
+    const unlisten = listen<boolean>("opencode_installed", (event) => {
+      if (event.payload) {
+        setOpencodeAvailable(true);
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
   const [formData, setFormData] = useState<AIPreset>({
     provider: defaultPreset?.provider || "openai",
     apiKey: defaultPreset?.apiKey || "",
@@ -274,31 +301,31 @@ export function AIProviderConfig({
   // If editing an existing screenpipe-cloud preset without being logged in, show login prompt
   if (defaultPreset?.provider === "screenpipe-cloud" && !settings?.user?.token) {
     return (
-      <div className="w-full space-y-6 rounded-lg bg-card p-6">
+      <div className="w-full space-y-4 rounded-lg bg-card p-4">
         <div>
-          <h2 className="text-lg font-semibold">edit ai provider</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="text-base font-semibold">edit ai provider</h2>
+          <p className="text-xs text-muted-foreground">
             modify your ai provider settings
           </p>
         </div>
 
-        <div className="flex flex-col items-center justify-center py-8 space-y-4">
-          <div className="p-4 rounded-full bg-amber-500/10">
-            <LogIn className="h-8 w-8 text-amber-500" />
+        <div className="flex flex-col items-center justify-center py-6 space-y-3">
+          <div className="p-3 rounded-full bg-amber-500/10">
+            <LogIn className="h-6 w-6 text-amber-500" />
           </div>
-          <div className="text-center space-y-2">
-            <h3 className="font-semibold text-lg">Login Required</h3>
-            <p className="text-sm text-muted-foreground max-w-sm">
-              This preset uses Screenpipe Cloud. Please log in to your Screenpipe account to edit it.
+          <div className="text-center space-y-1">
+            <h3 className="font-semibold text-base">Login Required</h3>
+            <p className="text-xs text-muted-foreground max-w-sm">
+              This preset uses Screenpipe Cloud. Please log in to edit it.
             </p>
           </div>
           {showLoginCta && (
             <Button
               onClick={async () => {
-                // Open settings window at account section
                 await commands.showWindow({ Settings: { page: "account" } });
               }}
-              className="gap-2"
+              className="gap-2 h-9"
+              size="sm"
             >
               <LogIn className="h-4 w-4" />
               Go to Login
@@ -310,21 +337,21 @@ export function AIProviderConfig({
   }
 
   return (
-    <div className="w-full space-y-6 rounded-lg bg-card p-6">
+    <div className="w-full space-y-4 rounded-lg bg-card p-4">
       <div>
-        <h2 className="text-lg font-semibold">
+        <h2 className="text-base font-semibold">
           {defaultPreset?.id ? "edit ai provider" : "ai provider"}
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {defaultPreset?.id
             ? "modify your ai provider settings"
             : "configure your ai provider settings"}
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="name" className="flex items-center gap-2">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="name" className="flex items-center gap-2 text-sm">
             name
             {idError && (
               <span className="text-xs text-destructive font-normal">
@@ -339,7 +366,7 @@ export function AIProviderConfig({
             value={formData.id || undefined}
             onChange={(e) => handleIdChange(e.target.value)}
             className={cn(
-              "font-mono",
+              "font-mono h-9",
               idError && "border-destructive focus-visible:ring-destructive",
             )}
             autoComplete="off"
@@ -352,18 +379,21 @@ export function AIProviderConfig({
           />
         </div>
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className={cn(
+          "grid gap-2",
+          opencodeAvailable ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"
+        )}>
           <Button
             type="button"
             variant={selectedProvider === "openai" ? "default" : "outline"}
-            className="flex h-24 flex-col items-center justify-center gap-2"
+            className="flex h-16 flex-col items-center justify-center gap-1"
             onClick={() => {
               setSelectedProvider("openai");
               setFormData({ ...formData, provider: "openai" });
             }}
           >
-            <Icons.openai className="h-8 w-8" />
-            <span>openai</span>
+            <Icons.openai className="h-5 w-5" />
+            <span className="text-xs">openai</span>
           </Button>
 
           <Button
@@ -371,7 +401,7 @@ export function AIProviderConfig({
             variant={
               selectedProvider === "native-ollama" ? "default" : "outline"
             }
-            className="flex h-24 flex-col items-center justify-center gap-2"
+            className="flex h-16 flex-col items-center justify-center gap-1"
             onClick={() => {
               setSelectedProvider("native-ollama");
               setFormData({
@@ -381,8 +411,8 @@ export function AIProviderConfig({
               });
             }}
           >
-            <Icons.terminal className="h-8 w-8" />
-            <span>ollama</span>
+            <Icons.terminal className="h-5 w-5" />
+            <span className="text-xs">ollama</span>
           </Button>
 
           <Button
@@ -391,7 +421,7 @@ export function AIProviderConfig({
             variant={
               selectedProvider === "screenpipe-cloud" ? "default" : "outline"
             }
-            className="flex h-24 flex-col items-center justify-center gap-2"
+            className="flex h-16 flex-col items-center justify-center gap-1 relative"
             onClick={() => {
               setSelectedProvider("screenpipe-cloud");
               setFormData({
@@ -401,11 +431,11 @@ export function AIProviderConfig({
               });
             }}
           >
-            <Icons.terminal className="h-8 w-8" />
-            <span>screenpipe</span>
+            <Icons.terminal className="h-5 w-5" />
+            <span className="text-xs">screenpipe</span>
             {!settings?.user?.token && (
-              <span className="text-xs text-destructive font-normal">
-                login to screenpipe to use this provider
+              <span className="absolute -bottom-5 text-[10px] text-destructive font-normal whitespace-nowrap">
+                login required
               </span>
             )}
           </Button>
@@ -413,7 +443,7 @@ export function AIProviderConfig({
           <Button
             type="button"
             variant={selectedProvider === "custom" ? "default" : "outline"}
-            className="flex h-24 flex-col items-center justify-center gap-2"
+            className="flex h-16 flex-col items-center justify-center gap-1"
             onClick={() => {
               setSelectedProvider("custom");
               setFormData({
@@ -423,16 +453,41 @@ export function AIProviderConfig({
               });
             }}
           >
-            <Icons.settings className="h-8 w-8" />
-            <span>custom</span>
+            <Icons.settings className="h-5 w-5" />
+            <span className="text-xs">custom</span>
           </Button>
 
+          {opencodeAvailable && (
+            <Button
+              type="button"
+              disabled={!settings?.user?.token}
+              variant={selectedProvider === "opencode" ? "default" : "outline"}
+              className="flex h-16 flex-col items-center justify-center gap-1 relative"
+              onClick={() => {
+                setSelectedProvider("opencode");
+                setFormData({
+                  ...formData,
+                  provider: "opencode",
+                  url: "opencode://local",
+                  model: "claude-sonnet-4",
+                });
+              }}
+            >
+              <Icons.terminal className="h-5 w-5" />
+              <span className="text-xs">opencode</span>
+              {!settings?.user?.token && (
+                <span className="absolute -bottom-5 text-[10px] text-destructive font-normal whitespace-nowrap">
+                  login required
+                </span>
+              )}
+            </Button>
+          )}
         </div>
 
         {selectedProvider === "openai" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">api key</Label>
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <Label htmlFor="apiKey" className="text-sm">api key</Label>
               <div className="relative">
                 <Input
                   id="apiKey"
@@ -442,7 +497,7 @@ export function AIProviderConfig({
                   onChange={(e) =>
                     setFormData({ ...formData, apiKey: e.target.value })
                   }
-                  className="pr-10"
+                  className="pr-10 h-9"
                 />
                 <Button
                   type="button"
@@ -459,15 +514,15 @@ export function AIProviderConfig({
                 </Button>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="model">model</Label>
+            <div className="space-y-1">
+              <Label htmlFor="model" className="text-sm">model</Label>
               <Select
                 value={formData.model}
                 onValueChange={(value) =>
                   setFormData({ ...formData, model: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue
                     placeholder={
                       isLoadingModels ? "loading models..." : "select model"
@@ -493,9 +548,9 @@ export function AIProviderConfig({
         )}
 
         {selectedProvider === "native-ollama" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="baseUrl">base url</Label>
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <Label htmlFor="baseUrl" className="text-sm">base url</Label>
               <Input
                 id="baseUrl"
                 type="text"
@@ -504,17 +559,18 @@ export function AIProviderConfig({
                 onChange={(e) =>
                   setFormData({ ...formData, url: e.target.value })
                 }
+                className="h-9"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="model">model</Label>
+            <div className="space-y-1">
+              <Label htmlFor="model" className="text-sm">model</Label>
               <Select
                 value={formData.model}
                 onValueChange={(value) =>
                   setFormData({ ...formData, model: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue
                     placeholder={
                       isLoadingModels ? "loading models..." : "select model"
@@ -540,44 +596,42 @@ export function AIProviderConfig({
         )}
 
         {selectedProvider === "screenpipe-cloud" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="model">model</Label>
-              <Select
-                value={formData.model}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, model: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      isLoadingModels ? "loading models..." : "select model"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {openaiModels.length > 0 ? (
-                    openaiModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.id}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-models" disabled>
-                      {isLoadingModels ? "loading..." : "no models found"}
+          <div className="space-y-1">
+            <Label htmlFor="model" className="text-sm">model</Label>
+            <Select
+              value={formData.model}
+              onValueChange={(value) =>
+                setFormData({ ...formData, model: value })
+              }
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue
+                  placeholder={
+                    isLoadingModels ? "loading models..." : "select model"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {openaiModels.length > 0 ? (
+                  openaiModels.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {model.id}
                     </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+                  ))
+                ) : (
+                  <SelectItem value="no-models" disabled>
+                    {isLoadingModels ? "loading..." : "no models found"}
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
           </div>
         )}
 
         {selectedProvider === "custom" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="baseUrl">base url</Label>
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <Label htmlFor="baseUrl" className="text-sm">base url</Label>
               <Input
                 id="baseUrl"
                 type="text"
@@ -586,10 +640,11 @@ export function AIProviderConfig({
                 onChange={(e) =>
                   setFormData({ ...formData, url: e.target.value })
                 }
+                className="h-9"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">api key</Label>
+            <div className="space-y-1">
+              <Label htmlFor="apiKey" className="text-sm">api key</Label>
               <div className="relative">
                 <Input
                   id="apiKey"
@@ -599,7 +654,7 @@ export function AIProviderConfig({
                   onChange={(e) =>
                     setFormData({ ...formData, apiKey: e.target.value })
                   }
-                  className="pr-10"
+                  className="pr-10 h-9"
                 />
                 <Button
                   type="button"
@@ -616,15 +671,15 @@ export function AIProviderConfig({
                 </Button>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="model">model</Label>
+            <div className="space-y-1">
+              <Label htmlFor="model" className="text-sm">model</Label>
               <Select
                 value={formData.model}
                 onValueChange={(value) =>
                   setFormData({ ...formData, model: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue
                     placeholder={
                       isLoadingModels ? "loading models..." : "select model"
@@ -649,14 +704,37 @@ export function AIProviderConfig({
           </div>
         )}
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="maxContextChars" className="flex items-center">
+        {selectedProvider === "opencode" && (
+          <div className="space-y-1">
+            <Label htmlFor="model" className="text-sm">model</Label>
+            <Select
+              value={formData.model}
+              onValueChange={(value) =>
+                setFormData({ ...formData, model: value })
+              }
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="select model" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="claude-sonnet-4">claude-sonnet-4</SelectItem>
+                <SelectItem value="claude-opus-4">claude-opus-4</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              OpenCode uses Claude models via screenpipe-cloud
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="maxContextChars" className="flex items-center text-sm">
               max context{" "}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
+                    <HelpCircle className="ml-1 h-3 w-3 cursor-default" />
                   </TooltipTrigger>
                   <TooltipContent side="right">
                     <p>
@@ -669,7 +747,7 @@ export function AIProviderConfig({
                 </Tooltip>
               </TooltipProvider>
             </Label>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <Slider
                 id="maxContextChars"
                 min={10000}
@@ -681,14 +759,14 @@ export function AIProviderConfig({
                 }
                 className="flex-grow"
               />
-              <span className="min-w-[60px] text-right">
+              <span className="min-w-[50px] text-right text-sm">
                 {((formData.maxContextChars || 512000) / 1000).toFixed(0)}k
               </span>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="prompt">prompt</Label>
+          <div className="space-y-1">
+            <Label htmlFor="prompt" className="text-sm">prompt</Label>
             <Textarea
               id="prompt"
               value={formData.prompt || DEFAULT_PROMPT}
@@ -696,14 +774,14 @@ export function AIProviderConfig({
                 setFormData({ ...formData, prompt: e.target.value })
               }
               placeholder="enter your custom prompt here"
-              className="min-h-[100px]"
+              className="min-h-[80px] text-sm"
             />
           </div>
         </div>
 
         <Button
           type="submit"
-          className="w-full"
+          className="w-full h-9"
           disabled={
             isLoading ||
             Boolean(!formData.id?.length && !formData.model?.length)
@@ -778,7 +856,7 @@ export const AIPresetDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-3/4 max-w-screen-2xl">
+      <DialogContent className="w-full max-w-lg sm:max-w-xl">
         <DialogHeader className="sr-only">
           <DialogTitle>
             {preset ? "Edit Preset" : "Create New Preset"}

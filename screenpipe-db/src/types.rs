@@ -16,11 +16,18 @@ impl fmt::Display for DatabaseError {
 
 impl StdError for DatabaseError {}
 
+/// Search result variants for different content types.
+///
+/// Note: `UI` is for accessibility text traversal (ui_monitoring table).
+/// `Input` is for user actions like clicks/keystrokes (ui_events table).
 #[derive(OaSchema, Debug, Serialize, Deserialize)]
 pub enum SearchResult {
     OCR(OCRResult),
     Audio(AudioResult),
+    /// Accessibility text traversal (deprecated, use Vision)
     UI(UiContent),
+    /// User input actions (clicks, keystrokes, clipboard)
+    Input(UiEventRecord),
 }
 
 #[derive(FromRow, Debug)]
@@ -67,23 +74,60 @@ pub struct OCRResult {
     pub device_name: String,
 }
 
+/// Content type for search queries.
+///
+/// ## New API (recommended):
+/// - `vision` - Screen content (OCR text + accessibility)
+/// - `audio` - Transcribed speech
+/// - `input` - User actions (clicks, keystrokes, clipboard)
+///
+/// ## Deprecated (still supported):
+/// - `ocr` - Use `vision` instead
+/// - `ui` - Use `vision` instead (for accessibility text) or `input` (for events)
 #[derive(OaSchema, Debug, Deserialize, PartialEq, Default, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum ContentType {
     #[default]
     All,
+
+    // === New API (Three Pillars) ===
+    /// Screen content: OCR text + accessibility text
+    Vision,
+    /// User input actions: clicks, keystrokes, clipboard, app switches
+    Input,
+
+    // === Deprecated (backwards compatible) ===
+    /// @deprecated Use `vision` instead
+    #[serde(alias = "ocr")]
     OCR,
+    /// Audio transcriptions (not deprecated, same name)
     Audio,
+    /// @deprecated Use `vision` for text, `input` for events
+    #[serde(alias = "ui")]
     UI,
+
+    // === Combinations ===
     #[serde(rename = "audio+ui")]
     #[serde(alias = "audio ui")]
     AudioAndUi,
     #[serde(rename = "ocr+ui")]
     #[serde(alias = "ocr ui")]
+    #[serde(alias = "vision+ui")]
     OcrAndUi,
     #[serde(rename = "audio+ocr")]
     #[serde(alias = "audio ocr")]
+    #[serde(alias = "audio+vision")]
     AudioAndOcr,
+    /// Vision + Audio + Input (everything)
+    #[serde(rename = "vision+audio+input")]
+    #[serde(alias = "all_modalities")]
+    VisionAudioInput,
+    /// Vision + Input
+    #[serde(rename = "vision+input")]
+    VisionAndInput,
+    /// Audio + Input
+    #[serde(rename = "audio+input")]
+    AudioAndInput,
 }
 
 #[derive(FromRow)]
