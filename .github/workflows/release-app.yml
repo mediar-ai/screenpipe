@@ -568,6 +568,7 @@ jobs:
 
       - name: Upload debug symbols to Sentry (Windows)
         if: matrix.os_type == 'windows'
+        continue-on-error: true
         shell: powershell
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -585,6 +586,7 @@ jobs:
 
       - name: Upload debug symbols to Sentry (macOS)
         if: matrix.os_type == 'macos'
+        continue-on-error: true
         shell: bash
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
