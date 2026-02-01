@@ -87,6 +87,130 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_count_search_results_filters_app_and_window() {
+        let db = setup_test_db().await;
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
+        let frame_id_one = db
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("AppOne"),
+                Some("WindowOne"),
+                false,
+            )
+            .await
+            .unwrap();
+        let frame_id_two = db
+            .insert_frame(
+                "test_device",
+                None,
+                None,
+                Some("AppTwo"),
+                Some("WindowTwo"),
+                false,
+            )
+            .await
+            .unwrap();
+
+        db.insert_ocr_text(
+            frame_id_one,
+            "app one content",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
+        db.insert_ocr_text(
+            frame_id_two,
+            "app two content",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
+
+        let app_count = db
+            .count_search_results(
+                "",
+                ContentType::OCR,
+                None,
+                None,
+                Some("AppOne"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(app_count, 1);
+
+        let window_count = db
+            .count_search_results(
+                "",
+                ContentType::OCR,
+                None,
+                None,
+                None,
+                Some("WindowTwo"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(window_count, 1);
+
+        let combined_count = db
+            .count_search_results(
+                "content",
+                ContentType::OCR,
+                None,
+                None,
+                Some("AppOne"),
+                Some("WindowOne"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(combined_count, 1);
+
+        let missing_count = db
+            .count_search_results(
+                "",
+                ContentType::OCR,
+                None,
+                None,
+                Some("MissingApp"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing_count, 0);
+    }
+
+    #[tokio::test]
     async fn test_insert_and_search_audio() {
         let db = setup_test_db().await;
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
