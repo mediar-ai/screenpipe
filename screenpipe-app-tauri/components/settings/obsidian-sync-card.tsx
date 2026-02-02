@@ -163,7 +163,6 @@ export function ObsidianSyncCard() {
   const [isValidating, setIsValidating] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [syncStatusMessage, setSyncStatusMessage] = useState<string>("");
   const [syncHistory, setSyncHistory] = useState<SyncHistoryEntry[]>([]);
 
   // Load settings from localStorage on mount
@@ -218,16 +217,10 @@ export function ObsidianSyncCard() {
 
     listen<void>("obsidian_sync_started", () => {
       setStatus((s) => ({ ...s, isSyncing: true }));
-      setSyncStatusMessage("Starting AI agent...");
-    }).then((u) => unlisteners.push(u));
-
-    listen<string>("obsidian_sync_progress", (event) => {
-      setSyncStatusMessage(event.payload);
     }).then((u) => unlisteners.push(u));
 
     listen<ObsidianSyncStatus>("obsidian_sync_completed", (event) => {
       setStatus(event.payload);
-      setSyncStatusMessage("");
       // Add to history
       const newEntry: SyncHistoryEntry = { timestamp: new Date().toISOString(), status: "success" };
       setSyncHistory(prev => {
@@ -247,7 +240,6 @@ export function ObsidianSyncCard() {
         isSyncing: false,
         lastError: event.payload,
       }));
-      setSyncStatusMessage("");
       // Add to history
       const newEntry: SyncHistoryEntry = { timestamp: new Date().toISOString(), status: "error", error: event.payload };
       setSyncHistory(prev => {
@@ -484,12 +476,6 @@ export function ObsidianSyncCard() {
                   </>
                 )}
               </Button>
-              
-              {status.isSyncing && syncStatusMessage && (
-                <p className="text-sm text-muted-foreground animate-pulse">
-                  {syncStatusMessage}
-                </p>
-              )}
 
               {settings.vaultPath && (
                 <Button
