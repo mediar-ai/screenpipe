@@ -538,6 +538,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
+          # Fix std::filesystem availability - requires macOS 10.15+
+          # whisper.cpp ggml uses std::filesystem::path which needs 10.15
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os_type == 'macos' && '10.15' || '' }}
           # Fix i8mm build error - force M1 compatible architecture
           # -U__ARM_FEATURE_MATMUL_INT8 undefines i8mm macro
           # See: https://github.com/ggml-org/whisper.cpp/issues/3427
