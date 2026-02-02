@@ -540,13 +540,17 @@ jobs:
           CI: true
           # Fix std::filesystem availability - requires macOS 10.15+
           # whisper.cpp ggml uses std::filesystem::path which needs 10.15
+          # All these vars needed to ensure cmake picks up the deployment target
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os_type == 'macos' && '10.15' || '' }}
+          CMAKE_OSX_DEPLOYMENT_TARGET: ${{ matrix.os_type == 'macos' && '10.15' || '' }}
           # Fix i8mm build error - force M1 compatible architecture
           # -U__ARM_FEATURE_MATMUL_INT8 undefines i8mm macro
           # -mmacosx-version-min=10.15 ensures std::filesystem is available
           # See: https://github.com/ggml-org/whisper.cpp/issues/3427
           CFLAGS: ${{ matrix.os_type == 'macos' && (matrix.target == 'aarch64-apple-darwin' && '-mmacosx-version-min=10.15 -mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8' || '-mmacosx-version-min=10.15') || '' }}
           CXXFLAGS: ${{ matrix.os_type == 'macos' && (matrix.target == 'aarch64-apple-darwin' && '-mmacosx-version-min=10.15 -mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8' || '-mmacosx-version-min=10.15') || '' }}
+          CMAKE_C_FLAGS: ${{ matrix.os_type == 'macos' && '-mmacosx-version-min=10.15' || '' }}
+          CMAKE_CXX_FLAGS: ${{ matrix.os_type == 'macos' && '-mmacosx-version-min=10.15' || '' }}
           # Optimize for build speed on Windows
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.os_type == 'windows' && 'thin' || 'false' }}
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.os_type == 'windows' && '2' || '3' }}

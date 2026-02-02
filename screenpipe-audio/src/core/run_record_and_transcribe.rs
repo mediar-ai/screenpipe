@@ -61,7 +61,7 @@ pub async fn run_record_and_transcribe(
                 Ok(Err(broadcast::error::RecvError::Lagged(n))) => {
                     // Channel buffer overflow - receiver fell behind producer
                     // This is expected under heavy load, continue instead of failing
-                    warn!(
+                    debug!(
                         "audio channel lagged by {} messages for {}, continuing",
                         n, device_name
                     );
