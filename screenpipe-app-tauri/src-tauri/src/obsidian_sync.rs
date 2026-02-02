@@ -340,27 +340,44 @@ pub async fn obsidian_run_sync(
 async fn run_opencode_sync(app: &AppHandle, prompt: &str) -> Result<(), String> {
     info!("Starting obsidian sync with opencode");
 
-    // Try sidecar first, then PATH
     let shell = app.shell();
-    let cmd_result = shell.sidecar("opencode");
-
-    // Use "opencode run <message>" command
-    let (mut rx, _child) = match cmd_result {
-        Ok(cmd) => {
-            // Use sidecar with "run" subcommand
-            cmd.args(&["run", prompt])
-                .spawn()
-                .map_err(|e| format!("Failed to spawn opencode: {}", e))?
+    
+    // Try multiple ways to find opencode:
+    // 1. Sidecar (bundled with app)
+    // 2. Common install locations
+    // 3. PATH
+    
+    let spawn_result = if let Ok(cmd) = shell.sidecar("opencode") {
+        info!("Using opencode sidecar");
+        cmd.args(&["run", prompt]).spawn()
+    } else {
+        // Try common locations first
+        let common_paths = [
+            "/opt/homebrew/bin/opencode",  // macOS ARM homebrew
+            "/usr/local/bin/opencode",      // macOS Intel / Linux
+            "/usr/bin/opencode",            // Linux system
+        ];
+        
+        let mut found_path: Option<&str> = None;
+        for path in &common_paths {
+            if std::path::Path::new(path).exists() {
+                found_path = Some(path);
+                break;
+            }
         }
-        Err(_) => {
-            // Try PATH
-            shell
-                .command("opencode")
-                .args(&["run", prompt])
-                .spawn()
-                .map_err(|e| format!("Failed to spawn opencode from PATH: {}", e))?
+        
+        if let Some(path) = found_path {
+            info!("Using opencode at: {}", path);
+            shell.command(path).args(&["run", prompt]).spawn()
+        } else {
+            // Last resort: try PATH
+            info!("Trying opencode from PATH");
+            shell.command("opencode").args(&["run", prompt]).spawn()
         }
     };
+
+    let (mut rx, _child) = spawn_result
+        .map_err(|e| format!("Failed to spawn opencode: {}. Make sure opencode is installed (bun add -g opencode-ai)", e))?;
 
     // Collect output
     let mut stdout_lines = Vec::new();
