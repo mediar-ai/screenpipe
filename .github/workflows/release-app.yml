@@ -521,6 +521,13 @@ jobs:
         shell: bash
         run: cp screenpipe-app-tauri/src-tauri/tauri.prod.conf.json screenpipe-app-tauri/src-tauri/tauri.conf.json
 
+      - name: Set macOS deployment target
+        if: matrix.os_type == 'macos'
+        shell: bash
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=10.15" >> $GITHUB_ENV
+          echo "Setting MACOSX_DEPLOYMENT_TARGET=10.15 for std::filesystem support"
+
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
         env:
