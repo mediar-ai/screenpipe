@@ -3582,17 +3582,15 @@ async fn handle_stream_frames_socket(
                         let end_time = request.end_time;
 
                         // Store the active request for live polling
-                        // Set last_polled_timestamp to start_time so we poll from the beginning
-                        {
-                            let mut req = active_request_clone.lock().await;
-                            *req = Some((start_time, end_time, is_descending, start_time));
-                        }
-
                         // Clear sent frame IDs for new request
                         {
                             let mut sent = sent_frame_ids_clone.lock().await;
                             sent.clear();
                         }
+
+                        // DON'T set active_request yet - wait for initial fetch to complete
+                        // This prevents poll_timer from running with last_polled = start_time
+                        // which would cause ALL old frames to be re-sent
 
                         let sent_frame_ids_inner = sent_frame_ids_clone.clone();
                         let active_request_inner = active_request_clone.clone();
@@ -3609,13 +3607,12 @@ async fn handle_stream_frames_socket(
                             .await
                             {
                                 Ok(latest_timestamp) => {
-                                    // Update last_polled_timestamp to the most recent frame
-                                    if let Some(ts) = latest_timestamp {
-                                        let mut req = active_request_inner.lock().await;
-                                        if let Some((s, e, d, _)) = *req {
-                                            *req = Some((s, e, d, ts));
-                                        }
-                                    }
+                                    // NOW set active_request - initial fetch is done
+                                    // Use latest_timestamp (or end_time) as last_polled to avoid re-fetching
+                                    let poll_start = latest_timestamp.unwrap_or(end_time);
+                                    let mut req = active_request_inner.lock().await;
+                                    *req = Some((start_time, end_time, is_descending, poll_start));
+                                    info!("Initial fetch complete, enabling live polling from {}", poll_start);
                                 }
                                 Err(e) => {
                                     error!("frame fetching failed: {}", e);

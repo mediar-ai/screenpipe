@@ -575,11 +575,6 @@ pub async fn ensure_installed() -> Result<(), String> {
     Ok(())
 }
 
-/// Configure pi to use screenpipe as the AI provider (legacy)
-pub fn ensure_config() -> Result<(), String> {
-    ensure_pi_config(None)
-}
-
 /// Run pi with a prompt (non-interactive print mode) - legacy for obsidian sync
 pub async fn run(
     prompt: &str,
