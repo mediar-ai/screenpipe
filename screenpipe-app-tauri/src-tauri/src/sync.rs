@@ -175,7 +175,7 @@ pub async fn set_sync_enabled(state: State<'_, SyncState>, enabled: bool) -> Res
     Ok(())
 }
 
-/// Trigger an immediate sync.
+/// Trigger an immediate sync via the screenpipe server.
 #[tauri::command]
 #[specta::specta]
 pub async fn trigger_sync(state: State<'_, SyncState>) -> Result<(), String> {
@@ -197,14 +197,32 @@ pub async fn trigger_sync(state: State<'_, SyncState>) -> Result<(), String> {
     // Mark as syncing
     *state.is_syncing.write().await = true;
 
-    // TODO: Trigger actual sync via SyncService
-    // For now, simulate completion
-    let is_syncing = state.is_syncing.clone();
-    let last_sync = state.last_sync.clone();
+    // Trigger sync via the screenpipe server endpoint
+    let is_syncing_clone = state.is_syncing.clone();
+    let last_sync_clone = state.last_sync.clone();
+    let last_error_clone = state.last_error.clone();
+
     tokio::spawn(async move {
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        *is_syncing.write().await = false;
-        *last_sync.write().await = Some(Utc::now().to_rfc3339());
+        let client = reqwest::Client::new();
+        let result = client
+            .post("http://localhost:3030/sync/trigger")
+            .send()
+            .await;
+
+        match result {
+            Ok(response) if response.status().is_success() => {
+                *last_sync_clone.write().await = Some(Utc::now().to_rfc3339());
+                *last_error_clone.write().await = None;
+            }
+            Ok(response) => {
+                let error_text = response.text().await.unwrap_or_else(|_| "unknown error".to_string());
+                *last_error_clone.write().await = Some(error_text);
+            }
+            Err(e) => {
+                *last_error_clone.write().await = Some(format!("failed to trigger sync: {}", e));
+            }
+        }
+        *is_syncing_clone.write().await = false;
     });
 
     Ok(())

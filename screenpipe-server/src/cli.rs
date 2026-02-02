@@ -315,6 +315,35 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_ui_events: bool,
 
+    // =========================================================================
+    // Cloud Sync Options
+    // =========================================================================
+
+    /// Enable cloud sync for cross-device data synchronization.
+    /// Requires a valid sync token and password.
+    #[arg(long, default_value_t = false)]
+    pub enable_sync: bool,
+
+    /// API token for cloud sync authentication.
+    /// Can also be set via SCREENPIPE_SYNC_TOKEN environment variable.
+    #[arg(long, env = "SCREENPIPE_SYNC_TOKEN")]
+    pub sync_token: Option<String>,
+
+    /// Password for encrypting synced data.
+    /// This password is used to derive encryption keys - it never leaves your device.
+    /// Can also be set via SCREENPIPE_SYNC_PASSWORD environment variable.
+    #[arg(long, env = "SCREENPIPE_SYNC_PASSWORD")]
+    pub sync_password: Option<String>,
+
+    /// Interval between sync cycles in seconds (default: 300 = 5 minutes)
+    #[arg(long, default_value_t = 300)]
+    pub sync_interval_secs: u64,
+
+    /// Override the machine ID for this device.
+    /// By default, a unique ID is derived from the hostname.
+    #[arg(long)]
+    pub sync_machine_id: Option<String>,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -369,6 +398,11 @@ pub enum Command {
     Pipe {
         #[command(subcommand)]
         subcommand: PipeCommand,
+    },
+    /// Cloud sync management commands
+    Sync {
+        #[command(subcommand)]
+        subcommand: SyncCommand,
     },
     /// MCP Server management commands
     Mcp {
@@ -587,4 +621,47 @@ pub enum McpCommand {
 pub enum OutputFormat {
     Text,
     Json,
+}
+
+#[derive(Subcommand)]
+pub enum SyncCommand {
+    /// Show sync status
+    Status {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        /// Server port
+        #[arg(short = 'p', long, default_value_t = 3030)]
+        port: u16,
+    },
+    /// Trigger an immediate sync
+    Now {
+        /// Server port
+        #[arg(short = 'p', long, default_value_t = 3030)]
+        port: u16,
+    },
+    /// Download data from other devices
+    Download {
+        /// Time range in hours to download (default: 24)
+        #[arg(long, default_value_t = 24)]
+        hours: u32,
+        /// Server port
+        #[arg(short = 'p', long, default_value_t = 3030)]
+        port: u16,
+    },
+}
+
+/// Get or create a persistent machine ID for sync
+pub fn get_or_create_machine_id(override_id: Option<String>) -> String {
+    if let Some(id) = override_id {
+        return id;
+    }
+
+    // Use hostname hash as machine ID
+    if let Ok(hostname) = hostname::get() {
+        let hostname_str = hostname.to_string_lossy();
+        format!("{:x}", md5::compute(hostname_str.as_bytes()))
+    } else {
+        uuid::Uuid::new_v4().to_string()
+    }
 }

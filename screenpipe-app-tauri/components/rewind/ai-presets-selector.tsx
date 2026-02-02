@@ -464,7 +464,7 @@ export function AIProviderConfig({
                   ...formData,
                   provider: "opencode",
                   url: "", // URL is dynamic - set at runtime
-                  model: "claude-haiku-4-5@20251001",
+                  model: "screenpipe/claude-haiku-4-5",
                 });
               }}
             >
@@ -707,8 +707,8 @@ export function AIProviderConfig({
                 <SelectValue placeholder="select model" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="claude-haiku-4-5@20251001">Haiku 4.5 (fast)</SelectItem>
-                <SelectItem value="claude-opus-4-5@20251101">Opus 4.5 (powerful)</SelectItem>
+                <SelectItem value="screenpipe/claude-haiku-4-5">Haiku 4.5 (fast)</SelectItem>
+                <SelectItem value="screenpipe/claude-opus-4-5">Opus 4.5 (powerful)</SelectItem>
               </SelectContent>
             </Select>
           </div>

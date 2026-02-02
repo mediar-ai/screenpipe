@@ -373,7 +373,7 @@ const AISection = ({
         break;
       case "opencode":
         newUrl = ""; // URL is dynamic - set at runtime
-        newModel = "claude-haiku-4-5@20251001";
+        newModel = "screenpipe/claude-haiku-4-5";
         break;
     }
 

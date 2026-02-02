@@ -95,6 +95,10 @@ base64 = "0.22.1"
 
 uuid = { version = "1.5.0", features = ["v4"] }
 
+# Cloud sync utilities
+hostname = "0.4"
+md5 = "0.7"
+
 tempfile = "3.3.0"
 
 

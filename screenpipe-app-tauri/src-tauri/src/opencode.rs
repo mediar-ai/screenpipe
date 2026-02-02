@@ -100,11 +100,11 @@ fn find_free_port() -> Result<u16, String> {
 }
 
 /// Get the OpenCode config directory
+/// OpenCode uses ~/.config/opencode on all platforms (XDG standard)
 fn get_opencode_config_dir() -> Result<PathBuf, String> {
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| "Could not find config directory".to_string())?
-        .join("opencode");
-    Ok(config_dir)
+    let home_dir = dirs::home_dir()
+        .ok_or_else(|| "Could not find home directory".to_string())?;
+    Ok(home_dir.join(".config").join("opencode"))
 }
 
 /// Ensure OpenCode is configured to use screenpipe-cloud as the AI provider
@@ -123,26 +123,29 @@ fn ensure_opencode_config(user_token: Option<&str>) -> Result<(), String> {
         "$schema": "https://opencode.ai/config.json",
         "provider": {
             "screenpipe": {
-                "api": "anthropic",
-                "baseURL": "https://api.screenpi.pe/anthropic",
+                "npm": "@ai-sdk/anthropic",
+                "options": {
+                    "baseURL": "https://api.screenpi.pe/anthropic"
+                },
                 "models": {
-                    "claude-haiku-4-5@20251001": {
+                    "claude-haiku-4-5": {
                         "name": "Claude Haiku 4.5",
-                        "attachment": true,
-                        "reasoning": false
+                        "limit": {
+                            "context": 200000,
+                            "output": 8192
+                        }
                     },
-                    "claude-opus-4-5@20251101": {
+                    "claude-opus-4-5": {
                         "name": "Claude Opus 4.5",
-                        "attachment": true,
-                        "reasoning": true
+                        "limit": {
+                            "context": 200000,
+                            "output": 32768
+                        }
                     }
                 }
             }
         },
-        "model": {
-            "default": "screenpipe/claude-haiku-4-5@20251001",
-            "reasoning": "screenpipe/claude-opus-4-5@20251101"
-        }
+        "model": "screenpipe/claude-haiku-4-5"
     });
 
     // Write the config

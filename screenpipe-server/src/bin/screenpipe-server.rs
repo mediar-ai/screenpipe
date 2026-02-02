@@ -19,16 +19,21 @@ use screenpipe_db::{
 use screenpipe_server::{
     analytics,
     cli::{
-        AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, McpCommand,
-        MigrationSubCommand, OutputFormat, PipeCommand, VisionCommand,
+        get_or_create_machine_id, AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine,
+        Command, McpCommand, MigrationSubCommand, OutputFormat, PipeCommand, SyncCommand,
+        VisionCommand,
     },
     handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, start_sleep_monitor, start_ui_recording,
+    sync_provider::ScreenpipeSyncProvider,
     vision_manager::{
         start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
     },
     watch_pid, PipeManager, ResourceMonitor, SCServer,
+};
+use screenpipe_core::sync::{
+    BlobType, SyncClientConfig, SyncEvent, SyncManager, SyncService, SyncServiceConfig,
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;
@@ -621,6 +626,10 @@ async fn main() -> anyhow::Result<()> {
                 handle_mcp_command(subcommand, &local_data_dir_clone).await?;
                 return Ok(());
             }
+            Command::Sync { subcommand } => {
+                handle_sync_command(subcommand).await?;
+                return Ok(());
+            }
         }
     }
 
@@ -710,6 +719,22 @@ async fn main() -> anyhow::Result<()> {
                 e
             })?,
     );
+
+    // Start cloud sync service if enabled
+    let sync_service_handle = if cli.enable_sync {
+        match start_sync_service(&cli, db.clone()).await {
+            Ok(handle) => {
+                info!("cloud sync service started");
+                Some(handle)
+            }
+            Err(e) => {
+                error!("failed to start sync service: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     let db_server = db.clone();
 
@@ -943,6 +968,13 @@ async fn main() -> anyhow::Result<()> {
         cli.use_pii_removal,
     );
 
+    // Attach sync handle if sync is enabled
+    let server = if let Some(ref handle) = sync_service_handle {
+        server.with_sync_handle_arc(handle.clone())
+    } else {
+        server
+    };
+
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
     println!(
@@ -1020,6 +1052,16 @@ async fn main() -> anyhow::Result<()> {
         "│ capture unfocused wins │ {:<34} │",
         cli.capture_unfocused_windows
     );
+    println!(
+        "│ cloud sync             │ {:<34} │",
+        if cli.enable_sync { "enabled" } else { "disabled" }
+    );
+    if cli.enable_sync {
+        println!(
+            "│ sync interval          │ {:<34} │",
+            format!("{} seconds", cli.sync_interval_secs)
+        );
+    }
     println!(
         "│ auto-destruct pid      │ {:<34} │",
         cli.auto_destruct_pid.unwrap_or(0)
@@ -1330,6 +1372,11 @@ async fn main() -> anyhow::Result<()> {
             if let Some(ref handle) = ui_recorder_handle {
                 info!("stopping UI event capture");
                 handle.stop();
+            }
+            // Stop sync service if running
+            if let Some(ref handle) = sync_service_handle {
+                info!("stopping sync service");
+                let _ = handle.stop().await;
             }
             let _ = shutdown_tx.send(());
         }
@@ -1887,4 +1934,175 @@ fn is_command_available(command: &str) -> bool {
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+/// Start the cloud sync service
+async fn start_sync_service(
+    cli: &Cli,
+    db: Arc<DatabaseManager>,
+) -> anyhow::Result<Arc<screenpipe_core::sync::SyncServiceHandle>> {
+    // Validate required credentials
+    let token = cli
+        .sync_token
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("--sync-token or SCREENPIPE_SYNC_TOKEN required for sync"))?;
+
+    let password = cli.sync_password.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("--sync-password or SCREENPIPE_SYNC_PASSWORD required for sync")
+    })?;
+
+    // Get machine ID
+    let machine_id = get_or_create_machine_id(cli.sync_machine_id.clone());
+    info!("sync machine ID: {}", machine_id);
+
+    // Get device info
+    let device_name = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "Unknown".to_string());
+    let device_os = std::env::consts::OS.to_string();
+
+    // Create sync manager
+    let config = SyncClientConfig::new(token.clone(), machine_id.clone(), device_name, device_os);
+    let manager = SyncManager::new(config)?;
+
+    // Initialize with password
+    let is_new_user = manager.initialize(password).await?;
+    info!(
+        "sync initialized for {} user",
+        if is_new_user { "new" } else { "existing" }
+    );
+
+    let manager = Arc::new(manager);
+
+    // Create sync data provider
+    let provider = Arc::new(ScreenpipeSyncProvider::new(db, machine_id));
+
+    // Create sync service config
+    let service_config = SyncServiceConfig {
+        enabled: true,
+        sync_interval_secs: cli.sync_interval_secs,
+        sync_types: vec![BlobType::Ocr, BlobType::Transcripts],
+        max_blobs_per_cycle: 10,
+        sync_on_startup: true,
+    };
+
+    // Create and start service
+    let service = SyncService::new(manager, service_config, provider);
+    let (handle, mut event_rx) = service.start();
+
+    // Spawn event handler
+    tokio::spawn(async move {
+        while let Some(event) = event_rx.recv().await {
+            match event {
+                SyncEvent::Started => {
+                    info!("sync cycle started");
+                }
+                SyncEvent::Completed(report) => {
+                    info!(
+                        "sync cycle completed: {} blobs uploaded ({} bytes) in {:.2}s",
+                        report.blobs_uploaded, report.bytes_uploaded, report.duration_secs
+                    );
+                }
+                SyncEvent::Failed(err) => {
+                    error!("sync cycle failed: {}", err);
+                }
+                SyncEvent::Progress {
+                    uploaded,
+                    total,
+                    bytes_transferred,
+                } => {
+                    debug!(
+                        "sync progress: {}/{} blobs, {} bytes",
+                        uploaded, total, bytes_transferred
+                    );
+                }
+                SyncEvent::Stopped => {
+                    info!("sync service stopped");
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(Arc::new(handle))
+}
+
+/// Handle sync subcommands
+async fn handle_sync_command(command: &SyncCommand) -> anyhow::Result<()> {
+    let client = reqwest::Client::new();
+    let server_url = "http://localhost";
+
+    match command {
+        SyncCommand::Status { output, port } => {
+            let url = format!("{}:{}/sync/status", server_url, port);
+            match client.get(&url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    let data: serde_json::Value = response.json().await?;
+                    match output {
+                        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&data)?),
+                        OutputFormat::Text => {
+                            println!("sync status:");
+                            if let Some(enabled) = data.get("enabled") {
+                                println!("  enabled: {}", enabled);
+                            }
+                            if let Some(is_syncing) = data.get("is_syncing") {
+                                println!("  syncing: {}", is_syncing);
+                            }
+                            if let Some(last_sync) = data.get("last_sync") {
+                                println!("  last sync: {}", last_sync);
+                            }
+                            if let Some(storage_used) = data.get("storage_used") {
+                                println!("  storage used: {} bytes", storage_used);
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    println!("note: server not running or sync not enabled");
+                }
+            }
+        }
+        SyncCommand::Now { port } => {
+            let url = format!("{}:{}/sync/trigger", server_url, port);
+            match client.post(&url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    println!("sync triggered successfully");
+                }
+                Ok(response) => {
+                    let error: serde_json::Value = response.json().await.unwrap_or_default();
+                    println!(
+                        "failed to trigger sync: {}",
+                        error.get("error").unwrap_or(&serde_json::json!("unknown error"))
+                    );
+                }
+                Err(e) => {
+                    println!("failed to connect to server: {}", e);
+                }
+            }
+        }
+        SyncCommand::Download { hours, port } => {
+            let url = format!("{}:{}/sync/download?hours={}", server_url, port, hours);
+            match client.post(&url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    let data: serde_json::Value = response.json().await?;
+                    println!(
+                        "download complete: {} records imported",
+                        data.get("imported").unwrap_or(&serde_json::json!(0))
+                    );
+                }
+                Ok(response) => {
+                    let error: serde_json::Value = response.json().await.unwrap_or_default();
+                    println!(
+                        "failed to download: {}",
+                        error.get("error").unwrap_or(&serde_json::json!("unknown error"))
+                    );
+                }
+                Err(e) => {
+                    println!("failed to connect to server: {}", e);
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
