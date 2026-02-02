@@ -12,7 +12,7 @@ use screenpipe_audio::core::engine::AudioTranscriptionEngine;
 use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
-use screenpipe_server::{PipeManager, ResourceMonitor, SCServer, start_continuous_recording};
+use screenpipe_server::{PipeManager, ResourceMonitor, SCServer, start_continuous_recording, start_ui_recording, UiRecorderConfig};
 use screenpipe_vision::OcrEngine;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
@@ -41,6 +41,7 @@ pub struct EmbeddedServerConfig {
     pub deepgram_api_key: Option<String>,
     pub enable_frame_cache: bool,
     pub analytics_enabled: bool,
+    pub enable_ui_events: bool,
 }
 
 impl EmbeddedServerConfig {
@@ -76,6 +77,7 @@ impl EmbeddedServerConfig {
             },
             enable_frame_cache: store.enable_frame_cache,
             analytics_enabled: store.analytics_enabled,
+            enable_ui_events: store.enable_ui_events,
         }
     }
 }
@@ -343,6 +345,25 @@ pub async fn start_embedded_server(
             tokio::time::sleep(Duration::from_secs(5)).await;
             if let Err(e) = audio_manager_clone.start().await {
                 error!("Failed to start audio manager: {}", e);
+            }
+        });
+    }
+
+    // Start UI event recording (accessibility events)
+    if config.enable_ui_events {
+        let ui_config = UiRecorderConfig {
+            enabled: true,
+            ..Default::default()
+        };
+        let db_clone = db.clone();
+        tokio::spawn(async move {
+            match start_ui_recording(db_clone, ui_config).await {
+                Ok(_handle) => {
+                    info!("UI event recording started successfully");
+                }
+                Err(e) => {
+                    error!("Failed to start UI event recording: {}", e);
+                }
             }
         });
     }

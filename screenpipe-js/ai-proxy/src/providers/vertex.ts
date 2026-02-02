@@ -345,7 +345,25 @@ export class VertexAIProvider implements AIProvider {
 				// Handle assistant messages with potential tool calls
 				const content: any[] = [];
 				if (msg.content) {
-					content.push({ type: 'text', text: msg.content });
+					// Handle content that could be string, array, or other format
+					if (typeof msg.content === 'string') {
+						content.push({ type: 'text', text: msg.content });
+					} else if (Array.isArray(msg.content)) {
+						// Content is already an array of content blocks
+						for (const block of msg.content) {
+							if (block.type === 'text') {
+								// Unwrap nested text if needed
+								content.push({ type: 'text', text: unwrapText(block.text) });
+							} else if (block.type === 'tool_use') {
+								content.push(block);
+							} else {
+								content.push(block);
+							}
+						}
+					} else {
+						// Fallback: stringify unknown content
+						content.push({ type: 'text', text: String(msg.content) });
+					}
 				}
 				if (msg.tool_calls) {
 					for (const tc of msg.tool_calls) {
@@ -382,7 +400,8 @@ export class VertexAIProvider implements AIProvider {
 					// Convert OpenAI-style content parts to Anthropic format
 					convertedContent = msg.content.map((part: any) => {
 						if (part.type === 'text') {
-							return { type: 'text', text: part.text };
+							// Unwrap nested text if needed
+							return { type: 'text', text: unwrapText(part.text) };
 						} else if (part.type === 'image_url') {
 							// Convert OpenAI image_url format to Anthropic source format
 							const url = part.image_url?.url || '';
