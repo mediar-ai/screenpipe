@@ -344,10 +344,11 @@ async fn run_opencode_sync(app: &AppHandle, prompt: &str) -> Result<(), String> 
     let shell = app.shell();
     let cmd_result = shell.sidecar("opencode");
 
+    // Use "opencode run <message>" command
     let (mut rx, _child) = match cmd_result {
         Ok(cmd) => {
-            // Use sidecar with prompt as argument
-            cmd.args(&["-p", prompt, "--no-input"])
+            // Use sidecar with "run" subcommand
+            cmd.args(&["run", prompt])
                 .spawn()
                 .map_err(|e| format!("Failed to spawn opencode: {}", e))?
         }
@@ -355,7 +356,7 @@ async fn run_opencode_sync(app: &AppHandle, prompt: &str) -> Result<(), String> 
             // Try PATH
             shell
                 .command("opencode")
-                .args(&["-p", prompt, "--no-input"])
+                .args(&["run", prompt])
                 .spawn()
                 .map_err(|e| format!("Failed to spawn opencode from PATH: {}", e))?
         }
