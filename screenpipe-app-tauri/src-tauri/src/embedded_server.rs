@@ -12,7 +12,10 @@ use screenpipe_audio::core::engine::AudioTranscriptionEngine;
 use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
-use screenpipe_server::{PipeManager, ResourceMonitor, SCServer, start_continuous_recording, start_ui_recording, UiRecorderConfig};
+use screenpipe_server::{
+    PipeManager, ResourceMonitor, SCServer, start_continuous_recording, start_ui_recording, 
+    UiRecorderConfig, VisionManager, VisionManagerConfig, start_monitor_watcher, stop_monitor_watcher
+};
 use screenpipe_vision::OcrEngine;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
@@ -42,6 +45,7 @@ pub struct EmbeddedServerConfig {
     pub enable_frame_cache: bool,
     pub analytics_enabled: bool,
     pub enable_ui_events: bool,
+    pub use_all_monitors: bool,
 }
 
 impl EmbeddedServerConfig {
@@ -80,6 +84,7 @@ impl EmbeddedServerConfig {
             enable_frame_cache: store.enable_frame_cache,
             analytics_enabled: store.analytics_enabled,
             enable_ui_events: store.enable_ui_events,
+            use_all_monitors: store.use_all_monitors,
         }
     }
 }
