@@ -6,8 +6,8 @@
 use tracing::{debug, error, info, warn};
 
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
-const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1"; // OpenAI-compatible endpoint
-const DEFAULT_MODEL: &str = "claude-opus-4-5@20251101"; // Uses @ separator
+const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
+const DEFAULT_MODEL: &str = "claude-opus-4-5@20251101";
 
 /// Ensure pi CLI is installed/updated via bun
 pub async fn ensure_installed() -> Result<(), String> {
@@ -60,29 +60,32 @@ pub fn ensure_config() -> Result<(), String> {
     
     let models_path = config_dir.join("models.json");
     
-    // Custom screenpipe provider using OpenAI-compatible API
+    // Custom screenpipe provider with full model definitions
     let config = serde_json::json!({
         "providers": {
             "screenpipe": {
                 "baseUrl": SCREENPIPE_API_URL,
                 "api": "openai-completions",
+                "apiKey": "SCREENPIPE_API_KEY",
                 "authHeader": true,
                 "models": [
                     {
                         "id": "claude-opus-4-5@20251101",
                         "name": "Claude Opus 4.5",
-                        "contextWindow": 200000,
-                        "maxTokens": 32000,
                         "reasoning": true,
-                        "input": ["text", "image"]
+                        "input": ["text", "image"],
+                        "cost": {"input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75},
+                        "contextWindow": 200000,
+                        "maxTokens": 32000
                     },
                     {
                         "id": "claude-haiku-4-5@20251001",
-                        "name": "Claude Haiku 4.5", 
-                        "contextWindow": 200000,
-                        "maxTokens": 64000,
+                        "name": "Claude Haiku 4.5",
                         "reasoning": true,
-                        "input": ["text", "image"]
+                        "input": ["text", "image"],
+                        "cost": {"input": 0.8, "output": 4, "cacheRead": 0.08, "cacheWrite": 1},
+                        "contextWindow": 200000,
+                        "maxTokens": 64000
                     }
                 ]
             }
@@ -136,9 +139,8 @@ pub async fn run(prompt: &str, user_token: Option<&str>) -> Result<String, Strin
     cmd.arg("--model").arg(DEFAULT_MODEL);
     
     if let Some(token) = user_token {
-        info!("pi::run: setting OPENAI_API_KEY env var (token length: {})", token.len());
-        // OpenAI-compatible API uses OPENAI_API_KEY
-        cmd.env("OPENAI_API_KEY", token);
+        info!("pi::run: setting SCREENPIPE_API_KEY env var (token length: {})", token.len());
+        cmd.env("SCREENPIPE_API_KEY", token);
     } else {
         warn!("pi::run: no user_token provided!");
     }
