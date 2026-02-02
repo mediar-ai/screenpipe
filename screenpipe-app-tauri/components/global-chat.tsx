@@ -28,6 +28,7 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { commands, OpencodeInfo } from "@/lib/utils/tauri";
+import posthog from "posthog-js";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 
@@ -1203,6 +1204,7 @@ export function GlobalChat() {
   // Focus input when opening, reset state when closing
   useEffect(() => {
     if (open) {
+      posthog.capture("chat_opened");
       setTimeout(() => inputRef.current?.focus(), 100);
     } else {
       // Reset chat state when dialog closes
@@ -1487,6 +1489,14 @@ export function GlobalChat() {
   // Send message using OpenAI SDK with streaming
   async function sendMessage(userMessage: string) {
     if (!canChat || !activePreset) return;
+
+    // Track chat message
+    posthog.capture("chat_message_sent", {
+      message_length: userMessage.length,
+      provider: activePreset?.provider,
+      model: activePreset?.model,
+      is_opencode: isOpencode,
+    });
 
     // Use OpenCode if that's the active provider
     if (isOpencode) {
