@@ -54,18 +54,14 @@ impl EmbeddedServerConfig {
             ocr_engine: store.ocr_engine.clone(),
             audio_transcription_engine: store.audio_transcription_engine.clone(),
             monitor_ids: store.monitor_ids.clone(),
-            audio_devices: store
-                .audio_devices
-                .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect(),
+            audio_devices: store.audio_devices.clone(),
             ignored_windows: store.ignored_windows.clone(),
             included_windows: store.included_windows.clone(),
             languages: store
                 .languages
                 .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .filter(|s| s != "default")
+                .filter(|s| s != &"default")
+                .cloned()
                 .collect(),
             vad_sensitivity: store.vad_sensitivity.clone(),
             deepgram_api_key: if store.deepgram_api_key.is_empty()
