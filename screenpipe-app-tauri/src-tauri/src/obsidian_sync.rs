@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Obsidian sync settings stored in the app store
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Default)]
@@ -311,7 +311,7 @@ pub async fn obsidian_run_sync(
     let prompt = build_prompt(&settings, &start_time_str, &end_time_str);
 
     // Run opencode
-    let result = pi::run(&prompt, user_token.as_deref()).await;
+    let result = pi::run(&prompt, user_token.as_deref()).await.map(|_| ());
 
     // Update status based on result
     {
@@ -436,7 +436,7 @@ async fn run_scheduled_sync(
     let start_time = end_time - chrono::Duration::hours(settings.sync_hours as i64);
 
     let prompt = build_prompt(settings, &start_time.to_rfc3339(), &end_time.to_rfc3339());
-    let result = pi::run(&prompt, user_token).await;
+    let result = pi::run(&prompt, user_token).await.map(|_| ());
 
     // Update status
     {
