@@ -1,38 +1,22 @@
-// Embedded screenpipe server for macOS 26+
-// This runs the screenpipe server directly in the Tauri process,
-// bypassing the TCC permission inheritance issues with sidecar processes.
+// Embedded screenpipe server
+// Runs the screenpipe server directly in the Tauri process
 
-#[cfg(target_os = "macos")]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-#[cfg(target_os = "macos")]
 use std::path::PathBuf;
-#[cfg(target_os = "macos")]
 use std::sync::Arc;
-#[cfg(target_os = "macos")]
 use std::time::Duration;
 
-#[cfg(target_os = "macos")]
 use screenpipe_audio::audio_manager::AudioManagerBuilder;
-#[cfg(target_os = "macos")]
 use screenpipe_audio::core::device::{default_input_device, default_output_device, parse_audio_device};
-#[cfg(target_os = "macos")]
 use screenpipe_db::DatabaseManager;
-#[cfg(target_os = "macos")]
 use screenpipe_server::{PipeManager, ResourceMonitor, SCServer, start_continuous_recording};
-#[cfg(target_os = "macos")]
 use screenpipe_vision::OcrEngine;
-#[cfg(target_os = "macos")]
-use tokio::runtime::Runtime;
-#[cfg(target_os = "macos")]
 use tokio::sync::broadcast;
-#[cfg(target_os = "macos")]
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
-#[cfg(target_os = "macos")]
 use crate::store::SettingsStore;
 
 /// Configuration for embedded server
-#[cfg(target_os = "macos")]
 #[derive(Clone)]
 pub struct EmbeddedServerConfig {
     pub port: u16,
@@ -56,7 +40,6 @@ pub struct EmbeddedServerConfig {
     pub analytics_enabled: bool,
 }
 
-#[cfg(target_os = "macos")]
 impl EmbeddedServerConfig {
     pub fn from_store(store: &SettingsStore, data_dir: PathBuf) -> Self {
         Self {
@@ -99,32 +82,18 @@ impl EmbeddedServerConfig {
 }
 
 /// Handle for controlling the embedded server
-#[cfg(target_os = "macos")]
 pub struct EmbeddedServerHandle {
     shutdown_tx: broadcast::Sender<()>,
-    vision_runtime: Option<Runtime>,
-    pipes_runtime: Option<Runtime>,
 }
 
-#[cfg(target_os = "macos")]
 impl EmbeddedServerHandle {
-    pub fn shutdown(&mut self) {
+    pub fn shutdown(&self) {
         info!("Shutting down embedded screenpipe server");
         let _ = self.shutdown_tx.send(());
-
-        // Drop runtimes to stop all tasks
-        if let Some(rt) = self.vision_runtime.take() {
-            drop(rt);
-        }
-        if let Some(rt) = self.pipes_runtime.take() {
-            drop(rt);
-        }
     }
 }
 
 /// Start the embedded screenpipe server
-/// This runs the full screenpipe server within the Tauri process
-#[cfg(target_os = "macos")]
 pub async fn start_embedded_server(
     config: EmbeddedServerConfig,
 ) -> Result<EmbeddedServerHandle, String> {
@@ -145,14 +114,10 @@ pub async fn start_embedded_server(
     );
     info!("Database initialized at {}", db_path);
 
-    // Initialize pipe manager
-    let pipe_manager = Arc::new(PipeManager::new(local_data_dir.clone()));
-
     // Set up audio devices
     let mut audio_devices = Vec::new();
     if !config.disable_audio {
         if config.audio_devices.is_empty() {
-            // Use default devices
             if let Ok(input) = default_input_device() {
                 audio_devices.push(input.to_string());
             }
@@ -196,15 +161,6 @@ pub async fn start_embedded_server(
 
     let audio_manager = Arc::new(audio_manager);
 
-    // Create runtimes for vision and pipes
-    let vision_runtime =
-        Runtime::new().map_err(|e| format!("Failed to create vision runtime: {}", e))?;
-    let pipes_runtime =
-        Runtime::new().map_err(|e| format!("Failed to create pipes runtime: {}", e))?;
-
-    let vision_handle = vision_runtime.handle().clone();
-    let pipes_handle = pipes_runtime.handle().clone();
-
     // Shutdown channel
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
     let shutdown_tx_clone = shutdown_tx.clone();
@@ -213,7 +169,6 @@ pub async fn start_embedded_server(
     let monitor_ids: Vec<u32> = if config.monitor_ids.is_empty()
         || config.monitor_ids.contains(&"default".to_string())
     {
-        // Use all monitors
         let monitors = screenpipe_vision::monitor::list_monitors().await;
         monitors.iter().map(|m| m.id()).collect()
     } else {
@@ -229,8 +184,18 @@ pub async fn start_embedded_server(
         "tesseract" => OcrEngine::Tesseract,
         "windows-native" => OcrEngine::WindowsNative,
         "unstructured" => OcrEngine::Unstructured,
-        _ => OcrEngine::AppleNative, // Default for macOS
+        _ => {
+            #[cfg(target_os = "macos")]
+            { OcrEngine::AppleNative }
+            #[cfg(target_os = "windows")]
+            { OcrEngine::WindowsNative }
+            #[cfg(target_os = "linux")]
+            { OcrEngine::Tesseract }
+        }
     };
+
+    // Create a runtime handle for vision tasks
+    let vision_handle = tokio::runtime::Handle::current();
 
     // Start continuous recording
     if !config.disable_vision {
@@ -245,7 +210,6 @@ pub async fn start_embedded_server(
         let languages = config.languages.clone();
 
         let shutdown_rx = shutdown_tx_clone.subscribe();
-        let vision_handle_clone = vision_handle.clone();
 
         tokio::spawn(async move {
             let mut shutdown_rx = shutdown_rx;
@@ -258,15 +222,15 @@ pub async fn start_embedded_server(
                     ocr_engine.clone(),
                     monitor_ids.clone(),
                     use_pii_removal,
-                    false, // disable_vision = false (we're in !disable_vision block)
-                    &vision_handle_clone,
+                    false,
+                    &vision_handle,
                     &ignored_windows,
                     &included_windows,
-                    &[], // ignored_urls
+                    &[],
                     languages.clone(),
-                    false, // capture_unfocused_windows
-                    false, // realtime_vision
-                    None,  // activity_feed
+                    false,
+                    false,
+                    None,
                 );
 
                 tokio::select! {
@@ -295,25 +259,12 @@ pub async fn start_embedded_server(
         });
     }
 
-    // Start pipes
-    let pipes = pipe_manager.list_pipes().await;
-    for pipe in pipes {
-        if !pipe.enabled {
-            continue;
-        }
-        match pipe_manager.start_pipe_task(pipe.id.clone()).await {
-            Ok(future) => {
-                pipes_handle.spawn(future);
-            }
-            Err(e) => {
-                error!("Failed to start pipe {}: {}", pipe.id, e);
-            }
-        }
-    }
-
     // Start resource monitor
     let resource_monitor = ResourceMonitor::new(config.analytics_enabled);
     resource_monitor.start_monitoring(Duration::from_secs(30), Some(Duration::from_secs(60)));
+
+    // Create pipe manager (disabled)
+    let pipe_manager = Arc::new(PipeManager::new(local_data_dir.clone()));
 
     // Create and start HTTP server
     let server = SCServer::new(
@@ -324,7 +275,7 @@ pub async fn start_embedded_server(
         config.disable_vision,
         config.disable_audio,
         audio_manager.clone(),
-        true,  // enable_pipe_manager
+        false, // disable pipes
         config.use_pii_removal,
     );
 
@@ -337,45 +288,5 @@ pub async fn start_embedded_server(
 
     info!("Embedded screenpipe server started successfully");
 
-    Ok(EmbeddedServerHandle {
-        shutdown_tx,
-        vision_runtime: Some(vision_runtime),
-        pipes_runtime: Some(pipes_runtime),
-    })
-}
-
-/// Check if we should use embedded server (macOS 26+)
-#[cfg(target_os = "macos")]
-pub fn should_use_embedded_server() -> bool {
-    // Check macOS version - 26.0 (Tahoe) or later
-    let version = macos_version();
-    if let Some((major, _, _)) = version {
-        return major >= 26;
-    }
-    false
-}
-
-#[cfg(target_os = "macos")]
-fn macos_version() -> Option<(u32, u32, u32)> {
-    use std::process::Command;
-
-    let output = Command::new("sw_vers")
-        .arg("-productVersion")
-        .output()
-        .ok()?;
-
-    let version_str = String::from_utf8_lossy(&output.stdout);
-    let parts: Vec<&str> = version_str.trim().split('.').collect();
-
-    let major = parts.first()?.parse().ok()?;
-    let minor = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-    let patch = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-
-    Some((major, minor, patch))
-}
-
-// Stub implementations for non-macOS platforms
-#[cfg(not(target_os = "macos"))]
-pub fn should_use_embedded_server() -> bool {
-    false
+    Ok(EmbeddedServerHandle { shutdown_tx })
 }
