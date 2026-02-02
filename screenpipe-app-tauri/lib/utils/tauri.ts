@@ -79,6 +79,22 @@ async stopScreenpipe() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getMonitors() : Promise<Result<MonitorDevice[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_monitors") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getAudioDevices() : Promise<Result<AudioDeviceInfo[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_audio_devices") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getDiskUsage(forceRefresh: boolean | null) : Promise<Result<JsonValue, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_disk_usage", { forceRefresh }) };
@@ -481,10 +497,12 @@ async obsidianCancelSync() : Promise<Result<null, string>> {
 
 export type AIPreset = { id: string; prompt: string; provider: AIProviderType; url?: string; model?: string; defaultPreset: boolean; apiKey: string | null; maxContextChars: number }
 export type AIProviderType = "openai" | "native-ollama" | "custom" | "screenpipe-cloud" | "opencode"
+export type AudioDeviceInfo = { name: string; isDefault: boolean }
 export type Credits = { amount: number }
 export type EmbeddedLLM = { enabled: boolean; model: string; port: number }
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key in string]: JsonValue }
 export type LogFile = { name: string; path: string; modified_at: bigint }
+export type MonitorDevice = { id: number; name: string; isDefault: boolean; width: number; height: number }
 export type OSPermission = "screenRecording" | "microphone" | "accessibility"
 export type OSPermissionStatus = "notNeeded" | "empty" | "granted" | "denied"
 export type OSPermissionsCheck = { screenRecording: OSPermissionStatus; microphone: OSPermissionStatus; accessibility: OSPermissionStatus }

@@ -783,6 +783,8 @@ async fn main() {
                 update_global_shortcuts,
                 spawn_screenpipe,
                 stop_screenpipe,
+                sidecar::get_monitors,
+                sidecar::get_audio_devices,
                 // Commands from commands.rs
                 commands::get_disk_usage,
                 commands::open_pipe_window,
@@ -907,6 +909,8 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             stop_screenpipe,
+            sidecar::get_monitors,
+            sidecar::get_audio_devices,
             permissions::open_permission_settings,
             permissions::request_permission,
             permissions::do_permissions_check,

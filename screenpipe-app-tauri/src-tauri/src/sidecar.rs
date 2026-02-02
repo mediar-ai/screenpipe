@@ -4,14 +4,14 @@ use crate::permissions::do_permissions_check;
 use crate::store::SettingsStore;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::{Manager, State};
+use tauri::State;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// State holding the embedded server handle
 pub struct SidecarState(pub Arc<Mutex<Option<EmbeddedServerHandle>>>);
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitorDevice {
     pub id: u32,
@@ -19,6 +19,51 @@ pub struct MonitorDevice {
     pub is_default: bool,
     pub width: u32,
     pub height: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDeviceInfo {
+    pub name: String,
+    pub is_default: bool,
+}
+
+/// Get all available audio devices
+pub async fn get_available_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
+    debug!("Getting available audio devices");
+
+    let devices = screenpipe_audio::core::device::list_audio_devices()
+        .await
+        .map_err(|e| format!("Failed to list audio devices: {}", e))?;
+
+    let default_input = screenpipe_audio::core::device::default_input_device()
+        .map(|d| d.to_string())
+        .ok();
+    let default_output = screenpipe_audio::core::device::default_output_device()
+        .await
+        .map(|d| d.to_string())
+        .ok();
+
+    let result: Vec<AudioDeviceInfo> = devices
+        .iter()
+        .map(|d| {
+            let name = d.to_string();
+            let is_default = Some(&name) == default_input.as_ref() || Some(&name) == default_output.as_ref();
+            AudioDeviceInfo {
+                name,
+                is_default,
+            }
+        })
+        .collect();
+
+    debug!("Found {} audio devices", result.len());
+    Ok(result)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
+    get_available_audio_devices().await
 }
 
 /// Get all available monitors connected to the device
@@ -36,7 +81,7 @@ pub async fn get_available_monitors() -> Result<Vec<MonitorDevice>, String> {
         .enumerate()
         .map(|(i, m)| MonitorDevice {
             id: m.id(),
-            name: m.name().unwrap_or_else(|| format!("Monitor {}", i + 1)),
+            name: if m.name().is_empty() { format!("Monitor {}", i + 1) } else { m.name().to_string() },
             is_default: i == 0, // First monitor is default
             width: m.width(),
             height: m.height(),

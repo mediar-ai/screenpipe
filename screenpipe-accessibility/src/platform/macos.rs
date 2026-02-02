@@ -786,9 +786,7 @@ fn get_element_at_position(x: f64, y: f64, config: &UiCaptureConfig) -> Option<E
         let s = format!("{:?}", r);
         if let Some(start) = s.find("AX") {
             let rest = &s[start..];
-            let end = rest
-                .find([')', '"', '}'])
-                .unwrap_or(rest.len());
+            let end = rest.find([')', '"', '}']).unwrap_or(rest.len());
             rest[..end].to_string()
         } else {
             "Unknown".to_string()

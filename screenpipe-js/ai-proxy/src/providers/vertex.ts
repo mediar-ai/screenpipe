@@ -551,6 +551,29 @@ function sanitizeContent(content: any): any {
 }
 
 /**
+ * Recursively unwrap nested text objects until we get a string
+ */
+function unwrapText(text: any, depth: number = 0): string {
+	// Prevent infinite recursion
+	if (depth > 10) {
+		console.log('proxyToVertex: unwrapText max depth reached');
+		return String(text);
+	}
+
+	// If already a string, return it
+	if (typeof text === 'string') return text;
+
+	// If it's an object with a text property, unwrap it
+	if (text && typeof text === 'object' && 'text' in text) {
+		console.log('proxyToVertex: unwrapping nested text at depth', depth);
+		return unwrapText(text.text, depth + 1);
+	}
+
+	// Otherwise stringify it
+	return String(text);
+}
+
+/**
  * Sanitize a single content block
  * Fixes nested text issues like: {type: 'text', text: {text: '...'}}
  */
@@ -559,14 +582,11 @@ function sanitizeContentBlock(block: any): any {
 
 	// Fix nested text issue: {type: 'text', text: {text: '...'}}
 	if (block.type === 'text' && block.text !== undefined) {
-		// If text is an object with a text property, unwrap it
-		if (typeof block.text === 'object' && block.text !== null && 'text' in block.text) {
-			console.log('proxyToVertex: fixing nested text.text structure');
-			block.text = block.text.text;
-		}
-		// Ensure text is a string
-		if (typeof block.text !== 'string') {
-			block.text = String(block.text);
+		// Recursively unwrap nested text objects
+		const originalText = block.text;
+		block.text = unwrapText(block.text);
+		if (originalText !== block.text) {
+			console.log('proxyToVertex: fixed text from', JSON.stringify(originalText), 'to', JSON.stringify(block.text));
 		}
 	}
 
@@ -624,9 +644,19 @@ export async function proxyToVertex(
 		};
 		console.log('proxyToVertex: model=', body.model, 'stream=', body.stream, 'messages count=', body.messages?.length);
 
+		// Debug: log message structure before sanitization
+		if (body.messages && body.messages.length > 0) {
+			console.log('proxyToVertex: BEFORE sanitization, message[2] content:', JSON.stringify(body.messages[2]?.content, null, 2));
+		}
+
 		// Sanitize messages to fix common formatting issues
 		if (body.messages) {
 			body.messages = sanitizeMessages(body.messages);
+		}
+
+		// Debug: log message structure after sanitization
+		if (body.messages && body.messages.length > 0) {
+			console.log('proxyToVertex: AFTER sanitization, message[2] content:', JSON.stringify(body.messages[2]?.content, null, 2));
 		}
 
 		const isStreaming = body.stream === true;

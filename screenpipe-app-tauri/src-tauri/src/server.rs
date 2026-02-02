@@ -377,7 +377,7 @@ async fn set_window_size(
 async fn start_sidecar(
     State(state): State<ServerState>,
 ) -> Result<Json<ApiResponse>, (StatusCode, String)> {
-    info!("received request to start sidecar");
+    info!("received request to start screenpipe server");
 
     let app_handle = state.app_handle.clone();
     match crate::sidecar::spawn_screenpipe(
@@ -389,13 +389,13 @@ async fn start_sidecar(
     {
         Ok(_) => Ok(Json(ApiResponse {
             success: true,
-            message: "sidecar started successfully".to_string(),
+            message: "screenpipe server started successfully".to_string(),
         })),
         Err(e) => {
-            error!("failed to start sidecar: {}", e);
+            error!("failed to start screenpipe server: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("failed to start sidecar: {}", e),
+                format!("failed to start screenpipe server: {}", e),
             ))
         }
     }
@@ -404,7 +404,7 @@ async fn start_sidecar(
 async fn stop_sidecar(
     State(state): State<ServerState>,
 ) -> Result<Json<ApiResponse>, (StatusCode, String)> {
-    info!("received request to stop sidecar");
+    info!("received request to stop screenpipe server");
 
     let app_handle = state.app_handle.clone();
     match crate::sidecar::stop_screenpipe(
@@ -415,13 +415,13 @@ async fn stop_sidecar(
     {
         Ok(_) => Ok(Json(ApiResponse {
             success: true,
-            message: "sidecar stopped successfully".to_string(),
+            message: "screenpipe server stopped successfully".to_string(),
         })),
         Err(e) => {
-            error!("failed to stop sidecar: {}", e);
+            error!("failed to stop screenpipe server: {}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("failed to stop sidecar: {}", e),
+                format!("failed to stop screenpipe server: {}", e),
             ))
         }
     }

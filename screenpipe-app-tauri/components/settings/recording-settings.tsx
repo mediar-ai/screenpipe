@@ -43,8 +43,7 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
-import { Command as TauriCommand } from "@tauri-apps/plugin-shell";
-import { commands, SettingsStore } from "@/lib/utils/tauri";
+import { commands, SettingsStore, MonitorDevice, AudioDeviceInfo } from "@/lib/utils/tauri";
 
 import {
   useSettings,
@@ -91,18 +90,7 @@ type PermissionsStatus = {
   microphone: string;
 };
 
-interface AudioDevice {
-  name: string;
-  is_default: boolean;
-}
-
-interface MonitorDevice {
-  id: string;
-  name: string;
-  is_default: boolean;
-  width: number;
-  height: number;
-}
+// AudioDeviceInfo and MonitorDevice are imported from @/lib/utils/tauri
 
 const createWindowOptions = (
   windowItems: { name: string }[],
@@ -175,7 +163,7 @@ export function RecordingSettings() {
     []
   );
   const [availableAudioDevices, setAvailableAudioDevices] = useState<
-    AudioDevice[]
+    AudioDeviceInfo[]
   >([]);
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -270,44 +258,21 @@ export function RecordingSettings() {
   useEffect(() => {
     const loadDevices = async () => {
       try {
-        // Use sidecar command to fetch monitors
-        const monitorCommand = TauriCommand.sidecar("screenpipe", [
-          "vision",
-          "list",
-          "-o",
-          "json",
-        ]);
-
-        const monitorOutput = await monitorCommand.execute();
-        if (monitorOutput.code !== 0) {
-          throw new Error(`Failed to fetch monitors: ${monitorOutput.stderr}`);
+        // Fetch monitors using Tauri command
+        const monitorResult = await commands.getMonitors();
+        if (monitorResult.status === "error") {
+          throw new Error(`Failed to fetch monitors: ${monitorResult.error}`);
         }
-
-        // Parse the JSON response which might be in {data: [...], success: true} format
-        const monitorResponse = JSON.parse(monitorOutput.stdout);
-        const monitors: MonitorDevice[] =
-          monitorResponse.data || monitorResponse;
+        const monitors = monitorResult.data;
         console.log("monitors", monitors);
         setAvailableMonitors(monitors);
 
-        // Use sidecar command to fetch audio devices
-        const audioCommand = TauriCommand.sidecar("screenpipe", [
-          "audio",
-          "list",
-          "-o",
-          "json",
-        ]);
-
-        const audioOutput = await audioCommand.execute();
-        if (audioOutput.code !== 0) {
-          throw new Error(
-            `Failed to fetch audio devices: ${audioOutput.stderr}`
-          );
+        // Fetch audio devices using Tauri command
+        const audioResult = await commands.getAudioDevices();
+        if (audioResult.status === "error") {
+          throw new Error(`Failed to fetch audio devices: ${audioResult.error}`);
         }
-
-        // Parse the JSON response which might be in {data: [...], success: true} format
-        const audioResponse = JSON.parse(audioOutput.stdout);
-        const audioDevices: AudioDevice[] = audioResponse.data || audioResponse;
+        const audioDevices = audioResult.data;
         console.log("audioDevices", audioDevices);
         setAvailableAudioDevices(audioDevices);
 
@@ -324,7 +289,7 @@ export function RecordingSettings() {
 
         if (updatedMonitorIds.length === 0) {
           updatedMonitorIds = [
-            monitors.find((monitor) => monitor.is_default)!.id!.toString(),
+            monitors.find((monitor) => monitor.isDefault)!.id!.toString(),
           ]
         }
 
@@ -343,7 +308,7 @@ export function RecordingSettings() {
             audioDevices.length > 0)
         ) {
           updatedAudioDevices = audioDevices
-            .filter((device) => device.is_default)
+            .filter((device) => device.isDefault)
             .map((device) => device.name);
         }
 
@@ -1171,7 +1136,7 @@ export function RecordingSettings() {
                         )}
                       />
                       {device.name}
-                      {device.is_default && (
+                      {device.isDefault && (
                         <Badge variant="secondary" className="ml-2">
                           Default
                         </Badge>
@@ -1463,7 +1428,7 @@ export function RecordingSettings() {
                     <p className="font-medium">{monitor.name}</p>
                     <p className="text-sm text-muted-foreground">
                       {monitor.width}x{monitor.height}
-                      {monitor.is_default && " (Default)"}
+                      {monitor.isDefault && " (Default)"}
                     </p>
                   </div>
                   <Check

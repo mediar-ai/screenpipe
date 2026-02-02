@@ -506,6 +506,7 @@ impl SettingsStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update(app: &AppHandle, update: impl FnOnce(&mut SettingsStore)) -> Result<(), String> {
         let Ok(store) = get_store(app, None) else {
             return Err("Failed to get store".to_string());

@@ -662,14 +662,17 @@ pub async fn capture_all_visible_windows(
                 .iter()
                 .any(|&browser| app_name.to_lowercase().contains(browser));
 
-            if is_browser && browser_url.is_none() && !is_focused
-                && window_filters.is_title_suggesting_blocked_url(&window_name) {
-                    tracing::info!(
-                        "Privacy filter: Skipping unfocused browser window with suspicious title: {}",
-                        window_name
-                    );
-                    continue;
-                }
+            if is_browser
+                && browser_url.is_none()
+                && !is_focused
+                && window_filters.is_title_suggesting_blocked_url(&window_name)
+            {
+                tracing::info!(
+                    "Privacy filter: Skipping unfocused browser window with suspicious title: {}",
+                    window_name
+                );
+                continue;
+            }
 
             all_captured_images.push(CapturedWindow {
                 image,
