@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CustomDialogContent } from "@/components/rewind/custom-dialog-content";
 import { useSettings, ChatMessage, ChatConversation } from "@/lib/hooks/use-settings";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, FolderOpen, Zap, History, Search, Trash2, ChevronLeft, Copy, Check } from "lucide-react";
+import { Loader2, Send, Square, User, X, Settings, ExternalLink, Video, Plus, Zap, History, Search, Trash2, ChevronLeft, Copy, Check } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { parseInt } from "lodash";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,11 +23,10 @@ import remarkGfm from "remark-gfm";
 import OpenAI from "openai";
 import { ChatCompletionTool } from "openai/resources/chat/completions";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
-import { commands, PiInfo } from "@/lib/utils/tauri";
+import { commands } from "@/lib/utils/tauri";
 import posthog from "posthog-js";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
 
@@ -565,11 +564,11 @@ export function GlobalChat() {
   const [upgradeReason, setUpgradeReason] = useState<"daily_limit" | "model_not_allowed">("daily_limit");
   const [upgradeResetsAt, setUpgradeResetsAt] = useState<string | undefined>();
 
-  // Pi state
-  const [piInfo, setPiInfo] = useState<PiInfo | null>(null);
+  // Pi agent state
+  const [piInfo, setPiInfo] = useState<{ running: boolean; projectDir: string | null; pid: number | null } | null>(null);
   const [piProjectDir, setPiProjectDir] = useState<string>("");
   const [piStarting, setPiStarting] = useState(false);
-  const [piLogs, setPiLogs] = useState<string[]>([]);
+  const [piStreamingText, setPiStreamingText] = useState<string>("");
 
   // Chat history state
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -1055,12 +1054,75 @@ export function GlobalChat() {
 
   // Check if we have valid AI setup
   const hasPresets = settings.aiPresets && settings.aiPresets.length > 0;
-  const hasValidModel = activePreset?.provider === "pi" || (activePreset?.model && activePreset.model.trim() !== "");
-  const needsLogin = (activePreset?.provider === "screenpipe-cloud" || activePreset?.provider === "pi") && !settings.user?.token;
   const isPi = activePreset?.provider === "pi";
+  const hasValidModel = isPi || (activePreset?.model && activePreset.model.trim() !== "");
+  const needsLogin = (activePreset?.provider === "screenpipe-cloud" || isPi) && !settings.user?.token;
   const needsProjectDir = isPi && !piProjectDir;
   const piReady = isPi ? (piInfo?.running && !needsProjectDir) : true;
   const canChat = hasPresets && hasValidModel && !needsLogin && piReady;
+
+  // Load Pi project dir from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("pi_project_dir");
+    if (saved) setPiProjectDir(saved);
+  }, []);
+
+  // Save Pi project dir
+  useEffect(() => {
+    if (piProjectDir) {
+      localStorage.setItem("pi_project_dir", piProjectDir);
+    }
+  }, [piProjectDir]);
+
+  // Start Pi when needed
+  useEffect(() => {
+    if (!isPi || !open || needsLogin || !piProjectDir || piStarting || piInfo?.running) return;
+
+    const startPi = async () => {
+      setPiStarting(true);
+      try {
+        const result = await commands.piStart(piProjectDir, settings.user?.token ?? null);
+        if (result.status === "ok") {
+          setPiInfo(result.data);
+        } else {
+          toast({ title: "Failed to start Pi", description: result.error, variant: "destructive" });
+        }
+      } finally {
+        setPiStarting(false);
+      }
+    };
+    startPi();
+  }, [isPi, open, needsLogin, piProjectDir, piStarting, piInfo?.running, settings.user?.token]);
+
+  // Listen for Pi events
+  useEffect(() => {
+    if (!isPi) return;
+
+    const unlistenEvent = listen<any>("pi_event", (event) => {
+      const data = event.payload;
+      console.log("[Pi Event]", data);
+      
+      // Handle different event types
+      if (data.type === "message_update" && data.assistantMessageEvent) {
+        const evt = data.assistantMessageEvent;
+        if (evt.type === "text_delta" && evt.delta) {
+          setPiStreamingText(prev => prev + evt.delta);
+        }
+      } else if (data.type === "agent_end") {
+        // Agent finished
+        setPiStreamingText("");
+      }
+    });
+
+    const unlistenTerminated = listen("pi_terminated", () => {
+      setPiInfo(null);
+    });
+
+    return () => {
+      unlistenEvent.then(fn => fn());
+      unlistenTerminated.then(fn => fn());
+    };
+  }, [isPi]);
 
   // Debug: log why chat might be disabled
   useEffect(() => {
@@ -1073,61 +1135,11 @@ export function GlobalChat() {
         hasValidModel,
         needsLogin,
         canChat,
+        isPi,
+        piReady,
       });
     }
-  }, [open, activePreset, hasValidModel, needsLogin, canChat]);
-
-  // Load saved project directory on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("pi_project_dir");
-    if (saved) setPiProjectDir(saved);
-  }, []);
-
-  // Save project directory when changed
-  useEffect(() => {
-    if (piProjectDir) {
-      localStorage.setItem("pi_project_dir", piProjectDir);
-    }
-  }, [piProjectDir]);
-
-  // Start Pi when preset is selected, dialog is open, and project dir is set
-  useEffect(() => {
-    if (!isPi || !open || needsLogin || !piProjectDir || piStarting) return;
-
-    const initPi = async () => {
-      setPiStarting(true);
-
-      try {
-        // Check current status
-        const infoResult = await commands.piInfo();
-        if (infoResult.status === "ok") {
-          setPiInfo(infoResult.data);
-
-          // Check if already running with same project
-          if (infoResult.data.running && infoResult.data.projectDir === piProjectDir) {
-            // Already running with correct project
-            console.log("Pi already running for project:", piProjectDir);
-          } else {
-            // Not running or different project, start with selected directory
-            const startResult = await commands.piStart(piProjectDir, settings.user?.token ?? null);
-            if (startResult.status === "ok" && startResult.data.running) {
-              setPiInfo(startResult.data);
-            } else if (startResult.status === "error") {
-              toast({
-                title: "Pi failed to start",
-                description: startResult.error,
-                variant: "destructive",
-              });
-            }
-          }
-        }
-      } finally {
-        setPiStarting(false);
-      }
-    };
-
-    initPi();
-  }, [isPi, open, needsLogin, piProjectDir, settings.user?.token]);
+  }, [open, activePreset, hasValidModel, needsLogin, canChat, isPi, piReady]);
 
   // Get error message for why chat is disabled
   const getDisabledReason = (): string | null => {
@@ -1135,19 +1147,20 @@ export function GlobalChat() {
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset - click edit to add one`;
     if (needsLogin) return "Login required";
-    if (isPi && needsProjectDir) return "Select a project folder";
-    if (isPi && piStarting) return "Starting Pi...";
-    if (isPi && !piReady) return "Connecting to Pi...";
+    if (isPi && needsProjectDir) return "Select a project folder for Pi";
+    if (isPi && piStarting) return "Starting Pi agent...";
+    if (isPi && !piReady) return "Connecting to Pi agent...";
     return null;
   };
   const disabledReason = getDisabledReason();
 
-  // Project directory picker for Pi
+  // Pi project folder picker
   const selectPiProject = async () => {
+    const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
     const selected = await openDialog({
       directory: true,
       multiple: false,
-      title: "Select Project Folder for Pi",
+      title: "Select Project Folder for Pi Agent",
     });
     if (selected) {
       setPiProjectDir(selected as string);
@@ -1311,23 +1324,24 @@ export function GlobalChat() {
   function getOpenAIClient(): OpenAI | null {
     if (!activePreset) return null;
 
-    // For screenpipe-cloud, use token if available, otherwise "anonymous" for free tier
-    const apiKey =
-      activePreset.provider === "screenpipe-cloud"
+    // Pi and screenpipe-cloud both use the screenpipe API
+    const isScreenpipeProvider = activePreset.provider === "screenpipe-cloud" || activePreset.provider === "pi";
+
+    // For screenpipe providers, use token if available, otherwise "anonymous" for free tier
+    const apiKey = isScreenpipeProvider
         ? settings.user?.token || "anonymous"
         : "apiKey" in activePreset
           ? (activePreset.apiKey as string) || ""
           : "";
 
-    // Force correct URL for screenpipe-cloud (in case preset has wrong URL saved)
-    const baseURL =
-      activePreset.provider === "screenpipe-cloud"
+    // Force correct URL for screenpipe providers
+    const baseURL = isScreenpipeProvider
         ? "https://api.screenpi.pe/v1"
         : activePreset.url;
 
     // Add device ID header for usage tracking (free tier)
     const defaultHeaders: Record<string, string> = {};
-    if (activePreset.provider === "screenpipe-cloud" && settings.deviceId) {
+    if (isScreenpipeProvider && settings.deviceId) {
       defaultHeaders["X-Device-Id"] = settings.deviceId;
     }
 
@@ -1339,9 +1353,12 @@ export function GlobalChat() {
     });
   }
 
-  // Send message using Pi (listen to events for streaming output)
+  // Send message using Pi agent
   async function sendPiMessage(userMessage: string) {
-    if (!piInfo?.running) return;
+    if (!piInfo?.running) {
+      toast({ title: "Pi not running", description: "Please wait for Pi to start", variant: "destructive" });
+      return;
+    }
 
     const newUserMessage: Message = {
       id: Date.now().toString(),
@@ -1355,15 +1372,16 @@ export function GlobalChat() {
     setInput("");
     setIsLoading(true);
     setIsStreaming(true);
+    setPiStreamingText("");
 
     try {
-      // Add placeholder for streaming response
+      // Add placeholder for response
       setMessages((prev) => [
         ...prev,
-        { id: assistantMessageId, role: "assistant", content: "Processing...", timestamp: Date.now() },
+        { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() },
       ]);
 
-      // Send prompt to Pi via RPC
+      // Send prompt to Pi
       const result = await commands.piPrompt(userMessage);
       
       if (result.status === "error") {
@@ -1374,17 +1392,51 @@ export function GlobalChat() {
               : m
           )
         );
-      } else {
-        // Listen for output via pi_output events
-        // The response will be collected from pi_output events
+        setIsLoading(false);
+        setIsStreaming(false);
+        return;
+      }
+
+      // Wait for Pi events to update the message
+      // The pi_event listener will update piStreamingText
+      // We need to watch for changes and update the message
+      const checkInterval = setInterval(() => {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMessageId
-              ? { ...m, content: "Pi is processing your request. Check the terminal for full output." }
+              ? { ...m, content: piStreamingText || "Processing..." }
               : m
           )
         );
-      }
+      }, 100);
+
+      // Wait for agent_end or timeout
+      const timeout = setTimeout(() => {
+        clearInterval(checkInterval);
+        setIsLoading(false);
+        setIsStreaming(false);
+      }, 120000); // 2 minute timeout
+
+      // Listen for agent_end to stop
+      const unlistenEnd = await listen("pi_event", (event: any) => {
+        if (event.payload?.type === "agent_end") {
+          clearInterval(checkInterval);
+          clearTimeout(timeout);
+          unlistenEnd();
+          
+          // Final update with accumulated text
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, content: piStreamingText || "Done" }
+                : m
+            )
+          );
+          setIsLoading(false);
+          setIsStreaming(false);
+        }
+      });
+
     } catch (error) {
       console.error("Pi error:", error);
       setMessages((prev) =>
@@ -1394,7 +1446,6 @@ export function GlobalChat() {
             : m
         )
       );
-    } finally {
       setIsLoading(false);
       setIsStreaming(false);
     }
@@ -1409,10 +1460,9 @@ export function GlobalChat() {
       message_length: userMessage.length,
       provider: activePreset?.provider,
       model: activePreset?.model,
-      is_pi: isPi,
     });
 
-    // Use Pi if that's the active provider
+    // Use Pi agent if selected
     if (isPi) {
       return sendPiMessage(userMessage);
     }
@@ -2051,15 +2101,6 @@ export function GlobalChat() {
                   : "Screen Activity Assistant"}
               </p>
             </div>
-            {isPi && piProjectDir && (
-              <button
-                onClick={selectPiProject}
-                className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
-                title="Change project folder"
-              >
-                <FolderOpen size={16} />
-              </button>
-            )}
             <Button
               variant={showHistory ? "secondary" : "ghost"}
               size="sm"
@@ -2199,7 +2240,7 @@ export function GlobalChat() {
                   <div className="absolute bottom-0 right-0 w-4 h-4 border-r-2 border-b-2 border-current opacity-20 rounded-br" />
 
                   {needsProjectDir ? (
-                    <FolderOpen className="h-12 w-12 text-muted-foreground" />
+                    <Settings className="h-12 w-12 text-muted-foreground" />
                   ) : needsLogin ? (
                     <PipeAIIconLarge size={48} className="text-muted-foreground" />
                   ) : piStarting ? (
@@ -2210,10 +2251,10 @@ export function GlobalChat() {
                 </div>
                 <div className="text-center space-y-2">
                   <h3 className="font-semibold tracking-tight">
-                    {needsProjectDir ? "Select Project" : !hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : piStarting ? "Starting Pi..." : "Login Required"}
+                    {needsProjectDir ? "Select Project Folder" : !hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : piStarting ? "Starting Pi..." : "Login Required"}
                   </h3>
                   <p className="text-sm text-muted-foreground max-w-sm">
-                    {needsProjectDir ? "Choose a folder for Pi to work with" : disabledReason}
+                    {disabledReason}
                   </p>
                 </div>
                 {needsProjectDir && (
@@ -2222,7 +2263,7 @@ export function GlobalChat() {
                     onClick={selectPiProject}
                     className="gap-2 font-medium bg-foreground text-background hover:bg-foreground/90"
                   >
-                    <FolderOpen className="h-4 w-4" />
+                    <Settings className="h-4 w-4" />
                     Select Folder
                   </Button>
                 )}
@@ -2236,7 +2277,7 @@ export function GlobalChat() {
                     Login
                   </Button>
                 )}
-                {!hasPresets && (
+                {!hasPresets && !needsProjectDir && (
                   <Button
                     variant="outline"
                     onClick={async () => {
@@ -2249,7 +2290,7 @@ export function GlobalChat() {
                     Go to Settings
                   </Button>
                 )}
-                {hasPresets && !hasValidModel && (
+                {hasPresets && !hasValidModel && !needsProjectDir && (
                   <p className="text-xs text-muted-foreground font-mono">
                     Use the preset selector below to configure a model
                   </p>

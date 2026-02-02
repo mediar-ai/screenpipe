@@ -383,7 +383,7 @@ async piStop() : Promise<Result<PiInfo, string>> {
 }
 },
 /**
- * Check if pi is available (either as sidecar or in PATH)
+ * Check if pi is available
  */
 async piCheck() : Promise<Result<PiCheckResult, string>> {
     try {
@@ -394,7 +394,7 @@ async piCheck() : Promise<Result<PiCheckResult, string>> {
 }
 },
 /**
- * Install pi via bun (runs in background)
+ * Install pi via bun
  */
 async piInstall() : Promise<Result<null, string>> {
     try {
@@ -405,11 +405,22 @@ async piInstall() : Promise<Result<null, string>> {
 }
 },
 /**
- * Send a prompt to pi via stdin (RPC mode)
+ * Send a prompt to Pi
  */
 async piPrompt(message: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("pi_prompt", { message }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Abort current Pi operation
+ */
+async piAbort() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("pi_abort") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -568,8 +579,8 @@ export type OnboardingStore = { isCompleted: boolean; completedAt: string | null
  * Used to resume after app restart (e.g., after granting permissions)
  */
 currentStep?: string | null }
-export type PiCheckResult = { available: boolean; sidecarAvailable: boolean; pathAvailable: boolean }
-export type PiInfo = { running: boolean; projectDir: string | null; pid: number | null }
+export type PiCheckResult = { available: boolean; path: string | null }
+export type PiInfo = { running: boolean; projectDir: string | null; pid: number | null; sessionId: string | null }
 export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; userId: string; 
 /**
  * Persistent analytics ID used for PostHog tracking (both frontend and backend)

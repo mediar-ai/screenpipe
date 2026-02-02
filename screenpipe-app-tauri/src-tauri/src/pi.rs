@@ -1,17 +1,16 @@
 //! Pi Coding Agent Integration
 //!
-//! Manages the pi coding agent via RPC mode for AI-powered features.
-//! Uses stdin/stdout JSON protocol for communication.
+//! Manages the pi coding agent via RPC mode (stdin/stdout JSON protocol).
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use specta::Type;
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Arc;
 use tauri::Emitter;
-use tauri::{Manager, State};
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
-use tauri_plugin_shell::ShellExt;
+use tauri::{AppHandle, Manager, State};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
@@ -27,6 +26,7 @@ pub struct PiInfo {
     pub running: bool,
     pub project_dir: Option<String>,
     pub pid: Option<u32>,
+    pub session_id: Option<String>,
 }
 
 impl Default for PiInfo {
@@ -35,6 +35,7 @@ impl Default for PiInfo {
             running: false,
             project_dir: None,
             pid: None,
+            session_id: None,
         }
     }
 }
@@ -43,51 +44,92 @@ impl Default for PiInfo {
 #[serde(rename_all = "camelCase")]
 pub struct PiCheckResult {
     pub available: bool,
-    pub sidecar_available: bool,
-    pub path_available: bool,
+    pub path: Option<String>,
+}
+
+/// RPC Response from Pi
+#[derive(Debug, Deserialize)]
+struct RpcResponse {
+    #[serde(rename = "type")]
+    response_type: String,
+    success: Option<bool>,
+    error: Option<String>,
+    data: Option<Value>,
+    command: Option<String>,
+    id: Option<String>,
 }
 
 pub struct PiManager {
-    child: Option<CommandChild>,
+    child: Option<Child>,
+    stdin: Option<ChildStdin>,
     project_dir: Option<String>,
-    child_exited: bool,
+    request_id: u64,
+    app_handle: AppHandle,
 }
 
 impl PiManager {
-    pub fn new() -> Self {
+    pub fn new(app_handle: AppHandle) -> Self {
         Self {
             child: None,
+            stdin: None,
             project_dir: None,
-            child_exited: false,
+            request_id: 0,
+            app_handle,
         }
     }
 
     pub fn snapshot(&self) -> PiInfo {
         let (running, pid) = match &self.child {
             None => (false, None),
-            Some(_) if self.child_exited => (false, None),
-            Some(child) => (true, Some(child.pid())),
+            Some(child) => (true, Some(child.id())),
         };
 
         PiInfo {
             running,
             project_dir: self.project_dir.clone(),
             pid,
+            session_id: None,
         }
     }
 
     pub fn stop(&mut self) {
-        if let Some(child) = self.child.take() {
+        if let Some(mut child) = self.child.take() {
+            // Send abort command first
+            if let Some(ref mut stdin) = self.stdin {
+                let _ = writeln!(stdin, r#"{{"type":"abort"}}"#);
+            }
+            
+            // Kill the process
             if let Err(e) = child.kill() {
                 error!("Failed to kill pi child process: {}", e);
             }
+            let _ = child.wait();
         }
-        self.child_exited = true;
+        self.stdin = None;
         self.project_dir = None;
     }
 
     pub fn is_running(&self) -> bool {
-        self.child.is_some() && !self.child_exited
+        self.child.is_some()
+    }
+
+    /// Send a command to Pi via stdin and return response
+    pub fn send_command(&mut self, command: Value) -> Result<(), String> {
+        let stdin = self.stdin.as_mut().ok_or("Pi not running")?;
+        
+        self.request_id += 1;
+        let mut cmd = command;
+        if let Some(obj) = cmd.as_object_mut() {
+            obj.insert("id".to_string(), json!(format!("req_{}", self.request_id)));
+        }
+        
+        let cmd_str = serde_json::to_string(&cmd).map_err(|e| e.to_string())?;
+        debug!("Sending to Pi: {}", cmd_str);
+        
+        writeln!(stdin, "{}", cmd_str).map_err(|e| format!("Failed to write to Pi stdin: {}", e))?;
+        stdin.flush().map_err(|e| format!("Failed to flush Pi stdin: {}", e))?;
+        
+        Ok(())
     }
 }
 
@@ -96,6 +138,38 @@ fn get_pi_config_dir() -> Result<PathBuf, String> {
     let home_dir = dirs::home_dir()
         .ok_or_else(|| "Could not find home directory".to_string())?;
     Ok(home_dir.join(".pi").join("agent"))
+}
+
+/// Find pi executable
+fn find_pi_executable() -> Option<String> {
+    let home = dirs::home_dir()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let paths = vec![
+        format!("{}/.bun/bin/pi", home),
+        format!("{}/.npm-global/bin/pi", home),
+        "/opt/homebrew/bin/pi".to_string(),
+        "/usr/local/bin/pi".to_string(),
+    ];
+
+    for path in paths {
+        if std::path::Path::new(&path).exists() {
+            return Some(path);
+        }
+    }
+
+    // Try which command
+    if let Ok(output) = std::process::Command::new("which").arg("pi").output() {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Some(path);
+            }
+        }
+    }
+
+    None
 }
 
 /// Ensure Pi is configured to use screenpipe as the AI provider
@@ -158,41 +232,6 @@ fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
-/// Kill orphaned pi processes
-pub async fn kill_orphaned_pi_processes() {
-    #[cfg(target_os = "macos")]
-    {
-        let _ = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg("pgrep -f 'pi.*--mode.*rpc' | xargs kill -9 2>/dev/null || true")
-            .output()
-            .await;
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let _ = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg("pgrep -f 'pi.*--mode.*rpc' | xargs -I {} kill -15 {} 2>/dev/null || true")
-            .output()
-            .await;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-        // Note: Windows doesn't have easy pattern matching for processes
-        // We rely on proper cleanup via manager
-        let _ = tokio::process::Command::new("taskkill")
-            .args(["/F", "/IM", "pi.exe"])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-            .await;
-    }
-}
-
 /// Get Pi info
 #[tauri::command]
 #[specta::specta]
@@ -215,9 +254,6 @@ pub async fn pi_stop(state: State<'_, PiState>) -> Result<PiInfo, String> {
         m.stop();
     }
 
-    // Also kill any orphaned pi processes
-    kill_orphaned_pi_processes().await;
-
     match manager.as_ref() {
         Some(m) => Ok(m.snapshot()),
         None => Ok(PiInfo::default()),
@@ -228,7 +264,7 @@ pub async fn pi_stop(state: State<'_, PiState>) -> Result<PiInfo, String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn pi_start(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<'_, PiState>,
     project_dir: String,
     user_token: Option<String>,
@@ -242,14 +278,14 @@ pub async fn pi_start(
     std::fs::create_dir_all(&project_dir)
         .map_err(|e| format!("Failed to create project directory: {}", e))?;
 
-    // Ensure Pi is configured to use screenpipe
+    // Ensure Pi is configured
     ensure_pi_config(user_token.as_deref())?;
 
     let mut manager_guard = state.0.lock().await;
 
     // Initialize manager if needed
     if manager_guard.is_none() {
-        *manager_guard = Some(PiManager::new());
+        *manager_guard = Some(PiManager::new(app.clone()));
     }
 
     // Stop any existing instance
@@ -260,124 +296,96 @@ pub async fn pi_start(
         }
     }
 
-    // Build pi RPC command
-    let args = vec![
-        "--mode".to_string(),
-        "rpc".to_string(),
-        "--provider".to_string(),
-        "screenpipe".to_string(),
-        "--model".to_string(),
-        "claude-haiku-4-5@20251001".to_string(),
-        "--no-session".to_string(),
-    ];
+    // Find pi executable
+    let pi_path = find_pi_executable()
+        .ok_or_else(|| format!("Pi not found. Install with: bun add -g {}", PI_PACKAGE))?;
 
-    info!("Starting pi with args: {:?} in dir: {}", args, project_dir);
+    info!("Starting pi from {} in dir: {}", pi_path, project_dir);
 
-    // Try to spawn pi - first try sidecar, then fall back to PATH
-    let spawn_result = {
-        // Try sidecar first
-        let sidecar_spawn = if let Ok(cmd) = app.shell().sidecar("pi") {
-            info!("Trying bundled pi sidecar");
-            let mut command = cmd.args(&args).current_dir(&project_dir);
-            if let Some(ref token) = user_token {
-                command = command.env("SCREENPIPE_API_KEY", token);
-            }
-            Some(command.spawn())
-        } else {
-            None
-        };
+    // Build command
+    let mut cmd = Command::new(&pi_path);
+    cmd.current_dir(&project_dir)
+        .args(["--mode", "rpc", "--provider", "screenpipe", "--model", "claude-haiku-4-5@20251001"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-        // Check if sidecar spawn succeeded
-        match sidecar_spawn {
-            Some(Ok(result)) => {
-                info!("Using bundled pi sidecar");
-                Ok(result)
-            }
-            _ => {
-                // Fallback to PATH
-                info!("Sidecar not available, trying pi from PATH");
-                let mut command = app.shell()
-                    .command("pi")
-                    .args(&args)
-                    .current_dir(&project_dir);
+    if let Some(ref token) = user_token {
+        cmd.env("SCREENPIPE_API_KEY", token);
+    }
 
-                if let Some(ref token) = user_token {
-                    command = command.env("SCREENPIPE_API_KEY", token);
-                }
+    // Spawn process
+    let mut child = cmd.spawn()
+        .map_err(|e| format!("Failed to spawn pi: {}", e))?;
 
-                command.spawn()
-            }
-        }
-    };
+    let pid = child.id();
+    info!("Pi started with PID: {}", pid);
 
-    let (mut rx, child) = spawn_result.map_err(|e| {
-        format!("Failed to start Pi: {}. Install with: bun add -g {}", e, PI_PACKAGE)
-    })?;
+    // Take stdin for writing commands
+    let stdin = child.stdin.take()
+        .ok_or_else(|| "Failed to get pi stdin".to_string())?;
 
-    let pid = child.pid();
-    info!("Spawned pi with PID {}", pid);
+    // Take stdout for reading events
+    let stdout = child.stdout.take()
+        .ok_or_else(|| "Failed to get pi stdout".to_string())?;
 
-    // Update manager state
+    // Take stderr for logging
+    let stderr = child.stderr.take();
+
+    // Update manager
     if let Some(m) = manager_guard.as_mut() {
         m.child = Some(child);
+        m.stdin = Some(stdin);
         m.project_dir = Some(project_dir.clone());
-        m.child_exited = false;
     }
 
-    // Clone state for async task
-    let state_arc = state.0.clone();
-    let app_handle = app.app_handle().clone();
-
-    // Spawn task to handle stdout/stderr
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes).to_string();
-                    debug!("pi stdout: {}", line);
+    // Spawn stdout reader thread
+    let app_handle = app.clone();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    debug!("Pi stdout: {}", line);
+                    // Try to parse as JSON and emit event
+                    if let Ok(event) = serde_json::from_str::<Value>(&line) {
+                        let _ = app_handle.emit("pi_event", &event);
+                    }
                     let _ = app_handle.emit("pi_output", &line);
                 }
-                CommandEvent::Stderr(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes).to_string();
-                    if line.to_lowercase().contains("error") || line.to_lowercase().contains("failed") {
-                        error!("pi stderr: {}", line);
-                    } else {
-                        debug!("pi stderr: {}", line);
-                    }
-                    let _ = app_handle.emit("pi_log", &line);
+                Err(e) => {
+                    error!("Error reading pi stdout: {}", e);
+                    break;
                 }
-                CommandEvent::Terminated(payload) => {
-                    warn!("pi terminated with status: {:?}", payload.code);
-                    if let Ok(mut manager) = state_arc.try_lock() {
-                        if let Some(m) = manager.as_mut() {
-                            m.child_exited = true;
-                        }
-                    }
-                    let _ = app_handle.emit("pi_terminated", payload.code);
-                }
-                CommandEvent::Error(message) => {
-                    error!("pi error: {}", message);
-                    if let Ok(mut manager) = state_arc.try_lock() {
-                        if let Some(m) = manager.as_mut() {
-                            m.child_exited = true;
-                        }
-                    }
-                    let _ = app_handle.emit("pi_error", &message);
-                }
-                _ => {}
             }
         }
+        info!("Pi stdout reader ended");
+        let _ = app_handle.emit("pi_terminated", ());
     });
 
-    // Brief wait for process to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Check if still running
-    if let Some(m) = manager_guard.as_ref() {
-        if m.child_exited {
-            return Err("Pi exited unexpectedly. Check logs for details.".to_string());
-        }
+    // Spawn stderr reader thread
+    if let Some(stderr) = stderr {
+        let app_handle = app.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                match line {
+                    Ok(line) => {
+                        if line.to_lowercase().contains("error") {
+                            error!("Pi stderr: {}", line);
+                        } else {
+                            debug!("Pi stderr: {}", line);
+                        }
+                        let _ = app_handle.emit("pi_log", &line);
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
     }
+
+    // Wait a moment for initialization
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     match manager_guard.as_ref() {
         Some(m) => Ok(m.snapshot()),
@@ -385,160 +393,58 @@ pub async fn pi_start(
     }
 }
 
-/// Check if pi is available (either as sidecar or in PATH)
-#[tauri::command]
-#[specta::specta]
-pub async fn pi_check(app: tauri::AppHandle) -> Result<PiCheckResult, String> {
-    let sidecar_available = app.shell().sidecar("pi").is_ok();
-
-    let path_available = {
-        #[cfg(target_os = "windows")]
-        {
-            std::process::Command::new("where")
-                .arg("pi")
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            std::process::Command::new("which")
-                .arg("pi")
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
-        }
-    };
-
-    Ok(PiCheckResult {
-        available: sidecar_available || path_available,
-        sidecar_available,
-        path_available,
-    })
-}
-
-/// Install pi via bun (runs in background)
-#[tauri::command]
-#[specta::specta]
-pub async fn pi_install(app: tauri::AppHandle) -> Result<(), String> {
-    info!("Installing pi via bun...");
-
-    // Use bundled bun sidecar to install pi globally
-    let bun_result = app.shell().sidecar("bun");
-
-    match bun_result {
-        Ok(cmd) => {
-            let args = vec!["add", "-g", PI_PACKAGE];
-            info!("Running: bun {:?}", args);
-
-            match cmd.args(&args).spawn() {
-                Ok((mut rx, _child)) => {
-                    // Spawn a task to log output but don't block
-                    let app_handle = app.app_handle().clone();
-                    tauri::async_runtime::spawn(async move {
-                        while let Some(event) = rx.recv().await {
-                            match event {
-                                CommandEvent::Stdout(line) => {
-                                    let text = String::from_utf8_lossy(&line);
-                                    debug!("pi install stdout: {}", text);
-                                }
-                                CommandEvent::Stderr(line) => {
-                                    let text = String::from_utf8_lossy(&line);
-                                    debug!("pi install stderr: {}", text);
-                                }
-                                CommandEvent::Terminated(payload) => {
-                                    if payload.code == Some(0) {
-                                        info!("Pi installed successfully");
-                                        let _ = app_handle.emit("pi_installed", true);
-                                    } else {
-                                        error!("Pi installation failed with code: {:?}", payload.code);
-                                        let _ = app_handle.emit("pi_installed", false);
-                                    }
-                                }
-                                CommandEvent::Error(e) => {
-                                    error!("Pi install error: {}", e);
-                                    let _ = app_handle.emit("pi_installed", false);
-                                }
-                                _ => {}
-                            }
-                        }
-                    });
-                    Ok(())
-                }
-                Err(e) => {
-                    error!("Failed to spawn bun install: {}", e);
-                    Err(format!("Failed to start installation: {}", e))
-                }
-            }
-        }
-        Err(e) => {
-            error!("Bun sidecar not available: {}", e);
-            Err("Bun not available for installation".to_string())
-        }
-    }
-}
-
-/// Send a prompt to pi via stdin (RPC mode)
+/// Send a prompt to Pi
 #[tauri::command]
 #[specta::specta]
 pub async fn pi_prompt(
     state: State<'_, PiState>,
     message: String,
 ) -> Result<(), String> {
-    let manager = state.0.lock().await;
-    
-    match manager.as_ref() {
-        Some(m) if m.is_running() => {
-            // In RPC mode, we communicate via stdin/stdout
-            // The child process stdin needs to be accessed differently
-            // For now, we emit an event that the frontend will handle
-            // The actual RPC communication happens via the event stream
-            info!("Pi prompt requested: {}", message.chars().take(100).collect::<String>());
-            Ok(())
-        }
-        _ => Err("Pi is not running".to_string()),
-    }
-}
-
-/// Cleanup function to be called on app exit
-pub async fn cleanup_pi(state: &PiState) {
-    info!("Cleaning up pi on app exit");
     let mut manager = state.0.lock().await;
-    if let Some(m) = manager.as_mut() {
-        m.stop();
+    let m = manager.as_mut().ok_or("Pi not initialized")?;
+    
+    if !m.is_running() {
+        return Err("Pi is not running".to_string());
     }
-    kill_orphaned_pi_processes().await;
+
+    let cmd = json!({
+        "type": "prompt",
+        "message": message
+    });
+
+    m.send_command(cmd)
 }
 
-// Legacy print mode support (for obsidian sync, etc.)
-const DEFAULT_MODEL: &str = "claude-haiku-4-5@20251001";
+/// Abort current Pi operation
+#[tauri::command]
+#[specta::specta]
+pub async fn pi_abort(state: State<'_, PiState>) -> Result<(), String> {
+    let mut manager = state.0.lock().await;
+    let m = manager.as_mut().ok_or("Pi not initialized")?;
+    
+    if !m.is_running() {
+        return Err("Pi is not running".to_string());
+    }
 
-/// Find the pi executable path
-fn find_executable() -> Result<String, String> {
-    let home = dirs::home_dir()
-        .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_default();
-
-    let paths = vec![
-        format!("{}/.bun/bin/pi", home),
-        format!("{}/.npm-global/bin/pi", home),
-        format!("{}/.nvm/versions/node/v22.11.0/bin/pi", home),
-        "/opt/homebrew/bin/pi".to_string(),
-        "/usr/local/bin/pi".to_string(),
-        "/usr/bin/pi".to_string(),
-        "pi".to_string(),
-    ];
-
-    paths
-        .into_iter()
-        .find(|p| p == "pi" || std::path::Path::new(p).exists())
-        .ok_or_else(|| format!("Could not find pi. Install with: bun add -g {}", PI_PACKAGE))
+    m.send_command(json!({"type": "abort"}))
 }
 
-/// Ensure pi CLI is installed/updated via bun (legacy)
-pub async fn ensure_installed() -> Result<(), String> {
-    info!("Ensuring pi CLI is installed/updated via bun...");
+/// Check if pi is available
+#[tauri::command]
+#[specta::specta]
+pub async fn pi_check() -> Result<PiCheckResult, String> {
+    let path = find_pi_executable();
+    Ok(PiCheckResult {
+        available: path.is_some(),
+        path,
+    })
+}
+
+/// Install pi via bun
+#[tauri::command]
+#[specta::specta]
+pub async fn pi_install(app: AppHandle) -> Result<(), String> {
+    info!("Installing pi via bun...");
 
     let home = dirs::home_dir()
         .map(|h| h.to_string_lossy().to_string())
@@ -548,143 +454,114 @@ pub async fn ensure_installed() -> Result<(), String> {
         format!("{}/.bun/bin/bun", home),
         "/opt/homebrew/bin/bun".to_string(),
         "/usr/local/bin/bun".to_string(),
-        "bun".to_string(),
     ];
 
     let bun = bun_paths
         .iter()
-        .find(|p| *p == "bun" || std::path::Path::new(p).exists())
+        .find(|p| std::path::Path::new(p).exists())
         .ok_or("Could not find bun. Install from https://bun.sh")?
         .clone();
 
-    info!("Using bun at: {}", bun);
+    let app_handle = app.clone();
+    std::thread::spawn(move || {
+        let output = std::process::Command::new(&bun)
+            .args(["add", "-g", PI_PACKAGE])
+            .output();
 
-    let output = tokio::process::Command::new(&bun)
-        .args(["add", "-g", PI_PACKAGE])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run bun: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        warn!("bun install warning: {}", stderr);
-    } else {
-        info!("pi CLI installed/updated successfully");
-    }
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Pi installed successfully");
+                    let _ = app_handle.emit("pi_installed", true);
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    error!("Pi installation failed: {}", stderr);
+                    let _ = app_handle.emit("pi_installed", false);
+                }
+            }
+            Err(e) => {
+                error!("Failed to run bun: {}", e);
+                let _ = app_handle.emit("pi_installed", false);
+            }
+        }
+    });
 
     Ok(())
 }
 
-/// Run pi with a prompt (non-interactive print mode) - legacy for obsidian sync
+/// Cleanup function to be called on app exit
+pub async fn cleanup_pi(state: &PiState) {
+    info!("Cleaning up pi on app exit");
+    let mut manager = state.0.lock().await;
+    if let Some(m) = manager.as_mut() {
+        m.stop();
+    }
+}
+
+// ============================================================================
+// Legacy functions for obsidian sync (print mode)
+// ============================================================================
+
+/// Run pi with a prompt (non-interactive print mode)
 pub async fn run(
     prompt: &str,
     user_token: Option<&str>,
     working_dir: &str,
     pid_tx: Option<tokio::sync::oneshot::Sender<u32>>,
 ) -> Result<String, String> {
-    // Ensure pi is installed and configured
-    ensure_installed().await?;
     ensure_pi_config(user_token)?;
 
-    let pi_cmd = find_executable()?;
-    info!("Using pi at: {}", pi_cmd);
+    let pi_path = find_pi_executable()
+        .ok_or_else(|| format!("Pi not found. Install with: bun add -g {}", PI_PACKAGE))?;
 
-    let mut cmd = tokio::process::Command::new(&pi_cmd);
+    let mut cmd = tokio::process::Command::new(&pi_path);
     cmd.current_dir(working_dir);
     cmd.arg("-p").arg(prompt);
     cmd.arg("--provider").arg("screenpipe");
-    cmd.arg("--model").arg(DEFAULT_MODEL);
+    cmd.arg("--model").arg("claude-haiku-4-5@20251001");
 
     if let Some(token) = user_token {
-        info!(
-            "pi::run: setting SCREENPIPE_API_KEY env var (token length: {})",
-            token.len()
-        );
         cmd.env("SCREENPIPE_API_KEY", token);
-    } else {
-        warn!("pi::run: no user_token provided!");
     }
 
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
 
-    info!("Running pi command...");
-    let child = cmd
-        .spawn()
+    let child = cmd.spawn()
         .map_err(|e| format!("Failed to spawn pi: {}", e))?;
 
-    // Send PID if requested
     if let Some(tx) = pid_tx {
         if let Some(pid) = child.id() {
             let _ = tx.send(pid);
-            info!("Pi process started with PID: {}", pid);
         }
     }
 
-    let output = child
-        .wait_with_output()
-        .await
+    let output = child.wait_with_output().await
         .map_err(|e| format!("Failed to wait for pi: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-    if !stdout.is_empty() {
-        debug!("pi stdout: {}", stdout);
-    }
-    if !stderr.is_empty() {
-        debug!("pi stderr: {}", stderr);
-    }
-
     if output.status.success() {
-        info!("Pi completed successfully");
         Ok(stdout)
     } else {
-        let error_msg = if !stderr.is_empty() {
-            stderr
-        } else {
-            format!("Pi exited with code {:?}", output.status.code())
-        };
-        error!("Pi failed: {}", error_msg);
-        Err(error_msg)
+        Err(if !stderr.is_empty() { stderr } else { format!("Pi exited with code {:?}", output.status.code()) })
     }
 }
 
-/// Kill a pi process by PID (legacy)
+/// Kill a pi process by PID
 pub fn kill(pid: u32) -> Result<(), String> {
-    info!("Killing pi process with PID: {}", pid);
-
     #[cfg(unix)]
     {
-        use std::process::Command;
-        let _ = Command::new("kill")
-            .args(["-TERM", &format!("-{}", pid)])
-            .output();
-        let output = Command::new("kill")
+        let _ = std::process::Command::new("kill")
             .args(["-TERM", &pid.to_string()])
-            .output()
-            .map_err(|e| format!("Failed to kill process: {}", e))?;
-
-        if output.status.success() {
-            info!("Pi process {} killed", pid);
-            Ok(())
-        } else {
-            Err(format!("Failed to kill process {}", pid))
-        }
+            .output();
     }
-
     #[cfg(windows)]
     {
-        use std::process::Command;
-        let output = Command::new("taskkill")
+        let _ = std::process::Command::new("taskkill")
             .args(["/F", "/PID", &pid.to_string()])
-            .output()
-            .map_err(|e| format!("Failed to kill process: {}", e))?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(format!("Failed to kill process {}", pid))
-        }
+            .output();
     }
+    Ok(())
 }

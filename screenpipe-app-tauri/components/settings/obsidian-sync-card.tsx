@@ -109,7 +109,7 @@ const ObsidianLogo = ({ className }: { className?: string }) => (
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { Command } from "@tauri-apps/plugin-shell";
 import { Badge } from "@/components/ui/badge";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useToast } from "@/components/ui/use-toast";
@@ -429,14 +429,20 @@ export function ObsidianSyncCard() {
   const openObsidian = async () => {
     if (!settings.vaultPath) return;
 
-    // Extract vault name from path
-    const vaultName = settings.vaultPath.split("/").pop() || "vault";
-    const deepLink = `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=screenpipe%2Flogs`;
+    // Use path-based deep link (don't encode - Obsidian expects raw path)
+    const deepLink = `obsidian://open?path=${settings.vaultPath}`;
 
     try {
-      await openUrl(deepLink);
+      // Use the 'open' command on macOS to handle custom URL schemes
+      const command = Command.create("open", [deepLink]);
+      await command.execute();
     } catch (e) {
       console.error("Failed to open Obsidian:", e);
+      toast({
+        variant: "destructive",
+        title: "Failed to open Obsidian",
+        description: "Make sure Obsidian is installed",
+      });
     }
   };
 
