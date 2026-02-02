@@ -311,10 +311,10 @@ pub async fn obsidian_run_sync(
     let prompt = build_prompt(&settings, &start_time_str, &end_time_str);
 
     // Debug: check if token is passed
-    info!("obsidian_run_sync: user_token present = {}", user_token.is_some());
+    info!("obsidian_run_sync: user_token present = {}, vault_path = {}", user_token.is_some(), settings.vault_path);
     
-    // Run pi
-    let result = pi::run(&prompt, user_token.as_deref()).await.map(|_| ());
+    // Run pi in the vault directory
+    let result = pi::run(&prompt, user_token.as_deref(), &settings.vault_path).await.map(|_| ());
 
     // Update status based on result
     {
@@ -439,7 +439,7 @@ async fn run_scheduled_sync(
     let start_time = end_time - chrono::Duration::hours(settings.sync_hours as i64);
 
     let prompt = build_prompt(settings, &start_time.to_rfc3339(), &end_time.to_rfc3339());
-    let result = pi::run(&prompt, user_token).await.map(|_| ());
+    let result = pi::run(&prompt, user_token, &settings.vault_path).await.map(|_| ());
 
     // Update status
     {

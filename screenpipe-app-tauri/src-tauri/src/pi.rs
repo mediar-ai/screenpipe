@@ -125,7 +125,8 @@ fn find_executable() -> Result<String, String> {
 }
 
 /// Run pi with a prompt (non-interactive print mode)
-pub async fn run(prompt: &str, user_token: Option<&str>) -> Result<String, String> {
+/// vault_path: Working directory where pi should run (e.g., Obsidian vault)
+pub async fn run(prompt: &str, user_token: Option<&str>, working_dir: &str) -> Result<String, String> {
     // Ensure pi is installed and configured
     ensure_installed().await?;
     ensure_config()?;
@@ -134,6 +135,7 @@ pub async fn run(prompt: &str, user_token: Option<&str>) -> Result<String, Strin
     info!("Using pi at: {}", pi_cmd);
     
     let mut cmd = tokio::process::Command::new(&pi_cmd);
+    cmd.current_dir(working_dir);
     cmd.arg("-p").arg(prompt);
     cmd.arg("--provider").arg("screenpipe");
     cmd.arg("--model").arg(DEFAULT_MODEL);
