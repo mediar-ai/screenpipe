@@ -446,12 +446,9 @@ export default function Timeline() {
 			startTime.setHours(0, 0, 0, 0);
 
 			const endTime = new Date(currentDateEffect);
-			if (isSameDay(endTime, new Date())) {
-				// For today: don't set endTime to end of day, leave it as current time
-				// so server can poll for real-time frames
-			} else {
-				endTime.setHours(23, 59, 59, 999);
-			}
+			// Always set endTime to end of day (23:59:59) so server can poll for new frames
+			// Server checks `now <= end_time` to decide whether to continue polling
+			endTime.setHours(23, 59, 59, 999);
 			fetchTimeRange(startTime, endTime);
 		}
 		checkIfThereAreFrames();
