@@ -335,6 +335,48 @@ pub async fn obsidian_run_sync(
     result.map(|_| status.clone())
 }
 
+/// Ensure pi CLI is installed via bun
+async fn ensure_pi_installed() -> Result<(), String> {
+    info!("Ensuring pi CLI is installed/updated via bun...");
+    
+    // Find bun
+    let home = dirs::home_dir().map(|h| h.to_string_lossy().to_string()).unwrap_or_default();
+    let bun_paths = vec![
+        format!("{}/.bun/bin/bun", home),
+        "/opt/homebrew/bin/bun".to_string(),
+        "/usr/local/bin/bun".to_string(),
+        "bun".to_string(),
+    ];
+    
+    let mut bun_cmd: Option<String> = None;
+    for path in &bun_paths {
+        if path == "bun" || std::path::Path::new(path).exists() {
+            bun_cmd = Some(path.clone());
+            break;
+        }
+    }
+    
+    let bun = bun_cmd.ok_or("Could not find bun. Install bun first: https://bun.sh")?;
+    info!("Using bun at: {}", bun);
+    
+    // Run: bun add -g @mariozechner/pi-coding-agent
+    let output = tokio::process::Command::new(&bun)
+        .args(["add", "-g", "@mariozechner/pi-coding-agent"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run bun: {}", e))?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        warn!("bun install warning: {}", stderr);
+        // Don't fail - pi might already be installed via npm
+    } else {
+        info!("pi CLI installed/updated successfully");
+    }
+    
+    Ok(())
+}
+
 /// Ensure pi is configured to use screenpipe as the AI provider
 fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
     let config_dir = dirs::home_dir()
@@ -379,6 +421,9 @@ fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
 async fn run_pi_sync(_app: &AppHandle, prompt: &str, user_token: Option<&str>) -> Result<(), String> {
     info!("Starting obsidian sync with pi");
 
+    // Ensure pi is installed via bun
+    ensure_pi_installed().await?;
+    
     // Ensure pi is configured to use screenpipe provider
     ensure_pi_config(user_token)?;
     
@@ -410,6 +455,7 @@ async fn run_pi_sync(_app: &AppHandle, prompt: &str, user_token: Option<&str>) -
     let mut cmd = tokio::process::Command::new(&pi_cmd);
     cmd.arg("-p").arg(prompt);
     cmd.arg("--provider").arg("screenpipe");
+    cmd.arg("--model").arg("claude-sonnet-4-20250514");
     
     if let Some(token) = user_token {
         cmd.arg("--api-key").arg(token);
