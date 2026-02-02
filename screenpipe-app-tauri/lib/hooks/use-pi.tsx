@@ -1,30 +1,30 @@
 import { useState, useEffect, useCallback } from "react";
-import { commands, OpencodeInfo, OpencodeCheckResult } from "@/lib/utils/tauri";
+import { commands, PiInfo, PiCheckResult } from "@/lib/utils/tauri";
 import { listen } from "@tauri-apps/api/event";
 
-export interface UseOpencodeResult {
-  info: OpencodeInfo | null;
-  checkResult: OpencodeCheckResult | null;
+export interface UsePiResult {
+  info: PiInfo | null;
+  checkResult: PiCheckResult | null;
   isLoading: boolean;
   error: string | null;
   logs: string[];
-  start: (projectDir: string) => Promise<OpencodeInfo | null>;
+  start: (projectDir: string, userToken?: string) => Promise<PiInfo | null>;
   stop: () => Promise<void>;
   refresh: () => Promise<void>;
   check: () => Promise<void>;
   clearError: () => void;
 }
 
-export function useOpencode(): UseOpencodeResult {
-  const [info, setInfo] = useState<OpencodeInfo | null>(null);
-  const [checkResult, setCheckResult] = useState<OpencodeCheckResult | null>(null);
+export function usePi(): UsePiResult {
+  const [info, setInfo] = useState<PiInfo | null>(null);
+  const [checkResult, setCheckResult] = useState<PiCheckResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
     try {
-      const result = await commands.opencodeInfo();
+      const result = await commands.piInfo();
       if (result.status === "ok") {
         setInfo(result.data);
       } else {
@@ -37,7 +37,7 @@ export function useOpencode(): UseOpencodeResult {
 
   const check = useCallback(async () => {
     try {
-      const result = await commands.opencodeCheck();
+      const result = await commands.piCheck();
       if (result.status === "ok") {
         setCheckResult(result.data);
       } else {
@@ -48,12 +48,12 @@ export function useOpencode(): UseOpencodeResult {
     }
   }, []);
 
-  const start = useCallback(async (projectDir: string): Promise<OpencodeInfo | null> => {
+  const start = useCallback(async (projectDir: string, userToken?: string): Promise<PiInfo | null> => {
     setIsLoading(true);
     setError(null);
     setLogs([]);
     try {
-      const result = await commands.opencodeStart(projectDir, null);
+      const result = await commands.piStart(projectDir, userToken ?? null);
       if (result.status === "ok") {
         setInfo(result.data);
         return result.data;
@@ -74,7 +74,7 @@ export function useOpencode(): UseOpencodeResult {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await commands.opencodeStop();
+      const result = await commands.piStop();
       if (result.status === "ok") {
         setInfo(result.data);
       } else {
@@ -97,23 +97,28 @@ export function useOpencode(): UseOpencodeResult {
     refresh();
   }, [check, refresh]);
 
-  // Listen for OpenCode events
+  // Listen for Pi events
   useEffect(() => {
-    const unlistenLog = listen<string>("opencode_log", (event) => {
+    const unlistenLog = listen<string>("pi_log", (event) => {
       setLogs((prev) => [...prev.slice(-99), event.payload]);
     });
 
-    const unlistenTerminated = listen<number | null>("opencode_terminated", () => {
+    const unlistenOutput = listen<string>("pi_output", (event) => {
+      setLogs((prev) => [...prev.slice(-99), event.payload]);
+    });
+
+    const unlistenTerminated = listen<number | null>("pi_terminated", () => {
       refresh();
     });
 
-    const unlistenError = listen<string>("opencode_error", (event) => {
+    const unlistenError = listen<string>("pi_error", (event) => {
       setError(event.payload);
       refresh();
     });
 
     return () => {
       unlistenLog.then((fn) => fn());
+      unlistenOutput.then((fn) => fn());
       unlistenTerminated.then((fn) => fn());
       unlistenError.then((fn) => fn());
     };

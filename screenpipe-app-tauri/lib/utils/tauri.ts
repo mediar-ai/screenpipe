@@ -350,57 +350,66 @@ async deleteCloudData() : Promise<Result<null, string>> {
 }
 },
 /**
- * Get OpenCode info
+ * Get Pi info
  */
-async opencodeInfo() : Promise<Result<OpencodeInfo, string>> {
+async piInfo() : Promise<Result<PiInfo, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("opencode_info") };
+    return { status: "ok", data: await TAURI_INVOKE("pi_info") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
 /**
- * Start the OpenCode sidecar
- * user_token: The user's screenpipe auth token for API access
+ * Start the Pi sidecar in RPC mode
  */
-async opencodeStart(projectDir: string, userToken: string | null) : Promise<Result<OpencodeInfo, string>> {
+async piStart(projectDir: string, userToken: string | null) : Promise<Result<PiInfo, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("opencode_start", { projectDir, userToken }) };
+    return { status: "ok", data: await TAURI_INVOKE("pi_start", { projectDir, userToken }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
 /**
- * Stop the OpenCode sidecar
+ * Stop the Pi sidecar
  */
-async opencodeStop() : Promise<Result<OpencodeInfo, string>> {
+async piStop() : Promise<Result<PiInfo, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("opencode_stop") };
+    return { status: "ok", data: await TAURI_INVOKE("pi_stop") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
 /**
- * Check if opencode is available (either as sidecar or in PATH)
+ * Check if pi is available (either as sidecar or in PATH)
  */
-async opencodeCheck() : Promise<Result<OpencodeCheckResult, string>> {
+async piCheck() : Promise<Result<PiCheckResult, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("opencode_check") };
+    return { status: "ok", data: await TAURI_INVOKE("pi_check") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
 /**
- * Install opencode via bun (runs in background)
- * Returns immediately, installation happens async
+ * Install pi via bun (runs in background)
  */
-async opencodeInstall() : Promise<Result<null, string>> {
+async piInstall() : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("opencode_install") };
+    return { status: "ok", data: await TAURI_INVOKE("pi_install") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Send a prompt to Pi
+ */
+async piPrompt(message: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("pi_prompt", { message }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -507,7 +516,7 @@ async obsidianCancelSync() : Promise<Result<null, string>> {
 /** user-defined types **/
 
 export type AIPreset = { id: string; prompt: string; provider: AIProviderType; url?: string; model?: string; defaultPreset: boolean; apiKey: string | null; maxContextChars: number }
-export type AIProviderType = "openai" | "native-ollama" | "custom" | "screenpipe-cloud" | "opencode"
+export type AIProviderType = "openai" | "native-ollama" | "custom" | "screenpipe-cloud" | "pi"
 export type AudioDeviceInfo = { name: string; isDefault: boolean }
 export type Credits = { amount: number }
 export type EmbeddedLLM = { enabled: boolean; model: string; port: number }
@@ -559,8 +568,8 @@ export type OnboardingStore = { isCompleted: boolean; completedAt: string | null
  * Used to resume after app restart (e.g., after granting permissions)
  */
 currentStep?: string | null }
-export type OpencodeCheckResult = { available: boolean; sidecarAvailable: boolean; pathAvailable: boolean }
-export type OpencodeInfo = { running: boolean; baseUrl: string | null; port: number | null; projectDir: string | null; pid: number | null }
+export type PiCheckResult = { available: boolean; sidecarAvailable: boolean; pathAvailable: boolean }
+export type PiInfo = { running: boolean; projectDir: string | null; pid: number | null }
 export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; userId: string; 
 /**
  * Persistent analytics ID used for PostHog tracking (both frontend and backend)

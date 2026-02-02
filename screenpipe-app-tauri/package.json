@@ -14,7 +14,6 @@
     "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe-*,tesseract-*,ffmpeg*,bun*,ollama*,ui_monitor*} node_modules"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.1.48",
     "@patternfly/react-core": "^6.1.0",
     "@patternfly/react-log-viewer": "^6.1.0",
     "@radix-ui/react-accordion": "^1.2.0",

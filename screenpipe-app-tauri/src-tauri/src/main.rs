@@ -39,7 +39,6 @@ use crate::store::SettingsStore;
 
 mod commands;
 mod disk_usage;
-mod opencode;
 mod permissions;
 mod server;
 mod sidecar;
@@ -819,12 +818,13 @@ async fn main() {
                 sync::init_sync,
                 sync::lock_sync,
                 sync::delete_cloud_data,
-                // OpenCode commands
-                opencode::opencode_info,
-                opencode::opencode_start,
-                opencode::opencode_stop,
-                opencode::opencode_check,
-                opencode::opencode_install,
+                // Pi commands
+                pi::pi_info,
+                pi::pi_start,
+                pi::pi_stop,
+                pi::pi_check,
+                pi::pi_install,
+                pi::pi_prompt,
                 // Obsidian Sync commands
                 obsidian_sync::obsidian_save_settings,
                 obsidian_sync::obsidian_validate_vault,
@@ -852,7 +852,7 @@ async fn main() {
     }
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
-    let opencode_state = opencode::OpencodeState(Arc::new(tokio::sync::Mutex::new(None)));
+    let pi_state = pi::PiState(Arc::new(tokio::sync::Mutex::new(None)));
     let obsidian_sync_state = obsidian_sync::ObsidianSyncState::new();
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
@@ -905,7 +905,7 @@ async fn main() {
         let app = app.plugin(tauri_nspanel::init());
 
         let app = app.manage(sidecar_state)
-        .manage(opencode_state)
+        .manage(pi_state)
         .manage(obsidian_sync_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -964,12 +964,13 @@ async fn main() {
             sync::init_sync,
             sync::lock_sync,
             sync::delete_cloud_data,
-            // OpenCode commands
-            opencode::opencode_info,
-            opencode::opencode_start,
-            opencode::opencode_stop,
-            opencode::opencode_check,
-            opencode::opencode_install,
+            // Pi commands
+            pi::pi_info,
+            pi::pi_start,
+            pi::pi_stop,
+            pi::pi_check,
+            pi::pi_install,
+            pi::pi_prompt,
             // Obsidian Sync commands
             obsidian_sync::obsidian_save_settings,
             obsidian_sync::obsidian_validate_vault,
@@ -1331,11 +1332,11 @@ async fn main() {
                 drop(server_shutdown_tx.send(()));
             }
 
-            // Cleanup OpenCode sidecar
-            let app_handle_opencode = app_handle.app_handle().clone();
+            // Cleanup Pi sidecar
+            let app_handle_pi = app_handle.app_handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Some(opencode_state) = app_handle_opencode.try_state::<opencode::OpencodeState>() {
-                    opencode::cleanup_opencode(&opencode_state).await;
+                if let Some(pi_state) = app_handle_pi.try_state::<pi::PiState>() {
+                    pi::cleanup_pi(&pi_state).await;
                 }
             });
         }

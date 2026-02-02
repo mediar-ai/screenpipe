@@ -77,7 +77,7 @@ const formatPresetName = (name: string): string => {
 };
 
 export interface AIProviderCardProps {
-  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded" | "opencode";
+  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded" | "pi";
   title: string;
   description: string;
   imageSrc: string;
@@ -148,12 +148,12 @@ const AISection = ({
   preset,
   setDialog,
   isDuplicating,
-  opencodeAvailable,
+  piAvailable,
 }: {
   preset?: AIPreset;
   setDialog: (value: boolean) => void;
   isDuplicating?: boolean;
-  opencodeAvailable?: boolean;
+  piAvailable?: boolean;
 }) => {
   const { settings, updateSettings } = useSettings();
   const [settingsPreset, setSettingsPreset] = useState<
@@ -371,9 +371,9 @@ const AISection = ({
       case "custom":
         newUrl = settingsPreset?.url || "";
         break;
-      case "opencode":
-        newUrl = ""; // URL is dynamic - set at runtime
-        newModel = "screenpipe/claude-haiku-4-5";
+      case "pi":
+        newUrl = ""; // Pi uses RPC mode, not HTTP
+        newModel = "claude-haiku-4-5@20251001";
         break;
     }
 
@@ -576,14 +576,14 @@ const AISection = ({
             onClick={() => handleAiProviderChange("custom")}
           />
 
-          {opencodeAvailable && (
+          {piAvailable && (
             <AIProviderCard
-              type="opencode"
-              title="OpenCode"
-              description="High-intelligence AI agent powered by Claude. Requires login."
+              type="pi"
+              title="Pi Agent"
+              description="AI coding agent powered by Claude. Requires login."
               imageSrc="/images/screenpipe.png"
-              selected={settingsPreset?.provider === "opencode"}
-              onClick={() => handleAiProviderChange("opencode")}
+              selected={settingsPreset?.provider === "pi"}
+              onClick={() => handleAiProviderChange("pi")}
               disabled={!settings.user?.token}
               warningText={!settings.user?.token ? "Login required" : undefined}
             />
@@ -824,7 +824,7 @@ const providerImageSrc: Record<AIPreset["provider"], string> = {
   "screenpipe-cloud": "/images/screenpipe.png",
   "native-ollama": "/images/ollama.png",
   custom: "/images/custom.png",
-  opencode: "/images/screenpipe.png",
+  pi: "/images/screenpipe.png",
 };
 
 export const AIPresets = () => {
@@ -837,29 +837,29 @@ export const AIPresets = () => {
     null
   );
   const [isDuplicating, setIsDuplicating] = useState(false);
-  const [opencodeAvailable, setOpencodeAvailable] = useState(false);
-  const [opencodeInstalling, setOpencodeInstalling] = useState(false);
+  const [piAvailable, setPiAvailable] = useState(false);
+  const [piInstalling, setPiInstalling] = useState(false);
 
-  // Check OpenCode availability and install if needed (background)
+  // Check Pi availability and install if needed (background)
   useEffect(() => {
-    const checkAndInstallOpencode = async () => {
-      const result = await commands.opencodeCheck();
+    const checkAndInstallPi = async () => {
+      const result = await commands.piCheck();
       if (result.status === "ok" && result.data.available) {
-        setOpencodeAvailable(true);
+        setPiAvailable(true);
       } else {
         // Try to install in background
-        setOpencodeInstalling(true);
-        await commands.opencodeInstall();
+        setPiInstalling(true);
+        await commands.piInstall();
       }
     };
 
-    checkAndInstallOpencode();
+    checkAndInstallPi();
 
     // Listen for install completion
-    const unlisten = listen<boolean>("opencode_installed", (event) => {
-      setOpencodeInstalling(false);
+    const unlisten = listen<boolean>("pi_installed", (event) => {
+      setPiInstalling(false);
       if (event.payload) {
-        setOpencodeAvailable(true);
+        setPiAvailable(true);
       }
     });
 
@@ -881,7 +881,7 @@ export const AIPresets = () => {
         setDialog={setCreatePresentDialog}
         preset={selectedPreset}
         isDuplicating={isDuplicating}
-        opencodeAvailable={opencodeAvailable}
+        piAvailable={piAvailable}
       />
     );
 

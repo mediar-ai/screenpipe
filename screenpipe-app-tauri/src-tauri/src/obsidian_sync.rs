@@ -76,7 +76,7 @@ impl ObsidianSyncState {
     }
 }
 
-/// System prompt for the opencode agent with screenpipe API docs
+/// System prompt for the pi agent with screenpipe API docs
 const SYSTEM_PROMPT: &str = r#"You are syncing screenpipe activity data to an Obsidian vault.
 
 ## Screenpipe API Reference
@@ -170,7 +170,7 @@ Create/append to the daily log file using this markdown table format:
 - Detect timezone from the system or use the timestamp offsets in the data
 "#;
 
-/// Build the full prompt for opencode
+/// Build the full prompt for pi
 fn build_prompt(settings: &ObsidianSyncSettings, start_time: &str, end_time: &str) -> String {
     let local_now = chrono::Local::now();
     let today = local_now.format("%Y-%m-%d").to_string();

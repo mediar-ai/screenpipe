@@ -652,15 +652,15 @@ export function StandaloneChat() {
   const hasPresets = settings.aiPresets && settings.aiPresets.length > 0;
   const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
   const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
-  const needsOpencodeLogin = activePreset?.provider === "opencode" && !settings.user?.token;
-  const canChat = hasPresets && hasValidModel && !needsLogin && !needsOpencodeLogin;
+  const needsPiLogin = activePreset?.provider === "pi" && !settings.user?.token;
+  const canChat = hasPresets && hasValidModel && !needsLogin && !needsPiLogin;
 
   const getDisabledReason = (): string | null => {
     if (!hasPresets) return "No AI presets configured";
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset`;
     if (needsLogin) return "Login required for Screenpipe Cloud";
-    if (needsOpencodeLogin) return "Login required for OpenCode";
+    if (needsPiLogin) return "Login required for Pi";
     return null;
   };
   const disabledReason = getDisabledReason();
@@ -772,9 +772,9 @@ export function StandaloneChat() {
   function getOpenAIClient(): OpenAI | null {
     if (!activePreset) return null;
 
-    // Handle opencode provider - uses screenpipe-cloud directly with Claude models
-    // OpenCode CLI doesn't expose an OpenAI-compatible API, so we use the cloud directly
-    if (activePreset.provider === "opencode") {
+    // Handle pi provider - uses screenpipe-cloud directly with Claude models
+    // Pi uses RPC mode locally, so for chat we use the cloud directly
+    if (activePreset.provider === "pi") {
       return new OpenAI({
         apiKey: settings.user?.token || "anonymous",
         baseURL: "https://api.screenpi.pe/v1",
@@ -1334,13 +1334,13 @@ export function StandaloneChat() {
             </div>
             <div className="text-center space-y-2">
               <h3 className="font-semibold tracking-tight">
-                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : (needsLogin || needsOpencodeLogin ? "Login Required" : "Setup Required")}
+                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : (needsLogin || needsPiLogin ? "Login Required" : "Setup Required")}
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
                 {disabledReason}
               </p>
             </div>
-            {(needsLogin || needsOpencodeLogin) && (
+            {(needsLogin || needsPiLogin) && (
               <Button
                 variant="default"
                 onClick={() => openUrl("https://screenpi.pe/login")}

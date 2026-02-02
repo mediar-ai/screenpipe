@@ -29,7 +29,7 @@ const providerIcons = {
 	"screenpipe-cloud": <Image src="/images/screenpipe.png" alt="Screenpipe Cloud" width={16} height={16} />,
 	"native-ollama": <Image src="/images/ollama.png" alt="Ollama" width={16} height={16} />,
 	custom: <Image src="/images/custom.png" alt="Custom" width={16} height={16} />,
-	opencode: <Image src="/images/opencode.png" alt="OpenCode" width={16} height={16} />,
+	pi: <Image src="/images/screenpipe.png" alt="Pi" width={16} height={16} />,
 };
 
 const getPresetProviderIcon = (provider: AIPreset["provider"]) => {

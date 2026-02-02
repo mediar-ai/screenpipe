@@ -1,13 +1,13 @@
 use std::{fs, path::PathBuf};
-use tauri::Manager;
 
 pub fn get_base_dir(
-    app: &tauri::AppHandle,
+    _app: &tauri::AppHandle,
     custom_path: Option<String>,
 ) -> anyhow::Result<PathBuf> {
-    let default_path = app.path().local_data_dir()
-        .map_err(|e| anyhow::anyhow!("Could not get local data directory: {}", e))?
-        .join("screenpipe");
+    // Use $HOME/.screenpipe to match CLI default
+    let default_path = dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("Could not get home directory"))?
+        .join(".screenpipe");
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
 

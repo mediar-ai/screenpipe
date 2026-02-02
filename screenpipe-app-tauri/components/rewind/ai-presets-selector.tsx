@@ -135,25 +135,25 @@ export function AIProviderConfig({
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [idError, setIdError] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [opencodeAvailable, setOpencodeAvailable] = useState(false);
+  const [piAvailable, setPiAvailable] = useState(false);
 
-  // Check OpenCode availability
+  // Check Pi availability
   useEffect(() => {
-    const checkOpencode = async () => {
+    const checkPi = async () => {
       try {
-        const result = await commands.opencodeCheck();
+        const result = await commands.piCheck();
         if (result.status === "ok" && result.data.available) {
-          setOpencodeAvailable(true);
+          setPiAvailable(true);
         }
       } catch (e) {
-        console.error("Failed to check opencode:", e);
+        console.error("Failed to check pi:", e);
       }
     };
-    checkOpencode();
+    checkPi();
 
-    const unlisten = listen<boolean>("opencode_installed", (event) => {
+    const unlisten = listen<boolean>("pi_installed", (event) => {
       if (event.payload) {
-        setOpencodeAvailable(true);
+        setPiAvailable(true);
       }
     });
 
@@ -381,7 +381,7 @@ export function AIProviderConfig({
 
         <div className={cn(
           "grid gap-1.5",
-          opencodeAvailable ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"
+          piAvailable ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"
         )}>
           <Button
             type="button"
@@ -452,24 +452,24 @@ export function AIProviderConfig({
             <span>custom</span>
           </Button>
 
-          {opencodeAvailable && (
+          {piAvailable && (
             <Button
               type="button"
               disabled={!settings?.user?.token}
-              variant={selectedProvider === "opencode" ? "default" : "outline"}
+              variant={selectedProvider === "pi" ? "default" : "outline"}
               className="flex h-10 flex-col items-center justify-center gap-0.5 text-xs"
               onClick={() => {
-                setSelectedProvider("opencode");
+                setSelectedProvider("pi");
                 setFormData({
                   ...formData,
-                  provider: "opencode",
-                  url: "", // URL is dynamic - set at runtime
-                  model: "screenpipe/claude-haiku-4-5",
+                  provider: "pi",
+                  url: "", // Pi uses RPC mode
+                  model: "claude-haiku-4-5@20251001",
                 });
               }}
             >
               <Icons.terminal className="h-4 w-4" />
-              <span>opencode</span>
+              <span>pi</span>
             </Button>
           )}
         </div>
@@ -694,7 +694,7 @@ export function AIProviderConfig({
           </div>
         )}
 
-        {selectedProvider === "opencode" && (
+        {selectedProvider === "pi" && (
           <div className="space-y-1">
             <Label htmlFor="model" className="text-xs">model</Label>
             <Select
@@ -707,8 +707,8 @@ export function AIProviderConfig({
                 <SelectValue placeholder="select model" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="screenpipe/claude-haiku-4-5">Haiku 4.5 (fast)</SelectItem>
-                <SelectItem value="screenpipe/claude-opus-4-5">Opus 4.5 (powerful)</SelectItem>
+                <SelectItem value="claude-haiku-4-5@20251001">Haiku 4.5 (fast)</SelectItem>
+                <SelectItem value="claude-opus-4-5@20251101">Opus 4.5 (powerful)</SelectItem>
               </SelectContent>
             </Select>
           </div>

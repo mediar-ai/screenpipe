@@ -27,12 +27,9 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
-import { commands, OpencodeInfo } from "@/lib/utils/tauri";
+import { commands, PiInfo } from "@/lib/utils/tauri";
 import posthog from "posthog-js";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
-
-type OpencodeClient = ReturnType<typeof createOpencodeClient>;
 
 const SCREENPIPE_API = "http://localhost:3030";
 
@@ -568,12 +565,11 @@ export function GlobalChat() {
   const [upgradeReason, setUpgradeReason] = useState<"daily_limit" | "model_not_allowed">("daily_limit");
   const [upgradeResetsAt, setUpgradeResetsAt] = useState<string | undefined>();
 
-  // OpenCode state
-  const [opencodeInfo, setOpencodeInfo] = useState<OpencodeInfo | null>(null);
-  const [opencodeClient, setOpencodeClient] = useState<OpencodeClient | null>(null);
-  const [opencodeSessionId, setOpencodeSessionId] = useState<string | null>(null);
-  const [opencodeProjectDir, setOpencodeProjectDir] = useState<string>("");
-  const [opencodeStarting, setOpencodeStarting] = useState(false);
+  // Pi state
+  const [piInfo, setPiInfo] = useState<PiInfo | null>(null);
+  const [piProjectDir, setPiProjectDir] = useState<string>("");
+  const [piStarting, setPiStarting] = useState(false);
+  const [piLogs, setPiLogs] = useState<string[]>([]);
 
   // Chat history state
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -1059,12 +1055,12 @@ export function GlobalChat() {
 
   // Check if we have valid AI setup
   const hasPresets = settings.aiPresets && settings.aiPresets.length > 0;
-  const hasValidModel = activePreset?.provider === "opencode" || (activePreset?.model && activePreset.model.trim() !== "");
-  const needsLogin = (activePreset?.provider === "screenpipe-cloud" || activePreset?.provider === "opencode") && !settings.user?.token;
-  const isOpencode = activePreset?.provider === "opencode";
-  const needsProjectDir = isOpencode && !opencodeProjectDir;
-  const opencodeReady = isOpencode ? (opencodeInfo?.running && opencodeClient && opencodeSessionId && !needsProjectDir) : true;
-  const canChat = hasPresets && hasValidModel && !needsLogin && opencodeReady;
+  const hasValidModel = activePreset?.provider === "pi" || (activePreset?.model && activePreset.model.trim() !== "");
+  const needsLogin = (activePreset?.provider === "screenpipe-cloud" || activePreset?.provider === "pi") && !settings.user?.token;
+  const isPi = activePreset?.provider === "pi";
+  const needsProjectDir = isPi && !piProjectDir;
+  const piReady = isPi ? (piInfo?.running && !needsProjectDir) : true;
+  const canChat = hasPresets && hasValidModel && !needsLogin && piReady;
 
   // Debug: log why chat might be disabled
   useEffect(() => {
@@ -1083,70 +1079,42 @@ export function GlobalChat() {
 
   // Load saved project directory on mount
   useEffect(() => {
-    const saved = localStorage.getItem("opencode_project_dir");
-    if (saved) setOpencodeProjectDir(saved);
+    const saved = localStorage.getItem("pi_project_dir");
+    if (saved) setPiProjectDir(saved);
   }, []);
 
   // Save project directory when changed
   useEffect(() => {
-    if (opencodeProjectDir) {
-      localStorage.setItem("opencode_project_dir", opencodeProjectDir);
+    if (piProjectDir) {
+      localStorage.setItem("pi_project_dir", piProjectDir);
     }
-  }, [opencodeProjectDir]);
+  }, [piProjectDir]);
 
-  // Start OpenCode when preset is selected, dialog is open, and project dir is set
+  // Start Pi when preset is selected, dialog is open, and project dir is set
   useEffect(() => {
-    if (!isOpencode || !open || needsLogin || !opencodeProjectDir || opencodeStarting) return;
+    if (!isPi || !open || needsLogin || !piProjectDir || piStarting) return;
 
-    const initOpencode = async () => {
-      setOpencodeStarting(true);
+    const initPi = async () => {
+      setPiStarting(true);
 
       try {
         // Check current status
-        const infoResult = await commands.opencodeInfo();
+        const infoResult = await commands.piInfo();
         if (infoResult.status === "ok") {
-          setOpencodeInfo(infoResult.data);
+          setPiInfo(infoResult.data);
 
           // Check if already running with same project
-          if (infoResult.data.running && infoResult.data.baseUrl && infoResult.data.projectDir === opencodeProjectDir) {
-            // Already running with correct project, set up client
-            const client = createOpencodeClient({ baseUrl: infoResult.data.baseUrl });
-            setOpencodeClient(client);
-
-            // Get or create a session
-            try {
-              const sessions = await client.session.list();
-              if (sessions.data && sessions.data.length > 0) {
-                setOpencodeSessionId(sessions.data[0].id);
-              } else {
-                const newSession = await client.session.create({ directory: opencodeProjectDir });
-                if (newSession.data) {
-                  setOpencodeSessionId(newSession.data.id);
-                }
-              }
-            } catch (e) {
-              console.error("Failed to get/create opencode session:", e);
-            }
+          if (infoResult.data.running && infoResult.data.projectDir === piProjectDir) {
+            // Already running with correct project
+            console.log("Pi already running for project:", piProjectDir);
           } else {
             // Not running or different project, start with selected directory
-            const startResult = await commands.opencodeStart(opencodeProjectDir, settings.user?.token ?? null);
-            if (startResult.status === "ok" && startResult.data.running && startResult.data.baseUrl) {
-              setOpencodeInfo(startResult.data);
-              const client = createOpencodeClient({ baseUrl: startResult.data.baseUrl });
-              setOpencodeClient(client);
-
-              // Create initial session
-              try {
-                const newSession = await client.session.create({ directory: opencodeProjectDir });
-                if (newSession.data) {
-                  setOpencodeSessionId(newSession.data.id);
-                }
-              } catch (e) {
-                console.error("Failed to create opencode session:", e);
-              }
+            const startResult = await commands.piStart(piProjectDir, settings.user?.token ?? null);
+            if (startResult.status === "ok" && startResult.data.running) {
+              setPiInfo(startResult.data);
             } else if (startResult.status === "error") {
               toast({
-                title: "OpenCode failed to start",
+                title: "Pi failed to start",
                 description: startResult.error,
                 variant: "destructive",
               });
@@ -1154,12 +1122,12 @@ export function GlobalChat() {
           }
         }
       } finally {
-        setOpencodeStarting(false);
+        setPiStarting(false);
       }
     };
 
-    initOpencode();
-  }, [isOpencode, open, needsLogin, opencodeProjectDir, settings.user?.token]);
+    initPi();
+  }, [isPi, open, needsLogin, piProjectDir, settings.user?.token]);
 
   // Get error message for why chat is disabled
   const getDisabledReason = (): string | null => {
@@ -1167,22 +1135,22 @@ export function GlobalChat() {
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset - click edit to add one`;
     if (needsLogin) return "Login required";
-    if (isOpencode && needsProjectDir) return "Select a project folder";
-    if (isOpencode && opencodeStarting) return "Starting OpenCode...";
-    if (isOpencode && !opencodeReady) return "Connecting to OpenCode...";
+    if (isPi && needsProjectDir) return "Select a project folder";
+    if (isPi && piStarting) return "Starting Pi...";
+    if (isPi && !piReady) return "Connecting to Pi...";
     return null;
   };
   const disabledReason = getDisabledReason();
 
-  // Project directory picker for OpenCode
-  const selectOpencodeProject = async () => {
+  // Project directory picker for Pi
+  const selectPiProject = async () => {
     const selected = await openDialog({
       directory: true,
       multiple: false,
-      title: "Select Project Folder for OpenCode",
+      title: "Select Project Folder for Pi",
     });
     if (selected) {
-      setOpencodeProjectDir(selected as string);
+      setPiProjectDir(selected as string);
     }
   };
 
@@ -1371,9 +1339,9 @@ export function GlobalChat() {
     });
   }
 
-  // Send message using OpenCode SDK
-  async function sendOpencodeMessage(userMessage: string) {
-    if (!opencodeClient || !opencodeSessionId) return;
+  // Send message using Pi (listen to events for streaming output)
+  async function sendPiMessage(userMessage: string) {
+    if (!piInfo?.running) return;
 
     const newUserMessage: Message = {
       id: Date.now().toString(),
@@ -1392,96 +1360,33 @@ export function GlobalChat() {
       // Add placeholder for streaming response
       setMessages((prev) => [
         ...prev,
-        { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() },
+        { id: assistantMessageId, role: "assistant", content: "Processing...", timestamp: Date.now() },
       ]);
 
-      // Send to OpenCode
-      await opencodeClient.session.promptAsync({
-        sessionID: opencodeSessionId,
-        parts: [{ type: "text", text: userMessage }],
-      });
-
-      // Poll for updates with smart completion detection
-      let accumulatedText = "";
-      let stableCount = 0;
-      let lastMessageCount = 0;
-      const maxStablePolls = 5; // Stop if no changes for 5 polls
-      const maxPolls = 120; // Max 2 minutes at 1s intervals
-      let pollCount = 0;
-
-      const poll = async (): Promise<void> => {
-        if (!opencodeClient || !opencodeSessionId || pollCount >= maxPolls) {
-          setIsLoading(false);
-          setIsStreaming(false);
-          return;
-        }
-
-        pollCount++;
-
-        try {
-          const msgs = await opencodeClient.session.messages({ sessionID: opencodeSessionId });
-          if (msgs.data && msgs.data.length > 0) {
-            const assistantMsgs = msgs.data.filter((m: any) => m.info.role === "assistant");
-            const lastAssistantMsg = assistantMsgs[assistantMsgs.length - 1];
-
-            if (lastAssistantMsg) {
-              const textParts = lastAssistantMsg.parts
-                .filter((p: any) => p.type === "text")
-                .map((p: any) => p.text)
-                .join("\n");
-
-              // Also show tool usage
-              const toolParts = lastAssistantMsg.parts
-                .filter((p: any) => p.type === "tool")
-                .map((p: any) => `\n\`${p.tool}\``)
-                .join("");
-
-              const fullText = textParts + toolParts;
-
-              if (fullText !== accumulatedText) {
-                accumulatedText = fullText;
-                stableCount = 0;
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantMessageId
-                      ? { ...m, content: accumulatedText }
-                      : m
-                  )
-                );
-              } else {
-                stableCount++;
-              }
-
-              // Check if we have more messages than before (response complete)
-              if (assistantMsgs.length > lastMessageCount && stableCount >= 2) {
-                // New message appeared and stabilized - likely complete
-                setIsLoading(false);
-                setIsStreaming(false);
-                return;
-              }
-              lastMessageCount = assistantMsgs.length;
-
-              // Stop if content hasn't changed for maxStablePolls
-              if (stableCount >= maxStablePolls && accumulatedText.length > 0) {
-                setIsLoading(false);
-                setIsStreaming(false);
-                return;
-              }
-            }
-          }
-        } catch (e) {
-          console.error("Error polling opencode messages:", e);
-        }
-
-        // Continue polling
-        setTimeout(poll, 1000);
-      };
-
-      // Start polling after a brief delay
-      setTimeout(poll, 500);
-
+      // Send prompt to Pi via RPC
+      const result = await commands.piPrompt(userMessage);
+      
+      if (result.status === "error") {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId
+              ? { ...m, content: `Error: ${result.error}` }
+              : m
+          )
+        );
+      } else {
+        // Listen for output via pi_output events
+        // The response will be collected from pi_output events
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId
+              ? { ...m, content: "Pi is processing your request. Check the terminal for full output." }
+              : m
+          )
+        );
+      }
     } catch (error) {
-      console.error("OpenCode error:", error);
+      console.error("Pi error:", error);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMessageId
@@ -1489,6 +1394,7 @@ export function GlobalChat() {
             : m
         )
       );
+    } finally {
       setIsLoading(false);
       setIsStreaming(false);
     }
@@ -1503,12 +1409,12 @@ export function GlobalChat() {
       message_length: userMessage.length,
       provider: activePreset?.provider,
       model: activePreset?.model,
-      is_opencode: isOpencode,
+      is_pi: isPi,
     });
 
-    // Use OpenCode if that's the active provider
-    if (isOpencode) {
-      return sendOpencodeMessage(userMessage);
+    // Use Pi if that's the active provider
+    if (isPi) {
+      return sendPiMessage(userMessage);
     }
 
     const openai = getOpenAIClient();
@@ -2137,17 +2043,17 @@ export function GlobalChat() {
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="font-semibold text-sm tracking-tight">
-                {isOpencode ? "OpenCode" : "Pipe AI"}
+                {isPi ? "Pi Agent" : "Pipe AI"}
               </h2>
               <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider truncate">
-                {isOpencode && opencodeProjectDir
-                  ? opencodeProjectDir.split("/").pop() || opencodeProjectDir
+                {isPi && piProjectDir
+                  ? piProjectDir.split("/").pop() || piProjectDir
                   : "Screen Activity Assistant"}
               </p>
             </div>
-            {isOpencode && opencodeProjectDir && (
+            {isPi && piProjectDir && (
               <button
-                onClick={selectOpencodeProject}
+                onClick={selectPiProject}
                 className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-foreground/70 hover:text-foreground transition-colors border border-border/30"
                 title="Change project folder"
               >
@@ -2296,7 +2202,7 @@ export function GlobalChat() {
                     <FolderOpen className="h-12 w-12 text-muted-foreground" />
                   ) : needsLogin ? (
                     <PipeAIIconLarge size={48} className="text-muted-foreground" />
-                  ) : opencodeStarting ? (
+                  ) : piStarting ? (
                     <Loader2 className="h-12 w-12 text-muted-foreground animate-spin" />
                   ) : (
                     <Settings className="h-12 w-12 text-destructive/70" />
@@ -2304,16 +2210,16 @@ export function GlobalChat() {
                 </div>
                 <div className="text-center space-y-2">
                   <h3 className="font-semibold tracking-tight">
-                    {needsProjectDir ? "Select Project" : !hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : opencodeStarting ? "Starting OpenCode" : "Login Required"}
+                    {needsProjectDir ? "Select Project" : !hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : piStarting ? "Starting Pi..." : "Login Required"}
                   </h3>
                   <p className="text-sm text-muted-foreground max-w-sm">
-                    {needsProjectDir ? "Choose a folder for OpenCode to work with" : disabledReason}
+                    {needsProjectDir ? "Choose a folder for Pi to work with" : disabledReason}
                   </p>
                 </div>
                 {needsProjectDir && (
                   <Button
                     variant="default"
-                    onClick={selectOpencodeProject}
+                    onClick={selectPiProject}
                     className="gap-2 font-medium bg-foreground text-background hover:bg-foreground/90"
                   >
                     <FolderOpen className="h-4 w-4" />
