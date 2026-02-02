@@ -21,6 +21,9 @@ pub struct ObsidianSyncSettings {
     pub enabled: bool,
     /// Path to the Obsidian vault
     pub vault_path: String,
+    /// Subfolder within vault for notes (e.g., "screenpipe/logs" or "daily/activity")
+    #[serde(default = "default_notes_path")]
+    pub notes_path: String,
     /// Sync interval in minutes (0 = manual only)
     pub sync_interval_minutes: u32,
     /// Custom user prompt to append to system prompt
@@ -29,6 +32,10 @@ pub struct ObsidianSyncSettings {
     pub last_sync_time: Option<String>,
     /// Number of hours to sync (how far back to look)
     pub sync_hours: u32,
+}
+
+fn default_notes_path() -> String {
+    "screenpipe/logs".to_string()
 }
 
 /// Status of an ongoing or completed sync
@@ -154,15 +161,21 @@ Create/append to the daily log file using this markdown table format:
 - Query in chunks to avoid context overflow
 - Use curl to fetch data from the API
 - Write files using the write tool
-- Create the screenpipe/logs/ subfolder structure
+- Create the subfolder structure if it doesn't exist
 "#;
 
 /// Build the full prompt for opencode
 fn build_prompt(settings: &ObsidianSyncSettings, start_time: &str, end_time: &str) -> String {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let notes_path = if settings.notes_path.is_empty() {
+        "screenpipe/logs".to_string()
+    } else {
+        settings.notes_path.trim_matches('/').to_string()
+    };
     let note_path = format!(
-        "{}/screenpipe/logs/{}.md",
+        "{}/{}/{}.md",
         settings.vault_path.trim_end_matches('/'),
+        notes_path,
         today
     );
 

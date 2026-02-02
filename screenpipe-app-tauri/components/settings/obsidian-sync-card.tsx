@@ -117,6 +117,7 @@ import { useToast } from "@/components/ui/use-toast";
 interface ObsidianSyncSettings {
   enabled: boolean;
   vaultPath: string;
+  notesPath: string; // Subfolder within vault for notes (e.g., "screenpipe/logs" or "daily/activity")
   syncIntervalMinutes: number;
   customPrompt: string;
   lastSyncTime: string | null;
@@ -133,6 +134,7 @@ interface ObsidianSyncStatus {
 const DEFAULT_SETTINGS: ObsidianSyncSettings = {
   enabled: false,
   vaultPath: "",
+  notesPath: "screenpipe/logs", // Default subfolder
   syncIntervalMinutes: 0, // 0 = manual only
   customPrompt: "",
   lastSyncTime: null,
@@ -514,6 +516,25 @@ export function ObsidianSyncCard() {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Notes Folder Path */}
+            <div className="space-y-2">
+              <Label htmlFor="notes-path" className="flex items-center gap-2">
+                <FolderOpen className="h-4 w-4" />
+                Notes folder (within vault)
+              </Label>
+              <Input
+                id="notes-path"
+                value={settings.notesPath}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, notesPath: e.target.value }))
+                }
+                placeholder="screenpipe/logs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Subfolder where daily notes will be created (e.g., &quot;daily/screenpipe&quot; or &quot;journals/activity&quot;)
+              </p>
             </div>
 
             {/* Sync Hours */}
