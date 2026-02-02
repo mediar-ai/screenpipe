@@ -716,8 +716,9 @@ async fn main() {
     let _ = fix_path_env::fix();
 
     // Check if telemetry is disabled via store setting (analyticsEnabled)
-    let telemetry_disabled = dirs::data_local_dir()
-        .map(|dir| dir.join("screenpipe").join("store.bin"))
+    // Use ~/.screenpipe to match CLI default data directory
+    let telemetry_disabled = dirs::home_dir()
+        .map(|dir| dir.join(".screenpipe").join("store.bin"))
         .and_then(|path| std::fs::read_to_string(&path).ok())
         .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
         .and_then(|data| data.get("analyticsEnabled").and_then(|v| v.as_bool()))
