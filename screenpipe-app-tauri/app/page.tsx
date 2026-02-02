@@ -13,6 +13,7 @@ import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { commands } from "@/lib/utils/tauri";
 import localforage from "localforage";
 import { LoginDialog } from "../components/login-dialog";
+import { UpdateDialog, useUpdateListener } from "../components/update-dialog";
 import { ModelDownloadTracker } from "../components/model-download-tracker";
 import Timeline from "@/components/rewind/timeline";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,9 @@ export default function Home() {
   const { isMac } = usePlatform();
   const [isRestarting, setIsRestarting] = useState(false);
   const isProcessingRef = useRef(false);
+  
+  // Listen for update events from Rust
+  useUpdateListener();
 
   // Load onboarding status on mount
   useEffect(() => {
@@ -138,6 +142,7 @@ export default function Home() {
           <ChangelogDialog />
           <BreakingChangesInstructionsDialog />
           <LoginDialog />
+          <UpdateDialog />
           <ModelDownloadTracker />
           {!isServerDown ? (
             <div className="w-full scrollbar-hide bg-background relative">

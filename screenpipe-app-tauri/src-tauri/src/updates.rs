@@ -3,6 +3,7 @@ use crate::SidecarState;
 use anyhow::Error;
 use dark_light::Mode;
 use log::{error, info};
+use serde_json;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuItem, MenuItemBuilder};
@@ -120,6 +121,15 @@ impl UpdatesManager {
                 *self.update_installed.lock().await = true;
                 self.update_menu_item.set_enabled(true)?;
                 self.update_menu_item.set_text("update now")?;
+            }
+
+            // Emit event to frontend for custom update dialog
+            let update_info = serde_json::json!({
+                "version": update.version,
+                "body": update.body.clone().unwrap_or_default()
+            });
+            if let Err(e) = self.app.emit("update-available", update_info) {
+                error!("Failed to emit update-available event: {}", e);
             }
 
             if show_dialog {

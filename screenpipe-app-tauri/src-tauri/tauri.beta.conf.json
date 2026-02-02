@@ -46,7 +46,7 @@
   "plugins": {
     "updater": {
       "active": true,
-      "dialog": true,
+      "dialog": false,
       "endpoints": [
         "https://cdn.crabnebula.app/update/mediar/screenpipe-beta/{{target}}-{{arch}}/{{current_version}}"
       ],

@@ -40,6 +40,7 @@ pub struct EmbeddedServerConfig {
     pub audio_devices: Vec<String>,
     pub ignored_windows: Vec<String>,
     pub included_windows: Vec<String>,
+    pub ignored_urls: Vec<String>,
     pub languages: Vec<String>,
     pub vad_sensitivity: String,
     pub deepgram_api_key: Option<String>,
@@ -47,6 +48,8 @@ pub struct EmbeddedServerConfig {
     pub analytics_enabled: bool,
     pub enable_ui_events: bool,
     pub use_all_monitors: bool,
+    pub use_chinese_mirror: bool,
+    pub user_id: Option<String>,
 }
 
 impl EmbeddedServerConfig {
@@ -86,6 +89,13 @@ impl EmbeddedServerConfig {
             analytics_enabled: store.analytics_enabled,
             enable_ui_events: store.enable_ui_events,
             use_all_monitors: store.use_all_monitors,
+            use_chinese_mirror: store.use_chinese_mirror,
+            ignored_urls: store.ignored_urls.clone(),
+            user_id: if store.user.id.is_some() && !store.user.id.as_ref().unwrap().is_empty() {
+                store.user.id.clone()
+            } else {
+                None
+            },
         }
     }
 }
@@ -192,6 +202,26 @@ pub async fn start_embedded_server(
 ) -> Result<EmbeddedServerHandle, String> {
     info!("Starting embedded screenpipe server on port {}", config.port);
 
+    // Set environment variables for compatibility with CLI behavior
+    // File descriptor limit to prevent "Too many open files" errors
+    std::env::set_var("SCREENPIPE_FD_LIMIT", "8192");
+    
+    // Chinese HuggingFace mirror
+    if config.use_chinese_mirror {
+        std::env::set_var("HF_ENDPOINT", "https://hf-mirror.com");
+        info!("Using Chinese HuggingFace mirror");
+    }
+    
+    // Screenpipe cloud proxy for deepgram
+    if config.audio_transcription_engine == "screenpipe-cloud" {
+        if let Some(ref user_id) = config.user_id {
+            std::env::set_var("DEEPGRAM_API_URL", "https://api.screenpi.pe/v1/listen");
+            std::env::set_var("DEEPGRAM_WEBSOCKET_URL", "wss://api.screenpi.pe");
+            std::env::set_var("CUSTOM_DEEPGRAM_API_TOKEN", user_id);
+            info!("Using screenpipe cloud for audio transcription");
+        }
+    }
+
     let local_data_dir = config.data_dir.clone();
 
     // Create data directory
@@ -291,6 +321,7 @@ pub async fn start_embedded_server(
         let use_pii_removal = config.use_pii_removal;
         let ignored_windows = config.ignored_windows.clone();
         let included_windows = config.included_windows.clone();
+        let ignored_urls = config.ignored_urls.clone();
         let languages_clone = languages.clone();
 
         if config.use_all_monitors {
@@ -305,7 +336,7 @@ pub async fn start_embedded_server(
                 use_pii_removal,
                 ignored_windows,
                 included_windows,
-                ignored_urls: vec![],
+                ignored_urls,
                 languages: languages_clone,
                 capture_unfocused_windows: false,
                 realtime_vision: false,
@@ -381,7 +412,7 @@ pub async fn start_embedded_server(
                         &vision_handle,
                         &ignored_windows,
                         &included_windows,
-                        &[],
+                        &ignored_urls,
                         languages_clone.clone(),
                         false,
                         false,
