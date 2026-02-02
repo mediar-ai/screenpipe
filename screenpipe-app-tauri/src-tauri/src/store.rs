@@ -580,6 +580,9 @@ pub struct ObsidianSettingsStore {
     pub sync_interval_minutes: u32,
     pub custom_prompt: String,
     pub sync_hours: u32,
+    /// Next scheduled run time (ISO 8601) - used to resume scheduler after app restart
+    #[serde(default)]
+    pub next_scheduled_run: Option<String>,
 }
 
 fn default_notes_path() -> String {

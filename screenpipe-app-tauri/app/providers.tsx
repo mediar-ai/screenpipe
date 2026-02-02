@@ -9,11 +9,25 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { PermissionMonitorProvider } from "@/lib/hooks/use-permission-monitor";
 import { forwardRef } from "react";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { attachConsole } from "@tauri-apps/plugin-log";
 
 export const Providers = forwardRef<
   HTMLDivElement,
   { children: React.ReactNode }
 >(({ children }, ref) => {
+  // Attach browser console to Tauri log plugin (writes to file)
+  useEffect(() => {
+    let detach: (() => void) | undefined;
+    attachConsole().then((fn) => {
+      detach = fn;
+    }).catch((err) => {
+      console.error("Failed to attach console to log plugin:", err);
+    });
+    return () => {
+      detach?.();
+    };
+  }, []);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const isDebug = process.env.TAURI_ENV_DEBUG === "true";
