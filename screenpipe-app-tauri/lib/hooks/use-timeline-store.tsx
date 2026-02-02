@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import { hasFramesForDate } from "../actions/has-frames-date";
 import { subDays } from "date-fns";
+import { saveFramesToCache, loadCachedFrames } from "./use-timeline-cache";
 
 // Frame buffer for batching updates - reduces 68 re-renders to ~3-5
 let frameBuffer: StreamTimeSeriesResponse[] = [];
@@ -13,7 +14,7 @@ const PROGRESS_UPDATE_INTERVAL_MS = 500; // Only update progress indicator every
 // Connection retry logic - don't show error immediately, server might be starting
 let connectionAttempts = 0;
 let errorGraceTimer: ReturnType<typeof setTimeout> | null = null;
-const MAX_SILENT_RETRIES = 3; // Retry 3 times before showing error
+const MAX_SILENT_RETRIES = 5; // Increased from 3 - retry more before showing error
 const RETRY_DELAY_MS = 2000; // Wait 2 seconds between retries
 
 // Request timeout logic - retry if no frames arrive
@@ -28,6 +29,10 @@ let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 // Track the current WebSocket instance to ignore events from old connections
 let currentWsId = 0;
 
+// Cache save debounce
+let cacheSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const CACHE_SAVE_DEBOUNCE_MS = 2000; // Save cache 2s after last frame update
+
 interface TimelineState {
 	frames: StreamTimeSeriesResponse[];
 	frameTimestamps: Set<string>; // For O(1) deduplication lookups
@@ -41,6 +46,9 @@ interface TimelineState {
 	// Track new frames for animation and position adjustment
 	newFramesCount: number; // How many new frames were added at the front (for animation)
 	lastFlushTimestamp: number; // Timestamp of last flush (to trigger effects)
+	// Optimistic UI state
+	isConnected: boolean; // WebSocket connection status
+	hasCachedData: boolean; // Whether we loaded from cache
 
 	// Actions
 	setFrames: (frames: StreamTimeSeriesResponse[]) => void;
@@ -57,6 +65,7 @@ interface TimelineState {
 	clearNewFramesCount: () => void;
 	clearSentRequestForDate: (date: Date) => void;
 	clearFramesForNavigation: () => void; // Clear frames when navigating to new date
+	loadFromCache: () => Promise<void>; // Load cached frames on startup
 }
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
@@ -71,6 +80,8 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 	sentRequests: new Set<string>(),
 	newFramesCount: 0,
 	lastFlushTimestamp: 0,
+	isConnected: false,
+	hasCachedData: false,
 
 	setFrames: (frames) => set({ frames }),
 	setIsLoading: (isLoading) => set({ isLoading }),
@@ -88,6 +99,31 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		});
 	},
 
+	// Load cached frames for instant display
+	loadFromCache: async () => {
+		try {
+			const cached = await loadCachedFrames();
+			if (cached && cached.frames.length > 0) {
+				const cachedDate = new Date(cached.date);
+				const timestamps = new Set(cached.frames.map(f => f.timestamp));
+				
+				set({
+					frames: cached.frames,
+					frameTimestamps: timestamps,
+					currentDate: cachedDate,
+					isLoading: false, // Show cached data immediately
+					hasCachedData: true,
+					message: null,
+					error: null,
+				});
+				
+				console.log(`Loaded ${cached.frames.length} frames from cache`);
+			}
+		} catch (error) {
+			console.warn("Failed to load from cache:", error);
+		}
+	},
+
 	// Clear frames when navigating to a new date to avoid confusion between old/new frames
 	clearFramesForNavigation: () => {
 		// Clear the frame buffer too
@@ -96,14 +132,15 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			clearTimeout(flushTimer);
 			flushTimer = null;
 		}
-		set({
-			frames: [],
-			frameTimestamps: new Set<string>(),
+		// DON'T clear frames - keep showing stale data while loading new
+		// Only clear the request tracking and show loading indicator
+		set((state) => ({
+			sentRequests: new Set<string>(),
 			isLoading: true,
-			loadingProgress: { loaded: 0, isStreaming: false },
+			loadingProgress: { loaded: state.frames.length, isStreaming: false },
 			error: null,
-			message: null,
-		});
+			message: "loading...",
+		}));
 	},
 
 	hasDateBeenFetched: (date: Date) => {
@@ -173,6 +210,15 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				}
 			}
 
+			// Debounce cache save - don't save on every flush
+			if (cacheSaveTimer) {
+				clearTimeout(cacheSaveTimer);
+			}
+			cacheSaveTimer = setTimeout(() => {
+				cacheSaveTimer = null;
+				saveFramesToCache(mergedFrames, state.currentDate);
+			}, CACHE_SAVE_DEBOUNCE_MS);
+
 			return {
 				frames: mergedFrames,
 				frameTimestamps: updatedTimestamps,
@@ -206,16 +252,23 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			existingWs.close();
 		}
 
-		// Reset state for fresh data when reconnecting
+		// OPTIMISTIC: Don't reset frames on reconnect - keep showing existing data
+		// Only reset request tracking and connection state
+		const currentFrames = get().frames;
+		const currentTimestamps = get().frameTimestamps;
+		
 		set({
-			frames: [],
-			frameTimestamps: new Set<string>(),
+			// Keep existing frames visible!
+			frames: currentFrames,
+			frameTimestamps: currentTimestamps,
 			sentRequests: new Set<string>(),
-			isLoading: true,
-			loadingProgress: { loaded: 0, isStreaming: false },
+			isLoading: currentFrames.length === 0, // Only show loading if no frames
+			loadingProgress: { loaded: currentFrames.length, isStreaming: false },
 			error: null,
-			message: null,
+			message: currentFrames.length > 0 ? null : "connecting...",
+			isConnected: false,
 		});
+		
 		frameBuffer = [];
 		requestRetryCount = 0; // Reset retry counter on reconnection
 		if (progressUpdateTimer) {
@@ -240,12 +293,14 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				errorGraceTimer = null;
 			}
 
+			const currentFrames = get().frames;
 			set({
 				websocket: ws,
 				error: null,
 				message: null,
-				isLoading: true,
-				loadingProgress: { loaded: 0, isStreaming: true }
+				isLoading: currentFrames.length === 0,
+				loadingProgress: { loaded: currentFrames.length, isStreaming: true },
+				isConnected: true,
 			});
 			console.log("WebSocket connection established");
 
@@ -274,13 +329,11 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				if (data === "keep-alive-text") {
 					// Flush any pending frames when we get keep-alive
 					get().flushFrameBuffer();
+					const currentFrames = get().frames;
 					set((state) => ({
 						error: null,
 						isLoading: false,
-						message:
-							state.message === "please wait..."
-								? state.message
-								: "please wait...",
+						message: currentFrames.length === 0 ? "waiting for data..." : null,
 					}));
 					return;
 				}
@@ -288,7 +341,11 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				// Handle error messages
 				if (data.error) {
 					get().flushFrameBuffer(); // Flush before error
-					set({ error: data.error, isLoading: false });
+					// OPTIMISTIC: Don't show error if we have frames
+					const currentFrames = get().frames;
+					if (currentFrames.length === 0) {
+						set({ error: data.error, isLoading: false });
+					}
 					return;
 				}
 
@@ -335,10 +392,14 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 				}
 			} catch (error) {
 				console.error("Failed to parse frame data:", error);
-				set({
-					error: "Failed to parse server response",
-					isLoading: false,
-				});
+				// OPTIMISTIC: Don't show error if we have frames
+				const currentFrames = get().frames;
+				if (currentFrames.length === 0) {
+					set({
+						error: "Failed to parse server response",
+						isLoading: false,
+					});
+				}
 			}
 		};
 
@@ -349,11 +410,17 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			console.error("WebSocket error:", error);
 			connectionAttempts++;
 
+			const currentFrames = get().frames;
+
 			// Silent retry if under max attempts (server might be starting)
 			if (connectionAttempts < MAX_SILENT_RETRIES) {
 				console.log(`Connection attempt ${connectionAttempts}/${MAX_SILENT_RETRIES}, retrying...`);
-				// Keep showing loading state, not error
-				set({ isLoading: true, message: "connecting to screenpipe..." });
+				// OPTIMISTIC: Keep showing existing frames, just update connection status
+				set({ 
+					isLoading: currentFrames.length === 0, 
+					message: currentFrames.length === 0 ? "connecting to screenpipe..." : null,
+					isConnected: false,
+				});
 
 				// Schedule retry
 				if (!errorGraceTimer) {
@@ -363,8 +430,13 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 					}, RETRY_DELAY_MS);
 				}
 			} else {
-				// Max retries exceeded, show error
-				set({ error: "Connection error occurred", isLoading: false });
+				// Max retries exceeded - but still don't block if we have frames
+				if (currentFrames.length === 0) {
+					set({ error: "Connection error occurred", isLoading: false, isConnected: false });
+				} else {
+					// Have frames - show subtle indicator, not error
+					set({ error: null, isLoading: false, isConnected: false, message: null });
+				}
 			}
 		};
 
@@ -390,13 +462,18 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			}
 			get().flushFrameBuffer();
 
-			// Only show "Connection closed" if we had a successful connection before
-			if (connectionAttempts === 0) {
+			const currentFrames = get().frames;
+			
+			// OPTIMISTIC: Only show message if no frames
+			if (connectionAttempts === 0 && currentFrames.length === 0) {
 				set({
 					message: "Connection closed",
 					isLoading: false,
-					loadingProgress: { loaded: get().frames.length, isStreaming: false }
+					loadingProgress: { loaded: 0, isStreaming: false },
+					isConnected: false,
 				});
+			} else {
+				set({ isConnected: false });
 			}
 
 			// Reset attempts and reconnect after delay (tracked to prevent cascade)
@@ -527,4 +604,3 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 		}
 	},
 }));
-

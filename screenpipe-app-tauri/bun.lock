@@ -5,7 +5,6 @@
     "": {
       "name": "screenpipe-app",
       "dependencies": {
-        "@opencode-ai/sdk": "^1.1.48",
         "@patternfly/react-core": "^6.1.0",
         "@patternfly/react-log-viewer": "^6.1.0",
         "@radix-ui/react-accordion": "^1.2.0",
@@ -360,8 +359,6 @@
     "@nodelib/fs.stat": ["@nodelib/fs.stat@2.0.5", "", {}, ""],
 
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, ""],
-
-    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.1.48", "", {}, "sha512-j5/79X45fUPWVD2Ffm/qvwLclDCdPeV+TYMDrm9to0p4pmzhmeKevCsyiRdLg0o0HE3AFRUnOo2rdO9NetN79A=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, ""],
 
