@@ -16,7 +16,6 @@ use screenpipe_core::sync::{
     BlobType, PendingBlob, SyncClientConfig, SyncDataProvider, SyncManager, SyncService,
     SyncServiceConfig, SyncServiceHandle,
 };
-use screenpipe_db::DatabaseManager;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -240,7 +239,7 @@ pub async fn import_chunk(
 // ============================================================================
 
 /// Request to initialize sync at runtime.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SyncInitRequest {
     /// API token for cloud authentication
     pub token: String,
@@ -253,7 +252,7 @@ pub struct SyncInitRequest {
 }
 
 /// Response from sync initialization.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SyncInitResponse {
     pub success: bool,
     pub is_new_user: bool,
@@ -406,7 +405,7 @@ pub async fn sync_init(
 }
 
 /// Response for sync status.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SyncStatusResponse {
     pub enabled: bool,
     pub is_syncing: bool,
@@ -503,7 +502,7 @@ fn default_hours() -> u32 {
 }
 
 /// Response from download operation.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SyncDownloadResponse {
     pub success: bool,
     pub blobs_downloaded: usize,
@@ -588,4 +587,85 @@ pub async fn sync_download(
         blobs_downloaded,
         records_imported,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_sync_state() {
+        let state = new_sync_state();
+        // Should be empty initially
+        let guard = state.try_read().unwrap();
+        assert!(guard.is_none());
+    }
+
+    #[test]
+    fn test_sync_init_request_serialization() {
+        let request = SyncInitRequest {
+            token: "test-token".to_string(),
+            password: "test-password".to_string(),
+            machine_id: Some("test-machine".to_string()),
+            sync_interval_secs: Some(300),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("test-token"));
+        assert!(json.contains("test-machine"));
+    }
+
+    #[test]
+    fn test_sync_status_response_serialization() {
+        let response = SyncStatusResponse {
+            enabled: true,
+            is_syncing: false,
+            last_sync: Some("2024-01-28T14:00:00Z".to_string()),
+            last_error: None,
+            machine_id: Some("test-machine".to_string()),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        let parsed: SyncStatusResponse = serde_json::from_str(&json).unwrap();
+
+        assert!(parsed.enabled);
+        assert!(!parsed.is_syncing);
+        assert_eq!(parsed.machine_id, Some("test-machine".to_string()));
+    }
+
+    #[test]
+    fn test_sync_download_request_defaults() {
+        let json = r#"{}"#;
+        let request: SyncDownloadRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.hours, 24); // Default value
+    }
+
+    #[test]
+    fn test_sync_init_response_serialization() {
+        let response = SyncInitResponse {
+            success: true,
+            is_new_user: false,
+            machine_id: "abc123".to_string(),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("abc123"));
+        assert!(json.contains("\"success\":true"));
+    }
+
+    #[test]
+    fn test_sync_download_response_serialization() {
+        let response = SyncDownloadResponse {
+            success: true,
+            blobs_downloaded: 5,
+            records_imported: 100,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        let parsed: SyncDownloadResponse = serde_json::from_str(&json).unwrap();
+
+        assert!(parsed.success);
+        assert_eq!(parsed.blobs_downloaded, 5);
+        assert_eq!(parsed.records_imported, 100);
+    }
 }

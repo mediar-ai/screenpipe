@@ -8,8 +8,6 @@ use specta::Type;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
@@ -378,107 +376,74 @@ fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
 }
 
 /// Internal function to run pi with the sync prompt
-async fn run_pi_sync(app: &AppHandle, prompt: &str, user_token: Option<&str>) -> Result<(), String> {
+async fn run_pi_sync(_app: &AppHandle, prompt: &str, user_token: Option<&str>) -> Result<(), String> {
     info!("Starting obsidian sync with pi");
 
     // Ensure pi is configured to use screenpipe provider
     ensure_pi_config(user_token)?;
     
-    let shell = app.shell();
+    // Find pi executable
+    let home = dirs::home_dir().map(|h| h.to_string_lossy().to_string()).unwrap_or_default();
+    let npm_global = format!("{}/.npm-global/bin/pi", home);
+    let nvm_default = format!("{}/.nvm/versions/node/v22.11.0/bin/pi", home); // Common nvm path
+    let all_paths = vec![
+        npm_global,
+        nvm_default,
+        "/opt/homebrew/bin/pi".to_string(),
+        "/usr/local/bin/pi".to_string(),
+        "/usr/bin/pi".to_string(),
+        "pi".to_string(), // PATH fallback
+    ];
     
-    // Build args: pi -p "prompt" --provider screenpipe --api-key <token>
-    let mut args = vec!["-p".to_string(), prompt.to_string(), "--provider".to_string(), "screenpipe".to_string()];
+    let mut pi_path: Option<String> = None;
+    for path in &all_paths {
+        if path == "pi" || std::path::Path::new(path).exists() {
+            pi_path = Some(path.clone());
+            break;
+        }
+    }
+    
+    let pi_cmd = pi_path.ok_or("Could not find pi. Install with: npm install -g @mariozechner/pi-coding-agent")?;
+    info!("Using pi at: {}", pi_cmd);
+    
+    // Build command using tokio::process::Command directly
+    let mut cmd = tokio::process::Command::new(&pi_cmd);
+    cmd.arg("-p").arg(prompt);
+    cmd.arg("--provider").arg("screenpipe");
     
     if let Some(token) = user_token {
-        args.push("--api-key".to_string());
-        args.push(token.to_string());
+        cmd.arg("--api-key").arg(token);
     }
     
-    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    // Capture output
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
     
-    // Try multiple ways to find pi
-    let spawn_result = if let Ok(cmd) = shell.sidecar("pi") {
-        info!("Using pi sidecar");
-        cmd.args(&args_ref).spawn()
-    } else {
-        // Try common locations first
-        let home = dirs::home_dir().map(|h| h.to_string_lossy().to_string()).unwrap_or_default();
-        let npm_global = format!("{}/.npm-global/bin/pi", home);
-        let common_paths: Vec<&str> = vec![
-            "/opt/homebrew/bin/pi",     // macOS ARM homebrew
-            "/usr/local/bin/pi",        // macOS Intel / Linux
-            "/usr/bin/pi",              // Linux system
-        ];
-        // Also check npm global path
-        let all_paths: Vec<String> = std::iter::once(npm_global)
-            .chain(common_paths.iter().map(|s| s.to_string()))
-            .collect();
-        
-        let mut found_path: Option<String> = None;
-        for path in &all_paths {
-            if std::path::Path::new(path).exists() {
-                found_path = Some(path.clone());
-                break;
-            }
-        }
-        
-        if let Some(ref path) = found_path {
-            info!("Using pi at: {}", path);
-            shell.command(path.as_str()).args(&args_ref).spawn()
-        } else {
-            // Last resort: try PATH
-            info!("Trying pi from PATH");
-            shell.command("pi").args(&args_ref).spawn()
-        }
-    };
-
-    let (mut rx, _child) = spawn_result
+    info!("Running pi command...");
+    let output = cmd.output().await
         .map_err(|e| format!("Failed to spawn pi: {}. Make sure pi is installed (npm install -g @mariozechner/pi-coding-agent)", e))?;
-
-    // Collect output
-    let mut stdout_lines = Vec::new();
-    let mut stderr_lines = Vec::new();
-    let mut exit_code = None;
-
-    while let Some(event) = rx.recv().await {
-        match event {
-            CommandEvent::Stdout(line) => {
-                let text = String::from_utf8_lossy(&line).to_string();
-                debug!("pi stdout: {}", text);
-                stdout_lines.push(text);
-            }
-            CommandEvent::Stderr(line) => {
-                let text = String::from_utf8_lossy(&line).to_string();
-                debug!("pi stderr: {}", text);
-                stderr_lines.push(text);
-            }
-            CommandEvent::Terminated(payload) => {
-                exit_code = payload.code;
-                break;
-            }
-            CommandEvent::Error(e) => {
-                error!("pi error: {}", e);
-                return Err(format!("Pi error: {}", e));
-            }
-            _ => {}
-        }
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    
+    if !stdout.is_empty() {
+        debug!("pi stdout: {}", stdout);
+    }
+    if !stderr.is_empty() {
+        debug!("pi stderr: {}", stderr);
     }
 
-    match exit_code {
-        Some(0) => {
-            info!("Obsidian sync completed successfully");
-            Ok(())
-        }
-        Some(code) => {
-            let error_msg = if !stderr_lines.is_empty() {
-                stderr_lines.join("\n")
-            } else {
-                format!("Pi exited with code {}", code)
-            };
-            error!("Obsidian sync failed: {}", error_msg);
-            Err(error_msg)
-        }
-        None => Err("Pi terminated without exit code".to_string()),
+    if output.status.success() {
+        info!("Obsidian sync completed successfully");
+        Ok(())
+    } else {
+        let error_msg = if !stderr.is_empty() {
+            stderr.to_string()
+        } else {
+            format!("Pi exited with code {:?}", output.status.code())
+        };
+        error!("Obsidian sync failed: {}", error_msg);
+        Err(error_msg)
     }
 }
 
