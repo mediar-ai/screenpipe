@@ -310,7 +310,10 @@ pub async fn obsidian_run_sync(
     // Build prompt
     let prompt = build_prompt(&settings, &start_time_str, &end_time_str);
 
-    // Run opencode
+    // Debug: check if token is passed
+    info!("obsidian_run_sync: user_token present = {}", user_token.is_some());
+    
+    // Run pi
     let result = pi::run(&prompt, user_token.as_deref()).await.map(|_| ());
 
     // Update status based on result

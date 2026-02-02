@@ -116,7 +116,10 @@ pub async fn run(prompt: &str, user_token: Option<&str>) -> Result<String, Strin
     cmd.arg("--model").arg(DEFAULT_MODEL);
     
     if let Some(token) = user_token {
+        info!("pi::run: passing api-key (token length: {})", token.len());
         cmd.arg("--api-key").arg(token);
+    } else {
+        warn!("pi::run: no user_token provided!");
     }
     
     cmd.stdout(std::process::Stdio::piped());
