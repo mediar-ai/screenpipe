@@ -6617,6 +6617,7 @@ dependencies = [
  "crossbeam-channel",
  "parking_lot",
  "regex",
+ "screenpipe-core",
  "screenpipe-db",
  "serde",
  "serde_json",

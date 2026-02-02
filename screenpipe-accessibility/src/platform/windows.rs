@@ -9,6 +9,7 @@ use anyhow::Result;
 use chrono::Utc;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use parking_lot::Mutex;
+use screenpipe_core::pii_removal::remove_pii;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -305,10 +306,15 @@ fn run_native_hooks(
 fn flush_text_buffer(state: &mut HookState) {
     if !state.text_buf.is_empty() {
         let content = std::mem::take(&mut state.text_buf);
+        let text = if state.config.apply_pii_removal {
+            remove_pii(&content)
+        } else {
+            content
+        };
         let event = UiEvent::text(
             Utc::now(),
             state.start.elapsed().as_millis() as u64,
-            content,
+            text,
         );
         let _ = state.tx.try_send(event);
         state.last_text_time = None;
@@ -364,6 +370,7 @@ unsafe extern "system" fn keyboard_hook_proc(
                 // Check for clipboard operations (Ctrl+C, Ctrl+X, Ctrl+V)
                 if mods & 0x02 != 0 && s.config.capture_clipboard {
                     // Ctrl is pressed
+                    let apply_pii = s.config.apply_pii_removal;
                     match vk_code {
                         0x43 => {
                             // C
@@ -374,7 +381,7 @@ unsafe extern "system" fn keyboard_hook_proc(
                                 data: EventData::Clipboard {
                                     operation: 'c',
                                     content: if s.config.capture_clipboard_content {
-                                        get_clipboard_text()
+                                        get_clipboard_text().map(|c| if apply_pii { remove_pii(&c) } else { c })
                                     } else {
                                         None
                                     },
@@ -397,7 +404,7 @@ unsafe extern "system" fn keyboard_hook_proc(
                                 data: EventData::Clipboard {
                                     operation: 'x',
                                     content: if s.config.capture_clipboard_content {
-                                        get_clipboard_text()
+                                        get_clipboard_text().map(|c| if apply_pii { remove_pii(&c) } else { c })
                                     } else {
                                         None
                                     },
@@ -420,7 +427,7 @@ unsafe extern "system" fn keyboard_hook_proc(
                                 data: EventData::Clipboard {
                                     operation: 'v',
                                     content: if s.config.capture_clipboard_content {
-                                        get_clipboard_text()
+                                        get_clipboard_text().map(|c| if apply_pii { remove_pii(&c) } else { c })
                                     } else {
                                         None
                                     },

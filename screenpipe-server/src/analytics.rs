@@ -3,7 +3,8 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tracing::{debug, error, trace};
+use sysinfo::{System, SystemExt};
+use tracing::{debug, error, trace, warn};
 
 const POSTHOG_API_KEY: &str = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce";
 const POSTHOG_HOST: &str = "https://eu.i.posthog.com";
@@ -95,4 +96,92 @@ pub fn capture_event_nonblocking(event: &'static str, properties: Value) {
     tokio::spawn(async move {
         capture_event(event, properties).await;
     });
+}
+
+/// Parse macOS version string (e.g., "14.5" or "10.15.7") into major version number
+#[cfg(target_os = "macos")]
+fn parse_macos_major_version(version_str: &str) -> Option<u32> {
+    version_str.split('.').next()?.parse().ok()
+}
+
+/// Check macOS version and send telemetry event if below recommended versions.
+/// This helps track users on older macOS versions that may have compatibility issues.
+/// 
+/// Thresholds:
+/// - Below 12 (Monterey): ScreenCaptureKit not available at all
+/// - Below 14 (Sonoma): sck-rs may have issues, recommended to upgrade
+#[cfg(target_os = "macos")]
+pub fn check_macos_version() {
+    if !TELEMETRY_ENABLED.load(Ordering::SeqCst) {
+        return;
+    }
+
+    let sys = System::new();
+    let os_version = sys.os_version().unwrap_or_default();
+    let os_name = sys.name().unwrap_or_default();
+    
+    // Only check on macOS
+    if !os_name.to_lowercase().contains("mac") {
+        return;
+    }
+
+    let major_version = match parse_macos_major_version(&os_version) {
+        Some(v) => v,
+        None => {
+            debug!("Could not parse macOS version: {}", os_version);
+            return;
+        }
+    };
+
+    // Determine version category
+    let (below_12, below_14) = (major_version < 12, major_version < 14);
+    
+    if !below_12 && !below_14 {
+        debug!("macOS version {} is supported", os_version);
+        return;
+    }
+
+    // Log warning for user
+    if below_12 {
+        warn!(
+            "macOS {} detected. Screen recording requires macOS 12.3+ (Monterey). \
+            Please upgrade your macOS for screen capture to work.",
+            os_version
+        );
+    } else if below_14 {
+        warn!(
+            "macOS {} detected. For best screen capture performance, \
+            macOS 14+ (Sonoma) is recommended.",
+            os_version
+        );
+    }
+
+    // Send telemetry event
+    let event_name: &'static str = if below_12 {
+        "macos_version_below_12"
+    } else {
+        "macos_version_below_14"
+    };
+
+    capture_event_nonblocking(
+        event_name,
+        json!({
+            "os_version": os_version,
+            "major_version": major_version,
+            "below_12": below_12,
+            "below_14": below_14,
+            "screen_capture_supported": !below_12,
+        }),
+    );
+
+    debug!(
+        "Sent {} event for macOS {}",
+        event_name, os_version
+    );
+}
+
+/// No-op on non-macOS platforms
+#[cfg(not(target_os = "macos"))]
+pub fn check_macos_version() {
+    // Only relevant on macOS
 }

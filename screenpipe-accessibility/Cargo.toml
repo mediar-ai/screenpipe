@@ -11,6 +11,7 @@ db = ["screenpipe-db"]
 
 [dependencies]
 screenpipe-db = { path = "../screenpipe-db", optional = true }
+screenpipe-core = { path = "../screenpipe-core" }
 # Core
 anyhow = "1.0"
 tracing = "0.1"

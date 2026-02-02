@@ -9,6 +9,7 @@ use anyhow::Result;
 use chrono::Utc;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use parking_lot::Mutex;
+use screenpipe_core::pii_removal::remove_pii;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -321,7 +322,12 @@ fn run_event_tap(
         let mut buf = state.text_buf.lock();
         if buf.should_flush() {
             if let Some(s) = buf.flush() {
-                let event = UiEvent::text(Utc::now(), state.start.elapsed().as_millis() as u64, s);
+                let text = if state.config.apply_pii_removal {
+                    remove_pii(&s)
+                } else {
+                    s
+                };
+                let event = UiEvent::text(Utc::now(), state.start.elapsed().as_millis() as u64, text);
                 let _ = state.tx.try_send(event);
             }
         }
@@ -330,7 +336,12 @@ fn run_event_tap(
     // Final flush
     let mut buf = state.text_buf.lock();
     if let Some(s) = buf.flush() {
-        let event = UiEvent::text(Utc::now(), state.start.elapsed().as_millis() as u64, s);
+        let text = if state.config.apply_pii_removal {
+            remove_pii(&s)
+        } else {
+            s
+        };
+        let event = UiEvent::text(Utc::now(), state.start.elapsed().as_millis() as u64, text);
         let _ = state.tx.try_send(event);
     }
 
@@ -521,10 +532,14 @@ extern "C" fn tap_callback(
                         let tx = state.tx.clone();
                         let start = state.start;
                         let capture_content = state.config.capture_clipboard_content;
+                        let apply_pii = state.config.apply_pii_removal;
                         std::thread::spawn(move || {
                             std::thread::sleep(std::time::Duration::from_millis(50));
                             let content = if capture_content {
-                                get_clipboard().map(|s| truncate(&s, 1000))
+                                get_clipboard().map(|s| {
+                                    let truncated = truncate(&s, 1000);
+                                    if apply_pii { remove_pii(&truncated) } else { truncated }
+                                })
                             } else {
                                 None
                             };
@@ -549,10 +564,14 @@ extern "C" fn tap_callback(
                         let tx = state.tx.clone();
                         let start = state.start;
                         let capture_content = state.config.capture_clipboard_content;
+                        let apply_pii = state.config.apply_pii_removal;
                         std::thread::spawn(move || {
                             std::thread::sleep(std::time::Duration::from_millis(50));
                             let content = if capture_content {
-                                get_clipboard().map(|s| truncate(&s, 1000))
+                                get_clipboard().map(|s| {
+                                    let truncated = truncate(&s, 1000);
+                                    if apply_pii { remove_pii(&truncated) } else { truncated }
+                                })
                             } else {
                                 None
                             };
@@ -575,7 +594,10 @@ extern "C" fn tap_callback(
                     }
                     KEY_V => {
                         let content = if state.config.capture_clipboard_content {
-                            get_clipboard().map(|s| truncate(&s, 1000))
+                            get_clipboard().map(|s| {
+                                let truncated = truncate(&s, 1000);
+                                if state.config.apply_pii_removal { remove_pii(&truncated) } else { truncated }
+                            })
                         } else {
                             None
                         };
@@ -800,7 +822,10 @@ fn get_element_at_position(x: f64, y: f64, config: &UiCaptureConfig) -> Option<E
     Some(ElementContext {
         role,
         name: name.map(|s| truncate(&s, 200)),
-        value: value.map(|s| truncate(&s, 500)),
+        value: value.map(|s| {
+            let truncated = truncate(&s, 500);
+            if config.apply_pii_removal { remove_pii(&truncated) } else { truncated }
+        }),
         description: description.map(|s| truncate(&s, 200)),
         automation_id: None,
         bounds: None,

@@ -131,6 +131,12 @@ interface ObsidianSyncStatus {
   notesCreatedToday: number;
 }
 
+interface SyncHistoryEntry {
+  timestamp: string;
+  status: "success" | "error";
+  error?: string;
+}
+
 const DEFAULT_SETTINGS: ObsidianSyncSettings = {
   enabled: false,
   vaultPath: "",
@@ -158,6 +164,7 @@ export function ObsidianSyncCard() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [syncStatusMessage, setSyncStatusMessage] = useState<string>("");
+  const [syncHistory, setSyncHistory] = useState<SyncHistoryEntry[]>([]);
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -171,6 +178,16 @@ export function ObsidianSyncCard() {
       }
     }
     setSettingsLoaded(true);
+
+    // Load sync history
+    const savedHistory = localStorage.getItem("obsidian-sync-history");
+    if (savedHistory) {
+      try {
+        setSyncHistory(JSON.parse(savedHistory).slice(0, 10)); // Keep last 10
+      } catch (e) {
+        console.error("Failed to parse sync history:", e);
+      }
+    }
 
     // Fetch suggested vault paths
     fetchVaultPaths();
@@ -211,6 +228,13 @@ export function ObsidianSyncCard() {
     listen<ObsidianSyncStatus>("obsidian_sync_completed", (event) => {
       setStatus(event.payload);
       setSyncStatusMessage("");
+      // Add to history
+      const newEntry: SyncHistoryEntry = { timestamp: new Date().toISOString(), status: "success" };
+      setSyncHistory(prev => {
+        const updated = [newEntry, ...prev].slice(0, 10);
+        localStorage.setItem("obsidian-sync-history", JSON.stringify(updated));
+        return updated;
+      });
       toast({
         title: "Obsidian sync completed",
         description: "Your activity has been synced to Obsidian",
@@ -224,6 +248,13 @@ export function ObsidianSyncCard() {
         lastError: event.payload,
       }));
       setSyncStatusMessage("");
+      // Add to history
+      const newEntry: SyncHistoryEntry = { timestamp: new Date().toISOString(), status: "error", error: event.payload };
+      setSyncHistory(prev => {
+        const updated = [newEntry, ...prev].slice(0, 10);
+        localStorage.setItem("obsidian-sync-history", JSON.stringify(updated));
+        return updated;
+      });
       toast({
         variant: "destructive",
         title: "Obsidian sync failed",
@@ -651,7 +682,7 @@ export function ObsidianSyncCard() {
         )}
 
         {/* Status Bar */}
-        <div className="px-6 py-3 bg-muted/50 border-t border-border">
+        <div className="px-6 py-3 bg-muted/50 border-t border-border space-y-2">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <div className="flex items-center gap-4">
               <span>
@@ -673,6 +704,29 @@ export function ObsidianSyncCard() {
               </span>
             )}
           </div>
+          
+          {/* Sync History */}
+          {syncHistory.length > 0 && (
+            <div className="text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span>Recent:</span>
+                {syncHistory.slice(0, 5).map((entry, i) => (
+                  <span
+                    key={i}
+                    className={`px-1.5 py-0.5 rounded ${
+                      entry.status === "success" 
+                        ? "bg-green-500/10 text-green-600" 
+                        : "bg-red-500/10 text-red-500"
+                    }`}
+                    title={entry.error || "Success"}
+                  >
+                    {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {entry.status === "success" ? " ✓" : " ✗"}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

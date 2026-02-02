@@ -707,6 +707,10 @@ async fn main() -> anyhow::Result<()> {
     // Initialize analytics for API tracking
     analytics::init(!cli.disable_telemetry);
 
+    // Check macOS version and send telemetry if below supported versions
+    // This helps track users who may have screen capture issues due to old macOS
+    analytics::check_macos_version();
+
     // Start sleep/wake monitor for telemetry (macOS only)
     // This tracks sleep/wake events and checks if recording is degraded after wake
     start_sleep_monitor();
