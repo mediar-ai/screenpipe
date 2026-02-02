@@ -497,7 +497,7 @@ pub(crate) async fn search(
             SearchResult::Input(input) => input
                 .app_name
                 .as_ref()
-                .map_or(true, |app| !is_screenpipe_app(app)),
+                .is_none_or(|app| !is_screenpipe_app(app)),
         })
         .map(|result| match result {
             SearchResult::OCR(ocr) => ContentItem::OCR(OCRContent {
@@ -1441,7 +1441,10 @@ impl SCServer {
             .route("/sync/status", get(sync_api::sync_status))
             .route("/sync/trigger", axum::routing::post(sync_api::sync_trigger))
             .route("/sync/lock", axum::routing::post(sync_api::sync_lock))
-            .route("/sync/download", axum::routing::post(sync_api::sync_download))
+            .route(
+                "/sync/download",
+                axum::routing::post(sync_api::sync_download),
+            )
             // NOTE: websockerts and sse is not supported by openapi so we move it down here
             .route("/stream/frames", get(stream_frames_handler))
             .route("/ws/events", get(ws_events_handler))

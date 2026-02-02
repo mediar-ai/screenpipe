@@ -44,7 +44,7 @@ pub async fn start_continuous_recording(
                 let ignored_urls_video = ignored_urls.to_vec();
 
                 let languages = languages.clone();
-                let activity_feed = activity_feed.clone();
+                let activity_feed = activity_feed;
 
                 debug!("Starting video recording for monitor {}", monitor_id);
                 vision_handle.spawn(async move {
@@ -65,7 +65,7 @@ pub async fn start_continuous_recording(
                             languages.clone(),
                             capture_unfocused_windows,
                             realtime_vision,
-                            activity_feed.clone(),
+                            activity_feed,
                         )
                         .await
                         {

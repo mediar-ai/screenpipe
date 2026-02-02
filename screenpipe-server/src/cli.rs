@@ -318,7 +318,6 @@ pub struct Cli {
     // =========================================================================
     // Cloud Sync Options
     // =========================================================================
-
     /// Enable cloud sync for cross-device data synchronization.
     /// Requires a valid sync token and password.
     #[arg(long, default_value_t = false)]

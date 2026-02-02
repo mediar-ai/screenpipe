@@ -25,7 +25,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowTextW,
     GetWindowThreadProcessId, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HC_ACTION,
-    HHOOK, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP,
+    HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP,
     WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
     WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
 };
@@ -311,21 +311,13 @@ fn flush_text_buffer(state: &mut HookState) {
         } else {
             content
         };
-        let event = UiEvent::text(
-            Utc::now(),
-            state.start.elapsed().as_millis() as u64,
-            text,
-        );
+        let event = UiEvent::text(Utc::now(), state.start.elapsed().as_millis() as u64, text);
         let _ = state.tx.try_send(event);
         state.last_text_time = None;
     }
 }
 
-unsafe extern "system" fn keyboard_hook_proc(
-    code: i32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
+unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let kb_struct = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
         let vk_code = kb_struct.vkCode as u16;
@@ -381,7 +373,13 @@ unsafe extern "system" fn keyboard_hook_proc(
                                 data: EventData::Clipboard {
                                     operation: 'c',
                                     content: if s.config.capture_clipboard_content {
-                                        get_clipboard_text().map(|c| if apply_pii { remove_pii(&c) } else { c })
+                                        get_clipboard_text().map(|c| {
+                                            if apply_pii {
+                                                remove_pii(&c)
+                                            } else {
+                                                c
+                                            }
+                                        })
                                     } else {
                                         None
                                     },
@@ -404,7 +402,13 @@ unsafe extern "system" fn keyboard_hook_proc(
                                 data: EventData::Clipboard {
                                     operation: 'x',
                                     content: if s.config.capture_clipboard_content {
-                                        get_clipboard_text().map(|c| if apply_pii { remove_pii(&c) } else { c })
+                                        get_clipboard_text().map(|c| {
+                                            if apply_pii {
+                                                remove_pii(&c)
+                                            } else {
+                                                c
+                                            }
+                                        })
                                     } else {
                                         None
                                     },
@@ -427,7 +431,13 @@ unsafe extern "system" fn keyboard_hook_proc(
                                 data: EventData::Clipboard {
                                     operation: 'v',
                                     content: if s.config.capture_clipboard_content {
-                                        get_clipboard_text().map(|c| if apply_pii { remove_pii(&c) } else { c })
+                                        get_clipboard_text().map(|c| {
+                                            if apply_pii {
+                                                remove_pii(&c)
+                                            } else {
+                                                c
+                                            }
+                                        })
                                     } else {
                                         None
                                     },
@@ -644,8 +654,7 @@ fn run_activity_only_hooks(activity_feed: ActivityFeed, stop: Arc<AtomicBool>) {
             ACTIVITY_KB_HOOK.with(|h| *h.borrow_mut() = Some(hook));
         }
 
-        let mouse_hook =
-            SetWindowsHookExW(WH_MOUSE_LL, Some(activity_mouse_hook), h_instance, 0);
+        let mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, Some(activity_mouse_hook), h_instance, 0);
         if let Ok(hook) = mouse_hook {
             ACTIVITY_MOUSE_HOOK.with(|h| *h.borrow_mut() = Some(hook));
         }

@@ -264,9 +264,12 @@ pub fn compare_histogram(image1: &DynamicImage, image2: &DynamicImage) -> anyhow
 pub fn compare_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 {
     let image_one = image1.to_luma8();
     let image_two = image2.to_luma8();
-    let result =
-        image_compare::gray_similarity_structure(&image_compare::Algorithm::MSSIMSimple, &image_one, &image_two)
-            .expect("Images had different dimensions");
+    let result = image_compare::gray_similarity_structure(
+        &image_compare::Algorithm::MSSIMSimple,
+        &image_one,
+        &image_two,
+    )
+    .expect("Images had different dimensions");
     1.0 - result.score // Convert similarity to difference
 }
 
@@ -304,7 +307,7 @@ mod tests {
             // Create horizontal "text lines"
             let line_height = 20;
             let is_text_line = (y / line_height) % 2 == 0;
-            
+
             if is_text_line {
                 // Simulate text with varying intensity
                 let char_width = 10;
@@ -343,7 +346,10 @@ mod tests {
 
         let stats = comparer.stats();
         assert_eq!(stats.hash_hits, 1, "Should have 1 hash hit");
-        assert_eq!(stats.total_comparisons, 2, "Should have 2 total comparisons");
+        assert_eq!(
+            stats.total_comparisons, 2,
+            "Should have 2 total comparisons"
+        );
     }
 
     #[test]
@@ -371,7 +377,10 @@ mod tests {
         let hash1 = calculate_image_hash(&image1);
         let hash2 = calculate_image_hash(&image2);
 
-        assert_ne!(hash1, hash2, "Different images should have different hashes");
+        assert_ne!(
+            hash1, hash2,
+            "Different images should have different hashes"
+        );
     }
 
     #[test]
@@ -544,15 +553,17 @@ mod tests {
         let mut comparer = FrameComparer::new(config);
 
         // Simulate a real capture sequence with clear differences
-        let frame1 = create_text_pattern_image(1920, 1080, 0);   // Initial screen
-        let frame2 = create_text_pattern_image(1920, 1080, 0);   // Same (should hash-match)
-        let frame3 = create_text_pattern_image(1920, 1080, 0);   // Same (should hash-match)
-        let frame4 = create_gradient_image(1920, 1080);          // Different content
+        let frame1 = create_text_pattern_image(1920, 1080, 0); // Initial screen
+        let frame2 = create_text_pattern_image(1920, 1080, 0); // Same (should hash-match)
+        let frame3 = create_text_pattern_image(1920, 1080, 0); // Same (should hash-match)
+        let frame4 = create_gradient_image(1920, 1080); // Different content
         let frame5 = create_solid_image(1920, 1080, 128, 128, 128); // Gray screen
         let frame6 = create_solid_image(1920, 1080, 128, 128, 128); // Same (should hash-match)
-        let frame7 = create_solid_image(1920, 1080, 0, 0, 0);    // Black screen
+        let frame7 = create_solid_image(1920, 1080, 0, 0, 0); // Black screen
 
-        let frames = vec![&frame1, &frame2, &frame3, &frame4, &frame5, &frame6, &frame7];
+        let frames = vec![
+            &frame1, &frame2, &frame3, &frame4, &frame5, &frame6, &frame7,
+        ];
 
         let mut results = Vec::new();
         for frame in &frames {
@@ -569,18 +580,34 @@ mod tests {
         assert_eq!(results[2], 0.0);
 
         // Different content: detected
-        assert!(results[3] > 0.0, "Different content should be detected: {}", results[3]);
-        assert!(results[4] > 0.0, "Gray screen should be detected: {}", results[4]);
+        assert!(
+            results[3] > 0.0,
+            "Different content should be detected: {}",
+            results[3]
+        );
+        assert!(
+            results[4] > 0.0,
+            "Gray screen should be detected: {}",
+            results[4]
+        );
 
         // Identical again: 0.0
         assert_eq!(results[5], 0.0);
 
         // Big change: high diff
-        assert!(results[6] > 0.3, "Black screen should be big change: {}", results[6]);
+        assert!(
+            results[6] > 0.3,
+            "Black screen should be big change: {}",
+            results[6]
+        );
 
         // Verify hash hits
         let stats = comparer.stats();
-        assert!(stats.hash_hits >= 3, "Should have at least 3 hash hits, got {}", stats.hash_hits);
+        assert!(
+            stats.hash_hits >= 3,
+            "Should have at least 3 hash hits, got {}",
+            stats.hash_hits
+        );
     }
 
     #[test]
@@ -668,7 +695,10 @@ mod tests {
         assert!(diff > 0.5, "Black vs white should have high SSIM diff");
 
         let same_diff = compare_ssim(&image1, &image1);
-        assert!(same_diff < 0.01, "Same image should have near-zero SSIM diff");
+        assert!(
+            same_diff < 0.01,
+            "Same image should have near-zero SSIM diff"
+        );
     }
 
     // ============================================================

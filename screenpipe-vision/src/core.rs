@@ -9,8 +9,8 @@ use crate::microsoft::perform_ocr_windows;
 use crate::monitor::get_monitor_by_id;
 use crate::ocr_cache::{WindowCacheKey, WindowOcrCache};
 use crate::tesseract::perform_ocr_tesseract;
-use crate::utils::OcrEngine;
 use crate::utils::capture_screenshot;
+use crate::utils::OcrEngine;
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
@@ -282,7 +282,7 @@ pub async fn continuous_capture(
 
             // Log frame comparison stats periodically
             let stats = frame_comparer.stats();
-            if stats.total_comparisons % 100 == 0 {
+            if stats.total_comparisons.is_multiple_of(100) {
                 debug!(
                     "Frame comparison stats: {} total, {} hash hits ({:.1}% hit rate)",
                     stats.total_comparisons,

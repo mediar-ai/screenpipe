@@ -192,7 +192,7 @@ impl VideoCapture {
                     capture_window_filters.clone(),
                     capture_languages.clone(),
                     capture_unfocused,
-                    capture_activity_feed.clone(),
+                    capture_activity_feed,
                 )
                 .await
                 {

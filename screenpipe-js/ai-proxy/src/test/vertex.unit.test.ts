@@ -5,51 +5,204 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { mapModelToVertex, parseStreamingEvent, VertexAIProvider } from '../providers/vertex';
+import { mapModelToVertex, parseStreamingEvent, VertexAIProvider, sanitizeMessages } from '../providers/vertex';
+
+// ============================================================================
+// Message Sanitization Tests (for proxyToVertex)
+// ============================================================================
+describe('sanitizeMessages', () => {
+	it('should fix nested text.text structure', () => {
+		// This is the exact bug: {type: 'text', text: {text: '...'}}
+		const messages = [
+			{
+				role: 'user',
+				content: [{ type: 'text', text: { text: 'Hello world' } }],  // BUG: nested text
+			},
+		];
+
+		const sanitized = sanitizeMessages(messages);
+
+		expect(sanitized[0].content[0].type).toBe('text');
+		expect(sanitized[0].content[0].text).toBe('Hello world');
+		expect(typeof sanitized[0].content[0].text).toBe('string');
+	});
+
+	it('should not modify correctly formatted messages', () => {
+		const messages = [
+			{ role: 'user', content: 'Hello' },
+			{ role: 'assistant', content: 'Hi there!' },
+		];
+
+		const sanitized = sanitizeMessages(messages);
+
+		expect(sanitized[0].content).toBe('Hello');
+		expect(sanitized[1].content).toBe('Hi there!');
+	});
+
+	it('should handle array content with correct format', () => {
+		const messages = [
+			{
+				role: 'user',
+				content: [{ type: 'text', text: 'Hello' }],  // Correct format
+			},
+		];
+
+		const sanitized = sanitizeMessages(messages);
+
+		expect(sanitized[0].content[0].text).toBe('Hello');
+	});
+
+	it('should fix deeply nested text in multi-turn conversation', () => {
+		// Reproduces: "messages.2.content.0.text.text: Input should be a valid string"
+		const messages = [
+			{ role: 'user', content: 'First message' },
+			{ role: 'assistant', content: 'First response' },
+			{
+				role: 'user',
+				content: [{ type: 'text', text: { text: 'Second message with bug' } }],
+			},
+		];
+
+		const sanitized = sanitizeMessages(messages);
+
+		// Check message at index 2
+		expect(sanitized[2].content[0].text).toBe('Second message with bug');
+		expect(typeof sanitized[2].content[0].text).toBe('string');
+	});
+
+	it('should handle mixed content (text + image)', () => {
+		const messages = [
+			{
+				role: 'user',
+				content: [
+					{ type: 'text', text: { text: 'What is in this image?' } },  // Bug to fix
+					{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc' } },
+				],
+			},
+		];
+
+		const sanitized = sanitizeMessages(messages);
+
+		expect(sanitized[0].content[0].text).toBe('What is in this image?');
+		expect(sanitized[0].content[1].type).toBe('image');  // Image should be unchanged
+	});
+
+	it('should handle tool_use content', () => {
+		const messages = [
+			{
+				role: 'assistant',
+				content: [
+					{ type: 'text', text: { text: "I'll search for that" } },
+					{ type: 'tool_use', id: 'toolu_123', name: 'search', input: { q: 'test' } },
+				],
+			},
+		];
+
+		const sanitized = sanitizeMessages(messages);
+
+		expect(sanitized[0].content[0].text).toBe("I'll search for that");
+		expect(sanitized[0].content[1].type).toBe('tool_use');
+		expect(sanitized[0].content[1].input).toEqual({ q: 'test' });
+	});
+
+	it('should handle tool_result content', () => {
+		const messages = [
+			{
+				role: 'user',
+				content: [
+					{
+						type: 'tool_result',
+						tool_use_id: 'toolu_123',
+						content: [{ type: 'text', text: { text: 'Search results' } }],  // Nested in tool_result
+					},
+				],
+			},
+		];
+
+		const sanitized = sanitizeMessages(messages);
+
+		expect(sanitized[0].content[0].content[0].text).toBe('Search results');
+	});
+
+	it('should handle null and undefined gracefully', () => {
+		const messages = [
+			{ role: 'user', content: null },
+			{ role: 'assistant', content: undefined },
+			null,
+		];
+
+		const sanitized = sanitizeMessages(messages as any);
+
+		expect(sanitized[0].content).toBeNull();
+		expect(sanitized[1].content).toBeUndefined();
+		expect(sanitized[2]).toBeNull();
+	});
+
+	it('should convert non-string text to string', () => {
+		const messages = [
+			{
+				role: 'user',
+				content: [{ type: 'text', text: 12345 }],  // Number instead of string
+			},
+		];
+
+		const sanitized = sanitizeMessages(messages);
+
+		expect(sanitized[0].content[0].text).toBe('12345');
+		expect(typeof sanitized[0].content[0].text).toBe('string');
+	});
+});
 
 // ============================================================================
 // Model Format Conversion Tests
 // ============================================================================
 describe('mapModelToVertex', () => {
-	describe('converts dash-date format to at-date format', () => {
+	describe('converts and aliases models', () => {
 		it('should convert claude-opus-4-5-20251101 to claude-opus-4-5@20251101', () => {
 			expect(mapModelToVertex('claude-opus-4-5-20251101')).toBe('claude-opus-4-5@20251101');
 		});
 
-		it('should convert claude-sonnet-4-5-20250929 to claude-sonnet-4-5@20250929', () => {
-			expect(mapModelToVertex('claude-sonnet-4-5-20250929')).toBe('claude-sonnet-4-5@20250929');
+		// Sonnet models are aliased to haiku (sonnet is outdated)
+		it('should alias claude-sonnet-4-5-20250929 to claude-haiku-4-5@20251001', () => {
+			expect(mapModelToVertex('claude-sonnet-4-5-20250929')).toBe('claude-haiku-4-5@20251001');
 		});
 
 		it('should convert claude-haiku-4-5-20251001 to claude-haiku-4-5@20251001', () => {
 			expect(mapModelToVertex('claude-haiku-4-5-20251001')).toBe('claude-haiku-4-5@20251001');
 		});
 
-		it('should convert claude-sonnet-4-20250514 to claude-sonnet-4@20250514', () => {
-			expect(mapModelToVertex('claude-sonnet-4-20250514')).toBe('claude-sonnet-4@20250514');
+		// Sonnet models are aliased to haiku
+		it('should alias claude-sonnet-4-20250514 to claude-haiku-4-5@20251001', () => {
+			expect(mapModelToVertex('claude-sonnet-4-20250514')).toBe('claude-haiku-4-5@20251001');
 		});
 
+		// Old sonnet 3.5 is converted but not aliased (no specific alias defined)
 		it('should convert claude-3-5-sonnet-20241022 to claude-3-5-sonnet@20241022', () => {
 			expect(mapModelToVertex('claude-3-5-sonnet-20241022')).toBe('claude-3-5-sonnet@20241022');
 		});
 	});
 
-	describe('preserves already-correct format', () => {
-		it('should not modify claude-opus-4-5@20251101', () => {
-			expect(mapModelToVertex('claude-opus-4-5@20251101')).toBe('claude-opus-4-5@20251101');
+	describe('applies aliases for known models', () => {
+		// Models with @ that aren't in aliases fall back to haiku
+		it('should fallback claude-opus-4-5@20251101 to haiku (not in aliases)', () => {
+			expect(mapModelToVertex('claude-opus-4-5@20251101')).toBe('claude-haiku-4-5@20251001');
 		});
 
-		it('should not modify claude-3-5-sonnet-v2@20241022', () => {
-			expect(mapModelToVertex('claude-3-5-sonnet-v2@20241022')).toBe('claude-3-5-sonnet-v2@20241022');
+		// Any claude model without specific alias falls back to haiku
+		it('should alias unknown claude models to haiku', () => {
+			expect(mapModelToVertex('claude-3-5-sonnet-v2@20241022')).toBe('claude-haiku-4-5@20251001');
 		});
 	});
 
 	describe('handles edge cases', () => {
-		it('should not modify model without date suffix', () => {
-			expect(mapModelToVertex('claude-3-5-sonnet')).toBe('claude-3-5-sonnet');
+		// Any claude model defaults to haiku
+		it('should alias claude-3-5-sonnet to haiku', () => {
+			expect(mapModelToVertex('claude-3-5-sonnet')).toBe('claude-haiku-4-5@20251001');
 		});
 
-		it('should not modify model with short date', () => {
-			expect(mapModelToVertex('claude-3-5-sonnet-2024')).toBe('claude-3-5-sonnet-2024');
+		// Short date suffix doesn't trigger date conversion
+		it('should alias claude-3-5-sonnet-2024 to haiku', () => {
+			expect(mapModelToVertex('claude-3-5-sonnet-2024')).toBe('claude-haiku-4-5@20251001');
 		});
 
 		it('should not modify empty string', () => {
@@ -947,6 +1100,172 @@ describe('Streaming timeout expectations', () => {
 
 		// This is a documentation test - actual implementation is in createStreamingCompletion
 		expect(EXPECTED_IDLE_TIMEOUT_MS).toBeGreaterThan(0);
+	});
+});
+
+// ============================================================================
+// Assistant Message Content Array Bug Test (NEW - for text.text nesting fix)
+// ============================================================================
+describe('Assistant message with array content', () => {
+	const mockServiceAccount = JSON.stringify({
+		type: 'service_account',
+		project_id: 'test',
+		private_key_id: 'test',
+		private_key: '-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----',
+		client_email: 'test@test.iam.gserviceaccount.com',
+		client_id: '123',
+		auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+		token_uri: 'https://oauth2.googleapis.com/token',
+		auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+		client_x509_cert_url: 'https://www.googleapis.com/robot/v1/metadata/x509/test',
+	});
+
+	let provider: VertexAIProvider;
+
+	beforeEach(() => {
+		provider = new VertexAIProvider(mockServiceAccount, 'test-project', 'us-east5');
+	});
+
+	it('should handle assistant message with array content (text block)', () => {
+		// This reproduces the bug: "messages.2.content.0.text.text: Input should be a valid string"
+		// When assistant message content is an array like [{type: 'text', text: 'Hello'}],
+		// it was incorrectly wrapped as {type: 'text', text: [{type: 'text', text: 'Hello'}]}
+
+		const requestBody = {
+			model: 'claude-haiku-4-5@20251001',
+			messages: [
+				{ role: 'user' as const, content: 'Hello' },
+				{
+					role: 'assistant' as const,
+					content: [{ type: 'text', text: 'I will help you.' }],  // Array content!
+				},
+				{ role: 'user' as const, content: 'Thanks' },
+			],
+		};
+
+		// Access private method via any
+		const anthropicBody = (provider as any).convertToAnthropicFormat(requestBody);
+
+		// The assistant message content should be properly formatted
+		// Either as a string 'I will help you.' or as array [{type: 'text', text: 'I will help you.'}]
+		// NOT as {type: 'text', text: [{type: 'text', text: 'I will help you.'}]}
+		// messages[0] = user, messages[1] = assistant, messages[2] = user
+		const assistantMsg = anthropicBody.messages[1];
+
+		if (typeof assistantMsg.content === 'string') {
+			expect(assistantMsg.content).toBe('I will help you.');
+		} else if (Array.isArray(assistantMsg.content)) {
+			expect(assistantMsg.content[0].type).toBe('text');
+			expect(typeof assistantMsg.content[0].text).toBe('string');
+			expect(assistantMsg.content[0].text).toBe('I will help you.');
+		} else {
+			throw new Error('Unexpected content format');
+		}
+	});
+
+	it('should handle assistant message with mixed array content (text + tool_use)', () => {
+		const requestBody = {
+			model: 'claude-haiku-4-5@20251001',
+			messages: [
+				{ role: 'user' as const, content: 'Search for X' },
+				{
+					role: 'assistant' as const,
+					content: [
+						{ type: 'text', text: "I'll search for that." },
+						{ type: 'tool_use', id: 'toolu_123', name: 'search', input: { q: 'X' } },
+					],
+				},
+			],
+		};
+
+		const anthropicBody = (provider as any).convertToAnthropicFormat(requestBody);
+		// messages[0] = user, messages[1] = assistant
+		const assistantMsg = anthropicBody.messages[1];
+
+		// Should be an array with both text and tool_use blocks
+		expect(Array.isArray(assistantMsg.content)).toBe(true);
+		expect(assistantMsg.content.length).toBe(2);
+		expect(assistantMsg.content[0].type).toBe('text');
+		expect(typeof assistantMsg.content[0].text).toBe('string');
+		expect(assistantMsg.content[1].type).toBe('tool_use');
+	});
+
+	it('should handle assistant message with string content (normal case)', () => {
+		const requestBody = {
+			model: 'claude-haiku-4-5@20251001',
+			messages: [
+				{ role: 'user' as const, content: 'Hello' },
+				{ role: 'assistant' as const, content: 'Hi there!' },  // String content
+			],
+		};
+
+		const anthropicBody = (provider as any).convertToAnthropicFormat(requestBody);
+		// messages[0] = user, messages[1] = assistant
+		const assistantMsg = anthropicBody.messages[1];
+
+		// String content should remain as string
+		expect(assistantMsg.content).toBe('Hi there!');
+	});
+
+	it('should NOT create nested text.text structure (bug reproduction)', () => {
+		// This is the exact bug scenario that causes:
+		// "messages.2.content.0.text.text: Input should be a valid string"
+		const requestBody = {
+			model: 'claude-haiku-4-5@20251001',
+			messages: [
+				{ role: 'user' as const, content: 'Hello' },
+				{
+					role: 'assistant' as const,
+					content: [{ type: 'text', text: 'Response 1' }],
+				},
+				{ role: 'user' as const, content: 'Follow up' },
+			],
+		};
+
+		const anthropicBody = (provider as any).convertToAnthropicFormat(requestBody);
+
+		// Check message at index 1 (the assistant message)
+		const assistantMsg = anthropicBody.messages[1];
+
+		// Recursively check that no content block has text.text (double nesting)
+		function checkNoDoubleNesting(content: any): void {
+			if (Array.isArray(content)) {
+				content.forEach(checkNoDoubleNesting);
+			} else if (content && typeof content === 'object') {
+				if (content.type === 'text') {
+					// text should be a string, not an object
+					expect(typeof content.text).toBe('string');
+					expect(content.text).not.toHaveProperty('text');
+				}
+				// Check nested properties
+				Object.values(content).forEach(checkNoDoubleNesting);
+			}
+		}
+
+		checkNoDoubleNesting(assistantMsg.content);
+	});
+
+	it('should handle user message with array content containing text blocks', () => {
+		// User messages can also have array content
+		const requestBody = {
+			model: 'claude-haiku-4-5@20251001',
+			messages: [
+				{
+					role: 'user' as const,
+					content: [{ type: 'text', text: 'Hello from array' }],
+				},
+			],
+		};
+
+		const anthropicBody = (provider as any).convertToAnthropicFormat(requestBody);
+		const userMsg = anthropicBody.messages[0];
+
+		// Check the text is properly formatted
+		if (Array.isArray(userMsg.content)) {
+			expect(userMsg.content[0].type).toBe('text');
+			expect(typeof userMsg.content[0].text).toBe('string');
+			expect(userMsg.content[0].text).toBe('Hello from array');
+		}
 	});
 });
 

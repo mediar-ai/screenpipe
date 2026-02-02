@@ -1,7 +1,9 @@
 use anyhow::Result;
 use regex::Regex;
 use screenpipe_db::DatabaseManager;
-use screenpipe_vision::frame_comparison::{calculate_image_hash, FrameComparer, FrameComparisonConfig};
+use screenpipe_vision::frame_comparison::{
+    calculate_image_hash, FrameComparer, FrameComparisonConfig,
+};
 use screenpipe_vision::utils::OcrEngine;
 
 #[cfg(target_os = "macos")]

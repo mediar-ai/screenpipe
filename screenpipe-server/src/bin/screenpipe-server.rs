@@ -13,6 +13,9 @@ use screenpipe_audio::{
     },
 };
 use screenpipe_core::find_ffmpeg_path;
+use screenpipe_core::sync::{
+    BlobType, SyncClientConfig, SyncEvent, SyncManager, SyncService, SyncServiceConfig,
+};
 use screenpipe_db::{
     create_migration_worker, DatabaseManager, MigrationCommand, MigrationConfig, MigrationStatus,
 };
@@ -31,9 +34,6 @@ use screenpipe_server::{
         start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
     },
     watch_pid, PipeManager, ResourceMonitor, SCServer,
-};
-use screenpipe_core::sync::{
-    BlobType, SyncClientConfig, SyncEvent, SyncManager, SyncService, SyncServiceConfig,
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;
@@ -808,7 +808,7 @@ async fn main() -> anyhow::Result<()> {
     let vision_manager: Option<Arc<VisionManager>> = if cli.use_all_monitors && !cli.disable_vision
     {
         info!("Using dynamic monitor detection (--use-all-monitors)");
-        
+
         // Create activity feed for adaptive FPS if enabled
         #[cfg(feature = "adaptive-fps")]
         let activity_feed: screenpipe_vision::ActivityFeedOption = if cli.adaptive_fps {
@@ -819,17 +819,20 @@ async fn main() -> anyhow::Result<()> {
                     Some(feed)
                 }
                 Err(e) => {
-                    warn!("Failed to start activity feed: {:?}. Adaptive FPS will be disabled.", e);
+                    warn!(
+                        "Failed to start activity feed: {:?}. Adaptive FPS will be disabled.",
+                        e
+                    );
                     None
                 }
             }
         } else {
             None
         };
-        
+
         #[cfg(not(feature = "adaptive-fps"))]
         let activity_feed: screenpipe_vision::ActivityFeedOption = None;
-        
+
         let config = VisionManagerConfig {
             output_path: output_path_clone.to_string(),
             fps,
@@ -842,7 +845,7 @@ async fn main() -> anyhow::Result<()> {
             languages: languages_clone.clone(),
             capture_unfocused_windows: cli.capture_unfocused_windows,
             realtime_vision: cli.enable_realtime_audio_transcription,
-            activity_feed: activity_feed.clone(),
+            activity_feed: activity_feed,
         };
         Some(Arc::new(VisionManager::new(
             config,
@@ -893,17 +896,20 @@ async fn main() -> anyhow::Result<()> {
                     Some(feed)
                 }
                 Err(e) => {
-                    warn!("Failed to start activity feed: {:?}. Adaptive FPS will be disabled.", e);
+                    warn!(
+                        "Failed to start activity feed: {:?}. Adaptive FPS will be disabled.",
+                        e
+                    );
                     None
                 }
             }
         } else {
             None
         };
-        
+
         #[cfg(not(feature = "adaptive-fps"))]
         let activity_feed_legacy: screenpipe_vision::ActivityFeedOption = None;
-        
+
         // Use traditional start_continuous_recording
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -925,7 +931,7 @@ async fn main() -> anyhow::Result<()> {
                     languages_clone.clone(),
                     cli.capture_unfocused_windows,
                     cli.enable_realtime_audio_transcription,
-                    activity_feed_legacy.clone(),
+                    activity_feed_legacy,
                 );
 
                 let result = tokio::select! {
@@ -1058,7 +1064,11 @@ async fn main() -> anyhow::Result<()> {
     );
     println!(
         "│ cloud sync             │ {:<34} │",
-        if cli.enable_sync { "enabled" } else { "disabled" }
+        if cli.enable_sync {
+            "enabled"
+        } else {
+            "disabled"
+        }
     );
     if cli.enable_sync {
         println!(
@@ -1946,10 +1956,9 @@ async fn start_sync_service(
     db: Arc<DatabaseManager>,
 ) -> anyhow::Result<Arc<screenpipe_core::sync::SyncServiceHandle>> {
     // Validate required credentials
-    let token = cli
-        .sync_token
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("--sync-token or SCREENPIPE_SYNC_TOKEN required for sync"))?;
+    let token = cli.sync_token.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("--sync-token or SCREENPIPE_SYNC_TOKEN required for sync")
+    })?;
 
     let password = cli.sync_password.as_ref().ok_or_else(|| {
         anyhow::anyhow!("--sync-password or SCREENPIPE_SYNC_PASSWORD required for sync")
@@ -2076,7 +2085,9 @@ async fn handle_sync_command(command: &SyncCommand) -> anyhow::Result<()> {
                     let error: serde_json::Value = response.json().await.unwrap_or_default();
                     println!(
                         "failed to trigger sync: {}",
-                        error.get("error").unwrap_or(&serde_json::json!("unknown error"))
+                        error
+                            .get("error")
+                            .unwrap_or(&serde_json::json!("unknown error"))
                     );
                 }
                 Err(e) => {
@@ -2098,7 +2109,9 @@ async fn handle_sync_command(command: &SyncCommand) -> anyhow::Result<()> {
                     let error: serde_json::Value = response.json().await.unwrap_or_default();
                     println!(
                         "failed to download: {}",
-                        error.get("error").unwrap_or(&serde_json::json!("unknown error"))
+                        error
+                            .get("error")
+                            .unwrap_or(&serde_json::json!("unknown error"))
                     );
                 }
                 Err(e) => {

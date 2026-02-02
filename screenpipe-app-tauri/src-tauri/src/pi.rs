@@ -152,7 +152,7 @@ pub async fn run(prompt: &str, user_token: Option<&str>, working_dir: &str, pid_
     cmd.stderr(std::process::Stdio::piped());
     
     info!("Running pi command...");
-    let mut child = cmd.spawn()
+    let child = cmd.spawn()
         .map_err(|e| format!("Failed to spawn pi: {}", e))?;
     
     // Send PID if requested

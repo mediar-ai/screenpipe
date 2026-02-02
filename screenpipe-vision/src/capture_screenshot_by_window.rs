@@ -350,7 +350,7 @@ impl WindowFilters {
 
             // Strategy 1: Check if pattern appears as a word in the title
             let words: Vec<&str> = title_lower.split_whitespace().collect();
-            let word_match = words.iter().any(|word| *word == pattern);
+            let word_match = words.contains(&pattern);
 
             // Strategy 2: Check in title without spaces (e.g., "Wells Fargo" -> "wellsfargo")
             let no_space_match = title_no_spaces.contains(pattern);
@@ -393,7 +393,7 @@ fn get_all_windows_sck() -> Result<Vec<WindowData>, Box<dyn Error>> {
     let windows = SckWindow::all()?;
     Ok(windows
         .into_iter()
-        .filter_map(|window| extract_window_data_sck(window))
+        .filter_map(extract_window_data_sck)
         .collect())
 }
 
@@ -444,7 +444,10 @@ fn extract_window_data_sck(window: SckWindow) -> Option<WindowData> {
             image_buffer: buffer,
         }),
         Err(e) => {
-            debug!("Failed to capture image for window {} ({}): {}", app_name, title, e);
+            debug!(
+                "Failed to capture image for window {} ({}): {}",
+                app_name, title, e
+            );
             None
         }
     }
@@ -455,7 +458,7 @@ fn get_all_windows_xcap() -> Result<Vec<WindowData>, Box<dyn Error>> {
     let windows = XcapWindow::all()?;
     Ok(windows
         .into_iter()
-        .filter_map(|window| extract_window_data_xcap(window))
+        .filter_map(extract_window_data_xcap)
         .collect())
 }
 
@@ -506,7 +509,10 @@ fn extract_window_data_xcap(window: XcapWindow) -> Option<WindowData> {
             image_buffer: buffer,
         }),
         Err(e) => {
-            debug!("Failed to capture image for window {} ({}): {}", app_name, title, e);
+            debug!(
+                "Failed to capture image for window {} ({}): {}",
+                app_name, title, e
+            );
             None
         }
     }
@@ -563,7 +569,10 @@ fn get_all_windows() -> Result<Vec<WindowData>, Box<dyn Error>> {
                     image_buffer: buffer,
                 }),
                 Err(e) => {
-                    debug!("Failed to capture image for window {} ({}): {}", app_name, title, e);
+                    debug!(
+                        "Failed to capture image for window {} ({}): {}",
+                        app_name, title, e
+                    );
                     None
                 }
             }
@@ -653,15 +662,14 @@ pub async fn capture_all_visible_windows(
                 .iter()
                 .any(|&browser| app_name.to_lowercase().contains(browser));
 
-            if is_browser && browser_url.is_none() && !is_focused {
-                if window_filters.is_title_suggesting_blocked_url(&window_name) {
+            if is_browser && browser_url.is_none() && !is_focused
+                && window_filters.is_title_suggesting_blocked_url(&window_name) {
                     tracing::info!(
                         "Privacy filter: Skipping unfocused browser window with suspicious title: {}",
                         window_name
                     );
                     continue;
                 }
-            }
 
             all_captured_images.push(CapturedWindow {
                 image,

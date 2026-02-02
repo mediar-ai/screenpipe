@@ -193,7 +193,11 @@ pub async fn sync_init(
                     *is_syncing.write().await = false;
                     *last_error.write().await = Some(err);
                 }
-                SyncEvent::Progress { uploaded, total, bytes_transferred } => {
+                SyncEvent::Progress {
+                    uploaded,
+                    total,
+                    bytes_transferred,
+                } => {
                     debug!(
                         "sync progress: {}/{} blobs, {} bytes",
                         uploaded, total, bytes_transferred
@@ -298,7 +302,9 @@ pub async fn sync_lock(
             info!("sync locked and service stopped");
             Ok(Json(json!({"success": true, "message": "sync locked"})))
         }
-        None => Ok(Json(json!({"success": true, "message": "sync was not initialized"}))),
+        None => Ok(Json(
+            json!({"success": true, "message": "sync was not initialized"}),
+        )),
     }
 }
 

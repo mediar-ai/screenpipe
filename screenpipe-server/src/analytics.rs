@@ -106,7 +106,7 @@ fn parse_macos_major_version(version_str: &str) -> Option<u32> {
 
 /// Check macOS version and send telemetry event if below recommended versions.
 /// This helps track users on older macOS versions that may have compatibility issues.
-/// 
+///
 /// Thresholds:
 /// - Below 12 (Monterey): ScreenCaptureKit not available at all
 /// - Below 14 (Sonoma): sck-rs may have issues, recommended to upgrade
@@ -119,7 +119,7 @@ pub fn check_macos_version() {
     let sys = System::new();
     let os_version = sys.os_version().unwrap_or_default();
     let os_name = sys.name().unwrap_or_default();
-    
+
     // Only check on macOS
     if !os_name.to_lowercase().contains("mac") {
         return;
@@ -135,7 +135,7 @@ pub fn check_macos_version() {
 
     // Determine version category
     let (below_12, below_14) = (major_version < 12, major_version < 14);
-    
+
     if !below_12 && !below_14 {
         debug!("macOS version {} is supported", os_version);
         return;
@@ -174,10 +174,7 @@ pub fn check_macos_version() {
         }),
     );
 
-    debug!(
-        "Sent {} event for macOS {}",
-        event_name, os_version
-    );
+    debug!("Sent {} event for macOS {}", event_name, os_version);
 }
 
 /// No-op on non-macOS platforms

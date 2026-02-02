@@ -81,10 +81,12 @@ impl EmbeddedServerConfig {
 }
 
 /// Handle for controlling the embedded server
+#[allow(dead_code)]
 pub struct EmbeddedServerHandle {
     shutdown_tx: broadcast::Sender<()>,
 }
 
+#[allow(dead_code)]
 impl EmbeddedServerHandle {
     pub fn shutdown(&self) {
         info!("Shutting down embedded screenpipe server");

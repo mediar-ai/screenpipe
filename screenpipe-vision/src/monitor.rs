@@ -33,9 +33,8 @@ pub mod macos_version {
     use std::process::Command;
 
     /// Cached macOS version (major, minor)
-    pub static MACOS_VERSION: Lazy<(u32, u32)> = Lazy::new(|| {
-        get_macos_version().unwrap_or((0, 0))
-    });
+    pub static MACOS_VERSION: Lazy<(u32, u32)> =
+        Lazy::new(|| get_macos_version().unwrap_or((0, 0)));
 
     /// Check if we should use sck-rs (requires macOS 12.3+)
     pub fn use_sck_rs() -> bool {
@@ -49,13 +48,13 @@ pub mod macos_version {
             .arg("-productVersion")
             .output()
             .ok()?;
-        
+
         let version_str = String::from_utf8_lossy(&output.stdout);
         let parts: Vec<&str> = version_str.trim().split('.').collect();
-        
-        let major: u32 = parts.get(0)?.parse().ok()?;
+
+        let major: u32 = parts.first()?.parse().ok()?;
         let minor: u32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-        
+
         tracing::info!("Detected macOS version: {}.{}", major, minor);
         Some((major, minor))
     }
@@ -306,7 +305,8 @@ pub async fn get_monitor_by_id(id: u32) -> Option<SafeMonitor> {
             match XcapMonitor::all() {
                 Ok(monitors) => {
                     let monitor_count = monitors.len();
-                    let monitor_ids: Vec<u32> = monitors.iter().filter_map(|m| m.id().ok()).collect();
+                    let monitor_ids: Vec<u32> =
+                        monitors.iter().filter_map(|m| m.id().ok()).collect();
 
                     tracing::debug!(
                         "Found {} monitors with IDs: {:?} (using xcap fallback)",

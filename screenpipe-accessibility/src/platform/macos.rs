@@ -327,7 +327,8 @@ fn run_event_tap(
                 } else {
                     s
                 };
-                let event = UiEvent::text(Utc::now(), state.start.elapsed().as_millis() as u64, text);
+                let event =
+                    UiEvent::text(Utc::now(), state.start.elapsed().as_millis() as u64, text);
                 let _ = state.tx.try_send(event);
             }
         }
@@ -538,7 +539,11 @@ extern "C" fn tap_callback(
                             let content = if capture_content {
                                 get_clipboard().map(|s| {
                                     let truncated = truncate(&s, 1000);
-                                    if apply_pii { remove_pii(&truncated) } else { truncated }
+                                    if apply_pii {
+                                        remove_pii(&truncated)
+                                    } else {
+                                        truncated
+                                    }
                                 })
                             } else {
                                 None
@@ -570,7 +575,11 @@ extern "C" fn tap_callback(
                             let content = if capture_content {
                                 get_clipboard().map(|s| {
                                     let truncated = truncate(&s, 1000);
-                                    if apply_pii { remove_pii(&truncated) } else { truncated }
+                                    if apply_pii {
+                                        remove_pii(&truncated)
+                                    } else {
+                                        truncated
+                                    }
                                 })
                             } else {
                                 None
@@ -596,7 +605,11 @@ extern "C" fn tap_callback(
                         let content = if state.config.capture_clipboard_content {
                             get_clipboard().map(|s| {
                                 let truncated = truncate(&s, 1000);
-                                if state.config.apply_pii_removal { remove_pii(&truncated) } else { truncated }
+                                if state.config.apply_pii_removal {
+                                    remove_pii(&truncated)
+                                } else {
+                                    truncated
+                                }
                             })
                         } else {
                             None
@@ -774,7 +787,7 @@ fn get_element_at_position(x: f64, y: f64, config: &UiCaptureConfig) -> Option<E
         if let Some(start) = s.find("AX") {
             let rest = &s[start..];
             let end = rest
-                .find(|c| c == ')' || c == '"' || c == '}')
+                .find([')', '"', '}'])
                 .unwrap_or(rest.len());
             rest[..end].to_string()
         } else {
@@ -824,7 +837,11 @@ fn get_element_at_position(x: f64, y: f64, config: &UiCaptureConfig) -> Option<E
         name: name.map(|s| truncate(&s, 200)),
         value: value.map(|s| {
             let truncated = truncate(&s, 500);
-            if config.apply_pii_removal { remove_pii(&truncated) } else { truncated }
+            if config.apply_pii_removal {
+                remove_pii(&truncated)
+            } else {
+                truncated
+            }
         }),
         description: description.map(|s| truncate(&s, 200)),
         automation_id: None,

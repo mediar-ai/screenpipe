@@ -1,7 +1,8 @@
 use clap::Parser;
 use screenpipe_core::Language;
 use screenpipe_vision::{
-    capture_screenshot_by_window::WindowFilters, continuous_capture, monitor::list_monitors, OcrEngine,
+    capture_screenshot_by_window::WindowFilters, continuous_capture, monitor::list_monitors,
+    OcrEngine,
 };
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::channel;

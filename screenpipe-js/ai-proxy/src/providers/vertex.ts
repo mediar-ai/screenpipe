@@ -512,6 +512,82 @@ export class VertexAIProvider implements AIProvider {
 }
 
 /**
+ * Sanitize message content to fix common formatting issues
+ * Fixes issues like: {type: 'text', text: {text: '...'}} -> {type: 'text', text: '...'}
+ */
+export function sanitizeMessages(messages: any[]): any[] {
+	if (!Array.isArray(messages)) return messages;
+
+	return messages.map((msg) => {
+		if (!msg || typeof msg !== 'object') return msg;
+
+		// Handle content field
+		if (msg.content !== undefined) {
+			msg.content = sanitizeContent(msg.content);
+		}
+
+		return msg;
+	});
+}
+
+/**
+ * Sanitize content field which can be string, array, or other formats
+ */
+function sanitizeContent(content: any): any {
+	// If string, return as-is
+	if (typeof content === 'string') return content;
+
+	// If array, sanitize each element
+	if (Array.isArray(content)) {
+		return content.map(sanitizeContentBlock);
+	}
+
+	// If object that looks like a single content block, sanitize it
+	if (content && typeof content === 'object') {
+		return sanitizeContentBlock(content);
+	}
+
+	return content;
+}
+
+/**
+ * Sanitize a single content block
+ * Fixes nested text issues like: {type: 'text', text: {text: '...'}}
+ */
+function sanitizeContentBlock(block: any): any {
+	if (!block || typeof block !== 'object') return block;
+
+	// Fix nested text issue: {type: 'text', text: {text: '...'}}
+	if (block.type === 'text' && block.text !== undefined) {
+		// If text is an object with a text property, unwrap it
+		if (typeof block.text === 'object' && block.text !== null && 'text' in block.text) {
+			console.log('proxyToVertex: fixing nested text.text structure');
+			block.text = block.text.text;
+		}
+		// Ensure text is a string
+		if (typeof block.text !== 'string') {
+			block.text = String(block.text);
+		}
+	}
+
+	// Handle tool_use blocks - ensure input is parsed if it's a string
+	if (block.type === 'tool_use' && typeof block.input === 'string') {
+		try {
+			block.input = JSON.parse(block.input);
+		} catch (e) {
+			// Keep as-is if not valid JSON
+		}
+	}
+
+	// Handle tool_result blocks
+	if (block.type === 'tool_result' && block.content !== undefined) {
+		block.content = sanitizeContent(block.content);
+	}
+
+	return block;
+}
+
+/**
  * Create a passthrough proxy for raw Anthropic API requests to Vertex AI
  * This is what the Agent SDK needs - it sends Anthropic-format requests
  * and expects Anthropic-format responses
@@ -547,6 +623,12 @@ export async function proxyToVertex(
 			[key: string]: any;
 		};
 		console.log('proxyToVertex: model=', body.model, 'stream=', body.stream, 'messages count=', body.messages?.length);
+
+		// Sanitize messages to fix common formatting issues
+		if (body.messages) {
+			body.messages = sanitizeMessages(body.messages);
+		}
+
 		const isStreaming = body.stream === true;
 
 		// Get access token

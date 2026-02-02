@@ -46,19 +46,17 @@ pub async fn process_with_whisper(
         .full(params, &audio)
         .expect("failed to run model");
 
-    let num_segments = whisper_state
-        .full_n_segments()
-        .expect("failed to get number of segments");
+    let num_segments = whisper_state.full_n_segments();
 
     let mut transcript = String::new();
 
     for i in 0..num_segments {
         // Get the transcribed text and timestamps for the current segment.
-        let segment = whisper_state
-            .full_get_segment_text(i)
-            .expect("failed to get segment");
-
-        transcript.push_str(&segment);
+        if let Some(segment) = whisper_state.get_segment(i) {
+            if let Ok(text) = segment.to_str() {
+                transcript.push_str(text);
+            }
+        }
     }
 
     Ok(transcript)

@@ -1144,6 +1144,8 @@ async fn main() {
             if !use_dev_mode {
                 let store_clone = store.clone();
                 let base_dir_clone = base_dir.clone();
+                let sidecar_state = app_handle.state::<SidecarState>();
+                let sidecar_state_inner = sidecar_state.0.clone();
                 tauri::async_runtime::spawn(async move {
                     if server_running.await.unwrap_or(false) {
                         info!("Server already running, skipping embedded server start");
@@ -1172,7 +1174,9 @@ async fn main() {
                     match embedded_server::start_embedded_server(config).await {
                         Ok(handle) => {
                             info!("Embedded screenpipe server started successfully");
-                            std::mem::forget(handle);
+                            // Store handle in state so it can be stopped/restarted later
+                            let mut guard = sidecar_state_inner.lock().await;
+                            *guard = Some(handle);
                         }
                         Err(e) => {
                             error!("Failed to start embedded server: {}", e);

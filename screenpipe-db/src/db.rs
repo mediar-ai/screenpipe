@@ -3192,7 +3192,7 @@ LIMIT ? OFFSET ?
             )
             "#,
         )
-        .bind(&event.timestamp)
+        .bind(event.timestamp)
         .bind(&event.session_id)
         .bind(event.relative_ms)
         .bind(event.event_type.to_string())
@@ -3259,7 +3259,7 @@ LIMIT ? OFFSET ?
                 )
                 "#,
             )
-            .bind(&event.timestamp)
+            .bind(event.timestamp)
             .bind(&event.session_id)
             .bind(event.relative_ms)
             .bind(event.event_type.to_string())
