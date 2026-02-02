@@ -405,7 +405,7 @@ async piInstall() : Promise<Result<null, string>> {
 }
 },
 /**
- * Send a prompt to Pi
+ * Send a prompt to pi via stdin (RPC mode)
  */
 async piPrompt(message: string) : Promise<Result<null, string>> {
     try {
