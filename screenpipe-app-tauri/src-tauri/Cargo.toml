@@ -124,6 +124,12 @@ core-graphics-helmer-fork = "0.24.0"
 nokhwa-bindings-macos = { git = "https://github.com/CapSoftware/nokhwa", rev = "0d3d1f30a78b" }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
 
+# Embedded screenpipe server for macOS 26+ (TCC fix)
+screenpipe-server = { path = "../../screenpipe-server", default-features = false }
+screenpipe-vision = { path = "../../screenpipe-vision" }
+screenpipe-audio = { path = "../../screenpipe-audio" }
+screenpipe-db = { path = "../../screenpipe-db" }
+
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.52.0"

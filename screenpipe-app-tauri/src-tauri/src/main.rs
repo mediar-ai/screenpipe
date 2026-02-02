@@ -54,6 +54,8 @@ mod space_monitor;
 mod sync;
 mod obsidian_sync;
 mod pi;
+#[cfg(target_os = "macos")]
+mod embedded_server;
 
 pub use server::*;
 
@@ -1142,45 +1144,127 @@ async fn main() {
 
             info!("use_dev_mode: {}", use_dev_mode);
 
-            // Start sidecar in non-dev mode (production behavior)
-            // Uses the same SidecarState that tauri commands use
-            if !use_dev_mode  {
-                let sidecar_state_clone = sidecar_state_for_init.clone();
-                let app_handle_clone = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    let mut state_guard = sidecar_state_clone.lock().await;
-                    // Initialize the manager if it doesn't exist
-                    if state_guard.is_none() {
-                        *state_guard = Some(SidecarManager::new());
-                    }
-                    let manager = state_guard.as_mut().unwrap();
-                    if server_running.await.unwrap_or(false) {
-                        return;
-                    }
-                    
-                    // Check permissions before spawning sidecar
-                    let permissions_check = permissions::do_permissions_check(false);
-                    let disable_audio = store.disable_audio;
-                    
-                    // Always check screen recording permission - this is required and needs restart
-                    if !permissions_check.screen_recording.permitted() {
-                        warn!("Screen recording permission not granted: {:?}. Sidecar will not start until permission is granted.", permissions_check.screen_recording);
-                        // Don't start the sidecar if screen recording permission isn't granted
-                        // User will need to grant permission through the onboarding/settings UI and restart
-                        return;
-                    }
-                    
-                    // Check microphone permission if audio recording is enabled - but don't block startup
-                    if !disable_audio && !permissions_check.microphone.permitted() {
-                        warn!("Microphone permission not granted and audio recording is enabled: {:?}. Audio recording will not work until permission is granted, but sidecar will still start.", permissions_check.microphone);
-                        // Continue with sidecar startup - microphone permission can be granted at runtime
-                    }
-                    
-                    info!("Screen recording permission granted, spawning screenpipe sidecar. Audio disabled: {}, microphone permission: {:?}", disable_audio, permissions_check.microphone);
-                    if let Err(e) = manager.spawn(&app_handle_clone, None).await {
-                        error!("Failed to spawn initial sidecar: {}", e);
-                    }
-                });
+            // Check if we should use embedded server (macOS 26+)
+            #[cfg(target_os = "macos")]
+            let use_embedded = embedded_server::should_use_embedded_server();
+            #[cfg(not(target_os = "macos"))]
+            let use_embedded = false;
+
+            if use_embedded {
+                info!("macOS 26+ detected, using embedded server for TCC compatibility");
+            }
+
+            // Start recording in non-dev mode (production behavior)
+            if !use_dev_mode {
+                #[cfg(target_os = "macos")]
+                if use_embedded {
+                    // Use embedded server for macOS 26+ (TCC fix)
+                    let app_handle_clone = app_handle.clone();
+                    let store_clone = store.clone();
+                    let base_dir_clone = base_dir.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if server_running.await.unwrap_or(false) {
+                            info!("Server already running, skipping embedded server start");
+                            return;
+                        }
+
+                        // Check permissions before starting embedded server
+                        let permissions_check = permissions::do_permissions_check(false);
+                        let disable_audio = store_clone.disable_audio;
+
+                        if !permissions_check.screen_recording.permitted() {
+                            warn!("Screen recording permission not granted: {:?}. Embedded server will not start.", permissions_check.screen_recording);
+                            return;
+                        }
+
+                        if !disable_audio && !permissions_check.microphone.permitted() {
+                            warn!("Microphone permission not granted: {:?}. Audio recording will not work.", permissions_check.microphone);
+                        }
+
+                        info!("Starting embedded screenpipe server...");
+                        let config = embedded_server::EmbeddedServerConfig::from_store(
+                            &store_clone,
+                            base_dir_clone,
+                        );
+
+                        match embedded_server::start_embedded_server(config).await {
+                            Ok(handle) => {
+                                info!("Embedded screenpipe server started successfully");
+                                // Store handle for cleanup - we'll manage this through app state
+                                // For now, the handle will be dropped when the app exits
+                                std::mem::forget(handle);
+                            }
+                            Err(e) => {
+                                error!("Failed to start embedded server: {}", e);
+                            }
+                        }
+                    });
+                } else {
+                    // Use sidecar for older macOS versions
+                    let sidecar_state_clone = sidecar_state_for_init.clone();
+                    let app_handle_clone = app_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let mut state_guard = sidecar_state_clone.lock().await;
+                        if state_guard.is_none() {
+                            *state_guard = Some(SidecarManager::new());
+                        }
+                        let manager = state_guard.as_mut().unwrap();
+                        if server_running.await.unwrap_or(false) {
+                            return;
+                        }
+
+                        let permissions_check = permissions::do_permissions_check(false);
+                        let disable_audio = store.disable_audio;
+
+                        if !permissions_check.screen_recording.permitted() {
+                            warn!("Screen recording permission not granted: {:?}. Sidecar will not start.", permissions_check.screen_recording);
+                            return;
+                        }
+
+                        if !disable_audio && !permissions_check.microphone.permitted() {
+                            warn!("Microphone permission not granted: {:?}. Audio recording will not work.", permissions_check.microphone);
+                        }
+
+                        info!("Screen recording permission granted, spawning screenpipe sidecar.");
+                        if let Err(e) = manager.spawn(&app_handle_clone, None).await {
+                            error!("Failed to spawn initial sidecar: {}", e);
+                        }
+                    });
+                }
+
+                #[cfg(not(target_os = "macos"))]
+                {
+                    // Non-macOS: always use sidecar
+                    let sidecar_state_clone = sidecar_state_for_init.clone();
+                    let app_handle_clone = app_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let mut state_guard = sidecar_state_clone.lock().await;
+                        if state_guard.is_none() {
+                            *state_guard = Some(SidecarManager::new());
+                        }
+                        let manager = state_guard.as_mut().unwrap();
+                        if server_running.await.unwrap_or(false) {
+                            return;
+                        }
+
+                        let permissions_check = permissions::do_permissions_check(false);
+                        let disable_audio = store.disable_audio;
+
+                        if !permissions_check.screen_recording.permitted() {
+                            warn!("Screen recording permission not granted: {:?}. Sidecar will not start.", permissions_check.screen_recording);
+                            return;
+                        }
+
+                        if !disable_audio && !permissions_check.microphone.permitted() {
+                            warn!("Microphone permission not granted: {:?}. Audio recording will not work.", permissions_check.microphone);
+                        }
+
+                        info!("Screen recording permission granted, spawning screenpipe sidecar.");
+                        if let Err(e) = manager.spawn(&app_handle_clone, None).await {
+                            error!("Failed to spawn initial sidecar: {}", e);
+                        }
+                    });
+                }
             } else {
                 debug!("Skipping sidecar spawn: dev_mode enabled");
             }
