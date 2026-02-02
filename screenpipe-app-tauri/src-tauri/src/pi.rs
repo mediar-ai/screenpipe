@@ -6,7 +6,7 @@
 use tracing::{debug, error, info, warn};
 
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
-const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/anthropic/v1";
+const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/anthropic"; // Pi adds /v1/messages
 const DEFAULT_MODEL: &str = "claude-opus-4-5-20251101";
 
 /// Ensure pi CLI is installed/updated via bun
@@ -60,7 +60,7 @@ pub fn ensure_config() -> Result<(), String> {
     
     let models_path = config_dir.join("models.json");
     
-    // Override built-in anthropic provider to use screenpipe API proxy
+    // Override anthropic baseUrl to use screenpipe API proxy
     let config = serde_json::json!({
         "providers": {
             "anthropic": {
