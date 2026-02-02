@@ -54,6 +54,7 @@ mod space_monitor;
 mod sync;
 mod obsidian_sync;
 mod pi;
+mod embedded_server;
 
 pub use server::*;
 
@@ -848,7 +849,6 @@ async fn main() {
     }
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
-    let sidecar_state_for_init = sidecar_state.0.clone(); // Clone for initial spawn
     let opencode_state = opencode::OpencodeState(Arc::new(tokio::sync::Mutex::new(None)));
     let obsidian_sync_state = obsidian_sync::ObsidianSyncState::new();
     #[allow(clippy::single_match)]
@@ -1136,53 +1136,51 @@ async fn main() {
             let server_shutdown_tx = spawn_server(app_handle.clone(), 11435);
             app.manage(server_shutdown_tx);
 
-            // Dev mode check and sidecar initialization
-            let use_dev_mode = store
-                .dev_mode;
-
+            // Dev mode check
+            let use_dev_mode = store.dev_mode;
             info!("use_dev_mode: {}", use_dev_mode);
 
-            // Start sidecar in non-dev mode (production behavior)
-            // Uses the same SidecarState that tauri commands use
-            if !use_dev_mode  {
-                let sidecar_state_clone = sidecar_state_for_init.clone();
-                let app_handle_clone = app_handle.clone();
+            // Start embedded server in non-dev mode
+            if !use_dev_mode {
+                let store_clone = store.clone();
+                let base_dir_clone = base_dir.clone();
                 tauri::async_runtime::spawn(async move {
-                    let mut state_guard = sidecar_state_clone.lock().await;
-                    // Initialize the manager if it doesn't exist
-                    if state_guard.is_none() {
-                        *state_guard = Some(SidecarManager::new());
-                    }
-                    let manager = state_guard.as_mut().unwrap();
                     if server_running.await.unwrap_or(false) {
+                        info!("Server already running, skipping embedded server start");
                         return;
                     }
-                    
-                    // Check permissions before spawning sidecar
+
+                    // Check permissions before starting
                     let permissions_check = permissions::do_permissions_check(false);
-                    let disable_audio = store.disable_audio;
-                    
-                    // Always check screen recording permission - this is required and needs restart
+                    let disable_audio = store_clone.disable_audio;
+
                     if !permissions_check.screen_recording.permitted() {
-                        warn!("Screen recording permission not granted: {:?}. Sidecar will not start until permission is granted.", permissions_check.screen_recording);
-                        // Don't start the sidecar if screen recording permission isn't granted
-                        // User will need to grant permission through the onboarding/settings UI and restart
+                        warn!("Screen recording permission not granted: {:?}. Server will not start.", permissions_check.screen_recording);
                         return;
                     }
-                    
-                    // Check microphone permission if audio recording is enabled - but don't block startup
+
                     if !disable_audio && !permissions_check.microphone.permitted() {
-                        warn!("Microphone permission not granted and audio recording is enabled: {:?}. Audio recording will not work until permission is granted, but sidecar will still start.", permissions_check.microphone);
-                        // Continue with sidecar startup - microphone permission can be granted at runtime
+                        warn!("Microphone permission not granted: {:?}. Audio recording will not work.", permissions_check.microphone);
                     }
-                    
-                    info!("Screen recording permission granted, spawning screenpipe sidecar. Audio disabled: {}, microphone permission: {:?}", disable_audio, permissions_check.microphone);
-                    if let Err(e) = manager.spawn(&app_handle_clone, None).await {
-                        error!("Failed to spawn initial sidecar: {}", e);
+
+                    info!("Starting embedded screenpipe server...");
+                    let config = embedded_server::EmbeddedServerConfig::from_store(
+                        &store_clone,
+                        base_dir_clone,
+                    );
+
+                    match embedded_server::start_embedded_server(config).await {
+                        Ok(handle) => {
+                            info!("Embedded screenpipe server started successfully");
+                            std::mem::forget(handle);
+                        }
+                        Err(e) => {
+                            error!("Failed to start embedded server: {}", e);
+                        }
                     }
                 });
             } else {
-                debug!("Skipping sidecar spawn: dev_mode enabled");
+                debug!("Skipping server start: dev_mode enabled");
             }
 
             // Initialize update check
