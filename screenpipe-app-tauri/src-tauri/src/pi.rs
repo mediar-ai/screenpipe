@@ -7,7 +7,7 @@ use tracing::{debug, error, info, warn};
 
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
 const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/anthropic";
-const DEFAULT_MODEL: &str = "claude-opus-4-5-20250514";
+const DEFAULT_MODEL: &str = "claude-opus-4-5@20251101";
 
 /// Ensure pi CLI is installed/updated via bun
 pub async fn ensure_installed() -> Result<(), String> {
@@ -66,10 +66,10 @@ pub fn ensure_config() -> Result<(), String> {
                 "api": "anthropic",
                 "baseURL": SCREENPIPE_API_URL,
                 "models": {
-                    "claude-opus-4-5-20250514": {
+                    "claude-opus-4-5@20251101": {
                         "name": "Claude Opus 4.5"
                     },
-                    "claude-haiku-4-5-20251001": {
+                    "claude-haiku-4-5@20251001": {
                         "name": "Claude Haiku 4.5"
                     }
                 }
