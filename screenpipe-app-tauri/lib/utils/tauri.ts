@@ -300,6 +300,8 @@ async removeSyncDevice(deviceId: string) : Promise<Result<null, string>> {
 },
 /**
  * Initialize sync with password.
+ * This initializes both the local SyncManager (for device queries) and
+ * the server's SyncService (for actual data sync).
  */
 async initSync(password: string) : Promise<Result<boolean, string>> {
     try {
@@ -310,7 +312,7 @@ async initSync(password: string) : Promise<Result<boolean, string>> {
 }
 },
 /**
- * Lock sync (clear keys from memory).
+ * Lock sync (clear keys from memory and stop server sync service).
  */
 async lockSync() : Promise<Result<null, string>> {
     try {

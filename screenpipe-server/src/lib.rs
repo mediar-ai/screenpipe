@@ -10,6 +10,7 @@ pub mod pipe_manager;
 mod resource_monitor;
 mod server;
 pub mod sleep_monitor;
+mod sync_api;
 pub mod sync_provider;
 pub mod text_embeds;
 pub mod ui_events_api;

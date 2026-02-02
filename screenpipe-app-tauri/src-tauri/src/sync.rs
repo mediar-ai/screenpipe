@@ -293,6 +293,8 @@ pub async fn remove_sync_device(
 }
 
 /// Initialize sync with password.
+/// This initializes both the local SyncManager (for device queries) and
+/// the server's SyncService (for actual data sync).
 #[tauri::command]
 #[specta::specta]
 pub async fn init_sync(
@@ -315,10 +317,10 @@ pub async fn init_sync(
 
     let device_os = std::env::consts::OS.to_string();
 
-    // Create sync client config
-    let config = SyncClientConfig::new(token, state.machine_id.clone(), device_name, device_os);
+    // Create sync client config for local manager (used for device queries)
+    let config = SyncClientConfig::new(token.clone(), state.machine_id.clone(), device_name, device_os);
 
-    // Create sync manager
+    // Create local sync manager
     let manager = SyncManager::new(config).map_err(|e| format!("failed to create sync manager: {}", e))?;
 
     // Initialize with password (this will either create new keys or derive from existing)
@@ -327,7 +329,7 @@ pub async fn init_sync(
         .await
         .map_err(|e| format!("failed to initialize sync: {}", e))?;
 
-    // Store the manager
+    // Store the local manager
     *state.manager.write().await = Some(Arc::new(manager));
     *state.enabled.write().await = true;
 
@@ -336,18 +338,69 @@ pub async fn init_sync(
         if is_new_user { "new" } else { "existing" }
     );
 
+    // Now initialize the server's sync service
+    let client = reqwest::Client::new();
+    let init_request = serde_json::json!({
+        "token": token,
+        "password": password,
+        "machine_id": state.machine_id.clone(),
+        "sync_interval_secs": 300
+    });
+
+    match client
+        .post("http://localhost:3030/sync/init")
+        .json(&init_request)
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => {
+            info!("server sync service initialized");
+        }
+        Ok(response) if response.status().as_u16() == 409 => {
+            // Already initialized - that's fine
+            debug!("server sync service already initialized");
+        }
+        Ok(response) => {
+            let error_text = response.text().await.unwrap_or_else(|_| "unknown error".to_string());
+            // Log but don't fail - local manager is still useful
+            debug!("failed to initialize server sync: {}", error_text);
+        }
+        Err(e) => {
+            // Log but don't fail - server might not be running yet
+            debug!("failed to connect to server for sync init: {}", e);
+        }
+    }
+
     Ok(is_new_user)
 }
 
-/// Lock sync (clear keys from memory).
+/// Lock sync (clear keys from memory and stop server sync service).
 #[tauri::command]
 #[specta::specta]
 pub async fn lock_sync(state: State<'_, SyncState>) -> Result<(), String> {
+    // Lock local manager
     let manager_guard = state.manager.read().await;
     if let Some(manager) = manager_guard.as_ref() {
         manager.lock().await;
     }
     *state.enabled.write().await = false;
+
+    // Lock server sync service
+    let client = reqwest::Client::new();
+    match client
+        .post("http://localhost:3030/sync/lock")
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => {
+            info!("server sync service locked");
+        }
+        Ok(_) | Err(_) => {
+            // Server might not be running or sync not initialized - that's fine
+            debug!("could not lock server sync (may not be running)");
+        }
+    }
+
     Ok(())
 }
 

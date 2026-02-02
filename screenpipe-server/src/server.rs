@@ -51,6 +51,8 @@ use screenpipe_core::pii_removal::detect_pii_regions;
 use screenpipe_core::sync::SyncServiceHandle;
 use tracing::{debug, error, info};
 
+use crate::sync_api::{self, SyncState};
+
 use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -115,8 +117,10 @@ pub struct AppState {
     pub use_pii_removal: bool,
     /// Cloud search client for hybrid local + cloud queries
     pub cloud_search: Arc<crate::cloud_search::CloudSearchClient>,
-    /// Cloud sync service handle (if enabled)
+    /// Cloud sync service handle (if enabled via CLI)
     pub sync_handle: Option<Arc<SyncServiceHandle>>,
+    /// Runtime sync state (initialized via /sync/init endpoint)
+    pub sync_state: SyncState,
 }
 
 // Update the SearchQuery struct
@@ -1368,8 +1372,10 @@ impl SCServer {
             use_pii_removal: self.use_pii_removal,
             // Cloud search client (disabled by default, can be enabled via API)
             cloud_search: Arc::new(crate::cloud_search::CloudSearchClient::new()),
-            // Cloud sync service handle
+            // Cloud sync service handle (from CLI)
             sync_handle: self.sync_handle.clone(),
+            // Runtime sync state (initialized via /sync/init)
+            sync_state: sync_api::new_sync_state(),
         });
 
         let cors = CorsLayer::new()
@@ -1431,8 +1437,11 @@ impl SCServer {
             .route("/ui-events", get(ui_events_search_handler))
             .route("/ui-events/stats", get(ui_events_stats_handler))
             // Cloud Sync API routes
-            .route("/sync/status", get(sync_status_handler))
-            .route("/sync/trigger", axum::routing::post(sync_trigger_handler))
+            .route("/sync/init", axum::routing::post(sync_api::sync_init))
+            .route("/sync/status", get(sync_api::sync_status))
+            .route("/sync/trigger", axum::routing::post(sync_api::sync_trigger))
+            .route("/sync/lock", axum::routing::post(sync_api::sync_lock))
+            .route("/sync/download", axum::routing::post(sync_api::sync_download))
             // NOTE: websockerts and sse is not supported by openapi so we move it down here
             .route("/stream/frames", get(stream_frames_handler))
             .route("/ws/events", get(ws_events_handler))
@@ -4004,49 +4013,6 @@ struct MergeSpeakersRequest {
 
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
-
-// ============================================================================
-// Cloud Sync Handlers
-// ============================================================================
-
-#[derive(Serialize)]
-struct SyncStatusResponse {
-    enabled: bool,
-    is_syncing: bool,
-    last_sync: Option<String>,
-    last_error: Option<String>,
-}
-
-async fn sync_status_handler(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<SyncStatusResponse>, (StatusCode, Json<Value>)> {
-    let enabled = state.sync_handle.is_some();
-
-    Ok(Json(SyncStatusResponse {
-        enabled,
-        is_syncing: false, // TODO: Track this in AppState
-        last_sync: None,   // TODO: Track this in AppState
-        last_error: None,
-    }))
-}
-
-async fn sync_trigger_handler(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    match &state.sync_handle {
-        Some(handle) => match handle.sync_now().await {
-            Ok(_) => Ok(Json(json!({"success": true, "message": "sync triggered"}))),
-            Err(e) => Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("failed to trigger sync: {}", e)})),
-            )),
-        },
-        None => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "sync not enabled"})),
-        )),
-    }
-}
 
 #[cfg(test)]
 mod tests {
