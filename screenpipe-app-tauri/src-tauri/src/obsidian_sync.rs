@@ -313,7 +313,11 @@ pub async fn obsidian_run_sync(
     // Debug: check if token is passed
     info!("obsidian_run_sync: user_token present = {}, vault_path = {}", user_token.is_some(), settings.vault_path);
     
+    // Emit progress
+    let _ = app.emit("obsidian_sync_progress", "Querying screenpipe data...");
+    
     // Run pi in the vault directory
+    let _ = app.emit("obsidian_sync_progress", "AI is analyzing and writing notes...");
     let result = pi::run(&prompt, user_token.as_deref(), &settings.vault_path).await.map(|_| ());
 
     // Update status based on result

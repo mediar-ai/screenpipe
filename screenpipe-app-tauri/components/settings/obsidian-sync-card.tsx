@@ -156,6 +156,8 @@ export function ObsidianSyncCard() {
   const [isValidVault, setIsValidVault] = useState<boolean | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [syncStatusMessage, setSyncStatusMessage] = useState<string>("");
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -168,6 +170,7 @@ export function ObsidianSyncCard() {
         console.error("Failed to parse obsidian settings:", e);
       }
     }
+    setSettingsLoaded(true);
 
     // Fetch suggested vault paths
     fetchVaultPaths();
@@ -176,10 +179,12 @@ export function ObsidianSyncCard() {
     fetchStatus();
   }, []);
 
-  // Save settings to localStorage when they change
+  // Save settings to localStorage when they change (only after initial load)
   useEffect(() => {
-    localStorage.setItem("obsidian-sync-settings", JSON.stringify(settings));
-  }, [settings]);
+    if (settingsLoaded) {
+      localStorage.setItem("obsidian-sync-settings", JSON.stringify(settings));
+    }
+  }, [settings, settingsLoaded]);
 
   // Validate vault path when it changes
   useEffect(() => {
@@ -196,10 +201,16 @@ export function ObsidianSyncCard() {
 
     listen<void>("obsidian_sync_started", () => {
       setStatus((s) => ({ ...s, isSyncing: true }));
+      setSyncStatusMessage("Starting AI agent...");
+    }).then((u) => unlisteners.push(u));
+
+    listen<string>("obsidian_sync_progress", (event) => {
+      setSyncStatusMessage(event.payload);
     }).then((u) => unlisteners.push(u));
 
     listen<ObsidianSyncStatus>("obsidian_sync_completed", (event) => {
       setStatus(event.payload);
+      setSyncStatusMessage("");
       toast({
         title: "Obsidian sync completed",
         description: "Your activity has been synced to Obsidian",
@@ -212,6 +223,7 @@ export function ObsidianSyncCard() {
         isSyncing: false,
         lastError: event.payload,
       }));
+      setSyncStatusMessage("");
       toast({
         variant: "destructive",
         title: "Obsidian sync failed",
@@ -441,6 +453,12 @@ export function ObsidianSyncCard() {
                   </>
                 )}
               </Button>
+              
+              {status.isSyncing && syncStatusMessage && (
+                <p className="text-sm text-muted-foreground animate-pulse">
+                  {syncStatusMessage}
+                </p>
+              )}
 
               {settings.vaultPath && (
                 <Button
