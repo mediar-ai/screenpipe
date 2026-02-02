@@ -6,8 +6,8 @@
 use tracing::{debug, error, info, warn};
 
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
-const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/anthropic"; // Pi adds /v1/messages
-const DEFAULT_MODEL: &str = "claude-opus-4-5-20251101";
+const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1"; // OpenAI-compatible endpoint
+const DEFAULT_MODEL: &str = "claude-opus-4-5@20251101"; // Uses @ separator
 
 /// Ensure pi CLI is installed/updated via bun
 pub async fn ensure_installed() -> Result<(), String> {
@@ -60,11 +60,31 @@ pub fn ensure_config() -> Result<(), String> {
     
     let models_path = config_dir.join("models.json");
     
-    // Override anthropic baseUrl to use screenpipe API proxy
+    // Custom screenpipe provider using OpenAI-compatible API
     let config = serde_json::json!({
         "providers": {
-            "anthropic": {
-                "baseUrl": SCREENPIPE_API_URL
+            "screenpipe": {
+                "baseUrl": SCREENPIPE_API_URL,
+                "api": "openai-completions",
+                "authHeader": true,
+                "models": [
+                    {
+                        "id": "claude-opus-4-5@20251101",
+                        "name": "Claude Opus 4.5",
+                        "contextWindow": 200000,
+                        "maxTokens": 32000,
+                        "reasoning": true,
+                        "input": ["text", "image"]
+                    },
+                    {
+                        "id": "claude-haiku-4-5@20251001",
+                        "name": "Claude Haiku 4.5", 
+                        "contextWindow": 200000,
+                        "maxTokens": 64000,
+                        "reasoning": true,
+                        "input": ["text", "image"]
+                    }
+                ]
             }
         }
     });
@@ -112,12 +132,13 @@ pub async fn run(prompt: &str, user_token: Option<&str>) -> Result<String, Strin
     
     let mut cmd = tokio::process::Command::new(&pi_cmd);
     cmd.arg("-p").arg(prompt);
-    cmd.arg("--provider").arg("anthropic");
+    cmd.arg("--provider").arg("screenpipe");
     cmd.arg("--model").arg(DEFAULT_MODEL);
     
     if let Some(token) = user_token {
-        info!("pi::run: setting ANTHROPIC_API_KEY env var (token length: {})", token.len());
-        cmd.env("ANTHROPIC_API_KEY", token);
+        info!("pi::run: setting OPENAI_API_KEY env var (token length: {})", token.len());
+        // OpenAI-compatible API uses OPENAI_API_KEY
+        cmd.env("OPENAI_API_KEY", token);
     } else {
         warn!("pi::run: no user_token provided!");
     }
