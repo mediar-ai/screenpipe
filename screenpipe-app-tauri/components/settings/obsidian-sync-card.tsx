@@ -295,8 +295,10 @@ export function ObsidianSyncCard() {
       return;
     }
 
+    console.log("obsidian sync: token present, length:", appSettings.user.token.length);
+
     try {
-      await invoke("obsidian_run_sync", { settings, userToken: appSettings?.user?.token });
+      await invoke("obsidian_run_sync", { settings, userToken: appSettings.user.token });
     } catch (e) {
       console.error("Failed to run sync:", e);
       toast({
