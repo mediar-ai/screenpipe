@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Arc;
 use tauri::Emitter;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
@@ -49,6 +49,7 @@ pub struct PiCheckResult {
 
 /// RPC Response from Pi
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct RpcResponse {
     #[serde(rename = "type")]
     response_type: String,
@@ -59,6 +60,7 @@ struct RpcResponse {
     id: Option<String>,
 }
 
+#[allow(dead_code)]
 pub struct PiManager {
     child: Option<Child>,
     stdin: Option<ChildStdin>,
@@ -343,15 +345,27 @@ pub async fn pi_start(
     let app_handle = app.clone();
     std::thread::spawn(move || {
         let reader = BufReader::new(stdout);
+        info!("Pi stdout reader started");
         for line in reader.lines() {
             match line {
                 Ok(line) => {
-                    debug!("Pi stdout: {}", line);
+                    // Log all output at info level for debugging
+                    info!("Pi stdout: {}", line);
                     // Try to parse as JSON and emit event
-                    if let Ok(event) = serde_json::from_str::<Value>(&line) {
-                        let _ = app_handle.emit("pi_event", &event);
+                    match serde_json::from_str::<Value>(&line) {
+                        Ok(event) => {
+                            info!("Pi event type: {:?}", event.get("type"));
+                            if let Err(e) = app_handle.emit("pi_event", &event) {
+                                error!("Failed to emit pi_event: {}", e);
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Pi stdout not JSON: {} (line: {})", e, &line[..line.len().min(100)]);
+                        }
                     }
-                    let _ = app_handle.emit("pi_output", &line);
+                    if let Err(e) = app_handle.emit("pi_output", &line) {
+                        error!("Failed to emit pi_output: {}", e);
+                    }
                 }
                 Err(e) => {
                     error!("Error reading pi stdout: {}", e);
@@ -368,19 +382,18 @@ pub async fn pi_start(
         let app_handle = app.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
+            info!("Pi stderr reader started");
             for line in reader.lines() {
                 match line {
                     Ok(line) => {
-                        if line.to_lowercase().contains("error") {
-                            error!("Pi stderr: {}", line);
-                        } else {
-                            debug!("Pi stderr: {}", line);
-                        }
+                        // Log all stderr at info level for debugging
+                        info!("Pi stderr: {}", line);
                         let _ = app_handle.emit("pi_log", &line);
                     }
                     Err(_) => break,
                 }
             }
+            info!("Pi stderr reader ended");
         });
     }
 

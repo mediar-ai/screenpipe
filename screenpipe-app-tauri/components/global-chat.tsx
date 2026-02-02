@@ -568,7 +568,8 @@ export function GlobalChat() {
   const [piInfo, setPiInfo] = useState<{ running: boolean; projectDir: string | null; pid: number | null } | null>(null);
   const [piProjectDir, setPiProjectDir] = useState<string>("");
   const [piStarting, setPiStarting] = useState(false);
-  const [piStreamingText, setPiStreamingText] = useState<string>("");
+  const piStreamingTextRef = useRef<string>("");
+  const piMessageIdRef = useRef<string | null>(null);
 
   // Chat history state
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -1057,22 +1058,17 @@ export function GlobalChat() {
   const isPi = activePreset?.provider === "pi";
   const hasValidModel = isPi || (activePreset?.model && activePreset.model.trim() !== "");
   const needsLogin = (activePreset?.provider === "screenpipe-cloud" || isPi) && !settings.user?.token;
-  const needsProjectDir = isPi && !piProjectDir;
-  const piReady = isPi ? (piInfo?.running && !needsProjectDir) : true;
-  const canChat = hasPresets && hasValidModel && !needsLogin && piReady;
+  const piReady = isPi ? piInfo?.running : true;
+  const canChat = hasPresets && hasValidModel && !needsLogin && (isPi ? piReady : true);
 
-  // Load Pi project dir from localStorage
+  // Auto-set Pi project dir to temp location
   useEffect(() => {
-    const saved = localStorage.getItem("pi_project_dir");
-    if (saved) setPiProjectDir(saved);
-  }, []);
-
-  // Save Pi project dir
-  useEffect(() => {
-    if (piProjectDir) {
-      localStorage.setItem("pi_project_dir", piProjectDir);
+    if (isPi && !piProjectDir) {
+      // Use a default temp directory for Pi
+      const defaultDir = "/tmp/screenpipe-pi-chat";
+      setPiProjectDir(defaultDir);
     }
-  }, [piProjectDir]);
+  }, [isPi, piProjectDir]);
 
   // Start Pi when needed
   useEffect(() => {
@@ -1080,13 +1076,18 @@ export function GlobalChat() {
 
     const startPi = async () => {
       setPiStarting(true);
+      console.log("[Pi] Starting with dir:", piProjectDir);
       try {
         const result = await commands.piStart(piProjectDir, settings.user?.token ?? null);
+        console.log("[Pi] Start result:", result);
         if (result.status === "ok") {
           setPiInfo(result.data);
         } else {
+          console.error("[Pi] Start failed:", result.error);
           toast({ title: "Failed to start Pi", description: result.error, variant: "destructive" });
         }
+      } catch (e) {
+        console.error("[Pi] Start exception:", e);
       } finally {
         setPiStarting(false);
       }
@@ -1098,29 +1099,105 @@ export function GlobalChat() {
   useEffect(() => {
     if (!isPi) return;
 
-    const unlistenEvent = listen<any>("pi_event", (event) => {
-      const data = event.payload;
-      console.log("[Pi Event]", data);
-      
-      // Handle different event types
-      if (data.type === "message_update" && data.assistantMessageEvent) {
-        const evt = data.assistantMessageEvent;
-        if (evt.type === "text_delta" && evt.delta) {
-          setPiStreamingText(prev => prev + evt.delta);
-        }
-      } else if (data.type === "agent_end") {
-        // Agent finished
-        setPiStreamingText("");
-      }
-    });
+    let unlistenEvent: (() => void) | null = null;
+    let unlistenTerminated: (() => void) | null = null;
+    let unlistenOutput: (() => void) | null = null;
+    let mounted = true;
 
-    const unlistenTerminated = listen("pi_terminated", () => {
-      setPiInfo(null);
-    });
+    const setup = async () => {
+      unlistenEvent = await listen<any>("pi_event", (event) => {
+        if (!mounted) return;
+        const data = event.payload;
+        console.log("[Pi Event]", data.type, data);
+        
+        // Handle different event types
+        if (data.type === "message_update" && data.assistantMessageEvent) {
+          const evt = data.assistantMessageEvent;
+          if (evt.type === "text_delta" && evt.delta) {
+            piStreamingTextRef.current += evt.delta;
+            // Update the message if we have an active message ID
+            if (piMessageIdRef.current) {
+              const msgId = piMessageIdRef.current;
+              const content = piStreamingTextRef.current;
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content } : m)
+              );
+            }
+          }
+        } else if (data.type === "tool_execution_start") {
+          // Tool started - show what's happening
+          console.log("[Pi] Tool started:", data.toolName, data.args);
+          if (piMessageIdRef.current) {
+            const msgId = piMessageIdRef.current;
+            const currentText = piStreamingTextRef.current;
+            const toolInfo = `\n\n*Running ${data.toolName}...*`;
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content: currentText + toolInfo } : m)
+            );
+          }
+        } else if (data.type === "tool_execution_update") {
+          // Tool progress
+          console.log("[Pi] Tool update:", data.toolName, data.partialResult);
+        } else if (data.type === "tool_execution_end") {
+          // Tool finished
+          console.log("[Pi] Tool ended:", data.toolName, data.isError);
+          if (piMessageIdRef.current) {
+            const msgId = piMessageIdRef.current;
+            const content = piStreamingTextRef.current;
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content } : m)
+            );
+          }
+        } else if (data.type === "agent_end") {
+          // Agent finished - final update
+          console.log("[Pi] Agent ended");
+          if (piMessageIdRef.current) {
+            const msgId = piMessageIdRef.current;
+            const content = piStreamingTextRef.current || "Done";
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content } : m)
+            );
+          }
+          piStreamingTextRef.current = "";
+          piMessageIdRef.current = null;
+          setIsLoading(false);
+          setIsStreaming(false);
+        } else if (data.type === "response" && data.success === false) {
+          // Error response
+          console.error("[Pi] Error:", data.error);
+          if (piMessageIdRef.current) {
+            const msgId = piMessageIdRef.current;
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content: `Error: ${data.error}` } : m)
+            );
+          }
+          piStreamingTextRef.current = "";
+          piMessageIdRef.current = null;
+          setIsLoading(false);
+          setIsStreaming(false);
+        }
+      });
+
+      unlistenTerminated = await listen("pi_terminated", () => {
+        if (!mounted) return;
+        console.log("[Pi] Process terminated");
+        setPiInfo(null);
+      });
+
+      // Also listen for raw output for debugging
+      unlistenOutput = await listen<string>("pi_output", (event) => {
+        if (!mounted) return;
+        console.log("[Pi Raw]", event.payload);
+      });
+    };
+
+    setup();
 
     return () => {
-      unlistenEvent.then(fn => fn());
-      unlistenTerminated.then(fn => fn());
+      mounted = false;
+      unlistenEvent?.();
+      unlistenTerminated?.();
+      unlistenOutput?.();
     };
   }, [isPi]);
 
@@ -1147,25 +1224,11 @@ export function GlobalChat() {
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset - click edit to add one`;
     if (needsLogin) return "Login required";
-    if (isPi && needsProjectDir) return "Select a project folder for Pi";
     if (isPi && piStarting) return "Starting Pi agent...";
     if (isPi && !piReady) return "Connecting to Pi agent...";
     return null;
   };
   const disabledReason = getDisabledReason();
-
-  // Pi project folder picker
-  const selectPiProject = async () => {
-    const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
-    const selected = await openDialog({
-      directory: true,
-      multiple: false,
-      title: "Select Project Folder for Pi Agent",
-    });
-    if (selected) {
-      setPiProjectDir(selected as string);
-    }
-  };
 
   // Listen for Rust-level open-chat event (Cmd+L / Ctrl+L global shortcut)
   useEffect(() => {
@@ -1368,23 +1431,49 @@ export function GlobalChat() {
     };
 
     const assistantMessageId = (Date.now() + 1).toString();
+    
+    // Set up refs for event handler to use
+    piStreamingTextRef.current = "";
+    piMessageIdRef.current = assistantMessageId;
+    
     setMessages((prev) => [...prev, newUserMessage]);
     setInput("");
     setIsLoading(true);
     setIsStreaming(true);
-    setPiStreamingText("");
+
+    // Timeout failsafe - if no agent_end after 3 minutes, stop loading
+    const timeoutId = setTimeout(() => {
+      if (piMessageIdRef.current === assistantMessageId) {
+        console.warn("[Pi] Timeout waiting for response");
+        piMessageIdRef.current = null;
+        setIsLoading(false);
+        setIsStreaming(false);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId && m.content === "Processing..."
+              ? { ...m, content: "Request timed out. Check if Pi is running correctly." }
+              : m
+          )
+        );
+      }
+    }, 180000);
 
     try {
       // Add placeholder for response
       setMessages((prev) => [
         ...prev,
-        { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() },
+        { id: assistantMessageId, role: "assistant", content: "Processing...", timestamp: Date.now() },
       ]);
 
-      // Send prompt to Pi
+      console.log("[Pi] Sending prompt:", userMessage);
+      
+      // Send prompt to Pi - the pi_event listener in useEffect handles the rest
       const result = await commands.piPrompt(userMessage);
+      console.log("[Pi] Prompt result:", result);
       
       if (result.status === "error") {
+        clearTimeout(timeoutId);
+        piMessageIdRef.current = null;
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMessageId
@@ -1397,48 +1486,13 @@ export function GlobalChat() {
         return;
       }
 
-      // Wait for Pi events to update the message
-      // The pi_event listener will update piStreamingText
-      // We need to watch for changes and update the message
-      const checkInterval = setInterval(() => {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMessageId
-              ? { ...m, content: piStreamingText || "Processing..." }
-              : m
-          )
-        );
-      }, 100);
-
-      // Wait for agent_end or timeout
-      const timeout = setTimeout(() => {
-        clearInterval(checkInterval);
-        setIsLoading(false);
-        setIsStreaming(false);
-      }, 120000); // 2 minute timeout
-
-      // Listen for agent_end to stop
-      const unlistenEnd = await listen("pi_event", (event: any) => {
-        if (event.payload?.type === "agent_end") {
-          clearInterval(checkInterval);
-          clearTimeout(timeout);
-          unlistenEnd();
-          
-          // Final update with accumulated text
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: piStreamingText || "Done" }
-                : m
-            )
-          );
-          setIsLoading(false);
-          setIsStreaming(false);
-        }
-      });
+      // The pi_event listener will handle streaming updates and completion
+      // Clear timeout when agent_end is received (handled in the listener)
 
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error("Pi error:", error);
+      piMessageIdRef.current = null;
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMessageId
@@ -2093,12 +2147,10 @@ export function GlobalChat() {
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="font-semibold text-sm tracking-tight">
-                {isPi ? "Pi Agent" : "Pipe AI"}
+                Pipe AI
               </h2>
               <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider truncate">
-                {isPi && piProjectDir
-                  ? piProjectDir.split("/").pop() || piProjectDir
-                  : "Screen Activity Assistant"}
+                Screen Activity Assistant
               </p>
             </div>
             <Button
@@ -2229,7 +2281,7 @@ export function GlobalChat() {
               <div className="relative flex flex-col items-center justify-center py-12 space-y-4">
                 <div className={cn(
                   "relative p-6 rounded-2xl border",
-                  needsLogin || needsProjectDir
+                  needsLogin || piStarting
                     ? "bg-muted/50 border-border/50"
                     : "bg-destructive/5 border-destructive/20"
                 )}>
@@ -2239,9 +2291,7 @@ export function GlobalChat() {
                   <div className="absolute bottom-0 left-0 w-4 h-4 border-l-2 border-b-2 border-current opacity-20 rounded-bl" />
                   <div className="absolute bottom-0 right-0 w-4 h-4 border-r-2 border-b-2 border-current opacity-20 rounded-br" />
 
-                  {needsProjectDir ? (
-                    <Settings className="h-12 w-12 text-muted-foreground" />
-                  ) : needsLogin ? (
+                  {needsLogin ? (
                     <PipeAIIconLarge size={48} className="text-muted-foreground" />
                   ) : piStarting ? (
                     <Loader2 className="h-12 w-12 text-muted-foreground animate-spin" />
@@ -2251,23 +2301,13 @@ export function GlobalChat() {
                 </div>
                 <div className="text-center space-y-2">
                   <h3 className="font-semibold tracking-tight">
-                    {needsProjectDir ? "Select Project Folder" : !hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : piStarting ? "Starting Pi..." : "Login Required"}
+                    {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : piStarting ? "Starting Pi..." : "Login Required"}
                   </h3>
                   <p className="text-sm text-muted-foreground max-w-sm">
                     {disabledReason}
                   </p>
                 </div>
-                {needsProjectDir && (
-                  <Button
-                    variant="default"
-                    onClick={selectPiProject}
-                    className="gap-2 font-medium bg-foreground text-background hover:bg-foreground/90"
-                  >
-                    <Settings className="h-4 w-4" />
-                    Select Folder
-                  </Button>
-                )}
-                {needsLogin && !needsProjectDir && (
+                {needsLogin && (
                   <Button
                     variant="default"
                     onClick={() => openUrl("https://screenpi.pe/login")}
@@ -2277,7 +2317,7 @@ export function GlobalChat() {
                     Login
                   </Button>
                 )}
-                {!hasPresets && !needsProjectDir && (
+                {!hasPresets && (
                   <Button
                     variant="outline"
                     onClick={async () => {
@@ -2290,7 +2330,7 @@ export function GlobalChat() {
                     Go to Settings
                   </Button>
                 )}
-                {hasPresets && !hasValidModel && !needsProjectDir && (
+                {hasPresets && !hasValidModel && (
                   <p className="text-xs text-muted-foreground font-mono">
                     Use the preset selector below to configure a model
                   </p>

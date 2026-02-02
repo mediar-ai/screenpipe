@@ -429,13 +429,47 @@ export function ObsidianSyncCard() {
   const openObsidian = async () => {
     if (!settings.vaultPath) return;
 
-    // Use path-based deep link (don't encode - Obsidian expects raw path)
-    const deepLink = `obsidian://open?path=${settings.vaultPath}`;
-
     try {
-      // Use the 'open' command on macOS to handle custom URL schemes
+      // Read Obsidian's vault registry to find the correct vault name
+      const { homeDir } = await import("@tauri-apps/api/path");
+      const { readTextFile } = await import("@tauri-apps/plugin-fs");
+      
+      const home = await homeDir();
+      const obsidianConfigPath = `${home}Library/Application Support/obsidian/obsidian.json`;
+      
+      let vaultName: string | null = null;
+      
+      try {
+        const configContent = await readTextFile(obsidianConfigPath);
+        const config = JSON.parse(configContent);
+        
+        // Find vault that matches our path
+        for (const [_id, vault] of Object.entries(config.vaults || {})) {
+          const v = vault as { path: string };
+          if (v.path === settings.vaultPath) {
+            // Extract vault name from path
+            vaultName = settings.vaultPath.split("/").pop() || null;
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn("Could not read Obsidian config:", e);
+      }
+
+      // Use vault name if found, otherwise just open Obsidian app
+      const deepLink = vaultName 
+        ? `obsidian://open?vault=${encodeURIComponent(vaultName)}`
+        : "obsidian://";
+
       const command = Command.create("open", [deepLink]);
       await command.execute();
+      
+      if (!vaultName) {
+        toast({
+          title: "Opened Obsidian",
+          description: "Vault not found in Obsidian registry. You may need to open it manually.",
+        });
+      }
     } catch (e) {
       console.error("Failed to open Obsidian:", e);
       toast({

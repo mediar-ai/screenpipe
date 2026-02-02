@@ -703,6 +703,7 @@ pub fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
 // check if the server is running
 #[tauri::command]
 #[specta::specta]
+#[allow(dead_code)]
 async fn is_server_running(app: AppHandle) -> Result<bool, String> {
     let store = app.state::<store::SettingsStore>();
     let port = store.port;
@@ -1140,7 +1141,6 @@ async fn main() {
 
             // Get app handle once for all initializations
             let app_handle = app.handle().clone();
-            let server_running = is_server_running(app_handle.clone());
 
             // Initialize server first (core service)
             let server_shutdown_tx = spawn_server(app_handle.clone(), 11435);
@@ -1151,48 +1151,83 @@ async fn main() {
             info!("use_dev_mode: {}", use_dev_mode);
 
             // Start embedded server in non-dev mode
+            // Use a dedicated thread with its own tokio runtime to avoid competing with Tauri's UI runtime
             if !use_dev_mode {
                 let store_clone = store.clone();
                 let base_dir_clone = base_dir.clone();
                 let sidecar_state = app_handle.state::<SidecarState>();
                 let sidecar_state_inner = sidecar_state.0.clone();
-                tauri::async_runtime::spawn(async move {
-                    if server_running.await.unwrap_or(false) {
-                        info!("Server already running, skipping embedded server start");
-                        return;
-                    }
+                
+                // Spawn a dedicated thread for the server with its own runtime
+                // This prevents CPU contention between UI and recording workloads
+                std::thread::Builder::new()
+                    .name("screenpipe-server".to_string())
+                    .spawn(move || {
+                        // Create a dedicated multi-threaded runtime for the server
+                        let server_runtime = tokio::runtime::Builder::new_multi_thread()
+                            .worker_threads(4)
+                            .thread_name("screenpipe-worker")
+                            .enable_all()
+                            .build()
+                            .expect("Failed to create server runtime");
+                        
+                        server_runtime.block_on(async move {
+                            // Check if server already running (with timeout)
+                            let server_running = tokio::time::timeout(
+                                std::time::Duration::from_secs(2),
+                                async {
+                                    reqwest::Client::new()
+                                        .get("http://localhost:3030/health")
+                                        .timeout(std::time::Duration::from_secs(1))
+                                        .send()
+                                        .await
+                                        .is_ok()
+                                }
+                            ).await.unwrap_or(false);
+                            
+                            if server_running {
+                                info!("Server already running, skipping embedded server start");
+                                return;
+                            }
 
-                    // Check permissions before starting
-                    let permissions_check = permissions::do_permissions_check(false);
-                    let disable_audio = store_clone.disable_audio;
+                            // Check permissions before starting
+                            let permissions_check = permissions::do_permissions_check(false);
+                            let disable_audio = store_clone.disable_audio;
 
-                    if !permissions_check.screen_recording.permitted() {
-                        warn!("Screen recording permission not granted: {:?}. Server will not start.", permissions_check.screen_recording);
-                        return;
-                    }
+                            if !permissions_check.screen_recording.permitted() {
+                                warn!("Screen recording permission not granted: {:?}. Server will not start.", permissions_check.screen_recording);
+                                return;
+                            }
 
-                    if !disable_audio && !permissions_check.microphone.permitted() {
-                        warn!("Microphone permission not granted: {:?}. Audio recording will not work.", permissions_check.microphone);
-                    }
+                            if !disable_audio && !permissions_check.microphone.permitted() {
+                                warn!("Microphone permission not granted: {:?}. Audio recording will not work.", permissions_check.microphone);
+                            }
 
-                    info!("Starting embedded screenpipe server...");
-                    let config = embedded_server::EmbeddedServerConfig::from_store(
-                        &store_clone,
-                        base_dir_clone,
-                    );
+                            info!("Starting embedded screenpipe server on dedicated runtime...");
+                            let config = embedded_server::EmbeddedServerConfig::from_store(
+                                &store_clone,
+                                base_dir_clone,
+                            );
 
-                    match embedded_server::start_embedded_server(config).await {
-                        Ok(handle) => {
-                            info!("Embedded screenpipe server started successfully");
-                            // Store handle in state so it can be stopped/restarted later
-                            let mut guard = sidecar_state_inner.lock().await;
-                            *guard = Some(handle);
-                        }
-                        Err(e) => {
-                            error!("Failed to start embedded server: {}", e);
-                        }
-                    }
-                });
+                            match embedded_server::start_embedded_server(config).await {
+                                Ok(handle) => {
+                                    info!("Embedded screenpipe server started successfully on dedicated runtime");
+                                    // Store handle in state so it can be stopped/restarted later
+                                    let mut guard = sidecar_state_inner.blocking_lock();
+                                    *guard = Some(handle);
+                                    
+                                    // Keep the runtime alive
+                                    loop {
+                                        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to start embedded server: {}", e);
+                                }
+                            }
+                        });
+                    })
+                    .expect("Failed to spawn server thread");
             } else {
                 debug!("Skipping server start: dev_mode enabled");
             }
