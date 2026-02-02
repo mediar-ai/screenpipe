@@ -13,7 +13,7 @@ import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { commands } from "@/lib/utils/tauri";
 import localforage from "localforage";
 import { LoginDialog } from "../components/login-dialog";
-import { UpdateDialog, useUpdateListener } from "../components/update-dialog";
+import { UpdateBanner, useUpdateListener } from "../components/update-banner";
 import { ModelDownloadTracker } from "../components/model-download-tracker";
 import Timeline from "@/components/rewind/timeline";
 import { Button } from "@/components/ui/button";
