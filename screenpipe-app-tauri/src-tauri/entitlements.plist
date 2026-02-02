@@ -15,7 +15,12 @@
     <true/>
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
-    
+
+    <!-- XPC service communication for screen capture (macOS 26+ TCC fix) -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>$(TeamIdentifierPrefix)screenpi.pe</string>
+    </array>
 
 </dict>
 </plist>

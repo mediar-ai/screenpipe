@@ -8,6 +8,8 @@ pub use crate::core::ActivityFeedOption;
 #[cfg(target_os = "macos")]
 pub mod apple;
 pub mod core;
+#[cfg(target_os = "macos")]
+pub mod xpc_capture;
 pub mod custom_ocr;
 pub mod frame_comparison;
 #[cfg(target_os = "windows")]

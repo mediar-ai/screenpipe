@@ -10,6 +10,10 @@ use sck_rs::Monitor as SckMonitor;
 // xcap is used on non-macOS platforms, and as fallback on older macOS
 use xcap::Monitor as XcapMonitor;
 
+// XPC capture client for macOS (uses main app's TCC permissions)
+#[cfg(target_os = "macos")]
+use crate::xpc_capture::{is_xpc_capture_available, XpcCaptureClient};
+
 #[derive(Clone)]
 pub struct SafeMonitor {
     monitor_id: u32,
@@ -123,6 +127,27 @@ impl SafeMonitor {
         let monitor_id = self.monitor_id;
         let use_sck = self.use_sck;
 
+        // Try XPC capture first (uses main app's TCC permissions on macOS 26+)
+        if is_xpc_capture_available() {
+            match XpcCaptureClient::new() {
+                Ok(client) => {
+                    match client.capture_monitor(monitor_id).await {
+                        Ok(image) => {
+                            tracing::debug!("Captured monitor {} via XPC", monitor_id);
+                            return Ok(image);
+                        }
+                        Err(e) => {
+                            tracing::warn!("XPC capture failed for monitor {}, falling back to direct capture: {}", monitor_id, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!("XPC client creation failed, using direct capture: {}", e);
+                }
+            }
+        }
+
+        // Fall back to direct capture (sck-rs or xcap)
         let image = std::thread::spawn(move || -> Result<DynamicImage> {
             if use_sck {
                 // Use sck-rs (ScreenCaptureKit)
@@ -221,6 +246,42 @@ impl SafeMonitor {
 
 #[cfg(target_os = "macos")]
 pub async fn list_monitors() -> Vec<SafeMonitor> {
+    // Try XPC capture first (uses main app's TCC permissions on macOS 26+)
+    if is_xpc_capture_available() {
+        match XpcCaptureClient::new() {
+            Ok(client) => {
+                match client.list_monitors().await {
+                    Ok(monitors) if !monitors.is_empty() => {
+                        tracing::debug!("Listed {} monitors via XPC", monitors.len());
+                        return monitors
+                            .into_iter()
+                            .map(|m| SafeMonitor {
+                                monitor_id: m.id,
+                                monitor_data: Arc::new(MonitorData {
+                                    width: m.width,
+                                    height: m.height,
+                                    name: format!("Display {}", m.id),
+                                    is_primary: m.id == 1, // First display is typically primary
+                                }),
+                                use_sck: true, // Will use XPC for capture
+                            })
+                            .collect();
+                    }
+                    Ok(_) => {
+                        tracing::warn!("XPC returned empty monitor list, falling back to direct enumeration");
+                    }
+                    Err(e) => {
+                        tracing::warn!("XPC list_monitors failed, falling back to direct enumeration: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("XPC client creation failed, using direct enumeration: {}", e);
+            }
+        }
+    }
+
+    // Fall back to direct enumeration
     tokio::task::spawn_blocking(|| {
         if use_sck_rs() {
             tracing::debug!("Using sck-rs for screen capture (macOS 12.3+)");
@@ -257,6 +318,21 @@ pub async fn list_monitors() -> Vec<SafeMonitor> {
 
 #[cfg(target_os = "macos")]
 pub async fn get_default_monitor() -> SafeMonitor {
+    // Try to get monitors via XPC first
+    let monitors = list_monitors().await;
+    if !monitors.is_empty() {
+        // Return the primary monitor or the first one
+        return monitors
+            .into_iter()
+            .find(|m| m.is_primary())
+            .unwrap_or_else(|| {
+                list_monitors_sync().first().cloned().unwrap_or_else(|| {
+                    panic!("No monitors found")
+                })
+            });
+    }
+
+    // Fallback to direct enumeration
     tokio::task::spawn_blocking(|| {
         if use_sck_rs() {
             SafeMonitor::from_sck(SckMonitor::all().unwrap().first().unwrap().clone())
@@ -266,6 +342,24 @@ pub async fn get_default_monitor() -> SafeMonitor {
     })
     .await
     .unwrap()
+}
+
+/// Synchronous monitor listing for fallback scenarios
+#[cfg(target_os = "macos")]
+fn list_monitors_sync() -> Vec<SafeMonitor> {
+    if use_sck_rs() {
+        SckMonitor::all()
+            .unwrap_or_default()
+            .into_iter()
+            .map(SafeMonitor::from_sck)
+            .collect()
+    } else {
+        XcapMonitor::all()
+            .unwrap_or_default()
+            .into_iter()
+            .map(SafeMonitor::from_xcap)
+            .collect()
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
