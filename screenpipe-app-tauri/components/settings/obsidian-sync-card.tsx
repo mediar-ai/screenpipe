@@ -21,6 +21,7 @@ import {
   AlertCircle,
   Clock,
   ExternalLink,
+  X,
 } from "lucide-react";
 
 // Official Obsidian logo SVG
@@ -344,6 +345,14 @@ export function ObsidianSyncCard() {
     }
   };
 
+  const handleCancel = async () => {
+    try {
+      await invoke("obsidian_cancel_sync");
+    } catch (e) {
+      console.error("Failed to cancel sync:", e);
+    }
+  };
+
   const handleEnableScheduler = async () => {
     if (!isValidVault || settings.syncIntervalMinutes === 0) {
       return;
@@ -459,23 +468,25 @@ export function ObsidianSyncCard() {
                 {isExpanded ? "Hide Settings" : "Configure"}
               </Button>
 
-              <Button
-                onClick={handleSync}
-                disabled={!isValidVault || status.isSyncing || !isLoggedIn}
-                className="gap-2"
-              >
-                {status.isSyncing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    Sync Now
-                  </>
-                )}
-              </Button>
+              {status.isSyncing ? (
+                <Button
+                  onClick={handleCancel}
+                  variant="outline"
+                  className="gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSync}
+                  disabled={!isValidVault || !isLoggedIn}
+                  className="gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Sync Now
+                </Button>
+              )}
 
               {settings.vaultPath && (
                 <Button

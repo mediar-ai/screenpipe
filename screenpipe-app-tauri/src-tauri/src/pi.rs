@@ -126,7 +126,8 @@ fn find_executable() -> Result<String, String> {
 
 /// Run pi with a prompt (non-interactive print mode)
 /// vault_path: Working directory where pi should run (e.g., Obsidian vault)
-pub async fn run(prompt: &str, user_token: Option<&str>, working_dir: &str) -> Result<String, String> {
+/// Returns (stdout, pid) on success
+pub async fn run(prompt: &str, user_token: Option<&str>, working_dir: &str, pid_tx: Option<tokio::sync::oneshot::Sender<u32>>) -> Result<String, String> {
     // Ensure pi is installed and configured
     ensure_installed().await?;
     ensure_config()?;
@@ -151,8 +152,19 @@ pub async fn run(prompt: &str, user_token: Option<&str>, working_dir: &str) -> R
     cmd.stderr(std::process::Stdio::piped());
     
     info!("Running pi command...");
-    let output = cmd.output().await
+    let mut child = cmd.spawn()
         .map_err(|e| format!("Failed to spawn pi: {}", e))?;
+    
+    // Send PID if requested
+    if let Some(tx) = pid_tx {
+        if let Some(pid) = child.id() {
+            let _ = tx.send(pid);
+            info!("Pi process started with PID: {}", pid);
+        }
+    }
+    
+    let output = child.wait_with_output().await
+        .map_err(|e| format!("Failed to wait for pi: {}", e))?;
     
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -175,5 +187,46 @@ pub async fn run(prompt: &str, user_token: Option<&str>, working_dir: &str) -> R
         };
         error!("Pi failed: {}", error_msg);
         Err(error_msg)
+    }
+}
+
+/// Kill a pi process by PID
+pub fn kill(pid: u32) -> Result<(), String> {
+    info!("Killing pi process with PID: {}", pid);
+    
+    #[cfg(unix)]
+    {
+        use std::process::Command;
+        // Kill process group to also kill child processes
+        let _ = Command::new("kill")
+            .args(["-TERM", &format!("-{}", pid)])
+            .output();
+        // Also try direct kill
+        let output = Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .output()
+            .map_err(|e| format!("Failed to kill process: {}", e))?;
+        
+        if output.status.success() {
+            info!("Pi process {} killed", pid);
+            Ok(())
+        } else {
+            Err(format!("Failed to kill process {}", pid))
+        }
+    }
+    
+    #[cfg(windows)]
+    {
+        use std::process::Command;
+        let output = Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .output()
+            .map_err(|e| format!("Failed to kill process: {}", e))?;
+        
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(format!("Failed to kill process {}", pid))
+        }
     }
 }

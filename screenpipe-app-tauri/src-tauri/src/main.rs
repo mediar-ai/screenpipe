@@ -829,6 +829,7 @@ async fn main() {
                 obsidian_sync::obsidian_run_sync,
                 obsidian_sync::obsidian_start_scheduler,
                 obsidian_sync::obsidian_stop_scheduler,
+                obsidian_sync::obsidian_cancel_sync,
             ])
             .typ::<SettingsStore>()
             .typ::<OnboardingStore>()
@@ -970,7 +971,8 @@ async fn main() {
             obsidian_sync::obsidian_get_sync_status,
             obsidian_sync::obsidian_run_sync,
             obsidian_sync::obsidian_start_scheduler,
-            obsidian_sync::obsidian_stop_scheduler
+            obsidian_sync::obsidian_stop_scheduler,
+            obsidian_sync::obsidian_cancel_sync
         ])
         .setup(move |app| {
             //deep link register_all

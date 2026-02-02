@@ -1,16 +1,11 @@
 use clap::Parser;
-#[cfg(target_os = "macos")]
-use sck_rs::Monitor;
 use screenpipe_core::Language;
 use screenpipe_vision::{
-    capture_screenshot_by_window::WindowFilters, continuous_capture, OcrEngine,
+    capture_screenshot_by_window::WindowFilters, continuous_capture, monitor::list_monitors, OcrEngine,
 };
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::channel;
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
-
-#[cfg(not(target_os = "macos"))]
-use xcap::Monitor;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -39,16 +34,8 @@ async fn main() {
     let languages = cli.language;
 
     // Get monitor ID before spawning the task
-    #[cfg(target_os = "macos")]
-    let monitor_id = tokio::task::spawn_blocking(|| Monitor::all().unwrap().first().unwrap().id())
-        .await
-        .unwrap();
-
-    #[cfg(not(target_os = "macos"))]
-    let monitor_id =
-        tokio::task::spawn_blocking(|| Monitor::all().unwrap().first().unwrap().id().unwrap())
-            .await
-            .unwrap();
+    let monitors = list_monitors().await;
+    let monitor_id = monitors.first().expect("No monitors found").id();
 
     let window_filters = Arc::new(WindowFilters::new(&[], &[], &[]));
 

@@ -62,12 +62,14 @@ impl Default for ObsidianSyncStatus {
 pub struct ObsidianSyncState {
     pub status: Arc<Mutex<ObsidianSyncStatus>>,
     pub scheduler_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    pub current_pid: Arc<Mutex<Option<u32>>>,
 }
 
 impl ObsidianSyncState {
     pub fn new() -> Self {
         Self {
             status: Arc::new(Mutex::new(ObsidianSyncStatus::default())),
+            current_pid: Arc::new(Mutex::new(None)),
             scheduler_handle: Arc::new(Mutex::new(None)),
         }
     }
@@ -313,12 +315,22 @@ pub async fn obsidian_run_sync(
     // Debug: check if token is passed
     info!("obsidian_run_sync: user_token present = {}, vault_path = {}", user_token.is_some(), settings.vault_path);
     
-    // Emit progress
-    let _ = app.emit("obsidian_sync_progress", "Querying screenpipe data...");
+    // Create channel to receive PID
+    let (pid_tx, pid_rx) = tokio::sync::oneshot::channel();
+    let current_pid = state.current_pid.clone();
+    
+    // Spawn task to store PID when received
+    tokio::spawn(async move {
+        if let Ok(pid) = pid_rx.await {
+            *current_pid.lock().await = Some(pid);
+        }
+    });
     
     // Run pi in the vault directory
-    let _ = app.emit("obsidian_sync_progress", "AI is analyzing and writing notes...");
-    let result = pi::run(&prompt, user_token.as_deref(), &settings.vault_path).await.map(|_| ());
+    let result = pi::run(&prompt, user_token.as_deref(), &settings.vault_path, Some(pid_tx)).await.map(|_| ());
+    
+    // Clear PID when done
+    *state.current_pid.lock().await = None;
 
     // Update status based on result
     {
@@ -363,6 +375,7 @@ pub async fn obsidian_start_scheduler(
     let interval_mins = settings.sync_interval_minutes;
     let settings_clone = settings.clone();
     let status_arc = state.status.clone();
+    let current_pid_arc = state.current_pid.clone();
     let app_handle = app.clone();
     let token_clone = user_token.clone();
 
@@ -393,7 +406,7 @@ pub async fn obsidian_start_scheduler(
             info!("Running scheduled obsidian sync");
 
             // Run sync
-            let result = run_scheduled_sync(&app_handle, &settings_clone, &status_arc, token_clone.as_deref()).await;
+            let result = run_scheduled_sync(&app_handle, &settings_clone, &status_arc, &current_pid_arc, token_clone.as_deref()).await;
 
             if let Err(e) = result {
                 warn!("Scheduled obsidian sync failed: {}", e);
@@ -422,11 +435,34 @@ pub async fn obsidian_stop_scheduler(
     Ok(())
 }
 
+/// Cancel the currently running sync
+#[tauri::command]
+#[specta::specta]
+pub async fn obsidian_cancel_sync(
+    app: AppHandle,
+    state: tauri::State<'_, ObsidianSyncState>,
+) -> Result<(), String> {
+    let mut pid = state.current_pid.lock().await;
+    if let Some(p) = pid.take() {
+        crate::pi::kill(p)?;
+        
+        // Update status
+        let mut status = state.status.lock().await;
+        status.is_syncing = false;
+        status.last_error = Some("Cancelled by user".to_string());
+        
+        let _ = app.emit("obsidian_sync_error", "Cancelled by user");
+        info!("Obsidian sync cancelled");
+    }
+    Ok(())
+}
+
 /// Internal function to run a scheduled sync
 async fn run_scheduled_sync(
     app: &AppHandle,
     settings: &ObsidianSyncSettings,
     status: &Arc<Mutex<ObsidianSyncStatus>>,
+    current_pid: &Arc<Mutex<Option<u32>>>,
     user_token: Option<&str>,
 ) -> Result<(), String> {
     // Update status
@@ -443,7 +479,20 @@ async fn run_scheduled_sync(
     let start_time = end_time - chrono::Duration::hours(settings.sync_hours as i64);
 
     let prompt = build_prompt(settings, &start_time.to_rfc3339(), &end_time.to_rfc3339());
-    let result = pi::run(&prompt, user_token, &settings.vault_path).await.map(|_| ());
+    
+    // Create channel to receive PID
+    let (pid_tx, pid_rx) = tokio::sync::oneshot::channel();
+    let pid_clone = current_pid.clone();
+    tokio::spawn(async move {
+        if let Ok(pid) = pid_rx.await {
+            *pid_clone.lock().await = Some(pid);
+        }
+    });
+    
+    let result = pi::run(&prompt, user_token, &settings.vault_path, Some(pid_tx)).await.map(|_| ());
+    
+    // Clear PID when done
+    *current_pid.lock().await = None;
 
     // Update status
     {

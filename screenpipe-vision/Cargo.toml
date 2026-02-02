@@ -52,13 +52,6 @@ base64 = "0.22.1"
 reqwest = { workspace = true }
 url = "2.5.0"
 
-# Screen capture - platform specific
-[target.'cfg(target_os = "macos")'.dependencies.sck-rs]
-git = "https://github.com/louis030195/sck-rs"
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-xcap = "0.8.1"
-
 [dev-dependencies]
 tempfile = "3.3.0"
 criterion = { workspace = true }
@@ -93,7 +86,19 @@ harness = false
 name = "screenpipe-vision-websocket"
 path = "examples/websocket.rs"
 
+# Platform-specific dependencies
+
+# macOS: sck-rs for 12.3+ (ScreenCaptureKit), xcap as fallback for older versions
+[target.'cfg(target_os = "macos")'.dependencies]
+sck-rs = { git = "https://github.com/louis030195/sck-rs" }
+xcap = "0.8.1"
+libc = "0.2.168"
+cidre = { git = "https://github.com/yury/cidre.git", features = ["vn", "cv", "cg"] }
+accessibility-sys = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
+core-foundation = "=0.10.0"
+
 [target.'cfg(target_os = "windows")'.dependencies]
+xcap = "0.8.1"
 uiautomation = { version = "0.16.1" }
 windows = { version = "0.58", features = [
   "Graphics_Imaging",
@@ -103,13 +108,8 @@ windows = { version = "0.58", features = [
   "Foundation_Collections",
 ] }
 
-[target.'cfg(target_os = "macos")'.dependencies]
-libc = "0.2.168"
-cidre = { git = "https://github.com/yury/cidre.git", features = ["vn", "cv", "cg"] }
-accessibility-sys = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
-core-foundation = "=0.10.0"
-
 [target.'cfg(target_os = "linux")'.dependencies]
+xcap = "0.8.1"
 libc = "0.2.168"
 atspi = { version = "0.25.0", features = ["tokio","proxies-tokio","zbus"] }
 zbus       = { version = "5.5", default-features = false }

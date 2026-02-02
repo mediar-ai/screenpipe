@@ -5,14 +5,22 @@ use std::error::Error;
 use std::fmt;
 use tracing::debug;
 
+// On macOS, we have both sck-rs (for 12.3+) and xcap (fallback for older versions)
 #[cfg(target_os = "macos")]
-use sck_rs::{Window, XCapError};
+use sck_rs::{Window as SckWindow, XCapError as SckXCapError};
 
+#[cfg(target_os = "macos")]
+use xcap::{Window as XcapWindow, XCapError as XcapXCapError};
+
+// Non-macOS only uses xcap
 #[cfg(not(target_os = "macos"))]
 use xcap::{Window, XCapError};
 
 use crate::browser_utils::create_url_detector;
 use crate::monitor::SafeMonitor;
+
+#[cfg(target_os = "macos")]
+use crate::monitor::macos_version::use_sck_rs;
 use url::Url;
 
 const BROWSER_NAMES: [&str; 9] = [
@@ -22,25 +30,47 @@ const BROWSER_NAMES: [&str; 9] = [
 #[derive(Debug)]
 enum CaptureError {
     NoWindows,
+    #[cfg(not(target_os = "macos"))]
     XCapError(XCapError),
+    #[cfg(target_os = "macos")]
+    CaptureBackendError(String),
 }
 
 impl fmt::Display for CaptureError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             CaptureError::NoWindows => write!(f, "No windows found"),
+            #[cfg(not(target_os = "macos"))]
             CaptureError::XCapError(e) => write!(f, "XCap error: {}", e),
+            #[cfg(target_os = "macos")]
+            CaptureError::CaptureBackendError(e) => write!(f, "Capture error: {}", e),
         }
     }
 }
 
 impl Error for CaptureError {}
 
+#[cfg(not(target_os = "macos"))]
 impl From<XCapError> for CaptureError {
     fn from(error: XCapError) -> Self {
-        // XCap errors are often expected (system windows, protected content)
         debug!("XCap error occurred: {}", error);
         CaptureError::XCapError(error)
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl From<SckXCapError> for CaptureError {
+    fn from(error: SckXCapError) -> Self {
+        debug!("sck-rs error occurred: {}", error);
+        CaptureError::CaptureBackendError(error.to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl From<XcapXCapError> for CaptureError {
+    fn from(error: XcapXCapError) -> Self {
+        debug!("xcap error occurred: {}", error);
+        CaptureError::CaptureBackendError(error.to_string())
     }
 }
 
@@ -335,23 +365,162 @@ impl WindowFilters {
     }
 }
 
-pub async fn capture_all_visible_windows(
-    monitor: &SafeMonitor,
-    window_filters: &WindowFilters,
-    capture_unfocused_windows: bool,
-) -> Result<Vec<CapturedWindow>, Box<dyn Error>> {
-    let mut all_captured_images = Vec::new();
+/// Intermediate structure for window data extracted from platform-specific Window types
+struct WindowData {
+    app_name: String,
+    title: String,
+    is_focused: bool,
+    process_id: i32,
+    window_x: i32,
+    window_y: i32,
+    window_width: u32,
+    window_height: u32,
+    image_buffer: image::RgbaImage,
+}
 
-    // Get windows and immediately extract the data we need
-    let windows_data = Window::all()?
+/// Get all visible windows using the appropriate backend
+#[cfg(target_os = "macos")]
+fn get_all_windows() -> Result<Vec<WindowData>, Box<dyn Error>> {
+    if use_sck_rs() {
+        get_all_windows_sck()
+    } else {
+        get_all_windows_xcap()
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn get_all_windows_sck() -> Result<Vec<WindowData>, Box<dyn Error>> {
+    let windows = SckWindow::all()?;
+    Ok(windows
+        .into_iter()
+        .filter_map(|window| extract_window_data_sck(window))
+        .collect())
+}
+
+#[cfg(target_os = "macos")]
+fn extract_window_data_sck(window: SckWindow) -> Option<WindowData> {
+    let app_name = match window.app_name() {
+        Ok(name) => name.to_string(),
+        Err(e) => {
+            debug!("Failed to get app_name for window: {}", e);
+            return None;
+        }
+    };
+
+    let title = match window.title() {
+        Ok(title) => title.to_string(),
+        Err(e) => {
+            debug!("Failed to get title for window {}: {}", app_name, e);
+            return None;
+        }
+    };
+
+    if let Ok(is_minimized) = window.is_minimized() {
+        if is_minimized {
+            debug!("Window {} ({}) is_minimized", app_name, title);
+            return None;
+        }
+    }
+
+    let is_focused = window.is_focused().unwrap_or(false);
+    let process_id = window.pid().map(|p| p as i32).unwrap_or(-1);
+    let (window_x, window_y, window_width, window_height) = (
+        window.x().unwrap_or(0),
+        window.y().unwrap_or(0),
+        window.width().unwrap_or(0),
+        window.height().unwrap_or(0),
+    );
+
+    match window.capture_image() {
+        Ok(buffer) => Some(WindowData {
+            app_name,
+            title,
+            is_focused,
+            process_id,
+            window_x,
+            window_y,
+            window_width,
+            window_height,
+            image_buffer: buffer,
+        }),
+        Err(e) => {
+            debug!("Failed to capture image for window {} ({}): {}", app_name, title, e);
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn get_all_windows_xcap() -> Result<Vec<WindowData>, Box<dyn Error>> {
+    let windows = XcapWindow::all()?;
+    Ok(windows
+        .into_iter()
+        .filter_map(|window| extract_window_data_xcap(window))
+        .collect())
+}
+
+#[cfg(target_os = "macos")]
+fn extract_window_data_xcap(window: XcapWindow) -> Option<WindowData> {
+    let app_name = match window.app_name() {
+        Ok(name) => name.to_string(),
+        Err(e) => {
+            debug!("Failed to get app_name for window: {}", e);
+            return None;
+        }
+    };
+
+    let title = match window.title() {
+        Ok(title) => title.to_string(),
+        Err(e) => {
+            debug!("Failed to get title for window {}: {}", app_name, e);
+            return None;
+        }
+    };
+
+    if let Ok(is_minimized) = window.is_minimized() {
+        if is_minimized {
+            debug!("Window {} ({}) is_minimized", app_name, title);
+            return None;
+        }
+    }
+
+    let is_focused = window.is_focused().unwrap_or(false);
+    let process_id = window.pid().map(|p| p as i32).unwrap_or(-1);
+    let (window_x, window_y, window_width, window_height) = (
+        window.x().unwrap_or(0),
+        window.y().unwrap_or(0),
+        window.width().unwrap_or(0),
+        window.height().unwrap_or(0),
+    );
+
+    match window.capture_image() {
+        Ok(buffer) => Some(WindowData {
+            app_name,
+            title,
+            is_focused,
+            process_id,
+            window_x,
+            window_y,
+            window_width,
+            window_height,
+            image_buffer: buffer,
+        }),
+        Err(e) => {
+            debug!("Failed to capture image for window {} ({}): {}", app_name, title, e);
+            None
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn get_all_windows() -> Result<Vec<WindowData>, Box<dyn Error>> {
+    let windows = Window::all()?;
+    Ok(windows
         .into_iter()
         .filter_map(|window| {
-            // Extract all necessary data from the window while in the main thread
             let app_name = match window.app_name() {
                 Ok(name) => name.to_string(),
                 Err(e) => {
-                    // Log warning and skip this window
-                    // mostly noise
                     debug!("Failed to get app_name for window: {}", e);
                     return None;
                 }
@@ -360,50 +529,20 @@ pub async fn capture_all_visible_windows(
             let title = match window.title() {
                 Ok(title) => title.to_string(),
                 Err(e) => {
-                    // Expected for some system/overlay windows
                     debug!("Failed to get title for window {}: {}", app_name, e);
                     return None;
                 }
             };
 
-            match window.is_minimized() {
-                Ok(is_minimized) => {
-                    if is_minimized {
-                        debug!("Window {} ({}) is_minimized", app_name, title);
-                        return None;
-                    }
-                }
-                Err(e) => {
-                    // Expected for some system/overlay windows - not a real error
-                    debug!("Failed to get is_minimized for window {}: {}", app_name, e);
-                }
-            };
-
-            let is_focused = match window.is_focused() {
-                Ok(focused) => focused,
-                Err(e) => {
-                    // Expected for overlay/system windows
-                    debug!(
-                        "Failed to get focus state for window {} ({}): {}",
-                        app_name, title, e
-                    );
+            if let Ok(is_minimized) = window.is_minimized() {
+                if is_minimized {
+                    debug!("Window {} ({}) is_minimized", app_name, title);
                     return None;
                 }
-            };
+            }
 
-            let process_id = match window.pid() {
-                Ok(pid) => pid as i32,
-                Err(e) => {
-                    // Expected for some protected/system processes
-                    debug!(
-                        "Failed to get process ID for window {} ({}): {}",
-                        app_name, title, e
-                    );
-                    -1
-                }
-            };
-
-            // Get window position and size for coordinate transformation
+            let is_focused = window.is_focused().unwrap_or(false);
+            let process_id = window.pid().map(|p| p as i32).unwrap_or(-1);
             let (window_x, window_y, window_width, window_height) = (
                 window.x().unwrap_or(0),
                 window.y().unwrap_or(0),
@@ -411,53 +550,57 @@ pub async fn capture_all_visible_windows(
                 window.height().unwrap_or(0),
             );
 
-            // Capture image immediately while we have access to the window
             match window.capture_image() {
-                Ok(buffer) => Some((
+                Ok(buffer) => Some(WindowData {
                     app_name,
                     title,
                     is_focused,
-                    buffer,
                     process_id,
                     window_x,
                     window_y,
                     window_width,
                     window_height,
-                )),
+                    image_buffer: buffer,
+                }),
                 Err(e) => {
-                    // Expected for overlay windows, protected content, or transparent windows
-                    debug!(
-                        "Failed to capture image for window {} ({}): {}",
-                        app_name, title, e
-                    );
+                    debug!("Failed to capture image for window {} ({}): {}", app_name, title, e);
                     None
                 }
             }
         })
-        .collect::<Vec<_>>();
+        .collect())
+}
+
+pub async fn capture_all_visible_windows(
+    monitor: &SafeMonitor,
+    window_filters: &WindowFilters,
+    capture_unfocused_windows: bool,
+) -> Result<Vec<CapturedWindow>, Box<dyn Error>> {
+    let mut all_captured_images = Vec::new();
+
+    // Get windows using the appropriate backend
+    let windows_data = get_all_windows()?;
 
     if windows_data.is_empty() {
         return Err(Box::new(CaptureError::NoWindows));
     }
 
     // Process the captured data
-    for (
-        app_name,
-        window_name,
-        is_focused,
-        buffer,
-        process_id,
-        window_x,
-        window_y,
-        window_width,
-        window_height,
-    ) in windows_data
-    {
+    for window_data in windows_data {
+        let WindowData {
+            app_name,
+            title: window_name,
+            is_focused,
+            process_id,
+            window_x,
+            window_y,
+            window_width,
+            window_height,
+            image_buffer,
+        } = window_data;
+
         // Convert to DynamicImage
-        let image = DynamicImage::ImageRgba8(
-            image::ImageBuffer::from_raw(buffer.width(), buffer.height(), buffer.into_raw())
-                .unwrap(),
-        );
+        let image = DynamicImage::ImageRgba8(image_buffer);
 
         // Apply filters
         // Note: Empty window_name/app_name check fixes frame-window mismatch bug where apps like Arc
