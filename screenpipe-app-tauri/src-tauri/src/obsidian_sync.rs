@@ -402,23 +402,29 @@ async fn run_pi_sync(app: &AppHandle, prompt: &str, user_token: Option<&str>) ->
         cmd.args(&args_ref).spawn()
     } else {
         // Try common locations first
-        let common_paths = [
+        let home = dirs::home_dir().map(|h| h.to_string_lossy().to_string()).unwrap_or_default();
+        let npm_global = format!("{}/.npm-global/bin/pi", home);
+        let common_paths: Vec<&str> = vec![
             "/opt/homebrew/bin/pi",     // macOS ARM homebrew
             "/usr/local/bin/pi",        // macOS Intel / Linux
             "/usr/bin/pi",              // Linux system
         ];
+        // Also check npm global path
+        let all_paths: Vec<String> = std::iter::once(npm_global)
+            .chain(common_paths.iter().map(|s| s.to_string()))
+            .collect();
         
-        let mut found_path: Option<&str> = None;
-        for path in &common_paths {
+        let mut found_path: Option<String> = None;
+        for path in &all_paths {
             if std::path::Path::new(path).exists() {
-                found_path = Some(path);
+                found_path = Some(path.clone());
                 break;
             }
         }
         
-        if let Some(path) = found_path {
+        if let Some(ref path) = found_path {
             info!("Using pi at: {}", path);
-            shell.command(path).args(&args_ref).spawn()
+            shell.command(path.as_str()).args(&args_ref).spawn()
         } else {
             // Last resort: try PATH
             info!("Trying pi from PATH");
