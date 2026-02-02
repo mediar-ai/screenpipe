@@ -114,7 +114,7 @@ interface TimeRange {
 interface ParsedMentions {
   cleanedInput: string;
   timeRanges: TimeRange[];
-  contentType: "all" | "ocr" | "audio" | null;
+  contentType: "all" | "ocr" | "audio" | "vision" | "input" | null;
   appName: string | null;
   usedSelection: boolean;
   speakerName: string | null;
@@ -159,7 +159,7 @@ export function parseMentions(input: string, options?: ParseMentionsOptions): Pa
   const now = new Date();
   const timeRanges: TimeRange[] = [];
   let cleanedInput = input;
-  let contentType: "all" | "ocr" | "audio" | null = null;
+  let contentType: "all" | "ocr" | "audio" | "vision" | "input" | null = null;
   let appName: string | null = null;
   let usedSelection = false;
   let speakerName: string | null = null;
@@ -242,11 +242,18 @@ export function parseMentions(input: string, options?: ParseMentionsOptions): Pa
     cleanedInput = cleanedInput.replace(audioPattern, "").trim();
   }
 
-  // @screen or @ocr - screen text only
-  const screenPattern = /@(screen|ocr)\b/gi;
+  // @screen or @ocr or @vision - screen text only
+  const screenPattern = /@(screen|ocr|vision)\b/gi;
   if (screenPattern.test(cleanedInput)) {
     contentType = "ocr";
     cleanedInput = cleanedInput.replace(screenPattern, "").trim();
+  }
+
+  // @input or @clicks or @events - UI events (clicks, keystrokes, app switches)
+  const inputPattern = /@(input|clicks|events)\b/gi;
+  if (inputPattern.test(cleanedInput)) {
+    contentType = "input";
+    cleanedInput = cleanedInput.replace(inputPattern, "").trim();
   }
 
   // === APP MENTIONS ===
@@ -363,6 +370,7 @@ const STATIC_MENTION_SUGGESTIONS: MentionSuggestion[] = [
   // Content type
   { tag: "@audio", description: "audio/meetings only", category: "content" },
   { tag: "@screen", description: "screen text only", category: "content" },
+  { tag: "@input", description: "UI events (clicks, keys)", category: "content" },
 ];
 
 // Speaker interface for dynamic suggestions
@@ -409,8 +417,8 @@ EXAMPLES:
           },
           content_type: {
             type: "string",
-            enum: ["all", "ocr", "audio", "ui"],
-            description: "Filter by type. Use 'audio' for meetings/conversations, 'ocr' for screen text. Default: 'all'",
+            enum: ["all", "ocr", "audio", "vision", "input"],
+            description: "Filter by type. Use 'audio' for meetings/conversations, 'ocr'/'vision' for screen text, 'input' for UI events (clicks, keystrokes, app switches). Default: 'all'",
           },
           limit: {
             type: "integer",

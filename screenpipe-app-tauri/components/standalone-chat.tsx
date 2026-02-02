@@ -56,6 +56,7 @@ const STATIC_MENTION_SUGGESTIONS: MentionSuggestion[] = [
   { tag: "@last-hour", description: "past hour", category: "time" },
   { tag: "@audio", description: "audio/meetings only", category: "content" },
   { tag: "@screen", description: "screen text only", category: "content" },
+  { tag: "@input", description: "UI events (clicks, keys)", category: "content" },
 ];
 
 const TOOLS: ChatCompletionTool[] = [
@@ -76,7 +77,7 @@ RULES:
         type: "object",
         properties: {
           q: { type: "string", description: "Search keywords. Be specific. Optional but recommended." },
-          content_type: { type: "string", enum: ["all", "ocr", "audio", "ui"], description: "Filter by type." },
+          content_type: { type: "string", enum: ["all", "ocr", "audio", "vision", "input"], description: "Filter by type. 'input' for UI events (clicks, keystrokes)." },
           limit: { type: "integer", description: "Max results (1-20). Default: 10" },
           start_time: { type: "string", description: "ISO 8601 UTC start time. REQUIRED." },
           end_time: { type: "string", description: "ISO 8601 UTC end time." },
