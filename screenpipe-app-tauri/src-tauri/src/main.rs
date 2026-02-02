@@ -52,6 +52,7 @@ mod windows_overlay;
 #[cfg(target_os = "macos")]
 mod space_monitor;
 mod sync;
+mod obsidian_sync;
 
 pub use server::*;
 
@@ -820,12 +821,21 @@ async fn main() {
                 opencode::opencode_stop,
                 opencode::opencode_check,
                 opencode::opencode_install,
+                // Obsidian Sync commands
+                obsidian_sync::obsidian_validate_vault,
+                obsidian_sync::obsidian_get_vault_paths,
+                obsidian_sync::obsidian_get_sync_status,
+                obsidian_sync::obsidian_run_sync,
+                obsidian_sync::obsidian_start_scheduler,
+                obsidian_sync::obsidian_stop_scheduler,
             ])
             .typ::<SettingsStore>()
             .typ::<OnboardingStore>()
             .typ::<sync::SyncStatusResponse>()
             .typ::<sync::SyncDeviceInfo>()
-            .typ::<sync::SyncConfig>();
+            .typ::<sync::SyncConfig>()
+            .typ::<obsidian_sync::ObsidianSyncSettings>()
+            .typ::<obsidian_sync::ObsidianSyncStatus>();
 
         builder
             .export(
@@ -838,6 +848,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     let sidecar_state_for_init = sidecar_state.0.clone(); // Clone for initial spawn
     let opencode_state = opencode::OpencodeState(Arc::new(tokio::sync::Mutex::new(None)));
+    let obsidian_sync_state = obsidian_sync::ObsidianSyncState::new();
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -890,6 +901,7 @@ async fn main() {
 
         let app = app.manage(sidecar_state)
         .manage(opencode_state)
+        .manage(obsidian_sync_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             stop_screenpipe,
@@ -950,7 +962,14 @@ async fn main() {
             opencode::opencode_start,
             opencode::opencode_stop,
             opencode::opencode_check,
-            opencode::opencode_install
+            opencode::opencode_install,
+            // Obsidian Sync commands
+            obsidian_sync::obsidian_validate_vault,
+            obsidian_sync::obsidian_get_vault_paths,
+            obsidian_sync::obsidian_get_sync_status,
+            obsidian_sync::obsidian_run_sync,
+            obsidian_sync::obsidian_start_scheduler,
+            obsidian_sync::obsidian_stop_scheduler
         ])
         .setup(move |app| {
             //deep link register_all
