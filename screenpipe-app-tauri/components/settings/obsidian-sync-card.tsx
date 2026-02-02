@@ -20,9 +20,91 @@ import {
   Loader2,
   AlertCircle,
   Clock,
-  FileText,
   ExternalLink,
 } from "lucide-react";
+
+// Official Obsidian logo SVG
+const ObsidianLogo = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 65 100"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      d="M46.3815 1.64838C45.2519 0.813498 43.7845 0.584108 42.4545 1.03483L3.24014 14.5801C1.49498 15.1697 0.326172 16.8207 0.326172 18.6635V62.5907C0.326172 63.9128 0.939877 65.1578 1.98099 65.9521L19.3133 79.1764L43.8598 98.2123C44.8174 98.9549 46.0419 99.2481 47.2303 99.0186L61.4684 96.1592C63.2723 95.7962 64.6211 94.2257 64.6738 92.3817L65.3262 28.3912C65.3519 26.2187 64.0954 24.2459 62.1038 23.3874L46.3815 1.64838Z"
+      fill="url(#paint0_linear)"
+    />
+    <path
+      d="M46.3815 1.64838C45.2519 0.813498 43.7845 0.584108 42.4545 1.03483L3.24014 14.5801C1.49498 15.1697 0.326172 16.8207 0.326172 18.6635V62.5907C0.326172 63.9128 0.939877 65.1578 1.98099 65.9521L19.3133 79.1764L43.8598 98.2123C44.8174 98.9549 46.0419 99.2481 47.2303 99.0186L61.4684 96.1592C63.2723 95.7962 64.6211 94.2257 64.6738 92.3817L65.3262 28.3912C65.3519 26.2187 64.0954 24.2459 62.1038 23.3874L46.3815 1.64838Z"
+      fill="url(#paint1_radial)"
+      fillOpacity="0.5"
+    />
+    <path
+      d="M19.5464 79.4006L2.03852 65.7962C1.05533 65.0455 0.475586 63.8721 0.475586 62.6279V18.5625C0.475586 16.6254 1.74092 14.913 3.60033 14.3312L42.4771 1.03483C43.7845 0.584108 45.2519 0.813498 46.3815 1.64838L62.1038 23.3874C64.0954 24.2459 65.3519 26.2187 65.3262 28.3912L64.6738 92.3817C64.6211 94.2257 63.2723 95.7962 61.4684 96.1592L47.2303 99.0186C46.0419 99.2481 44.8174 98.9549 43.8598 98.2123L19.5464 79.4006Z"
+      stroke="url(#paint2_linear)"
+      strokeWidth="0.5"
+    />
+    <path
+      d="M39.0728 36.9812L25.2818 62.8318C24.6506 63.9804 25.0839 65.4298 26.2325 66.061L43.2024 75.7139C44.3509 76.3451 45.8004 75.9118 46.4316 74.7632L60.2226 48.9126C60.8538 47.764 60.4205 46.3146 59.2719 45.6834L42.302 36.0305C41.1534 35.3993 39.704 35.8326 39.0728 36.9812Z"
+      fill="#9A8AFF"
+    />
+    <path
+      d="M19.3133 79.1764L1.98099 65.9521C0.939877 65.1578 0.326172 63.9128 0.326172 62.5907V18.6635L24.4687 63.6587L19.3133 79.1764Z"
+      fill="url(#paint3_linear)"
+    />
+    <path
+      d="M24.4687 63.6587L0.326172 18.6635C0.326172 16.8207 1.49498 15.1697 3.24014 14.5801L42.4545 1.03483L24.4687 63.6587Z"
+      fill="url(#paint4_linear)"
+    />
+    <path
+      d="M42.4545 1.03483L46.3815 1.64838L62.1038 23.3874L24.4687 63.6587L42.4545 1.03483Z"
+      fill="url(#paint5_linear)"
+    />
+    <path
+      d="M62.1038 23.3874C64.0954 24.2459 65.3519 26.2187 65.3262 28.3912L64.6738 92.3817L24.4687 63.6587L62.1038 23.3874Z"
+      fill="url(#paint6_linear)"
+    />
+    <path
+      d="M64.6738 92.3817C64.6211 94.2257 63.2723 95.7962 61.4684 96.1592L47.2303 99.0186C46.0419 99.2481 44.8174 98.9549 43.8598 98.2123L19.3133 79.1764L24.4687 63.6587L64.6738 92.3817Z"
+      fill="url(#paint7_linear)"
+    />
+    <defs>
+      <linearGradient id="paint0_linear" x1="32.8262" y1="0.695312" x2="32.8262" y2="99.1953" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#6C56CC"/>
+        <stop offset="1" stopColor="#9785E5"/>
+      </linearGradient>
+      <radialGradient id="paint1_radial" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(32.8262 49.9453) scale(49.1504 49.1504)">
+        <stop stopColor="white"/>
+        <stop offset="1" stopColor="white" stopOpacity="0"/>
+      </radialGradient>
+      <linearGradient id="paint2_linear" x1="0.225586" y1="49.9453" x2="65.5762" y2="49.9453" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#6C56CC"/>
+        <stop offset="1" stopColor="#9785E5"/>
+      </linearGradient>
+      <linearGradient id="paint3_linear" x1="12.3974" y1="18.6635" x2="12.3974" y2="79.1764" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#6C56CC"/>
+        <stop offset="1" stopColor="#4A3A9E"/>
+      </linearGradient>
+      <linearGradient id="paint4_linear" x1="21.3903" y1="1.03483" x2="21.3903" y2="63.6587" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#9785E5"/>
+        <stop offset="1" stopColor="#6C56CC"/>
+      </linearGradient>
+      <linearGradient id="paint5_linear" x1="43.2862" y1="1.03483" x2="43.2862" y2="63.6587" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#6C56CC"/>
+        <stop offset="1" stopColor="#4A3A9E"/>
+      </linearGradient>
+      <linearGradient id="paint6_linear" x1="44.8974" y1="23.3874" x2="44.8974" y2="92.3817" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#9785E5"/>
+        <stop offset="1" stopColor="#6C56CC"/>
+      </linearGradient>
+      <linearGradient id="paint7_linear" x1="42.0" y1="63.6587" x2="42.0" y2="99.1953" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#6C56CC"/>
+        <stop offset="1" stopColor="#4A3A9E"/>
+      </linearGradient>
+    </defs>
+  </svg>
+);
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -295,8 +377,8 @@ export function ObsidianSyncCard() {
         <div className="flex items-start p-6 gap-6">
           {/* Obsidian Logo */}
           <div className="flex-shrink-0">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center">
-              <FileText className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center">
+              <ObsidianLogo className="w-12 h-16" />
             </div>
           </div>
 
