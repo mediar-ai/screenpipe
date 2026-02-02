@@ -6,7 +6,7 @@
 use tracing::{debug, error, info, warn};
 
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
-const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/anthropic";
+const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/anthropic/v1";
 const DEFAULT_MODEL: &str = "claude-opus-4-5@20251101";
 
 /// Ensure pi CLI is installed/updated via bun
