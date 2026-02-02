@@ -13,15 +13,16 @@ import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { commands } from "@/lib/utils/tauri";
 import localforage from "localforage";
 import { LoginDialog } from "../components/login-dialog";
-import { UpdateBanner, useUpdateListener } from "../components/update-banner";
 import { ModelDownloadTracker } from "../components/model-download-tracker";
 import Timeline from "@/components/rewind/timeline";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { RefreshCw, AlertTriangle } from "lucide-react";
+import { RefreshCw, AlertTriangle, WifiOff } from "lucide-react";
 import { PermissionButtons } from "@/components/status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import SplashScreen from "@/components/splash-screen";
+import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
+import { hasCachedData } from "@/lib/hooks/use-timeline-cache";
 
 export default function Home() {
   const { settings, updateSettings, loadUser, reloadStore, isSettingsLoaded, loadingError } = useSettings();
@@ -32,8 +33,29 @@ export default function Home() {
   const [isRestarting, setIsRestarting] = useState(false);
   const isProcessingRef = useRef(false);
   
-  // Listen for update events from Rust
-  useUpdateListener();
+  // Optimistic UI: track if user has any data (cached or live)
+  const { frames, isConnected, loadFromCache } = useTimelineStore();
+  const [hasAnyData, setHasAnyData] = useState(false);
+  
+  // Check for cached data on mount
+  useEffect(() => {
+    const checkCache = async () => {
+      const hasCached = await hasCachedData();
+      setHasAnyData(hasCached);
+      if (hasCached) {
+        // Load cached frames immediately for instant display
+        loadFromCache();
+      }
+    };
+    checkCache();
+  }, [loadFromCache]);
+  
+  // Update hasAnyData when frames change
+  useEffect(() => {
+    if (frames.length > 0) {
+      setHasAnyData(true);
+    }
+  }, [frames.length]);
 
   // Load onboarding status on mount
   useEffect(() => {
@@ -130,6 +152,13 @@ export default function Home() {
     }
   };
 
+  // Determine what to show:
+  // 1. If user has data (cached or live) -> always show timeline, even if server is down
+  // 2. If no data AND server is down -> show server error screen
+  // 3. If no data AND server is starting -> show loading
+  const showTimeline = hasAnyData || !isServerDown;
+  const showServerError = !hasAnyData && isServerDown;
+
   return (
     <div className="flex flex-col items-center flex-1 mx-auto relative scrollbar-hide">
       {/* Transparent titlebar area - no drag region to prevent accidental window moves */}
@@ -142,12 +171,20 @@ export default function Home() {
           <ChangelogDialog />
           <BreakingChangesInstructionsDialog />
           <LoginDialog />
-          <UpdateDialog />
           <ModelDownloadTracker />
-          {!isServerDown ? (
+          
+          {showTimeline ? (
             <div className="w-full scrollbar-hide bg-background relative">
-              {/* Show connecting overlay while health check is loading */}
-              {isHealthLoading && (
+              {/* Subtle disconnected indicator - only show if we have data but no connection */}
+              {hasAnyData && !isConnected && isServerDown && (
+                <div className="fixed top-10 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-muted/90 backdrop-blur-sm rounded-full text-xs text-muted-foreground border">
+                  <WifiOff className="h-3 w-3" />
+                  <span>reconnecting...</span>
+                </div>
+              )}
+              
+              {/* Show connecting overlay only if NO data and still loading */}
+              {!hasAnyData && isHealthLoading && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
                   <div className="flex flex-col items-center gap-3">
                     <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -157,7 +194,7 @@ export default function Home() {
               )}
               <Timeline />
             </div>
-          ) : (
+          ) : showServerError ? (
             <div className="flex items-center justify-center h-screen p-4 bg-background w-full">
               <div className="max-w-lg w-full space-y-6">
                 {/* Header */}
@@ -223,6 +260,14 @@ export default function Home() {
                     </>
                   )}
                 </div>
+              </div>
+            </div>
+          ) : (
+            // Fallback loading state
+            <div className="flex items-center justify-center h-screen">
+              <div className="flex flex-col items-center gap-3">
+                <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">starting up...</p>
               </div>
             </div>
           )}

@@ -1,6 +1,6 @@
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import { useTimelineStore } from "./use-timeline-store";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export function useTimelineData(
 	currentDate: Date,
@@ -14,12 +14,26 @@ export function useTimelineData(
 		connectWebSocket,
 		fetchNextDayData,
 		websocket,
+		loadFromCache,
 	} = useTimelineStore();
 
+	const hasInitialized = useRef(false);
+
 	useEffect(() => {
-		// Establish WebSocket connection on mount
-		// The connectWebSocket function handles closing existing connections
-		connectWebSocket();
+		// Only initialize once
+		if (hasInitialized.current) return;
+		hasInitialized.current = true;
+
+		const initialize = async () => {
+			// 1. First, load cached frames for instant display
+			await loadFromCache();
+			
+			// 2. Then establish WebSocket connection for live updates
+			// The connectWebSocket function handles closing existing connections
+			connectWebSocket();
+		};
+
+		initialize();
 	}, []); // Only connect once when component mounts
 
 	// NOTE: Auto-select of first frame is handled in timeline.tsx to avoid
@@ -34,4 +48,3 @@ export function useTimelineData(
 		websocket, // Expose websocket so timeline.tsx can depend on it
 	};
 }
-
