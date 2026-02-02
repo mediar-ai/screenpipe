@@ -53,6 +53,7 @@ mod windows_overlay;
 mod space_monitor;
 mod sync;
 mod obsidian_sync;
+mod pi;
 
 pub use server::*;
 

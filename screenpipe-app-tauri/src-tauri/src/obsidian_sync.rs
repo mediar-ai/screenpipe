@@ -3,6 +3,7 @@
 //! Syncs screenpipe activity data to an Obsidian vault using pi as the AI agent.
 //! The agent queries screenpipe API in chunks and generates markdown summaries.
 
+use crate::pi;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::path::PathBuf;
@@ -310,7 +311,7 @@ pub async fn obsidian_run_sync(
     let prompt = build_prompt(&settings, &start_time_str, &end_time_str);
 
     // Run opencode
-    let result = run_pi_sync(&app, &prompt, user_token.as_deref()).await;
+    let result = pi::run(&prompt, user_token.as_deref()).await;
 
     // Update status based on result
     {
@@ -333,164 +334,6 @@ pub async fn obsidian_run_sync(
 
     let status = state.status.lock().await;
     result.map(|_| status.clone())
-}
-
-/// Ensure pi CLI is installed via bun
-async fn ensure_pi_installed() -> Result<(), String> {
-    info!("Ensuring pi CLI is installed/updated via bun...");
-    
-    // Find bun
-    let home = dirs::home_dir().map(|h| h.to_string_lossy().to_string()).unwrap_or_default();
-    let bun_paths = vec![
-        format!("{}/.bun/bin/bun", home),
-        "/opt/homebrew/bin/bun".to_string(),
-        "/usr/local/bin/bun".to_string(),
-        "bun".to_string(),
-    ];
-    
-    let mut bun_cmd: Option<String> = None;
-    for path in &bun_paths {
-        if path == "bun" || std::path::Path::new(path).exists() {
-            bun_cmd = Some(path.clone());
-            break;
-        }
-    }
-    
-    let bun = bun_cmd.ok_or("Could not find bun. Install bun first: https://bun.sh")?;
-    info!("Using bun at: {}", bun);
-    
-    // Run: bun add -g @mariozechner/pi-coding-agent
-    let output = tokio::process::Command::new(&bun)
-        .args(["add", "-g", "@mariozechner/pi-coding-agent"])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run bun: {}", e))?;
-    
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        warn!("bun install warning: {}", stderr);
-        // Don't fail - pi might already be installed via npm
-    } else {
-        info!("pi CLI installed/updated successfully");
-    }
-    
-    Ok(())
-}
-
-/// Ensure pi is configured to use screenpipe as the AI provider
-fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
-    let config_dir = dirs::home_dir()
-        .ok_or("Could not find home directory")?
-        .join(".pi")
-        .join("agent");
-    
-    std::fs::create_dir_all(&config_dir)
-        .map_err(|e| format!("Failed to create pi config dir: {}", e))?;
-    
-    let models_path = config_dir.join("models.json");
-    
-    // Create models.json with screenpipe provider
-    let config = serde_json::json!({
-        "providers": {
-            "screenpipe": {
-                "api": "anthropic",
-                "baseURL": "https://api.screenpi.pe/anthropic",
-                "models": {
-                    "claude-sonnet-4-20250514": {
-                        "name": "Claude Sonnet 4"
-                    },
-                    "claude-haiku-4-5-20251001": {
-                        "name": "Claude Haiku 4.5"
-                    }
-                }
-            }
-        }
-    });
-    
-    let config_str = serde_json::to_string_pretty(&config)
-        .map_err(|e| format!("Failed to serialize config: {}", e))?;
-    
-    std::fs::write(&models_path, config_str)
-        .map_err(|e| format!("Failed to write pi config: {}", e))?;
-    
-    info!("Pi config written to {:?}", models_path);
-    Ok(())
-}
-
-/// Internal function to run pi with the sync prompt
-async fn run_pi_sync(_app: &AppHandle, prompt: &str, user_token: Option<&str>) -> Result<(), String> {
-    info!("Starting obsidian sync with pi");
-
-    // Ensure pi is installed via bun
-    ensure_pi_installed().await?;
-    
-    // Ensure pi is configured to use screenpipe provider
-    ensure_pi_config(user_token)?;
-    
-    // Find pi executable
-    let home = dirs::home_dir().map(|h| h.to_string_lossy().to_string()).unwrap_or_default();
-    let npm_global = format!("{}/.npm-global/bin/pi", home);
-    let nvm_default = format!("{}/.nvm/versions/node/v22.11.0/bin/pi", home); // Common nvm path
-    let all_paths = vec![
-        npm_global,
-        nvm_default,
-        "/opt/homebrew/bin/pi".to_string(),
-        "/usr/local/bin/pi".to_string(),
-        "/usr/bin/pi".to_string(),
-        "pi".to_string(), // PATH fallback
-    ];
-    
-    let mut pi_path: Option<String> = None;
-    for path in &all_paths {
-        if path == "pi" || std::path::Path::new(path).exists() {
-            pi_path = Some(path.clone());
-            break;
-        }
-    }
-    
-    let pi_cmd = pi_path.ok_or("Could not find pi. Install with: npm install -g @mariozechner/pi-coding-agent")?;
-    info!("Using pi at: {}", pi_cmd);
-    
-    // Build command using tokio::process::Command directly
-    let mut cmd = tokio::process::Command::new(&pi_cmd);
-    cmd.arg("-p").arg(prompt);
-    cmd.arg("--provider").arg("screenpipe");
-    cmd.arg("--model").arg("claude-sonnet-4-20250514");
-    
-    if let Some(token) = user_token {
-        cmd.arg("--api-key").arg(token);
-    }
-    
-    // Capture output
-    cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::piped());
-    
-    info!("Running pi command...");
-    let output = cmd.output().await
-        .map_err(|e| format!("Failed to spawn pi: {}. Make sure pi is installed (npm install -g @mariozechner/pi-coding-agent)", e))?;
-    
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    
-    if !stdout.is_empty() {
-        debug!("pi stdout: {}", stdout);
-    }
-    if !stderr.is_empty() {
-        debug!("pi stderr: {}", stderr);
-    }
-
-    if output.status.success() {
-        info!("Obsidian sync completed successfully");
-        Ok(())
-    } else {
-        let error_msg = if !stderr.is_empty() {
-            stderr.to_string()
-        } else {
-            format!("Pi exited with code {:?}", output.status.code())
-        };
-        error!("Obsidian sync failed: {}", error_msg);
-        Err(error_msg)
-    }
 }
 
 /// Start the background scheduler for periodic syncs
@@ -593,7 +436,7 @@ async fn run_scheduled_sync(
     let start_time = end_time - chrono::Duration::hours(settings.sync_hours as i64);
 
     let prompt = build_prompt(settings, &start_time.to_rfc3339(), &end_time.to_rfc3339());
-    let result = run_pi_sync(app, &prompt, user_token).await;
+    let result = pi::run(&prompt, user_token).await;
 
     // Update status
     {
