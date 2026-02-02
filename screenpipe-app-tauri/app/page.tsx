@@ -175,6 +175,7 @@ export default function Home() {
           
           {showTimeline ? (
             <div className="w-full scrollbar-hide bg-background relative">
+<<<<<<< Updated upstream
               {/* Subtle disconnected indicator - only show if we have data but no connection */}
               {hasAnyData && !isConnected && isServerDown && (
                 <div className="fixed top-10 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-muted/90 backdrop-blur-sm rounded-full text-xs text-muted-foreground border">
@@ -185,6 +186,11 @@ export default function Home() {
               
               {/* Show connecting overlay only if NO data and still loading */}
               {!hasAnyData && isHealthLoading && (
+=======
+              <UpdateBanner />
+              {/* Show connecting overlay while health check is loading */}
+              {isHealthLoading && (
+>>>>>>> Stashed changes
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
                   <div className="flex flex-col items-center gap-3">
                     <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />

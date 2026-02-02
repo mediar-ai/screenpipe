@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Settings } from "@/lib/hooks/use-settings";
 import { open } from "@tauri-apps/plugin-shell";
+import { UpdateBanner } from "@/components/update-banner";
 
 export default function GeneralSettings() {
   const { settings, updateSettings } = useSettings();
@@ -57,9 +58,12 @@ export default function GeneralSettings() {
   return (
     <div className="space-y-8">
       <div className="space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          General Settings
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            General Settings
+          </h1>
+          <UpdateBanner compact />
+        </div>
         <p className="text-muted-foreground text-lg">
           Configure basic application preferences and behavior
         </p>
