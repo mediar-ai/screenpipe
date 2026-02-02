@@ -1,15 +1,15 @@
 //! Obsidian Sync Module
 //!
-//! Syncs screenpipe activity data to an Obsidian vault using the AI proxy.
-//! Queries screenpipe API for activity, sends to Claude for summarization,
-//! and writes markdown notes to the vault.
+//! Syncs screenpipe activity data to an Obsidian vault using opencode as the AI agent.
+//! The agent queries screenpipe API in chunks and generates markdown summaries.
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use specta::Type;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_shell::process::CommandEvent;
+use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
@@ -74,29 +74,129 @@ impl ObsidianSyncState {
     }
 }
 
-/// System prompt for summarizing screenpipe data
-const SYSTEM_PROMPT: &str = r#"You are summarizing screen activity data into concise markdown notes.
+/// System prompt for the opencode agent with screenpipe API docs
+const SYSTEM_PROMPT: &str = r#"You are syncing screenpipe activity data to an Obsidian vault.
+
+## Screenpipe API Reference
+
+Base URL: http://localhost:3030
+
+### Search Endpoint
+```
+GET /search
+```
+
+Query parameters:
+- `content_type`: "ocr" | "audio" | "all" (default: all)
+- `start_time`: ISO 8601 timestamp (e.g., 2025-02-01T10:00:00Z)
+- `end_time`: ISO 8601 timestamp
+- `limit`: max results per request (default: 50, max: 1000)
+- `offset`: pagination offset
+
+Example:
+```bash
+curl "http://localhost:3030/search?content_type=all&start_time=2025-02-01T10:00:00Z&end_time=2025-02-01T10:30:00Z&limit=200"
+```
+
+Response format:
+```json
+{
+  "data": [
+    {
+      "type": "OCR",
+      "content": {
+        "frame_id": 123,
+        "text": "screen text content...",
+        "app_name": "Arc",
+        "window_name": "GitHub - Pull Request",
+        "timestamp": "2025-02-01T10:05:00Z"
+      }
+    },
+    {
+      "type": "Audio",
+      "content": {
+        "transcription": "spoken words...",
+        "timestamp": "2025-02-01T10:05:30Z"
+      }
+    }
+  ],
+  "pagination": { "total": 500, "limit": 200, "offset": 0 }
+}
+```
+
+## Your Task
+
+1. Query the screenpipe API for the specified time range
+2. Process data in 30-minute chunks to manage context size
+3. For each chunk, summarize the key activities
+4. Append summaries to the daily markdown log file
+5. Create folders/files as needed
 
 ## Output Format
 
-Create a markdown summary using this table format:
+Create/append to the daily log file using this markdown table format:
+
+```markdown
+# Activity Log - YYYY-MM-DD
 
 | Time | Activity | Apps | Tags |
 |------|----------|------|------|
-| HH:MM-HH:MM | Brief description of what was done | App1, App2 | #tag1 #tag2 |
+| 10:00-10:30 | Reviewed PR #123 for auth module | GitHub, VSCode | #coding #review |
+| 10:30-11:00 | Call with team about roadmap | Zoom, Notion | #meeting #planning |
+```
 
-## Rules
+## Best Practices
 
 - Link people names with [[Name]] (Obsidian wiki-links)
 - Link projects/concepts with [[concept-name]]
 - Keep summaries concise but capture key activities
 - Group related activities together
 - Include apps used for context
-- Add semantic tags for easy filtering (#coding, #meeting, #research, etc.)
+- Add semantic tags for easy filtering
 - Skip idle periods or duplicates
-- If no meaningful activity, just write "No significant activity recorded"
-- Focus on what was accomplished, not every detail
+- If no meaningful activity in a chunk, skip it or note "idle"
+
+## Important
+
+- Query in chunks to avoid context overflow
+- Use curl to fetch data from the API
+- Write files using the write tool
+- Create the subfolder structure if it doesn't exist
 "#;
+
+/// Build the full prompt for opencode
+fn build_prompt(settings: &ObsidianSyncSettings, start_time: &str, end_time: &str) -> String {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let notes_path = if settings.notes_path.is_empty() {
+        "screenpipe/logs".to_string()
+    } else {
+        settings.notes_path.trim_matches('/').to_string()
+    };
+    let note_path = format!(
+        "{}/{}/{}.md",
+        settings.vault_path.trim_end_matches('/'),
+        notes_path,
+        today
+    );
+
+    let mut prompt = format!(
+        r#"Sync my screenpipe activity to Obsidian.
+
+Time range: {} to {}
+Output file: {}
+
+{}"#,
+        start_time, end_time, note_path, SYSTEM_PROMPT
+    );
+
+    // Append user's custom prompt if provided
+    if !settings.custom_prompt.is_empty() {
+        prompt.push_str("\n\n## Additional Instructions from User\n\n");
+        prompt.push_str(&settings.custom_prompt);
+    }
+
+    prompt
+}
 
 /// Validate that a path is a valid Obsidian vault (has .obsidian folder)
 #[tauri::command]
@@ -115,11 +215,7 @@ pub async fn obsidian_get_vault_paths() -> Result<Vec<String>, String> {
 
     // Common Obsidian vault locations
     if let Some(home) = dirs::home_dir() {
-        let candidates = vec![
-            home.join("Documents"),
-            home.join("Obsidian"),
-            home.clone(),
-        ];
+        let candidates = vec![home.join("Documents"), home.join("Obsidian"), home.clone()];
 
         for candidate in candidates {
             if let Ok(entries) = std::fs::read_dir(&candidate) {
@@ -141,8 +237,7 @@ pub async fn obsidian_get_vault_paths() -> Result<Vec<String>, String> {
     // Also check iCloud on macOS
     #[cfg(target_os = "macos")]
     if let Some(home) = dirs::home_dir() {
-        let icloud_obsidian = home
-            .join("Library/Mobile Documents/iCloud~md~obsidian/Documents");
+        let icloud_obsidian = home.join("Library/Mobile Documents/iCloud~md~obsidian/Documents");
         if let Ok(entries) = std::fs::read_dir(&icloud_obsidian) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -206,8 +301,17 @@ pub async fn obsidian_run_sync(
     // Emit event for UI
     let _ = app.emit("obsidian_sync_started", ());
 
-    // Run the sync
-    let result = run_sync_internal(&settings).await;
+    // Calculate time range
+    let end_time = chrono::Utc::now();
+    let start_time = end_time - chrono::Duration::hours(settings.sync_hours as i64);
+    let start_time_str = start_time.to_rfc3339();
+    let end_time_str = end_time.to_rfc3339();
+
+    // Build prompt
+    let prompt = build_prompt(&settings, &start_time_str, &end_time_str);
+
+    // Run opencode
+    let result = run_opencode_sync(&app, &prompt).await;
 
     // Update status based on result
     {
@@ -232,211 +336,76 @@ pub async fn obsidian_run_sync(
     result.map(|_| status.clone())
 }
 
-/// Internal function to run the sync
-async fn run_sync_internal(settings: &ObsidianSyncSettings) -> Result<(), String> {
-    info!("Starting obsidian sync");
+/// Internal function to run opencode with the sync prompt
+async fn run_opencode_sync(app: &AppHandle, prompt: &str) -> Result<(), String> {
+    info!("Starting obsidian sync with opencode");
 
-    let client = reqwest::Client::new();
+    // Try sidecar first, then PATH
+    let shell = app.shell();
+    let cmd_result = shell.sidecar("opencode");
 
-    // Calculate time range
-    let end_time = chrono::Utc::now();
-    let start_time = end_time - chrono::Duration::hours(settings.sync_hours as i64);
+    let (mut rx, _child) = match cmd_result {
+        Ok(cmd) => {
+            // Use sidecar with prompt as argument
+            cmd.args(&["-p", prompt, "--no-input"])
+                .spawn()
+                .map_err(|e| format!("Failed to spawn opencode: {}", e))?
+        }
+        Err(_) => {
+            // Try PATH
+            shell
+                .command("opencode")
+                .args(&["-p", prompt, "--no-input"])
+                .spawn()
+                .map_err(|e| format!("Failed to spawn opencode from PATH: {}", e))?
+        }
+    };
 
-    // Query screenpipe for activity data
-    let search_url = format!(
-        "http://localhost:3030/search?content_type=all&start_time={}&end_time={}&limit=500",
-        start_time.to_rfc3339(),
-        end_time.to_rfc3339()
-    );
+    // Collect output
+    let mut stdout_lines = Vec::new();
+    let mut stderr_lines = Vec::new();
+    let mut exit_code = None;
 
-    debug!("Querying screenpipe: {}", search_url);
-
-    let search_response = client
-        .get(&search_url)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to query screenpipe: {}", e))?;
-
-    if !search_response.status().is_success() {
-        return Err(format!(
-            "Screenpipe API error: {}",
-            search_response.status()
-        ));
-    }
-
-    let search_data: serde_json::Value = search_response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse screenpipe response: {}", e))?;
-
-    let data_array = search_data
-        .get("data")
-        .and_then(|d| d.as_array())
-        .ok_or("No data in screenpipe response")?;
-
-    if data_array.is_empty() {
-        info!("No activity data found for the time range");
-        // Still create a note saying no activity
-        let markdown = format!(
-            "# Activity Log - {}\n\nNo significant activity recorded during this period.\n",
-            end_time.format("%Y-%m-%d")
-        );
-        write_note(settings, &markdown)?;
-        return Ok(());
-    }
-
-    // Prepare a summary of the data for Claude
-    let mut activity_summary = String::new();
-    activity_summary.push_str(&format!(
-        "Activity data from {} to {}:\n\n",
-        start_time.format("%H:%M"),
-        end_time.format("%H:%M")
-    ));
-
-    for item in data_array.iter().take(100) {
-        // Limit to avoid token overflow
-        if let Some(content) = item.get("content") {
-            let item_type = item.get("type").and_then(|t| t.as_str()).unwrap_or("unknown");
-
-            match item_type {
-                "OCR" => {
-                    let app = content
-                        .get("app_name")
-                        .and_then(|a| a.as_str())
-                        .unwrap_or("unknown");
-                    let window = content
-                        .get("window_name")
-                        .and_then(|w| w.as_str())
-                        .unwrap_or("");
-                    let text = content
-                        .get("text")
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("")
-                        .chars()
-                        .take(200)
-                        .collect::<String>();
-                    let timestamp = content
-                        .get("timestamp")
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("");
-
-                    if !text.trim().is_empty() {
-                        activity_summary.push_str(&format!(
-                            "- [{}] {}: {} - \"{}\"\n",
-                            timestamp, app, window, text
-                        ));
-                    }
-                }
-                "Audio" => {
-                    let transcription = content
-                        .get("transcription")
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("")
-                        .chars()
-                        .take(300)
-                        .collect::<String>();
-                    let timestamp = content
-                        .get("timestamp")
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("");
-
-                    if !transcription.trim().is_empty() {
-                        activity_summary.push_str(&format!(
-                            "- [{}] Audio: \"{}\"\n",
-                            timestamp, transcription
-                        ));
-                    }
-                }
-                _ => {}
+    while let Some(event) = rx.recv().await {
+        match event {
+            CommandEvent::Stdout(line) => {
+                let text = String::from_utf8_lossy(&line).to_string();
+                debug!("opencode stdout: {}", text);
+                stdout_lines.push(text);
             }
+            CommandEvent::Stderr(line) => {
+                let text = String::from_utf8_lossy(&line).to_string();
+                debug!("opencode stderr: {}", text);
+                stderr_lines.push(text);
+            }
+            CommandEvent::Terminated(payload) => {
+                exit_code = payload.code;
+                break;
+            }
+            CommandEvent::Error(e) => {
+                error!("opencode error: {}", e);
+                return Err(format!("Opencode error: {}", e));
+            }
+            _ => {}
         }
     }
 
-    // Build prompt for Claude
-    let mut user_prompt = format!(
-        "Summarize this screen activity into a markdown table. Time range: {} to {}\n\n{}",
-        start_time.format("%H:%M"),
-        end_time.format("%H:%M"),
-        activity_summary
-    );
-
-    // Add custom instructions if provided
-    if !settings.custom_prompt.is_empty() {
-        user_prompt.push_str(&format!(
-            "\n\nAdditional instructions from user:\n{}",
-            settings.custom_prompt
-        ));
+    match exit_code {
+        Some(0) => {
+            info!("Obsidian sync completed successfully");
+            Ok(())
+        }
+        Some(code) => {
+            let error_msg = if !stderr_lines.is_empty() {
+                stderr_lines.join("\n")
+            } else {
+                format!("Opencode exited with code {}", code)
+            };
+            error!("Obsidian sync failed: {}", error_msg);
+            Err(error_msg)
+        }
+        None => Err("Opencode terminated without exit code".to_string()),
     }
-
-    // Call Claude via screenpipe AI proxy
-    let ai_response = client
-        .post("http://localhost:3030/v1/chat/completions")
-        .json(&json!({
-            "model": "gpt-4o",  // Will be routed to Claude via proxy
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
-            ],
-            "max_tokens": 2000
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Failed to call AI: {}", e))?;
-
-    if !ai_response.status().is_success() {
-        let error_text = ai_response.text().await.unwrap_or_default();
-        return Err(format!("AI API error: {}", error_text));
-    }
-
-    let ai_data: serde_json::Value = ai_response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse AI response: {}", e))?;
-
-    let summary = ai_data
-        .get("choices")
-        .and_then(|c| c.get(0))
-        .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))
-        .and_then(|c| c.as_str())
-        .ok_or("Failed to extract AI response")?;
-
-    // Build final markdown
-    let today = end_time.format("%Y-%m-%d").to_string();
-    let markdown = format!("# Activity Log - {}\n\n{}\n", today, summary);
-
-    // Write to file
-    write_note(settings, &markdown)?;
-
-    info!("Obsidian sync completed successfully");
-    Ok(())
-}
-
-/// Write markdown content to the notes file
-fn write_note(settings: &ObsidianSyncSettings, content: &str) -> Result<(), String> {
-    let notes_path = if settings.notes_path.is_empty() {
-        "screenpipe/logs".to_string()
-    } else {
-        settings.notes_path.trim_matches('/').to_string()
-    };
-
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let full_path = PathBuf::from(&settings.vault_path)
-        .join(&notes_path)
-        .join(format!("{}.md", today));
-
-    // Create directory if needed
-    if let Some(parent) = full_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directory: {}", e))?;
-    }
-
-    // Write file (overwrite for now - could append in future)
-    std::fs::write(&full_path, content)
-        .map_err(|e| format!("Failed to write note: {}", e))?;
-
-    info!("Wrote note to: {:?}", full_path);
-    Ok(())
 }
 
 /// Start the background scheduler for periodic syncs
@@ -466,9 +435,8 @@ pub async fn obsidian_start_scheduler(
     );
 
     let handle = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
-            interval_mins as u64 * 60,
-        ));
+        let mut interval =
+            tokio::time::interval(tokio::time::Duration::from_secs(interval_mins as u64 * 60));
 
         // Skip the first tick (immediate)
         interval.tick().await;
@@ -487,35 +455,8 @@ pub async fn obsidian_start_scheduler(
 
             info!("Running scheduled obsidian sync");
 
-            // Update status
-            {
-                let mut status = status_arc.lock().await;
-                status.is_syncing = true;
-                status.last_error = None;
-            }
-
-            let _ = app_handle.emit("obsidian_sync_started", ());
-
-            let result = run_sync_internal(&settings_clone).await;
-
-            // Update status
-            {
-                let mut status = status_arc.lock().await;
-                status.is_syncing = false;
-
-                match &result {
-                    Ok(_) => {
-                        status.last_sync_time = Some(chrono::Utc::now().to_rfc3339());
-                        status.last_error = None;
-                        status.notes_created_today += 1;
-                        let _ = app_handle.emit("obsidian_sync_completed", status.clone());
-                    }
-                    Err(e) => {
-                        status.last_error = Some(e.clone());
-                        let _ = app_handle.emit("obsidian_sync_error", e.clone());
-                    }
-                }
-            }
+            // Run sync (we can't use the command directly, so replicate the logic)
+            let result = run_scheduled_sync(&app_handle, &settings_clone, &status_arc).await;
 
             if let Err(e) = result {
                 warn!("Scheduled obsidian sync failed: {}", e);
@@ -542,4 +483,48 @@ pub async fn obsidian_stop_scheduler(
         info!("Obsidian sync scheduler stopped");
     }
     Ok(())
+}
+
+/// Internal function to run a scheduled sync
+async fn run_scheduled_sync(
+    app: &AppHandle,
+    settings: &ObsidianSyncSettings,
+    status: &Arc<Mutex<ObsidianSyncStatus>>,
+) -> Result<(), String> {
+    // Update status
+    {
+        let mut s = status.lock().await;
+        s.is_syncing = true;
+        s.last_error = None;
+    }
+
+    let _ = app.emit("obsidian_sync_started", ());
+
+    // Calculate time range
+    let end_time = chrono::Utc::now();
+    let start_time = end_time - chrono::Duration::hours(settings.sync_hours as i64);
+
+    let prompt = build_prompt(settings, &start_time.to_rfc3339(), &end_time.to_rfc3339());
+    let result = run_opencode_sync(app, &prompt).await;
+
+    // Update status
+    {
+        let mut s = status.lock().await;
+        s.is_syncing = false;
+
+        match &result {
+            Ok(_) => {
+                s.last_sync_time = Some(chrono::Utc::now().to_rfc3339());
+                s.last_error = None;
+                s.notes_created_today += 1;
+                let _ = app.emit("obsidian_sync_completed", s.clone());
+            }
+            Err(e) => {
+                s.last_error = Some(e.clone());
+                let _ = app.emit("obsidian_sync_error", e.clone());
+            }
+        }
+    }
+
+    result
 }
