@@ -724,12 +724,16 @@ fn run_app_observer(
                 *current_app.lock() = Some(name.clone());
 
                 if config.capture_app_switch {
-                    let event = UiEvent::app_switch(
+                    // Capture focused element's context (including text field values)
+                    let focused_element = get_focused_element_context(&config);
+                    
+                    let mut event = UiEvent::app_switch(
                         Utc::now(),
                         start.elapsed().as_millis() as u64,
                         name.clone(),
                         pid,
                     );
+                    event.element = focused_element;
                     let _ = tx.try_send(event);
                 }
                 last_app = Some(name.clone());
@@ -750,6 +754,9 @@ fn run_app_observer(
                 *current_window.lock() = window_title.clone();
 
                 if config.capture_window_focus {
+                    // Capture focused element's context (including text field values)
+                    let focused_element = get_focused_element_context(&config);
+                    
                     let event = UiEvent {
                         id: None,
                         timestamp: Utc::now(),
@@ -761,7 +768,7 @@ fn run_app_observer(
                         app_name: None,
                         window_title: None,
                         browser_url: None,
-                        element: None,
+                        element: focused_element,
                         frame_id: None,
                     };
                     let _ = tx.try_send(event);
@@ -868,6 +875,74 @@ fn get_focused_window_title(pid: i32) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Get the currently focused UI element's context (for capturing text field values)
+fn get_focused_element_context(config: &UiCaptureConfig) -> Option<ElementContext> {
+    let sys = ax::UiElement::sys_wide();
+    let focused = sys.attr_value(ax::attr::focused_ui_element()).ok()?;
+    
+    if focused.get_type_id() != ax::UiElement::type_id() {
+        return None;
+    }
+    
+    let elem: &ax::UiElement = unsafe { std::mem::transmute(&*focused) };
+    
+    let role = elem.role().ok().map(|r| {
+        let s = format!("{:?}", r);
+        if let Some(start) = s.find("AX") {
+            let rest = &s[start..];
+            let end = rest.find([')', '"', '}']).unwrap_or(rest.len());
+            rest[..end].to_string()
+        } else {
+            "Unknown".to_string()
+        }
+    })?;
+    
+    // Get element name/label
+    let name = get_string_attr(elem, ax::attr::title())
+        .or_else(|| get_string_attr(elem, ax::attr::desc()))
+        .or_else(|| elem.role_desc().ok().map(|s| s.to_string()));
+    
+    // Check for password field
+    if config.is_password_field(Some(&role), name.as_deref()) {
+        return Some(ElementContext {
+            role,
+            name: Some("[password field]".to_string()),
+            value: None,
+            description: None,
+            automation_id: None,
+            bounds: None,
+        });
+    }
+    
+    // Get value for text input elements
+    let value = if role.contains("TextField") 
+        || role.contains("TextArea") 
+        || role.contains("ComboBox")
+        || role.contains("SearchField")
+        || role.contains("TextInput")
+    {
+        get_string_attr(elem, ax::attr::value())
+    } else {
+        None
+    };
+    
+    Some(ElementContext {
+        role,
+        name: name.map(|s| truncate(&s, 200)),
+        value: value.map(|s| {
+            let truncated = truncate(&s, 1000); // Allow more text for input fields
+            if config.apply_pii_removal {
+                remove_pii(&truncated)
+            } else {
+                truncated
+            }
+        }),
+        description: None,
+        automation_id: None,
+        bounds: None,
+    })
 }
 
 fn get_clipboard() -> Option<String> {

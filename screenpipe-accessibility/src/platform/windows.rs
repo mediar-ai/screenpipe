@@ -1006,6 +1006,8 @@ fn run_app_observer(
 
                 // Send app switch event
                 if config.capture_app_switch {
+                    // TODO: Add UI Automation to get focused element value on Windows
+                    // For now, we don't capture focused element context on Windows
                     let event = UiEvent::app_switch(
                         Utc::now(),
                         start.elapsed().as_millis() as u64,
@@ -1017,6 +1019,7 @@ fn run_app_observer(
 
                 // Send window focus event
                 if config.capture_window_focus && title != last_title {
+                    // TODO: Add UI Automation to get focused element value on Windows
                     let event = UiEvent {
                         id: None,
                         timestamp: Utc::now(),
@@ -1028,7 +1031,7 @@ fn run_app_observer(
                         app_name: None,
                         window_title: None,
                         browser_url: None,
-                        element: None,
+                        element: None, // TODO: capture focused element on Windows
                         frame_id: None,
                     };
                     let _ = tx.try_send(event);
