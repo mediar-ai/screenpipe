@@ -699,7 +699,7 @@ export function ObsidianSyncCard() {
               )}
             </div>
             {status.lastError && (
-              <span className="text-red-500 text-xs truncate max-w-xs">
+              <span className="text-xs truncate max-w-xs text-muted-foreground">
                 Error: {status.lastError}
               </span>
             )}
@@ -713,11 +713,7 @@ export function ObsidianSyncCard() {
                 {syncHistory.slice(0, 5).map((entry, i) => (
                   <span
                     key={i}
-                    className={`px-1.5 py-0.5 rounded ${
-                      entry.status === "success" 
-                        ? "bg-green-500/10 text-green-600" 
-                        : "bg-red-500/10 text-red-500"
-                    }`}
+                    className="px-1.5 py-0.5 rounded bg-muted"
                     title={entry.error || "Success"}
                   >
                     {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
