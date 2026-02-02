@@ -8,6 +8,9 @@ use std::time::Duration;
 
 use screenpipe_audio::audio_manager::AudioManagerBuilder;
 use screenpipe_audio::core::device::{default_input_device, default_output_device, parse_audio_device};
+use screenpipe_audio::core::engine::AudioTranscriptionEngine;
+use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
+use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
 use screenpipe_server::{PipeManager, ResourceMonitor, SCServer, start_continuous_recording};
 use screenpipe_vision::OcrEngine;
@@ -45,7 +48,7 @@ impl EmbeddedServerConfig {
         Self {
             port: store.port,
             data_dir,
-            fps: if store.fps > 0.0 { store.fps } else { 1.0 },
+            fps: if store.fps > 0.0 { store.fps as f64 } else { 1.0 },
             audio_chunk_duration: store.audio_chunk_duration as u64,
             video_chunk_duration: 30,
             disable_audio: store.disable_audio,
@@ -89,6 +92,111 @@ impl EmbeddedServerHandle {
     }
 }
 
+/// Parse language string to Language enum
+fn parse_language(s: &str) -> Option<Language> {
+    match s.to_lowercase().as_str() {
+        "english" | "en" => Some(Language::English),
+        "chinese" | "zh" => Some(Language::Chinese),
+        "german" | "de" => Some(Language::German),
+        "spanish" | "es" => Some(Language::Spanish),
+        "russian" | "ru" => Some(Language::Russian),
+        "korean" | "ko" => Some(Language::Korean),
+        "french" | "fr" => Some(Language::French),
+        "japanese" | "ja" => Some(Language::Japanese),
+        "portuguese" | "pt" => Some(Language::Portuguese),
+        "turkish" | "tr" => Some(Language::Turkish),
+        "polish" | "pl" => Some(Language::Polish),
+        "catalan" | "ca" => Some(Language::Catalan),
+        "dutch" | "nl" => Some(Language::Dutch),
+        "arabic" | "ar" => Some(Language::Arabic),
+        "swedish" | "sv" => Some(Language::Swedish),
+        "italian" | "it" => Some(Language::Italian),
+        "indonesian" | "id" => Some(Language::Indonesian),
+        "hindi" | "hi" => Some(Language::Hindi),
+        "finnish" | "fi" => Some(Language::Finnish),
+        "hebrew" | "he" => Some(Language::Hebrew),
+        "ukrainian" | "uk" => Some(Language::Ukrainian),
+        "greek" | "el" => Some(Language::Greek),
+        "malay" | "ms" => Some(Language::Malay),
+        "czech" | "cs" => Some(Language::Czech),
+        "romanian" | "ro" => Some(Language::Romanian),
+        "danish" | "da" => Some(Language::Danish),
+        "hungarian" | "hu" => Some(Language::Hungarian),
+        "norwegian" | "no" => Some(Language::Norwegian),
+        "thai" | "th" => Some(Language::Thai),
+        "urdu" | "ur" => Some(Language::Urdu),
+        "croatian" | "hr" => Some(Language::Croatian),
+        "bulgarian" | "bg" => Some(Language::Bulgarian),
+        "lithuanian" | "lt" => Some(Language::Lithuanian),
+        "latin" | "la" => Some(Language::Latin),
+        "maori" | "mi" => Some(Language::Maori),
+        "malayalam" | "ml" => Some(Language::Malayalam),
+        "welsh" | "cy" => Some(Language::Welsh),
+        "slovak" | "sk" => Some(Language::Slovak),
+        "telugu" | "te" => Some(Language::Telugu),
+        "persian" | "fa" => Some(Language::Persian),
+        "latvian" | "lv" => Some(Language::Latvian),
+        "bengali" | "bn" => Some(Language::Bengali),
+        "serbian" | "sr" => Some(Language::Serbian),
+        "azerbaijani" | "az" => Some(Language::Azerbaijani),
+        "slovenian" | "sl" => Some(Language::Slovenian),
+        "kannada" | "kn" => Some(Language::Kannada),
+        "estonian" | "et" => Some(Language::Estonian),
+        "macedonian" | "mk" => Some(Language::Macedonian),
+        "breton" | "br" => Some(Language::Breton),
+        "basque" | "eu" => Some(Language::Basque),
+        "icelandic" | "is" => Some(Language::Icelandic),
+        "armenian" | "hy" => Some(Language::Armenian),
+        "nepali" | "ne" => Some(Language::Nepali),
+        "mongolian" | "mn" => Some(Language::Mongolian),
+        "bosnian" | "bs" => Some(Language::Bosnian),
+        "kazakh" | "kk" => Some(Language::Kazakh),
+        "albanian" | "sq" => Some(Language::Albanian),
+        "swahili" | "sw" => Some(Language::Swahili),
+        "galician" | "gl" => Some(Language::Galician),
+        "marathi" | "mr" => Some(Language::Marathi),
+        "punjabi" | "pa" => Some(Language::Punjabi),
+        "sinhala" | "si" => Some(Language::Sinhala),
+        "khmer" | "km" => Some(Language::Khmer),
+        "shona" | "sn" => Some(Language::Shona),
+        "yoruba" | "yo" => Some(Language::Yoruba),
+        "somali" | "so" => Some(Language::Somali),
+        "afrikaans" | "af" => Some(Language::Afrikaans),
+        "occitan" | "oc" => Some(Language::Occitan),
+        "georgian" | "ka" => Some(Language::Georgian),
+        "belarusian" | "be" => Some(Language::Belarusian),
+        "tajik" | "tg" => Some(Language::Tajik),
+        "sindhi" | "sd" => Some(Language::Sindhi),
+        "gujarati" | "gu" => Some(Language::Gujarati),
+        "amharic" | "am" => Some(Language::Amharic),
+        "yiddish" | "yi" => Some(Language::Yiddish),
+        "lao" | "lo" => Some(Language::Lao),
+        "uzbek" | "uz" => Some(Language::Uzbek),
+        "faroese" | "fo" => Some(Language::Faroese),
+        "haitian-creole" | "ht" => Some(Language::HaitianCreole),
+        "pashto" | "ps" => Some(Language::Pashto),
+        "turkmen" | "tk" => Some(Language::Turkmen),
+        "nynorsk" | "nn" => Some(Language::Nynorsk),
+        "maltese" | "mt" => Some(Language::Maltese),
+        "sanskrit" | "sa" => Some(Language::Sanskrit),
+        "luxembourgish" | "lb" => Some(Language::Luxembourgish),
+        "myanmar" | "my" => Some(Language::Myanmar),
+        "tibetan" | "bo" => Some(Language::Tibetan),
+        "tagalog" | "tl" => Some(Language::Tagalog),
+        "malagasy" | "mg" => Some(Language::Malagasy),
+        "assamese" | "as" => Some(Language::Assamese),
+        "tatar" | "tt" => Some(Language::Tatar),
+        "hawaiian" | "haw" => Some(Language::Hawaiian),
+        "lingala" | "ln" => Some(Language::Lingala),
+        "hausa" | "ha" => Some(Language::Hausa),
+        "bashkir" | "ba" => Some(Language::Bashkir),
+        "javanese" | "jw" => Some(Language::Javanese),
+        "sundanese" | "su" => Some(Language::Sundanese),
+        "cantonese" | "yue" => Some(Language::Cantonese),
+        _ => None,
+    }
+}
+
 /// Start the embedded screenpipe server
 pub async fn start_embedded_server(
     config: EmbeddedServerConfig,
@@ -109,6 +217,13 @@ pub async fn start_embedded_server(
             .map_err(|e| format!("Failed to initialize database: {}", e))?,
     );
     info!("Database initialized at {}", db_path);
+
+    // Parse languages
+    let languages: Vec<Language> = config
+        .languages
+        .iter()
+        .filter_map(|s| parse_language(s))
+        .collect();
 
     // Set up audio devices
     let mut audio_devices = Vec::new();
@@ -135,18 +250,16 @@ pub async fn start_embedded_server(
     // Build audio manager
     let audio_manager = AudioManagerBuilder::new()
         .audio_chunk_duration(Duration::from_secs(config.audio_chunk_duration))
-        .vad_engine(screenpipe_audio::vad_engine::VadEngineEnum::Silero)
+        .vad_engine(VadEngineEnum::Silero)
         .vad_sensitivity(match config.vad_sensitivity.as_str() {
-            "low" => screenpipe_audio::vad_engine::VadSensitivity::Low,
-            "medium" => screenpipe_audio::vad_engine::VadSensitivity::Medium,
-            _ => screenpipe_audio::vad_engine::VadSensitivity::High,
+            "low" => VadSensitivity::Low,
+            "medium" => VadSensitivity::Medium,
+            _ => VadSensitivity::High,
         })
-        .languages(config.languages.clone())
+        .languages(languages.clone())
         .transcription_engine(match config.audio_transcription_engine.as_str() {
-            "deepgram" | "screenpipe-cloud" => {
-                screenpipe_audio::transcription::AudioTranscriptionEngine::Deepgram
-            }
-            _ => screenpipe_audio::transcription::AudioTranscriptionEngine::WhisperLargeV3Turbo,
+            "deepgram" | "screenpipe-cloud" => AudioTranscriptionEngine::Deepgram,
+            _ => AudioTranscriptionEngine::WhisperLargeV3Turbo,
         })
         .enabled_devices(audio_devices.clone())
         .deepgram_api_key(config.deepgram_api_key.clone())
@@ -203,7 +316,7 @@ pub async fn start_embedded_server(
         let use_pii_removal = config.use_pii_removal;
         let ignored_windows = config.ignored_windows.clone();
         let included_windows = config.included_windows.clone();
-        let languages = config.languages.clone();
+        let languages = languages.clone();
 
         let shutdown_rx = shutdown_tx_clone.subscribe();
 
