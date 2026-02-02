@@ -459,6 +459,117 @@ pub async fn obsidian_stop_scheduler(
     Ok(())
 }
 
+/// Auto-start the scheduler on app launch if it was previously enabled
+pub async fn auto_start_scheduler(app: AppHandle, state: &ObsidianSyncState) {
+    info!("Checking if obsidian scheduler should auto-start...");
+    
+    // Load obsidian settings from store
+    let obsidian_settings = match ObsidianSettingsStore::get(&app) {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            info!("No obsidian settings found, skipping auto-start");
+            return;
+        }
+        Err(e) => {
+            warn!("Failed to load obsidian settings: {}", e);
+            return;
+        }
+    };
+
+    if !obsidian_settings.enabled {
+        info!("Obsidian scheduler is disabled, skipping auto-start");
+        return;
+    }
+
+    if obsidian_settings.vault_path.is_empty() {
+        info!("Obsidian vault path is empty, skipping auto-start");
+        return;
+    }
+
+    if obsidian_settings.sync_interval_minutes == 0 {
+        info!("Obsidian sync interval is 0, skipping auto-start");
+        return;
+    }
+
+    // Get user token from settings store
+    let user_token = match SettingsStore::get(&app) {
+        Ok(Some(s)) => s.user.token,
+        _ => None,
+    };
+
+    if user_token.is_none() {
+        info!("No user token found, skipping obsidian auto-start (requires login)");
+        return;
+    }
+
+    // Convert store settings to sync settings
+    let settings = ObsidianSyncSettings {
+        enabled: obsidian_settings.enabled,
+        vault_path: obsidian_settings.vault_path,
+        notes_path: obsidian_settings.notes_path,
+        sync_interval_minutes: obsidian_settings.sync_interval_minutes,
+        custom_prompt: obsidian_settings.custom_prompt,
+        last_sync_time: None,
+        sync_hours: obsidian_settings.sync_hours,
+    };
+
+    info!("Auto-starting obsidian scheduler with {}min interval", settings.sync_interval_minutes);
+
+    // Start the scheduler (similar to obsidian_start_scheduler but without tauri::State)
+    let interval_mins = settings.sync_interval_minutes;
+    let settings_clone = settings.clone();
+    let status_arc = state.status.clone();
+    let current_pid_arc = state.current_pid.clone();
+    let app_handle = app.clone();
+    let token_clone = user_token.clone();
+
+    let handle = tokio::spawn(async move {
+        info!("Obsidian scheduler task started (auto-start), interval: {}min", interval_mins);
+        
+        let mut interval =
+            tokio::time::interval(tokio::time::Duration::from_secs(interval_mins as u64 * 60));
+
+        // Skip the first tick (immediate)
+        interval.tick().await;
+        info!("Obsidian scheduler: first tick skipped, waiting for next interval");
+
+        loop {
+            info!("Obsidian scheduler: waiting for next tick...");
+            interval.tick().await;
+            info!("Obsidian scheduler: tick received at {:?}", chrono::Utc::now());
+
+            // Check if we should sync
+            {
+                let status = status_arc.lock().await;
+                if status.is_syncing {
+                    info!("Obsidian scheduler: skipping - already syncing");
+                    continue;
+                }
+            }
+
+            info!("Running scheduled obsidian sync");
+
+            // Run sync
+            let result = run_scheduled_sync(&app_handle, &settings_clone, &status_arc, &current_pid_arc, token_clone.as_deref()).await;
+
+            match result {
+                Ok(_) => {
+                    info!("Scheduled obsidian sync completed successfully");
+                }
+                Err(e) => {
+                    warn!("Scheduled obsidian sync failed: {}", e);
+                }
+            }
+        }
+    });
+
+    // Store the handle
+    let mut scheduler_handle = state.scheduler_handle.lock().await;
+    *scheduler_handle = Some(handle);
+    
+    info!("Obsidian scheduler auto-started successfully");
+}
+
 /// Cancel the currently running sync
 #[tauri::command]
 #[specta::specta]

@@ -1267,6 +1267,21 @@ async fn main() {
                     warn!("Failed to initialize global shortcuts: {}", e);
                 }
             });
+
+            // Auto-start obsidian sync scheduler if it was enabled
+            let app_handle_clone = app_handle.clone();
+            let obsidian_state = app_handle.state::<obsidian_sync::ObsidianSyncState>();
+            let obsidian_state_clone = obsidian_sync::ObsidianSyncState {
+                status: obsidian_state.status.clone(),
+                scheduler_handle: obsidian_state.scheduler_handle.clone(),
+                current_pid: obsidian_state.current_pid.clone(),
+            };
+            tauri::async_runtime::spawn(async move {
+                // Small delay to ensure everything is ready
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                obsidian_sync::auto_start_scheduler(app_handle_clone, &obsidian_state_clone).await;
+            });
+
             Ok(())
         })
         .build(tauri::generate_context!())
