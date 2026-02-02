@@ -1,6 +1,6 @@
 //! Obsidian Sync Module
 //!
-//! Syncs screenpipe activity data to an Obsidian vault using opencode as the AI agent.
+//! Syncs screenpipe activity data to an Obsidian vault using pi as the AI agent.
 //! The agent queries screenpipe API in chunks and generates markdown summaries.
 
 use serde::{Deserialize, Serialize};
@@ -273,6 +273,7 @@ pub async fn obsidian_run_sync(
     app: AppHandle,
     state: tauri::State<'_, ObsidianSyncState>,
     settings: ObsidianSyncSettings,
+    user_token: Option<String>,
 ) -> Result<ObsidianSyncStatus, String> {
     // Check if already syncing
     {
@@ -311,7 +312,7 @@ pub async fn obsidian_run_sync(
     let prompt = build_prompt(&settings, &start_time_str, &end_time_str);
 
     // Run opencode
-    let result = run_opencode_sync(&app, &prompt).await;
+    let result = run_pi_sync(&app, &prompt, user_token.as_deref()).await;
 
     // Update status based on result
     {
@@ -336,26 +337,75 @@ pub async fn obsidian_run_sync(
     result.map(|_| status.clone())
 }
 
-/// Internal function to run opencode with the sync prompt
-async fn run_opencode_sync(app: &AppHandle, prompt: &str) -> Result<(), String> {
-    info!("Starting obsidian sync with opencode");
+/// Ensure pi is configured to use screenpipe as the AI provider
+fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
+    let config_dir = dirs::home_dir()
+        .ok_or("Could not find home directory")?
+        .join(".pi")
+        .join("agent");
+    
+    std::fs::create_dir_all(&config_dir)
+        .map_err(|e| format!("Failed to create pi config dir: {}", e))?;
+    
+    let models_path = config_dir.join("models.json");
+    
+    // Create models.json with screenpipe provider
+    let config = serde_json::json!({
+        "providers": {
+            "screenpipe": {
+                "api": "anthropic",
+                "baseURL": "https://api.screenpi.pe/anthropic",
+                "models": {
+                    "claude-sonnet-4-20250514": {
+                        "name": "Claude Sonnet 4"
+                    },
+                    "claude-haiku-4-5-20251001": {
+                        "name": "Claude Haiku 4.5"
+                    }
+                }
+            }
+        }
+    });
+    
+    let config_str = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    
+    std::fs::write(&models_path, config_str)
+        .map_err(|e| format!("Failed to write pi config: {}", e))?;
+    
+    info!("Pi config written to {:?}", models_path);
+    Ok(())
+}
 
+/// Internal function to run pi with the sync prompt
+async fn run_pi_sync(app: &AppHandle, prompt: &str, user_token: Option<&str>) -> Result<(), String> {
+    info!("Starting obsidian sync with pi");
+
+    // Ensure pi is configured to use screenpipe provider
+    ensure_pi_config(user_token)?;
+    
     let shell = app.shell();
     
-    // Try multiple ways to find opencode:
-    // 1. Sidecar (bundled with app)
-    // 2. Common install locations
-    // 3. PATH
+    // Build args: pi -p "prompt" --provider screenpipe --api-key <token>
+    let mut args = vec!["-p".to_string(), prompt.to_string(), "--provider".to_string(), "screenpipe".to_string()];
     
-    let spawn_result = if let Ok(cmd) = shell.sidecar("opencode") {
-        info!("Using opencode sidecar");
-        cmd.args(&["run", prompt]).spawn()
+    if let Some(token) = user_token {
+        args.push("--api-key".to_string());
+        args.push(token.to_string());
+    }
+    
+    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    
+    // Try multiple ways to find pi
+    let spawn_result = if let Ok(cmd) = shell.sidecar("pi") {
+        info!("Using pi sidecar");
+        cmd.args(&args_ref).spawn()
     } else {
         // Try common locations first
         let common_paths = [
-            "/opt/homebrew/bin/opencode",  // macOS ARM homebrew
-            "/usr/local/bin/opencode",      // macOS Intel / Linux
-            "/usr/bin/opencode",            // Linux system
+            "/opt/homebrew/bin/pi",     // macOS ARM homebrew
+            "/usr/local/bin/pi",        // macOS Intel / Linux
+            "/usr/bin/pi",              // Linux system
         ];
         
         let mut found_path: Option<&str> = None;
@@ -367,17 +417,17 @@ async fn run_opencode_sync(app: &AppHandle, prompt: &str) -> Result<(), String> 
         }
         
         if let Some(path) = found_path {
-            info!("Using opencode at: {}", path);
-            shell.command(path).args(&["run", prompt]).spawn()
+            info!("Using pi at: {}", path);
+            shell.command(path).args(&args_ref).spawn()
         } else {
             // Last resort: try PATH
-            info!("Trying opencode from PATH");
-            shell.command("opencode").args(&["run", prompt]).spawn()
+            info!("Trying pi from PATH");
+            shell.command("pi").args(&args_ref).spawn()
         }
     };
 
     let (mut rx, _child) = spawn_result
-        .map_err(|e| format!("Failed to spawn opencode: {}. Make sure opencode is installed (bun add -g opencode-ai)", e))?;
+        .map_err(|e| format!("Failed to spawn pi: {}. Make sure pi is installed (npm install -g @mariozechner/pi-coding-agent)", e))?;
 
     // Collect output
     let mut stdout_lines = Vec::new();
@@ -388,12 +438,12 @@ async fn run_opencode_sync(app: &AppHandle, prompt: &str) -> Result<(), String> 
         match event {
             CommandEvent::Stdout(line) => {
                 let text = String::from_utf8_lossy(&line).to_string();
-                debug!("opencode stdout: {}", text);
+                debug!("pi stdout: {}", text);
                 stdout_lines.push(text);
             }
             CommandEvent::Stderr(line) => {
                 let text = String::from_utf8_lossy(&line).to_string();
-                debug!("opencode stderr: {}", text);
+                debug!("pi stderr: {}", text);
                 stderr_lines.push(text);
             }
             CommandEvent::Terminated(payload) => {
@@ -401,8 +451,8 @@ async fn run_opencode_sync(app: &AppHandle, prompt: &str) -> Result<(), String> 
                 break;
             }
             CommandEvent::Error(e) => {
-                error!("opencode error: {}", e);
-                return Err(format!("Opencode error: {}", e));
+                error!("pi error: {}", e);
+                return Err(format!("Pi error: {}", e));
             }
             _ => {}
         }
@@ -417,12 +467,12 @@ async fn run_opencode_sync(app: &AppHandle, prompt: &str) -> Result<(), String> 
             let error_msg = if !stderr_lines.is_empty() {
                 stderr_lines.join("\n")
             } else {
-                format!("Opencode exited with code {}", code)
+                format!("Pi exited with code {}", code)
             };
             error!("Obsidian sync failed: {}", error_msg);
             Err(error_msg)
         }
-        None => Err("Opencode terminated without exit code".to_string()),
+        None => Err("Pi terminated without exit code".to_string()),
     }
 }
 
@@ -433,6 +483,7 @@ pub async fn obsidian_start_scheduler(
     app: AppHandle,
     state: tauri::State<'_, ObsidianSyncState>,
     settings: ObsidianSyncSettings,
+    user_token: Option<String>,
 ) -> Result<(), String> {
     // Stop existing scheduler if any
     obsidian_stop_scheduler(state.clone()).await?;
@@ -446,6 +497,7 @@ pub async fn obsidian_start_scheduler(
     let settings_clone = settings.clone();
     let status_arc = state.status.clone();
     let app_handle = app.clone();
+    let token_clone = user_token.clone();
 
     info!(
         "Starting obsidian sync scheduler with {}min interval",
@@ -473,8 +525,8 @@ pub async fn obsidian_start_scheduler(
 
             info!("Running scheduled obsidian sync");
 
-            // Run sync (we can't use the command directly, so replicate the logic)
-            let result = run_scheduled_sync(&app_handle, &settings_clone, &status_arc).await;
+            // Run sync
+            let result = run_scheduled_sync(&app_handle, &settings_clone, &status_arc, token_clone.as_deref()).await;
 
             if let Err(e) = result {
                 warn!("Scheduled obsidian sync failed: {}", e);
@@ -508,6 +560,7 @@ async fn run_scheduled_sync(
     app: &AppHandle,
     settings: &ObsidianSyncSettings,
     status: &Arc<Mutex<ObsidianSyncStatus>>,
+    user_token: Option<&str>,
 ) -> Result<(), String> {
     // Update status
     {
@@ -523,7 +576,7 @@ async fn run_scheduled_sync(
     let start_time = end_time - chrono::Duration::hours(settings.sync_hours as i64);
 
     let prompt = build_prompt(settings, &start_time.to_rfc3339(), &end_time.to_rfc3339());
-    let result = run_opencode_sync(app, &prompt).await;
+    let result = run_pi_sync(app, &prompt, user_token).await;
 
     // Update status
     {

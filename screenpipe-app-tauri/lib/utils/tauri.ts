@@ -426,9 +426,9 @@ async obsidianGetSyncStatus() : Promise<Result<ObsidianSyncStatus, string>> {
 /**
  * Run a sync operation (manual trigger or from scheduler)
  */
-async obsidianRunSync(settings: ObsidianSyncSettings) : Promise<Result<ObsidianSyncStatus, string>> {
+async obsidianRunSync(settings: ObsidianSyncSettings, userToken: string | null) : Promise<Result<ObsidianSyncStatus, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("obsidian_run_sync", { settings }) };
+    return { status: "ok", data: await TAURI_INVOKE("obsidian_run_sync", { settings, userToken }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -437,9 +437,9 @@ async obsidianRunSync(settings: ObsidianSyncSettings) : Promise<Result<ObsidianS
 /**
  * Start the background scheduler for periodic syncs
  */
-async obsidianStartScheduler(settings: ObsidianSyncSettings) : Promise<Result<null, string>> {
+async obsidianStartScheduler(settings: ObsidianSyncSettings, userToken: string | null) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("obsidian_start_scheduler", { settings }) };
+    return { status: "ok", data: await TAURI_INVOKE("obsidian_start_scheduler", { settings, userToken }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

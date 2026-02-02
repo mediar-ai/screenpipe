@@ -296,7 +296,7 @@ export function ObsidianSyncCard() {
     }
 
     try {
-      await invoke("obsidian_run_sync", { settings });
+      await invoke("obsidian_run_sync", { settings, userToken: appSettings?.user?.token });
     } catch (e) {
       console.error("Failed to run sync:", e);
       toast({
@@ -315,7 +315,7 @@ export function ObsidianSyncCard() {
     try {
       const newSettings = { ...settings, enabled: true };
       setSettings(newSettings);
-      await invoke("obsidian_start_scheduler", { settings: newSettings });
+      await invoke("obsidian_start_scheduler", { settings: newSettings, userToken: appSettings?.user?.token });
       toast({
         title: "Scheduler started",
         description: `Syncing every ${settings.syncIntervalMinutes} minutes`,
