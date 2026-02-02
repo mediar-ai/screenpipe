@@ -46,6 +46,8 @@ pub struct EmbeddedServerConfig {
 
 impl EmbeddedServerConfig {
     pub fn from_store(store: &SettingsStore, data_dir: PathBuf) -> Self {
+        info!("Building EmbeddedServerConfig from store: enable_ui_events={}, disable_audio={}, disable_vision={}", 
+              store.enable_ui_events, store.disable_audio, store.disable_vision);
         Self {
             port: store.port,
             data_dir,
@@ -350,6 +352,7 @@ pub async fn start_embedded_server(
     }
 
     // Start UI event recording (accessibility events)
+    info!("UI events setting: enable_ui_events={}", config.enable_ui_events);
     if config.enable_ui_events {
         let ui_config = UiRecorderConfig {
             enabled: true,
@@ -358,8 +361,10 @@ pub async fn start_embedded_server(
         let db_clone = db.clone();
         tokio::spawn(async move {
             match start_ui_recording(db_clone, ui_config).await {
-                Ok(_handle) => {
+                Ok(handle) => {
                     info!("UI event recording started successfully");
+                    // Keep the handle alive - don't drop it or UI recording stops
+                    std::mem::forget(handle);
                 }
                 Err(e) => {
                     error!("Failed to start UI event recording: {}", e);

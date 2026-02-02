@@ -105,7 +105,7 @@ md5 = "0.7"
 screenpipe-core = { path = "../../screenpipe-core", features = ["cloud-sync"] }
 
 # Embedded screenpipe server
-screenpipe-server = { path = "../../screenpipe-server", default-features = false }
+screenpipe-server = { path = "../../screenpipe-server", default-features = false, features = ["ui-events"] }
 screenpipe-vision = { path = "../../screenpipe-vision" }
 screenpipe-audio = { path = "../../screenpipe-audio" }
 screenpipe-db = { path = "../../screenpipe-db" }

@@ -568,3 +568,43 @@ pub fn init_onboarding_store(app: &AppHandle) -> Result<OnboardingStore, String>
     }
     Ok(onboarding)
 }
+
+/// Obsidian sync settings stored persistently
+#[derive(Serialize, Deserialize, Type, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ObsidianSettingsStore {
+    pub enabled: bool,
+    pub vault_path: String,
+    #[serde(default = "default_notes_path")]
+    pub notes_path: String,
+    pub sync_interval_minutes: u32,
+    pub custom_prompt: String,
+    pub sync_hours: u32,
+}
+
+fn default_notes_path() -> String {
+    "screenpipe/logs".to_string()
+}
+
+impl ObsidianSettingsStore {
+    pub fn get(app: &AppHandle) -> Result<Option<Self>, String> {
+        let store = get_store(app, None).map_err(|e| e.to_string())?;
+
+        match store.is_empty() {
+            true => Ok(None),
+            false => {
+                let settings = serde_json::from_value(store.get("obsidian").unwrap_or(Value::Null));
+                match settings {
+                    Ok(settings) => Ok(settings),
+                    Err(_) => Ok(None),
+                }
+            }
+        }
+    }
+
+    pub fn save(&self, app: &AppHandle) -> Result<(), String> {
+        let store = get_store(app, None).map_err(|e| e.to_string())?;
+        store.set("obsidian", json!(self));
+        store.save().map_err(|e| e.to_string())
+    }
+}

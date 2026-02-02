@@ -1460,14 +1460,32 @@ dependencies = [
 
 [[package]]
 name = "cidre"
-version = "0.14.0"
-source = "git+https://github.com/yury/cidre.git#1c1f8bc2d8246dfb9d394a62faf1b2d72d8a9921"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aeb5b1ace98faf1a55e3631d63427f267897cfab7b65b1d5928cb0b8e6a4a194"
 dependencies = [
- "cidre-macros",
+ "cidre-macros 0.4.0",
  "half",
  "parking_lot",
  "tokio",
 ]
+
+[[package]]
+name = "cidre"
+version = "0.14.0"
+source = "git+https://github.com/yury/cidre.git#1c1f8bc2d8246dfb9d394a62faf1b2d72d8a9921"
+dependencies = [
+ "cidre-macros 0.5.0",
+ "half",
+ "parking_lot",
+ "tokio",
+]
+
+[[package]]
+name = "cidre-macros"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5da2cdee573cf967cf4fec1f95f12a16dce31efb6d104238a8cb114cbdae1780"
 
 [[package]]
 name = "cidre-macros"
@@ -1959,7 +1977,7 @@ version = "0.15.3"
 source = "git+https://github.com/louis030195/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
 dependencies = [
  "alsa",
- "cidre",
+ "cidre 0.14.0",
  "core-foundation-sys 0.8.7",
  "coreaudio-rs",
  "dasp_sample",
@@ -8552,7 +8570,7 @@ name = "sck-rs"
 version = "0.1.0"
 source = "git+https://github.com/louis030195/sck-rs#4bb14e4e18722fad1bdc8a105f568dbc30acfe8a"
 dependencies = [
- "cidre",
+ "cidre 0.14.0",
  "core-foundation 0.10.1",
  "core-graphics 0.24.0",
  "image 0.25.5",
@@ -8573,6 +8591,24 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "screenpipe-accessibility"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "cidre 0.13.1",
+ "crossbeam-channel",
+ "parking_lot",
+ "regex",
+ "screenpipe-core",
+ "screenpipe-db",
+ "serde",
+ "serde_json",
+ "tracing",
+ "windows 0.58.0",
+]
 
 [[package]]
 name = "screenpipe-app"
@@ -8821,7 +8857,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "chrono",
- "cidre",
+ "cidre 0.14.0",
  "clap",
  "clap_complete",
  "colored",
@@ -8846,6 +8882,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rust-stemmers",
+ "screenpipe-accessibility",
  "screenpipe-audio",
  "screenpipe-core",
  "screenpipe-db",
@@ -8882,7 +8919,7 @@ dependencies = [
  "atspi-proxies",
  "base64 0.22.1",
  "chrono",
- "cidre",
+ "cidre 0.14.0",
  "clap",
  "core-foundation 0.10.1",
  "image 0.25.5",

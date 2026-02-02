@@ -4,13 +4,14 @@
 //! The agent queries screenpipe API in chunks and generates markdown summaries.
 
 use crate::pi;
+use crate::store::{ObsidianSettingsStore, SettingsStore};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 /// Obsidian sync settings stored in the app store
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Default)]
@@ -367,6 +368,19 @@ pub async fn obsidian_start_scheduler(
     // Stop existing scheduler if any
     obsidian_stop_scheduler(state.clone()).await?;
 
+    // Save settings to persistent store for auto-restart on app launch
+    let store_settings = ObsidianSettingsStore {
+        enabled: settings.enabled,
+        vault_path: settings.vault_path.clone(),
+        notes_path: settings.notes_path.clone(),
+        sync_interval_minutes: settings.sync_interval_minutes,
+        custom_prompt: settings.custom_prompt.clone(),
+        sync_hours: settings.sync_hours,
+    };
+    if let Err(e) = store_settings.save(&app) {
+        warn!("Failed to save obsidian settings to store: {}", e);
+    }
+
     if !settings.enabled || settings.sync_interval_minutes == 0 {
         info!("Obsidian sync scheduler not started (disabled or interval=0)");
         return Ok(());
@@ -385,20 +399,25 @@ pub async fn obsidian_start_scheduler(
     );
 
     let handle = tokio::spawn(async move {
+        info!("Obsidian scheduler task started, interval: {}min", interval_mins);
+        
         let mut interval =
             tokio::time::interval(tokio::time::Duration::from_secs(interval_mins as u64 * 60));
 
         // Skip the first tick (immediate)
         interval.tick().await;
+        info!("Obsidian scheduler: first tick skipped, waiting for next interval");
 
         loop {
+            info!("Obsidian scheduler: waiting for next tick...");
             interval.tick().await;
+            info!("Obsidian scheduler: tick received at {:?}", chrono::Utc::now());
 
             // Check if we should sync
             {
                 let status = status_arc.lock().await;
                 if status.is_syncing {
-                    debug!("Skipping scheduled sync - already syncing");
+                    info!("Obsidian scheduler: skipping - already syncing");
                     continue;
                 }
             }
@@ -408,8 +427,13 @@ pub async fn obsidian_start_scheduler(
             // Run sync
             let result = run_scheduled_sync(&app_handle, &settings_clone, &status_arc, &current_pid_arc, token_clone.as_deref()).await;
 
-            if let Err(e) = result {
-                warn!("Scheduled obsidian sync failed: {}", e);
+            match result {
+                Ok(_) => {
+                    info!("Scheduled obsidian sync completed successfully");
+                }
+                Err(e) => {
+                    warn!("Scheduled obsidian sync failed: {}", e);
+                }
             }
         }
     });
