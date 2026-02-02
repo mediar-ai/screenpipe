@@ -164,6 +164,10 @@ Create/append to the daily log file using this markdown table format:
 - Use curl to fetch data from the API
 - Write files using the write tool
 - Create the subfolder structure if it doesn't exist
+- ONLY create/modify the single daily log file (YYYY-MM-DD.md) - DO NOT create any other files like INDEX.md, TODO.md, QUICK_REF.txt, etc.
+- Each sync should append to or update the existing daily log file, not create new files
+- Use the user's LOCAL timezone for all times displayed in the log (convert UTC timestamps to local time)
+- Detect timezone from the system or use the timestamp offsets in the data
 "#;
 
 /// Build the full prompt for opencode
@@ -198,6 +202,26 @@ Output file: {}
     }
 
     prompt
+}
+
+/// Save obsidian settings to persistent store (called when settings change)
+#[tauri::command]
+#[specta::specta]
+pub async fn obsidian_save_settings(
+    app: AppHandle,
+    settings: ObsidianSyncSettings,
+) -> Result<(), String> {
+    let store_settings = ObsidianSettingsStore {
+        enabled: settings.enabled,
+        vault_path: settings.vault_path,
+        notes_path: settings.notes_path,
+        sync_interval_minutes: settings.sync_interval_minutes,
+        custom_prompt: settings.custom_prompt,
+        sync_hours: settings.sync_hours,
+    };
+    store_settings.save(&app)?;
+    info!("Obsidian settings saved to store");
+    Ok(())
 }
 
 /// Validate that a path is a valid Obsidian vault (has .obsidian folder)

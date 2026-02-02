@@ -407,6 +407,17 @@ async opencodeInstall() : Promise<Result<null, string>> {
 }
 },
 /**
+ * Save obsidian settings to persistent store (called when settings change)
+ */
+async obsidianSaveSettings(settings: ObsidianSyncSettings) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("obsidian_save_settings", { settings }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Validate that a path is a valid Obsidian vault (has .obsidian folder)
  */
 async obsidianValidateVault(path: string) : Promise<Result<boolean, string>> {

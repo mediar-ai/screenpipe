@@ -727,7 +727,7 @@ async fn main() {
 
     let sentry_guard = if !telemetry_disabled {
         Some(sentry::init((
-            "https://ee250955c0511823f71188e7cd64cf5f@o4505591122886656.ingest.us.sentry.io/4510761352364032",
+            "https://da4edafe2c8e5e8682505945695ecad7@o4505591122886656.ingest.us.sentry.io/4510761355116544",
             sentry::ClientOptions {
                 release: sentry::release_name!(),
                 ..Default::default()
@@ -826,6 +826,7 @@ async fn main() {
                 opencode::opencode_check,
                 opencode::opencode_install,
                 // Obsidian Sync commands
+                obsidian_sync::obsidian_save_settings,
                 obsidian_sync::obsidian_validate_vault,
                 obsidian_sync::obsidian_get_vault_paths,
                 obsidian_sync::obsidian_get_sync_status,
@@ -970,6 +971,7 @@ async fn main() {
             opencode::opencode_check,
             opencode::opencode_install,
             // Obsidian Sync commands
+            obsidian_sync::obsidian_save_settings,
             obsidian_sync::obsidian_validate_vault,
             obsidian_sync::obsidian_get_vault_paths,
             obsidian_sync::obsidian_get_sync_status,

@@ -196,12 +196,50 @@ export function ObsidianSyncCard() {
     fetchStatus();
   }, []);
 
-  // Save settings to localStorage when they change (only after initial load)
+  // Save settings to localStorage immediately
   useEffect(() => {
     if (settingsLoaded) {
       localStorage.setItem("obsidian-sync-settings", JSON.stringify(settings));
     }
   }, [settings, settingsLoaded]);
+
+  // Debounced save to Rust store (just persist, don't restart scheduler)
+  useEffect(() => {
+    if (!settingsLoaded) return;
+
+    const timeoutId = setTimeout(() => {
+      // Save to Rust store for persistence across app restarts
+      invoke("obsidian_save_settings", { settings }).catch((e) => {
+        console.error("Failed to save obsidian settings to store:", e);
+      });
+    }, 1000); // 1 second debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [settings, settingsLoaded]);
+
+  // Only restart scheduler when interval changes (not on every settings change)
+  const prevIntervalRef = React.useRef(settings.syncIntervalMinutes);
+  const prevEnabledRef = React.useRef(settings.enabled);
+  
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    
+    const intervalChanged = prevIntervalRef.current !== settings.syncIntervalMinutes;
+    const enabledChanged = prevEnabledRef.current !== settings.enabled;
+    
+    prevIntervalRef.current = settings.syncIntervalMinutes;
+    prevEnabledRef.current = settings.enabled;
+    
+    // Only restart if interval or enabled status changed
+    if ((intervalChanged || enabledChanged) && settings.enabled && isValidVault && settings.syncIntervalMinutes > 0 && appSettings?.user?.token) {
+      invoke("obsidian_start_scheduler", { 
+        settings, 
+        userToken: appSettings.user.token 
+      }).catch((e) => {
+        console.error("Failed to restart scheduler:", e);
+      });
+    }
+  }, [settings.syncIntervalMinutes, settings.enabled, settingsLoaded, isValidVault, appSettings?.user?.token]);
 
   // Validate vault path when it changes
   useEffect(() => {
