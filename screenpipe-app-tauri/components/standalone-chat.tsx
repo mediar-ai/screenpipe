@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { homeDir } from "@tauri-apps/api/path";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useSettings, ChatMessage, ChatConversation } from "@/lib/hooks/use-settings";
@@ -187,10 +186,6 @@ export function StandaloneChat() {
   const [showHistory, setShowHistory] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
 
-  // OpenCode state - tracks the dynamic URL of the running opencode sidecar
-  const [opencodeBaseUrl, setOpencodeBaseUrl] = useState<string | null>(null);
-  const [isStartingOpencode, setIsStartingOpencode] = useState(false);
-
   // Process an image file to base64
   const processImageFile = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) return;
@@ -223,52 +218,6 @@ export function StandaloneChat() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSettingsLoaded]);
-
-  // Start OpenCode sidecar when provider is opencode
-  useEffect(() => {
-    if (activePreset?.provider !== "opencode") {
-      setOpencodeBaseUrl(null);
-      return;
-    }
-
-    const startOpencode = async () => {
-      setIsStartingOpencode(true);
-      try {
-        // First check if already running
-        const infoResult = await commands.opencodeInfo();
-        if (infoResult.status === "ok" && infoResult.data.running && infoResult.data.baseUrl) {
-          setOpencodeBaseUrl(infoResult.data.baseUrl);
-          setIsStartingOpencode(false);
-          return;
-        }
-
-        // Start opencode in the user's home directory
-        const homeDirPath = await homeDir();
-        const startResult = await commands.opencodeStart(homeDirPath, settings.user?.token || null);
-        if (startResult.status === "ok" && startResult.data.baseUrl) {
-          setOpencodeBaseUrl(startResult.data.baseUrl);
-        } else {
-          console.error("Failed to start opencode:", startResult.status === "error" ? startResult.error : "No base URL");
-          toast({
-            title: "Failed to start OpenCode",
-            description: "Could not start the OpenCode sidecar. Try restarting the app.",
-            variant: "destructive",
-          });
-        }
-      } catch (e) {
-        console.error("Error starting opencode:", e);
-        toast({
-          title: "OpenCode Error",
-          description: e instanceof Error ? e.message : "Unknown error",
-          variant: "destructive",
-        });
-      } finally {
-        setIsStartingOpencode(false);
-      }
-    };
-
-    startOpencode();
-  }, [activePreset?.provider, settings.user?.token]);
 
   // Save conversation to settings
   const saveConversation = async (msgs: Message[]) => {
@@ -703,8 +652,7 @@ export function StandaloneChat() {
   const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
   const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
   const needsOpencodeLogin = activePreset?.provider === "opencode" && !settings.user?.token;
-  const opencodeNotReady = activePreset?.provider === "opencode" && !opencodeBaseUrl;
-  const canChat = hasPresets && hasValidModel && !needsLogin && !needsOpencodeLogin && !opencodeNotReady;
+  const canChat = hasPresets && hasValidModel && !needsLogin && !needsOpencodeLogin;
 
   const getDisabledReason = (): string | null => {
     if (!hasPresets) return "No AI presets configured";
@@ -712,8 +660,6 @@ export function StandaloneChat() {
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset`;
     if (needsLogin) return "Login required for Screenpipe Cloud";
     if (needsOpencodeLogin) return "Login required for OpenCode";
-    if (isStartingOpencode) return "Starting OpenCode...";
-    if (opencodeNotReady) return "OpenCode not ready";
     return null;
   };
   const disabledReason = getDisabledReason();
@@ -825,15 +771,12 @@ export function StandaloneChat() {
   function getOpenAIClient(): OpenAI | null {
     if (!activePreset) return null;
 
-    // Handle opencode provider - uses dynamic URL from running sidecar
+    // Handle opencode provider - uses screenpipe-cloud directly with Claude models
+    // OpenCode CLI doesn't expose an OpenAI-compatible API, so we use the cloud directly
     if (activePreset.provider === "opencode") {
-      if (!opencodeBaseUrl) {
-        console.log("[Chat] OpenCode not ready yet, waiting...");
-        return null;
-      }
       return new OpenAI({
         apiKey: settings.user?.token || "anonymous",
-        baseURL: opencodeBaseUrl,
+        baseURL: "https://api.screenpi.pe/v1",
         dangerouslyAllowBrowser: true,
         defaultHeaders: settings.deviceId ? { "X-Device-Id": settings.deviceId } : {},
       });
@@ -1390,7 +1333,7 @@ export function StandaloneChat() {
             </div>
             <div className="text-center space-y-2">
               <h3 className="font-semibold tracking-tight">
-                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : (isStartingOpencode ? "Starting OpenCode..." : (opencodeNotReady ? "OpenCode Not Ready" : (needsLogin || needsOpencodeLogin ? "Login Required" : "Setup Required")))}
+                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : (needsLogin || needsOpencodeLogin ? "Login Required" : "Setup Required")}
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
                 {disabledReason}

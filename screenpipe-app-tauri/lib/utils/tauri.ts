@@ -244,7 +244,7 @@ async setSyncEnabled(enabled: boolean) : Promise<Result<null, string>> {
 }
 },
 /**
- * Trigger an immediate sync.
+ * Trigger an immediate sync via the screenpipe server.
  */
 async triggerSync() : Promise<Result<null, string>> {
     try {
@@ -387,6 +387,72 @@ async opencodeInstall() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Validate that a path is a valid Obsidian vault (has .obsidian folder)
+ */
+async obsidianValidateVault(path: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("obsidian_validate_vault", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Get suggested Obsidian vault paths by scanning common locations
+ */
+async obsidianGetVaultPaths() : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("obsidian_get_vault_paths") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Get current sync status
+ */
+async obsidianGetSyncStatus() : Promise<Result<ObsidianSyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("obsidian_get_sync_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Run a sync operation (manual trigger or from scheduler)
+ */
+async obsidianRunSync(settings: ObsidianSyncSettings) : Promise<Result<ObsidianSyncStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("obsidian_run_sync", { settings }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Start the background scheduler for periodic syncs
+ */
+async obsidianStartScheduler(settings: ObsidianSyncSettings) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("obsidian_start_scheduler", { settings }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stop the background scheduler
+ */
+async obsidianStopScheduler() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("obsidian_stop_scheduler") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -409,6 +475,42 @@ export type LogFile = { name: string; path: string; modified_at: bigint }
 export type OSPermission = "screenRecording" | "microphone" | "accessibility"
 export type OSPermissionStatus = "notNeeded" | "empty" | "granted" | "denied"
 export type OSPermissionsCheck = { screenRecording: OSPermissionStatus; microphone: OSPermissionStatus; accessibility: OSPermissionStatus }
+/**
+ * Obsidian sync settings stored in the app store
+ */
+export type ObsidianSyncSettings = { 
+/**
+ * Whether sync is enabled
+ */
+enabled: boolean; 
+/**
+ * Path to the Obsidian vault
+ */
+vaultPath: string; 
+/**
+ * Subfolder within vault for notes (e.g., "screenpipe/logs" or "daily/activity")
+ */
+notesPath?: string; 
+/**
+ * Sync interval in minutes (0 = manual only)
+ */
+syncIntervalMinutes: number; 
+/**
+ * Custom user prompt to append to system prompt
+ */
+customPrompt: string; 
+/**
+ * Last successful sync timestamp (ISO 8601)
+ */
+lastSyncTime: string | null; 
+/**
+ * Number of hours to sync (how far back to look)
+ */
+syncHours: number }
+/**
+ * Status of an ongoing or completed sync
+ */
+export type ObsidianSyncStatus = { isSyncing: boolean; lastSyncTime: string | null; lastError: string | null; notesCreatedToday: number }
 export type OnboardingStore = { isCompleted: boolean; completedAt: string | null; 
 /**
  * Current step in onboarding flow (login, intro, usecases, status)
@@ -421,11 +523,16 @@ export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isL
 /**
  * Persistent analytics ID used for PostHog tracking (both frontend and backend)
  */
-analyticsId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngine: string; monitorIds: string[]; audioDevices: string[]; usePiiRemoval: boolean; restartInterval: number; port: number; dataDir: string; disableAudio: boolean; ignoredWindows: string[]; includedWindows: string[]; ignoredUrls?: string[]; fps: number; vadSensitivity: string; analyticsEnabled: boolean; audioChunkDuration: number; useChineseMirror: boolean; languages: string[]; embeddedLLM: EmbeddedLLM; enableBeta: boolean; isFirstTimeUser: boolean; autoStartEnabled: boolean; enableFrameCache: boolean; platform: string; disabledShortcuts: string[]; user: User; showScreenpipeShortcut: string; startRecordingShortcut: string; stopRecordingShortcut: string; startAudioShortcut: string; stopAudioShortcut: string; showChatShortcut: string; searchShortcut: string; enableRealtimeAudioTranscription: boolean; realtimeAudioTranscriptionEngine: string; disableVision: boolean; useAllMonitors: boolean; enableRealtimeVision: boolean; showShortcutOverlay?: boolean; 
+analyticsId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngine: string; monitorIds: string[]; audioDevices: string[]; usePiiRemoval: boolean; restartInterval: number; port: number; dataDir: string; disableAudio: boolean; ignoredWindows: string[]; includedWindows: string[]; ignoredUrls?: string[]; fps: number; vadSensitivity: string; analyticsEnabled: boolean; audioChunkDuration: number; useChineseMirror: boolean; languages: string[]; embeddedLLM: EmbeddedLLM; enableBeta: boolean; isFirstTimeUser: boolean; autoStartEnabled: boolean; enableFrameCache: boolean; platform: string; disabledShortcuts: string[]; user: User; showScreenpipeShortcut: string; startRecordingShortcut: string; stopRecordingShortcut: string; startAudioShortcut: string; stopAudioShortcut: string; showChatShortcut: string; searchShortcut: string; enableRealtimeAudioTranscription: boolean; realtimeAudioTranscriptionEngine: string; disableVision: boolean; useAllMonitors: boolean; adaptiveFps?: boolean; enableRealtimeVision: boolean; showShortcutOverlay?: boolean; 
 /**
  * Unique device ID for AI usage tracking (generated on first launch)
  */
-deviceId?: string }
+deviceId?: string; 
+/**
+ * Enable UI event capture (keyboard, mouse, clipboard).
+ * Requires accessibility and input monitoring permissions on macOS.
+ */
+enableUiEvents?: boolean }
 export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding" | "Chat" | "PermissionRecovery"
 /**
  * Sync configuration.

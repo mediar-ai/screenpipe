@@ -290,25 +290,29 @@ pub async fn opencode_start(
 
     info!("Starting opencode with args: {:?} in dir: {}", args, project_dir);
 
-    // Try to spawn opencode - first try sidecar, then PATH
+    // Try to spawn opencode - first try sidecar, then fall back to PATH
     let spawn_result = {
-        let sidecar_result = app.shell().sidecar("opencode");
-
-        match sidecar_result {
-            Ok(cmd) => {
-                info!("Using bundled opencode sidecar");
-                let mut command = cmd.args(&args).current_dir(&project_dir);
-
-                // Pass the API key via environment variable for the provider
-                if let Some(ref token) = user_token {
-                    command = command.env("ANTHROPIC_API_KEY", token);
-                }
-
-                command.spawn()
+        // Try sidecar first
+        let sidecar_spawn = if let Ok(cmd) = app.shell().sidecar("opencode") {
+            info!("Trying bundled opencode sidecar");
+            let mut command = cmd.args(&args).current_dir(&project_dir);
+            if let Some(ref token) = user_token {
+                command = command.env("ANTHROPIC_API_KEY", token);
             }
-            Err(_) => {
+            Some(command.spawn())
+        } else {
+            None
+        };
+
+        // Check if sidecar spawn succeeded
+        match sidecar_spawn {
+            Some(Ok(result)) => {
+                info!("Using bundled opencode sidecar");
+                Ok(result)
+            }
+            _ => {
                 // Fallback to PATH
-                info!("Sidecar not found, trying opencode from PATH");
+                info!("Sidecar not available, trying opencode from PATH");
                 let mut command = app.shell()
                     .command("opencode")
                     .args(&args)
