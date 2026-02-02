@@ -477,7 +477,7 @@ impl Default for SettingsStore {
             enable_realtime_audio_transcription: false,
             realtime_audio_transcription_engine: "deepgram".to_string(),
             disable_vision: false,
-            use_all_monitors: false,
+            use_all_monitors: true,  // Match CLI default - dynamic monitor detection
             enable_realtime_vision: true,
             show_shortcut_overlay: true,
             device_id: uuid::Uuid::new_v4().to_string(),

@@ -14,7 +14,8 @@ use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
 use screenpipe_server::{
     PipeManager, ResourceMonitor, SCServer, start_continuous_recording, start_ui_recording, 
-    UiRecorderConfig, VisionManager, VisionManagerConfig, start_monitor_watcher, stop_monitor_watcher
+    UiRecorderConfig,
+    vision_manager::{VisionManager, VisionManagerConfig, start_monitor_watcher, stop_monitor_watcher},
 };
 use screenpipe_vision::OcrEngine;
 use tokio::sync::broadcast;
@@ -262,20 +263,6 @@ pub async fn start_embedded_server(
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
     let shutdown_tx_clone = shutdown_tx.clone();
 
-    // Get monitor IDs
-    let monitor_ids: Vec<u32> = if config.monitor_ids.is_empty()
-        || config.monitor_ids.contains(&"default".to_string())
-    {
-        let monitors = screenpipe_vision::monitor::list_monitors().await;
-        monitors.iter().map(|m| m.id()).collect()
-    } else {
-        config
-            .monitor_ids
-            .iter()
-            .filter_map(|s| s.parse().ok())
-            .collect()
-    };
-
     // Parse OCR engine
     let ocr_engine: OcrEngine = match config.ocr_engine.as_str() {
         "tesseract" => OcrEngine::Tesseract,
@@ -294,55 +281,127 @@ pub async fn start_embedded_server(
     // Create a runtime handle for vision tasks
     let vision_handle = tokio::runtime::Handle::current();
 
-    // Start continuous recording
+    // Start vision recording
     if !config.disable_vision {
         let db_clone = db.clone();
-        let output_path = Arc::new(data_path.to_string_lossy().into_owned());
+        let output_path = data_path.to_string_lossy().into_owned();
         let fps = config.fps;
         let video_chunk_duration = Duration::from_secs(config.video_chunk_duration);
         let ocr_engine = Arc::new(ocr_engine);
         let use_pii_removal = config.use_pii_removal;
         let ignored_windows = config.ignored_windows.clone();
         let included_windows = config.included_windows.clone();
-        let languages = languages.clone();
+        let languages_clone = languages.clone();
 
-        let shutdown_rx = shutdown_tx_clone.subscribe();
+        if config.use_all_monitors {
+            // Use VisionManager for dynamic monitor detection (handles connect/disconnect)
+            info!("Using dynamic monitor detection (use_all_monitors=true)");
+            
+            let vision_config = VisionManagerConfig {
+                output_path,
+                fps,
+                video_chunk_duration,
+                ocr_engine,
+                use_pii_removal,
+                ignored_windows,
+                included_windows,
+                ignored_urls: vec![],
+                languages: languages_clone,
+                capture_unfocused_windows: false,
+                realtime_vision: false,
+                activity_feed: None,
+            };
 
-        tokio::spawn(async move {
-            let mut shutdown_rx = shutdown_rx;
-            loop {
-                let recording_future = start_continuous_recording(
-                    db_clone.clone(),
-                    output_path.clone(),
-                    fps,
-                    video_chunk_duration,
-                    ocr_engine.clone(),
-                    monitor_ids.clone(),
-                    use_pii_removal,
-                    false,
-                    &vision_handle,
-                    &ignored_windows,
-                    &included_windows,
-                    &[],
-                    languages.clone(),
-                    false,
-                    false,
-                    None,
-                );
+            let vision_manager = Arc::new(VisionManager::new(
+                vision_config,
+                db_clone,
+                vision_handle.clone(),
+            ));
 
-                tokio::select! {
-                    result = recording_future => {
-                        if let Err(e) = result {
-                            error!("Continuous recording error: {:?}", e);
+            let vm_clone = vision_manager.clone();
+            let shutdown_rx = shutdown_tx_clone.subscribe();
+
+            tokio::spawn(async move {
+                let mut shutdown_rx = shutdown_rx;
+
+                // Start VisionManager
+                if let Err(e) = vm_clone.start().await {
+                    error!("Failed to start VisionManager: {:?}", e);
+                    return;
+                }
+                info!("VisionManager started successfully");
+
+                // Start MonitorWatcher for dynamic detection
+                if let Err(e) = start_monitor_watcher(vm_clone.clone()).await {
+                    error!("Failed to start monitor watcher: {:?}", e);
+                }
+                info!("Monitor watcher started - will detect connect/disconnect");
+
+                // Wait for shutdown signal
+                let _ = shutdown_rx.recv().await;
+                info!("Received shutdown signal for VisionManager");
+
+                // Stop monitor watcher and VisionManager
+                let _ = stop_monitor_watcher().await;
+                if let Err(e) = vm_clone.shutdown().await {
+                    error!("Error shutting down VisionManager: {:?}", e);
+                }
+            });
+        } else {
+            // Use static monitor list (legacy behavior)
+            let monitor_ids: Vec<u32> = if config.monitor_ids.is_empty()
+                || config.monitor_ids.contains(&"default".to_string())
+            {
+                let monitors = screenpipe_vision::monitor::list_monitors().await;
+                monitors.iter().map(|m| m.id()).collect()
+            } else {
+                config
+                    .monitor_ids
+                    .iter()
+                    .filter_map(|s| s.parse().ok())
+                    .collect()
+            };
+
+            info!("Using static monitor list: {:?}", monitor_ids);
+            let output_path = Arc::new(output_path);
+            let shutdown_rx = shutdown_tx_clone.subscribe();
+
+            tokio::spawn(async move {
+                let mut shutdown_rx = shutdown_rx;
+                loop {
+                    let recording_future = start_continuous_recording(
+                        db_clone.clone(),
+                        output_path.clone(),
+                        fps,
+                        video_chunk_duration,
+                        ocr_engine.clone(),
+                        monitor_ids.clone(),
+                        use_pii_removal,
+                        false,
+                        &vision_handle,
+                        &ignored_windows,
+                        &included_windows,
+                        &[],
+                        languages_clone.clone(),
+                        false,
+                        false,
+                        None,
+                    );
+
+                    tokio::select! {
+                        result = recording_future => {
+                            if let Err(e) = result {
+                                error!("Continuous recording error: {:?}", e);
+                            }
+                        }
+                        _ = shutdown_rx.recv() => {
+                            info!("Received shutdown signal for vision recording");
+                            break;
                         }
                     }
-                    _ = shutdown_rx.recv() => {
-                        info!("Received shutdown signal for vision recording");
-                        break;
-                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     // Start audio recording

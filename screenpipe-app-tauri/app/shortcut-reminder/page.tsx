@@ -6,6 +6,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import posthog from "posthog-js";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { getStore } from "@/lib/hooks/use-settings";
+import { X } from "lucide-react";
 
 export default function ShortcutReminderPage() {
   const { isMac, isLoading } = usePlatform();
@@ -86,6 +87,22 @@ export default function ShortcutReminderPage() {
     }
   }, []);
 
+  // Handle close button - hide overlay permanently
+  const handleClose = useCallback(async () => {
+    try {
+      const store = await getStore();
+      const settings = await store.get<Record<string, unknown>>("settings") || {};
+      await store.set("settings", { ...settings, showShortcutOverlay: false });
+      await store.save();
+      posthog.capture("shortcut_reminder_dismissed");
+      await getCurrentWindow().hide();
+    } catch (e) {
+      console.error("Failed to save setting:", e);
+      // Still try to hide the window
+      await getCurrentWindow().hide();
+    }
+  }, []);
+
   return (
     <div
       className="w-full h-full flex items-center justify-center"
@@ -141,7 +158,7 @@ export default function ShortcutReminderPage() {
           </div>
 
           {/* Chat shortcut */}
-          <div className="flex items-center gap-1.5 px-2 py-1">
+          <div className="flex items-center gap-1.5 px-2 py-1 border-r border-white/20">
             <svg
               width="10"
               height="10"
@@ -157,6 +174,16 @@ export default function ShortcutReminderPage() {
               {chatShortcut ?? "..."}
             </span>
           </div>
+
+          {/* Close button */}
+          <button
+            onClick={handleClose}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="flex items-center justify-center px-1.5 py-1 hover:bg-white/10 transition-colors"
+            title="Hide shortcut reminder"
+          >
+            <X className="h-2.5 w-2.5 text-white/40 hover:text-white/80" />
+          </button>
         </div>
       </div>
     </div>
