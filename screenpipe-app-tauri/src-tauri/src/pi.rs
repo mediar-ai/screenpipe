@@ -116,8 +116,8 @@ pub async fn run(prompt: &str, user_token: Option<&str>) -> Result<String, Strin
     cmd.arg("--model").arg(DEFAULT_MODEL);
     
     if let Some(token) = user_token {
-        info!("pi::run: passing api-key (token length: {})", token.len());
-        cmd.arg("--api-key").arg(token);
+        info!("pi::run: setting ANTHROPIC_API_KEY env var (token length: {})", token.len());
+        cmd.env("ANTHROPIC_API_KEY", token);
     } else {
         warn!("pi::run: no user_token provided!");
     }
