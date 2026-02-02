@@ -172,7 +172,11 @@ Create/append to the daily log file using this markdown table format:
 
 /// Build the full prompt for opencode
 fn build_prompt(settings: &ObsidianSyncSettings, start_time: &str, end_time: &str) -> String {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let local_now = chrono::Local::now();
+    let today = local_now.format("%Y-%m-%d").to_string();
+    let timezone = local_now.format("%Z").to_string(); // e.g., "PST", "EST"
+    let timezone_offset = local_now.format("%:z").to_string(); // e.g., "-08:00"
+    
     let notes_path = if settings.notes_path.is_empty() {
         "screenpipe/logs".to_string()
     } else {
@@ -190,9 +194,10 @@ fn build_prompt(settings: &ObsidianSyncSettings, start_time: &str, end_time: &st
 
 Time range: {} to {}
 Output file: {}
+User's timezone: {} (UTC{})
 
 {}"#,
-        start_time, end_time, note_path, SYSTEM_PROMPT
+        start_time, end_time, note_path, timezone, timezone_offset, SYSTEM_PROMPT
     );
 
     // Append user's custom prompt if provided
