@@ -81,6 +81,21 @@ pub async fn show_specific_window(
                     .set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             }
 
+            // Add event handler to reset activation policy when window closes
+            #[cfg(target_os = "macos")]
+            {
+                let app_clone = state.app_handle.clone();
+                window.on_window_event(move |event| {
+                    match event {
+                        tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } => {
+                            info!("Custom window closed, resetting activation policy");
+                            let _ = app_clone.set_activation_policy(tauri::ActivationPolicy::Regular);
+                        }
+                        _ => {}
+                    }
+                });
+            }
+
             if let Err(e) = window.show() {
                 error!("failed to show window: {}", e);
                 return Err((
@@ -626,22 +641,12 @@ impl ShowRewindWindow {
                             if !is_focused {
                                 info!("Main window lost focus, hiding window");
                                 
-                                // #[cfg(target_os = "macos")]
-                                // {
-                                //     let value = app_clone.clone();
-                                //     app_clone.run_on_main_thread(move || {
-                                //         if let Ok(panel) = value.get_webview_panel(RewindWindowId::Main.label()) {
-                                //             panel.order_out(None);
-                                //         }
-
-
-                                //     }).ok();   
-                                // }
-
-                                // #[cfg(not(target_os = "macos"))]
-                                // {
-                                //     let _ = window.hide();
-                                // }
+                                // Reset activation policy to Regular when main overlay loses focus
+                                // This restores the dock icon and tray menu which are hidden in Accessory mode
+                                #[cfg(target_os = "macos")]
+                                {
+                                    let _ = app_clone.set_activation_policy(tauri::ActivationPolicy::Regular);
+                                }
 
                                 let _ = app_clone.emit("window-focused", false).ok();
                             } else {
@@ -740,6 +745,18 @@ impl ShowRewindWindow {
                             }
                         }).ok();
                     }
+
+                    // Add event listener to reset activation policy when chat window closes or loses focus
+                    let app_clone = app.clone();
+                    window.on_window_event(move |event| {
+                        match event {
+                            tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } => {
+                                info!("Chat window closed, resetting activation policy");
+                                let _ = app_clone.set_activation_policy(tauri::ActivationPolicy::Regular);
+                            }
+                            _ => {}
+                        }
+                    });
 
                     window
                 };

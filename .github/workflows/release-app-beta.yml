@@ -321,7 +321,7 @@ jobs:
           sudo apt-get install -y /tmp/ubuntu-packages/*.deb
 
       - name: Install frontend dependencies
-        working-directory: ./apps/screenpipe-app-tauri
+        working-directory: ${{ github.workspace }}/apps/screenpipe-app-tauri
         run: bun install
 
       - name: Install vcpkg
@@ -424,7 +424,7 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./apps/screenpipe-app-tauri
+        working-directory: ${{ github.workspace }}/apps/screenpipe-app-tauri
 
       - name: Build CLI
         if: matrix.os_type != 'windows'
@@ -458,7 +458,7 @@ jobs:
       - name: Run pre_build.js
         run: |
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./apps/screenpipe-app-tauri
+        working-directory: ${{ github.workspace }}/apps/screenpipe-app-tauri
 
       - uses: actions/setup-python@v5
         if: matrix.os_type == 'windows'
