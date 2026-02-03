@@ -15,10 +15,6 @@
 - Project ID: 27525
 - Host: eu.i.posthog.com
 
-## What NOT to mention
-- Pipe store (removed)
-- Pipes marketplace (removed)
-
 ## Testing
 - `cargo test` for Rust
 - `bun test` for JS/TS
