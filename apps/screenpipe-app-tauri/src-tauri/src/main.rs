@@ -41,7 +41,7 @@ mod commands;
 mod disk_usage;
 mod permissions;
 mod server;
-mod sidecar;
+mod recording;
 mod store;
 mod tray;
 mod updates;
@@ -57,7 +57,7 @@ mod embedded_server;
 
 pub use server::*;
 
-pub use sidecar::*;
+pub use recording::*;
 
 pub use icons::*;
 pub use store::get_store;
@@ -69,8 +69,8 @@ pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use commands::write_browser_log;
 pub use server::spawn_server;
-pub use sidecar::spawn_screenpipe;
-pub use sidecar::stop_screenpipe;
+pub use recording::spawn_screenpipe;
+pub use recording::stop_screenpipe;
 // Removed: pub use store::get_profiles_store; // Profile functionality has been removed
 
 use crate::commands::hide_main_window;
@@ -804,8 +804,8 @@ async fn main() {
                 update_global_shortcuts,
                 spawn_screenpipe,
                 stop_screenpipe,
-                sidecar::get_monitors,
-                sidecar::get_audio_devices,
+                recording::get_monitors,
+                recording::get_audio_devices,
                 // Commands from commands.rs
                 commands::get_disk_usage,
                 commands::open_pipe_window,
@@ -876,7 +876,7 @@ async fn main() {
             .expect("Failed to export TypeScript bindings");
     }
 
-    let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
+    let recording_state = RecordingState(Arc::new(tokio::sync::Mutex::new(None)));
     let pi_state = pi::PiState(Arc::new(tokio::sync::Mutex::new(None)));
     let obsidian_sync_state = obsidian_sync::ObsidianSyncState::new();
     #[allow(clippy::single_match)]
@@ -930,14 +930,14 @@ async fn main() {
         #[cfg(target_os = "macos")]
         let app = app.plugin(tauri_nspanel::init());
 
-        let app = app.manage(sidecar_state)
+        let app = app.manage(recording_state)
         .manage(pi_state)
         .manage(obsidian_sync_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             stop_screenpipe,
-            sidecar::get_monitors,
-            sidecar::get_audio_devices,
+            recording::get_monitors,
+            recording::get_audio_devices,
             permissions::open_permission_settings,
             permissions::request_permission,
             permissions::do_permissions_check,
@@ -1224,8 +1224,8 @@ async fn main() {
             if !use_dev_mode {
                 let store_clone = store.clone();
                 let base_dir_clone = base_dir.clone();
-                let sidecar_state = app_handle.state::<SidecarState>();
-                let sidecar_state_inner = sidecar_state.0.clone();
+                let recording_state = app_handle.state::<RecordingState>();
+                let recording_state_inner = recording_state.0.clone();
                 
                 // Spawn a dedicated thread for the server with its own runtime
                 // This prevents CPU contention between UI and recording workloads
@@ -1283,7 +1283,7 @@ async fn main() {
                                     info!("Embedded screenpipe server started successfully on dedicated runtime");
                                     // Store handle in state so it can be stopped/restarted later
                                     {
-                                        let mut guard = sidecar_state_inner.lock().await;
+                                        let mut guard = recording_state_inner.lock().await;
                                         *guard = Some(handle);
                                     }
                                     
@@ -1293,7 +1293,7 @@ async fn main() {
                                         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                                         
                                         // Check if handle was taken (indicating shutdown requested)
-                                        let guard = sidecar_state_inner.lock().await;
+                                        let guard = recording_state_inner.lock().await;
                                         if guard.is_none() {
                                             info!("Server handle removed from state, shutting down server thread");
                                             break;

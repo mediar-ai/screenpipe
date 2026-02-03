@@ -9,7 +9,6 @@
             }
         },
         "externalBin": [
-            "screenpipe",
             "bun"
         ],
         "targets": [

@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 /// State holding the embedded server handle
-pub struct SidecarState(pub Arc<Mutex<Option<EmbeddedServerHandle>>>);
+pub struct RecordingState(pub Arc<Mutex<Option<EmbeddedServerHandle>>>);
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -101,7 +101,7 @@ pub async fn get_monitors() -> Result<Vec<MonitorDevice>, String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn stop_screenpipe(
-    state: State<'_, SidecarState>,
+    state: State<'_, RecordingState>,
     _app: tauri::AppHandle,
 ) -> Result<(), String> {
     info!("Stopping screenpipe server");
@@ -122,7 +122,7 @@ pub async fn stop_screenpipe(
 #[tauri::command]
 #[specta::specta]
 pub async fn spawn_screenpipe(
-    state: State<'_, SidecarState>,
+    state: State<'_, RecordingState>,
     app: tauri::AppHandle,
     _override_args: Option<Vec<String>>,
 ) -> Result<(), String> {
@@ -200,7 +200,7 @@ pub async fn spawn_screenpipe(
 
     // Build config from store
     let config = EmbeddedServerConfig::from_store(&store, base_dir);
-    let sidecar_state_inner = state.0.clone();
+    let recording_state_inner = state.0.clone();
 
     // Use a oneshot channel to report success/failure from the dedicated runtime
     let (result_tx, result_rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
@@ -228,7 +228,7 @@ pub async fn spawn_screenpipe(
                     Ok(handle) => {
                         info!("Embedded screenpipe server started successfully on dedicated runtime");
                         {
-                            let mut guard = sidecar_state_inner.lock().await;
+                            let mut guard = recording_state_inner.lock().await;
                             *guard = Some(handle);
                         }
                         // Signal success to the caller
@@ -237,7 +237,7 @@ pub async fn spawn_screenpipe(
                         // Keep the runtime alive until the handle is taken (shutdown requested)
                         loop {
                             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                            let guard = sidecar_state_inner.lock().await;
+                            let guard = recording_state_inner.lock().await;
                             if guard.is_none() {
                                 info!("Server handle removed from state, shutting down server thread");
                                 break;

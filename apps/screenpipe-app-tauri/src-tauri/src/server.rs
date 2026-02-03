@@ -172,8 +172,11 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/app-icon", axum::routing::get(get_app_icon_handler))
         .route("/window-size", axum::routing::post(set_window_size))
         .route("/sse/settings", axum::routing::get(settings_stream))
-        .route("/sidecar/start", axum::routing::post(start_sidecar))
-        .route("/sidecar/stop", axum::routing::post(stop_sidecar))
+        .route("/recording/start", axum::routing::post(start_recording))
+        .route("/recording/stop", axum::routing::post(stop_recording))
+        // Keep old routes for backward compatibility
+        .route("/sidecar/start", axum::routing::post(start_recording))
+        .route("/sidecar/stop", axum::routing::post(stop_recording))
         .route("/window", axum::routing::post(show_specific_window))
         .route("/window/close", axum::routing::post(close_window))
         .route(
@@ -374,14 +377,14 @@ async fn set_window_size(
     }
 }
 
-async fn start_sidecar(
+async fn start_recording(
     State(state): State<ServerState>,
 ) -> Result<Json<ApiResponse>, (StatusCode, String)> {
     info!("received request to start screenpipe server");
 
     let app_handle = state.app_handle.clone();
-    match crate::sidecar::spawn_screenpipe(
-        app_handle.clone().state::<crate::SidecarState>(),
+    match crate::recording::spawn_screenpipe(
+        app_handle.clone().state::<crate::RecordingState>(),
         app_handle,
         None,
     )
@@ -401,14 +404,14 @@ async fn start_sidecar(
     }
 }
 
-async fn stop_sidecar(
+async fn stop_recording(
     State(state): State<ServerState>,
 ) -> Result<Json<ApiResponse>, (StatusCode, String)> {
     info!("received request to stop screenpipe server");
 
     let app_handle = state.app_handle.clone();
-    match crate::sidecar::stop_screenpipe(
-        app_handle.clone().state::<crate::SidecarState>(),
+    match crate::recording::stop_screenpipe(
+        app_handle.clone().state::<crate::RecordingState>(),
         app_handle,
     )
     .await

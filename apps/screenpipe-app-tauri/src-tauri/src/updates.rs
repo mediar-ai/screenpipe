@@ -1,5 +1,5 @@
 use crate::stop_screenpipe;
-use crate::SidecarState;
+use crate::RecordingState;
 use anyhow::Error;
 use dark_light::Mode;
 use log::{error, info};
@@ -157,10 +157,10 @@ impl UpdatesManager {
                             .set_text("downloading latest version of screenpipe")?;
 
                         if let Err(err) =
-                            stop_screenpipe(self.app.state::<SidecarState>(), self.app.clone())
+                            stop_screenpipe(self.app.state::<RecordingState>(), self.app.clone())
                                 .await
                         {
-                            error!("Failed to kill sidecar: {}", err);
+                            error!("Failed to stop recording: {}", err);
                         }
 
                         update.download_and_install(|_, _| {}, || {}).await?;
@@ -171,16 +171,13 @@ impl UpdatesManager {
                     }
                     // Proceed with the update
 
-                    // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
-                    // bad UX: i use CLI and it kills my CLI because i updated app
-
                     #[cfg(not(target_os = "windows"))]
                     {
                         if let Err(err) =
-                            stop_screenpipe(self.app.state::<SidecarState>(), self.app.clone())
+                            stop_screenpipe(self.app.state::<RecordingState>(), self.app.clone())
                                 .await
                         {
-                            error!("Failed to kill sidecar: {}", err);
+                            error!("Failed to stop recording: {}", err);
                         }
                     }
                     self.update_screenpipe();

@@ -1,6 +1,6 @@
 use crate::commands::show_main_window;
 use crate::health::{get_recording_status, RecordingStatus};
-use crate::sidecar::SidecarState;
+use crate::recording::RecordingState;
 use crate::store::{get_store, OnboardingStore};
 use crate::updates::is_source_build;
 use crate::window_api::ShowRewindWindow;
@@ -252,18 +252,17 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         "quit" => {
             debug!("Quit requested");
 
-            // Stop the sidecar before exiting
+            // Stop recording before exiting
             let app_handle_clone = app_handle.clone();
             tauri::async_runtime::spawn(async move {
-                info!("Stopping screenpipe sidecar before quit...");
-                if let Some(sidecar_state) = app_handle_clone.try_state::<SidecarState>() {
-                    // Access the inner Arc<Mutex<...>> directly instead of calling the tauri command
-                    let mut handle_guard = sidecar_state.0.lock().await;
+                info!("Stopping screenpipe recording before quit...");
+                if let Some(recording_state) = app_handle_clone.try_state::<RecordingState>() {
+                    let mut handle_guard = recording_state.0.lock().await;
                     if let Some(handle) = handle_guard.take() {
                         handle.shutdown();
-                        info!("Screenpipe sidecar stopped successfully");
+                        info!("Screenpipe recording stopped successfully");
                     } else {
-                        debug!("No sidecar running to stop");
+                        debug!("No recording running to stop");
                     }
                 }
                 app_handle_clone.exit(0);

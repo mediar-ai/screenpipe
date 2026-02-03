@@ -236,42 +236,6 @@ if (platform == 'linux') {
 	}
 
 
-	// Copy screenpipe binary
-	console.log('copying screenpipe binary for linux...');
-	const potentialPaths = [
-		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
-		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
-		path.join(__dirname, '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
-		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
-		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
-		path.join(__dirname, '..', 'target', 'release', 'screenpipe'),
-		'/home/runner/work/screenpipe/screenpipe/target/release/screenpipe',
-	];
-
-	let copied = false;
-	for (const screenpipeSrc of potentialPaths) {
-		if (process.env['SKIP_SCREENPIPE_SETUP']) {
-			copied = true;
-			break;
-		}
-		const screenpipeDest = path.join(cwd, 'screenpipe-x86_64-unknown-linux-gnu');
-		try {
-			await fs.copyFile(screenpipeSrc, screenpipeDest);
-			console.log(`screenpipe binary copied successfully from ${screenpipeSrc}`);
-			copied = true;
-			break;
-		} catch (error) {
-			console.warn(`failed to copy screenpipe binary from ${screenpipeSrc}:`, error);
-		}
-	}
-
-	if (!copied) {
-		console.error("failed to copy screenpipe binary from any potential path.");
-		// uncomment the following line if you want the script to exit on failure
-		// process.exit(1);
-	}
-
-	
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`wget --no-config -nc ${config.linux.ffmpegUrl} -O ${config.linux.ffmpegName}.tar.xz`
@@ -294,41 +258,6 @@ if (platform == 'linux') {
 if (platform == 'windows') {
 	const wgetPath = await findWget();
 
-	console.log('Copying screenpipe binary...');
-
-	const potentialPaths = [
-		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe.exe'),
-		path.join(__dirname, '..', '..', '..', 'target', 'x86_64-pc-windows-msvc', 'release', 'screenpipe.exe'),
-		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe.exe'),
-		path.join(__dirname, '..', '..', 'target', 'x86_64-pc-windows-msvc', 'release', 'screenpipe.exe'),
-		path.join(__dirname, '..', 'target', 'release', 'screenpipe.exe'),
-		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe.exe'),
-		'D:\\a\\screenpipe\\screenpipe\\target\\release\\screenpipe.exe',
-	];
-
-	let copied = false;
-	for (const screenpipeSrc of potentialPaths) {
-		if (process.env['SKIP_SCREENPIPE_SETUP']) {
-			copied = true;
-			break;
-		}
-		const screenpipeDest = path.join(cwd, 'screenpipe-x86_64-pc-windows-msvc.exe');
-		try {
-			await fs.copyFile(screenpipeSrc, screenpipeDest);
-			console.log(`Screenpipe binary copied successfully from ${screenpipeSrc}`);
-			copied = true;
-			break;
-		} catch (error) {
-			console.warn(`Failed to copy screenpipe binary from ${screenpipeSrc}:`, error);
-		}
-	}
-
-	if (!copied) {
-		console.error("Failed to copy screenpipe binary from any potential path.");
-		// Uncomment the following line if you want the script to exit on failure
-		// process.exit(1);
-	}
-
 	// Setup FFMPEG
 	if (!(await fs.exists(config.ffmpegRealname))) {
 		await $`${wgetPath} --no-config --tries=10 --retry-connrefused --waitretry=10 --secure-protocol=auto --no-check-certificate --show-progress ${config.windows.ffmpegUrl} -O ${config.windows.ffmpegName}.7z`
@@ -342,71 +271,8 @@ if (platform == 'windows') {
 	// await $`SystemDrive=${process.env.SYSTEMDRIVE} SystemRoot=${process.env.SYSTEMROOT} windir=${process.env.WINDIR} ${process.env.VCPKG_ROOT}\\vcpkg.exe install ${config.windows.vcpkgPackages}`.quiet()
 }
 
-async function getMostRecentBinaryPath(targetArch, paths) {
-	const validPaths = await Promise.all(paths.map(async (path) => {
-		if (await fs.exists(path)) {
-			const { stdout } = await $`file ${path}`.quiet();
-			const binaryArch = stdout.includes('arm64') ? 'arm64' :
-				stdout.includes('x86_64') ? 'x86_64' : null;
-			if (binaryArch === targetArch) {
-				const stat = await fs.stat(path);
-				return { path, mtime: stat.mtime };
-			}
-		}
-		return null;
-	}));
-
-	const filteredPaths = validPaths.filter(Boolean);
-
-	if (filteredPaths.length === 0) {
-		return null;
-	}
-
-	return filteredPaths.reduce((mostRecent, current) =>
-		current.mtime > mostRecent.mtime ? current : mostRecent
-	).path;
-}
 /* ########## macOS ########## */
 if (platform == 'macos') {
-	const architectures = ['arm64', 'x86_64'];
-	for (const arch of architectures) {
-		if (process.env['SKIP_SCREENPIPE_SETUP']) {
-			break;
-		}
-		console.log(`Setting up screenpipe bin for ${arch}...`);
-		if (arch === 'arm64') {
-			const paths = [
-				"../../../target/aarch64-apple-darwin/release/screenpipe",
-				"../../../target/release/screenpipe",
-				"../../target/aarch64-apple-darwin/release/screenpipe",
-				"../../target/release/screenpipe"
-			];
-			const mostRecentPath = await getMostRecentBinaryPath('arm64', paths);
-			if (mostRecentPath) {
-				await $`cp ${mostRecentPath} screenpipe-aarch64-apple-darwin`;
-				console.log(`Copied most recent arm64 screenpipe binary from ${mostRecentPath}`);
-			} else {
-				console.error("No suitable arm64 screenpipe binary found");
-			}
-		} else if (arch === 'x86_64') {
-			// copy screenpipe binary (more recent one)
-			const paths = [
-				"../../../target/x86_64-apple-darwin/release/screenpipe",
-				"../../../target/release/screenpipe",
-				"../../target/x86_64-apple-darwin/release/screenpipe",
-				"../../target/release/screenpipe"
-			];
-			const mostRecentPath = await getMostRecentBinaryPath('x86_64', paths);
-			if (mostRecentPath) {
-				await $`cp ${mostRecentPath} screenpipe-x86_64-apple-darwin`;
-				console.log(`Copied most recent x86_64 screenpipe binary from ${mostRecentPath}`);
-			} else {
-				console.error("No suitable x86_64 screenpipe binary found");
-			}
-		}
-		console.log(`screenpipe for ${arch} set up successfully.`);
-	}
-
   // Setup ffmpeg and ffprobe for both arm64 and x86_64
   // ref: https://github.com/nathanbabcock/ffmpeg-sidecar/blob/b0ab2e1233451f219e302bf78cbbb6a5a8e85aa4/src/download.rs#L31
   if (!(await fs.exists(`ffmpeg-aarch64-apple-darwin`))) {

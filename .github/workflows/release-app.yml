@@ -251,7 +251,6 @@ jobs:
             apps/screenpipe-app-tauri/src-tauri/ffmpeg-*
             # Platform specific bins
             apps/screenpipe-app-tauri/src-tauri/bun-*
-            apps/screenpipe-app-tauri/src-tauri/screenpipe-*
           key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build-${{ hashFiles('**/Cargo.lock', '**/bun.lockb') }}
           restore-keys: |
             ${{ matrix.platform }}-${{ matrix.target }}-pre-build-
@@ -426,40 +425,6 @@ jobs:
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ${{ github.workspace }}/apps/screenpipe-app-tauri
 
-      - name: Build CLI
-        if: matrix.os_type != 'windows'
-        shell: bash
-        run: |
-          if [[ "${{ matrix.os_type }}" == "macos" ]]; then
-            export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
-            export PKG_CONFIG_ALLOW_CROSS=1
-            # Fix i8mm build error - force M1 compatible architecture
-            # M1 = armv8.4-a (no i8mm), M2+ = armv8.5-a+ (has i8mm)
-            # -U__ARM_FEATURE_MATMUL_INT8 undefines the i8mm macro to prevent
-            # the code from using i8mm intrinsics that aren't available on M1
-            # See: https://github.com/ggml-org/whisper.cpp/issues/3427
-            if [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
-              export CFLAGS="-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8"
-              export CXXFLAGS="-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8"
-            fi
-          fi
-          cargo build --release -p screenpipe-server ${{ matrix.args }}
-
-      - name: Build CLI on Windows
-        if: matrix.os_type == 'windows'
-        shell: powershell
-        env:
-          CARGO_PROFILE_RELEASE_STRIP: none
-          CARGO_PROFILE_RELEASE_PANIC: abort
-          CARGO_PROFILE_RELEASE_INCREMENTAL: false
-        run: cargo build --release -p screenpipe-server ${{ matrix.args }}
-
-        # Run pre build again to copy the CLI into app
-      - name: Run pre_build.js
-        run: |
-          bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ${{ github.workspace }}/apps/screenpipe-app-tauri
-
       - uses: actions/setup-python@v5
         if: matrix.os_type == 'windows'
         with:
@@ -592,11 +557,8 @@ jobs:
           # Install sentry-cli
           Invoke-WebRequest -Uri "https://release-registry.services.sentry.io/apps/sentry-cli/latest?response=download&arch=x86_64&platform=Windows&package=sentry-cli" -OutFile sentry-cli.exe
 
-          # Upload debug symbols (.pdb files) for screenpipe-cli project
+          # Upload debug symbols (.pdb files) for the app
           Write-Host "Uploading debug symbols to Sentry..."
-          .\sentry-cli.exe debug-files upload --org $env:SENTRY_ORG --project screenpipe-cli target/x86_64-pc-windows-msvc/release/
-
-          # Also upload for the app
           .\sentry-cli.exe debug-files upload --org $env:SENTRY_ORG --project screenpipe-app apps/screenpipe-app-tauri/src-tauri/target/release/
 
       - name: Upload debug symbols to Sentry (macOS)
@@ -610,11 +572,8 @@ jobs:
           # Install sentry-cli
           curl -sL https://sentry.io/get-cli/ | bash
 
-          # Upload debug symbols (dSYM files) for screenpipe-cli project
+          # Upload debug symbols (dSYM files) for the app
           echo "Uploading debug symbols to Sentry..."
-          sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-cli target/${{ matrix.target }}/release/
-
-          # Also upload for the app
           sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-app apps/screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/
 
       - name: Download and Run CLI Manually (Windows)
