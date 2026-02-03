@@ -786,6 +786,12 @@ fn run_app_observer(
 // ============================================================================
 
 fn get_element_at_position(x: f64, y: f64, config: &UiCaptureConfig) -> Option<ElementContext> {
+    // Skip menu bar area (top ~30 pixels) to avoid conflicts with tray icon accessibility
+    // This prevents crashes when clicking tray icons while accessibility capture is active
+    if y < 30.0 {
+        return None;
+    }
+    
     let sys = ax::UiElement::sys_wide();
     let elem = sys.element_at_pos(x as f32, y as f32).ok()?;
 
