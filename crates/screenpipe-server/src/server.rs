@@ -3184,6 +3184,24 @@ pub async fn get_frame_data(
                         serve_file(&frame_path).await
                     }
                     Err(e) => {
+                        let err_str = e.to_string();
+                        
+                        // Check for corrupted/missing video errors - return 410 Gone
+                        // This tells frontend the frame is permanently unavailable
+                        if err_str.contains("VIDEO_CORRUPTED") || err_str.contains("VIDEO_NOT_FOUND") {
+                            debug!("Frame {} unavailable (corrupted/missing video): {}", frame_id, e);
+                            return Err((
+                                StatusCode::GONE, // 410 = permanently unavailable
+                                JsonResponse(json!({
+                                    "error": "Frame unavailable - video file corrupted or missing",
+                                    "error_type": "video_corrupted",
+                                    "frame_id": frame_id,
+                                    "file_path": file_path,
+                                    "details": err_str
+                                })),
+                            ));
+                        }
+                        
                         error!("Failed to extract frame {}: {}", frame_id, e);
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,

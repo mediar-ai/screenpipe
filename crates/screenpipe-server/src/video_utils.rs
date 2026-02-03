@@ -704,11 +704,43 @@ impl VideoMetadataOverride {
 pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Result<String> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
-    // Get video FPS and duration
+    // Check if file exists first
+    if !std::path::Path::new(file_path).exists() {
+        return Err(anyhow::anyhow!("VIDEO_NOT_FOUND: {}", file_path));
+    }
+
+    // Check file size - empty files are definitely corrupted
+    if let Ok(metadata) = tokio::fs::metadata(file_path).await {
+        if metadata.len() == 0 {
+            return Err(anyhow::anyhow!("VIDEO_CORRUPTED: empty file {}", file_path));
+        }
+        // Files under 1KB are likely corrupted (no valid video that small)
+        if metadata.len() < 1024 {
+            return Err(anyhow::anyhow!(
+                "VIDEO_CORRUPTED: file too small ({} bytes) {}",
+                metadata.len(),
+                file_path
+            ));
+        }
+    }
+
+    // Get video FPS and duration - if this fails, the video is likely corrupted
     let (source_fps, video_duration) =
         match get_video_fps_and_duration(&ffmpeg_path, file_path).await {
             Ok((fps, duration)) => (fps, duration),
             Err(e) => {
+                // Check if this is a corrupted video (moov atom missing, invalid data, etc)
+                let err_str = e.to_string().to_lowercase();
+                if err_str.contains("moov")
+                    || err_str.contains("invalid data")
+                    || err_str.contains("no such file")
+                {
+                    return Err(anyhow::anyhow!(
+                        "VIDEO_CORRUPTED: cannot read metadata from {} - {}",
+                        file_path,
+                        e
+                    ));
+                }
                 error!("failed to get video metadata, using defaults: {}", e);
                 (1.0, f64::MAX) // Use MAX duration to disable validation on error
             }
