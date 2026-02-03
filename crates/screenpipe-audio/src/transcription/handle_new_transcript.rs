@@ -96,8 +96,9 @@ pub async fn handle_new_transcript(
         TRANSCRIPTS_TOTAL.fetch_add(1, Ordering::SeqCst);
 
         info!(
-            "device {} received transcription {:?}",
-            transcription.input.device, transcription.transcription
+            "device {} received transcription ({} chars)",
+            transcription.input.device,
+            transcription.transcription.as_ref().map(|t| t.len()).unwrap_or(0)
         );
 
         // Insert the new transcript after fetching
