@@ -16,6 +16,7 @@ use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_global_shortcut::ShortcutState;
+use screenpipe_db::DatabaseManager;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tokio::sync::mpsc;
@@ -40,6 +41,7 @@ use crate::store::SettingsStore;
 mod commands;
 mod disk_usage;
 mod permissions;
+mod rewind_integration;
 mod server;
 mod sidecar;
 mod store;
@@ -860,6 +862,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     let pi_state = pi::PiState(Arc::new(tokio::sync::Mutex::new(None)));
     let obsidian_sync_state = obsidian_sync::ObsidianSyncState::new();
+    let rewind_state = Arc::new(rewind_integration::RewindMigrationState::default());
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -913,6 +916,7 @@ async fn main() {
         let app = app.manage(sidecar_state)
         .manage(pi_state)
         .manage(obsidian_sync_state)
+        .manage(rewind_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             stop_screenpipe,
@@ -987,7 +991,13 @@ async fn main() {
             obsidian_sync::obsidian_run_sync,
             obsidian_sync::obsidian_start_scheduler,
             obsidian_sync::obsidian_stop_scheduler,
-            obsidian_sync::obsidian_cancel_sync
+            obsidian_sync::obsidian_cancel_sync,
+            // Rewind AI Import commands
+            commands::rewind_check_available,
+            commands::rewind_scan,
+            commands::rewind_get_progress,
+            commands::rewind_start_migration,
+            commands::rewind_cancel_migration
         ])
         .setup(move |app| {
             //deep link register_all
@@ -1047,6 +1057,25 @@ async fn main() {
                         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
                         .join(".screenpipe")
                 });
+
+            // Initialize Rewind migration state
+            {
+                let rewind_state = app.state::<Arc<rewind_integration::RewindMigrationState>>();
+                let base_dir_clone = base_dir.clone();
+                tauri::async_runtime::spawn(async move {
+                    let db_path = base_dir_clone.join("db.sqlite");
+                    match DatabaseManager::new(&db_path.to_string_lossy()).await {
+                        Ok(db) => {
+                            if let Err(e) = rewind_state.initialize(Arc::new(db), &base_dir_clone).await {
+                                error!("Failed to initialize Rewind migration: {}", e);
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to initialize Rewind migration DB: {}", e);
+                        }
+                    }
+                });
+            }
 
             // Set up rolling file appender
             let log_dir = get_screenpipe_data_dir(app.handle())

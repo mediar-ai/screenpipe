@@ -23,7 +23,7 @@ use screenpipe_server::{
     analytics,
     cli::{
         get_or_create_machine_id, AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine,
-        Command, McpCommand, MigrationSubCommand, OutputFormat, PipeCommand, SyncCommand,
+        Command, ImportCommand, McpCommand, MigrationSubCommand, OutputFormat, PipeCommand, SyncCommand,
         VisionCommand,
     },
     handle_index_command,
@@ -33,7 +33,7 @@ use screenpipe_server::{
     vision_manager::{
         start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
     },
-    watch_pid, PipeManager, ResourceMonitor, SCServer,
+    watch_pid, PipeManager, ResourceMonitor, SCServer, RewindMigration,
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;
@@ -628,6 +628,10 @@ async fn main() -> anyhow::Result<()> {
             }
             Command::Sync { subcommand } => {
                 handle_sync_command(subcommand).await?;
+                return Ok(());
+            }
+            Command::Import { subcommand } => {
+                handle_import_command(subcommand, &cli).await?;
                 return Ok(());
             }
         }
@@ -2116,6 +2120,142 @@ async fn handle_sync_command(command: &SyncCommand) -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     println!("failed to connect to server: {}", e);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle import subcommands
+async fn handle_import_command(command: &ImportCommand, _cli: &Cli) -> anyhow::Result<()> {
+    match command {
+        ImportCommand::Rewind {
+            scan,
+            start,
+            fresh,
+            data_dir,
+        } => {
+            let local_data_dir = get_base_dir(data_dir)?;
+            
+            // Initialize database
+            let db = Arc::new(
+                DatabaseManager::new(&format!(
+                    "{}/db.sqlite",
+                    local_data_dir.to_string_lossy()
+                ))
+                .await
+                .map_err(|e| {
+                    error!("failed to initialize database: {:?}", e);
+                    e
+                })?,
+            );
+
+            let migration = RewindMigration::new(db, &local_data_dir).await?;
+
+            if !migration.is_available() {
+                println!("Rewind AI data not found.");
+                println!("Expected location: ~/Library/Application Support/com.memoryvault.MemoryVault/chunks");
+                return Ok(());
+            }
+
+            if *scan || (!*start) {
+                // Scan and show statistics
+                let result = migration.scan().await?;
+                
+                println!();
+                println!("Rewind AI Data Found");
+                println!("====================");
+                println!("Location:          {}", result.rewind_path);
+                println!("Video files:       {}", result.total_video_files);
+                println!("Total size:        {}", result.total_size_formatted);
+                println!("Estimated frames:  ~{}", result.estimated_frame_count);
+                println!("Already imported:  {}", result.already_imported_count);
+                println!();
+                
+                if result.already_imported_count < result.total_video_files {
+                    let remaining = result.total_video_files - result.already_imported_count;
+                    println!("To start import:  screenpipe import rewind --start");
+                    if result.already_imported_count > 0 {
+                        println!("To start fresh:   screenpipe import rewind --start --fresh");
+                        println!();
+                        println!("({} videos remaining)", remaining);
+                    }
+                } else {
+                    println!("✓ All Rewind data has been imported!");
+                }
+                
+                return Ok(());
+            }
+
+            if *start {
+                println!("Starting Rewind import{}...", if *fresh { " (fresh start)" } else { "" });
+                println!();
+
+                // Subscribe to progress updates
+                let mut progress_rx = migration.progress_receiver();
+
+                // Start migration in background
+                let mut migration_handle = {
+                    let fresh = *fresh;
+                    tokio::spawn(async move {
+                        migration.start(fresh).await
+                    })
+                };
+
+                // Print progress updates
+                loop {
+                    tokio::select! {
+                        _ = progress_rx.changed() => {
+                            let progress = progress_rx.borrow();
+                            match progress.state {
+                                screenpipe_server::MigrationState::Importing => {
+                                    print!("\rProgress: {:.1}% ({}/{} videos, {} frames imported)     ",
+                                        progress.percent_complete,
+                                        progress.videos_processed,
+                                        progress.total_videos,
+                                        progress.frames_imported
+                                    );
+                                    std::io::stdout().flush()?;
+                                }
+                                screenpipe_server::MigrationState::Completed => {
+                                    println!();
+                                    println!();
+                                    println!("✓ Import completed!");
+                                    println!("  Videos processed: {}", progress.videos_processed);
+                                    println!("  Frames imported:  {}", progress.frames_imported);
+                                    println!("  Frames skipped:   {}", progress.frames_skipped);
+                                    break;
+                                }
+                                screenpipe_server::MigrationState::Failed => {
+                                    println!();
+                                    println!("✗ Import failed: {}", progress.error_message.as_deref().unwrap_or("Unknown error"));
+                                    break;
+                                }
+                                screenpipe_server::MigrationState::Cancelled => {
+                                    println!();
+                                    println!("Import cancelled.");
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                        result = &mut migration_handle => {
+                            match result {
+                                Ok(Ok(_)) => {}
+                                Ok(Err(e)) => {
+                                    println!();
+                                    println!("✗ Import failed: {}", e);
+                                }
+                                Err(e) => {
+                                    println!();
+                                    println!("✗ Import task failed: {}", e);
+                                }
+                            }
+                            break;
+                        }
+                    }
                 }
             }
         }

@@ -467,6 +467,30 @@ pub enum Command {
         #[arg(value_enum)]
         shell: Shell,
     },
+    /// Import data from external applications
+    Import {
+        #[command(subcommand)]
+        subcommand: ImportCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ImportCommand {
+    /// Import data from Rewind AI
+    Rewind {
+        /// Scan Rewind data and show statistics
+        #[arg(long)]
+        scan: bool,
+        /// Start or resume import
+        #[arg(long)]
+        start: bool,
+        /// Start fresh (clear previous progress)
+        #[arg(long)]
+        fresh: bool,
+        /// Data directory. Default to $HOME/.screenpipe
+        #[arg(long, value_hint = ValueHint::DirPath)]
+        data_dir: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

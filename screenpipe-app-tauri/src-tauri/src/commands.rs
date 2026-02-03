@@ -684,3 +684,88 @@ pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), S
     info!("Window-specific shortcuts unregistered");
     Ok(())
 }
+
+// ============================================================================
+// Rewind AI Import Commands
+// ============================================================================
+
+use crate::rewind_integration::RewindMigrationState;
+use screenpipe_server::{MigrationProgress, RewindScanResult};
+
+/// Check if Rewind AI data is available
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_check_available(
+    state: tauri::State<'_, std::sync::Arc<RewindMigrationState>>,
+) -> Result<bool, String> {
+    Ok(state.is_available().await)
+}
+
+/// Scan Rewind AI data
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_scan(
+    state: tauri::State<'_, std::sync::Arc<RewindMigrationState>>,
+) -> Result<RewindScanResult, String> {
+    state.scan().await.map_err(|e| e.to_string())
+}
+
+/// Get migration progress
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_get_progress(
+    state: tauri::State<'_, std::sync::Arc<RewindMigrationState>>,
+) -> Result<MigrationProgress, String> {
+    Ok(state.get_progress().await)
+}
+
+/// Start Rewind import
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_start_migration(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, std::sync::Arc<RewindMigrationState>>,
+    fresh_start: bool,
+) -> Result<(), String> {
+    use std::sync::Arc;
+
+    if state.is_running.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err("Migration already in progress".to_string());
+    }
+
+    state.is_running.store(true, std::sync::atomic::Ordering::SeqCst);
+
+    let migration = {
+        let guard = state.migration.lock().await;
+        guard.as_ref().ok_or("Not initialized")?.clone()
+    };
+
+    let state_clone = Arc::clone(&state.inner());
+    let app_handle_clone = app_handle.clone();
+
+    tokio::spawn(async move {
+        let result = migration.start(fresh_start).await;
+
+        state_clone.is_running.store(false, std::sync::atomic::Ordering::SeqCst);
+
+        // Emit completion event
+        let progress = migration.get_progress();
+        let _ = app_handle_clone.emit("rewind-migration-complete", progress);
+
+        if let Err(e) = result {
+            error!("Rewind migration failed: {}", e);
+        }
+    });
+
+    Ok(())
+}
+
+/// Cancel Rewind import
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_cancel_migration(
+    state: tauri::State<'_, std::sync::Arc<RewindMigrationState>>,
+) -> Result<(), String> {
+    state.cancel().await;
+    Ok(())
+}
