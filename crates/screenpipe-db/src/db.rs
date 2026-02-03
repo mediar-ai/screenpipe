@@ -3,10 +3,12 @@ use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
+use sqlx::pool::PoolConnection;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use sqlx::Column;
 use sqlx::Error as SqlxError;
 use sqlx::Row;
+use sqlx::Sqlite;
 use sqlx::TypeInfo;
 use sqlx::ValueRef;
 use std::sync::Arc;
@@ -92,6 +94,46 @@ impl DatabaseManager {
         match migrator.run(pool).await {
             Ok(_) => Ok(()),
             Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Acquire a connection with `BEGIN IMMEDIATE` and retry on SQLITE_BUSY variants.
+    ///
+    /// Unlike `pool.begin()` (DEFERRED), `BEGIN IMMEDIATE` acquires the write lock
+    /// upfront. This avoids SQLITE_BUSY_SNAPSHOT (code 517) that occurs in WAL mode
+    /// when a deferred reader tries to upgrade to writer after another commit.
+    ///
+    /// Returns the connection ready for writes. Caller must COMMIT or ROLLBACK.
+    async fn begin_immediate_with_retry(
+        &self,
+    ) -> Result<PoolConnection<Sqlite>, sqlx::Error> {
+        let max_retries = 5;
+        for attempt in 1..=max_retries {
+            let mut conn = self.pool.acquire().await?;
+            match sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await {
+                Ok(_) => return Ok(conn),
+                Err(e) if attempt < max_retries && Self::is_busy_error(&e) => {
+                    warn!(
+                        "BEGIN IMMEDIATE busy (attempt {}/{}), retrying...",
+                        attempt, max_retries
+                    );
+                    drop(conn);
+                    tokio::time::sleep(Duration::from_millis(100 * attempt as u64)).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        unreachable!()
+    }
+
+    /// Check if a sqlx error is a SQLite BUSY variant (code 5, 517, etc.)
+    fn is_busy_error(e: &sqlx::Error) -> bool {
+        match e {
+            sqlx::Error::Database(db_err) => {
+                let msg = db_err.message().to_lowercase();
+                msg.contains("database is locked") || msg.contains("busy")
+            }
+            _ => false,
         }
     }
 
@@ -3010,86 +3052,98 @@ LIMIT ? OFFSET ?
         new_speaker_name: &str,
         propagate_similar: bool,
     ) -> Result<(i64, u64, u64), sqlx::Error> {
-        // Phase 1: Short write transaction – reassign the chunk and move one embedding.
-        //          Avoid holding a write lock during expensive vector search.
+        // Phase 1: Short IMMEDIATE write transaction – reassign the chunk and move one embedding.
+        //          Uses BEGIN IMMEDIATE to acquire write lock upfront (avoids SQLITE_BUSY_SNAPSHOT
+        //          code 517 that happens with DEFERRED transactions in WAL mode under contention).
+        //          Retries on busy errors since the recording pipeline writes constantly.
         let (current_speaker_id, target_speaker_id, transcriptions_updated, mut embeddings_moved) = {
-            let mut tx = self.pool.begin().await?;
+            let mut conn = self.begin_immediate_with_retry().await?;
 
-            // 1. Get the current speaker_id for this audio chunk
-            let current_speaker_id: Option<i64> = sqlx::query_scalar(
-                "SELECT speaker_id FROM audio_transcriptions WHERE audio_chunk_id = ? LIMIT 1",
-            )
-            .bind(audio_chunk_id)
-            .fetch_optional(&mut *tx)
-            .await?;
+            let result: Result<_, sqlx::Error> = async {
+                // 1. Get the current speaker_id for this audio chunk
+                let current_speaker_id: Option<i64> = sqlx::query_scalar(
+                    "SELECT speaker_id FROM audio_transcriptions WHERE audio_chunk_id = ? LIMIT 1",
+                )
+                .bind(audio_chunk_id)
+                .fetch_optional(&mut *conn)
+                .await?;
 
-            let current_speaker_id = match current_speaker_id {
-                Some(id) => id,
-                None => {
-                    tx.rollback().await?;
-                    return Err(sqlx::Error::RowNotFound);
-                }
-            };
+                let current_speaker_id = match current_speaker_id {
+                    Some(id) => id,
+                    None => return Err(sqlx::Error::RowNotFound),
+                };
 
-            // 2. Find or create the target speaker
-            let target_speaker: Speaker = match sqlx::query_as::<_, Speaker>(
-                "SELECT id, name, metadata FROM speakers WHERE name = ? AND hallucination = 0",
-            )
-            .bind(new_speaker_name)
-            .fetch_optional(&mut *tx)
-            .await?
-            {
-                Some(speaker) => speaker,
-                None => {
-                    let id = sqlx::query("INSERT INTO speakers (name) VALUES (?)")
-                        .bind(new_speaker_name)
-                        .execute(&mut *tx)
-                        .await?
-                        .last_insert_rowid();
+                // 2. Find or create the target speaker
+                let target_speaker: Speaker = match sqlx::query_as::<_, Speaker>(
+                    "SELECT id, name, metadata FROM speakers WHERE name = ? AND hallucination = 0",
+                )
+                .bind(new_speaker_name)
+                .fetch_optional(&mut *conn)
+                .await?
+                {
+                    Some(speaker) => speaker,
+                    None => {
+                        let id = sqlx::query("INSERT INTO speakers (name) VALUES (?)")
+                            .bind(new_speaker_name)
+                            .execute(&mut *conn)
+                            .await?
+                            .last_insert_rowid();
 
-                    Speaker {
-                        id,
-                        name: new_speaker_name.to_string(),
-                        metadata: String::new(),
+                        Speaker {
+                            id,
+                            name: new_speaker_name.to_string(),
+                            metadata: String::new(),
+                        }
                     }
+                };
+
+                // 3. Update the transcription's speaker_id
+                let transcriptions_updated = sqlx::query(
+                    "UPDATE audio_transcriptions SET speaker_id = ? WHERE audio_chunk_id = ?",
+                )
+                .bind(target_speaker.id)
+                .bind(audio_chunk_id)
+                .execute(&mut *conn)
+                .await?
+                .rows_affected();
+
+                // 4. Move the embedding from old speaker to new speaker
+                let embedding_id: Option<i64> = sqlx::query_scalar(
+                    "SELECT id FROM speaker_embeddings WHERE speaker_id = ? LIMIT 1",
+                )
+                .bind(current_speaker_id)
+                .fetch_optional(&mut *conn)
+                .await?;
+
+                let mut embeddings_moved = 0u64;
+                if let Some(emb_id) = embedding_id {
+                    sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?")
+                        .bind(target_speaker.id)
+                        .bind(emb_id)
+                        .execute(&mut *conn)
+                        .await?;
+                    embeddings_moved = 1;
                 }
-            };
 
-            // 3. Update the transcription's speaker_id
-            let transcriptions_updated = sqlx::query(
-                "UPDATE audio_transcriptions SET speaker_id = ? WHERE audio_chunk_id = ?",
-            )
-            .bind(target_speaker.id)
-            .bind(audio_chunk_id)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected();
-
-            // 4. Move the embedding from old speaker to new speaker
-            let embedding_id: Option<i64> = sqlx::query_scalar(
-                "SELECT id FROM speaker_embeddings WHERE speaker_id = ? LIMIT 1",
-            )
-            .bind(current_speaker_id)
-            .fetch_optional(&mut *tx)
-            .await?;
-
-            let mut embeddings_moved = 0u64;
-            if let Some(emb_id) = embedding_id {
-                sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?")
-                    .bind(target_speaker.id)
-                    .bind(emb_id)
-                    .execute(&mut *tx)
-                    .await?;
-                embeddings_moved = 1;
+                Ok((
+                    current_speaker_id,
+                    target_speaker.id,
+                    transcriptions_updated,
+                    embeddings_moved,
+                ))
             }
+            .await;
 
-            tx.commit().await?;
-            (
-                current_speaker_id,
-                target_speaker.id,
-                transcriptions_updated,
-                embeddings_moved,
-            )
+            match result {
+                Ok(val) => {
+                    sqlx::query("COMMIT").execute(&mut *conn).await?;
+                    val
+                }
+                Err(e) => {
+                    let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                    return Err(e);
+                }
+            }
         };
 
         // Phase 2: If propagate_similar, do the expensive vector similarity search
@@ -3121,61 +3175,82 @@ LIMIT ? OFFSET ?
             })
             .collect();
 
-            // Phase 3: Short write transaction – apply the similarity results.
+            // Phase 3: Short IMMEDIATE write transaction – apply the similarity results.
             if !similar_rows.is_empty() {
-                let mut tx = self.pool.begin().await?;
+                let mut conn = self.begin_immediate_with_retry().await?;
 
-                for (emb_id, old_speaker_id) in &similar_rows {
-                    // Move the embedding
-                    sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?")
+                let result: Result<(), sqlx::Error> = async {
+                    for (emb_id, old_speaker_id) in &similar_rows {
+                        sqlx::query(
+                            "UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?",
+                        )
                         .bind(target_speaker_id)
                         .bind(emb_id)
-                        .execute(&mut *tx)
+                        .execute(&mut *conn)
                         .await?;
-                    embeddings_moved += 1;
+                        embeddings_moved += 1;
 
-                    // Move transcriptions from the old speaker
-                    sqlx::query(
-                        "UPDATE audio_transcriptions SET speaker_id = ? WHERE speaker_id = ?",
-                    )
-                    .bind(target_speaker_id)
-                    .bind(old_speaker_id)
-                    .execute(&mut *tx)
-                    .await?;
+                        sqlx::query(
+                            "UPDATE audio_transcriptions SET speaker_id = ? WHERE speaker_id = ?",
+                        )
+                        .bind(target_speaker_id)
+                        .bind(old_speaker_id)
+                        .execute(&mut *conn)
+                        .await?;
 
-                    // Check if old speaker has no more embeddings, delete if empty
-                    let remaining: i64 = sqlx::query_scalar(
-                        "SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = ?",
-                    )
-                    .bind(old_speaker_id)
-                    .fetch_one(&mut *tx)
-                    .await?;
+                        let remaining: i64 = sqlx::query_scalar(
+                            "SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = ?",
+                        )
+                        .bind(old_speaker_id)
+                        .fetch_one(&mut *conn)
+                        .await?;
 
-                    if remaining == 0 {
-                        sqlx::query("DELETE FROM speakers WHERE id = ?")
-                            .bind(old_speaker_id)
-                            .execute(&mut *tx)
-                            .await?;
+                        if remaining == 0 {
+                            sqlx::query("DELETE FROM speakers WHERE id = ?")
+                                .bind(old_speaker_id)
+                                .execute(&mut *conn)
+                                .await?;
+                        }
+                    }
+                    Ok(())
+                }
+                .await;
+
+                match result {
+                    Ok(()) => {
+                        sqlx::query("COMMIT").execute(&mut *conn).await?;
+                    }
+                    Err(e) => {
+                        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                        return Err(e);
                     }
                 }
-
-                tx.commit().await?;
             }
         }
 
         // Phase 4: Clean up – if original speaker has no embeddings left, delete it
-        {
+        if current_speaker_id != target_speaker_id {
             let remaining: i64 =
                 sqlx::query_scalar("SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = ?")
                     .bind(current_speaker_id)
                     .fetch_one(&self.pool)
                     .await?;
 
-            if remaining == 0 && current_speaker_id != target_speaker_id {
-                sqlx::query("DELETE FROM speakers WHERE id = ?")
+            if remaining == 0 {
+                let mut conn = self.begin_immediate_with_retry().await?;
+                let res = sqlx::query("DELETE FROM speakers WHERE id = ?")
                     .bind(current_speaker_id)
-                    .execute(&self.pool)
-                    .await?;
+                    .execute(&mut *conn)
+                    .await;
+                match res {
+                    Ok(_) => {
+                        sqlx::query("COMMIT").execute(&mut *conn).await?;
+                    }
+                    Err(e) => {
+                        let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                        return Err(e);
+                    }
+                }
             }
         }
 

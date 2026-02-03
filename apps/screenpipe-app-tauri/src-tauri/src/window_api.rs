@@ -799,8 +799,11 @@ impl ShowRewindWindow {
                     if let Ok(handle) = window.window_handle() {
                         if let raw_window_handle::RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
                             use objc::{msg_send, sel, sel_impl};
-                            let ns_window = appkit_handle.ns_window.as_ptr() as *mut objc::runtime::Object;
-                            let _: () = unsafe { msg_send![ns_window, setSharingType: 0_u64] };
+                            let ns_view = appkit_handle.ns_view.as_ptr() as *mut objc::runtime::Object;
+                            let ns_window: *mut objc::runtime::Object = unsafe { msg_send![ns_view, window] };
+                            if !ns_window.is_null() {
+                                let _: () = unsafe { msg_send![ns_window, setSharingType: 0_u64] };
+                            }
                         }
                     }
                 }

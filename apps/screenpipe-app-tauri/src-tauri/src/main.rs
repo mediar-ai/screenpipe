@@ -81,7 +81,7 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
-use tauri_plugin_sentry::sentry;
+use sentry;
 mod health;
 use base64::Engine;
 use health::start_health_check;
@@ -902,7 +902,8 @@ async fn main() {
 
         // Only add Sentry plugin if telemetry is enabled
         let app = if let Some(ref guard) = sentry_guard {
-            app.plugin(tauri_plugin_sentry::init(guard))
+            let client = sentry::Hub::current().client().unwrap();
+            app.plugin(tauri_plugin_sentry::init(&client))
         } else {
             app
         };
