@@ -1114,6 +1114,45 @@ async fn main() {
             });
             app.manage(store.clone());
 
+            // Attach non-sensitive settings to all future Sentry events
+            if !telemetry_disabled {
+                sentry::configure_scope(|scope| {
+                    scope.set_context("app_settings", sentry::protocol::Context::Other({
+                        let mut map = std::collections::BTreeMap::new();
+                        map.insert("fps".into(), serde_json::json!(store.fps));
+                        map.insert("adaptive_fps".into(), serde_json::json!(store.adaptive_fps));
+                        map.insert("audio_chunk_duration".into(), serde_json::json!(store.audio_chunk_duration));
+                        map.insert("port".into(), serde_json::json!(store.port));
+                        map.insert("disable_audio".into(), serde_json::json!(store.disable_audio));
+                        map.insert("audio_transcription_engine".into(), serde_json::json!(store.audio_transcription_engine));
+                        map.insert("enable_realtime_audio_transcription".into(), serde_json::json!(store.enable_realtime_audio_transcription));
+                        map.insert("enable_realtime_vision".into(), serde_json::json!(store.enable_realtime_vision));
+                        map.insert("ocr_engine".into(), serde_json::json!(store.ocr_engine));
+                        map.insert("monitor_ids".into(), serde_json::json!(store.monitor_ids));
+                        map.insert("use_all_monitors".into(), serde_json::json!(store.use_all_monitors));
+                        map.insert("languages".into(), serde_json::json!(store.languages));
+                        map.insert("use_pii_removal".into(), serde_json::json!(store.use_pii_removal));
+                        map.insert("disable_vision".into(), serde_json::json!(store.disable_vision));
+                        map.insert("vad_sensitivity".into(), serde_json::json!(store.vad_sensitivity));
+                        map.insert("enable_frame_cache".into(), serde_json::json!(store.enable_frame_cache));
+                        map.insert("enable_ui_events".into(), serde_json::json!(store.enable_ui_events));
+                        map.insert("enable_beta".into(), serde_json::json!(store.enable_beta));
+                        map.insert("auto_start_enabled".into(), serde_json::json!(store.auto_start_enabled));
+                        map.insert("platform".into(), serde_json::json!(store.platform));
+                        map.insert("embedded_llm_enabled".into(), serde_json::json!(store.embedded_llm.enabled));
+                        map.insert("embedded_llm_model".into(), serde_json::json!(store.embedded_llm.model));
+                        map.insert("restart_interval".into(), serde_json::json!(store.restart_interval));
+                        // Only send counts for privacy-sensitive lists (not actual values)
+                        map.insert("audio_device_count".into(), serde_json::json!(store.audio_devices.len()));
+                        map.insert("ignored_windows_count".into(), serde_json::json!(store.ignored_windows.len()));
+                        map.insert("included_windows_count".into(), serde_json::json!(store.included_windows.len()));
+                        map.insert("ignored_urls_count".into(), serde_json::json!(store.ignored_urls.len()));
+                        map.insert("ai_preset_count".into(), serde_json::json!(store.ai_presets.len()));
+                        map
+                    }));
+                });
+            }
+
             // Initialize sync state
             app.manage(sync::SyncState::default());
 
