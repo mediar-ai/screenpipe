@@ -7,6 +7,7 @@ pub mod cloud_search;
 pub mod core;
 pub mod filtering;
 pub mod pipe_manager;
+pub mod rewind_migration;
 mod resource_monitor;
 mod server;
 pub mod sleep_monitor;
@@ -39,3 +40,6 @@ pub use video::{FrameWriteInfo, FrameWriteTracker, VideoCapture};
 pub mod embedding;
 pub use cloud_search::{CloudSearchClient, CloudSearchMetadata, CloudStatus};
 pub use ui_recorder::{start_ui_recording, UiRecorderConfig, UiRecorderHandle};
+pub use rewind_migration::{
+    MigrationProgress, MigrationScanResult, MigrationState, RewindMigration, DEFAULT_REWIND_PATH,
+};

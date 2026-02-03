@@ -987,7 +987,11 @@ async fn main() {
             obsidian_sync::obsidian_run_sync,
             obsidian_sync::obsidian_start_scheduler,
             obsidian_sync::obsidian_stop_scheduler,
-            obsidian_sync::obsidian_cancel_sync
+            obsidian_sync::obsidian_cancel_sync,
+            // Rewind AI Migration commands
+            commands::check_rewind_available,
+            commands::scan_rewind_data,
+            commands::start_rewind_migration
         ])
         .setup(move |app| {
             //deep link register_all

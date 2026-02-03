@@ -684,3 +684,128 @@ pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), S
     info!("Window-specific shortcuts unregistered");
     Ok(())
 }
+
+// ============================================================================
+// Rewind AI Migration Commands
+// ============================================================================
+
+/// Check if Rewind AI data is available for migration
+#[tauri::command]
+#[specta::specta]
+pub async fn check_rewind_available() -> Result<bool, String> {
+    let rewind_path = dirs::home_dir()
+        .ok_or("Failed to get home directory")?
+        .join("Library/Application Support/com.memoryvault.MemoryVault/chunks");
+    
+    Ok(rewind_path.exists())
+}
+
+/// Get scan statistics for Rewind AI data
+#[tauri::command]
+#[specta::specta]
+pub async fn scan_rewind_data() -> Result<RewindScanResult, String> {
+    use screenpipe_server::rewind_migration::{RewindMigration, MigrationScanResult as ServerScanResult};
+    use screenpipe_db::DatabaseManager;
+    use std::sync::Arc;
+    
+    // Get database path
+    let screenpipe_dir = dirs::home_dir()
+        .ok_or("Failed to get home directory")?
+        .join(".screenpipe");
+    
+    let db_path = screenpipe_dir.join("data.db");
+    
+    // Create database manager
+    let db = DatabaseManager::new(&db_path.to_string_lossy())
+        .await
+        .map_err(|e| format!("Failed to connect to database: {}", e))?;
+    
+    let migration = RewindMigration::new(
+        Arc::new(db),
+        None,
+        Some(screenpipe_dir),
+        screenpipe_db::OcrEngine::default(),
+    );
+    
+    if !migration.is_data_available().await {
+        return Err("Rewind data not found".to_string());
+    }
+    
+    let result = migration.scan().await.map_err(|e| e.to_string())?;
+    
+    Ok(RewindScanResult {
+        total_video_files: result.total_video_files,
+        total_size_bytes: result.total_size_bytes,
+        estimated_frame_count: result.estimated_frame_count,
+        already_imported_count: result.already_imported_count,
+        rewind_path: result.rewind_path,
+    })
+}
+
+/// Result of scanning Rewind data (for Tauri command)
+#[derive(serde::Serialize, specta::Type)]
+pub struct RewindScanResult {
+    pub total_video_files: usize,
+    pub total_size_bytes: u64,
+    pub estimated_frame_count: usize,
+    pub already_imported_count: usize,
+    pub rewind_path: String,
+}
+
+/// Start Rewind AI migration
+#[tauri::command]
+#[specta::specta]
+pub async fn start_rewind_migration(fresh_start: bool) -> Result<String, String> {
+    use screenpipe_server::rewind_migration::RewindMigration;
+    use screenpipe_db::DatabaseManager;
+    use std::sync::Arc;
+    
+    // Get database path
+    let screenpipe_dir = dirs::home_dir()
+        .ok_or("Failed to get home directory")?
+        .join(".screenpipe");
+    
+    let db_path = screenpipe_dir.join("data.db");
+    
+    // Create database manager
+    let db = DatabaseManager::new(&db_path.to_string_lossy())
+        .await
+        .map_err(|e| format!("Failed to connect to database: {}", e))?;
+    
+    let db = Arc::new(db);
+    let screenpipe_dir_clone = screenpipe_dir.clone();
+    
+    // Clear checkpoint if fresh start
+    if fresh_start {
+        let migration = RewindMigration::new(
+            db.clone(),
+            None,
+            Some(screenpipe_dir.clone()),
+            screenpipe_db::OcrEngine::default(),
+        );
+        migration.clear_checkpoint().await.map_err(|e| e.to_string())?;
+    }
+    
+    let session_id = uuid::Uuid::new_v4().to_string();
+    
+    // Start migration in background
+    tokio::spawn(async move {
+        let migration = RewindMigration::new(
+            db,
+            None,
+            Some(screenpipe_dir_clone),
+            screenpipe_db::OcrEngine::default(),
+        );
+        
+        match migration.start().await {
+            Ok(progress) => {
+                info!("Rewind migration completed: {} frames imported", progress.frames_imported);
+            }
+            Err(e) => {
+                error!("Rewind migration failed: {}", e);
+            }
+        }
+    });
+    
+    Ok(session_id)
+}

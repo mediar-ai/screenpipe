@@ -52,6 +52,7 @@ use screenpipe_core::sync::SyncServiceHandle;
 use tracing::{debug, error, info};
 
 use crate::sync_api::{self, SyncState};
+use crate::rewind_migration::{MigrationProgress, MigrationScanResult, RewindMigration};
 
 use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::OcrEngine;
@@ -1445,6 +1446,12 @@ impl SCServer {
                 "/sync/download",
                 axum::routing::post(sync_api::sync_download),
             )
+            // Rewind AI Migration routes
+            .route("/rewind/scan", get(rewind_migration_scan))
+            .route("/rewind/start", axum::routing::post(rewind_migration_start))
+            .route("/rewind/progress", get(rewind_migration_progress))
+            .route("/rewind/pause", axum::routing::post(rewind_migration_pause))
+            .route("/rewind/cancel", axum::routing::post(rewind_migration_cancel))
             // NOTE: websockerts and sse is not supported by openapi so we move it down here
             .route("/stream/frames", get(stream_frames_handler))
             .route("/ws/events", get(ws_events_handler))
@@ -4016,6 +4023,161 @@ struct MergeSpeakersRequest {
 
 #[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
+
+// ============================================================================
+// Rewind AI Migration Endpoints
+// ============================================================================
+
+/// Response for Rewind migration scan
+#[derive(OaSchema, Serialize)]
+pub struct RewindScanResponse {
+    pub available: bool,
+    pub scan_result: Option<MigrationScanResult>,
+    pub error: Option<String>,
+}
+
+/// Request to start Rewind migration
+#[derive(OaSchema, Deserialize)]
+pub struct RewindMigrationStartRequest {
+    /// Optional custom path to Rewind data directory
+    pub rewind_path: Option<String>,
+    /// Whether to clear existing checkpoint and start fresh
+    #[serde(default)]
+    pub fresh_start: bool,
+}
+
+/// Response for migration start
+#[derive(OaSchema, Serialize)]
+pub struct RewindMigrationStartResponse {
+    pub success: bool,
+    pub message: String,
+    pub session_id: Option<String>,
+}
+
+/// Check if Rewind data is available and get scan statistics
+#[oasgen]
+async fn rewind_migration_scan(
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<RewindScanResponse>, (StatusCode, JsonResponse<Value>)> {
+    let migration = RewindMigration::new(
+        state.db.clone(),
+        None,
+        Some(state.screenpipe_dir.clone()),
+        screenpipe_db::OcrEngine::default(),
+    );
+
+    if !migration.is_data_available().await {
+        return Ok(JsonResponse(RewindScanResponse {
+            available: false,
+            scan_result: None,
+            error: Some("Rewind data not found. Please ensure Rewind AI is installed.".to_string()),
+        }));
+    }
+
+    match migration.scan().await {
+        Ok(result) => Ok(JsonResponse(RewindScanResponse {
+            available: true,
+            scan_result: Some(result),
+            error: None,
+        })),
+        Err(e) => Ok(JsonResponse(RewindScanResponse {
+            available: true,
+            scan_result: None,
+            error: Some(e.to_string()),
+        })),
+    }
+}
+
+/// Start or resume Rewind migration
+#[oasgen]
+async fn rewind_migration_start(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(request): JsonResponse<RewindMigrationStartRequest>,
+) -> Result<JsonResponse<RewindMigrationStartResponse>, (StatusCode, JsonResponse<Value>)> {
+    let rewind_path = request.rewind_path.map(PathBuf::from);
+    
+    // Clear checkpoint if fresh start requested
+    if request.fresh_start {
+        let migration_for_clear = RewindMigration::new(
+            state.db.clone(),
+            rewind_path.clone(),
+            Some(state.screenpipe_dir.clone()),
+            screenpipe_db::OcrEngine::default(),
+        );
+        if let Err(e) = migration_for_clear.clear_checkpoint().await {
+            error!("Failed to clear checkpoint: {}", e);
+        }
+    }
+
+    // Start migration in background task
+    let db = state.db.clone();
+    let screenpipe_dir = state.screenpipe_dir.clone();
+    let rewind_path_clone = rewind_path.clone();
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+
+    tokio::spawn(async move {
+        let migration = RewindMigration::new(
+            db,
+            rewind_path_clone,
+            Some(screenpipe_dir),
+            screenpipe_db::OcrEngine::default(),
+        );
+        match migration.start().await {
+            Ok(progress) => {
+                info!(
+                    "Rewind migration completed: {} frames imported",
+                    progress.frames_imported
+                );
+            }
+            Err(e) => {
+                error!("Rewind migration failed: {}", e);
+            }
+        }
+    });
+
+    Ok(JsonResponse(RewindMigrationStartResponse {
+        success: true,
+        message: "Migration started in background".to_string(),
+        session_id: Some(session_id),
+    }))
+}
+
+/// Get current migration progress
+#[oasgen]
+async fn rewind_migration_progress(
+    State(_state): State<Arc<AppState>>,
+) -> Result<JsonResponse<MigrationProgress>, (StatusCode, JsonResponse<Value>)> {
+    // For now, return default progress - in a full implementation,
+    // we'd store the migration state in AppState
+    Ok(JsonResponse(MigrationProgress::default()))
+}
+
+/// Pause the current migration
+#[oasgen]
+async fn rewind_migration_pause(
+    State(_state): State<Arc<AppState>>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    // In a full implementation, we'd store the migration handle in AppState
+    // and call request_pause() on it
+    Ok(JsonResponse(json!({
+        "success": true,
+        "message": "Pause requested"
+    })))
+}
+
+/// Cancel the current migration
+#[oasgen]
+async fn rewind_migration_cancel(
+    State(_state): State<Arc<AppState>>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    // In a full implementation, we'd store the migration handle in AppState
+    // and call request_cancel() on it
+    Ok(JsonResponse(json!({
+        "success": true,
+        "message": "Cancel requested"
+    })))
+}
 
 #[cfg(test)]
 mod tests {

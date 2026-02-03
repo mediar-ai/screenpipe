@@ -101,6 +101,8 @@ md5 = "0.7"
 
 tempfile = "3.3.0"
 
+# Path expansion
+shellexpand = "3.1"
 
 url = { version = "2.2.0", optional = true }
 
