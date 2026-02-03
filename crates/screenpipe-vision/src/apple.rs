@@ -95,12 +95,18 @@ pub fn perform_ocr_apple(
             Some(overall_confidence),
         );
 
+        // Guard against zero-dimension images that would cause CoreVideo errors
+        if width == 0 || height == 0 {
+            error!("Cannot perform OCR on zero-dimension image ({}x{})", width, height);
+            return default_ocr_result;
+        }
+
         let width = usize::try_from(width).unwrap();
         let height = usize::try_from(height).unwrap();
 
         let mut pixel_buf_out = None;
 
-        let pixel_buf = unsafe {
+        let pixel_buf = match unsafe {
             PixelBuf::create_with_bytes_in(
                 width,
                 height,
@@ -114,10 +120,21 @@ pub fn perform_ocr_apple(
                 None,
             )
             .to_result_unchecked(pixel_buf_out)
-        }
-        .unwrap();
+        } {
+            Ok(buf) => buf,
+            Err(e) => {
+                error!("Failed to create pixel buffer for OCR ({}x{}): {:?}", width, height, e);
+                return default_ocr_result;
+            }
+        };
 
-        let handler = ImageRequestHandler::with_cv_pixel_buf(&pixel_buf, None).unwrap();
+        let handler = match ImageRequestHandler::with_cv_pixel_buf(&pixel_buf, None) {
+            Some(h) => h,
+            None => {
+                error!("Failed to create image request handler for OCR");
+                return default_ocr_result;
+            }
+        };
         let mut request = RecognizeTextRequest::new();
         request.set_recognition_langs(&languages_array);
         request.set_uses_lang_correction(false);
@@ -133,13 +150,19 @@ pub fn perform_ocr_apple(
                 let mut ocr_results_vec: Vec<serde_json::Value> = Vec::new();
                 let mut ocr_text: String = String::new();
                 results.iter().for_each(|result| {
-                    let observation_result = result.top_candidates(1).get(0).unwrap();
+                    let Ok(observation_result) = result.top_candidates(1).get(0) else {
+                        return;
+                    };
                     let text = observation_result.string();
                     let confidence = observation_result.confidence() as f64;
-                    let bbox = observation_result
-                        .bounding_box_for_range(ns::Range::new(0, text.len()))
-                        .unwrap()
-                        .bounding_box();
+                    let Ok(bbox_result) = observation_result
+                        .bounding_box_for_range(ns::Range::new(0, text.len())) else {
+                        // Skip bounding box if it fails, still capture the text
+                        overall_confidence += confidence;
+                        ocr_text.push_str(text.to_string().as_str());
+                        return;
+                    };
+                    let bbox = bbox_result.bounding_box();
                     let x = bbox.origin.x;
                     let y = bbox.origin.y;
                     let height = bbox.size.height;
