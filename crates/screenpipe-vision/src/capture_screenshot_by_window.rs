@@ -232,21 +232,7 @@ impl WindowFilters {
         let app_name_lower = app_name.to_lowercase();
         let title_lower = title.to_lowercase();
 
-        // If include list is empty, we're done
-        if self.include_set.is_empty() {
-            return true;
-        }
-
-        // Check include list
-        if self
-            .include_set
-            .iter()
-            .any(|include| app_name_lower.contains(include) || title_lower.contains(include))
-        {
-            return true;
-        }
-
-        // Check ignore list first (usually smaller)
+        // Check ignore list first — always reject ignored windows
         if !self.ignore_set.is_empty()
             && self
                 .ignore_set
@@ -256,7 +242,16 @@ impl WindowFilters {
             return false;
         }
 
-        false
+        // If include list is set, only allow windows that match it
+        if !self.include_set.is_empty() {
+            return self
+                .include_set
+                .iter()
+                .any(|include| app_name_lower.contains(include) || title_lower.contains(include));
+        }
+
+        // No include list and not ignored — allow
+        true
     }
 
     /// Check if a URL should be filtered out for privacy
@@ -861,26 +856,23 @@ mod tests {
 
     #[test]
     fn test_is_valid_with_ignore_list() {
-        // The current is_valid logic:
-        // 1. If include_set is empty, return true (ignore_set not checked!)
-        // 2. If window matches include_set, return true
-        // 3. If window matches ignore_set (and didn't match include), return false
-        // 4. Otherwise return false
-        //
-        // This means ignore_set only filters things that DON'T match include_set
+        // Logic: ignore list is always checked first, then include list
         let filters = WindowFilters::new(&["private".to_string()], &[], &[]);
-        // Empty include_set = everything valid
+        // No include list: allow everything except ignored
         assert!(filters.is_valid("Chrome", "Google"));
-        assert!(filters.is_valid("Chrome", "Private Window")); // ignore_set not checked!
+        assert!(!filters.is_valid("Chrome", "Private Window")); // ignored!
 
         let filters_with_include =
             WindowFilters::new(&["private".to_string()], &["chrome".to_string()], &[]);
-        // Chrome matches include, so valid even if title has "private"
+        // Chrome matches include, "Google" not ignored → valid
         assert!(filters_with_include.is_valid("Chrome", "Google"));
-        assert!(filters_with_include.is_valid("Chrome", "Private Window")); // include wins
+        // "Private" is in ignore list → rejected even though Chrome is in include list
+        assert!(!filters_with_include.is_valid("Chrome", "Private Window"));
 
         // Firefox doesn't match include, and matches ignore
         assert!(!filters_with_include.is_valid("Firefox", "Private Browsing"));
+        // Firefox doesn't match include, and doesn't match ignore → still rejected (not in include list)
+        assert!(!filters_with_include.is_valid("Firefox", "Regular Window"));
     }
 
     // ==================== Edge cases ====================

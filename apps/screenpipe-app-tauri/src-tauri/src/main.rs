@@ -33,10 +33,12 @@ use specta_typescript::Typescript;
 use tauri_specta::{collect_commands, Builder};
 
 mod analytics;
+#[allow(deprecated)]
 mod icons;
 use crate::analytics::start_analytics;
 use crate::store::SettingsStore;
 
+#[allow(deprecated)]
 mod commands;
 mod disk_usage;
 mod permissions;
@@ -45,10 +47,12 @@ mod recording;
 mod store;
 mod tray;
 mod updates;
+#[allow(deprecated)]
 mod window_api;
 #[cfg(target_os = "windows")]
 mod windows_overlay;
 #[cfg(target_os = "macos")]
+#[allow(deprecated)]
 mod space_monitor;
 mod sync;
 mod obsidian_sync;
