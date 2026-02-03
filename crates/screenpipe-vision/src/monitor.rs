@@ -1,7 +1,32 @@
 use anyhow::{Error, Result};
 use image::DynamicImage;
+use std::fmt;
 use std::sync::Arc;
 use tracing;
+
+/// Error type for monitor listing that distinguishes permission issues from other failures
+#[derive(Debug)]
+pub enum MonitorListError {
+    /// Screen recording permission was denied by the OS
+    PermissionDenied,
+    /// Monitors could not be found (none connected, or headless)
+    NoMonitorsFound,
+    /// Some other error occurred
+    Other(String),
+}
+
+impl fmt::Display for MonitorListError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MonitorListError::PermissionDenied => write!(
+                f,
+                "Screen recording permission not granted. Grant access in System Settings > Privacy & Security > Screen Recording"
+            ),
+            MonitorListError::NoMonitorsFound => write!(f, "No monitors found"),
+            MonitorListError::Other(msg) => write!(f, "{}", msg),
+        }
+    }
+}
 
 // On macOS, we have both sck-rs (for 12.3+) and xcap (fallback for older versions)
 #[cfg(target_os = "macos")]
@@ -103,12 +128,12 @@ impl SafeMonitor {
     // Non-macOS: Create from xcap monitor
     #[cfg(not(target_os = "macos"))]
     pub fn new(monitor: XcapMonitor) -> Self {
-        let monitor_id = monitor.id().unwrap();
+        let monitor_id = monitor.id().unwrap_or(0);
         let monitor_data = Arc::new(MonitorData {
-            width: monitor.width().unwrap(),
-            height: monitor.height().unwrap(),
-            name: monitor.name().unwrap().to_string(),
-            is_primary: monitor.is_primary().unwrap(),
+            width: monitor.width().unwrap_or(0),
+            height: monitor.height().unwrap_or(0),
+            name: monitor.name().unwrap_or_default().to_string(),
+            is_primary: monitor.is_primary().unwrap_or(false),
         });
 
         Self {
@@ -171,10 +196,10 @@ impl SafeMonitor {
             let monitor = XcapMonitor::all()
                 .map_err(Error::from)?
                 .into_iter()
-                .find(|m| m.id().unwrap() == monitor_id)
+                .find(|m| m.id().unwrap_or(0) == monitor_id)
                 .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?;
 
-            if monitor.width().unwrap() == 0 || monitor.height().unwrap() == 0 {
+            if monitor.width().unwrap_or(0) == 0 || monitor.height().unwrap_or(0) == 0 {
                 return Err(anyhow::anyhow!("Invalid monitor dimensions"));
             }
 
@@ -218,62 +243,92 @@ impl SafeMonitor {
     }
 }
 
+/// List monitors with detailed error information (permission denied vs no monitors)
 #[cfg(target_os = "macos")]
-pub async fn list_monitors() -> Vec<SafeMonitor> {
+pub async fn list_monitors_detailed() -> std::result::Result<Vec<SafeMonitor>, MonitorListError> {
     tokio::task::spawn_blocking(|| {
         if use_sck_rs() {
             tracing::debug!("Using sck-rs for screen capture (macOS 12.3+)");
-            SckMonitor::all()
-                .unwrap_or_default()
-                .into_iter()
-                .map(SafeMonitor::from_sck)
-                .collect()
+            match SckMonitor::all() {
+                Ok(monitors) if monitors.is_empty() => Err(MonitorListError::NoMonitorsFound),
+                Ok(monitors) => Ok(monitors.into_iter().map(SafeMonitor::from_sck).collect()),
+                Err(e) => {
+                    let err_str = e.to_string();
+                    if err_str.contains("permission") || err_str.contains("Screen recording") {
+                        Err(MonitorListError::PermissionDenied)
+                    } else if err_str.contains("No monitors") {
+                        Err(MonitorListError::NoMonitorsFound)
+                    } else {
+                        Err(MonitorListError::Other(err_str))
+                    }
+                }
+            }
         } else {
             tracing::info!("Using xcap fallback for screen capture (macOS < 12.3)");
-            XcapMonitor::all()
-                .unwrap_or_default()
-                .into_iter()
-                .map(SafeMonitor::from_xcap)
-                .collect()
+            match XcapMonitor::all() {
+                Ok(monitors) if monitors.is_empty() => Err(MonitorListError::NoMonitorsFound),
+                Ok(monitors) => Ok(monitors.into_iter().map(SafeMonitor::from_xcap).collect()),
+                Err(e) => {
+                    let err_str = e.to_string();
+                    if err_str.contains("permission") || err_str.contains("Screen recording") {
+                        Err(MonitorListError::PermissionDenied)
+                    } else {
+                        Err(MonitorListError::Other(err_str))
+                    }
+                }
+            }
         }
     })
     .await
-    .unwrap()
+    .unwrap_or(Err(MonitorListError::Other("Task panicked".to_string())))
 }
 
+/// List monitors with detailed error information (permission denied vs no monitors)
 #[cfg(not(target_os = "macos"))]
-pub async fn list_monitors() -> Vec<SafeMonitor> {
+pub async fn list_monitors_detailed() -> std::result::Result<Vec<SafeMonitor>, MonitorListError> {
     tokio::task::spawn_blocking(|| {
-        XcapMonitor::all()
-            .unwrap()
-            .into_iter()
-            .map(SafeMonitor::new)
-            .collect()
+        match XcapMonitor::all() {
+            Ok(monitors) if monitors.is_empty() => Err(MonitorListError::NoMonitorsFound),
+            Ok(monitors) => Ok(monitors.into_iter().map(SafeMonitor::new).collect()),
+            Err(e) => Err(MonitorListError::Other(e.to_string())),
+        }
     })
     .await
-    .unwrap()
+    .unwrap_or(Err(MonitorListError::Other("Task panicked".to_string())))
+}
+
+/// List monitors, returning empty vec on any error (backwards-compatible)
+#[cfg(target_os = "macos")]
+pub async fn list_monitors() -> Vec<SafeMonitor> {
+    list_monitors_detailed().await.unwrap_or_default()
+}
+
+/// List monitors, returning empty vec on any error (backwards-compatible)
+#[cfg(not(target_os = "macos"))]
+pub async fn list_monitors() -> Vec<SafeMonitor> {
+    list_monitors_detailed().await.unwrap_or_default()
 }
 
 #[cfg(target_os = "macos")]
-pub async fn get_default_monitor() -> SafeMonitor {
+pub async fn get_default_monitor() -> Option<SafeMonitor> {
     tokio::task::spawn_blocking(|| {
         if use_sck_rs() {
-            SafeMonitor::from_sck(SckMonitor::all().unwrap().first().unwrap().clone())
+            SckMonitor::all().ok()?.into_iter().next().map(SafeMonitor::from_sck)
         } else {
-            SafeMonitor::from_xcap(XcapMonitor::all().unwrap().first().unwrap().clone())
+            XcapMonitor::all().ok()?.into_iter().next().map(SafeMonitor::from_xcap)
         }
     })
     .await
-    .unwrap()
+    .ok()?
 }
 
 #[cfg(not(target_os = "macos"))]
-pub async fn get_default_monitor() -> SafeMonitor {
+pub async fn get_default_monitor() -> Option<SafeMonitor> {
     tokio::task::spawn_blocking(|| {
-        SafeMonitor::new(XcapMonitor::all().unwrap().first().unwrap().clone())
+        XcapMonitor::all().ok()?.into_iter().next().map(SafeMonitor::new)
     })
     .await
-    .unwrap()
+    .ok()?
 }
 
 #[cfg(target_os = "macos")]
@@ -338,7 +393,7 @@ pub async fn get_monitor_by_id(id: u32) -> Option<SafeMonitor> {
     tokio::task::spawn_blocking(move || match XcapMonitor::all() {
         Ok(monitors) => {
             let monitor_count = monitors.len();
-            let monitor_ids: Vec<u32> = monitors.iter().map(|m| m.id().unwrap()).collect();
+            let monitor_ids: Vec<u32> = monitors.iter().map(|m| m.id().unwrap_or(0)).collect();
 
             tracing::debug!(
                 "Found {} monitors with IDs: {:?}",
@@ -348,7 +403,7 @@ pub async fn get_monitor_by_id(id: u32) -> Option<SafeMonitor> {
 
             monitors
                 .into_iter()
-                .find(|m| m.id().unwrap() == id)
+                .find(|m| m.id().unwrap_or(0) == id)
                 .map(SafeMonitor::new)
         }
         Err(e) => {

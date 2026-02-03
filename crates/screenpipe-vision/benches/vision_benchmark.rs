@@ -21,7 +21,7 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
             result_tx,
             Duration::from_millis(100),
             OcrEngine::Tesseract,
-            get_default_monitor().await.id(),
+            get_default_monitor().await.expect("no monitor found").id(),
             window_filters,
             vec![],
             false,

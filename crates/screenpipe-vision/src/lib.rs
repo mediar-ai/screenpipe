@@ -13,6 +13,7 @@ pub mod frame_comparison;
 #[cfg(target_os = "windows")]
 pub mod microsoft;
 pub mod monitor;
+pub use monitor::MonitorListError;
 pub mod ocr_cache;
 pub mod tesseract;
 pub mod utils;

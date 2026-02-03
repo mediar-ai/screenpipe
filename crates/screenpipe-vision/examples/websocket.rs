@@ -79,7 +79,7 @@ async fn main() -> Result<()> {
 
     let ws_port = cli.ws_port;
 
-    let monitor = get_default_monitor().await;
+    let monitor = get_default_monitor().await.expect("no monitor found — is screen recording permission granted?");
     let id = monitor.id();
     let window_filters = Arc::new(WindowFilters::new(
         &cli.ignored_windows,

@@ -53,7 +53,7 @@ use tracing::{debug, error, info};
 
 use crate::sync_api::{self, SyncState};
 
-use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
+use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors, list_monitors_detailed, MonitorListError};
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -712,6 +712,44 @@ pub async fn api_list_monitors(
         ))
     } else {
         Ok(JsonResponse(monitor_info))
+    }
+}
+
+pub async fn api_vision_status(
+) -> JsonResponse<serde_json::Value> {
+    match list_monitors_detailed().await {
+        Ok(monitors) if monitors.is_empty() => {
+            JsonResponse(json!({
+                "status": "no_monitors",
+                "message": "No monitors found"
+            }))
+        }
+        Ok(monitors) => {
+            let monitor_ids: Vec<u32> = monitors.iter().map(|m| m.id()).collect();
+            JsonResponse(json!({
+                "status": "ok",
+                "monitor_count": monitors.len(),
+                "monitor_ids": monitor_ids
+            }))
+        }
+        Err(MonitorListError::PermissionDenied) => {
+            JsonResponse(json!({
+                "status": "permission_denied",
+                "message": "Screen recording permission not granted. Grant access in System Settings > Privacy & Security > Screen Recording"
+            }))
+        }
+        Err(MonitorListError::NoMonitorsFound) => {
+            JsonResponse(json!({
+                "status": "no_monitors",
+                "message": "No monitors found"
+            }))
+        }
+        Err(MonitorListError::Other(e)) => {
+            JsonResponse(json!({
+                "status": "error",
+                "message": e
+            }))
+        }
     }
 }
 
@@ -1393,6 +1431,7 @@ impl SCServer {
             .get("/search", search)
             .get("/audio/list", api_list_audio_devices)
             .get("/vision/list", api_list_monitors)
+            .get("/vision/status", api_vision_status)
             .post("/tags/:content_type/:id", add_tags)
             .delete("/tags/:content_type/:id", remove_tags)
             .get("/pipes/info/:pipe_id", get_pipe_info_handler)

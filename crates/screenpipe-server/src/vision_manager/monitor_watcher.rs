@@ -6,9 +6,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
-use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::monitor::{list_monitors_detailed, MonitorListError};
 
 use super::manager::{VisionManager, VisionManagerStatus};
 
@@ -24,11 +24,24 @@ pub async fn start_monitor_watcher(vision_manager: Arc<VisionManager>) -> anyhow
     let handle = tokio::spawn(async move {
         // Track monitors that were disconnected (for reconnection detection)
         let mut known_monitors: HashSet<u32> = HashSet::new();
+        // Track permission state to avoid log spam
+        let mut permission_denied_logged = false;
 
         // Initialize with current monitors
-        let initial_monitors = list_monitors().await;
-        for monitor in &initial_monitors {
-            known_monitors.insert(monitor.id());
+        match list_monitors_detailed().await {
+            Ok(monitors) => {
+                for monitor in &monitors {
+                    known_monitors.insert(monitor.id());
+                }
+                permission_denied_logged = false;
+            }
+            Err(MonitorListError::PermissionDenied) => {
+                error!("Screen recording permission denied. Vision capture is disabled. Grant access in System Settings > Privacy & Security > Screen Recording");
+                permission_denied_logged = true;
+            }
+            Err(e) => {
+                warn!("Failed to list monitors on startup: {}", e);
+            }
         }
 
         loop {
@@ -38,8 +51,35 @@ pub async fn start_monitor_watcher(vision_manager: Arc<VisionManager>) -> anyhow
                 continue;
             }
 
-            // Get currently connected monitors
-            let current_monitors = list_monitors().await;
+            // Get currently connected monitors with detailed error info
+            let current_monitors = match list_monitors_detailed().await {
+                Ok(monitors) => {
+                    if permission_denied_logged {
+                        info!("Screen recording permission granted! Starting vision capture.");
+                        permission_denied_logged = false;
+                    }
+                    monitors
+                }
+                Err(MonitorListError::PermissionDenied) => {
+                    if !permission_denied_logged {
+                        error!("Screen recording permission denied. Vision capture is disabled. Grant access in System Settings > Privacy & Security > Screen Recording");
+                        permission_denied_logged = true;
+                    }
+                    // Back off to 30s when permission is denied instead of 2s
+                    tokio::time::sleep(Duration::from_secs(30)).await;
+                    continue;
+                }
+                Err(MonitorListError::NoMonitorsFound) => {
+                    debug!("No monitors found, will retry");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+                Err(e) => {
+                    warn!("Failed to list monitors: {}", e);
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+            };
             let current_ids: HashSet<u32> = current_monitors.iter().map(|m| m.id()).collect();
 
             // Get currently recording monitors
