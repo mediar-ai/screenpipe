@@ -29,7 +29,7 @@ tokio = { workspace = true }
 image = { workspace = true }
 
 # OCR
-rusty-tesseract = { git = "https://github.com/louis030195/rusty-tesseract.git", branch = "main" }
+rusty-tesseract = { git = "https://github.com/screenpipe/rusty-tesseract.git", branch = "main" }
 
 anyhow = "1.0.86"
 
@@ -90,7 +90,7 @@ path = "examples/websocket.rs"
 
 # macOS: sck-rs for 12.3+ (ScreenCaptureKit), xcap as fallback for older versions
 [target.'cfg(target_os = "macos")'.dependencies]
-sck-rs = { git = "https://github.com/louis030195/sck-rs" }
+sck-rs = { git = "https://github.com/screenpipe/sck-rs" }
 xcap = "0.8.1"
 libc = "0.2.168"
 cidre = { git = "https://github.com/yury/cidre.git", features = ["vn", "cv", "cg"] }

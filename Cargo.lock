@@ -1190,7 +1190,7 @@ dependencies = [
 [[package]]
 name = "cidre"
 version = "0.14.0"
-source = "git+https://github.com/yury/cidre.git#1873d4f8fadab51919279c2d4ffad99705ccaffc"
+source = "git+https://github.com/yury/cidre.git#ba5d0dd84251bebfced66e6dbcee0329fc9ede05"
 dependencies = [
  "cidre-macros 0.5.0",
  "half",
@@ -1572,7 +1572,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/louis030195/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
+source = "git+https://github.com/screenpipe/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
 dependencies = [
  "alsa",
  "cidre 0.14.0",
@@ -3983,7 +3983,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -6507,7 +6507,7 @@ checksum = "eded382c5f5f786b989652c49544c4877d9f015cc22e145a5ea8ea66c2921cd2"
 [[package]]
 name = "rusty-tesseract"
 version = "1.1.10"
-source = "git+https://github.com/louis030195/rusty-tesseract.git?branch=main#08346c1de08d122c7121425abc79081c30dbf778"
+source = "git+https://github.com/screenpipe/rusty-tesseract.git?branch=main#08346c1de08d122c7121425abc79081c30dbf778"
 dependencies = [
  "dirs",
  "image",
@@ -6583,7 +6583,7 @@ dependencies = [
 [[package]]
 name = "sck-rs"
 version = "0.1.0"
-source = "git+https://github.com/louis030195/sck-rs#63c4b27bb47a1a2f0c32297ea49ef291f9fef49f"
+source = "git+https://github.com/screenpipe/sck-rs#63c4b27bb47a1a2f0c32297ea49ef291f9fef49f"
 dependencies = [
  "cidre 0.14.0",
  "core-foundation 0.10.0",
@@ -6628,14 +6628,14 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-audio"
-version = "0.3.33"
+version = "0.3.36"
 dependencies = [
  "anyhow",
  "bytemuck",
  "bytes",
  "chrono",
  "clap",
- "cpal 0.15.3 (git+https://github.com/louis030195/cpal.git?branch=main)",
+ "cpal 0.15.3 (git+https://github.com/screenpipe/cpal.git?branch=main)",
  "criterion",
  "crossbeam",
  "dashmap",
@@ -6681,7 +6681,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-core"
-version = "0.3.33"
+version = "0.3.36"
 dependencies = [
  "accessibility",
  "accessibility-sys",
@@ -6732,7 +6732,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-db"
-version = "0.3.33"
+version = "0.3.36"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6756,7 +6756,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-events"
-version = "0.3.33"
+version = "0.3.36"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6774,7 +6774,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-integrations"
-version = "0.3.33"
+version = "0.3.36"
 dependencies = [
  "anyhow",
  "image",
@@ -6789,7 +6789,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-server"
-version = "0.3.33"
+version = "0.3.36"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6858,7 +6858,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-vision"
-version = "0.3.33"
+version = "0.3.36"
 dependencies = [
  "accessibility-sys",
  "anyhow",
@@ -8904,7 +8904,7 @@ dependencies = [
 [[package]]
 name = "vad-rs"
 version = "0.2.0"
-source = "git+https://github.com/mediar-ai/vad-rs-1.git#3af3b1829ab4d8f018f271fe53c6f382f15ca3a6"
+source = "git+https://github.com/screenpipe/vad-rs-1.git#3af3b1829ab4d8f018f271fe53c6f382f15ca3a6"
 dependencies = [
  "eyre",
  "ndarray 0.16.1",

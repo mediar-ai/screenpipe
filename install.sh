@@ -42,7 +42,7 @@ get_os_arch() {
 
 echo "fetching latest version from github..."
 # Fetch releases and find the latest CLI release (tags starting with 'v', not 'mcp-')
-RELEASES=$(curl -s https://api.github.com/repos/mediar-ai/screenpipe/releases)
+RELEASES=$(curl -s https://api.github.com/repos/screenpipe/screenpipe/releases)
 # Find first release with tag starting with 'v' (CLI release, not MCP)
 VERSION=$(echo "$RELEASES" | grep -o '"tag_name": *"v[0-9][^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
 if [ -z "$VERSION" ]; then
@@ -61,7 +61,7 @@ os=$(echo "$OS_ARCH" | cut -d' ' -f1)
 arch=$(echo "$OS_ARCH" | cut -d' ' -f2)
 
 FILENAME="screenpipe-${VERSION}-${arch}-${os}.tar.gz"
-URL="https://github.com/mediar-ai/screenpipe/releases/download/v${VERSION}/${FILENAME}"
+URL="https://github.com/screenpipe/screenpipe/releases/download/v${VERSION}/${FILENAME}"
 
 TMP_DIR=$(mktemp -d)
 cd "$TMP_DIR" || exit 1

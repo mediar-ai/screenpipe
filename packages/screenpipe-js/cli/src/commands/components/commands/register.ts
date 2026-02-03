@@ -50,7 +50,7 @@ export const registerComponentCommand = new Command()
             type: "input",
             name: "src",
             message: "where should we download the component from? (URL pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path})",
-            validate: input => input.startsWith("https://api.github.com/repos/") ? true : "URL must follow the pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path}. \n \n \nvisit: https://github.com/mediar-ai/screenpipe/blob/main/packages/screenpipe-js/cli/src/commands/components/README.md for more details.",
+            validate: input => input.startsWith("https://api.github.com/repos/") ? true : "URL must follow the pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path}. \n \n \nvisit: https://github.com/screenpipe/screenpipe/blob/main/packages/screenpipe-js/cli/src/commands/components/README.md for more details.",
           },
         ]);
         opts.src = src;
@@ -119,7 +119,7 @@ export const registerComponentCommand = new Command()
       currentRegistry[opts.name] = componentObject;
 
       await writeJsonToFile("./src/commands/components/commands/add/registry/registry.json", currentRegistry);
-      logger.log("run `bun run build` and open a PR at https://github.com/mediar-ai/screenpipe to update registry.");
+      logger.log("run `bun run build` and open a PR at https://github.com/screenpipe/screenpipe to update registry.");
     } catch (error) {
       logger.break();
       handleError(error);

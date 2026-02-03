@@ -12,7 +12,7 @@ import { platform } from "@tauri-apps/plugin-os";
 import { tempDir, join, homeDir } from "@tauri-apps/api/path";
 import { ObsidianSyncCard } from "./obsidian-sync-card";
 
-const GITHUB_RELEASES_API = "https://api.github.com/repos/mediar-ai/screenpipe/releases";
+const GITHUB_RELEASES_API = "https://api.github.com/repos/screenpipe/screenpipe/releases";
 
 interface GitHubAsset {
   name: string;

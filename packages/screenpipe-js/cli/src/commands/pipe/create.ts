@@ -40,7 +40,7 @@ async function downloadAndExtractSubdir(subdir: string, destPath: string) {
     s.message("downloading template files...");
 
     // Use GitHub's API to download just the specific subdirectory as a tarball
-    const repoOwner = "mediar-ai";
+    const repoOwner = "screenpipe";
     const repoName = "screenpipe";
     const branch = "main"; // or whatever branch you need
     const tarballUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/tarball/${branch}`;

@@ -1776,7 +1776,7 @@ pub async fn handle_mcp_command(
                 // Log the start of the download process
                 info!("starting download process for MCP directory");
 
-                let owner = "mediar-ai";
+                let owner = "screenpipe";
                 let repo = "screenpipe";
                 let branch = "main";
                 let target_dir = "crates/screenpipe-integrations/screenpipe-mcp";
@@ -1921,7 +1921,7 @@ async fn download_mcp_directory(
 
                 let subdir_api_url = format!(
                     "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
-                    "mediar-ai", "screenpipe", item.path, "main"
+                    "screenpipe", "screenpipe", item.path, "main"
                 );
 
                 // Fix recursion with Box::pin

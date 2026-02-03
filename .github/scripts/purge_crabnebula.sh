@@ -42,7 +42,7 @@ for ((m=0; m<=$minor; m++)); do
         version="$major.$m.$p"
         if [[ "$(echo -e "$version\n$purge_up_to" | sort -V | head -n1)" == "$version" && "$version" != "$purge_up_to" ]]; then
             echo "Purging version $version"
-            cn release purge mediar-ai/screenpipe "$version"
+            cn release purge screenpipe/screenpipe "$version"
         else
             echo "Skipping version $version"
         fi

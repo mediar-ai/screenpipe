@@ -20,7 +20,7 @@ oasgen = { workspace = true }
 
 # Cross-platform audio capture
 # Using fork with unified cidre version (compatible with sck-rs)
-cpal = { git = "https://github.com/louis030195/cpal.git", branch = "main" }
+cpal = { git = "https://github.com/screenpipe/cpal.git", branch = "main" }
 
 # Wav encoding
 hound = "3.5"
@@ -34,7 +34,7 @@ chrono = { version = "0.4.31", features = ["serde"] }
 # Local Embeddings + STT
 # Using fork of vad-rs with Silero VAD v5/v6 support
 # v5/v6: 3x faster, 6000+ languages, better accuracy
-vad-rs = { git = "https://github.com/mediar-ai/vad-rs-1.git", default-features = false }
+vad-rs = { git = "https://github.com/screenpipe/vad-rs-1.git", default-features = false }
 anyhow = "1.0.86"
 hf-hub = "0.3.2"
 # https://github.com/pdeljanov/Symphonia/tree/master?tab=readme-ov-file#optimizations
