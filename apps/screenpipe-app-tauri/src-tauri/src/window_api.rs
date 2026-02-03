@@ -519,7 +519,11 @@ impl ShowRewindWindow {
                         }
                     };
 
-                    let logical_size = monitor.size().to_logical(monitor.scale_factor());
+                    let logical_size: tauri::LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
+                    // Clamp min_inner_size to monitor dimensions to prevent panic
+                    // when monitor is smaller than the default min_size (e.g. M1 Air 1280x800 < 1200x850)
+                    let min = self.id().min_size().unwrap_or((0.0, 0.0));
+                    let clamped_min = (min.0.min(logical_size.width), min.1.min(logical_size.height));
                     let builder = self.window_builder(app, "/")
                         .visible_on_all_workspaces(true)
                         .always_on_top(true)
@@ -529,6 +533,7 @@ impl ShowRewindWindow {
                         .transparent(true)
                         .visible(false)
                         .hidden_title(true)
+                        .min_inner_size(clamped_min.0, clamped_min.1)
                         .inner_size(logical_size.width, logical_size.height)
                         .max_inner_size(logical_size.width, logical_size.height)
                         .position(position.0, position.1);
@@ -557,7 +562,10 @@ impl ShowRewindWindow {
                         .unwrap();
 
                     let position = monitor.position();
-                    let logical_size = monitor.size().to_logical(monitor.scale_factor());
+                    let logical_size: tauri::LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
+                    // Clamp min_inner_size to monitor dimensions to prevent panic
+                    let min = self.id().min_size().unwrap_or((0.0, 0.0));
+                    let clamped_min = (min.0.min(logical_size.width), min.1.min(logical_size.height));
                     let builder = self.window_builder(app, "/")
                         .title("screenpipe")
                         .visible_on_all_workspaces(true)
@@ -568,6 +576,7 @@ impl ShowRewindWindow {
                         .transparent(true)
                         .visible(false)
                         .drag_and_drop(false)
+                        .min_inner_size(clamped_min.0, clamped_min.1)
                         .inner_size(logical_size.width, logical_size.height)
                         .max_inner_size(logical_size.width, logical_size.height)
                         .position(position.x as f64, position.y as f64);
@@ -703,7 +712,22 @@ impl ShowRewindWindow {
                     return ShowRewindWindow::Main.show(app);
                 }
 
-                let builder = self.window_builder(app, "/onboarding").visible_on_all_workspaces(true).inner_size(1000.0, 850.0).minimizable(false).maximizable(false).focused(true);
+                // Clamp onboarding window size to primary monitor to prevent min > max panic
+                let (width, height) = if let Ok(Some(monitor)) = app.primary_monitor() {
+                    let logical: tauri::LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
+                    (1000.0_f64.min(logical.width), 850.0_f64.min(logical.height))
+                } else {
+                    (1000.0, 850.0)
+                };
+                let min = self.id().min_size().unwrap_or((0.0, 0.0));
+                let clamped_min = (min.0.min(width), min.1.min(height));
+                let builder = self.window_builder(app, "/onboarding")
+                    .visible_on_all_workspaces(true)
+                    .min_inner_size(clamped_min.0, clamped_min.1)
+                    .inner_size(width, height)
+                    .minimizable(false)
+                    .maximizable(false)
+                    .focused(true);
                 let window = builder.build()?;
 
                 window
