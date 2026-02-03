@@ -715,7 +715,6 @@ pub async fn api_list_monitors(
     }
 }
 
-#[oasgen]
 pub async fn api_vision_status(
 ) -> JsonResponse<serde_json::Value> {
     match list_monitors_detailed().await {
@@ -1436,7 +1435,6 @@ impl SCServer {
             .get("/search", search)
             .get("/audio/list", api_list_audio_devices)
             .get("/vision/list", api_list_monitors)
-            .get("/vision/status", api_vision_status)
             .post("/tags/:content_type/:id", add_tags)
             .delete("/tags/:content_type/:id", remove_tags)
             .get("/pipes/info/:pipe_id", get_pipe_info_handler)
@@ -1492,6 +1490,8 @@ impl SCServer {
                 "/sync/download",
                 axum::routing::post(sync_api::sync_download),
             )
+            // Vision status endpoint (not in OpenAPI spec to avoid oasgen registration issues)
+            .route("/vision/status", get(api_vision_status))
             // NOTE: websockerts and sse is not supported by openapi so we move it down here
             .route("/stream/frames", get(stream_frames_handler))
             .route("/ws/events", get(ws_events_handler))
