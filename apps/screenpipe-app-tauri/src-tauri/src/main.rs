@@ -732,6 +732,25 @@ async fn main() {
             "https://da4edafe2c8e5e8682505945695ecad7@o4505591122886656.ingest.us.sentry.io/4510761355116544",
             sentry::ClientOptions {
                 release: sentry::release_name!(),
+                send_default_pii: false,
+                server_name: Some("screenpipe-app".into()),
+                before_send: Some(std::sync::Arc::new(|mut event| {
+                    fn strip_user_paths(s: &str) -> String {
+                        let re_unix = regex::Regex::new(r"/Users/[^/\s]+").unwrap();
+                        let re_win = regex::Regex::new(r"(?i)C:\\Users\\[^\\\s]+").unwrap();
+                        let s = re_unix.replace_all(s, "~").to_string();
+                        re_win.replace_all(&s, "~").to_string()
+                    }
+                    if let Some(ref mut msg) = event.message {
+                        *msg = strip_user_paths(msg);
+                    }
+                    for val in event.exception.values.iter_mut() {
+                        if let Some(ref mut v) = val.value {
+                            *v = strip_user_paths(v);
+                        }
+                    }
+                    Some(event)
+                })),
                 ..Default::default()
             },
         )))

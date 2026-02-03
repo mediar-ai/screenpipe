@@ -262,6 +262,26 @@ async fn main() -> anyhow::Result<()> {
             sentry::ClientOptions {
                 release: Some(release_name.into()),
                 traces_sample_rate: 0.1,
+                send_default_pii: false,
+                server_name: Some("screenpipe-cli".into()),
+                before_send: Some(std::sync::Arc::new(|mut event| {
+                    // Strip file paths containing usernames from error messages
+                    fn strip_user_paths(s: &str) -> String {
+                        let re_unix = regex::Regex::new(r"/Users/[^/\s]+").unwrap();
+                        let re_win = regex::Regex::new(r"(?i)C:\\Users\\[^\\\s]+").unwrap();
+                        let s = re_unix.replace_all(s, "~").to_string();
+                        re_win.replace_all(&s, "~").to_string()
+                    }
+                    if let Some(ref mut msg) = event.message {
+                        *msg = strip_user_paths(msg);
+                    }
+                    for val in event.exception.values.iter_mut() {
+                        if let Some(ref mut v) = val.value {
+                            *v = strip_user_paths(v);
+                        }
+                    }
+                    Some(event)
+                })),
                 ..Default::default()
             }
         ));
