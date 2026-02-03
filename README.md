@@ -9,8 +9,8 @@
 <h1 align="center">[ screenpipe ]</h1>
 
 
-<p align="center">24/7 memory for your desktop</p>
-<p align="center">rewind but open source. 100% local. you own your data.</p>
+<p align="center">AI memory for your screen</p>
+<p align="center">AI finally knows what you're doing</p>
 
 
 
@@ -55,7 +55,7 @@
 
 ## what is this?
 
-screenpipe records your screen and audio 24/7, stores everything locally, and lets you connect digital history to ai.
+screenpipe turns your computer into a personal AI that knows everything you've done. record. search. automate. all local, all private, all yours
 
 ```
 ┌─────────────────────────────────────────┐
