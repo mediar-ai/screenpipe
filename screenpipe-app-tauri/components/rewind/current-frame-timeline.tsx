@@ -44,7 +44,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		width: number;
 		height: number;
 	} | null>(null);
-	// For object-cover, track the full rendered size and crop offset
+	// For object-contain, track the full rendered size and padding offset
 	const [renderedImageInfo, setRenderedImageInfo] = useState<{
 		width: number;
 		height: number;
@@ -163,7 +163,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	}, [debouncedFrameId, imageUrl]);
 
 	// Update rendered image info on resize
-	// For object-cover: image fills container, may be cropped, centered
+	// For object-contain: image fits within container, centered with letterboxing
 	useEffect(() => {
 		const updateDimensions = () => {
 			if (containerRef.current && naturalDimensions) {
@@ -175,16 +175,16 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 				let renderedHeight: number;
 
 				if (containerAspect > imageAspect) {
-					// Container is wider than image aspect - width fills, height overflows
-					renderedWidth = containerRect.width;
-					renderedHeight = containerRect.width / imageAspect;
-				} else {
-					// Container is taller than image aspect - height fills, width overflows
+					// Container is wider - height fits, width letterboxes
 					renderedHeight = containerRect.height;
 					renderedWidth = containerRect.height * imageAspect;
+				} else {
+					// Container is taller - width fits, height letterboxes
+					renderedWidth = containerRect.width;
+					renderedHeight = containerRect.width / imageAspect;
 				}
 
-				// Calculate crop offset (image is centered with object-cover)
+				// Calculate padding offset (image is centered with object-contain)
 				const offsetX = (containerRect.width - renderedWidth) / 2;
 				const offsetY = (containerRect.height - renderedHeight) / 2;
 
@@ -276,7 +276,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 				<img
 					src={imageUrl}
 					ref={imageRef}
-					className="absolute inset-0 w-full h-full object-cover"
+					className="absolute inset-0 w-full h-full object-contain bg-black"
 					style={{
 						zIndex: 1,
 						display: hasError ? 'none' : 'block',
@@ -303,7 +303,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 				/>
 			)}
 			{/* Text selection overlay for timeline view */}
-			{/* Position overlay to match the actual rendered image (accounting for object-cover cropping) */}
+			{/* Position overlay to match the actual rendered image (object-contain letterboxing) */}
 			{!isLoading && !hasError && naturalDimensions && renderedImageInfo && textPositions.length > 0 && (
 				<div
 					className="absolute overflow-hidden"
@@ -319,7 +319,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					<div
 						style={{
 							// Position the overlay to match where the image actually renders
-							// For object-cover, offsets are negative when image overflows
+							// For object-contain, offsets are positive when letterboxed
 							position: 'absolute',
 							left: renderedImageInfo.offsetX,
 							top: renderedImageInfo.offsetY,
