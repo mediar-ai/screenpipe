@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/lib/utils/tauri";
 import posthog from "posthog-js";
@@ -17,10 +18,16 @@ interface PermissionLostPayload {
  */
 export function usePermissionMonitor() {
   const hasShownRef = useRef(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     // Only run on client side
     if (typeof window === "undefined") return;
+
+    // Only run permission monitor on main app pages, not overlays or onboarding
+    // This prevents duplicate PostHog events since each Tauri window runs its own instance
+    const skipPaths = ["/shortcut-reminder", "/onboarding", "/permission-recovery"];
+    if (skipPaths.some((p) => pathname?.startsWith(p))) return;
 
     const unlisten = listen<PermissionLostPayload>("permission-lost", async (event) => {
       const { screen_recording, microphone, accessibility } = event.payload;
@@ -75,7 +82,7 @@ export function usePermissionMonitor() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [pathname]);
 }
 
 /**

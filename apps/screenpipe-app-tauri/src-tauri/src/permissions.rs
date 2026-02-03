@@ -340,8 +340,22 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
 pub async fn start_permission_monitor(app: tauri::AppHandle) {
     use tokio::time::{interval, Duration};
     use tauri::Emitter;
+    use crate::store::OnboardingStore;
 
-    // Wait a bit before starting to monitor (let the app initialize)
+    // Wait for onboarding to complete before monitoring permissions
+    // During onboarding, permissions haven't been granted yet - monitoring would cause false alarms
+    loop {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        match OnboardingStore::get(&app) {
+            Ok(Some(store)) if store.is_completed => {
+                info!("onboarding completed, starting permission monitor");
+                break;
+            }
+            _ => continue,
+        }
+    }
+
+    // Extra delay after onboarding to let permissions settle
     tokio::time::sleep(Duration::from_secs(10)).await;
 
     let mut check_interval = interval(Duration::from_secs(30));
@@ -392,21 +406,25 @@ pub async fn start_permission_monitor(app: tauri::AppHandle) {
         let accessibility_confirmed_lost = accessibility_fail_count == REQUIRED_CONSECUTIVE_FAILURES;
 
         if screen_confirmed_lost || mic_confirmed_lost || accessibility_confirmed_lost {
-            warn!(
-                "permission confirmed lost after {} consecutive failures - screen: {} (fails: {}), mic: {} (fails: {}), accessibility: {} (fails: {})",
-                REQUIRED_CONSECUTIVE_FAILURES,
-                screen_ok, screen_fail_count,
-                mic_ok, mic_fail_count,
-                accessibility_ok, accessibility_fail_count
-            );
+            // Double-check: only emit if at least one permission is actually lost right now
+            // This prevents phantom events from transient TCC flickers
+            if !screen_ok || !mic_ok || !accessibility_ok {
+                warn!(
+                    "permission confirmed lost after {} consecutive failures - screen: {} (fails: {}), mic: {} (fails: {}), accessibility: {} (fails: {})",
+                    REQUIRED_CONSECUTIVE_FAILURES,
+                    screen_ok, screen_fail_count,
+                    mic_ok, mic_fail_count,
+                    accessibility_ok, accessibility_fail_count
+                );
 
-            // Emit event to frontend
-            if let Err(e) = app.emit("permission-lost", serde_json::json!({
-                "screen_recording": !screen_ok,
-                "microphone": !mic_ok,
-                "accessibility": !accessibility_ok,
-            })) {
-                error!("failed to emit permission-lost event: {}", e);
+                // Emit event to frontend
+                if let Err(e) = app.emit("permission-lost", serde_json::json!({
+                    "screen_recording": !screen_ok,
+                    "microphone": !mic_ok,
+                    "accessibility": !accessibility_ok,
+                })) {
+                    error!("failed to emit permission-lost event: {}", e);
+                }
             }
         }
 
