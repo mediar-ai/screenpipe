@@ -237,6 +237,9 @@ async setTrayUnhealthIcon() : Promise<void> {
 async setTrayHealthIcon() : Promise<void> {
     await TAURI_INVOKE("set_tray_health_icon");
 },
+async writeBrowserLog(level: string, message: string) : Promise<void> {
+    await TAURI_INVOKE("write_browser_log", { level, message });
+},
 /**
  * Get current sync status.
  */

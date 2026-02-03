@@ -6453,24 +6453,6 @@
           "markdownDescription": "Denies the fetch_send command without any pre-configured scope."
         },
         {
-          "description": "Allows the log command\n#### This default permission set includes:\n\n- `allow-log`",
-          "type": "string",
-          "const": "log:default",
-          "markdownDescription": "Allows the log command\n#### This default permission set includes:\n\n- `allow-log`"
-        },
-        {
-          "description": "Enables the log command without any pre-configured scope.",
-          "type": "string",
-          "const": "log:allow-log",
-          "markdownDescription": "Enables the log command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the log command without any pre-configured scope.",
-          "type": "string",
-          "const": "log:deny-log",
-          "markdownDescription": "Denies the log command without any pre-configured scope."
-        },
-        {
           "description": "This permission set configures which\nnotification features are by default exposed.\n\n#### Granted Permissions\n\nIt allows all notification related features.\n\n\n#### This default permission set includes:\n\n- `allow-is-permission-granted`\n- `allow-request-permission`\n- `allow-notify`\n- `allow-register-action-types`\n- `allow-register-listener`\n- `allow-cancel`\n- `allow-get-pending`\n- `allow-remove-active`\n- `allow-get-active`\n- `allow-check-permissions`\n- `allow-show`\n- `allow-batch`\n- `allow-list-channels`\n- `allow-delete-channel`\n- `allow-create-channel`\n- `allow-permission-state`",
           "type": "string",
           "const": "notification:default",

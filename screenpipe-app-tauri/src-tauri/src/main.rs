@@ -67,6 +67,7 @@ pub use config::get_base_dir;
 
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
+pub use commands::write_browser_log;
 pub use server::spawn_server;
 pub use sidecar::spawn_screenpipe;
 pub use sidecar::stop_screenpipe;
@@ -809,6 +810,8 @@ async fn main() {
                 // Commands from tray.rs
                 set_tray_unhealth_icon,
                 set_tray_health_icon,
+                // Browser logging
+                write_browser_log,
                 // Commands from sync.rs
                 sync::get_sync_status,
                 sync::set_sync_enabled,
@@ -878,11 +881,6 @@ async fn main() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_log::Builder::new()
-            .target(tauri_plugin_log::Target::new(
-                tauri_plugin_log::TargetKind::Webview,
-            ))
-            .build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
@@ -929,6 +927,7 @@ async fn main() {
             permissions::get_missing_permissions,
             set_tray_unhealth_icon,
             set_tray_health_icon,
+            write_browser_log,
             commands::update_show_screenpipe_shortcut,
             commands::get_disk_usage,
             commands::open_pipe_window,
@@ -1218,7 +1217,7 @@ async fn main() {
                                 Ok(handle) => {
                                     info!("Embedded screenpipe server started successfully on dedicated runtime");
                                     // Store handle in state so it can be stopped/restarted later
-                                    let mut guard = sidecar_state_inner.blocking_lock();
+                                    let mut guard = sidecar_state_inner.lock().await;
                                     *guard = Some(handle);
                                     
                                     // Keep the runtime alive

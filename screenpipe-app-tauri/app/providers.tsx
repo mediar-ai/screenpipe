@@ -9,22 +9,41 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { PermissionMonitorProvider } from "@/lib/hooks/use-permission-monitor";
 import { forwardRef } from "react";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
-import { attachConsole } from "@tauri-apps/plugin-log";
+import { invoke } from "@tauri-apps/api/core";
 
 export const Providers = forwardRef<
   HTMLDivElement,
   { children: React.ReactNode }
 >(({ children }, ref) => {
-  // Attach browser console to Tauri log plugin (writes to file)
+  // Hook console to write to disk
   useEffect(() => {
-    let detach: (() => void) | undefined;
-    attachConsole().then((fn) => {
-      detach = fn;
-    }).catch((err) => {
-      console.error("Failed to attach console to log plugin:", err);
-    });
+    const origLog = console.log;
+    const origError = console.error;
+    const origWarn = console.warn;
+    const origDebug = console.debug;
+
+    console.log = (...args) => {
+      origLog(...args);
+      invoke("write_browser_log", { level: "info", message: args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ") }).catch(() => {});
+    };
+    console.error = (...args) => {
+      origError(...args);
+      invoke("write_browser_log", { level: "error", message: args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ") }).catch(() => {});
+    };
+    console.warn = (...args) => {
+      origWarn(...args);
+      invoke("write_browser_log", { level: "warn", message: args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ") }).catch(() => {});
+    };
+    console.debug = (...args) => {
+      origDebug(...args);
+      invoke("write_browser_log", { level: "debug", message: args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ") }).catch(() => {});
+    };
+
     return () => {
-      detach?.();
+      console.log = origLog;
+      console.error = origError;
+      console.warn = origWarn;
+      console.debug = origDebug;
     };
   }, []);
 

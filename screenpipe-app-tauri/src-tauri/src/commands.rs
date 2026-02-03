@@ -1,6 +1,17 @@
 use crate::{window_api::ShowRewindWindow, store::OnboardingStore, store::SettingsStore, parse_shortcut};
 use tauri::{Manager, Emitter};
-use tracing::{error, info};
+use tracing::{error, info, warn, debug};
+
+#[tauri::command]
+#[specta::specta]
+pub fn write_browser_log(level: String, message: String) {
+    match level.as_str() {
+        "error" => error!("[webview] {}", message),
+        "warn" => warn!("[webview] {}", message),
+        "debug" => debug!("[webview] {}", message),
+        _ => info!("[webview] {}", message),
+    }
+}
 
 
 
