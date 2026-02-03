@@ -1,5 +1,5 @@
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
-import React, { FC, useState, useRef } from "react";
+import React, { FC, useState, useRef, useEffect, useCallback } from "react";
 import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
 import { TextOverlay } from "@/components/text-overlay";
 import { ImageOff, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
@@ -26,6 +26,10 @@ export const SkeletonLoader: FC = () => {
 	);
 };
 
+// Debounce delay for frame loading (ms)
+// When scrolling fast, only load the frame after user "settles" for this duration
+const FRAME_LOAD_DEBOUNCE_MS = 150;
+
 export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	currentFrame,
 	onNavigate,
@@ -47,30 +51,120 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		offsetX: number;
 		offsetY: number;
 	} | null>(null);
+	
+	// Debounced frame ID - only updates after scroll settles
+	const [debouncedFrameId, setDebouncedFrameId] = useState<string | null>(null);
+	
 	const imageRef = useRef<HTMLImageElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
+	
+	// Abort controller for canceling pending image loads
+	const abortControllerRef = useRef<AbortController | null>(null);
+	
+	// Debounce timer ref
+	const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const frameId = currentFrame?.devices?.[0]?.frame_id;
-	const imageUrl = `http://localhost:3030/frames/${frameId}`;
+	
+	// Debounce frame ID changes to avoid loading frames during fast scrolling
+	// This is critical for performance - without debouncing, every scroll step
+	// triggers a new HTTP request that won't be used
+	useEffect(() => {
+		// Clear any pending debounce
+		if (debounceTimerRef.current) {
+			clearTimeout(debounceTimerRef.current);
+		}
+		
+		// If no frame, clear immediately
+		if (!frameId) {
+			setDebouncedFrameId(null);
+			return;
+		}
+		
+		// Show loading state immediately for responsive feel
+		setIsLoading(true);
+		
+		// Debounce the actual frame ID update
+		debounceTimerRef.current = setTimeout(() => {
+			setDebouncedFrameId(frameId);
+		}, FRAME_LOAD_DEBOUNCE_MS);
+		
+		return () => {
+			if (debounceTimerRef.current) {
+				clearTimeout(debounceTimerRef.current);
+			}
+		};
+	}, [frameId]);
+	
+	// Construct image URL only for debounced frame ID
+	const imageUrl = debouncedFrameId ? `http://localhost:3030/frames/${debouncedFrameId}` : null;
 
 	// Fetch OCR text positions for text selection overlay
+	// Use debounced frame ID to avoid unnecessary fetches
 	const { textPositions } = useFrameOcrData(
-		frameId ? parseInt(frameId, 10) : null
+		debouncedFrameId ? parseInt(debouncedFrameId, 10) : null
 	);
 
-	// Reset loading state when frame changes, but be smarter about it
-	React.useEffect(() => {
-		if (frameId && !imageRef.current?.complete) {
-			setIsLoading(true);
-			setHasError(false);
-			setRetryCount(0);
-			setNaturalDimensions(null);
+	// Abort previous image load and start new one when debounced frame changes
+	useEffect(() => {
+		// Abort any pending request when frame changes
+		if (abortControllerRef.current) {
+			abortControllerRef.current.abort();
 		}
-	}, [frameId]);
+		
+		if (!debouncedFrameId || !imageUrl) {
+			return;
+		}
+		
+		// Create new abort controller for this request
+		abortControllerRef.current = new AbortController();
+		
+		// Reset state for new frame
+		setHasError(false);
+		setRetryCount(0);
+		setNaturalDimensions(null);
+		
+		// Preload the image using fetch with abort signal
+		// This allows us to cancel the request if user scrolls away
+		const controller = abortControllerRef.current;
+		
+		fetch(imageUrl, { signal: controller.signal })
+			.then(response => {
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}`);
+				}
+				return response.blob();
+			})
+			.then(blob => {
+				// Request completed successfully - image will be in browser cache
+				// The <img> tag will load it instantly from cache
+				if (!controller.signal.aborted) {
+					// Image is now cached, the img onLoad will handle the rest
+				}
+			})
+			.catch(err => {
+				if (err.name === 'AbortError') {
+					// Request was aborted (user scrolled away) - this is expected
+					console.log('Frame request aborted (user scrolled):', debouncedFrameId);
+				} else {
+					// Actual error
+					console.error('Frame fetch error:', err);
+					if (!controller.signal.aborted) {
+						setIsLoading(false);
+						setHasError(true);
+					}
+				}
+			});
+		
+		return () => {
+			// Cleanup: abort if component unmounts or frame changes
+			controller.abort();
+		};
+	}, [debouncedFrameId, imageUrl]);
 
 	// Update rendered image info on resize
 	// For object-cover: image fills container, may be cropped, centered
-	React.useEffect(() => {
+	useEffect(() => {
 		const updateDimensions = () => {
 			if (containerRef.current && naturalDimensions) {
 				const containerRect = containerRef.current.getBoundingClientRect();
@@ -117,7 +211,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	};
 
 	// Auto-skip to next frame when error occurs - instant, no delay
-	React.useEffect(() => {
+	useEffect(() => {
 		if (hasError && !isLoading && onFrameUnavailable) {
 			// Minimal delay just to batch multiple errors
 			const timer = setTimeout(() => {
@@ -178,34 +272,36 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	return (
 		<div ref={containerRef} className="absolute inset-0 w-full h-full">
 			{isLoading && <SkeletonLoader />}
-			<img
-				src={imageUrl}
-				ref={imageRef}
-				className="absolute inset-0 w-full h-full object-cover"
-				style={{
-					zIndex: 1,
-					display: hasError ? 'none' : 'block',
-					opacity: isLoading ? 0 : 1,
-					transition: 'opacity 0.2s ease-in-out',
-				}}
-				alt="Current frame"
-				draggable={false}
-				onLoad={(e) => {
-					const img = e.target as HTMLImageElement;
-					console.log('Image loaded successfully for frame:', frameId);
-					setIsLoading(false);
-					setHasError(false);
-					setNaturalDimensions({
-						width: img.naturalWidth,
-						height: img.naturalHeight,
-					});
-				}}
-				onError={() => {
-					console.log('Image failed to load for frame:', frameId);
-					setIsLoading(false);
-					setHasError(true);
-				}}
-			/>
+			{imageUrl && (
+				<img
+					src={imageUrl}
+					ref={imageRef}
+					className="absolute inset-0 w-full h-full object-cover"
+					style={{
+						zIndex: 1,
+						display: hasError ? 'none' : 'block',
+						opacity: isLoading ? 0 : 1,
+						transition: 'opacity 0.15s ease-in-out',
+					}}
+					alt="Current frame"
+					draggable={false}
+					onLoad={(e) => {
+						const img = e.target as HTMLImageElement;
+						console.log('Image loaded successfully for frame:', debouncedFrameId);
+						setIsLoading(false);
+						setHasError(false);
+						setNaturalDimensions({
+							width: img.naturalWidth,
+							height: img.naturalHeight,
+						});
+					}}
+					onError={() => {
+						console.log('Image failed to load for frame:', debouncedFrameId);
+						setIsLoading(false);
+						setHasError(true);
+					}}
+				/>
+			)}
 			{/* Text selection overlay for timeline view */}
 			{/* Position overlay to match the actual rendered image (accounting for object-cover cropping) */}
 			{!isLoading && !hasError && naturalDimensions && renderedImageInfo && textPositions.length > 0 && (
