@@ -572,33 +572,51 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &ObsidianSyncState) {
 
     // Check if we have a scheduled run time and calculate initial delay
     let now = chrono::Utc::now();
-    let initial_delay = if let Some(ref next_run_str) = obsidian_settings.next_scheduled_run {
+    let (initial_delay, next_run_time) = if let Some(ref next_run_str) = obsidian_settings.next_scheduled_run {
         match chrono::DateTime::parse_from_rfc3339(next_run_str) {
             Ok(next_run) => {
                 let next_run_utc = next_run.with_timezone(&chrono::Utc);
                 if next_run_utc <= now {
                     // Missed the scheduled time - run immediately, then continue with normal interval
                     info!("Obsidian scheduler: missed scheduled run at {}, will run immediately", next_run_str);
-                    tokio::time::Duration::from_secs(0)
+                    // Next run will be now (immediate) + interval
+                    let next = now + chrono::Duration::minutes(interval_mins as i64);
+                    (tokio::time::Duration::from_secs(0), next)
                 } else {
                     // Wait until the scheduled time
                     let delay = (next_run_utc - now).to_std().unwrap_or(tokio::time::Duration::from_secs(0));
                     info!("Obsidian scheduler: resuming, next run in {:?} (at {})", delay, next_run_str);
-                    delay
+                    (delay, next_run_utc)
                 }
             }
             Err(e) => {
                 warn!("Failed to parse next_scheduled_run '{}': {}, using full interval", next_run_str, e);
-                tokio::time::Duration::from_secs(interval_mins as u64 * 60)
+                let next = now + chrono::Duration::minutes(interval_mins as i64);
+                (tokio::time::Duration::from_secs(interval_mins as u64 * 60), next)
             }
         }
     } else {
-        // No scheduled time, use full interval
+        // No scheduled time, use full interval and save it
         info!("Obsidian scheduler: no previous schedule, waiting full interval");
-        tokio::time::Duration::from_secs(interval_mins as u64 * 60)
+        let next = now + chrono::Duration::minutes(interval_mins as i64);
+        (tokio::time::Duration::from_secs(interval_mins as u64 * 60), next)
     };
 
-    info!("Auto-starting obsidian scheduler with {}min interval, initial delay: {:?}", interval_mins, initial_delay);
+    // Always save next_scheduled_run to store (so UI can display it)
+    let updated_settings = ObsidianSettingsStore {
+        enabled: obsidian_settings.enabled,
+        vault_path: obsidian_settings.vault_path.clone(),
+        notes_path: obsidian_settings.notes_path.clone(),
+        sync_interval_minutes: obsidian_settings.sync_interval_minutes,
+        custom_prompt: obsidian_settings.custom_prompt.clone(),
+        sync_hours: obsidian_settings.sync_hours,
+        next_scheduled_run: Some(next_run_time.to_rfc3339()),
+    };
+    if let Err(e) = updated_settings.save(&app) {
+        warn!("Failed to save next_scheduled_run on auto-start: {}", e);
+    }
+
+    info!("Auto-starting obsidian scheduler with {}min interval, initial delay: {:?}, next run at {}", interval_mins, initial_delay, next_run_time);
 
     let handle = tokio::spawn(async move {
         info!("Obsidian scheduler task started (auto-start), interval: {}min", interval_mins);
