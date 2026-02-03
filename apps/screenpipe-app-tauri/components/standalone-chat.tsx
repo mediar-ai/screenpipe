@@ -20,6 +20,7 @@ import remarkGfm from "remark-gfm";
 import OpenAI from "openai";
 import { ChatCompletionTool } from "openai/resources/chat/completions";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
@@ -125,6 +126,14 @@ graph TD
     B --> C[End]
 \`\`\`
 Use flowcharts (graph TD/LR), sequence diagrams, pie charts, etc. as appropriate.
+
+TIMELINE DEEP LINKS:
+When referencing specific moments from search results, create clickable links so users can jump to that point in their timeline.
+Format: [readable time](screenpipe://timeline?timestamp=ISO8601_TIMESTAMP)
+Examples:
+- [10:30 AM](screenpipe://timeline?timestamp=2024-01-15T18:30:00Z)
+- [yesterday at 3pm](screenpipe://timeline?timestamp=2024-01-14T15:00:00Z)
+Always use the exact timestamp from search results. Users can click these to navigate directly to that moment.
 
 Current time: ${now.toISOString()}
 User's timezone: ${timezone} (UTC${offsetStr})
@@ -1432,6 +1441,46 @@ export function StandaloneChat() {
                       if (isMediaLink && href) {
                         return <VideoComponent filePath={href} className="my-2" />;
                       }
+                      
+                      // Handle screenpipe:// timeline deep links in-app
+                      if (href?.startsWith("screenpipe://timeline")) {
+                        const handleTimelineClick = async (e: React.MouseEvent) => {
+                          e.preventDefault();
+                          try {
+                            const url = new URL(href);
+                            const timestamp = url.searchParams.get("timestamp");
+                            if (timestamp) {
+                              const date = new Date(timestamp);
+                              if (!isNaN(date.getTime())) {
+                                await commands.showWindow("Main");
+                                await emit("navigate-to-timestamp", timestamp);
+                                toast({
+                                  title: "navigating to timestamp",
+                                  description: `jumping to ${date.toLocaleString()}`,
+                                });
+                              }
+                            }
+                          } catch (error) {
+                            console.error("Failed to navigate to timeline:", error);
+                            toast({
+                              title: "navigation failed",
+                              description: "could not navigate to the timeline",
+                              variant: "destructive",
+                            });
+                          }
+                        };
+                        
+                        return (
+                          <button
+                            onClick={handleTimelineClick}
+                            className="underline underline-offset-2 text-blue-500 hover:text-blue-400 cursor-pointer inline"
+                            {...props}
+                          >
+                            {children}
+                          </button>
+                        );
+                      }
+                      
                       return (
                         <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" {...props}>
                           {children}

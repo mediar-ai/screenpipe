@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -2455,6 +2455,46 @@ export function GlobalChat() {
                         if (isMediaLink && href) {
                           return <VideoComponent filePath={href} className="my-2" />;
                         }
+                        
+                        // Handle screenpipe:// timeline deep links in-app
+                        if (href?.startsWith("screenpipe://timeline")) {
+                          const handleTimelineClick = async (e: React.MouseEvent) => {
+                            e.preventDefault();
+                            try {
+                              const url = new URL(href);
+                              const timestamp = url.searchParams.get("timestamp");
+                              if (timestamp) {
+                                const date = new Date(timestamp);
+                                if (!isNaN(date.getTime())) {
+                                  await commands.showWindow("Main");
+                                  await emit("navigate-to-timestamp", timestamp);
+                                  toast({
+                                    title: "navigating to timestamp",
+                                    description: `jumping to ${date.toLocaleString()}`,
+                                  });
+                                }
+                              }
+                            } catch (error) {
+                              console.error("Failed to navigate to timeline:", error);
+                              toast({
+                                title: "navigation failed",
+                                description: "could not navigate to the timeline",
+                                variant: "destructive",
+                              });
+                            }
+                          };
+                          
+                          return (
+                            <button
+                              onClick={handleTimelineClick}
+                              className="underline underline-offset-2 text-blue-500 hover:text-blue-400 cursor-pointer inline"
+                              {...props}
+                            >
+                              {children}
+                            </button>
+                          );
+                        }
+                        
                         return (
                           <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" {...props}>
                             {children}

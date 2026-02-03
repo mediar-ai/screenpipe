@@ -64,7 +64,11 @@ const BASE_TOOLS: Tool[] = [
       "Search screenpipe's recorded content: screen text (OCR), audio transcriptions, and UI elements. " +
       "Returns timestamped results with app context. " +
       "Call with no parameters to get recent activity. " +
-      "Use the 'screenpipe://context' resource for current time when building time-based queries.",
+      "Use the 'screenpipe://context' resource for current time when building time-based queries.\n\n" +
+      "DEEP LINKS: When referencing specific moments in results, create clickable timeline links:\n" +
+      "Format: [readable time](screenpipe://timeline?timestamp=ISO8601_TIMESTAMP)\n" +
+      "Example: [10:30 AM](screenpipe://timeline?timestamp=2024-01-15T18:30:00Z)\n" +
+      "Users can click these links to jump directly to that moment in their timeline.",
     annotations: {
       title: "Search Content",
       readOnlyHint: true,
@@ -369,7 +373,19 @@ Screenpipe captures three types of data:
 1. Read screenpipe://context first to get current timestamps
 2. Use search-ui-events for "what did I type?" queries
 3. Use get-ui-event-stats to understand app usage patterns
-4. Combine search-content (what was on screen) with search-ui-events (what was done)`,
+4. Combine search-content (what was on screen) with search-ui-events (what was done)
+
+## Timeline Deep Links
+When showing search results to users, create clickable links to specific moments:
+
+**Format:** \`[readable time](screenpipe://timeline?timestamp=ISO8601_TIMESTAMP)\`
+
+**Examples:**
+- \`[10:30 AM](screenpipe://timeline?timestamp=2024-01-15T18:30:00Z)\`
+- \`[yesterday at 3pm](screenpipe://timeline?timestamp=2024-01-14T15:00:00Z)\`
+
+Users can click these links to jump directly to that moment in their screenpipe timeline.
+Always use the exact timestamp from search results when creating these links.`,
           },
         ],
       };

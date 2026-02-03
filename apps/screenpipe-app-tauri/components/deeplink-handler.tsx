@@ -6,7 +6,7 @@ import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { commands } from "@/lib/utils/tauri";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { openSettingsWindow } from "@/lib/utils/window";
 
@@ -62,6 +62,36 @@ export function DeeplinkHandler() {
 
           if (url.includes("status")) {
             openStatusDialog();
+          }
+
+          // Handle timeline deep links: screenpipe://timeline?timestamp=ISO8601
+          if (parsedUrl.pathname === "timeline" || parsedUrl.host === "timeline") {
+            const timestamp = parsedUrl.searchParams.get("timestamp");
+            if (timestamp) {
+              try {
+                // Validate timestamp format
+                const date = new Date(timestamp);
+                if (!isNaN(date.getTime())) {
+                  // Show the main window first
+                  await commands.showWindow("Main");
+                  // Emit the navigate event to timeline
+                  await emit("navigate-to-timestamp", timestamp);
+                  toast({
+                    title: "navigating to timestamp",
+                    description: `jumping to ${date.toLocaleString()}`,
+                  });
+                } else {
+                  throw new Error("Invalid date");
+                }
+              } catch (error) {
+                console.error("Failed to parse timeline timestamp:", error);
+                toast({
+                  title: "invalid timestamp",
+                  description: "could not parse the timeline link",
+                  variant: "destructive",
+                });
+              }
+            }
           }
         }
       });

@@ -2,6 +2,7 @@ import { Message } from "ai";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { useState, useEffect, useRef } from "react";
+import { emit } from "@tauri-apps/api/event";
 
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "@/components/ui/codeblock";
@@ -17,6 +18,8 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import { VideoComponent } from "./video";
 import { MermaidDiagram } from "./mermaid-diagram";
 import { ChevronDown } from "lucide-react";
+import { commands } from "@/lib/utils/tauri";
+import { toast } from "@/components/ui/use-toast";
 
 export interface ChatMessageProps {
 	message: Message;
@@ -163,6 +166,46 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 							if (isMP4Link && href) {
 								return <VideoComponent filePath={href} />;
 							}
+							
+							// Handle screenpipe:// timeline deep links in-app
+							if (href?.startsWith("screenpipe://timeline")) {
+								const handleTimelineClick = async (e: React.MouseEvent) => {
+									e.preventDefault();
+									try {
+										const url = new URL(href);
+										const timestamp = url.searchParams.get("timestamp");
+										if (timestamp) {
+											const date = new Date(timestamp);
+											if (!isNaN(date.getTime())) {
+												await commands.showWindow("Main");
+												await emit("navigate-to-timestamp", timestamp);
+												toast({
+													title: "navigating to timestamp",
+													description: `jumping to ${date.toLocaleString()}`,
+												});
+											}
+										}
+									} catch (error) {
+										console.error("Failed to navigate to timeline:", error);
+										toast({
+											title: "navigation failed",
+											description: "could not navigate to the timeline",
+											variant: "destructive",
+										});
+									}
+								};
+								
+								return (
+									<button
+										onClick={handleTimelineClick}
+										className="underline underline-offset-2 text-blue-500 hover:text-blue-400 cursor-pointer inline"
+										{...props}
+									>
+										{children}
+									</button>
+								);
+							}
+							
 							return (
 								<a
 									href={href}
