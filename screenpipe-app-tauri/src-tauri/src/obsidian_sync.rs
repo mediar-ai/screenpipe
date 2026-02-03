@@ -46,6 +46,8 @@ pub struct ObsidianSyncStatus {
     pub last_sync_time: Option<String>,
     pub last_error: Option<String>,
     pub notes_created_today: u32,
+    /// Next scheduled run time (ISO 8601) - for UI display
+    pub next_scheduled_run: Option<String>,
 }
 
 impl Default for ObsidianSyncStatus {
@@ -55,6 +57,7 @@ impl Default for ObsidianSyncStatus {
             last_sync_time: None,
             last_error: None,
             notes_created_today: 0,
+            next_scheduled_run: None,
         }
     }
 }
@@ -292,10 +295,17 @@ pub async fn obsidian_get_vault_paths() -> Result<Vec<String>, String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn obsidian_get_sync_status(
+    app: AppHandle,
     state: tauri::State<'_, ObsidianSyncState>,
 ) -> Result<ObsidianSyncStatus, String> {
-    let status = state.status.lock().await;
-    Ok(status.clone())
+    let mut status = state.status.lock().await.clone();
+    
+    // Load next_scheduled_run from persistent store
+    if let Ok(Some(settings)) = ObsidianSettingsStore::get(&app) {
+        status.next_scheduled_run = settings.next_scheduled_run;
+    }
+    
+    Ok(status)
 }
 
 /// Run a sync operation (manual trigger or from scheduler)

@@ -130,6 +130,7 @@ interface ObsidianSyncStatus {
   lastSyncTime: string | null;
   lastError: string | null;
   notesCreatedToday: number;
+  nextScheduledRun: string | null;
 }
 
 interface SyncHistoryEntry {
@@ -158,6 +159,7 @@ export function ObsidianSyncCard() {
     lastSyncTime: null,
     lastError: null,
     notesCreatedToday: 0,
+    nextScheduledRun: null,
   });
   const [suggestedPaths, setSuggestedPaths] = useState<string[]>([]);
   const [isValidVault, setIsValidVault] = useState<boolean | null>(null);
@@ -195,6 +197,17 @@ export function ObsidianSyncCard() {
     // Get initial status
     fetchStatus();
   }, []);
+
+  // Periodically refresh status to update "next run" countdown
+  useEffect(() => {
+    if (!settings.enabled) return;
+    
+    const interval = setInterval(() => {
+      fetchStatus();
+    }, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [settings.enabled]);
 
   // Save settings to localStorage immediately
   useEffect(() => {
@@ -495,6 +508,26 @@ export function ObsidianSyncCard() {
     return date.toLocaleDateString();
   };
 
+  const formatNextRun = (isoTime: string | null) => {
+    if (!isoTime) return null;
+
+    const date = new Date(isoTime);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return "any moment";
+    
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "< 1 min";
+    if (diffMins < 60) return `${diffMins} min`;
+    const diffHours = Math.floor(diffMins / 60);
+    const remainingMins = diffMins % 60;
+    if (diffHours < 24) {
+      return remainingMins > 0 ? `${diffHours}h ${remainingMins}m` : `${diffHours}h`;
+    }
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   const isLoggedIn = Boolean(appSettings?.user?.token);
 
   return (
@@ -766,6 +799,15 @@ export function ObsidianSyncCard() {
                   {formatLastSync(status.lastSyncTime)}
                 </span>
               </span>
+              {settings.enabled && status.nextScheduledRun && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Next:{" "}
+                  <span className="text-foreground">
+                    {formatNextRun(status.nextScheduledRun)}
+                  </span>
+                </span>
+              )}
               {status.notesCreatedToday > 0 && (
                 <span>
                   {status.notesCreatedToday} sync

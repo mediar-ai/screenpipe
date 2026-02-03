@@ -1076,9 +1076,10 @@ export function GlobalChat() {
 
   // Start Pi when needed
   useEffect(() => {
-    console.log("[Pi Start Check]", { isPi, open, needsLogin, piProjectDir, piStarting, piRunning: piInfo?.running });
-    if (!isPi || !open || needsLogin || !piProjectDir || piStarting || piInfo?.running) {
-      console.log("[Pi] Not starting - conditions not met");
+    const shouldStart = isPi && open && !needsLogin && piProjectDir && !piStarting && !piInfo?.running;
+    console.log("[Pi Start Check]", { shouldStart, isPi, open, needsLogin, piProjectDir, piStarting, piRunning: piInfo?.running, hasToken: !!settings.user?.token });
+    
+    if (!shouldStart) {
       return;
     }
 
@@ -1090,6 +1091,7 @@ export function GlobalChat() {
         console.log("[Pi] Start result:", result);
         if (result.status === "ok") {
           setPiInfo(result.data);
+          console.log("[Pi] Started successfully, piInfo:", result.data);
         } else {
           console.error("[Pi] Start failed:", result.error);
           toast({ title: "Failed to start Pi", description: result.error, variant: "destructive" });

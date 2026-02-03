@@ -575,7 +575,11 @@ syncHours: number }
 /**
  * Status of an ongoing or completed sync
  */
-export type ObsidianSyncStatus = { isSyncing: boolean; lastSyncTime: string | null; lastError: string | null; notesCreatedToday: number }
+export type ObsidianSyncStatus = { isSyncing: boolean; lastSyncTime: string | null; lastError: string | null; notesCreatedToday: number; 
+/**
+ * Next scheduled run time (ISO 8601) - for UI display
+ */
+nextScheduledRun: string | null }
 export type OnboardingStore = { isCompleted: boolean; completedAt: string | null; 
 /**
  * Current step in onboarding flow (login, intro, usecases, status)
