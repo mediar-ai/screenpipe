@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, Suspense } from "react";
+import React, { useEffect, useState, useMemo, Suspense } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { usePostHog } from "posthog-js/react";
 import {
   Brain,
   Video,
@@ -52,6 +53,8 @@ function SettingsPageContent() {
   });
   
   const { settings } = useSettings();
+  const posthog = usePostHog();
+  const showCloudSync = useMemo(() => posthog?.isFeatureEnabled("cloud-sync") ?? false, [posthog]);
 
   const renderSection = () => {
     switch (activeSection) {
@@ -70,7 +73,7 @@ function SettingsPageContent() {
       case "connections":
         return <ConnectionsSection />;
       case "cloud-sync":
-        return <SyncSettings />;
+        return showCloudSync ? <SyncSettings /> : <GeneralSettings />;
       case "feedback":
         return <FeedbackSection />;
     }
@@ -119,12 +122,16 @@ function SettingsPageContent() {
       icon: <Plug className="h-4 w-4" />,
       description: "Connect to AI assistants like Claude",
     },
-    {
-      id: "cloud-sync",
-      label: "Cloud Sync",
-      icon: <Cloud className="h-4 w-4" />,
-      description: "Sync your data across devices",
-    },
+    ...(showCloudSync
+      ? [
+          {
+            id: "cloud-sync",
+            label: "Cloud Sync",
+            icon: <Cloud className="h-4 w-4" />,
+            description: "Sync your data across devices",
+          },
+        ]
+      : []),
     {
       id: "feedback",
       label: "Send Feedback",
