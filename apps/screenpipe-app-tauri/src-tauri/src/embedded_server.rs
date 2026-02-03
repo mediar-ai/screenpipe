@@ -324,7 +324,25 @@ pub async fn start_embedded_server(
         let ignored_urls = config.ignored_urls.clone();
         let languages_clone = languages.clone();
 
-        if config.use_all_monitors {
+        info!(
+            "Monitor config: use_all_monitors={}, monitor_ids={:?}",
+            config.use_all_monitors, config.monitor_ids
+        );
+
+        // Check if user has specific monitor IDs set (not empty, not "default")
+        // This handles upgrades where old configs have monitor_ids but use_all_monitors defaults to true
+        let has_specific_monitors = !config.monitor_ids.is_empty()
+            && !config.monitor_ids.contains(&"default".to_string())
+            && config.monitor_ids.iter().any(|id| id.parse::<u32>().is_ok());
+
+        let use_dynamic_detection = config.use_all_monitors && !has_specific_monitors;
+
+        info!(
+            "Monitor detection: has_specific_monitors={}, use_dynamic_detection={}",
+            has_specific_monitors, use_dynamic_detection
+        );
+
+        if use_dynamic_detection {
             // Use VisionManager for dynamic monitor detection (handles connect/disconnect)
             info!("Using dynamic monitor detection (use_all_monitors=true)");
             
@@ -379,18 +397,25 @@ pub async fn start_embedded_server(
                 }
             });
         } else {
-            // Use static monitor list (legacy behavior)
-            let monitor_ids: Vec<u32> = if config.monitor_ids.is_empty()
-                || config.monitor_ids.contains(&"default".to_string())
-            {
-                let monitors = screenpipe_vision::monitor::list_monitors().await;
-                monitors.iter().map(|m| m.id()).collect()
-            } else {
-                config
+            // Use static monitor list - either user disabled dynamic detection
+            // or has specific monitor IDs set from previous config
+            let monitor_ids: Vec<u32> = if has_specific_monitors {
+                // User has specific monitors selected - respect their choice
+                let parsed: Vec<u32> = config
                     .monitor_ids
                     .iter()
                     .filter_map(|s| s.parse().ok())
-                    .collect()
+                    .collect();
+                info!(
+                    "Using user-selected monitors: {:?} (from settings: {:?})",
+                    parsed, config.monitor_ids
+                );
+                parsed
+            } else {
+                // No specific monitors - use all available
+                info!("No specific monitors configured, using all available");
+                let monitors = screenpipe_vision::monitor::list_monitors().await;
+                monitors.iter().map(|m| m.id()).collect()
             };
 
             info!("Using static monitor list: {:?}", monitor_ids);
