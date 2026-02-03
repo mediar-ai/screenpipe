@@ -3,6 +3,7 @@ import React, { FC, useState, useRef, useEffect, useCallback } from "react";
 import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
 import { TextOverlay } from "@/components/text-overlay";
 import { ImageOff, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import posthog from "posthog-js";
 
 interface CurrentFrameTimelineProps {
 	currentFrame: StreamTimeSeriesResponse;
@@ -10,6 +11,7 @@ interface CurrentFrameTimelineProps {
 	canNavigatePrev?: boolean;
 	canNavigateNext?: boolean;
 	onFrameUnavailable?: () => void;
+	onFrameLoadError?: () => void;
 }
 
 export const SkeletonLoader: FC = () => {
@@ -36,6 +38,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	canNavigatePrev = true,
 	canNavigateNext = true,
 	onFrameUnavailable,
+	onFrameLoadError,
 }) => {
 	const [isLoading, setIsLoading] = useState(true);
 	const [hasError, setHasError] = useState(false);
@@ -63,8 +66,24 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	
 	// Debounce timer ref
 	const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	
+	// Performance tracking refs
+	const frameLoadStartTimeRef = useRef<number | null>(null);
+	const framesSkippedRef = useRef<number>(0);
+	const lastFrameIdRef = useRef<string | null>(null);
 
 	const frameId = currentFrame?.devices?.[0]?.frame_id;
+	
+	// Track frames skipped during fast scrolling (for analytics)
+	useEffect(() => {
+		if (frameId && lastFrameIdRef.current && frameId !== lastFrameIdRef.current) {
+			// If we're changing frames and there was a previous frame that didn't finish loading
+			if (frameLoadStartTimeRef.current !== null && debouncedFrameId !== frameId) {
+				framesSkippedRef.current += 1;
+			}
+		}
+		lastFrameIdRef.current = frameId;
+	}, [frameId, debouncedFrameId]);
 	
 	// Debounce frame ID changes to avoid loading frames during fast scrolling
 	// This is critical for performance - without debouncing, every scroll step
@@ -116,6 +135,9 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 			return;
 		}
 		
+		// Start timing the frame load
+		frameLoadStartTimeRef.current = performance.now();
+		
 		// Create new abort controller for this request
 		abortControllerRef.current = new AbortController();
 		
@@ -152,6 +174,21 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					if (!controller.signal.aborted) {
 						setIsLoading(false);
 						setHasError(true);
+						onFrameLoadError?.();
+						
+						// Track frame load failure
+						if (frameLoadStartTimeRef.current !== null) {
+							const loadTime = performance.now() - frameLoadStartTimeRef.current;
+							posthog.capture("timeline_frame_load_time", {
+								duration_ms: Math.round(loadTime),
+								frame_id: debouncedFrameId,
+								success: false,
+								error: err.message,
+								frames_skipped: framesSkippedRef.current,
+							});
+							frameLoadStartTimeRef.current = null;
+							framesSkippedRef.current = 0;
+						}
 					}
 				}
 			});
@@ -294,6 +331,21 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 							width: img.naturalWidth,
 							height: img.naturalHeight,
 						});
+						
+						// Track successful frame load time
+						if (frameLoadStartTimeRef.current !== null) {
+							const loadTime = performance.now() - frameLoadStartTimeRef.current;
+							posthog.capture("timeline_frame_load_time", {
+								duration_ms: Math.round(loadTime),
+								frame_id: debouncedFrameId,
+								success: true,
+								frames_skipped: framesSkippedRef.current,
+								image_width: img.naturalWidth,
+								image_height: img.naturalHeight,
+							});
+							frameLoadStartTimeRef.current = null;
+							framesSkippedRef.current = 0;
+						}
 					}}
 					onError={() => {
 						console.log('Image failed to load for frame:', debouncedFrameId);
