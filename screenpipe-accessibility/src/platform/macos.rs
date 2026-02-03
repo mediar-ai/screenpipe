@@ -726,7 +726,7 @@ fn run_app_observer(
                 if config.capture_app_switch {
                     // Capture focused element's context (including text field values)
                     let focused_element = get_focused_element_context(&config);
-                    
+
                     let mut event = UiEvent::app_switch(
                         Utc::now(),
                         start.elapsed().as_millis() as u64,
@@ -756,7 +756,7 @@ fn run_app_observer(
                 if config.capture_window_focus {
                     // Capture focused element's context (including text field values)
                     let focused_element = get_focused_element_context(&config);
-                    
+
                     let event = UiEvent {
                         id: None,
                         timestamp: Utc::now(),
@@ -881,13 +881,13 @@ fn get_focused_window_title(pid: i32) -> Option<String> {
 fn get_focused_element_context(config: &UiCaptureConfig) -> Option<ElementContext> {
     let sys = ax::UiElement::sys_wide();
     let focused = sys.attr_value(ax::attr::focused_ui_element()).ok()?;
-    
+
     if focused.get_type_id() != ax::UiElement::type_id() {
         return None;
     }
-    
+
     let elem: &ax::UiElement = unsafe { std::mem::transmute(&*focused) };
-    
+
     let role = elem.role().ok().map(|r| {
         let s = format!("{:?}", r);
         if let Some(start) = s.find("AX") {
@@ -898,12 +898,12 @@ fn get_focused_element_context(config: &UiCaptureConfig) -> Option<ElementContex
             "Unknown".to_string()
         }
     })?;
-    
+
     // Get element name/label
     let name = get_string_attr(elem, ax::attr::title())
         .or_else(|| get_string_attr(elem, ax::attr::desc()))
         .or_else(|| elem.role_desc().ok().map(|s| s.to_string()));
-    
+
     // Check for password field
     if config.is_password_field(Some(&role), name.as_deref()) {
         return Some(ElementContext {
@@ -915,10 +915,10 @@ fn get_focused_element_context(config: &UiCaptureConfig) -> Option<ElementContex
             bounds: None,
         });
     }
-    
+
     // Get value for text input elements
-    let value = if role.contains("TextField") 
-        || role.contains("TextArea") 
+    let value = if role.contains("TextField")
+        || role.contains("TextArea")
         || role.contains("ComboBox")
         || role.contains("SearchField")
         || role.contains("TextInput")
@@ -927,7 +927,7 @@ fn get_focused_element_context(config: &UiCaptureConfig) -> Option<ElementContex
     } else {
         None
     };
-    
+
     Some(ElementContext {
         role,
         name: name.map(|s| truncate(&s, 200)),

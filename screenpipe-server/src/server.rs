@@ -3612,7 +3612,10 @@ async fn handle_stream_frames_socket(
                                     let poll_start = latest_timestamp.unwrap_or(end_time);
                                     let mut req = active_request_inner.lock().await;
                                     *req = Some((start_time, end_time, is_descending, poll_start));
-                                    info!("Initial fetch complete, enabling live polling from {}", poll_start);
+                                    info!(
+                                        "Initial fetch complete, enabling live polling from {}",
+                                        poll_start
+                                    );
                                 }
                                 Err(e) => {
                                     error!("frame fetching failed: {}", e);
