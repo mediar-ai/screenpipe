@@ -715,6 +715,7 @@ pub async fn api_list_monitors(
     }
 }
 
+#[oasgen]
 pub async fn api_vision_status(
 ) -> JsonResponse<serde_json::Value> {
     match list_monitors_detailed().await {

@@ -313,7 +313,7 @@ if (platform == 'macos') {
 	// Strip extended attributes from all binaries to prevent codesign failures
 	console.log('Stripping extended attributes from binaries...');
 	try {
-		await $`xattr -cr ${cwd}`;
+		await $`xattr -cr ${cwd} 2>/dev/null`;
 		console.log('Extended attributes stripped successfully');
 	} catch (error) {
 		console.log('Note: xattr command not available or failed (non-fatal)');
