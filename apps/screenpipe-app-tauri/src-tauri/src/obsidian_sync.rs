@@ -330,9 +330,7 @@ pub async fn obsidian_run_sync(
         return Err("Vault path not configured".to_string());
     }
 
-    if !obsidian_validate_vault(settings.vault_path.clone()).await? {
-        return Err("Invalid Obsidian vault path".to_string());
-    }
+    // Note: vault validation is non-blocking - any folder works, Obsidian is optional
 
     // Update status to syncing
     {

@@ -244,7 +244,7 @@ export function ObsidianSyncCard() {
     prevEnabledRef.current = settings.enabled;
     
     // Only restart if interval or enabled status changed
-    if ((intervalChanged || enabledChanged) && settings.enabled && isValidVault && settings.syncIntervalMinutes > 0 && appSettings?.user?.token) {
+    if ((intervalChanged || enabledChanged) && settings.enabled && settings.vaultPath && settings.syncIntervalMinutes > 0 && appSettings?.user?.token) {
       invoke("obsidian_start_scheduler", { 
         settings, 
         userToken: appSettings.user.token 
@@ -352,7 +352,7 @@ export function ObsidianSyncCard() {
       const selected = await openDialog({
         directory: true,
         multiple: false,
-        title: "Select Obsidian Vault",
+        title: "Select Notes Folder",
       });
       if (selected && typeof selected === "string") {
         setSettings((s) => ({ ...s, vaultPath: selected }));
@@ -363,11 +363,11 @@ export function ObsidianSyncCard() {
   };
 
   const handleSync = async () => {
-    if (!isValidVault) {
+    if (!settings.vaultPath) {
       toast({
         variant: "destructive",
-        title: "Invalid vault",
-        description: "Please select a valid Obsidian vault first",
+        title: "No folder selected",
+        description: "Please select a folder first",
       });
       return;
     }
@@ -405,7 +405,7 @@ export function ObsidianSyncCard() {
   };
 
   const handleEnableScheduler = async () => {
-    if (!isValidVault || settings.syncIntervalMinutes === 0) {
+    if (!settings.vaultPath || settings.syncIntervalMinutes === 0) {
       return;
     }
 
@@ -591,7 +591,7 @@ export function ObsidianSyncCard() {
               ) : (
                 <Button
                   onClick={handleSync}
-                  disabled={!isValidVault || !isLoggedIn}
+                  disabled={!settings.vaultPath || !isLoggedIn}
                   className="gap-2"
                 >
                   <RefreshCw className="h-4 w-4" />
@@ -599,7 +599,7 @@ export function ObsidianSyncCard() {
                 </Button>
               )}
 
-              {settings.vaultPath && (
+              {settings.vaultPath && isValidVault && (
                 <Button
                   variant="outline"
                   onClick={openObsidian}
@@ -620,8 +620,11 @@ export function ObsidianSyncCard() {
             <div className="space-y-2">
               <Label htmlFor="vault-path" className="flex items-center gap-2">
                 <FolderOpen className="h-4 w-4" />
-                Obsidian Vault Path
+                Notes Folder
               </Label>
+              <p className="text-xs text-muted-foreground">
+                Works with Obsidian, Logseq, or any markdown folder
+              </p>
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <Input
@@ -634,8 +637,6 @@ export function ObsidianSyncCard() {
                     className={
                       isValidVault === true
                         ? "border-green-500"
-                        : isValidVault === false
-                        ? "border-red-500"
                         : ""
                     }
                   />
@@ -649,13 +650,12 @@ export function ObsidianSyncCard() {
               </div>
               {isValidVault === true && (
                 <p className="text-sm text-green-500 flex items-center gap-1">
-                  <Check className="h-3 w-3" /> Valid Obsidian vault
+                  <Check className="h-3 w-3" /> Obsidian vault detected
                 </p>
               )}
-              {isValidVault === false && (
-                <p className="text-sm text-red-500 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" /> Not a valid Obsidian vault
-                  (no .obsidian folder)
+              {isValidVault === false && settings.vaultPath && (
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Check className="h-3 w-3" /> Folder selected (not an Obsidian vault, but will work fine)
                 </p>
               )}
               {/* Suggested paths */}
@@ -760,7 +760,7 @@ export function ObsidianSyncCard() {
                         ? handleDisableScheduler
                         : handleEnableScheduler
                     }
-                    disabled={!isValidVault || !isLoggedIn}
+                    disabled={!settings.vaultPath || !isLoggedIn}
                   >
                     {settings.enabled ? "Stop" : "Start"}
                   </Button>
