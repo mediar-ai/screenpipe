@@ -87,7 +87,9 @@ jobs:
         [console]::beep(2000,1000)
         
         Start-Sleep -Seconds 30  # Allow more time for processing
-        Stop-Process -Id $process.Id -Force
+        if ($process -and -not $process.HasExited) {
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        }
 
     - name: Check for crashes and captured data
       shell: pwsh

@@ -387,12 +387,18 @@ async fn get_video_fps_and_duration(ffmpeg_path: &PathBuf, video_path: &str) -> 
     {
         let cache = VIDEO_METADATA_CACHE.read().await;
         if let Some(&(fps, duration)) = cache.get(video_path) {
-            debug!("Video metadata cache HIT for {}: fps={}, duration={}", video_path, fps, duration);
+            debug!(
+                "Video metadata cache HIT for {}: fps={}, duration={}",
+                video_path, fps, duration
+            );
             return Ok((fps, duration));
         }
     }
 
-    debug!("Video metadata cache MISS for {}, calling ffprobe", video_path);
+    debug!(
+        "Video metadata cache MISS for {}, calling ffprobe",
+        video_path
+    );
 
     // Cache miss - call ffprobe
     let (fps, duration) = get_video_fps_and_duration_uncached(ffmpeg_path, video_path).await?;
@@ -417,7 +423,10 @@ async fn get_video_fps_and_duration(ffmpeg_path: &PathBuf, video_path: &str) -> 
 }
 
 /// Internal function that actually calls ffprobe - used by the cached wrapper.
-async fn get_video_fps_and_duration_uncached(ffmpeg_path: &PathBuf, video_path: &str) -> Result<(f64, f64)> {
+async fn get_video_fps_and_duration_uncached(
+    ffmpeg_path: &PathBuf,
+    video_path: &str,
+) -> Result<(f64, f64)> {
     let ffprobe_path = get_ffprobe_path(ffmpeg_path);
 
     let mut cmd = Command::new(&ffprobe_path);

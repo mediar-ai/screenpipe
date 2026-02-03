@@ -73,6 +73,15 @@ export default function Timeline() {
 		start: new Date(new Date().setFullYear(new Date().getFullYear() - 1)),
 		end: new Date(),
 	});
+	
+	// Performance tracking refs
+	const timelineOpenedAtRef = useRef<number>(performance.now());
+	const firstFrameDisplayedRef = useRef<boolean>(false);
+	const totalLoadingTimeRef = useRef<number>(0);
+	const loadingStartTimeRef = useRef<number | null>(null);
+	const framesViewedRef = useRef<number>(0);
+	const framesFailedRef = useRef<number>(0);
+	const dateChangesRef = useRef<number>(0);
 
 	const { currentFrame, setCurrentFrame } = useCurrentFrame((index) => {
 		setCurrentIndex(index);
@@ -283,10 +292,69 @@ export default function Timeline() {
 		}
 	}, [frames.length, currentFrame, setCurrentFrame]);
 
-	// Track timeline opened
+	// Track timeline opened and setup session tracking
 	useEffect(() => {
+		timelineOpenedAtRef.current = performance.now();
+		firstFrameDisplayedRef.current = false;
+		totalLoadingTimeRef.current = 0;
+		framesViewedRef.current = 0;
+		framesFailedRef.current = 0;
+		dateChangesRef.current = 0;
+		
 		posthog.capture("timeline_opened");
+		
+		// Send session summary when timeline closes
+		return () => {
+			const sessionDuration = performance.now() - timelineOpenedAtRef.current;
+			const loadingPercentage = sessionDuration > 0 
+				? (totalLoadingTimeRef.current / sessionDuration) * 100 
+				: 0;
+			
+			posthog.capture("timeline_loading_time_total", {
+				session_duration_ms: Math.round(sessionDuration),
+				loading_time_ms: Math.round(totalLoadingTimeRef.current),
+				loading_percentage: Math.round(loadingPercentage * 10) / 10,
+				frames_viewed: framesViewedRef.current,
+				frames_failed: framesFailedRef.current,
+				date_changes: dateChangesRef.current,
+			});
+		};
 	}, []);
+	
+	// Track loading state changes for cumulative loading time
+	useEffect(() => {
+		if (isLoading || showBlockingLoader) {
+			// Started loading
+			if (loadingStartTimeRef.current === null) {
+				loadingStartTimeRef.current = performance.now();
+			}
+		} else {
+			// Stopped loading
+			if (loadingStartTimeRef.current !== null) {
+				totalLoadingTimeRef.current += performance.now() - loadingStartTimeRef.current;
+				loadingStartTimeRef.current = null;
+			}
+		}
+	}, [isLoading, showBlockingLoader]);
+	
+	// Track time to first frame
+	useEffect(() => {
+		if (currentFrame && !firstFrameDisplayedRef.current) {
+			firstFrameDisplayedRef.current = true;
+			const timeToFirstFrame = performance.now() - timelineOpenedAtRef.current;
+			
+			posthog.capture("timeline_time_to_first_frame", {
+				duration_ms: Math.round(timeToFirstFrame),
+				had_cache: frames.length > 1, // If we have multiple frames, likely from cache
+				frames_count: frames.length,
+			});
+		}
+		
+		// Track frames viewed
+		if (currentFrame) {
+			framesViewedRef.current += 1;
+		}
+	}, [currentFrame, frames.length]);
 
 	// Listen for open-search event from Rust (Cmd+K global shortcut)
 	useEffect(() => {
@@ -658,6 +726,7 @@ export default function Timeline() {
 			}
 
 			// Track date change
+			dateChangesRef.current += 1;
 			posthog.capture("timeline_date_changed", {
 				from_date: currentDate.toISOString(),
 				to_date: newDate.toISOString(),
@@ -786,6 +855,9 @@ export default function Timeline() {
 							}}
 							canNavigatePrev={currentIndex > 0}
 							canNavigateNext={currentIndex < frames.length - 1}
+							onFrameLoadError={() => {
+								framesFailedRef.current += 1;
+							}}
 							onFrameUnavailable={async () => {
 								// Get the current frame's frame_id
 								const failedFrameId = frames[currentIndex]?.devices?.[0]?.frame_id;
