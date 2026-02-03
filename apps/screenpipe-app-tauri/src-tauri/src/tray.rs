@@ -140,6 +140,7 @@ fn create_dynamic_menu(
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("settings", "settings").build(app)?)
         .item(&MenuItemBuilder::with_id("feedback", "send feedback").build(app)?)
+        .item(&MenuItemBuilder::with_id("book_call", "book a call with founder").build(app)?)
         .item(&MenuItemBuilder::with_id("onboarding", "onboarding").build(app)?)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?);
@@ -221,6 +222,9 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         }
         "feedback" => {
             let _ = ShowRewindWindow::Settings { page: Some("feedback".to_string()) }.show(app_handle);
+        }
+        "book_call" => {
+            let _ = app_handle.opener().open_url("https://cal.com/louis030195/screenpipe-onboarding", None::<&str>);
         }
         "onboarding" => {
             // Reset onboarding state so it shows even if previously completed
