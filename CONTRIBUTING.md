@@ -456,7 +456,7 @@ we use this for our docs through mintlify, usually the output is broken and i us
 
 ```
 please run this command:
-npx @mintlify/scraping@latest openapi-file content/docs-mintlify-mig-tmp/openapi.yaml -o /tmp
+npx @mintlify/scraping@latest openapi-file docs/mintlify/openapi.yaml -o /tmp
 and fix the openapi.yaml file and rerun the command until it works
 ```
 
@@ -471,7 +471,7 @@ get rid of semantic search bcs not prod rdy also
 
 make sure to run 
 
-`npx @mintlify/scraping@latest openapi-file content/docs-mintlify-mig-tmp/openapi.yaml -o /tmp`
+`npx @mintlify/scraping@latest openapi-file docs/mintlify/openapi.yaml -o /tmp`
 
 to validate the openapi.yaml file is valid btw before pushing 
 

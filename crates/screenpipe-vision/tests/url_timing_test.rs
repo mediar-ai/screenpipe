@@ -40,7 +40,7 @@ impl MockBrowser {
     }
 }
 
-/// Simulates the CURRENT buggy behavior in screenpipe-vision/src/core.rs
+/// Simulates the CURRENT buggy behavior in crates/screenpipe-vision/src/core.rs
 ///
 /// The issue is in capture_all_visible_windows():
 /// 1. Screenshot is captured first (line ~175)

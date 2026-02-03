@@ -90,11 +90,11 @@ pub enum PyannoteModel {
 async fn download_model(model_type: PyannoteModel) -> Result<()> {
     let (url, filename) = match model_type {
         PyannoteModel::Segmentation => (
-            "https://github.com/mediar-ai/screenpipe/raw/refs/heads/main/screenpipe-audio/models/pyannote/segmentation-3.0.onnx",
+            "https://github.com/mediar-ai/screenpipe/raw/refs/heads/main/crates/screenpipe-audio/models/pyannote/segmentation-3.0.onnx",
             "segmentation-3.0.onnx",
         ),
         PyannoteModel::Embedding => (
-            "https://github.com/mediar-ai/screenpipe/raw/refs/heads/main/screenpipe-audio/models/pyannote/wespeaker_en_voxceleb_CAM++.onnx",
+            "https://github.com/mediar-ai/screenpipe/raw/refs/heads/main/crates/screenpipe-audio/models/pyannote/wespeaker_en_voxceleb_CAM++.onnx",
             "wespeaker_en_voxceleb_CAM++.onnx",
         ),
     };

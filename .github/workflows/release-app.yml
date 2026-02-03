@@ -70,9 +70,9 @@ jobs:
         if: github.event.inputs.commit_hash && github.event.inputs.version
         run: |
           if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' apps/screenpipe-app-tauri/src-tauri/Cargo.toml
           else
-            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' apps/screenpipe-app-tauri/src-tauri/Cargo.toml
           fi
 
       - name: create draft release
@@ -135,15 +135,15 @@ jobs:
         if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform != 'macos-latest'
         shell: pwsh
         run: |
-          $content = Get-Content screenpipe-app-tauri/src-tauri/Cargo.toml
+          $content = Get-Content apps/screenpipe-app-tauri/src-tauri/Cargo.toml
           $content = $content -replace '^version = ".*"', ('version = "' + '${{ github.event.inputs.version }}' + '"')
-          $content | Set-Content screenpipe-app-tauri/src-tauri/Cargo.toml -Force
+          $content | Set-Content apps/screenpipe-app-tauri/src-tauri/Cargo.toml -Force
 
       - name: Update version in Cargo.toml
         if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform == 'macos-latest'
         shell: bash
         run: |
-          sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' apps/screenpipe-app-tauri/src-tauri/Cargo.toml
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -199,7 +199,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/${{ matrix.target }}
-            screenpipe-app-tauri/src-tauri/target
+            apps/screenpipe-app-tauri/src-tauri/target
           # Shared cache across branches
           shared-key: "rust-cache-${{ matrix.target }}"
           # Save cache even on failed builds
@@ -213,7 +213,7 @@ jobs:
             ~/.cargo/.crates.toml
             ~/.cargo/.crates2.json
             target/${{ matrix.target }}/release
-            screenpipe-app-tauri/src-tauri/target/release
+            apps/screenpipe-app-tauri/src-tauri/target/release
           key: ${{ runner.os }}-artifacts-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-artifacts-${{ matrix.target }}-
@@ -235,23 +235,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            screenpipe-app-tauri/src-tauri/ffmpeg
-            screenpipe-app-tauri/src-tauri/tesseract-*
-            screenpipe-app-tauri/node_modules
-            screenpipe-app-tauri/src-tauri/target
-            screenpipe-app-tauri/.tauri
-            screenpipe-app-tauri/src-tauri/WixTools
-            screenpipe-app-tauri/src-tauri/mkl
+            apps/screenpipe-app-tauri/src-tauri/ffmpeg
+            apps/screenpipe-app-tauri/src-tauri/tesseract-*
+            apps/screenpipe-app-tauri/node_modules
+            apps/screenpipe-app-tauri/src-tauri/target
+            apps/screenpipe-app-tauri/.tauri
+            apps/screenpipe-app-tauri/src-tauri/WixTools
+            apps/screenpipe-app-tauri/src-tauri/mkl
             # Ollama binaries and libs
-            screenpipe-app-tauri/src-tauri/ollama-*
-            screenpipe-app-tauri/src-tauri/lib/ollama
+            apps/screenpipe-app-tauri/src-tauri/ollama-*
+            apps/screenpipe-app-tauri/src-tauri/lib/ollama
             # Swift UI monitoring binaries
-            screenpipe-app-tauri/src-tauri/ui_monitor-*
+            apps/screenpipe-app-tauri/src-tauri/ui_monitor-*
             # FFmpeg downloads
-            screenpipe-app-tauri/src-tauri/ffmpeg-*
+            apps/screenpipe-app-tauri/src-tauri/ffmpeg-*
             # Platform specific bins
-            screenpipe-app-tauri/src-tauri/bun-*
-            screenpipe-app-tauri/src-tauri/screenpipe-*
+            apps/screenpipe-app-tauri/src-tauri/bun-*
+            apps/screenpipe-app-tauri/src-tauri/screenpipe-*
           key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build-${{ hashFiles('**/Cargo.lock', '**/bun.lockb') }}
           restore-keys: |
             ${{ matrix.platform }}-${{ matrix.target }}-pre-build-
@@ -321,7 +321,7 @@ jobs:
           sudo apt-get install -y /tmp/ubuntu-packages/*.deb
 
       - name: Install frontend dependencies
-        working-directory: ./screenpipe-app-tauri
+        working-directory: ./apps/screenpipe-app-tauri
         run: bun install
 
       - name: Install vcpkg
@@ -424,7 +424,7 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./screenpipe-app-tauri
+        working-directory: ./apps/screenpipe-app-tauri
 
       - name: Build CLI
         if: matrix.os_type != 'windows'
@@ -458,7 +458,7 @@ jobs:
       - name: Run pre_build.js
         run: |
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./screenpipe-app-tauri
+        working-directory: ./apps/screenpipe-app-tauri
 
       - uses: actions/setup-python@v5
         if: matrix.os_type == 'windows'
@@ -470,7 +470,7 @@ jobs:
         shell: powershell
         run: |
           # Create target directory
-          $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
+          $mkl_dir = "apps/screenpipe-app-tauri/src-tauri/mkl"
           New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
 
           # Install and copy Intel OpenMP
@@ -501,7 +501,7 @@ jobs:
         shell: powershell
         run: |
           # Create target directory
-          $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+          $vcredist_dir = "apps/screenpipe-app-tauri/src-tauri/vcredist"
           New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
 
           # Copy vcruntime DLLs from System32 (already present on Windows runners with VS installed)
@@ -519,7 +519,7 @@ jobs:
 
       - name: Use production config for release
         shell: bash
-        run: cp screenpipe-app-tauri/src-tauri/tauri.prod.conf.json screenpipe-app-tauri/src-tauri/tauri.conf.json
+        run: cp apps/screenpipe-app-tauri/src-tauri/tauri.prod.conf.json apps/screenpipe-app-tauri/src-tauri/tauri.conf.json
 
       - name: Set macOS deployment target
         if: matrix.os_type == 'macos'
@@ -577,7 +577,7 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.os_type == 'linux' && '1' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
-          projectPath: "./screenpipe-app-tauri"
+          projectPath: "./apps/screenpipe-app-tauri"
           tauriScript: bunx tauri -vvv
           retryAttempts: 3
 
@@ -597,7 +597,7 @@ jobs:
           .\sentry-cli.exe debug-files upload --org $env:SENTRY_ORG --project screenpipe-cli target/x86_64-pc-windows-msvc/release/
 
           # Also upload for the app
-          .\sentry-cli.exe debug-files upload --org $env:SENTRY_ORG --project screenpipe-app screenpipe-app-tauri/src-tauri/target/release/
+          .\sentry-cli.exe debug-files upload --org $env:SENTRY_ORG --project screenpipe-app apps/screenpipe-app-tauri/src-tauri/target/release/
 
       - name: Upload debug symbols to Sentry (macOS)
         if: matrix.os_type == 'macos'
@@ -615,7 +615,7 @@ jobs:
           sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-cli target/${{ matrix.target }}/release/
 
           # Also upload for the app
-          sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-app screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/
+          sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-app apps/screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/
 
       - name: Download and Run CLI Manually (Windows)
         if: matrix.os_type == 'windows'
@@ -638,7 +638,7 @@ jobs:
           Invoke-WebRequest -Uri $cliUrl -UserAgent $env:USER_AGENT -OutFile $cliExe
 
           # move to the directory we want to upload from
-          cd screenpipe-app-tauri/src-tauri
+          cd apps/screenpipe-app-tauri/src-tauri
 
           # upload assets with retry logic
           $cliFullPath = Join-Path $cliDir "cn.exe"
@@ -680,7 +680,7 @@ jobs:
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
           api-key: ${{ secrets.CN_API_KEY }}
-          path: ./screenpipe-app-tauri/src-tauri
+          path: ./apps/screenpipe-app-tauri/src-tauri
 
   publish-release:
     needs: [check_commit, publish-tauri]
@@ -696,7 +696,7 @@ jobs:
       - name: Get version from Cargo.toml
         id: get_version
         run: |
-          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Publish Release on CrabNebula Cloud

@@ -112,7 +112,7 @@ jobs:
     - name: Copy library for MKL
       shell: pwsh
       run: |
-        $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
+        $mkl_dir = "apps/screenpipe-app-tauri/src-tauri/mkl"
         New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
         python -m pip install --upgrade pip
         $temp_dir = "temp_omp"
@@ -134,7 +134,7 @@ jobs:
     - name: Copy library for vcredist
       shell: powershell
       run: |
-        $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+        $vcredist_dir = "apps/screenpipe-app-tauri/src-tauri/vcredist"
         New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
         Write-Host "Copying DLL files from System32..."
         # vcruntime140.dll should already exist on GitHub runners with VS installed
@@ -154,13 +154,13 @@ jobs:
       run: cargo build --release -p screenpipe-server --target x86_64-pc-windows-msvc
 
     - name: Install frontend dependencies
-      working-directory: ./screenpipe-app-tauri
+      working-directory: ./apps/screenpipe-app-tauri
       run: bun install
 
     - name: Run pre_build.js
       run: |
         bun ./scripts/pre_build.js
-      working-directory: ./screenpipe-app-tauri
+      working-directory: ./apps/screenpipe-app-tauri
 
     - name: Build
       uses: tauri-apps/tauri-action@v0.5.17
@@ -178,7 +178,7 @@ jobs:
         KNF_STATIC_CRT: "1"
       with:
         args: "--target x86_64-pc-windows-msvc --no-bundle"
-        projectPath: "./screenpipe-app-tauri"
+        projectPath: "./apps/screenpipe-app-tauri"
         tauriScript: bunx tauri -v
 
     - name: Install tauri-driver
@@ -201,7 +201,7 @@ jobs:
       continue-on-error: true
       shell: pwsh
       run: |
-        cd ./screenpipe-app-tauri
+        cd ./apps/screenpipe-app-tauri
         $edgeVersion = (bun tauri info  | Select-String 'WebView2').ToString().Split(':')[1].Trim()
         Write-Output "Detected Edge version: $edgeVersion"
         cd ..
@@ -216,7 +216,7 @@ jobs:
     - name: Run E2E Tests
       continue-on-error: true
       shell: pwsh
-      working-directory: ./screenpipe-app-tauri
+      working-directory: ./apps/screenpipe-app-tauri
       run: |
         bun run test:e2e 2>&1 | Tee-Object -FilePath e2e_output.log
 
@@ -226,8 +226,8 @@ jobs:
       with:
         name: windows-e2e-test-artifacts
         path: |
-          ./screenpipe-app-tauri/e2e/videos/*
-          ./screenpipe-app-tauri/e2e_output.log
+          ./apps/screenpipe-app-tauri/e2e/videos/*
+          ./apps/screenpipe-app-tauri/e2e_output.log
 
     - name: Upload Screenpipe data
       uses: actions/upload-artifact@v4
@@ -328,13 +328,13 @@ jobs:
       run: cargo build --release -p screenpipe-server --target x86_64-unknown-linux-gnu
 
     - name: Install frontend dependencies
-      working-directory: ./screenpipe-app-tauri
+      working-directory: ./apps/screenpipe-app-tauri
       run: bun install
 
     - name: Run pre_build.js
       run: |
         bun ./scripts/pre_build.js
-      working-directory: ./screenpipe-app-tauri
+      working-directory: ./apps/screenpipe-app-tauri
 
     - name: Build
       uses: tauri-apps/tauri-action@v0.5.17
@@ -350,7 +350,7 @@ jobs:
         VCPKG_STATIC_LINKAGE: "true"
       with:
         args: "--target x86_64-unknown-linux-gnu --no-bundle"
-        projectPath: "./screenpipe-app-tauri"
+        projectPath: "./apps/screenpipe-app-tauri"
         tauriScript: bunx tauri -v
 
     - name: Install tauri-driver
@@ -368,7 +368,7 @@ jobs:
     - name: Run E2E Tests
       continue-on-error: true
       shell: bash
-      working-directory: ./screenpipe-app-tauri
+      working-directory: ./apps/screenpipe-app-tauri
       run: |
         export XDG_RUNTIME_DIR=/run/user/$(id -u)
         export XDG_CONFIG_HOME="$HOME/.config"
@@ -385,8 +385,8 @@ jobs:
       with:
         name: linux-e2e-test-artifacts
         path: |
-          ./screenpipe-app-tauri/e2e/videos/*
-          ./screenpipe-app-tauri/e2e_output.log
+          ./apps/screenpipe-app-tauri/e2e/videos/*
+          ./apps/screenpipe-app-tauri/e2e_output.log
 
     - name: Upload Screenpipe data
       uses: actions/upload-artifact@v4

@@ -323,7 +323,7 @@ Bug: Timeline shows 7:41 PM but current time is 7:55 PM (14 min gap)
 
 Root Cause (CONFIRMED by test_channel_closure_does_not_starve_other_branches):
 -----------------------------------------------------------------------
-In handle_stream_frames_socket (screenpipe-server/src/server.rs):
+In handle_stream_frames_socket (crates/screenpipe-server/src/server.rs):
 
 When frame_rx channel closes (after initial fetch completes), tokio::select!
 keeps selecting that branch because a closed channel returns None IMMEDIATELY.
@@ -340,7 +340,7 @@ Fix Required:
 - Skip the frame_rx branch in tokio::select! once closed
 - OR restructure the loop to handle closed channel differently
 
-Code Location: screenpipe-server/src/server.rs:3193-3315
+Code Location: crates/screenpipe-server/src/server.rs:3193-3315
 `);
 
     // This test always passes - it's documentation

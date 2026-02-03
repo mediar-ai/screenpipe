@@ -14,7 +14,7 @@
     "url": "https://github.com/mediar-ai/screenpipe"
   },
   "homepage": "https://screenpi.pe",
-  "documentation": "https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-integrations/screenpipe-mcp",
+  "documentation": "https://github.com/mediar-ai/screenpipe/tree/main/crates/screenpipe-integrations/screenpipe-mcp",
   "support": "https://github.com/mediar-ai/screenpipe/issues",
   "license": "MIT",
   "server": {
