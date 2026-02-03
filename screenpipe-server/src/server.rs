@@ -1356,9 +1356,12 @@ impl SCServer {
             } else {
                 None
             },
+            // Frame image cache: increased from 100 to 1000 for better timeline scrolling performance.
+            // Each entry is just a file path (~100 bytes) + Instant, so 1000 entries ≈ 100KB.
+            // This dramatically reduces FFmpeg extraction calls when scrolling through timeline.
             frame_image_cache: if enable_frame_cache {
                 Some(Arc::new(Mutex::new(LruCache::new(
-                    NonZeroUsize::new(100).unwrap(),
+                    NonZeroUsize::new(1000).unwrap(),
                 ))))
             } else {
                 None
@@ -3139,7 +3142,10 @@ pub async fn get_frame_data(
                 match cache_result {
                     Ok(mut cache) => {
                         if let Some((file_path, timestamp)) = cache.get(&frame_id) {
-                            if timestamp.elapsed() < Duration::from_secs(300) {
+                            // Increased TTL from 5 minutes to 30 minutes.
+                            // Frames are immutable once captured, so longer caching is safe
+                            // and significantly improves timeline scrolling performance.
+                            if timestamp.elapsed() < Duration::from_secs(1800) {
                                 debug!(
                                     "Cache hit for frame_id: {}. Retrieved in {:?}",
                                     frame_id,
