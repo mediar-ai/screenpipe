@@ -39,6 +39,7 @@ use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::Path;
+use sysinfo::Disks;
 use std::{
     env, fs,
     io::Write,
@@ -149,6 +150,59 @@ fn get_base_dir(custom_path: &Option<String>) -> anyhow::Result<PathBuf> {
 
     fs::create_dir_all(&data_dir)?;
     Ok(base_dir)
+}
+
+/// Minimum disk space required to run screenpipe (in bytes)
+/// Default: 5 GB - enough for models and initial data storage
+const MIN_DISK_SPACE_BYTES: u64 = 5 * 1024 * 1024 * 1024;
+
+/// Check if there is enough disk space at the given path.
+/// Returns Ok(()) if there's enough space, otherwise returns an error with details.
+fn check_disk_space(path: &Path) -> anyhow::Result<()> {
+    let disks = Disks::new_with_refreshed_list();
+
+    // Find the disk that contains our path
+    let mut best_match: Option<&sysinfo::Disk> = None;
+    let mut best_match_len = 0;
+
+    for disk in disks.list() {
+        let mount_point = disk.mount_point();
+        if path.starts_with(mount_point) {
+            let mount_len = mount_point.as_os_str().len();
+            if mount_len > best_match_len {
+                best_match = Some(disk);
+                best_match_len = mount_len;
+            }
+        }
+    }
+
+    if let Some(disk) = best_match {
+        let available_space = disk.available_space();
+        let available_gb = available_space as f64 / (1024.0 * 1024.0 * 1024.0);
+        let required_gb = MIN_DISK_SPACE_BYTES as f64 / (1024.0 * 1024.0 * 1024.0);
+
+        if available_space < MIN_DISK_SPACE_BYTES {
+            return Err(anyhow::anyhow!(
+                "insufficient disk space: {:.2} GB available, {:.2} GB required. \
+                please free up some space before running screenpipe.",
+                available_gb,
+                required_gb
+            ));
+        }
+
+        eprintln!(
+            "disk space check: {:.2} GB available (minimum required: {:.2} GB)",
+            available_gb, required_gb
+        );
+    } else {
+        // If we can't find the disk, just warn and continue
+        eprintln!(
+            "warning: could not determine disk space for path: {}",
+            path.display()
+        );
+    }
+
+    Ok(())
 }
 
 fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGuard> {
@@ -631,6 +685,12 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
         }
+    }
+
+    // Check disk space before proceeding
+    if let Err(e) = check_disk_space(&local_data_dir) {
+        eprintln!("{}", e);
+        std::process::exit(1);
     }
 
     // Replace the current conditional check with:
