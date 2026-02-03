@@ -237,14 +237,13 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
             tauri::async_runtime::spawn(async move {
                 info!("Stopping screenpipe sidecar before quit...");
                 if let Some(sidecar_state) = app_handle_clone.try_state::<SidecarState>() {
-                    match crate::sidecar::stop_screenpipe(
-                        sidecar_state,
-                        app_handle_clone.clone(),
-                    )
-                    .await
-                    {
-                        Ok(_) => info!("Screenpipe sidecar stopped successfully"),
-                        Err(e) => error!("Failed to stop screenpipe sidecar: {}", e),
+                    // Access the inner Arc<Mutex<...>> directly instead of calling the tauri command
+                    let mut handle_guard = sidecar_state.0.lock().await;
+                    if let Some(handle) = handle_guard.take() {
+                        handle.shutdown();
+                        info!("Screenpipe sidecar stopped successfully");
+                    } else {
+                        debug!("No sidecar running to stop");
                     }
                 }
                 app_handle_clone.exit(0);
