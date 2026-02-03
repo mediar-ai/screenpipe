@@ -43,17 +43,12 @@ pub fn download_whisper_model(engine: Arc<AudioTranscriptionEngine>) -> Result<P
 pub fn create_whisper_context_parameters<'a>(
     engine: Arc<AudioTranscriptionEngine>,
 ) -> Result<WhisperContextParameters<'a>> {
-    let model_preset = match *engine {
-        AudioTranscriptionEngine::WhisperLargeV3
-        | AudioTranscriptionEngine::WhisperLargeV3Quantized => whisper_rs::DtwModelPreset::LargeV3,
-        AudioTranscriptionEngine::WhisperTiny | AudioTranscriptionEngine::WhisperTinyQuantized => {
-            whisper_rs::DtwModelPreset::Tiny
-        }
-        _ => whisper_rs::DtwModelPreset::LargeV3Turbo,
-    };
-
     let mut context_param = WhisperContextParameters::default();
-    context_param.dtw_parameters.mode = whisper_rs::DtwMode::ModelPreset { model_preset };
+
+    // NOTE: keep DTW disabled to avoid whisper.cpp median_filter asserts on short inputs
+    // (WHISPER_ASSERT filter_width < a->ne[2]). Token-level timestamps are optional for us
+    // and DTW can be re-enabled after the upstream issue is addressed.
+    context_param.dtw_parameters.mode = whisper_rs::DtwMode::None;
 
     Ok(context_param)
 }

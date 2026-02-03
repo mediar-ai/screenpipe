@@ -14,7 +14,7 @@ pub async fn process_with_whisper(
 ) -> Result<String> {
     let mut whisper_state = whisper_context
         .create_state()
-        .expect("failed to create key");
+        .map_err(|e| anyhow::anyhow!("failed to create whisper state: {}", e))?;
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
 
@@ -32,8 +32,8 @@ pub async fn process_with_whisper(
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
-    // Enable token level timestamps
-    params.set_token_timestamps(true);
+    // Disable token-level timestamps since DTW is disabled for stability.
+    params.set_token_timestamps(false);
     whisper_state.pcm_to_mel(&audio, 2)?;
     let (_, lang_tokens) = whisper_state.lang_detect(0, 2)?;
     let lang = detect_language(lang_tokens, languages);
@@ -44,7 +44,7 @@ pub async fn process_with_whisper(
 
     whisper_state
         .full(params, &audio)
-        .expect("failed to run model");
+        .map_err(|e| anyhow::anyhow!("failed to run whisper model: {}", e))?;
 
     let num_segments = whisper_state.full_n_segments();
 
