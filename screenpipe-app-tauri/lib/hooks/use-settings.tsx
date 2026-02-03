@@ -1,7 +1,6 @@
 import { homeDir } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Store } from "@tauri-apps/plugin-store";
-import { localDataDir } from "@tauri-apps/api/path";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import posthog from "posthog-js";
 import localforage from "localforage";
@@ -256,8 +255,9 @@ let _store: Promise<Store> | undefined;
 
 export const getStore = async () => {
 	if (!_store) {
-		const dir = await localDataDir();
-		_store = Store.load(`${dir}/screenpipe/store.bin`, {
+		// Use homeDir to match Rust backend's get_base_dir which uses $HOME/.screenpipe
+		const dir = await homeDir();
+		_store = Store.load(`${dir}/.screenpipe/store.bin`, {
 			autoSave: false,
 			defaults: {},
 		});
