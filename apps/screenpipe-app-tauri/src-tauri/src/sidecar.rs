@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// State holding the embedded server handle
 pub struct SidecarState(pub Arc<Mutex<Option<EmbeddedServerHandle>>>);
@@ -109,6 +109,8 @@ pub async fn stop_screenpipe(
     let mut handle_guard = state.0.lock().await;
     if let Some(handle) = handle_guard.take() {
         handle.shutdown();
+        // Wait for the old server to fully release port 3030
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         info!("Screenpipe server stopped");
         Ok(())
     } else {
@@ -157,7 +159,7 @@ pub async fn spawn_screenpipe(
         let mut handle_guard = state.0.lock().await;
         if let Some(handle) = handle_guard.take() {
             handle.shutdown();
-            // Give it a moment to shut down
+            // Give it time to release the port
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }
     }
@@ -198,16 +200,66 @@ pub async fn spawn_screenpipe(
 
     // Build config from store
     let config = EmbeddedServerConfig::from_store(&store, base_dir);
+    let sidecar_state_inner = state.0.clone();
 
-    // Start the embedded server
-    let handle = start_embedded_server(config).await?;
+    // Use a oneshot channel to report success/failure from the dedicated runtime
+    let (result_tx, result_rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
 
-    // Store the handle
-    {
-        let mut handle_guard = state.0.lock().await;
-        *handle_guard = Some(handle);
+    // Spawn a dedicated thread with its own tokio runtime — same pattern as main.rs initial boot.
+    // This prevents the HTTP server from being starved by Tauri's UI runtime.
+    std::thread::Builder::new()
+        .name("screenpipe-server".to_string())
+        .spawn(move || {
+            let server_runtime = match tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(4)
+                .thread_name("screenpipe-worker")
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(e) => {
+                    let _ = result_tx.send(Err(format!("Failed to create server runtime: {}", e)));
+                    return;
+                }
+            };
+
+            server_runtime.block_on(async move {
+                match start_embedded_server(config).await {
+                    Ok(handle) => {
+                        info!("Embedded screenpipe server started successfully on dedicated runtime");
+                        {
+                            let mut guard = sidecar_state_inner.lock().await;
+                            *guard = Some(handle);
+                        }
+                        // Signal success to the caller
+                        let _ = result_tx.send(Ok(()));
+
+                        // Keep the runtime alive until the handle is taken (shutdown requested)
+                        loop {
+                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                            let guard = sidecar_state_inner.lock().await;
+                            if guard.is_none() {
+                                info!("Server handle removed from state, shutting down server thread");
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to start embedded server: {}", e);
+                        let _ = result_tx.send(Err(e));
+                    }
+                }
+            });
+        })
+        .map_err(|e| format!("Failed to spawn server thread: {}", e))?;
+
+    // Wait for the dedicated runtime to report back
+    match result_rx.await {
+        Ok(Ok(())) => {
+            info!("Screenpipe server started successfully");
+            Ok(())
+        }
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err("Server startup channel dropped unexpectedly".to_string()),
     }
-
-    info!("Screenpipe server started successfully");
-    Ok(())
 }

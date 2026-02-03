@@ -1386,11 +1386,15 @@ impl SCServer {
             audio_disabled: self.audio_disabled,
             enable_pipe_manager: self.enable_pipe,
             frame_cache: if enable_frame_cache {
-                Some(Arc::new(
-                    FrameCache::new(self.screenpipe_dir.clone().join("data"), self.db.clone())
-                        .await
-                        .unwrap(),
-                ))
+                match FrameCache::new(self.screenpipe_dir.clone().join("data"), self.db.clone())
+                    .await
+                {
+                    Ok(cache) => Some(Arc::new(cache)),
+                    Err(e) => {
+                        error!("Failed to create frame cache, starting without it: {:?}", e);
+                        None
+                    }
+                }
             } else {
                 None
             },
