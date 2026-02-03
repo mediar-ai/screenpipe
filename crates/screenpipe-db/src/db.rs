@@ -3010,81 +3010,95 @@ LIMIT ? OFFSET ?
         new_speaker_name: &str,
         propagate_similar: bool,
     ) -> Result<(i64, u64, u64), sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
+        // Phase 1: Short write transaction – reassign the chunk and move one embedding.
+        //          Avoid holding a write lock during expensive vector search.
+        let (current_speaker_id, target_speaker_id, transcriptions_updated, mut embeddings_moved) = {
+            let mut tx = self.pool.begin().await?;
 
-        // 1. Get the current speaker_id for this audio chunk
-        let current_speaker_id: Option<i64> = sqlx::query_scalar(
-            "SELECT speaker_id FROM audio_transcriptions WHERE audio_chunk_id = ? LIMIT 1",
-        )
-        .bind(audio_chunk_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+            // 1. Get the current speaker_id for this audio chunk
+            let current_speaker_id: Option<i64> = sqlx::query_scalar(
+                "SELECT speaker_id FROM audio_transcriptions WHERE audio_chunk_id = ? LIMIT 1",
+            )
+            .bind(audio_chunk_id)
+            .fetch_optional(&mut *tx)
+            .await?;
 
-        let current_speaker_id = match current_speaker_id {
-            Some(id) => id,
-            None => {
-                tx.rollback().await?;
-                return Err(sqlx::Error::RowNotFound);
-            }
-        };
-
-        // 2. Find or create the target speaker
-        let target_speaker: Speaker = match sqlx::query_as::<_, Speaker>(
-            "SELECT id, name, metadata FROM speakers WHERE name = ? AND hallucination = 0",
-        )
-        .bind(new_speaker_name)
-        .fetch_optional(&mut *tx)
-        .await?
-        {
-            Some(speaker) => speaker,
-            None => {
-                // Create new speaker
-                let id = sqlx::query("INSERT INTO speakers (name) VALUES (?)")
-                    .bind(new_speaker_name)
-                    .execute(&mut *tx)
-                    .await?
-                    .last_insert_rowid();
-
-                Speaker {
-                    id,
-                    name: new_speaker_name.to_string(),
-                    metadata: String::new(),
+            let current_speaker_id = match current_speaker_id {
+                Some(id) => id,
+                None => {
+                    tx.rollback().await?;
+                    return Err(sqlx::Error::RowNotFound);
                 }
+            };
+
+            // 2. Find or create the target speaker
+            let target_speaker: Speaker = match sqlx::query_as::<_, Speaker>(
+                "SELECT id, name, metadata FROM speakers WHERE name = ? AND hallucination = 0",
+            )
+            .bind(new_speaker_name)
+            .fetch_optional(&mut *tx)
+            .await?
+            {
+                Some(speaker) => speaker,
+                None => {
+                    let id = sqlx::query("INSERT INTO speakers (name) VALUES (?)")
+                        .bind(new_speaker_name)
+                        .execute(&mut *tx)
+                        .await?
+                        .last_insert_rowid();
+
+                    Speaker {
+                        id,
+                        name: new_speaker_name.to_string(),
+                        metadata: String::new(),
+                    }
+                }
+            };
+
+            // 3. Update the transcription's speaker_id
+            let transcriptions_updated = sqlx::query(
+                "UPDATE audio_transcriptions SET speaker_id = ? WHERE audio_chunk_id = ?",
+            )
+            .bind(target_speaker.id)
+            .bind(audio_chunk_id)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+
+            // 4. Move the embedding from old speaker to new speaker
+            let embedding_id: Option<i64> = sqlx::query_scalar(
+                "SELECT id FROM speaker_embeddings WHERE speaker_id = ? LIMIT 1",
+            )
+            .bind(current_speaker_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            let mut embeddings_moved = 0u64;
+            if let Some(emb_id) = embedding_id {
+                sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?")
+                    .bind(target_speaker.id)
+                    .bind(emb_id)
+                    .execute(&mut *tx)
+                    .await?;
+                embeddings_moved = 1;
             }
+
+            tx.commit().await?;
+            (
+                current_speaker_id,
+                target_speaker.id,
+                transcriptions_updated,
+                embeddings_moved,
+            )
         };
 
-        // 3. Update the transcription's speaker_id
-        let transcriptions_updated =
-            sqlx::query("UPDATE audio_transcriptions SET speaker_id = ? WHERE audio_chunk_id = ?")
-                .bind(target_speaker.id)
-                .bind(audio_chunk_id)
-                .execute(&mut *tx)
-                .await?
-                .rows_affected();
-
-        // 4. Move the embedding from old speaker to new speaker
-        let embedding_id: Option<i64> =
-            sqlx::query_scalar("SELECT id FROM speaker_embeddings WHERE speaker_id = ? LIMIT 1")
-                .bind(current_speaker_id)
-                .fetch_optional(&mut *tx)
-                .await?;
-
-        let mut embeddings_moved = 0u64;
-        if let Some(emb_id) = embedding_id {
-            sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?")
-                .bind(target_speaker.id)
-                .bind(emb_id)
-                .execute(&mut *tx)
-                .await?;
-            embeddings_moved = 1;
-        }
-
-        // 5. If propagate_similar, find and reassign similar embeddings
+        // Phase 2: If propagate_similar, do the expensive vector similarity search
+        //          OUTSIDE any transaction so we don't hold a write lock.
         if propagate_similar {
             let threshold = 0.5; // Same as speaker matching threshold
 
-            // Find similar embeddings from other speakers
-            let similar_rows = sqlx::query(
+            // Read-only: find similar embeddings from other speakers
+            let similar_rows: Vec<(i64, i64)> = sqlx::query(
                 r#"
                 SELECT se2.id as embedding_id, se2.speaker_id
                 FROM speaker_embeddings se1
@@ -3094,65 +3108,78 @@ LIMIT ? OFFSET ?
                   AND se2.speaker_id != ?
                 "#,
             )
-            .bind(target_speaker.id)
+            .bind(target_speaker_id)
             .bind(threshold)
-            .bind(target_speaker.id)
-            .fetch_all(&mut *tx)
-            .await?;
-
-            for row in similar_rows {
+            .bind(target_speaker_id)
+            .fetch_all(&self.pool)
+            .await?
+            .iter()
+            .map(|row| {
                 let emb_id: i64 = row.get("embedding_id");
                 let old_speaker_id: i64 = row.get("speaker_id");
+                (emb_id, old_speaker_id)
+            })
+            .collect();
 
-                // Move the embedding
-                sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?")
-                    .bind(target_speaker.id)
-                    .bind(emb_id)
-                    .execute(&mut *tx)
-                    .await?;
-                embeddings_moved += 1;
+            // Phase 3: Short write transaction – apply the similarity results.
+            if !similar_rows.is_empty() {
+                let mut tx = self.pool.begin().await?;
 
-                // Move transcriptions from the old speaker
-                sqlx::query("UPDATE audio_transcriptions SET speaker_id = ? WHERE speaker_id = ?")
-                    .bind(target_speaker.id)
+                for (emb_id, old_speaker_id) in &similar_rows {
+                    // Move the embedding
+                    sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?")
+                        .bind(target_speaker_id)
+                        .bind(emb_id)
+                        .execute(&mut *tx)
+                        .await?;
+                    embeddings_moved += 1;
+
+                    // Move transcriptions from the old speaker
+                    sqlx::query(
+                        "UPDATE audio_transcriptions SET speaker_id = ? WHERE speaker_id = ?",
+                    )
+                    .bind(target_speaker_id)
                     .bind(old_speaker_id)
                     .execute(&mut *tx)
                     .await?;
 
-                // Check if old speaker has no more embeddings, delete if empty
-                let remaining: i64 = sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = ?",
-                )
-                .bind(old_speaker_id)
-                .fetch_one(&mut *tx)
-                .await?;
+                    // Check if old speaker has no more embeddings, delete if empty
+                    let remaining: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = ?",
+                    )
+                    .bind(old_speaker_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
 
-                if remaining == 0 {
-                    sqlx::query("DELETE FROM speakers WHERE id = ?")
-                        .bind(old_speaker_id)
-                        .execute(&mut *tx)
-                        .await?;
+                    if remaining == 0 {
+                        sqlx::query("DELETE FROM speakers WHERE id = ?")
+                            .bind(old_speaker_id)
+                            .execute(&mut *tx)
+                            .await?;
+                    }
                 }
+
+                tx.commit().await?;
             }
         }
 
-        // 6. Clean up: if original speaker has no embeddings left, delete it
-        let remaining: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = ?")
-                .bind(current_speaker_id)
-                .fetch_one(&mut *tx)
-                .await?;
+        // Phase 4: Clean up – if original speaker has no embeddings left, delete it
+        {
+            let remaining: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = ?")
+                    .bind(current_speaker_id)
+                    .fetch_one(&self.pool)
+                    .await?;
 
-        if remaining == 0 && current_speaker_id != target_speaker.id {
-            sqlx::query("DELETE FROM speakers WHERE id = ?")
-                .bind(current_speaker_id)
-                .execute(&mut *tx)
-                .await?;
+            if remaining == 0 && current_speaker_id != target_speaker_id {
+                sqlx::query("DELETE FROM speakers WHERE id = ?")
+                    .bind(current_speaker_id)
+                    .execute(&self.pool)
+                    .await?;
+            }
         }
 
-        tx.commit().await?;
-
-        Ok((target_speaker.id, transcriptions_updated, embeddings_moved))
+        Ok((target_speaker_id, transcriptions_updated, embeddings_moved))
     }
 
     // ============================================================================

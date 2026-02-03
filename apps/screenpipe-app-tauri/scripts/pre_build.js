@@ -297,6 +297,8 @@ if (platform == 'windows') {
 	console.log('Copying screenpipe binary...');
 
 	const potentialPaths = [
+		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe.exe'),
+		path.join(__dirname, '..', '..', '..', 'target', 'x86_64-pc-windows-msvc', 'release', 'screenpipe.exe'),
 		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe.exe'),
 		path.join(__dirname, '..', '..', 'target', 'x86_64-pc-windows-msvc', 'release', 'screenpipe.exe'),
 		path.join(__dirname, '..', 'target', 'release', 'screenpipe.exe'),
