@@ -1,4 +1,3 @@
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=c3628864-a0cb-47a1-a822-2f936cff50b2" />
 
 <p align="center">
    <a href ="https://screenpi.pe">
