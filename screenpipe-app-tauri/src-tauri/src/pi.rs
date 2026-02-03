@@ -161,12 +161,38 @@ fn find_pi_executable() -> Option<String> {
         }
     }
 
-    // Try which command
-    if let Ok(output) = std::process::Command::new("which").arg("pi").output() {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Some(path);
+    // Try which/where command
+    #[cfg(unix)]
+    {
+        if let Ok(output) = std::process::Command::new("which").arg("pi").output() {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        if let Ok(output) = std::process::Command::new("where")
+            .arg("pi")
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+        {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                if !path.is_empty() {
+                    return Some(path);
+                }
             }
         }
     }
@@ -311,6 +337,14 @@ pub async fn pi_start(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    // On Windows, prevent console window from appearing
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
 
     if let Some(ref token) = user_token {
         cmd.env("SCREENPIPE_API_KEY", token);
@@ -477,9 +511,18 @@ pub async fn pi_install(app: AppHandle) -> Result<(), String> {
 
     let app_handle = app.clone();
     std::thread::spawn(move || {
-        let output = std::process::Command::new(&bun)
-            .args(["add", "-g", PI_PACKAGE])
-            .output();
+        let mut cmd = std::process::Command::new(&bun);
+        cmd.args(["add", "-g", PI_PACKAGE]);
+
+        // On Windows, prevent console window from appearing
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        let output = cmd.output();
 
         match output {
             Ok(output) => {
@@ -540,6 +583,14 @@ pub async fn run(
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
 
+    // On Windows, prevent console window from appearing
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
     let child = cmd.spawn()
         .map_err(|e| format!("Failed to spawn pi: {}", e))?;
 
@@ -572,8 +623,11 @@ pub fn kill(pid: u32) -> Result<(), String> {
     }
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let _ = std::process::Command::new("taskkill")
             .args(["/F", "/PID", &pid.to_string()])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
     }
     Ok(())
