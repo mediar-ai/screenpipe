@@ -96,9 +96,10 @@ or [download the desktop app](https://screenpi.pe)
 ## specs
 
 - 10% cpu usage
-- 4gb ram
+- 0.5-3gb ram
 - ~15gb storage/month
 - works offline
+- optional encrypted device sync
 
 ## use with claude code
 
