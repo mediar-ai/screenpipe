@@ -61,7 +61,8 @@ impl DatabaseManager {
         }
 
         let pool = SqlitePoolOptions::new()
-            .max_connections(50)
+            // SQLite only allows a single writer; keep the pool modest to reduce write contention.
+            .max_connections(10)
             .min_connections(3) // Minimum number of idle connections
             .acquire_timeout(Duration::from_secs(10))
             .connect(&connection_string)
@@ -69,6 +70,11 @@ impl DatabaseManager {
 
         // Enable WAL mode
         sqlx::query("PRAGMA journal_mode = WAL;")
+            .execute(&pool)
+            .await?;
+
+        // Give writers time to wait for the lock instead of failing immediately.
+        sqlx::query("PRAGMA busy_timeout = 5000;")
             .execute(&pool)
             .await?;
 

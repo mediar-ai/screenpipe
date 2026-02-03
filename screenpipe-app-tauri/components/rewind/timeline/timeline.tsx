@@ -241,12 +241,12 @@ export const TimelineSlider = ({
 	// Calculate frame width based on zoom level
 	const frameWidth = useMemo(() => {
 		const baseWidth = 6; // 1.5 * 4 = 6px base (w-1.5 = 0.375rem = 6px)
-		return Math.max(2, baseWidth * zoomLevel);
+		return Math.max(2, Math.round(baseWidth * zoomLevel));
 	}, [zoomLevel]);
 
 	const frameMargin = useMemo(() => {
 		const baseMargin = 2; // mx-0.5 = 0.125rem = 2px
-		return Math.max(1, baseMargin * zoomLevel);
+		return Math.max(1, Math.round(baseMargin * zoomLevel));
 	}, [zoomLevel]);
 
 	// Animation state for new frames pulse
@@ -636,6 +636,10 @@ export const TimelineSlider = ({
 										? timeMarkers.find(m => m.position === visibleFrames.indexOf(frame))
 										: null;
 
+									const shouldShowTooltip = hoveredTimestamp
+										? hoveredTimestamp === frame.timestamp
+										: frames[currentIndex]?.timestamp === frame.timestamp;
+
 									return (
 										<motion.div
 											key={`${frame.timestamp}-${frameIdx}`}
@@ -690,8 +694,7 @@ export const TimelineSlider = ({
 											)}
 
 											{/* Tooltip on hover */}
-											{(hoveredTimestamp === frame.timestamp ||
-												frames[currentIndex]?.timestamp === frame.timestamp) && (
+											{shouldShowTooltip && (
 												<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-2 w-max bg-popover border border-border rounded-lg px-3 py-2 text-xs shadow-2xl">
 													<div className="flex items-center gap-2 mb-1">
 														<img

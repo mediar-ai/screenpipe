@@ -298,13 +298,18 @@ pub async fn remove_sync_device(
 #[tauri::command]
 #[specta::specta]
 pub async fn init_sync(
-    _app: AppHandle,
+    app: AppHandle,
     state: State<'_, SyncState>,
-    settings: State<'_, SettingsStore>,
+    _settings: State<'_, SettingsStore>,
     password: String,
 ) -> Result<bool, String> {
-    // Get auth token from settings
-    let token = settings
+    // Get auth token from FRESH settings (not managed state which may be stale)
+    // The managed SettingsStore is loaded once at startup and doesn't update when user logs in
+    let fresh_settings = SettingsStore::get(&app)
+        .map_err(|e| format!("failed to read settings: {}", e))?
+        .ok_or_else(|| "settings not found".to_string())?;
+    
+    let token = fresh_settings
         .user
         .token
         .clone()
