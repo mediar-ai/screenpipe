@@ -169,7 +169,7 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 							
 							// Handle screenpipe:// timeline deep links in-app
 							if (href?.startsWith("screenpipe://timeline")) {
-								const handleTimelineClick = async (e: React.MouseEvent) => {
+								const handleTimelineClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
 									e.preventDefault();
 									try {
 										const url = new URL(href);
@@ -196,13 +196,14 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 								};
 								
 								return (
-									<button
+									<a
+										href={href}
 										onClick={handleTimelineClick}
 										className="underline underline-offset-2 text-blue-500 hover:text-blue-400 cursor-pointer inline"
 										{...props}
 									>
 										{children}
-									</button>
+									</a>
 								);
 							}
 							
