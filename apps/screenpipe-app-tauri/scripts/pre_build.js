@@ -374,6 +374,8 @@ if (platform == 'macos') {
 		console.log(`Setting up screenpipe bin for ${arch}...`);
 		if (arch === 'arm64') {
 			const paths = [
+				"../../../target/aarch64-apple-darwin/release/screenpipe",
+				"../../../target/release/screenpipe",
 				"../../target/aarch64-apple-darwin/release/screenpipe",
 				"../../target/release/screenpipe"
 			];
@@ -387,6 +389,8 @@ if (platform == 'macos') {
 		} else if (arch === 'x86_64') {
 			// copy screenpipe binary (more recent one)
 			const paths = [
+				"../../../target/x86_64-apple-darwin/release/screenpipe",
+				"../../../target/release/screenpipe",
 				"../../target/x86_64-apple-darwin/release/screenpipe",
 				"../../target/release/screenpipe"
 			];
