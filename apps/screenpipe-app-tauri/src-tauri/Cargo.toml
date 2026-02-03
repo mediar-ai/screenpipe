@@ -102,13 +102,13 @@ hostname = "0.4"
 md5 = "0.7"
 
 # Screenpipe core (for sync)
-screenpipe-core = { path = "../../screenpipe-core", features = ["cloud-sync"] }
+screenpipe-core = { path = "../../../crates/screenpipe-core", features = ["cloud-sync"] }
 
 # Embedded screenpipe server
-screenpipe-server = { path = "../../screenpipe-server", default-features = false, features = ["ui-events"] }
-screenpipe-vision = { path = "../../screenpipe-vision" }
-screenpipe-audio = { path = "../../screenpipe-audio" }
-screenpipe-db = { path = "../../screenpipe-db" }
+screenpipe-server = { path = "../../../crates/screenpipe-server", default-features = false, features = ["ui-events"] }
+screenpipe-vision = { path = "../../../crates/screenpipe-vision" }
+screenpipe-audio = { path = "../../../crates/screenpipe-audio" }
+screenpipe-db = { path = "../../../crates/screenpipe-db" }
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-cli = "2.4.0"

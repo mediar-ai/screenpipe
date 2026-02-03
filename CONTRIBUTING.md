@@ -48,7 +48,7 @@ before you begin:
 
 6. **build the desktop app**:
    ```bash
-   cd screenpipe-app-tauri
+   cd apps/screenpipe-app-tauri
    bun install
    bun tauri build
    ```
@@ -101,7 +101,7 @@ before you begin:
    ```powershell
    cd screenpipe
    # Define the target directory where Intel OpenMP DLLs will be copied 
-   $mkl_dir = (pwd).Path + "\screenpipe-app-tauri\src-tauri\mkl"
+   $mkl_dir = (pwd).Path + "\apps\screenpipe-app-tauri\src-tauri\mkl"
    New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
 
    python -m pip install --upgrade pip
@@ -144,7 +144,7 @@ before you begin:
    }
    
    # Copy vcruntime140.dll to the specified directory
-   $vcredist_dir = (pwd).Path + "\screenpipe-app-tauri\src-tauri\vcredist"
+   $vcredist_dir = (pwd).Path + "\apps\screenpipe-app-tauri\src-tauri\vcredist"
    New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
    Copy-Item $path -Destination $vcredist_dir -Force
    
@@ -155,7 +155,7 @@ before you begin:
    ```powershell
    cd screenpipe
    cargo build --release
-   cd screenpipe-app-tauri
+   cd apps/screenpipe-app-tauri
    bun install
    bun tauri build
    ```
@@ -187,7 +187,7 @@ before you begin:
 
 5. **build the desktop app**:
    ```bash
-   cd screenpipe-app-tauri
+   cd apps/screenpipe-app-tauri
    bun install
    bun tauri build
    ```

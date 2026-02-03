@@ -34,7 +34,7 @@ Clone and build from source:
 
 ```bash
 git clone https://github.com/mediar-ai/screenpipe
-cd screenpipe/screenpipe-integrations/screenpipe-mcp
+cd screenpipe/crates/screenpipe-integrations/screenpipe-mcp
 npm install
 npm run build
 ```

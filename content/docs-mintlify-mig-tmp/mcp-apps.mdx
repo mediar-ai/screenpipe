@@ -39,7 +39,7 @@ your UI works in:
 create a single HTML file with embedded CSS and JavaScript:
 
 ```html
-<!-- screenpipe-integrations/screenpipe-mcp/ui/my-app.html -->
+<!-- crates/screenpipe-integrations/screenpipe-mcp/ui/my-app.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -197,7 +197,7 @@ want to add your UI to screenpipe? here's how:
 ### file structure
 
 ```
-screenpipe-integrations/screenpipe-mcp/
+crates/screenpipe-integrations/screenpipe-mcp/
 ├── src/
 │   └── index.ts          # MCP server
 ├── ui/
@@ -242,7 +242,7 @@ screenpipe-integrations/screenpipe-mcp/
 use MCP Inspector to test:
 
 ```bash
-cd screenpipe-integrations/screenpipe-mcp
+cd crates/screenpipe-integrations/screenpipe-mcp
 npm run build
 npx @modelcontextprotocol/inspector node dist/index.js
 ```
@@ -305,4 +305,4 @@ MCP Apps run in sandboxed iframes with:
 
 - [MCP Apps specification](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/)
 - [ext-apps SDK](https://github.com/modelcontextprotocol/ext-apps)
-- [screenpipe MCP source](https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-integrations/screenpipe-mcp)
+- [screenpipe MCP source](https://github.com/mediar-ai/screenpipe/tree/main/crates/screenpipe-integrations/screenpipe-mcp)

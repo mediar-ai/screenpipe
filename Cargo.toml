@@ -1,15 +1,8 @@
 [workspace]
 members = [
-    "screenpipe-core",
-    "screenpipe-vision",
-    "screenpipe-audio",
-    "screenpipe-server",
-    "screenpipe-integrations",
-    "screenpipe-events",
-    "screenpipe-db",
-    "screenpipe-accessibility",
+    "crates/*",
 ]
-exclude = ["screenpipe-app-tauri/src-tauri"]
+exclude = ["apps/screenpipe-app-tauri/src-tauri"]
 resolver = "2"
 
 [workspace.package]

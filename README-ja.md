@@ -28,7 +28,7 @@
     <a href="https://screenpi.pe" target="_blank">
         <img src="https://img.shields.io/badge/ダウンロード-デスクトップアプリ-black?style=for-the-badge" alt="ダウンロード">
     </a>
-    <a href="https://github.com/mediar-ai/screenpipe/raw/main/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb" target="_blank">
+    <a href="https://github.com/mediar-ai/screenpipe/raw/main/crates/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb" target="_blank">
         <img src="https://img.shields.io/badge/インストール-Claude%20拡張機能-D97706?style=for-the-badge&logo=anthropic&logoColor=white" alt="claude拡張機能をインストール">
     </a>
 </p>
