@@ -793,19 +793,23 @@ impl ShowRewindWindow {
                 let window = builder.build()?;
 
                 // Exclude from screen capture (NSWindowSharingNone = 0)
+                // MUST run on main thread - AppKit window operations crash from background threads
                 #[cfg(target_os = "macos")]
                 {
-                    use raw_window_handle::HasWindowHandle;
-                    if let Ok(handle) = window.window_handle() {
-                        if let raw_window_handle::RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
-                            use objc::{msg_send, sel, sel_impl};
-                            let ns_view = appkit_handle.ns_view.as_ptr() as *mut objc::runtime::Object;
-                            let ns_window: *mut objc::runtime::Object = unsafe { msg_send![ns_view, window] };
-                            if !ns_window.is_null() {
-                                let _: () = unsafe { msg_send![ns_window, setSharingType: 0_u64] };
+                    let window_clone = window.clone();
+                    app.run_on_main_thread(move || {
+                        use raw_window_handle::HasWindowHandle;
+                        if let Ok(handle) = window_clone.window_handle() {
+                            if let raw_window_handle::RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
+                                use objc::{msg_send, sel, sel_impl};
+                                let ns_view = appkit_handle.ns_view.as_ptr() as *mut objc::runtime::Object;
+                                let ns_window: *mut objc::runtime::Object = unsafe { msg_send![ns_view, window] };
+                                if !ns_window.is_null() {
+                                    let _: () = unsafe { msg_send![ns_window, setSharingType: 0_u64] };
+                                }
                             }
                         }
-                    }
+                    }).ok();
                 }
 
                 window
