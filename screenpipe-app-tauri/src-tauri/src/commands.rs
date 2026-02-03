@@ -684,3 +684,118 @@ pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), S
     info!("Window-specific shortcuts unregistered");
     Ok(())
 }
+
+// ============================================================================
+// Rewind AI Integration Commands
+// ============================================================================
+
+use crate::rewind_integration::{
+    self, MigrationProgress, RewindMigrationState, RewindScanResult,
+};
+
+/// Check if Rewind AI data is available for migration
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_check_available() -> bool {
+    rewind_integration::is_rewind_available().await
+}
+
+/// Scan Rewind AI data and return statistics
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_scan() -> Result<RewindScanResult, String> {
+    let screenpipe_dir = dirs::home_dir()
+        .ok_or("Failed to get home directory")?
+        .join(".screenpipe");
+
+    rewind_integration::scan_rewind_data(&screenpipe_dir)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get current migration progress
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_get_progress(
+    state: tauri::State<'_, std::sync::Arc<RewindMigrationState>>,
+) -> Result<MigrationProgress, String> {
+    let progress = state.progress.lock().await;
+    Ok(progress.clone())
+}
+
+/// Start Rewind AI migration
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_start_migration(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, std::sync::Arc<RewindMigrationState>>,
+    fresh_start: bool,
+) -> Result<(), String> {
+    use screenpipe_db::DatabaseManager;
+    use std::sync::Arc;
+
+    // Check if already running
+    if state
+        .is_running
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        return Err("Migration already in progress".to_string());
+    }
+
+    let screenpipe_dir = dirs::home_dir()
+        .ok_or("Failed to get home directory")?
+        .join(".screenpipe");
+
+    let db_path = screenpipe_dir.join("data.db");
+
+    let db = DatabaseManager::new(&db_path.to_string_lossy())
+        .await
+        .map_err(|e| format!("Failed to connect to database: {}", e))?;
+
+    let db = Arc::new(db);
+    let state_clone = Arc::clone(&state.inner());
+    let app_handle_clone = app_handle.clone();
+
+    // Start migration in background
+    tokio::spawn(async move {
+        let result = rewind_integration::run_migration(db, screenpipe_dir, state_clone.clone(), fresh_start).await;
+
+        // Emit completion event
+        if let Err(e) = result {
+            let mut progress = state_clone.progress.lock().await;
+            progress.state = rewind_integration::MigrationState::Failed;
+            progress.error_message = Some(e.to_string());
+        }
+
+        // Emit final progress
+        let progress = state_clone.progress.lock().await;
+        let _ = app_handle_clone.emit("rewind-migration-complete", progress.clone());
+    });
+
+    Ok(())
+}
+
+/// Cancel ongoing Rewind migration
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_cancel_migration(
+    state: tauri::State<'_, std::sync::Arc<RewindMigrationState>>,
+) -> Result<(), String> {
+    state
+        .cancel_flag
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
+/// Clear migration checkpoint for fresh start
+#[tauri::command]
+#[specta::specta]
+pub async fn rewind_clear_checkpoint() -> Result<(), String> {
+    let screenpipe_dir = dirs::home_dir()
+        .ok_or("Failed to get home directory")?
+        .join(".screenpipe");
+
+    rewind_integration::clear_checkpoint(&screenpipe_dir)
+        .await
+        .map_err(|e| e.to_string())
+}

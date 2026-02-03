@@ -40,6 +40,7 @@ use crate::store::SettingsStore;
 mod commands;
 mod disk_usage;
 mod permissions;
+mod rewind_integration;
 mod server;
 mod sidecar;
 mod store;
@@ -860,6 +861,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     let pi_state = pi::PiState(Arc::new(tokio::sync::Mutex::new(None)));
     let obsidian_sync_state = obsidian_sync::ObsidianSyncState::new();
+    let rewind_migration_state = Arc::new(rewind_integration::RewindMigrationState::default());
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -913,6 +915,7 @@ async fn main() {
         let app = app.manage(sidecar_state)
         .manage(pi_state)
         .manage(obsidian_sync_state)
+        .manage(rewind_migration_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             stop_screenpipe,
@@ -987,7 +990,14 @@ async fn main() {
             obsidian_sync::obsidian_run_sync,
             obsidian_sync::obsidian_start_scheduler,
             obsidian_sync::obsidian_stop_scheduler,
-            obsidian_sync::obsidian_cancel_sync
+            obsidian_sync::obsidian_cancel_sync,
+            // Rewind AI Integration commands
+            commands::rewind_check_available,
+            commands::rewind_scan,
+            commands::rewind_get_progress,
+            commands::rewind_start_migration,
+            commands::rewind_cancel_migration,
+            commands::rewind_clear_checkpoint
         ])
         .setup(move |app| {
             //deep link register_all

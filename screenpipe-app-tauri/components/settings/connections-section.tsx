@@ -11,6 +11,7 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { platform } from "@tauri-apps/plugin-os";
 import { tempDir, join, homeDir } from "@tauri-apps/api/path";
 import { ObsidianSyncCard } from "./obsidian-sync-card";
+import { RewindIntegrationCard } from "./rewind-integration-card";
 
 const GITHUB_RELEASES_API = "https://api.github.com/repos/mediar-ai/screenpipe/releases";
 
@@ -302,6 +303,9 @@ export function ConnectionsSection() {
 
         {/* Obsidian Sync */}
         <ObsidianSyncCard />
+
+        {/* Rewind AI Import */}
+        <RewindIntegrationCard />
 
         {/* Learn & Build section */}
         <div className="space-y-3">
