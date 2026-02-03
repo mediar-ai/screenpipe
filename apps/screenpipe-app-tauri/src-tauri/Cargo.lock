@@ -1974,7 +1974,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/louis030195/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
+source = "git+https://github.com/screenpipe/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
 dependencies = [
  "alsa",
  "cidre 0.14.0",
@@ -8456,7 +8456,7 @@ checksum = "955d28af4278de8121b7ebeb796b6a45735dc01436d898801014aced2773a3d6"
 [[package]]
 name = "rusty-tesseract"
 version = "1.1.10"
-source = "git+https://github.com/louis030195/rusty-tesseract.git?branch=main#08346c1de08d122c7121425abc79081c30dbf778"
+source = "git+https://github.com/screenpipe/rusty-tesseract.git?branch=main#08346c1de08d122c7121425abc79081c30dbf778"
 dependencies = [
  "dirs 5.0.1",
  "image 0.25.5",
@@ -8568,7 +8568,7 @@ dependencies = [
 [[package]]
 name = "sck-rs"
 version = "0.1.0"
-source = "git+https://github.com/louis030195/sck-rs#4bb14e4e18722fad1bdc8a105f568dbc30acfe8a"
+source = "git+https://github.com/screenpipe/sck-rs#4bb14e4e18722fad1bdc8a105f568dbc30acfe8a"
 dependencies = [
  "cidre 0.14.0",
  "core-foundation 0.10.1",
@@ -12092,7 +12092,7 @@ dependencies = [
 [[package]]
 name = "vad-rs"
 version = "0.2.0"
-source = "git+https://github.com/mediar-ai/vad-rs-1.git#3af3b1829ab4d8f018f271fe53c6f382f15ca3a6"
+source = "git+https://github.com/screenpipe/vad-rs-1.git#3af3b1829ab4d8f018f271fe53c6f382f15ca3a6"
 dependencies = [
  "eyre",
  "ndarray 0.16.1",

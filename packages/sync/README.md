@@ -136,7 +136,7 @@ bunx @screenpipe/sync --stop
 
 ## Requirements
 
-- [Screenpipe](https://github.com/mediar-ai/screenpipe) running locally
+- [Screenpipe](https://github.com/screenpipe/screenpipe) running locally
 - [Bun](https://bun.sh) runtime
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (optional, for AI extraction)
 
@@ -146,4 +146,4 @@ All processing happens locally. Screen data never leaves your machine unless you
 
 ## License
 
-MIT - Part of the [Screenpipe](https://github.com/mediar-ai/screenpipe) project.
+MIT - Part of the [Screenpipe](https://github.com/screenpipe/screenpipe) project.

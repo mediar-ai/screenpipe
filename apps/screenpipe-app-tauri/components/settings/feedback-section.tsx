@@ -74,10 +74,10 @@ export function FeedbackSection() {
                 For bugs or technical issues, you can open an issue on GitHub.
               </p>
               <button
-                onClick={() => open("https://github.com/mediar-ai/screenpipe/issues")}
+                onClick={() => open("https://github.com/screenpipe/screenpipe/issues")}
                 className="text-sm text-primary hover:underline"
               >
-                github.com/mediar-ai/screenpipe/issues →
+                github.com/screenpipe/screenpipe/issues →
               </button>
             </div>
           </div>

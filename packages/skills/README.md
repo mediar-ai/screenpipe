@@ -65,4 +65,4 @@ The agent reads these skill files and uses them to answer your questions about y
 
 ## License
 
-MIT - Part of [Screenpipe](https://github.com/mediar-ai/screenpipe)
+MIT - Part of [Screenpipe](https://github.com/screenpipe/screenpipe)

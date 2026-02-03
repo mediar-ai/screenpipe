@@ -11,4 +11,4 @@
 - Fixed Cloud Sync password screen for new and existing users
 - Fixed subscription detection across devices with email fallback
 
-#### **Full Changelog:** [360b92b8..7a8ac6c5](https://github.com/mediar-ai/screenpipe/compare/360b92b8..7a8ac6c5)
+#### **Full Changelog:** [360b92b8..7a8ac6c5](https://github.com/screenpipe/screenpipe/compare/360b92b8..7a8ac6c5)

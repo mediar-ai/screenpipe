@@ -175,7 +175,7 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
                     app_handle,
                     "releases",
                     WebviewUrl::External(
-                        "https://github.com/mediar-ai/screenpipe/releases"
+                        "https://github.com/screenpipe/screenpipe/releases"
                             .parse()
                             .unwrap(),
                     ),
@@ -207,7 +207,7 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
                         if clicked_download {
                             let _ = app.opener().open_url("https://screenpi.pe/download", None::<&str>);
                         } else {
-                            let _ = app.opener().open_url("https://github.com/mediar-ai/screenpipe/releases", None::<&str>);
+                            let _ = app.opener().open_url("https://github.com/screenpipe/screenpipe/releases", None::<&str>);
                         }
                     });
                 });

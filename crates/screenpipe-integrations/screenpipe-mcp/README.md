@@ -1,6 +1,6 @@
 # Screenpipe MCP Server
 
-<a href="https://www.pulsemcp.com/servers/mediar-ai-screenpipe"><img src="https://www.pulsemcp.com/badge/top-pick/mediar-ai-screenpipe" width="400" alt="PulseMCP Badge"></a>
+<a href="https://www.pulsemcp.com/servers/screenpipe-screenpipe"><img src="https://www.pulsemcp.com/badge/top-pick/screenpipe-screenpipe" width="400" alt="PulseMCP Badge"></a>
 
 <br/>
 
@@ -33,7 +33,7 @@ The easiest way to use screenpipe-mcp is with npx. Edit your Claude Desktop conf
 Clone and build from source:
 
 ```bash
-git clone https://github.com/mediar-ai/screenpipe
+git clone https://github.com/screenpipe/screenpipe
 cd screenpipe/crates/screenpipe-integrations/screenpipe-mcp
 npm install
 npm run build

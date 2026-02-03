@@ -32,7 +32,7 @@ before you begin:
 
 3. **clone the repository**:
    ```bash
-   git clone https://github.com/mediar-ai/screenpipe
+   git clone https://github.com/screenpipe/screenpipe
    cd screenpipe
    ```
 
@@ -91,7 +91,7 @@ before you begin:
    ```
 5. **clone the project**:
    ```powershell
-      git clone https://github.com/mediar-ai/screenpipe.git
+      git clone https://github.com/screenpipe/screenpipe.git
       cd screenpipe
    ```
 6. **setup Intel OpenMP DLLs**:
@@ -175,7 +175,7 @@ before you begin:
 
 3. **clone and build**:
    ```bash
-   git clone https://github.com/mediar-ai/screenpipe
+   git clone https://github.com/screenpipe/screenpipe
    cd screenpipe
    cargo build --release
    ```
@@ -346,7 +346,7 @@ then open the file in `target/release/instruments` using xcode -> open developer
 cargo bench
 ```
 
-[check benchmark visuals](https://mediar-ai.github.io/screenpipe/dev/bench/)
+[check benchmark visuals](https://screenpipe.github.io/screenpipe/dev/bench/)
 
 ### creating new migrations
 

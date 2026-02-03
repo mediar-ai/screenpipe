@@ -63,7 +63,7 @@ mod timeline_performance_tests {
                  Menu bar: File Edit View Insert Format Tools Extensions Help \
                  Status bar: Ln 42, Col 15 - Spaces: 4 - UTF-8 - LF - Rust - Formatted \
                  Terminal output: Compiling screenpipe v0.2.76 warning: unused variable \
-                 Browser tabs: GitHub - mediar-ai/screenpipe - Stack Overflow - rust async \
+                 Browser tabs: GitHub - screenpipe/screenpipe - Stack Overflow - rust async \
                  Dock: Finder Safari Chrome VSCode Slack Notion Calendar Spotify Terminal \
                  This additional text simulates more content that would typically be on screen {}",
                 i, i % 100, i % 50, i % 20, i % 100, "x".repeat(500)

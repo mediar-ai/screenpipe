@@ -94,7 +94,7 @@ const results = await pipe.queryScreenpipe({
   speakerIds: [1, 2],        // filter audio by speaker IDs
   speakerName: "John",       // filter audio by speaker name (partial match)
   frameName: "screenshot.png",
-  browserUrl: "github.com/mediar-ai/screenpipe" // filter by browser URL
+  browserUrl: "github.com/screenpipe/screenpipe" // filter by browser URL
 })
 ```
 
@@ -311,7 +311,7 @@ you need to add a `pipe.json` file to your pipe folder with this config for exam
 
 this will run the `/api/log` route every 5 minutes.
 
-check how the obsidian pipe implements this, [route](https://github.com/mediar-ai/screenpipe/blob/main/pipes/obsidian/src/app/api/log/route.ts) and [pipe.json](https://github.com/mediar-ai/screenpipe/blob/main/pipes/obsidian/pipe.json) for a complete example.
+check how the obsidian pipe implements this, [route](https://github.com/screenpipe/screenpipe/blob/main/pipes/obsidian/src/app/api/log/route.ts) and [pipe.json](https://github.com/screenpipe/screenpipe/blob/main/pipes/obsidian/pipe.json) for a complete example.
 
 we recommend using the CLI to add the `update-pipe-config` server action to your pipe. this will allow you to update the pipe's cron schedule using a server action.
 
@@ -625,7 +625,7 @@ export function SettingsComponent() {
 - use server actions for settings operations
 - consider using shadcn/ui components for consistent UI
 
-see the [obsidian pipe](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) for a complete example of settings management.
+see the [obsidian pipe](https://github.com/screenpipe/screenpipe/tree/main/pipes/obsidian) for a complete example of settings management.
 
 ### integrating with llms
 
@@ -712,7 +712,7 @@ async function handleRequest() {
 }
 ```
 
-see the [obsidian pipe](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) for the complete implementation.
+see the [obsidian pipe](https://github.com/screenpipe/screenpipe/tree/main/pipes/obsidian) for the complete implementation.
 
 or [irs-agent](https://github.com/different-ai/irs-agent/blob/master/src/services/financial-activity-detector.ts) for a more complex example.
 
@@ -830,7 +830,7 @@ async function streamMeetingInsights(settings: Settings) {
 }
 ```
 
-check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) on github to see more ai integration patterns.
+check out our [production pipe examples](https://github.com/screenpipe/screenpipe/tree/main/pipes) on github to see more ai integration patterns.
 
 
 ### notifications (desktop)
@@ -860,6 +860,6 @@ await pipe.inbox.clearMessages()
 
 paste these links into your cursor chat for context:
 
-- https://github.com/mediar-ai/screenpipe/blob/main/packages/screenpipe-js/browser-sdk/src/index.ts
-- https://github.com/mediar-ai/screenpipe/blob/main/packages/screenpipe-js/node-sdk/src/index.ts
-- https://github.com/mediar-ai/screenpipe/blob/main/packages/screenpipe-js/common/Operator.ts
+- https://github.com/screenpipe/screenpipe/blob/main/packages/screenpipe-js/browser-sdk/src/index.ts
+- https://github.com/screenpipe/screenpipe/blob/main/packages/screenpipe-js/node-sdk/src/index.ts
+- https://github.com/screenpipe/screenpipe/blob/main/packages/screenpipe-js/common/Operator.ts

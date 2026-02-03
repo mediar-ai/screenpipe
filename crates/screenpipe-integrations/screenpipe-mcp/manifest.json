@@ -11,11 +11,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mediar-ai/screenpipe"
+    "url": "https://github.com/screenpipe/screenpipe"
   },
   "homepage": "https://screenpi.pe",
-  "documentation": "https://github.com/mediar-ai/screenpipe/tree/main/crates/screenpipe-integrations/screenpipe-mcp",
-  "support": "https://github.com/mediar-ai/screenpipe/issues",
+  "documentation": "https://github.com/screenpipe/screenpipe/tree/main/crates/screenpipe-integrations/screenpipe-mcp",
+  "support": "https://github.com/screenpipe/screenpipe/issues",
   "license": "MIT",
   "server": {
     "type": "node",

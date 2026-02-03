@@ -69,7 +69,7 @@
       },
       {
         "label": "github",
-        "href": "https://github.com/mediar-ai/screenpipe"
+        "href": "https://github.com/screenpipe/screenpipe"
       }
     ],
     "primary": {
@@ -80,7 +80,7 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/mediar-ai/screenpipe",
+      "github": "https://github.com/screenpipe/screenpipe",
       "x": "https://x.com/screen_pipe",
       "discord": "https://discord.gg/dU9EBuw7Uq"
     }

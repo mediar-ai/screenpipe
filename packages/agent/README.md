@@ -110,4 +110,4 @@ Your Computer                    Your Agent Server
 
 ## License
 
-MIT - Part of [Screenpipe](https://github.com/mediar-ai/screenpipe)
+MIT - Part of [Screenpipe](https://github.com/screenpipe/screenpipe)

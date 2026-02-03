@@ -227,7 +227,7 @@ impl UpdatesManager {
             let _ = self.app.opener().open_url("https://screenpi.pe/download", None::<&str>);
         } else {
             // Open GitHub releases
-            let _ = self.app.opener().open_url("https://github.com/mediar-ai/screenpipe/releases", None::<&str>);
+            let _ = self.app.opener().open_url("https://github.com/screenpipe/screenpipe/releases", None::<&str>);
         }
 
         Ok(())

@@ -257,7 +257,7 @@ mod tests {
         assert_eq!(sanitize_pipe_name(github_url), "AI-Interview-Coach");
 
         // test pipe url as a subdirectory
-        let github_url_subdir = "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search";
+        let github_url_subdir = "https://github.com/screenpipe/screenpipe/tree/main/pipes/search";
         assert_eq!(sanitize_pipe_name(github_url_subdir), "search");
 
         // test a local directory path
@@ -348,7 +348,7 @@ mod tests {
         let urls = vec![
             "https://github.com/KentTDang/AI-Interview-Coach/",
             "https://github.com/KentTDang/AI-Interview-Coach/tree/main",
-            "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search",
+            "https://github.com/screenpipe/screenpipe/tree/main/pipes/search",
         ];
 
         for url in urls {
