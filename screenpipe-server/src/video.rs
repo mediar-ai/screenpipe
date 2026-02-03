@@ -471,6 +471,13 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
     debug!("FFmpeg command: {:?}", command);
 
     let child = command.spawn()?;

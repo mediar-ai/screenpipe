@@ -48,21 +48,25 @@ pub async fn watch_pid(pid: u32) -> bool {
             }
 
             // Fallback to Command approach
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+
             let pid_output = Command::new("tasklist")
                 .args(&["/FI", &format!("PID eq {}", pid), "/NH", "/FO", "CSV"])
+                .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .expect("failed to check pid");
 
-            let app_output = Command::new("tasklist")
-                .args(&[
-                    "/FI",
-                    "IMAGENAME eq screenpipe-app.exe",
-                    "/NH",
-                    "/FO",
-                    "CSV",
-                ])
-                .output()
-                .expect("failed to check app name");
+            let mut app_cmd = Command::new("tasklist");
+            app_cmd.args(&[
+                "/FI",
+                "IMAGENAME eq screenpipe-app.exe",
+                "/NH",
+                "/FO",
+                "CSV",
+            ]);
+            app_cmd.creation_flags(CREATE_NO_WINDOW);
+            let app_output = app_cmd.output().expect("failed to check app name");
 
             let pid_alive = String::from_utf8_lossy(&pid_output.stdout).contains(&pid.to_string());
             let app_alive = !String::from_utf8_lossy(&app_output.stdout).is_empty();

@@ -97,6 +97,13 @@ pub async fn extract_frame(file_path: &str, offset_index: i64) -> Result<String>
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
     debug!("ffmpeg command: {:?}", command);
 
     let mut child = command.spawn()?;
@@ -144,10 +151,17 @@ pub async fn validate_media(file_path: &str) -> Result<()> {
     }
 
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
-    let status = Command::new(ffmpeg_path)
-        .args(["-v", "error", "-i", file_path, "-f", "null", "-"])
-        .output()
-        .await?;
+    let mut cmd = Command::new(ffmpeg_path);
+    cmd.args(["-v", "error", "-i", file_path, "-f", "null", "-"]);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let status = cmd.output().await?;
 
     if status.status.success() {
         Ok(())
@@ -192,21 +206,28 @@ pub async fn merge_videos(
     }
 
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
-    let status = Command::new(ffmpeg_path)
-        .args([
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            temp_file.to_str().unwrap(),
-            "-c",
-            "copy",
-            "-y",
-            output_path.to_str().unwrap(),
-        ])
-        .output()
-        .await?;
+    let mut cmd = Command::new(ffmpeg_path);
+    cmd.args([
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        temp_file.to_str().unwrap(),
+        "-c",
+        "copy",
+        "-y",
+        output_path.to_str().unwrap(),
+    ]);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let status = cmd.output().await?;
 
     // clean up the temporary file
     tokio::fs::remove_file(temp_file).await?;
@@ -277,31 +298,38 @@ pub async fn extract_frames_from_video(
     let fps_filter = format!("fps={}", target_fps);
 
     // Extract frames using ffmpeg
-    let status = Command::new(&ffmpeg_path)
-        .args([
-            "-i",
-            video_path.to_str().unwrap(),
-            "-vf",
-            &fps_filter,
-            "-strict",
-            "unofficial",
-            "-c:v",
-            "mjpeg",
-            "-q:v",
-            "2",
-            "-qmin",
-            "2",
-            "-qmax",
-            "4",
-            "-vsync",
-            "0",
-            "-threads",
-            "2",
-            "-y",
-            output_pattern.to_str().unwrap(),
-        ])
-        .output()
-        .await?;
+    let mut cmd = Command::new(&ffmpeg_path);
+    cmd.args([
+        "-i",
+        video_path.to_str().unwrap(),
+        "-vf",
+        &fps_filter,
+        "-strict",
+        "unofficial",
+        "-c:v",
+        "mjpeg",
+        "-q:v",
+        "2",
+        "-qmin",
+        "2",
+        "-qmax",
+        "4",
+        "-vsync",
+        "0",
+        "-threads",
+        "2",
+        "-y",
+        output_pattern.to_str().unwrap(),
+    ]);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let status = cmd.output().await?;
 
     if !status.status.success() {
         let stderr = String::from_utf8_lossy(&status.stderr);
@@ -343,21 +371,28 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
 async fn get_video_fps_and_duration(ffmpeg_path: &PathBuf, video_path: &str) -> Result<(f64, f64)> {
     let ffprobe_path = get_ffprobe_path(ffmpeg_path);
 
-    let output = Command::new(&ffprobe_path)
-        .args([
-            "-v",
-            "quiet",
-            "-print_format",
-            "json",
-            "-select_streams",
-            "v:0", // Select first video stream
-            "-show_entries",
-            "stream=r_frame_rate:format=duration", // Request frame rate and duration
-            "-show_format",
-            video_path,
-        ])
-        .output()
-        .await?;
+    let mut cmd = Command::new(&ffprobe_path);
+    cmd.args([
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-select_streams",
+        "v:0", // Select first video stream
+        "-show_entries",
+        "stream=r_frame_rate:format=duration", // Request frame rate and duration
+        "-show_format",
+        video_path,
+    ]);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = cmd.output().await?;
 
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);
@@ -423,21 +458,27 @@ pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
     let ffprobe_path = get_ffprobe_path(&ffmpeg_path);
 
     // Try ffprobe first
-    let creation_time = match Command::new(&ffprobe_path)
-        .args([
-            "-v",
-            "quiet",
-            "-print_format",
-            "json",
-            "-show_format",
-            "-show_streams",
-            "-show_entries",
-            "format_tags=creation_time",
-            video_path,
-        ])
-        .output()
-        .await
+    let mut cmd = Command::new(&ffprobe_path);
+    cmd.args([
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        "-show_entries",
+        "format_tags=creation_time",
+        video_path,
+    ]);
+
+    #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let creation_time = match cmd.output().await {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let metadata: FFprobeOutput = serde_json::from_str(&stdout)?;
@@ -492,18 +533,25 @@ pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
 
 // Helper function to get fps and duration
 async fn get_video_technical_metadata(ffprobe_path: &Path, video_path: &str) -> Result<(f64, f64)> {
-    let output = Command::new(ffprobe_path)
-        .args([
-            "-v",
-            "quiet",
-            "-print_format",
-            "json",
-            "-show_format",
-            "-show_streams",
-            video_path,
-        ])
-        .output()
-        .await?;
+    let mut cmd = Command::new(ffprobe_path);
+    cmd.args([
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        video_path,
+    ]);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = cmd.output().await?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let metadata: FFprobeOutput = serde_json::from_str(&stdout)?;
@@ -674,6 +722,13 @@ pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Res
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
     debug!("ffmpeg command: {:?}", command);
 
     let output = command.output().await?;
@@ -767,6 +822,13 @@ pub async fn extract_high_quality_frame(
         "1",
         output_path.to_str().unwrap(),
     ]);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
 
     let output = command.output().await?;
     if !output.status.success() {

@@ -741,6 +741,13 @@ async fn extract_frame(
         output_pattern.to_str().unwrap(),
     ]);
 
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
     debug!("running ffmpeg command: {:?}", cmd);
 
     let output = cmd.output().await?;
@@ -849,11 +856,17 @@ async fn is_video_file_complete(ffmpeg_path: &PathBuf, file_path: &str) -> Resul
         }
     }
 
-    match Command::new(ffmpeg_path)
-        .args(["-v", "error", "-i", file_path, "-f", "null", "-"])
-        .output()
-        .await
+    let mut cmd = Command::new(ffmpeg_path);
+    cmd.args(["-v", "error", "-i", file_path, "-f", "null", "-"]);
+
+    #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    match cmd.output().await {
         Ok(output) => {
             let is_complete = output.status.success();
             if !is_complete {
@@ -1010,10 +1023,17 @@ impl OrderedFrameStreamer {
 }
 
 async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
-    let output = Command::new(ffmpeg_path)
-        .args(["-i", video_path])
-        .output()
-        .await?;
+    let mut cmd = Command::new(ffmpeg_path);
+    cmd.args(["-i", video_path]);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = cmd.output().await?;
 
     // ffmpeg outputs metadata to stderr by design
     let metadata = String::from_utf8_lossy(&output.stderr);
