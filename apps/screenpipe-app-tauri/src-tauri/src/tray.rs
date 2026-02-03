@@ -106,6 +106,19 @@ fn create_dynamic_menu(
             .build(app)?,
     );
 
+    // Show "fix permissions" item when recording is in error state and permissions are denied
+    if get_recording_status() == RecordingStatus::Error {
+        let perms = crate::permissions::do_permissions_check(false);
+        let has_permission_issue = !perms.screen_recording.permitted()
+            || !perms.microphone.permitted();
+        if has_permission_issue {
+            menu_builder = menu_builder.item(
+                &MenuItemBuilder::with_id("fix_permissions", "⚠ fix permissions")
+                    .build(app)?,
+            );
+        }
+    }
+
     // Version and update items
     let is_beta = app.config().identifier.contains("beta");
     let version_text = if is_beta {
@@ -166,6 +179,9 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         }
         "stop_recording" => {
             let _ = app_handle.emit("shortcut-stop-recording", ());
+        }
+        "fix_permissions" => {
+            let _ = ShowRewindWindow::PermissionRecovery.show(app_handle);
         }
         "releases" => {
             // Open GitHub releases in a webview window
