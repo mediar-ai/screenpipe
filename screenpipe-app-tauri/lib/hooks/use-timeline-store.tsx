@@ -105,19 +105,23 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			const cached = await loadCachedFrames();
 			if (cached && cached.frames.length > 0) {
 				const cachedDate = new Date(cached.date);
+				const today = new Date();
+				const isToday = cachedDate.toDateString() === today.toDateString();
 				const timestamps = new Set(cached.frames.map(f => f.timestamp));
 				
+				// Only use cached frames if they're from today
+				// Otherwise start fresh with today's date
 				set({
-					frames: cached.frames,
-					frameTimestamps: timestamps,
-					currentDate: cachedDate,
-					isLoading: false, // Show cached data immediately
-					hasCachedData: true,
+					frames: isToday ? cached.frames : [],
+					frameTimestamps: isToday ? timestamps : new Set<string>(),
+					currentDate: today, // Always use today, not cached date
+					isLoading: !isToday, // Show loading if cache is stale
+					hasCachedData: isToday,
 					message: null,
 					error: null,
 				});
 				
-				console.log(`Loaded ${cached.frames.length} frames from cache`);
+				console.log(`Loaded ${cached.frames.length} frames from cache (isToday: ${isToday})`);
 			}
 		} catch (error) {
 			console.warn("Failed to load from cache:", error);
