@@ -515,9 +515,15 @@ pub async fn show_shortcut_reminder(
                 // Use to_panel() on window_clone directly instead of get_webview_panel
                 // This avoids race conditions with panel registration
                 if let Ok(panel) = window_clone.to_panel() {
+                    use objc::{msg_send, sel, sel_impl};
+
                     // Level 1001 = above CGShieldingWindowLevel, shows over fullscreen
                     panel.set_level(1001);
                     panel.set_style_mask(0);
+
+                    // Exclude from screen capture (NSWindowSharingNone = 0)
+                    let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
+
                     panel.set_collection_behaviour(
                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |

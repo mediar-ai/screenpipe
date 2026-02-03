@@ -619,6 +619,10 @@ impl ShowRewindWindow {
                                 // Disable window dragging by clicking on background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
 
+                                // Exclude from screen capture so the overlay doesn't appear
+                                // in screenshots of other apps (NSWindowSharingNone = 0)
+                                let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
+
                                 panel.set_collection_behaviour(
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
@@ -736,6 +740,9 @@ impl ShowRewindWindow {
                                 // Enable dragging by clicking anywhere on the window background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
 
+                                // Exclude from screen capture (NSWindowSharingNone = 0)
+                                let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
+
                                 panel.set_collection_behaviour(
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
@@ -784,6 +791,20 @@ impl ShowRewindWindow {
                 #[cfg(target_os = "macos")]
                 let builder = builder.hidden_title(true);
                 let window = builder.build()?;
+
+                // Exclude from screen capture (NSWindowSharingNone = 0)
+                #[cfg(target_os = "macos")]
+                {
+                    use raw_window_handle::HasWindowHandle;
+                    if let Ok(handle) = window.window_handle() {
+                        if let raw_window_handle::RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
+                            use objc::{msg_send, sel, sel_impl};
+                            let ns_window = appkit_handle.ns_window.as_ptr() as *mut objc::runtime::Object;
+                            let _: () = unsafe { msg_send![ns_window, setSharingType: 0_u64] };
+                        }
+                    }
+                }
+
                 window
             }
         };

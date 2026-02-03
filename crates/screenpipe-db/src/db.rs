@@ -3,7 +3,7 @@ use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
-use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use sqlx::Column;
 use sqlx::Error as SqlxError;
 use sqlx::Row;
@@ -60,36 +60,22 @@ impl DatabaseManager {
             sqlx::Sqlite::create_database(&connection_string).await?;
         }
 
+        let connect_options: SqliteConnectOptions = connection_string
+            .parse::<SqliteConnectOptions>()?
+            // busy_timeout is per-connection; setting it here ensures ALL pooled
+            // connections wait before returning SQLITE_BUSY ("database is locked").
+            .busy_timeout(Duration::from_secs(10))
+            .pragma("journal_mode", "WAL")
+            .pragma("cache_size", "-64000")   // 64 MB page cache
+            .pragma("mmap_size", "268435456") // 256 MB memory-mapped I/O
+            .pragma("temp_store", "MEMORY");
+
         let pool = SqlitePoolOptions::new()
             // SQLite only allows a single writer; keep the pool modest to reduce write contention.
             .max_connections(10)
             .min_connections(3) // Minimum number of idle connections
             .acquire_timeout(Duration::from_secs(10))
-            .connect(&connection_string)
-            .await?;
-
-        // Enable WAL mode
-        sqlx::query("PRAGMA journal_mode = WAL;")
-            .execute(&pool)
-            .await?;
-
-        // Give writers time to wait for the lock instead of failing immediately.
-        sqlx::query("PRAGMA busy_timeout = 5000;")
-            .execute(&pool)
-            .await?;
-
-        // Optimize SQLite for search performance
-        // cache_size: -64000 = 64MB page cache (negative = KB)
-        // mmap_size: 256MB memory-mapped I/O for faster reads
-        // temp_store: keep temp tables in memory
-        sqlx::query("PRAGMA cache_size = -64000;")
-            .execute(&pool)
-            .await?;
-        sqlx::query("PRAGMA mmap_size = 268435456;")
-            .execute(&pool)
-            .await?;
-        sqlx::query("PRAGMA temp_store = MEMORY;")
-            .execute(&pool)
+            .connect_with(connect_options)
             .await?;
 
         let db_manager = DatabaseManager { pool };
