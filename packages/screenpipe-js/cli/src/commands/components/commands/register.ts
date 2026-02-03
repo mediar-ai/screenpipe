@@ -15,7 +15,7 @@ async function writeJsonToFile(filePath: string, data: RegistrySchema) {
       if (error instanceof Error) {
         if (error.message === "No such file or directory") {
           logger.break()
-          logger.warn("this command can only be called from within the screenpipe-js/cli of screenpipe's repository");
+          logger.warn("this command can only be called from within the packages/screenpipe-js/cli of screenpipe's repository");
           process.exit(1)
         }
       }
@@ -50,7 +50,7 @@ export const registerComponentCommand = new Command()
             type: "input",
             name: "src",
             message: "where should we download the component from? (URL pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path})",
-            validate: input => input.startsWith("https://api.github.com/repos/") ? true : "URL must follow the pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path}. \n \n \nvisit: https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/cli/src/commands/components/README.md for more details.",
+            validate: input => input.startsWith("https://api.github.com/repos/") ? true : "URL must follow the pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path}. \n \n \nvisit: https://github.com/mediar-ai/screenpipe/blob/main/packages/screenpipe-js/cli/src/commands/components/README.md for more details.",
           },
         ]);
         opts.src = src;

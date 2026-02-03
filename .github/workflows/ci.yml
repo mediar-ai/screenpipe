@@ -67,7 +67,7 @@ jobs:
       # todo: need to run backend ...
       # - name: Run bun tests
       #   run: bun test
-      #   working-directory: ./screenpipe-js
+      #   working-directory: ./packages/screenpipe-js
 
   test-windows:
     runs-on: windows-2019
