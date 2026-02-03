@@ -446,11 +446,11 @@ pub async fn obsidian_start_scheduler(
         
         let interval_duration = tokio::time::Duration::from_secs(interval_mins as u64 * 60);
         
+        // First sync: wait the full interval (user just started/restarted the scheduler)
+        info!("Obsidian scheduler: waiting {}min for first sync...", interval_mins);
+        tokio::time::sleep(interval_duration).await;
+
         loop {
-            // Wait for the interval
-            info!("Obsidian scheduler: waiting {}min for next sync...", interval_mins);
-            tokio::time::sleep(interval_duration).await;
-            
             let now = chrono::Utc::now();
             info!("Obsidian scheduler: tick received at {:?}", now);
 
@@ -459,6 +459,7 @@ pub async fn obsidian_start_scheduler(
                 let status = status_arc.lock().await;
                 if status.is_syncing {
                     info!("Obsidian scheduler: skipping - already syncing");
+                    tokio::time::sleep(interval_duration).await;
                     continue;
                 }
             }
@@ -483,6 +484,10 @@ pub async fn obsidian_start_scheduler(
                     warn!("Scheduled obsidian sync failed: {}", e);
                 }
             }
+
+            // Wait for next interval
+            info!("Obsidian scheduler: waiting {}min for next sync...", interval_mins);
+            tokio::time::sleep(interval_duration).await;
         }
     });
 
@@ -612,6 +617,15 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &ObsidianSyncState) {
     };
     if let Err(e) = updated_settings.save(&app) {
         warn!("Failed to save next_scheduled_run on auto-start: {}", e);
+    }
+
+    // Stop any existing scheduler before starting (prevents duplicate tasks)
+    {
+        let mut handle = state.scheduler_handle.lock().await;
+        if let Some(h) = handle.take() {
+            h.abort();
+            info!("Stopped existing obsidian scheduler before auto-start");
+        }
     }
 
     info!("Auto-starting obsidian scheduler with {}min interval, initial delay: {:?}, next run at {}", interval_mins, initial_delay, next_run_time);

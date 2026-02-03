@@ -230,12 +230,22 @@ export function ObsidianSyncCard() {
     return () => clearTimeout(timeoutId);
   }, [settings, settingsLoaded]);
 
-  // Only restart scheduler when interval changes (not on every settings change)
-  const prevIntervalRef = React.useRef(settings.syncIntervalMinutes);
-  const prevEnabledRef = React.useRef(settings.enabled);
+  // Only restart scheduler when interval changes via user action (not on initial load)
+  const prevIntervalRef = React.useRef<number | null>(null);
+  const prevEnabledRef = React.useRef<boolean | null>(null);
+  const isInitialLoadRef = React.useRef(true);
   
   useEffect(() => {
     if (!settingsLoaded) return;
+    
+    // Skip the first render after settings are loaded from localStorage
+    // to avoid killing the auto-started scheduler from Rust
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      prevIntervalRef.current = settings.syncIntervalMinutes;
+      prevEnabledRef.current = settings.enabled;
+      return;
+    }
     
     const intervalChanged = prevIntervalRef.current !== settings.syncIntervalMinutes;
     const enabledChanged = prevEnabledRef.current !== settings.enabled;
@@ -243,7 +253,7 @@ export function ObsidianSyncCard() {
     prevIntervalRef.current = settings.syncIntervalMinutes;
     prevEnabledRef.current = settings.enabled;
     
-    // Only restart if interval or enabled status changed
+    // Only restart if interval or enabled status changed by user action
     if ((intervalChanged || enabledChanged) && settings.enabled && settings.vaultPath && settings.syncIntervalMinutes > 0 && appSettings?.user?.token) {
       invoke("obsidian_start_scheduler", { 
         settings, 
