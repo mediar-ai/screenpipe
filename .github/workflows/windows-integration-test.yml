@@ -87,6 +87,7 @@ jobs:
         [console]::beep(2000,1000)
         
         Start-Sleep -Seconds 30  # Allow more time for processing
+        # Ensure the CLI is still running before stopping it
         if ($process -and -not $process.HasExited) {
           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         }
