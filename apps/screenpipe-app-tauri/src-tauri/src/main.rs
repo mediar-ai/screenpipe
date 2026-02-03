@@ -1137,6 +1137,12 @@ async fn main() {
             // Attach non-sensitive settings to all future Sentry events
             if !telemetry_disabled {
                 sentry::configure_scope(|scope| {
+                    // Set user.id to the persistent analytics UUID
+                    // This links Sentry errors to PostHog sessions and feedback reports
+                    scope.set_user(Some(sentry::protocol::User {
+                        id: Some(store.analytics_id.clone()),
+                        ..Default::default()
+                    }));
                     scope.set_context("app_settings", sentry::protocol::Context::Other({
                         let mut map = std::collections::BTreeMap::new();
                         map.insert("fps".into(), serde_json::json!(store.fps));

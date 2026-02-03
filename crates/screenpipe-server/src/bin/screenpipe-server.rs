@@ -288,6 +288,12 @@ async fn main() -> anyhow::Result<()> {
 
         // Attach non-sensitive CLI settings to all future Sentry events
         sentry::configure_scope(|scope| {
+            // Set user.id to the same analytics ID used by PostHog
+            // This links Sentry errors to PostHog sessions and feedback reports
+            scope.set_user(Some(sentry::protocol::User {
+                id: Some(analytics::get_distinct_id().to_string()),
+                ..Default::default()
+            }));
             scope.set_context("cli_settings", sentry::protocol::Context::Other({
                 let mut map = std::collections::BTreeMap::new();
                 map.insert("fps".into(), json!(cli.fps));

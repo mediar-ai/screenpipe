@@ -46,6 +46,7 @@ pub struct EmbeddedServerConfig {
     pub deepgram_api_key: Option<String>,
     pub enable_frame_cache: bool,
     pub analytics_enabled: bool,
+    pub analytics_id: String,
     pub enable_ui_events: bool,
     pub use_all_monitors: bool,
     pub use_chinese_mirror: bool,
@@ -87,6 +88,7 @@ impl EmbeddedServerConfig {
             },
             enable_frame_cache: store.enable_frame_cache,
             analytics_enabled: store.analytics_enabled,
+            analytics_id: store.analytics_id.clone(),
             enable_ui_events: store.enable_ui_events,
             use_all_monitors: store.use_all_monitors,
             use_chinese_mirror: store.use_chinese_mirror,
@@ -205,6 +207,12 @@ pub async fn start_embedded_server(
     // Set environment variables for compatibility with CLI behavior
     // File descriptor limit to prevent "Too many open files" errors
     std::env::set_var("SCREENPIPE_FD_LIMIT", "8192");
+
+    // Pass analytics ID so the embedded server's PostHog events use the same distinct_id
+    // as the Tauri app frontend, linking CLI and app analytics to the same user
+    if !config.analytics_id.is_empty() {
+        std::env::set_var("SCREENPIPE_ANALYTICS_ID", &config.analytics_id);
+    }
     
     // Chinese HuggingFace mirror
     if config.use_chinese_mirror {

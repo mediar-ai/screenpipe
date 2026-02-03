@@ -289,6 +289,7 @@ export const ShareLogsButton = ({
           feedback_text: feedbackText,
           screenshot_url: screenshotPath,
           video_url: videoPath,
+          screenpipe_id: settings.analyticsId,
         }),
       });
 
