@@ -354,8 +354,21 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     setSetupState("starting");
 
     try {
-      await invoke("stop_screenpipe");
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // First check if server is already running and healthy
+      const healthCheck = await fetch("http://localhost:3030/health", {
+        method: "GET",
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => null);
+
+      if (healthCheck?.ok) {
+        // Server is already running, no need to restart
+        console.log("Server already running and healthy, skipping restart");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        setSetupState("recording");
+        return;
+      }
+
+      // Server not running, start it
       await invoke("spawn_screenpipe");
       await new Promise((resolve) => setTimeout(resolve, 3000));
       setSetupState("recording");

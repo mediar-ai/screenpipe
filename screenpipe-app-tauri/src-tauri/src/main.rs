@@ -1217,12 +1217,22 @@ async fn main() {
                                 Ok(handle) => {
                                     info!("Embedded screenpipe server started successfully on dedicated runtime");
                                     // Store handle in state so it can be stopped/restarted later
-                                    let mut guard = sidecar_state_inner.lock().await;
-                                    *guard = Some(handle);
+                                    {
+                                        let mut guard = sidecar_state_inner.lock().await;
+                                        *guard = Some(handle);
+                                    }
                                     
-                                    // Keep the runtime alive
+                                    // Keep the runtime alive, but check periodically if we should shut down
+                                    // When stop_screenpipe is called, the handle is taken from the state
                                     loop {
-                                        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                                        
+                                        // Check if handle was taken (indicating shutdown requested)
+                                        let guard = sidecar_state_inner.lock().await;
+                                        if guard.is_none() {
+                                            info!("Server handle removed from state, shutting down server thread");
+                                            break;
+                                        }
                                     }
                                 }
                                 Err(e) => {
