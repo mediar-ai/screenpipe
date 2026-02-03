@@ -6583,7 +6583,7 @@ dependencies = [
 [[package]]
 name = "sck-rs"
 version = "0.1.0"
-source = "git+https://github.com/louis030195/sck-rs#670e08a50b5ef7ba463b3bb1295c7307d059223d"
+source = "git+https://github.com/louis030195/sck-rs#63c4b27bb47a1a2f0c32297ea49ef291f9fef49f"
 dependencies = [
  "cidre 0.14.0",
  "core-foundation 0.10.0",
