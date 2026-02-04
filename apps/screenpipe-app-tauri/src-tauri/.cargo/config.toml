@@ -3,3 +3,8 @@
 
 [env]
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+# whisper.cpp ggml uses std::filesystem::path which requires macOS 10.15+
+# These are picked up by whisper-rs-sys's cmake build before compilation starts
+# CI can still override via explicit env vars (force = false is default)
+MACOSX_DEPLOYMENT_TARGET = { value = "10.15", force = false }
+CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", force = false }

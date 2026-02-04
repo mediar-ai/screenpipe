@@ -239,31 +239,25 @@ export default function Timeline() {
 				isSameDay(new Date(frame.timestamp), targetDate)
 			);
 			if (isSameDay(targetDate, currentDate) && hasFramesForTargetDate) {
-				console.log("[pendingNavigation] Frames loaded for target date, jumping:", targetDate.toISOString());
+				console.log("[pendingNavigation] Frames loaded for target date, jumping to closest frame:", targetDate.toISOString());
 
-				// Find the first frame of the target day (frames are sorted newest-first)
-				const targetDayStart = startOfDay(targetDate);
-				const targetDayEnd = endOfDay(targetDate);
+				// Find the closest frame to the target timestamp
+				const targetTime = targetDate.getTime();
+				let closestIndex = 0;
+				let closestDiff = Infinity;
 
-				// Find the LAST frame in the array that's within the target day
-				// (since frames are sorted newest-first, last match = earliest frame)
-				let firstFrameIndex = -1;
-				for (let i = frames.length - 1; i >= 0; i--) {
-					const frameDate = new Date(frames[i].timestamp);
-					if (frameDate >= targetDayStart && frameDate <= targetDayEnd) {
-						firstFrameIndex = i;
-						break;
+				frames.forEach((frame, index) => {
+					const frameTime = new Date(frame.timestamp).getTime();
+					const diff = Math.abs(frameTime - targetTime);
+					if (diff < closestDiff) {
+						closestDiff = diff;
+						closestIndex = index;
 					}
-				}
+				});
 
-				if (firstFrameIndex !== -1) {
-					setCurrentIndex(firstFrameIndex);
-					setCurrentFrame(frames[firstFrameIndex]);
-					console.log("[pendingNavigation] Jumped to frame index:", firstFrameIndex);
-				} else {
-					// Fallback: just use jumpToTime
-					jumpToTime(targetDate);
-				}
+				setCurrentIndex(closestIndex);
+				setCurrentFrame(frames[closestIndex]);
+				console.log("[pendingNavigation] Jumped to frame index:", closestIndex);
 
 				// Clear pending navigation and UI state
 				pendingNavigationRef.current = null;
@@ -661,7 +655,6 @@ export default function Timeline() {
 		setCurrentIndex(closestIndex);
 		if (frames[closestIndex]) {
 			setCurrentFrame(frames[closestIndex]);
-			//	setCurrentDate(new Date(frames[closestIndex].timestamp));
 		}
 	};
 
@@ -1128,12 +1121,15 @@ export default function Timeline() {
 					onClose={() => setShowSearchModal(false)}
 					onNavigateToTimestamp={(timestamp) => {
 						const targetDate = new Date(timestamp);
-						pendingNavigationRef.current = targetDate;
 						setSeekingTimestamp(timestamp);
 
 						if (!isSameDay(targetDate, currentDate)) {
+							// Different day: store pending navigation, frames effect will handle jump after load
+							pendingNavigationRef.current = targetDate;
 							handleDateChange(targetDate);
 						} else {
+							// Same day: jump directly, no pending navigation needed
+							pendingNavigationRef.current = null;
 							jumpToTime(targetDate);
 							setSeekingTimestamp(null);
 						}

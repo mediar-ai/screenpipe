@@ -1062,8 +1062,7 @@ export function GlobalChat() {
   // TEMP: Allow chat even if Pi isn't ready yet - will fall back to screenpipe-cloud
   const canChat = hasPresets && hasValidModel && !needsLogin;
   
-  // Debug logging for Pi
-  console.log("[Pi Debug]", { isPi, piReady, piInfo, piProjectDir, piStarting, open, needsLogin, hasToken: !!settings.user?.token, provider: activePreset?.provider });
+
 
   // Auto-set Pi project dir to temp location
   useEffect(() => {
@@ -1077,7 +1076,6 @@ export function GlobalChat() {
   // Start Pi when needed
   useEffect(() => {
     const shouldStart = isPi && open && !needsLogin && piProjectDir && !piStarting && !piInfo?.running;
-    console.log("[Pi Start Check]", { shouldStart, isPi, open, needsLogin, piProjectDir, piStarting, piRunning: piInfo?.running, hasToken: !!settings.user?.token });
     
     if (!shouldStart) {
       return;

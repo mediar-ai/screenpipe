@@ -233,7 +233,10 @@ export const TimelineSlider = ({
 		if (container) {
 			// Small delay to ensure DOM is ready
 			requestAnimationFrame(() => {
-				container.focus();
+				// preventScroll: true prevents the browser from scrolling the container
+				// to the focus target, which would reset the timeline position after
+				// navigating from search results
+				container.focus({ preventScroll: true });
 			});
 		}
 	}, [isSearchModalOpen]);

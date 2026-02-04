@@ -41,7 +41,7 @@ pub fn download_whisper_model(engine: Arc<AudioTranscriptionEngine>) -> Result<P
 }
 
 pub fn create_whisper_context_parameters<'a>(
-    engine: Arc<AudioTranscriptionEngine>,
+    _engine: Arc<AudioTranscriptionEngine>,
 ) -> Result<WhisperContextParameters<'a>> {
     let mut context_param = WhisperContextParameters::default();
 

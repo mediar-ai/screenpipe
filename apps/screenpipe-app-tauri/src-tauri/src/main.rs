@@ -924,7 +924,7 @@ async fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build());
 
         // Only add Sentry plugin if telemetry is enabled
-        let app = if let Some(ref guard) = sentry_guard {
+        let app = if let Some(ref _guard) = sentry_guard {
             let client = sentry::Hub::current().client().unwrap();
             app.plugin(tauri_plugin_sentry::init(&client))
         } else {
