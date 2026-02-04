@@ -200,6 +200,26 @@ fn find_pi_executable() -> Option<String> {
     None
 }
 
+/// Ensure the screenpipe-search skill exists in the project's .pi/skills directory
+fn ensure_screenpipe_skill(project_dir: &str) -> Result<(), String> {
+    let skill_dir = std::path::Path::new(project_dir)
+        .join(".pi")
+        .join("skills")
+        .join("screenpipe-search");
+    let skill_path = skill_dir.join("SKILL.md");
+
+    // Always overwrite to keep skill up-to-date with app version
+    std::fs::create_dir_all(&skill_dir)
+        .map_err(|e| format!("Failed to create skill dir: {}", e))?;
+
+    let skill_content = include_str!("../assets/skills/screenpipe-search/SKILL.md");
+    std::fs::write(&skill_path, skill_content)
+        .map_err(|e| format!("Failed to write screenpipe-search skill: {}", e))?;
+
+    debug!("Screenpipe search skill installed at {:?}", skill_path);
+    Ok(())
+}
+
 /// Ensure Pi is configured to use screenpipe as the AI provider
 fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
     let config_dir = get_pi_config_dir()?;
@@ -305,6 +325,9 @@ pub async fn pi_start(
     // Create project directory if it doesn't exist
     std::fs::create_dir_all(&project_dir)
         .map_err(|e| format!("Failed to create project directory: {}", e))?;
+
+    // Ensure screenpipe-search skill exists in project
+    ensure_screenpipe_skill(&project_dir)?;
 
     // Ensure Pi is configured
     ensure_pi_config(user_token.as_deref())?;

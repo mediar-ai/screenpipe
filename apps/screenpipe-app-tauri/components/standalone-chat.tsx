@@ -154,11 +154,221 @@ interface SearchResult {
   };
 }
 
+interface ToolCall {
+  id: string;
+  toolName: string;
+  args: Record<string, any>;
+  result?: string;
+  isError?: boolean;
+  isRunning: boolean;
+}
+
+type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool"; toolCall: ToolCall };
+
 interface Message {
   id: string;
   role: "user" | "assistant";
-  content: string;
+  content: string; // full text for copy/history
   timestamp: number;
+  contentBlocks?: ContentBlock[];
+}
+
+// Tool icons by name
+const TOOL_ICONS: Record<string, string> = {
+  bash: "⚡",
+  read: "📄",
+  edit: "✏️",
+  write: "📝",
+  grep: "🔍",
+  find: "🔎",
+  ls: "📁",
+};
+
+function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
+  const [expanded, setExpanded] = useState(false);
+  const icon = TOOL_ICONS[toolCall.toolName] || "🔧";
+
+  // Format args for display
+  const argsPreview = toolCall.toolName === "bash"
+    ? toolCall.args.command || ""
+    : toolCall.toolName === "read"
+      ? toolCall.args.path || ""
+      : toolCall.toolName === "edit"
+        ? toolCall.args.path || ""
+        : toolCall.toolName === "write"
+          ? toolCall.args.path || ""
+          : JSON.stringify(toolCall.args).slice(0, 100);
+
+  return (
+    <div className="rounded-lg border border-border/50 bg-background/50 text-xs font-mono overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors text-left"
+      >
+        {toolCall.isRunning ? (
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
+        ) : toolCall.isError ? (
+          <span className="text-destructive flex-shrink-0">✗</span>
+        ) : (
+          <span className="text-green-500 flex-shrink-0">✓</span>
+        )}
+        <span className="text-muted-foreground flex-shrink-0">{icon}</span>
+        <span className="font-semibold flex-shrink-0">{toolCall.toolName}</span>
+        <span className="text-muted-foreground truncate flex-1">{argsPreview}</span>
+        <span className="text-muted-foreground flex-shrink-0">{expanded ? "▾" : "▸"}</span>
+      </button>
+      {expanded && (
+        <div className="border-t border-border/50">
+          {/* Args */}
+          <div className="px-3 py-2 bg-neutral-900 dark:bg-neutral-950 text-neutral-300">
+            <div className="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">input</div>
+            <pre className="whitespace-pre-wrap break-words text-neutral-100 max-h-[200px] overflow-y-auto">
+              {toolCall.toolName === "bash" ? toolCall.args.command : JSON.stringify(toolCall.args, null, 2)}
+            </pre>
+          </div>
+          {/* Result */}
+          {toolCall.result !== undefined && (
+            <div className="px-3 py-2 bg-neutral-900/80 dark:bg-neutral-950/80 text-neutral-300 border-t border-neutral-800">
+              <div className="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">
+                {toolCall.isError ? "error" : "output"}
+              </div>
+              <pre className={cn(
+                "whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto",
+                toolCall.isError ? "text-red-400" : "text-neutral-100"
+              )}>
+                {toolCall.result}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Markdown renderer for text blocks
+function MarkdownBlock({ text, isUser }: { text: string; isUser: boolean }) {
+  return (
+    <MemoizedReactMarkdown
+      className={cn(
+        "prose prose-sm max-w-none break-words overflow-hidden",
+        isUser ? "prose-invert" : "dark:prose-invert"
+      )}
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p({ children }) {
+          return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>;
+        },
+        a({ href, children, ...props }) {
+          const isMediaLink = href?.toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
+          if (isMediaLink && href) {
+            return <VideoComponent filePath={href} className="my-2" />;
+          }
+
+          if (href?.startsWith("screenpipe://timeline")) {
+            const handleTimelineClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+              e.preventDefault();
+              try {
+                const url = new URL(href);
+                const timestamp = url.searchParams.get("timestamp");
+                if (timestamp) {
+                  const date = new Date(timestamp);
+                  if (!isNaN(date.getTime())) {
+                    await commands.showWindow("Main");
+                    await emit("navigate-to-timestamp", timestamp);
+                  }
+                }
+              } catch (error) {
+                console.error("Failed to navigate to timeline:", error);
+              }
+            };
+
+            return (
+              <a
+                href={href}
+                onClick={handleTimelineClick}
+                className="underline underline-offset-2 text-blue-500 hover:text-blue-400 cursor-pointer inline"
+                {...props}
+              >
+                {children}
+              </a>
+            );
+          }
+
+          return (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" {...props}>
+              {children}
+            </a>
+          );
+        },
+        pre({ children, ...props }) {
+          return (
+            <pre className="overflow-x-auto rounded-lg bg-neutral-900 dark:bg-neutral-950 text-neutral-100 p-3 my-2 text-xs max-w-full" {...props}>
+              {children}
+            </pre>
+          );
+        },
+        code({ className, children, ...props }) {
+          const content = String(children).replace(/\n$/, "");
+          const isMedia = content.trim().toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
+          const match = /language-(\w+)/.exec(className || "");
+          const language = match?.[1] || "";
+          const isCodeBlock = className?.includes("language-");
+
+          if (language === "mermaid") {
+            return <MermaidDiagram chart={content} />;
+          }
+
+          if (isMedia) {
+            return <VideoComponent filePath={content.trim()} className="my-2" />;
+          }
+
+          if (isCodeBlock) {
+            return (
+              <code className="font-mono text-xs block whitespace-pre text-neutral-100" {...props}>
+                {content}
+              </code>
+            );
+          }
+
+          return (
+            <code className="px-1.5 py-0.5 rounded bg-neutral-800 dark:bg-neutral-900 text-neutral-100 font-mono text-xs" {...props}>
+              {content}
+            </code>
+          );
+        },
+      }}
+    >
+      {text}
+    </MemoizedReactMarkdown>
+  );
+}
+
+// Renders message content with interleaved text and tool call blocks
+function MessageContent({ message }: { message: Message }) {
+  const isUser = message.role === "user";
+
+  // If we have content blocks (Pi messages with tool calls), render them in order
+  if (message.contentBlocks && message.contentBlocks.length > 0) {
+    return (
+      <>
+        {message.contentBlocks.map((block, i) => {
+          if (block.type === "text" && block.text.trim()) {
+            return <MarkdownBlock key={`text-${i}`} text={block.text} isUser={isUser} />;
+          }
+          if (block.type === "tool") {
+            return <ToolCallBlock key={block.toolCall.id} toolCall={block.toolCall} />;
+          }
+          return null;
+        })}
+      </>
+    );
+  }
+
+  // Fallback: plain text message (user messages, non-Pi assistant messages)
+  return <MarkdownBlock text={message.content} isUser={isUser} />;
 }
 
 export function StandaloneChat() {
@@ -197,6 +407,7 @@ export function StandaloneChat() {
   const [piStarting, setPiStarting] = useState(false);
   const piStreamingTextRef = useRef<string>("");
   const piMessageIdRef = useRef<string | null>(null);
+  const piContentBlocksRef = useRef<ContentBlock[]>([]);
   const piStartInFlightRef = useRef(false);
   const piRestartCountRef = useRef(0);
   const piStoppedIntentionallyRef = useRef(false);
@@ -217,27 +428,8 @@ export function StandaloneChat() {
     reader.readAsDataURL(file);
   }, []);
 
-  // Load active conversation from settings on mount
-  useEffect(() => {
-    if (!isSettingsLoaded) return;
-
-    const history = settings.chatHistory;
-    if (history?.activeConversationId && history.historyEnabled !== false) {
-      const activeConv = history.conversations.find(
-        c => c.id === history.activeConversationId
-      );
-      if (activeConv && activeConv.messages.length > 0) {
-        setMessages(activeConv.messages.map(m => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          timestamp: m.timestamp,
-        })));
-        setConversationId(activeConv.id);
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSettingsLoaded]);
+  // Always start with a fresh conversation — history is accessible via the History button
+  // (No auto-load of last active conversation)
 
   // Save conversation to settings
   const saveConversation = async (msgs: Message[]) => {
@@ -709,7 +901,8 @@ export function StandaloneChat() {
   // Auto-set Pi project dir
   useEffect(() => {
     if (isPi && !piProjectDir) {
-      setPiProjectDir("/tmp/screenpipe-pi-chat");
+      const home = process.env.HOME || process.env.USERPROFILE || "/tmp";
+      setPiProjectDir(`${home}/.screenpipe/pi-chat`);
     }
   }, [isPi, piProjectDir]);
 
@@ -770,29 +963,62 @@ export function StandaloneChat() {
           const evt = data.assistantMessageEvent;
           if (evt.type === "text_delta" && evt.delta) {
             piStreamingTextRef.current += evt.delta;
+
+            // Append to last text block or create new one
+            const blocks = piContentBlocksRef.current;
+            const lastBlock = blocks[blocks.length - 1];
+            if (lastBlock && lastBlock.type === "text") {
+              lastBlock.text += evt.delta;
+            } else {
+              blocks.push({ type: "text", text: evt.delta });
+            }
+
             if (piMessageIdRef.current) {
               const msgId = piMessageIdRef.current;
               const content = piStreamingTextRef.current;
+              const contentBlocks = [...blocks];
               setMessages((prev) =>
-                prev.map((m) => m.id === msgId ? { ...m, content } : m)
+                prev.map((m) => m.id === msgId ? { ...m, content, contentBlocks } : m)
               );
             }
           }
         } else if (data.type === "tool_execution_start") {
           if (piMessageIdRef.current) {
             const msgId = piMessageIdRef.current;
-            const currentText = piStreamingTextRef.current;
-            const toolInfo = `\n\n*Running ${data.toolName}...*`;
+            const toolCall: ToolCall = {
+              id: data.toolCallId || Date.now().toString(),
+              toolName: data.toolName || "unknown",
+              args: data.args || {},
+              isRunning: true,
+            };
+            // Add tool block (text before it is already its own block)
+            piContentBlocksRef.current.push({ type: "tool", toolCall });
+            const contentBlocks = [...piContentBlocksRef.current];
             setMessages((prev) =>
-              prev.map((m) => m.id === msgId ? { ...m, content: currentText + toolInfo } : m)
+              prev.map((m) => m.id === msgId ? { ...m, contentBlocks } : m)
             );
           }
         } else if (data.type === "tool_execution_end") {
           if (piMessageIdRef.current) {
             const msgId = piMessageIdRef.current;
-            const content = piStreamingTextRef.current;
+            const toolCallId = data.toolCallId;
+            const resultText = data.result?.content
+              ?.map((c: any) => c.text || "")
+              .join("\n") || "";
+            const truncated = resultText.length > 2000
+              ? resultText.slice(0, 2000) + "\n... (truncated)"
+              : resultText;
+            // Update the tool block in-place
+            for (const block of piContentBlocksRef.current) {
+              if (block.type === "tool" && block.toolCall.id === toolCallId) {
+                block.toolCall.isRunning = false;
+                block.toolCall.result = truncated;
+                block.toolCall.isError = data.isError;
+              }
+            }
+            const contentBlocks = [...piContentBlocksRef.current];
             setMessages((prev) =>
-              prev.map((m) => m.id === msgId ? { ...m, content } : m)
+              prev.map((m) => m.id === msgId ? { ...m, contentBlocks } : m)
             );
           }
         } else if (data.type === "agent_end") {
@@ -800,12 +1026,14 @@ export function StandaloneChat() {
           if (piMessageIdRef.current) {
             const msgId = piMessageIdRef.current;
             const content = piStreamingTextRef.current || "Done";
+            const contentBlocks = [...piContentBlocksRef.current];
             setMessages((prev) =>
-              prev.map((m) => m.id === msgId ? { ...m, content } : m)
+              prev.map((m) => m.id === msgId ? { ...m, content, contentBlocks } : m)
             );
           }
           piStreamingTextRef.current = "";
           piMessageIdRef.current = null;
+          piContentBlocksRef.current = [];
           setIsLoading(false);
           setIsStreaming(false);
         } else if (data.type === "response" && data.success === false) {
@@ -817,6 +1045,7 @@ export function StandaloneChat() {
           }
           piStreamingTextRef.current = "";
           piMessageIdRef.current = null;
+          piContentBlocksRef.current = [];
           setIsLoading(false);
           setIsStreaming(false);
         }
@@ -864,6 +1093,7 @@ export function StandaloneChat() {
 
     piStreamingTextRef.current = "";
     piMessageIdRef.current = assistantMessageId;
+    piContentBlocksRef.current = [];
 
     setMessages((prev) => [...prev, newUserMessage]);
     setInput("");
@@ -1620,7 +1850,7 @@ export function StandaloneChat() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
               className={cn(
-                "relative flex gap-3",
+                "relative flex gap-3 min-w-0",
                 message.role === "user" ? "flex-row-reverse" : "flex-row"
               )}
             >
@@ -1638,120 +1868,16 @@ export function StandaloneChat() {
                   <PipeAIIcon size={16} animated={false} />
                 )}
               </div>
-              <div className="group/message flex-1 flex flex-col">
+              <div className="group/message flex-1 flex flex-col min-w-0">
               <div
                 className={cn(
-                  "relative rounded-xl px-4 py-3 text-sm border",
+                  "relative rounded-xl px-4 py-3 text-sm border overflow-hidden",
                   message.role === "user"
                     ? "bg-foreground text-background border-foreground"
                     : "bg-muted/30 border-border/50"
                 )}
               >
-                <MemoizedReactMarkdown
-                  className={cn(
-                    "prose prose-sm max-w-none",
-                    message.role === "user" ? "prose-invert" : "dark:prose-invert"
-                  )}
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    p({ children }) {
-                      return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>;
-                    },
-                    a({ href, children, ...props }) {
-                      const isMediaLink = href?.toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
-                      if (isMediaLink && href) {
-                        return <VideoComponent filePath={href} className="my-2" />;
-                      }
-                      
-                      // Handle screenpipe:// timeline deep links in-app
-                      if (href?.startsWith("screenpipe://timeline")) {
-                        const handleTimelineClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
-                          e.preventDefault();
-                          try {
-                            const url = new URL(href);
-                            const timestamp = url.searchParams.get("timestamp");
-                            if (timestamp) {
-                              const date = new Date(timestamp);
-                              if (!isNaN(date.getTime())) {
-                                await commands.showWindow("Main");
-                                await emit("navigate-to-timestamp", timestamp);
-                                toast({
-                                  title: "navigating to timestamp",
-                                  description: `jumping to ${date.toLocaleString()}`,
-                                });
-                              }
-                            }
-                          } catch (error) {
-                            console.error("Failed to navigate to timeline:", error);
-                            toast({
-                              title: "navigation failed",
-                              description: "could not navigate to the timeline",
-                              variant: "destructive",
-                            });
-                          }
-                        };
-                        
-                        return (
-                          <a
-                            href={href}
-                            onClick={handleTimelineClick}
-                            className="underline underline-offset-2 text-blue-500 hover:text-blue-400 cursor-pointer inline"
-                            {...props}
-                          >
-                            {children}
-                          </a>
-                        );
-                      }
-                      
-                      return (
-                        <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" {...props}>
-                          {children}
-                        </a>
-                      );
-                    },
-                    pre({ children, ...props }) {
-                      return (
-                        <pre className="overflow-x-auto rounded-lg bg-neutral-900 dark:bg-neutral-950 text-neutral-100 p-3 my-2 text-xs" style={{ maxWidth: 'calc(100% - 0px)' }} {...props}>
-                          {children}
-                        </pre>
-                      );
-                    },
-                    code({ className, children, ...props }) {
-                      const content = String(children).replace(/\n$/, "");
-                      const isMedia = content.trim().toLowerCase().match(/\.(mp4|mp3|wav|webm)$/);
-                      const match = /language-(\w+)/.exec(className || "");
-                      const language = match?.[1] || "";
-                      const isCodeBlock = className?.includes("language-");
-
-                      // Render mermaid diagrams
-                      if (language === "mermaid") {
-                        return <MermaidDiagram chart={content} />;
-                      }
-
-                      if (isMedia) {
-                        return <VideoComponent filePath={content.trim()} className="my-2" />;
-                      }
-
-                      // Code block (inside pre) - just the code, pre handles styling
-                      if (isCodeBlock) {
-                        return (
-                          <code className="font-mono text-xs block whitespace-pre text-neutral-100" {...props}>
-                            {content}
-                          </code>
-                        );
-                      }
-
-                      // Inline code
-                      return (
-                        <code className="px-1.5 py-0.5 rounded bg-neutral-800 dark:bg-neutral-900 text-neutral-100 font-mono text-xs" {...props}>
-                          {content}
-                        </code>
-                      );
-                    },
-                  }}
-                >
-                  {message.content}
-                </MemoizedReactMarkdown>
+                <MessageContent message={message} />
                 {/* Upgrade button for daily limit errors */}
                 {message.role === "assistant" &&
                  (message.content.includes("used all your free queries") ||
