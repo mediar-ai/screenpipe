@@ -541,82 +541,57 @@ export function ObsidianSyncCard() {
   const isLoggedIn = Boolean(appSettings?.user?.token);
 
   return (
-    <Card className="border-border bg-card shadow-sm overflow-hidden">
+    <Card className="border-border bg-card overflow-hidden">
       <CardContent className="p-0">
-        <div className="flex items-start p-6 gap-6">
+        <div className="flex items-start p-4 gap-4">
           {/* Obsidian Logo */}
           <div className="flex-shrink-0">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center">
-              <ObsidianLogo className="w-12 h-16" />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center">
+              <ObsidianLogo className="w-7 h-10" />
             </div>
           </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-xl font-semibold text-foreground">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-sm font-semibold text-foreground">
                 Obsidian Sync
               </h3>
-              <span className="px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground rounded-full">
-                PKM
-              </span>
               {settings.enabled && (
-                <span className="px-2 py-0.5 text-xs font-medium bg-green-500/20 text-green-500 rounded-full">
-                  ● auto-sync
+                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-foreground/10 text-foreground rounded-full">
+                  ● auto
                 </span>
               )}
             </div>
-            <p className="text-muted-foreground mb-4">
-              Automatically sync your screen activity to Obsidian as markdown
-              notes. Powered by Claude AI.
+            <p className="text-xs text-muted-foreground mb-3">
+              Sync screen activity to markdown notes. Powered by Claude AI.
             </p>
 
             {!isLoggedIn && (
-              <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-4">
-                <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                  <AlertCircle className="h-4 w-4 inline mr-2" />
-                  Login required to use Obsidian sync (requires Claude API access)
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground mb-2">
+                <AlertCircle className="h-3 w-3 inline mr-1" />
+                Login required
+              </p>
             )}
 
-            <div className="flex flex-wrap gap-3">
-              <Button
-                onClick={() => setIsExpanded(!isExpanded)}
-                variant="outline"
-                className="gap-2"
-              >
-                {isExpanded ? "Hide Settings" : "Configure"}
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => setIsExpanded(!isExpanded)} variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
+                {isExpanded ? "Hide" : "Configure"}
               </Button>
 
               {status.isSyncing ? (
-                <Button
-                  onClick={handleCancel}
-                  variant="outline"
-                  className="gap-2"
-                >
-                  <X className="h-4 w-4" />
-                  Cancel
+                <Button onClick={handleCancel} variant="outline" size="sm" className="gap-1.5 h-7 text-xs">
+                  <X className="h-3 w-3" />Cancel
                 </Button>
               ) : (
-                <Button
-                  onClick={handleSync}
-                  disabled={!settings.vaultPath || !isLoggedIn}
-                  className="gap-2"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Sync Now
+                <Button onClick={handleSync} disabled={!settings.vaultPath || !isLoggedIn} size="sm" className="gap-1.5 h-7 text-xs">
+                  <RefreshCw className="h-3 w-3" />Sync Now
                 </Button>
               )}
 
               {settings.vaultPath && isValidVault && (
-                <Button
-                  variant="outline"
-                  onClick={openObsidian}
-                  className="gap-2"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open in Obsidian
+                <Button variant="outline" onClick={openObsidian} size="sm" className="gap-1.5 h-7 text-xs">
+                  <ExternalLink className="h-3 w-3" />Open
                 </Button>
               )}
             </div>
@@ -625,61 +600,25 @@ export function ObsidianSyncCard() {
 
         {/* Expanded Settings */}
         {isExpanded && (
-          <div className="px-6 pb-6 space-y-4 border-t border-border pt-4">
+          <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
             {/* Vault Path */}
-            <div className="space-y-2">
-              <Label htmlFor="vault-path" className="flex items-center gap-2">
-                <FolderOpen className="h-4 w-4" />
-                Notes Folder
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Works with Obsidian, Logseq, or any markdown folder
-              </p>
-              <div className="flex gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="vault-path" className="text-xs font-medium">Notes folder</Label>
+              <div className="flex gap-1.5">
                 <div className="flex-1 relative">
-                  <Input
-                    id="vault-path"
-                    value={settings.vaultPath}
-                    onChange={(e) =>
-                      setSettings((s) => ({ ...s, vaultPath: e.target.value }))
-                    }
-                    placeholder="/path/to/your/vault"
-                    className={
-                      isValidVault === true
-                        ? "border-green-500"
-                        : ""
-                    }
-                  />
-                  {isValidating && (
-                    <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
+                  <Input id="vault-path" value={settings.vaultPath} onChange={(e) => setSettings((s) => ({ ...s, vaultPath: e.target.value }))} placeholder="/path/to/folder" className={`h-7 text-xs ${isValidVault === true ? "border-green-500" : ""}`} />
+                  {isValidating && <Loader2 className="absolute right-2 top-1.5 h-3 w-3 animate-spin text-muted-foreground" />}
                 </div>
-                <Button type="button" variant="outline" onClick={handleBrowse}>
-                  <FolderOpen className="h-4 w-4" />
+                <Button type="button" variant="outline" onClick={handleBrowse} size="sm" className="h-7 w-7 p-0">
+                  <FolderOpen className="h-3 w-3" />
                 </Button>
               </div>
-              {isValidVault === true && (
-                <p className="text-sm text-green-500 flex items-center gap-1">
-                  <Check className="h-3 w-3" /> Obsidian vault detected
-                </p>
-              )}
-              {isValidVault === false && settings.vaultPath && (
-                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                  <Check className="h-3 w-3" /> Folder selected (not an Obsidian vault, but will work fine)
-                </p>
-              )}
-              {/* Suggested paths */}
+              {isValidVault === true && <p className="text-[11px] text-green-500"><Check className="h-2.5 w-2.5 inline mr-0.5" />Obsidian vault detected</p>}
+              {isValidVault === false && settings.vaultPath && <p className="text-[11px] text-muted-foreground"><Check className="h-2.5 w-2.5 inline mr-0.5" />Folder OK (not an Obsidian vault)</p>}
               {suggestedPaths.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className="flex flex-wrap gap-1 mt-1">
                   {suggestedPaths.map((path) => (
-                    <Badge
-                      key={path}
-                      variant="outline"
-                      className="cursor-pointer hover:bg-muted"
-                      onClick={() =>
-                        setSettings((s) => ({ ...s, vaultPath: path }))
-                      }
-                    >
+                    <Badge key={path} variant="outline" className="cursor-pointer hover:bg-muted text-[10px] h-5" onClick={() => setSettings((s) => ({ ...s, vaultPath: path }))}>
                       {path.split("/").pop()}
                     </Badge>
                   ))}
@@ -687,169 +626,70 @@ export function ObsidianSyncCard() {
               )}
             </div>
 
-            {/* Notes Folder Path */}
-            <div className="space-y-2">
-              <Label htmlFor="notes-path" className="flex items-center gap-2">
-                <FolderOpen className="h-4 w-4" />
-                Notes folder (within vault)
-              </Label>
-              <Input
-                id="notes-path"
-                value={settings.notesPath}
-                onChange={(e) =>
-                  setSettings((s) => ({ ...s, notesPath: e.target.value }))
-                }
-                placeholder="screenpipe/logs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Subfolder where daily notes will be created (e.g., &quot;daily/screenpipe&quot; or &quot;journals/activity&quot;)
-              </p>
+            {/* Notes subfolder */}
+            <div className="space-y-1.5">
+              <Label htmlFor="notes-path" className="text-xs font-medium">Subfolder</Label>
+              <Input id="notes-path" value={settings.notesPath} onChange={(e) => setSettings((s) => ({ ...s, notesPath: e.target.value }))} placeholder="screenpipe/logs" className="h-7 text-xs" />
             </div>
 
-            {/* Sync Hours */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Hours to sync
-              </Label>
-              <Select
-                value={String(settings.syncHours)}
-                onValueChange={(v) =>
-                  setSettings((s) => ({ ...s, syncHours: parseInt(v) }))
-                }
-              >
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Last 1 hour</SelectItem>
-                  <SelectItem value="2">Last 2 hours</SelectItem>
-                  <SelectItem value="4">Last 4 hours</SelectItem>
-                  <SelectItem value="8">Last 8 hours</SelectItem>
-                  <SelectItem value="24">Last 24 hours</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                How far back to look when syncing
-              </p>
-            </div>
-
-            {/* Auto-sync Interval */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4" />
-                Auto-sync interval
-              </Label>
-              <div className="flex gap-2 items-center">
-                <Select
-                  value={String(settings.syncIntervalMinutes)}
-                  onValueChange={(v) =>
-                    setSettings((s) => ({
-                      ...s,
-                      syncIntervalMinutes: parseInt(v),
-                    }))
-                  }
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
+            {/* Sync Hours + Interval in a row */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Hours to sync</Label>
+                <Select value={String(settings.syncHours)} onValueChange={(v) => setSettings((s) => ({ ...s, syncHours: parseInt(v) }))}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0">Manual only</SelectItem>
-                    <SelectItem value="15">Every 15 minutes</SelectItem>
-                    <SelectItem value="30">Every 30 minutes</SelectItem>
-                    <SelectItem value="60">Every hour</SelectItem>
-                    <SelectItem value="120">Every 2 hours</SelectItem>
+                    <SelectItem value="1">Last 1h</SelectItem>
+                    <SelectItem value="2">Last 2h</SelectItem>
+                    <SelectItem value="4">Last 4h</SelectItem>
+                    <SelectItem value="8">Last 8h</SelectItem>
+                    <SelectItem value="24">Last 24h</SelectItem>
                   </SelectContent>
                 </Select>
-                {settings.syncIntervalMinutes > 0 && (
-                  <Button
-                    variant={settings.enabled ? "destructive" : "default"}
-                    size="sm"
-                    onClick={
-                      settings.enabled
-                        ? handleDisableScheduler
-                        : handleEnableScheduler
-                    }
-                    disabled={!settings.vaultPath || !isLoggedIn}
-                  >
-                    {settings.enabled ? "Stop" : "Start"}
-                  </Button>
-                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Auto-sync</Label>
+                <div className="flex gap-1.5">
+                  <Select value={String(settings.syncIntervalMinutes)} onValueChange={(v) => setSettings((s) => ({ ...s, syncIntervalMinutes: parseInt(v) }))}>
+                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Manual</SelectItem>
+                      <SelectItem value="15">15 min</SelectItem>
+                      <SelectItem value="30">30 min</SelectItem>
+                      <SelectItem value="60">1 hour</SelectItem>
+                      <SelectItem value="120">2 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {settings.syncIntervalMinutes > 0 && (
+                    <Button variant={settings.enabled ? "destructive" : "default"} size="sm" className="h-7 text-xs px-2" onClick={settings.enabled ? handleDisableScheduler : handleEnableScheduler} disabled={!settings.vaultPath || !isLoggedIn}>
+                      {settings.enabled ? "Stop" : "Start"}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Custom Prompt */}
-            <div className="space-y-2">
-              <Label htmlFor="custom-prompt">
-                Custom instructions (optional)
-              </Label>
-              <Textarea
-                id="custom-prompt"
-                value={settings.customPrompt}
-                onChange={(e) =>
-                  setSettings((s) => ({ ...s, customPrompt: e.target.value }))
-                }
-                placeholder="Add any custom instructions for how to structure your notes, what to focus on, naming conventions, etc."
-                rows={3}
-              />
-              <p className="text-xs text-muted-foreground">
-                These instructions will be added to the AI prompt
-              </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="custom-prompt" className="text-xs font-medium">Custom instructions</Label>
+              <Textarea id="custom-prompt" value={settings.customPrompt} onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))} placeholder="Optional: how to structure notes, what to focus on..." rows={2} className="text-xs" />
             </div>
           </div>
         )}
 
         {/* Status Bar */}
-        <div className="px-6 py-3 bg-muted/50 border-t border-border space-y-2">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <div className="flex items-center gap-4">
-              <span>
-                Last sync:{" "}
-                <span className="text-foreground">
-                  {formatLastSync(status.lastSyncTime)}
-                </span>
-              </span>
-              {settings.enabled && status.nextScheduledRun && (
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  Next:{" "}
-                  <span className="text-foreground">
-                    {formatNextRun(status.nextScheduledRun)}
-                  </span>
-                </span>
-              )}
-              {status.notesCreatedToday > 0 && (
-                <span>
-                  {status.notesCreatedToday} sync
-                  {status.notesCreatedToday > 1 ? "s" : ""} today
-                </span>
-              )}
-            </div>
-            {status.lastError && (
-              <span className="text-xs truncate max-w-xs text-muted-foreground">
-                Error: {status.lastError}
-              </span>
+        <div className="px-4 py-2 bg-muted/50 border-t border-border">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+            <span>Last: <span className="text-foreground">{formatLastSync(status.lastSyncTime)}</span></span>
+            {settings.enabled && status.nextScheduledRun && (
+              <span className="flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />Next: <span className="text-foreground">{formatNextRun(status.nextScheduledRun)}</span></span>
             )}
+            {syncHistory.length > 0 && syncHistory.slice(0, 5).map((entry, i) => (
+              <span key={i} className="px-1 py-0.5 rounded bg-muted text-[10px]" title={entry.error || "Success"}>
+                {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{entry.status === "success" ? " ✓" : " ✗"}
+              </span>
+            ))}
           </div>
-          
-          {/* Sync History */}
-          {syncHistory.length > 0 && (
-            <div className="text-xs text-muted-foreground">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span>Recent:</span>
-                {syncHistory.slice(0, 5).map((entry, i) => (
-                  <span
-                    key={i}
-                    className="px-1.5 py-0.5 rounded bg-muted"
-                    title={entry.error || "Success"}
-                  >
-                    {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    {entry.status === "success" ? " ✓" : " ✗"}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </CardContent>
     </Card>

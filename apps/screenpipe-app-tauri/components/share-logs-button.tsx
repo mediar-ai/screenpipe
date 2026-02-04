@@ -317,17 +317,17 @@ export const ShareLogsButton = ({
   };
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-6 w-full max-w-2xl">
+      <div className="flex flex-col gap-2.5 w-full">
         {!shareLink ? (
           <>
             <Textarea
               placeholder="describe your feedback or issue..."
               value={feedbackText}
               onChange={(e) => setFeedbackText(e.target.value)}
-              className="min-h-[120px] resize-none rounded-xl bg-secondary/5 placeholder:text-muted-foreground/50 focus:border-secondary/30 focus:ring-0 transition-colors"
+              className="min-h-[60px] resize-none text-xs bg-secondary/5 placeholder:text-muted-foreground/50 focus:border-secondary/30 focus:ring-0 transition-colors"
             />
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <label className="cursor-pointer flex-none">
                 <input
                   type="file"
@@ -339,16 +339,16 @@ export const ShareLogsButton = ({
                 <Button
                   variant={screenshot ? "secondary" : "outline"}
                   size="sm"
-                  className={`gap-2 h-9 px-4 rounded-full transition-all ${
+                  className={`gap-1.5 h-7 text-xs transition-all ${
                     screenshot
-                      ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/20"
+                      ? "bg-foreground/10 text-foreground"
                       : ""
                   }`}
                   disabled={!!screenshot}
                   asChild
                 >
                   <span>
-                    <Camera className="h-3.5 w-3.5" />
+                    <Camera className="h-3 w-3" />
                     <span>screenshot</span>
                   </span>
                 </Button>
@@ -360,27 +360,27 @@ export const ShareLogsButton = ({
                     variant={mergedVideoPath ? "secondary" : "outline"}
                     size="sm"
                     onClick={captureLastFiveMinutes}
-                    className={`gap-2 h-9 px-4 rounded-full transition-all ${
+                    className={`gap-1.5 h-7 text-xs transition-all ${
                       mergedVideoPath
-                        ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/20"
+                        ? "bg-foreground/10 text-foreground"
                         : ""
                     }`}
                     disabled={isLoadingVideo || health?.status === "error"}
                   >
                     {isLoadingVideo ? (
-                      <Loader className="h-3.5 w-3.5 animate-spin" />
+                      <Loader className="h-3 w-3 animate-spin" />
                     ) : (
-                      <Video className="h-3.5 w-3.5" />
+                      <Video className="h-3 w-3" />
                     )}
                     <span>recording</span>
-                    <span className="ml-1 text-xs text-muted-foreground/70">
+                    <span className="ml-0.5 text-[10px] text-muted-foreground">
                       5m
                     </span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent
                   side="bottom"
-                  className="text-xs bg-secondary border border-secondary/30"
+                  className="text-xs"
                 >
                   attach last 5 minutes of screen recording
                 </TooltipContent>
@@ -388,7 +388,7 @@ export const ShareLogsButton = ({
             </div>
 
             {screenshot && (
-              <div className="relative w-48 aspect-video rounded-xl overflow-hidden bg-secondary/10 border border-secondary/20">
+              <div className="relative w-32 aspect-video rounded-lg overflow-hidden bg-secondary/10 border border-border">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={screenshot}
@@ -398,10 +398,10 @@ export const ShareLogsButton = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute top-2 right-2 h-7 w-7 rounded-full bg-background/80 hover:bg-background/95 border border-border"
+                  className="absolute top-1 right-1 h-5 w-5 rounded-full bg-background/80 hover:bg-background/95 border border-border"
                   onClick={() => setScreenshot(null)}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-2.5 w-2.5" />
                 </Button>
               </div>
             )}
@@ -411,16 +411,16 @@ export const ShareLogsButton = ({
               size="sm"
               onClick={sendLogs}
               disabled={isSending || !feedbackText.trim()}
-              className="gap-2 group relative h-10 px-5 rounded-full"
+              className="gap-1.5 h-8 text-xs w-full bg-foreground text-background hover:bg-foreground/90"
             >
               {isSending ? (
                 <>
-                  <Loader className="h-3.5 w-3.5 animate-spin" />
-                  <span>sending feedback...</span>
+                  <Loader className="h-3 w-3 animate-spin" />
+                  <span>sending...</span>
                 </>
               ) : (
                 <>
-                  <Upload className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5" />
+                  <Upload className="h-3 w-3" />
                   <span>send feedback</span>
                 </>
               )}
