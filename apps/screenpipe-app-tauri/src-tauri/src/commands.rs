@@ -127,6 +127,86 @@ pub fn is_overlay_click_through(_app_handle: tauri::AppHandle) -> bool {
     false
 }
 
+/// Resize the main overlay panel to a compact bottom bar or back to fullscreen.
+/// `compact = true` → thin strip at bottom of current screen.
+/// `compact = false` → full screen (same as initial overlay).
+#[tauri::command]
+#[specta::specta]
+pub fn set_overlay_compact(app_handle: tauri::AppHandle, compact: bool, bar_height: f64) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_nspanel::ManagerExt;
+        use tauri_nspanel::cocoa::appkit::{NSEvent, NSScreen};
+        use tauri_nspanel::cocoa::base::{id, nil};
+        use tauri_nspanel::cocoa::foundation::{NSArray, NSPoint, NSRect};
+        use objc::{msg_send, sel, sel_impl};
+
+        let label = crate::window_api::RewindWindowId::Main.label();
+        let panel = app_handle.get_webview_panel(label)
+            .map_err(|e| format!("no panel: {:?}", e))?;
+
+        app_handle.run_on_main_thread(move || {
+            unsafe {
+                let mouse_location: NSPoint = NSEvent::mouseLocation(nil);
+                let screens: id = NSScreen::screens(nil);
+                let count: u64 = NSArray::count(screens);
+
+                for i in 0..count {
+                    let screen: id = NSArray::objectAtIndex(screens, i);
+                    let frame: NSRect = NSScreen::frame(screen);
+                    if mouse_location.x >= frame.origin.x
+                        && mouse_location.x < frame.origin.x + frame.size.width
+                        && mouse_location.y >= frame.origin.y
+                        && mouse_location.y < frame.origin.y + frame.size.height
+                    {
+                        let new_frame = if compact {
+                            // Bottom strip: same x, y=screen origin, full width, bar_height
+                            NSRect::new(
+                                NSPoint::new(frame.origin.x, frame.origin.y),
+                                tauri_nspanel::cocoa::foundation::NSSize::new(frame.size.width, bar_height),
+                            )
+                        } else {
+                            // Full screen
+                            frame
+                        };
+                        let _: () = msg_send![&*panel, setFrame:new_frame display:true animate:true];
+                        break;
+                    }
+                }
+            }
+        }).map_err(|e| format!("main thread: {:?}", e))?;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // On Windows/Linux, use Tauri window API
+        if let Some(window) = app_handle.get_webview_window("main") {
+            if let Ok(Some(monitor)) = window.current_monitor() {
+                let scale = monitor.scale_factor();
+                let size = monitor.size();
+                let pos = monitor.position();
+                let logical_w = size.width as f64 / scale;
+                let logical_h = size.height as f64 / scale;
+                if compact {
+                    let _ = window.set_size(tauri::LogicalSize::new(logical_w, bar_height));
+                    let _ = window.set_position(tauri::LogicalPosition::new(
+                        pos.x as f64 / scale,
+                        pos.y as f64 / scale + logical_h - bar_height,
+                    ));
+                } else {
+                    let _ = window.set_size(tauri::LogicalSize::new(logical_w, logical_h));
+                    let _ = window.set_position(tauri::LogicalPosition::new(
+                        pos.x as f64 / scale,
+                        pos.y as f64 / scale,
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(target_os = "windows")]
 const DEFAULT_SHORTCUT: &str = "Alt+S";
 #[cfg(not(target_os = "windows"))]

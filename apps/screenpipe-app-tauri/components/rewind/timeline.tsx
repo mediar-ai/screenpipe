@@ -871,6 +871,13 @@ export default function Timeline() {
 
 	// Compact mode: thin bottom bar with timeline + thumbnail
 	const isCompact = isCompactDefault && !isExpanded;
+	const COMPACT_BAR_HEIGHT = 80;
+
+	// Resize the actual window when toggling compact ↔ expanded
+	useEffect(() => {
+		if (!isCompactDefault) return; // fullscreen mode — don't touch window size
+		commands.setOverlayCompact(isCompact, COMPACT_BAR_HEIGHT);
+	}, [isCompact, isCompactDefault]);
 
 	const compactThumbnailUrl = currentFrame?.devices?.[0]?.frame_id
 		? `http://localhost:3030/frames/${currentFrame.devices[0].frame_id}`
@@ -885,101 +892,93 @@ export default function Timeline() {
 			<TimelineProvider>
 				<div
 					ref={containerRef}
-					className="inset-0 flex flex-col relative"
+					className="flex flex-col text-foreground bg-card"
 					style={{
-						height: "100vh",
+						height: `${COMPACT_BAR_HEIGHT}px`,
 						WebkitUserSelect: "none",
 						userSelect: "none",
 					}}
 				>
-					{/* Transparent area — click to dismiss */}
-					<div
-						className="flex-1"
-						onClick={() => commands.closeWindow("Main")}
-					/>
+					{/* Compact bottom bar — fills the entire small window */}
+					<div className="flex items-center gap-3 px-4 h-full border-t border-border">
+						{/* Thumbnail */}
+						<button
+							onClick={() => setIsExpanded(true)}
+							className="relative flex-shrink-0 w-[88px] h-[52px] rounded-md overflow-hidden border border-border/50 hover:border-primary/50 transition-colors group cursor-pointer bg-muted"
+							title="Expand (Enter)"
+						>
+							{compactThumbnailUrl ? (
+								<img
+									src={compactThumbnailUrl}
+									alt="Current frame"
+									className="w-full h-full object-cover"
+								/>
+							) : (
+								<div className="w-full h-full flex items-center justify-center">
+									<Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+								</div>
+							)}
+							<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+								<Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+							</div>
+						</button>
 
-					{/* Compact bottom bar */}
-					<div className="relative z-40 bg-card/95 backdrop-blur-xl border-t border-border shadow-2xl">
-						<div className="flex items-center gap-3 px-4 py-2 h-[72px]">
-							{/* Thumbnail */}
+						{/* Timestamp */}
+						<span className="text-xs font-mono text-muted-foreground flex-shrink-0 w-12 text-center">
+							{compactTimestamp}
+						</span>
+
+						{/* Timeline slider — fills remaining space */}
+						<div className="flex-1 min-w-0">
+							{frames.length > 0 ? (
+								<TimelineSlider
+									frames={frames}
+									currentIndex={currentIndex}
+									onFrameChange={(index) => {
+										setCurrentIndex(index);
+										if (frames[index]) {
+											setCurrentFrame(frames[index]);
+										}
+									}}
+									fetchNextDayData={fetchNextDayData}
+									currentDate={currentDate}
+									startAndEndDates={startAndEndDates}
+									newFramesCount={newFramesCount}
+									lastFlushTimestamp={lastFlushTimestamp}
+									isSearchModalOpen={showSearchModal}
+								/>
+							) : (
+								<div className="text-xs text-muted-foreground text-center">
+									{isLoading ? "Loading..." : "No frames"}
+								</div>
+							)}
+						</div>
+
+						{/* Action buttons */}
+						<div className="flex items-center gap-1 flex-shrink-0">
+							<button
+								onClick={() => setShowSearchModal(true)}
+								className="p-2 hover:bg-muted rounded-md transition-colors"
+								title="Search (/)"
+							>
+								<svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+								</svg>
+							</button>
 							<button
 								onClick={() => setIsExpanded(true)}
-								className="relative flex-shrink-0 w-[88px] h-[52px] rounded-md overflow-hidden border border-border/50 hover:border-primary/50 transition-colors group cursor-pointer bg-muted"
+								className="p-2 hover:bg-muted rounded-md transition-colors"
 								title="Expand (Enter)"
 							>
-								{compactThumbnailUrl ? (
-									<img
-										src={compactThumbnailUrl}
-										alt="Current frame"
-										className="w-full h-full object-cover"
-									/>
-								) : (
-									<div className="w-full h-full flex items-center justify-center">
-										<Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-									</div>
-								)}
-								<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-									<Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-								</div>
+								<Maximize2 className="w-4 h-4 text-muted-foreground" />
 							</button>
-
-							{/* Timestamp */}
-							<span className="text-xs font-mono text-muted-foreground flex-shrink-0 w-12 text-center">
-								{compactTimestamp}
-							</span>
-
-							{/* Timeline slider — fills remaining space */}
-							<div className="flex-1 min-w-0">
-								{frames.length > 0 ? (
-									<TimelineSlider
-										frames={frames}
-										currentIndex={currentIndex}
-										onFrameChange={(index) => {
-											setCurrentIndex(index);
-											if (frames[index]) {
-												setCurrentFrame(frames[index]);
-											}
-										}}
-										fetchNextDayData={fetchNextDayData}
-										currentDate={currentDate}
-										startAndEndDates={startAndEndDates}
-										newFramesCount={newFramesCount}
-										lastFlushTimestamp={lastFlushTimestamp}
-										isSearchModalOpen={showSearchModal}
-									/>
-								) : (
-									<div className="text-xs text-muted-foreground text-center">
-										{isLoading ? "Loading..." : "No frames"}
-									</div>
-								)}
-							</div>
-
-							{/* Action buttons */}
-							<div className="flex items-center gap-1 flex-shrink-0">
-								<button
-									onClick={() => setShowSearchModal(true)}
-									className="p-2 hover:bg-muted rounded-md transition-colors"
-									title="Search (/)"
-								>
-									<svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-									</svg>
-								</button>
-								<button
-									onClick={() => setIsExpanded(true)}
-									className="p-2 hover:bg-muted rounded-md transition-colors"
-									title="Expand (Enter)"
-								>
-									<Maximize2 className="w-4 h-4 text-muted-foreground" />
-								</button>
-								<button
-									onClick={() => commands.closeWindow("Main")}
-									className="p-2 hover:bg-muted rounded-md transition-colors"
-									title="Close (Esc)"
-								>
-									<X className="w-4 h-4 text-muted-foreground" />
-								</button>
-							</div>
+							<button
+								onClick={() => commands.closeWindow("Main")}
+								className="p-2 hover:bg-muted rounded-md transition-colors"
+								title="Close (Esc)"
+							>
+								<X className="w-4 h-4 text-muted-foreground" />
+							</button>
 						</div>
 					</div>
 

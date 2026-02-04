@@ -959,6 +959,7 @@ async fn main() {
                 // Window-specific shortcut commands (dynamic registration)
                 commands::register_window_shortcuts,
                 commands::unregister_window_shortcuts,
+                commands::set_overlay_compact,
                 // Commands from tray.rs
                 set_tray_unhealth_icon,
                 set_tray_health_icon,
@@ -1100,10 +1101,11 @@ async fn main() {
             // Window-specific shortcut commands (dynamic registration)
             commands::register_window_shortcuts,
             commands::unregister_window_shortcuts,
-            // Overlay commands (Windows)
+            // Overlay commands
             commands::enable_overlay_click_through,
             commands::disable_overlay_click_through,
             commands::is_overlay_click_through,
+            commands::set_overlay_compact,
             get_log_files,
             get_media_file,
             upload_file_to_s3,
