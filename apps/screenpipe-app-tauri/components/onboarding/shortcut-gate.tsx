@@ -10,12 +10,6 @@ import { scheduleFirstRunNotification } from "@/lib/notifications";
 import { commands } from "@/lib/utils/tauri";
 import posthog from "posthog-js";
 
-interface CapturedText {
-  text: string;
-  appName: string;
-  windowName: string;
-}
-
 function parseShortcutKeys(shortcut: string, isMac: boolean): string[] {
   if (!shortcut) return isMac ? ["⌃", "⌘", "S"] : ["Ctrl", "Win", "S"];
 
@@ -74,8 +68,6 @@ export default function ShortcutGate() {
   const { isMac } = usePlatform();
   const { completeOnboarding } = useOnboarding();
   const [seconds, setSeconds] = useState(0);
-  const [captures, setCaptures] = useState<CapturedText[]>([]);
-  const [currentCapture, setCurrentCapture] = useState<CapturedText | null>(null);
   const [showSkip, setShowSkip] = useState(false);
   const isCompletingRef = useRef(false);
 
@@ -84,44 +76,6 @@ export default function ShortcutGate() {
   // Count-up timer
   useEffect(() => {
     const interval = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Poll for latest captured text
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch(
-          "http://localhost:3030/search?content_type=ocr&limit=1&offset=0&order=descending",
-          { signal: AbortSignal.timeout(3000) }
-        );
-        const data = await res.json();
-        if (data.data?.length > 0) {
-          const item = data.data[0];
-          const text = item.content?.text?.trim();
-          if (text && text.length > 15) {
-            // Extract a clean snippet (first meaningful line)
-            const lines = text.split("\n").filter((l: string) => l.trim().length > 10);
-            const snippet = lines[0]?.substring(0, 80) || text.substring(0, 80);
-            const capture: CapturedText = {
-              text: snippet + (snippet.length >= 80 ? "..." : ""),
-              appName: item.content?.app_name || "",
-              windowName: item.content?.window_name || "",
-            };
-            setCurrentCapture(capture);
-            setCaptures((prev) => {
-              // Avoid duplicates
-              if (prev.length > 0 && prev[prev.length - 1].text === capture.text) return prev;
-              return [...prev.slice(-4), capture];
-            });
-          }
-        }
-      } catch {
-        /* server might still be starting */
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -196,7 +150,7 @@ export default function ShortcutGate() {
   }, [handleComplete]);
 
   return (
-    <div className="flex flex-col items-center justify-center space-y-8 py-2">
+    <div className="flex flex-col items-center justify-center space-y-10 py-4">
       {/* Recording indicator with timer */}
       <motion.div
         className="flex items-center space-x-2"
@@ -214,55 +168,12 @@ export default function ShortcutGate() {
         </span>
       </motion.div>
 
-      {/* Live capture preview */}
-      <motion.div
-        className="w-full max-w-sm min-h-[4.5rem] flex items-center justify-center"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
-      >
-        <AnimatePresence mode="wait">
-          {currentCapture ? (
-            <motion.div
-              key={currentCapture.text}
-              className="w-full border border-border/50 rounded-lg p-3 bg-muted/20"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.3 }}
-            >
-              <p className="font-mono text-xs text-foreground/70 line-clamp-2 leading-relaxed">
-                &ldquo;{currentCapture.text}&rdquo;
-              </p>
-              {(currentCapture.appName || currentCapture.windowName) && (
-                <p className="font-mono text-[10px] text-muted-foreground mt-1.5">
-                  {[currentCapture.appName, currentCapture.windowName]
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .join(" · ")}
-                </p>
-              )}
-            </motion.div>
-          ) : (
-            <motion.p
-              key="placeholder"
-              className="font-mono text-xs text-muted-foreground"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              capturing your screen...
-            </motion.p>
-          )}
-        </AnimatePresence>
-      </motion.div>
-
       {/* The gate */}
       <motion.div
-        className="flex flex-col items-center space-y-6"
+        className="flex flex-col items-center space-y-7"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5, duration: 0.5 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
       >
         <p className="font-mono text-sm text-muted-foreground">
           press to see your timeline
