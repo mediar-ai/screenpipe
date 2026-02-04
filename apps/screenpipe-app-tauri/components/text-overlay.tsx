@@ -8,14 +8,11 @@ import type { TextPosition } from "@/lib/hooks/use-frame-ocr-data";
 /**
  * Check if a string looks like a URL.
  * Matches http(s)://, www., and domain-like patterns.
- * Uses a permissive TLD check: any 2-13 char alphabetic TLD is accepted
- * because OCR text won't produce false positives like "hello.world"
- * in a screenshot context — the text is already rendered UI.
  */
 export function isUrl(text: string): boolean {
 	const trimmed = text.trim();
 
-	// Reject if contains spaces (URLs don't have spaces)
+	// Reject if contains spaces
 	if (/\s/.test(trimmed)) {
 		return false;
 	}
@@ -30,12 +27,64 @@ export function isUrl(text: string): boolean {
 		return true;
 	}
 
-	// Check for domain-like patterns: word.tld or sub.word.tld
-	// Accept any alphabetic TLD with 2-13 chars (covers .com, .chat, .pe, .website, etc.)
+	// Check for domain-like patterns with any 2-13 char alphabetic TLD
 	const domainPattern =
 		/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,13}(\/[^\s]*)?$/;
 
 	return domainPattern.test(trimmed);
+}
+
+/**
+ * Regex to find URLs embedded within arbitrary text.
+ * Matches:
+ *   - https://... or http://... (up to whitespace)
+ *   - www.domain.tld/path
+ *   - domain.tld/path (common TLDs only, to avoid false positives in prose)
+ */
+const URL_IN_TEXT_RE =
+	/https?:\/\/[^\s]+|www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,13}[^\s]*|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.(?:com|org|net|io|dev|app|co|ai|edu|gov|me|tv|pe|chat|xyz|live|news|pro|tech|cloud|page|link|site|store|blog)(?:\/[^\s]*)?|[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.(?:com|org|net|io|dev|app|co|ai|edu|gov|me|tv|pe|chat|xyz|live|news|pro|tech|cloud|page|link|site|store|blog)(?:\/[^\s]*)?/gi;
+
+/**
+ * Extract URLs from a text block and compute their approximate bounding boxes
+ * based on character offset within the block.
+ */
+export interface ExtractedUrl {
+	url: string;
+	normalizedUrl: string;
+	/** Fraction of the text block width where this URL starts (0-1) */
+	startFraction: number;
+	/** Fraction of the text block width this URL spans (0-1) */
+	widthFraction: number;
+}
+
+export function extractUrlsFromText(text: string): ExtractedUrl[] {
+	const results: ExtractedUrl[] = [];
+	const totalLen = text.length;
+	if (totalLen === 0) return results;
+
+	let match: RegExpExecArray | null;
+	// Reset lastIndex for global regex
+	URL_IN_TEXT_RE.lastIndex = 0;
+
+	while ((match = URL_IN_TEXT_RE.exec(text)) !== null) {
+		const url = match[0];
+		// Clean trailing punctuation that's unlikely part of the URL
+		const cleaned = url.replace(/[),;:!?.'"\]]+$/, "");
+		if (cleaned.length < 4) continue;
+
+		const startIdx = match.index;
+		const startFraction = startIdx / totalLen;
+		const widthFraction = cleaned.length / totalLen;
+
+		results.push({
+			url: cleaned,
+			normalizedUrl: normalizeUrl(cleaned),
+			startFraction,
+			widthFraction,
+		});
+	}
+
+	return results;
 }
 
 /**
@@ -49,7 +98,6 @@ export function normalizeUrl(url: string): string {
 	if (trimmed.startsWith("www.")) {
 		return `https://${trimmed}`;
 	}
-	// If it looks like a domain, add https
 	return `https://${trimmed}`;
 }
 
@@ -74,29 +122,27 @@ interface TextOverlayProps {
 	clickableUrls?: boolean;
 }
 
-interface ScaledTextPosition extends TextPosition {
-	scaledBounds: {
-		left: number;
-		top: number;
-		width: number;
-		height: number;
-	};
+/** A URL link to render, with pixel coordinates */
+interface UrlLink {
+	key: string;
+	normalizedUrl: string;
+	displayUrl: string;
+	left: number;
+	top: number;
+	width: number;
+	height: number;
 }
 
-interface ScaledTextPositionWithUrl extends ScaledTextPosition {
-	isUrl: boolean;
-	normalizedUrl?: string;
-}
-
-// Minimum click target height in pixels — OCR boxes can be tiny (8-13px)
+// Minimum click target height in pixels
 const MIN_LINK_HEIGHT = 24;
-// Extra horizontal padding on each side for easier clicking
+// Extra horizontal padding on each side
 const LINK_PADDING_X = 4;
 
 /**
  * TextOverlay renders clickable URL links positioned over a screenshot.
- * URLs are detected from OCR text and rendered as visible, hoverable links.
- * Clicking opens the URL in the system default browser via Tauri shell.
+ * URLs are detected from OCR text (even embedded in longer text blocks)
+ * and rendered as visible, hoverable links. Clicking opens the URL in
+ * the system default browser via Tauri shell.
  */
 export const TextOverlay = memo(function TextOverlay({
 	textPositions,
@@ -111,41 +157,70 @@ export const TextOverlay = memo(function TextOverlay({
 }: TextOverlayProps) {
 	const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-	// Scale and filter text positions, detect URLs
-	// Note: OCR bounds are normalized (0-1 range), so we multiply directly by displayed dimensions
-	const scaledPositions = useMemo<ScaledTextPositionWithUrl[]>(() => {
-		if (!displayedWidth || !displayedHeight) {
-			return [];
+	// Find all URLs across all text positions and compute their pixel positions
+	const urlLinks = useMemo<UrlLink[]>(() => {
+		if (!displayedWidth || !displayedHeight) return [];
+
+		const links: UrlLink[] = [];
+
+		for (const pos of textPositions) {
+			if (pos.confidence < minConfidence) continue;
+
+			// Scale the block's bounding box to display pixels
+			const blockLeft = pos.bounds.left * displayedWidth;
+			const blockTop = pos.bounds.top * displayedHeight;
+			const blockWidth = pos.bounds.width * displayedWidth;
+			const blockHeight = pos.bounds.height * displayedHeight;
+
+			// Skip off-screen or invalid blocks
+			if (
+				blockWidth <= 0 ||
+				blockHeight <= 0 ||
+				blockLeft < 0 ||
+				blockTop < 0 ||
+				blockLeft + blockWidth > displayedWidth + 1 ||
+				blockTop + blockHeight > displayedHeight + 1
+			) {
+				continue;
+			}
+
+			// First: check if the entire text is a URL
+			if (isUrl(pos.text)) {
+				links.push({
+					key: `${links.length}-${pos.text.slice(0, 20)}`,
+					normalizedUrl: normalizeUrl(pos.text),
+					displayUrl: pos.text,
+					left: blockLeft,
+					top: blockTop,
+					width: blockWidth,
+					height: blockHeight,
+				});
+				continue;
+			}
+
+			// Second: extract URLs embedded within the text
+			const extracted = extractUrlsFromText(pos.text);
+			for (const ext of extracted) {
+				const urlLeft = blockLeft + ext.startFraction * blockWidth;
+				const urlWidth = ext.widthFraction * blockWidth;
+
+				// Skip if the computed URL region is too small or off-screen
+				if (urlWidth < 10) continue;
+				if (urlLeft + urlWidth > displayedWidth + 1) continue;
+
+				links.push({
+					key: `${links.length}-${ext.url.slice(0, 20)}`,
+					normalizedUrl: ext.normalizedUrl,
+					displayUrl: ext.url,
+					left: urlLeft,
+					top: blockTop,
+					width: urlWidth,
+					height: blockHeight,
+				});
+			}
 		}
 
-		return textPositions
-			.filter((pos) => pos.confidence >= minConfidence)
-			.map((pos) => {
-				const textIsUrl = isUrl(pos.text);
-				return {
-					...pos,
-					scaledBounds: {
-						left: pos.bounds.left * displayedWidth,
-						top: pos.bounds.top * displayedHeight,
-						width: pos.bounds.width * displayedWidth,
-						height: pos.bounds.height * displayedHeight,
-					},
-					isUrl: textIsUrl,
-					normalizedUrl: textIsUrl ? normalizeUrl(pos.text) : undefined,
-				};
-			})
-			.filter(
-				(pos) =>
-					pos.scaledBounds.width > 0 &&
-					pos.scaledBounds.height > 0 &&
-					pos.scaledBounds.left >= 0 &&
-					pos.scaledBounds.top >= 0 &&
-					// Allow small overflow (1px tolerance) for rounding
-					pos.scaledBounds.left + pos.scaledBounds.width <=
-						displayedWidth + 1 &&
-					pos.scaledBounds.top + pos.scaledBounds.height <=
-						displayedHeight + 1
-			);
+		return links;
 	}, [textPositions, displayedWidth, displayedHeight, minConfidence]);
 
 	const handleUrlClick = useCallback(
@@ -156,19 +231,13 @@ export const TextOverlay = memo(function TextOverlay({
 				await shellOpen(url);
 			} catch (err) {
 				console.error("failed to open URL:", url, err);
-				// Fallback: try window.open
 				window.open(url, "_blank", "noopener,noreferrer");
 			}
 		},
 		[]
 	);
 
-	// Only render URLs (text selection is disabled for now)
-	const positionsToRender = scaledPositions.filter(
-		(pos) => pos.isUrl && pos.normalizedUrl
-	);
-
-	if (positionsToRender.length === 0) {
+	if (!clickableUrls || urlLinks.length === 0) {
 		return null;
 	}
 
@@ -181,33 +250,32 @@ export const TextOverlay = memo(function TextOverlay({
 				pointerEvents: "none",
 			}}
 		>
-			{positionsToRender.map((pos, index) => {
-				if (!clickableUrls || !pos.normalizedUrl) return null;
-
+			{urlLinks.map((link, index) => {
 				const isHovered = hoveredIndex === index;
 
-				// Enlarge the click target for small OCR boxes
-				const rawH = pos.scaledBounds.height;
+				// Enlarge click target for small OCR boxes
+				const rawH = link.height;
 				const targetH = Math.max(rawH, MIN_LINK_HEIGHT);
 				const extraY = (targetH - rawH) / 2;
-				const targetW = pos.scaledBounds.width + LINK_PADDING_X * 2;
+				const targetW = link.width + LINK_PADDING_X * 2;
 
 				return (
 					<a
-						key={`${index}-${pos.text.slice(0, 20)}`}
-						href={pos.normalizedUrl}
-						onClick={(e) => handleUrlClick(pos.normalizedUrl!, e)}
+						key={link.key}
+						href={link.normalizedUrl}
+						onClick={(e) =>
+							handleUrlClick(link.normalizedUrl, e)
+						}
 						onMouseEnter={() => setHoveredIndex(index)}
 						onMouseLeave={() => setHoveredIndex(null)}
 						className="absolute block"
 						style={{
-							left: pos.scaledBounds.left - LINK_PADDING_X,
-							top: pos.scaledBounds.top - extraY,
+							left: link.left - LINK_PADDING_X,
+							top: link.top - extraY,
 							width: targetW,
 							height: targetH,
 							cursor: "pointer",
 							pointerEvents: "auto",
-							// Visible underline always, highlight on hover
 							borderBottom: isHovered
 								? "2px solid rgba(96, 165, 250, 0.9)"
 								: "2px solid rgba(96, 165, 250, 0.45)",
@@ -217,7 +285,6 @@ export const TextOverlay = memo(function TextOverlay({
 							borderRadius: "2px",
 							transition:
 								"background-color 0.15s, border-color 0.15s",
-							// Debug mode
 							...(debug
 								? {
 										border: "1px solid rgba(59, 130, 246, 0.7)",
@@ -226,25 +293,26 @@ export const TextOverlay = memo(function TextOverlay({
 									}
 								: {}),
 						}}
-						title={`Open ${pos.normalizedUrl}`}
+						title={`Open ${link.normalizedUrl}`}
 						target="_blank"
 						rel="noopener noreferrer"
 					>
-						{/* Tooltip on hover showing the URL */}
 						{isHovered && (
 							<span
 								className="absolute left-0 whitespace-nowrap text-xs px-2 py-1 rounded shadow-lg border z-50"
 								style={{
 									bottom: targetH + 4,
-									backgroundColor: "rgba(0, 0, 0, 0.85)",
+									backgroundColor:
+										"rgba(0, 0, 0, 0.85)",
 									color: "rgba(96, 165, 250, 1)",
-									borderColor: "rgba(96, 165, 250, 0.3)",
+									borderColor:
+										"rgba(96, 165, 250, 0.3)",
 									maxWidth: "400px",
 									overflow: "hidden",
 									textOverflow: "ellipsis",
 								}}
 							>
-								{pos.normalizedUrl}
+								{link.normalizedUrl}
 							</span>
 						)}
 					</a>
@@ -272,7 +340,6 @@ interface TextOverlayWithImageProps {
 
 /**
  * A wrapper that renders TextOverlay positioned correctly relative to an image.
- * Use this when you have an image ref and want to overlay text on it.
  */
 export const TextOverlayForImage = memo(function TextOverlayForImage({
 	textPositions,
