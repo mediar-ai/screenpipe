@@ -17,69 +17,51 @@ export function FeedbackSection() {
         </p>
       </div>
 
-      <div className="space-y-6">
-        <div className="p-6 bg-card rounded-xl border border-border">
-          <div className="flex items-start gap-4 mb-6">
-            <div className="p-3 bg-primary/10 rounded-lg">
-              <MessageSquare className="h-6 w-6 text-primary" />
-            </div>
+      <div className="space-y-2">
+        <div className="px-3 py-2.5 bg-card rounded-lg border border-border">
+          <div className="flex items-center gap-2.5 mb-2.5">
+            <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold mb-1">Share Your Thoughts</h3>
-              <p className="text-sm text-muted-foreground">
-                Your feedback helps us make screenpipe better. Logs are automatically
-                included to help us diagnose any issues you&apos;re experiencing.
-              </p>
+              <h3 className="text-sm font-medium text-foreground">Share your thoughts</h3>
+              <p className="text-xs text-muted-foreground">Logs are included automatically</p>
             </div>
           </div>
-
           <ShareLogsButton showShareLink={true} />
         </div>
 
-        <div className="p-4 bg-muted/50 rounded-lg">
-          <p className="text-sm text-muted-foreground">
-            <strong>What gets sent:</strong> Your feedback message, app logs, system info
-            (OS version, app version), and any screenshots or recordings you choose to attach.
-            No personal screen content is sent unless you explicitly attach it.
-          </p>
-        </div>
-
-        <div className="p-6 bg-card rounded-xl border border-border">
-          <div className="flex items-start gap-4">
-            <div className="p-3 bg-primary/10 rounded-lg">
-              <Lightbulb className="h-6 w-6 text-primary" />
+        <div className="px-3 py-2.5 bg-card rounded-lg border border-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Lightbulb className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Feature ideas</h3>
+                <p className="text-xs text-muted-foreground">Vote or submit requests</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold mb-1">Feature Ideas</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Vote on existing ideas or submit your own feature requests.
-              </p>
-              <button
-                onClick={() => open("https://screenpi.pe/ideas")}
-                className="text-sm text-primary hover:underline"
-              >
-                screenpi.pe/ideas →
-              </button>
-            </div>
+            <button
+              onClick={() => open("https://screenpi.pe/ideas")}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              screenpi.pe/ideas →
+            </button>
           </div>
         </div>
 
-        <div className="p-6 bg-card rounded-xl border border-border">
-          <div className="flex items-start gap-4">
-            <div className="p-3 bg-primary/10 rounded-lg">
-              <Github className="h-6 w-6 text-primary" />
+        <div className="px-3 py-2.5 bg-card rounded-lg border border-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Github className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <h3 className="text-sm font-medium text-foreground">GitHub issues</h3>
+                <p className="text-xs text-muted-foreground">Bugs & technical issues</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold mb-1">GitHub Issues</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                For bugs or technical issues, you can open an issue on GitHub.
-              </p>
-              <button
-                onClick={() => open("https://github.com/screenpipe/screenpipe/issues")}
-                className="text-sm text-primary hover:underline"
-              >
-                github.com/screenpipe/screenpipe/issues →
-              </button>
-            </div>
+            <button
+              onClick={() => open("https://github.com/screenpipe/screenpipe/issues")}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Open →
+            </button>
           </div>
         </div>
       </div>

@@ -33,6 +33,7 @@ import {
   RefreshCw,
   Loader2,
   Globe,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -70,6 +71,7 @@ import { exists } from "@tauri-apps/plugin-fs";
 import { ToastAction } from "@/components/ui/toast";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Separator } from "@/components/ui/separator";
+import { Card, CardContent } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
@@ -767,983 +769,584 @@ export function RecordingSettings() {
       </div>
 
 
-      {/* Data Directory */}
       <div className="space-y-2">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Storage</h2>
-
-        {dataDirInputVisible ? (
-          <ValidatedInput
-            id="dataDir"
-            label="Data Directory Path"
-            value={settings.dataDir || ""}
-            onChange={handleDataDirInputChange}
-            validation={validateDataDirectory}
-            onBlur={() => {
-              setDataDirInputVisible(false);
-              validateDataDirInput();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setDataDirInputVisible(false);
-                validateDataDirInput();
-              }
-            }}
-            placeholder="Enter data directory path"
-            autoFocus={true}
-            required={true}
-          />
-        ) : (
-          <Button
-            variant="outline"
-            role="combobox"
-            className="w-full justify-between"
-            onClick={handleDataDirChange}
-          >
-            <div className="flex gap-4">
-              {settings.dataDir ? "Change directory" : "Select directory"}
-              <span className="text-muted-foreground">
-                {settings.dataDir || "Default directory"}
-              </span>
+      {/* Data Directory */}
+      <Card className="border-border bg-card">
+        <CardContent className="px-3 py-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <Folder className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Data directory</h3>
+                <p className="text-xs text-muted-foreground truncate max-w-[200px]">{settings.dataDir || "Default"}</p>
+              </div>
             </div>
-            <ChevronsUpDown className="h-4 w-4 opacity-50" />
-          </Button>
-        )}
-      </div>
-
-      {/* Rest of the existing UI sections remain the same but with improved validation feedback */}
-      
-      {/* Adaptive FPS Toggle */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <Label htmlFor="adaptiveFps" className="flex items-center space-x-2">
-            <span>Adaptive FPS</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>
-                    Automatically increase capture rate during mouse/keyboard activity
-                    (up to 5 FPS) and decrease during idle periods. Helps capture fast
-                    workflows without missing data.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <p className="text-sm text-muted-foreground">
-            Boost FPS during activity, reduce when idle
-          </p>
-        </div>
-        <Switch
-          id="adaptiveFps"
-          checked={settings.adaptiveFps}
-          onCheckedChange={(checked) =>
-            handleSettingsChange({ adaptiveFps: checked }, true)
-          }
-        />
-      </div>
-
-      {/* FPS Section - hidden when adaptive FPS is enabled */}
-      {!settings.adaptiveFps && (
-        <div className="flex flex-col space-y-2">
-          <Label htmlFor="fps" className="flex items-center space-x-2">
-            <span>Frames per second (FPS)</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>
-                    Adjust the recording frame rate. Lower values save resources,
-                    higher values provide smoother recordings and are less likely to miss activity.
-                    We optimize resource usage when your screen doesn&apos;t change much.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {validationErrors.fps && (
-              <AlertCircle className="h-4 w-4 text-destructive" />
+            {dataDirInputVisible ? (
+              <ValidatedInput
+                id="dataDir"
+                label=""
+                value={settings.dataDir || ""}
+                onChange={handleDataDirInputChange}
+                validation={validateDataDirectory}
+                onBlur={() => { setDataDirInputVisible(false); validateDataDirInput(); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { setDataDirInputVisible(false); validateDataDirInput(); } }}
+                placeholder="Path"
+                autoFocus={true}
+                required={true}
+              />
+            ) : (
+              <Button variant="outline" size="sm" onClick={handleDataDirChange} className="h-7 text-xs shrink-0">
+                Change
+              </Button>
             )}
-          </Label>
-          <div className="flex items-center space-x-4">
-            <Slider
-              id="fps"
-              min={0.1}
-              max={10}
-              step={0.1}
-              value={[settings.fps]}
-              onValueChange={handleFpsChange}
-              className="flex-grow"
-            />
-            <span className="w-12 text-right">
-              {settings.fps.toFixed(1)}
-            </span>
           </div>
-          {validationErrors.fps && (
-            <p className="text-sm text-destructive">{validationErrors.fps}</p>
-          )}
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
-      {/* Enhanced Audio Chunk Duration Section */}
-      <div className="flex flex-col space-y-2">
-        <Label
-          htmlFor="audioChunkDuration"
-          className="flex items-center space-x-2"
-        >
-          <span>Audio chunk duration (seconds)</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 cursor-default" />
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>
-                  Adjust the duration of each audio chunk. Shorter durations may lower
-                  resource usage spikes, while longer durations may increase transcription
-                  quality. Deepgram generally works better than Whisper for higher quality transcription.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          {validationErrors.audioChunkDuration && (
-            <AlertCircle className="h-4 w-4 text-destructive" />
+      {/* Adaptive FPS */}
+      <Card className="border-border bg-card">
+        <CardContent className="px-3 py-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Adaptive FPS</h3>
+                <p className="text-xs text-muted-foreground">Boost during activity, reduce when idle</p>
+              </div>
+            </div>
+            <Switch
+              id="adaptiveFps"
+              checked={settings.adaptiveFps}
+              onCheckedChange={(checked) => handleSettingsChange({ adaptiveFps: checked }, true)}
+            />
+          </div>
+          {!settings.adaptiveFps && (
+            <div className="flex items-center space-x-3 mt-2 ml-[26px]">
+              <Slider id="fps" min={0.1} max={10} step={0.1} value={[settings.fps]} onValueChange={handleFpsChange} className="flex-grow" />
+              <span className="text-xs text-muted-foreground w-12 text-right">{settings.fps.toFixed(1)} fps</span>
+            </div>
           )}
-        </Label>
-        <div className="flex items-center space-x-4">
-          <Slider
-            id="audioChunkDuration"
-            min={5}
-            max={3000}
-            step={1}
-            value={[settings.audioChunkDuration]}
-            onValueChange={handleAudioChunkDurationChange}
-            className="flex-grow"
-          />
-          <span className="w-12 text-right">
-            {settings.audioChunkDuration} s
-          </span>
-        </div>
-        {validationErrors.audioChunkDuration && (
-          <p className="text-sm text-destructive">{validationErrors.audioChunkDuration}</p>
-        )}
+        </CardContent>
+      </Card>
+
+      {/* Audio Chunk Duration */}
+      <Card className="border-border bg-card">
+        <CardContent className="px-3 py-2.5">
+          <div className="flex items-center space-x-2.5">
+            <Mic className="h-4 w-4 text-muted-foreground shrink-0" />
+            <h3 className="text-sm font-medium text-foreground">Audio chunk duration</h3>
+          </div>
+          <div className="flex items-center space-x-3 mt-2 ml-[26px]">
+            <Slider id="audioChunkDuration" min={5} max={3000} step={1} value={[settings.audioChunkDuration]} onValueChange={handleAudioChunkDurationChange} className="flex-grow" />
+            <span className="text-xs text-muted-foreground w-10 text-right">{settings.audioChunkDuration}s</span>
+          </div>
+        </CardContent>
+      </Card>
       </div>
 
       
 
-      {/* Audio Transcription Engine */}
-      <div className="flex flex-col space-y-2">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Audio Transcription</h2>
-        <div className="space-y-4">
-          {/* Screenpipe Cloud Subscription Status */}
-          {settings.user && (
-            <div className="flex items-center justify-between p-3 rounded-lg border bg-secondary/20 border-secondary/50">
-              <div className="flex items-center gap-2">
-                <div className={cn(
-                  "h-2 w-2 rounded-full",
-                  settings.user.cloud_subscribed ? "bg-foreground" : "bg-muted-foreground"
-                )} />
-                <span className="text-sm text-muted-foreground">
-                  Screenpipe Cloud: {settings.user.cloud_subscribed ? "Subscribed" : "Not subscribed"}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  disabled={isRefreshingSubscription}
-                  onClick={async () => {
-                    if (!settings.user?.token) return;
-                    setIsRefreshingSubscription(true);
-                    try {
-                      await loadUser(settings.user.token, true);
-                      toast({
-                        title: "Subscription status refreshed",
-                        description: settings.user.cloud_subscribed
-                          ? "Your subscription is active"
-                          : "Subscription status updated",
-                      });
-                    } catch (error) {
-                      toast({
-                        title: "Failed to refresh",
-                        description: "Please try again",
-                        variant: "destructive",
-                      });
-                    } finally {
-                      setIsRefreshingSubscription(false);
-                    }
-                  }}
-                >
-                  <RefreshCw className={cn("h-3 w-3", isRefreshingSubscription && "animate-spin")} />
+      {/* Audio */}
+      <div className="space-y-2 pt-2">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Audio</h2>
+
+        {/* Transcription Engine */}
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Mic className="h-4 w-4 text-muted-foreground shrink-0" />
+                <h3 className="text-sm font-medium text-foreground">Transcription engine</h3>
+              </div>
+              <Select
+                value={settings.audioTranscriptionEngine}
+                onValueChange={(value) => handleAudioTranscriptionModelChange(value)}
+              >
+                <SelectTrigger className="w-[200px] h-7 text-xs">
+                  <SelectValue placeholder="Select engine" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="screenpipe-cloud" disabled={!settings.user?.cloud_subscribed}>
+                    Screenpipe Cloud {!settings.user?.cloud_subscribed && "(pro)"}
+                  </SelectItem>
+                  <SelectItem value="whisper-tiny">Whisper Tiny</SelectItem>
+                  <SelectItem value="whisper-tiny-quantized">Whisper Tiny Quantized</SelectItem>
+                  <SelectItem value="whisper-large">Whisper Large V3</SelectItem>
+                  <SelectItem value="whisper-large-quantized">Whisper Large V3 Quantized</SelectItem>
+                  <SelectItem value="whisper-large-v3-turbo">Whisper Large V3 Turbo</SelectItem>
+                  <SelectItem value="whisper-large-v3-turbo-quantized">Whisper Large V3 Turbo Quantized</SelectItem>
+                  <SelectItem value="deepgram">Deepgram</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {settings.audioTranscriptionEngine === "deepgram" && (
+              <div className="mt-2 ml-[26px] relative">
+                <ValidatedInput
+                  id="deepgramApiKey"
+                  label=""
+                  type={showApiKey ? "text" : "password"}
+                  value={settings.deepgramApiKey || ""}
+                  onChange={handleDeepgramApiKeyChange}
+                  validation={validateDeepgramApiKey}
+                  placeholder="Deepgram API key"
+                  required={true}
+                  className="pr-8 h-7 text-xs"
+                />
+                <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-7 w-7" onClick={() => setShowApiKey(!showApiKey)}>
+                  {showApiKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                 </Button>
               </div>
-              {!settings.user.cloud_subscribed && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const clientRefId = `${settings.user?.id}&customer_email=${encodeURIComponent(settings.user?.email ?? "")}`;
-                    openUrl(`https://buy.stripe.com/9B63cv1cD1oG2Vjg097ss0G?client_reference_id=${clientRefId}`);
-                  }}
-                >
-                  Subscribe
-                </Button>
-              )}
-            </div>
-          )}
+            )}
+          </CardContent>
+        </Card>
 
-          <div className="flex flex-col space-y-2">
-            <Label htmlFor="audioTranscriptionEngine" className="flex items-center space-x-2">
-              <span>Audio transcription engine</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="h-4 w-4 cursor-default" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>
-                      Choose the transcription engine. Deepgram provides higher quality but requires an API key or screenpipe cloud.
-                      Whisper runs locally but may be slower.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <Select
-              value={settings.audioTranscriptionEngine}
-              onValueChange={(value) => handleAudioTranscriptionModelChange(value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select transcription engine" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="screenpipe-cloud" disabled={!settings.user?.cloud_subscribed}>
-                  Screenpipe Cloud {!settings.user?.cloud_subscribed && "(requires subscription)"}
-                </SelectItem>
-                <SelectItem value="whisper-tiny">Whisper Tiny</SelectItem>
-                <SelectItem value="whisper-tiny-quantized">Whisper Tiny Quantized</SelectItem>
-                <SelectItem value="whisper-large">Whisper Large V3</SelectItem>
-                <SelectItem value="whisper-large-quantized">Whisper Large V3 Quantized</SelectItem>
-                <SelectItem value="whisper-large-v3-turbo">Whisper Large V3 Turbo</SelectItem>
-                <SelectItem value="whisper-large-v3-turbo-quantized">Whisper Large V3 Turbo Quantized</SelectItem>
-                <SelectItem value="deepgram">Deepgram</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      
 
-          {/* Deepgram API Key - shown only when Deepgram is selected */}
-          {settings.audioTranscriptionEngine === "deepgram" && (
-            <div className="relative">
-              <ValidatedInput
-                id="deepgramApiKey"
-                label="Deepgram API Key"
-                type={showApiKey ? "text" : "password"}
-                value={settings.deepgramApiKey || ""}
-                onChange={handleDeepgramApiKeyChange}
-                validation={validateDeepgramApiKey}
-                placeholder="Enter your Deepgram API key"
-                required={true}
-                helperText="Get an API key from deepgram.com or use Screenpipe Cloud"
-                className="pr-10"
+        {/* System Default Audio */}
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Follow system default</h3>
+                  <p className="text-xs text-muted-foreground">Auto-switch when you change default device</p>
+                </div>
+              </div>
+              <Switch
+                id="useSystemDefaultAudio"
+                checked={settings.useSystemDefaultAudio ?? true}
+                onCheckedChange={(checked) => handleSettingsChange({ useSystemDefaultAudio: checked }, true)}
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-2 top-7 h-8 w-8"
-                onClick={() => setShowApiKey(!showApiKey)}
-              >
-                {showApiKey ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </Button>
             </div>
-          )}
+          </CardContent>
+        </Card>
 
-        </div>
-      </div>
-
-      
-
-      {/* Follow System Default Audio */}
-      <div className="flex flex-col space-y-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="useSystemDefaultAudio" className="flex items-center space-x-2">
-            <span>Follow system default</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>
-                    Automatically use system default audio devices. When you plug in a new microphone
-                    or change the default in System Settings, screenpipe will automatically switch to it.
-                    This handles device disconnects, sleep/wake, and app conflicts gracefully.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <Switch
-            id="useSystemDefaultAudio"
-            checked={settings.useSystemDefaultAudio ?? true}
-            onCheckedChange={(checked) =>
-              handleSettingsChange({ useSystemDefaultAudio: checked }, true)
-            }
-          />
-        </div>
-        {settings.useSystemDefaultAudio && (
-          <p className="text-sm text-muted-foreground">
-            Using system default input and output devices. Changes are detected automatically.
-          </p>
+        {/* Audio Devices */}
+        {!settings.useSystemDefaultAudio && (
+          <Card className="border-border bg-card">
+            <CardContent className="px-3 py-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <Mic className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <h3 className="text-sm font-medium text-foreground">Audio devices</h3>
+                </div>
+                <Popover open={openAudioDevices} onOpenChange={setOpenAudioDevices}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 text-xs">
+                      {settings.audioDevices.length > 0 ? `${settings.audioDevices.length} selected` : "Select..."}
+                      <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search devices..." />
+                      <CommandList>
+                        <CommandEmpty>No devices found.</CommandEmpty>
+                        <CommandGroup>
+                          {availableAudioDevices.map((device) => (
+                            <CommandItem key={device.name} value={device.name} onSelect={() => handleAudioDeviceChange(device.name)}>
+                              <Check className={cn("mr-2 h-3 w-3", settings.audioDevices.includes(device.name) ? "opacity-100" : "opacity-0")} />
+                              <span className="text-xs">{device.name}</span>
+                              {device.isDefault && <Badge variant="secondary" className="ml-1 text-[10px] h-4">Default</Badge>}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </CardContent>
+          </Card>
         )}
-      </div>
 
-      {/* Audio Devices */}
-      {!settings.useSystemDefaultAudio && (
-      <div className="flex flex-col space-y-2">
-        <Label htmlFor="audioDevices" className="flex items-center space-x-2">
-          <span>Audio devices</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 cursor-default" />
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>
-                  Select which audio devices to record from. You can select multiple devices.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </Label>
-        <Popover open={openAudioDevices} onOpenChange={setOpenAudioDevices}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={openAudioDevices}
-              className="w-full justify-between"
-            >
-              {settings.audioDevices.length > 0
-                ? `${settings.audioDevices.length} device(s) selected`
-                : "Select audio devices..."}
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-full p-0">
-            <Command>
-              <CommandInput placeholder="Search audio devices..." />
-              <CommandList>
-                <CommandEmpty>No audio devices found.</CommandEmpty>
-                <CommandGroup>
-                  {availableAudioDevices.map((device) => (
-                    <CommandItem
-                      key={device.name}
-                      value={device.name}
-                      onSelect={() => handleAudioDeviceChange(device.name)}
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          settings.audioDevices.includes(device.name)
-                            ? "opacity-100"
-                            : "opacity-0"
-                        )}
-                      />
-                      {device.name}
-                      {device.isDefault && (
-                        <Badge variant="secondary" className="ml-2">
-                          Default
-                        </Badge>
-                      )}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
-      )}
+        {/* Languages */}
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Languages className="h-4 w-4 text-muted-foreground shrink-0" />
+                <h3 className="text-sm font-medium text-foreground">Languages</h3>
+              </div>
+              <Popover open={openLanguages} onOpenChange={setOpenLanguages}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 text-xs">
+                    {settings.languages.length > 0 ? `${settings.languages.length} selected` : "Select..."}
+                    <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[250px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search languages..." />
+                    <CommandList>
+                      <CommandEmpty>No languages found.</CommandEmpty>
+                      <CommandGroup>
+                        {[
+                          { code: "english", name: "English" }, { code: "spanish", name: "Spanish" },
+                          { code: "french", name: "French" }, { code: "german", name: "German" },
+                          { code: "italian", name: "Italian" }, { code: "portuguese", name: "Portuguese" },
+                          { code: "russian", name: "Russian" }, { code: "japanese", name: "Japanese" },
+                          { code: "korean", name: "Korean" }, { code: "chinese", name: "Chinese" },
+                          { code: "arabic", name: "Arabic" }, { code: "hindi", name: "Hindi" },
+                          { code: "dutch", name: "Dutch" }, { code: "swedish", name: "Swedish" },
+                          { code: "indonesian", name: "Indonesian" }, { code: "finnish", name: "Finnish" },
+                          { code: "hebrew", name: "Hebrew" }, { code: "ukrainian", name: "Ukrainian" },
+                          { code: "greek", name: "Greek" }, { code: "malay", name: "Malay" },
+                          { code: "czech", name: "Czech" }, { code: "romanian", name: "Romanian" },
+                          { code: "danish", name: "Danish" }, { code: "hungarian", name: "Hungarian" },
+                          { code: "norwegian", name: "Norwegian" }, { code: "thai", name: "Thai" },
+                          { code: "urdu", name: "Urdu" }, { code: "croatian", name: "Croatian" },
+                          { code: "bulgarian", name: "Bulgarian" }, { code: "lithuanian", name: "Lithuanian" },
+                          { code: "latin", name: "Latin" }, { code: "welsh", name: "Welsh" },
+                          { code: "slovak", name: "Slovak" }, { code: "persian", name: "Persian" },
+                          { code: "latvian", name: "Latvian" }, { code: "bengali", name: "Bengali" },
+                          { code: "serbian", name: "Serbian" }, { code: "azerbaijani", name: "Azerbaijani" },
+                          { code: "slovenian", name: "Slovenian" }, { code: "estonian", name: "Estonian" },
+                          { code: "macedonian", name: "Macedonian" }, { code: "nepali", name: "Nepali" },
+                          { code: "mongolian", name: "Mongolian" }, { code: "bosnian", name: "Bosnian" },
+                          { code: "kazakh", name: "Kazakh" }, { code: "albanian", name: "Albanian" },
+                          { code: "swahili", name: "Swahili" }, { code: "galician", name: "Galician" },
+                          { code: "marathi", name: "Marathi" }, { code: "punjabi", name: "Punjabi" },
+                          { code: "sinhala", name: "Sinhala" }, { code: "khmer", name: "Khmer" },
+                          { code: "afrikaans", name: "Afrikaans" }, { code: "belarusian", name: "Belarusian" },
+                          { code: "gujarati", name: "Gujarati" }, { code: "amharic", name: "Amharic" },
+                          { code: "yiddish", name: "Yiddish" }, { code: "lao", name: "Lao" },
+                          { code: "uzbek", name: "Uzbek" }, { code: "faroese", name: "Faroese" },
+                          { code: "pashto", name: "Pashto" }, { code: "maltese", name: "Maltese" },
+                          { code: "sanskrit", name: "Sanskrit" }, { code: "luxembourgish", name: "Luxembourgish" },
+                          { code: "myanmar", name: "Myanmar" }, { code: "tibetan", name: "Tibetan" },
+                          { code: "tagalog", name: "Tagalog" }, { code: "assamese", name: "Assamese" },
+                          { code: "tatar", name: "Tatar" }, { code: "hausa", name: "Hausa" },
+                          { code: "javanese", name: "Javanese" }, { code: "turkish", name: "Turkish" },
+                          { code: "polish", name: "Polish" }, { code: "catalan", name: "Catalan" },
+                          { code: "malayalam", name: "Malayalam" },
+                        ].map((language) => (
+                          <CommandItem key={language.code} value={language.code} onSelect={() => handleLanguageChange(language.code as Language)}>
+                            <Check className={cn("mr-2 h-3 w-3", settings.languages.includes(language.code as Language) ? "opacity-100" : "opacity-0")} />
+                            <span className="text-xs">{language.name}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Languages */}
-      <div className="flex flex-col space-y-2">
-        <Label htmlFor="languages" className="flex items-center space-x-2">
-          <Languages className="h-4 w-4" />
-          <span>Languages</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 cursor-default" />
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>
-                  Select languages for audio transcription. Multiple languages can be selected.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </Label>
-        <Popover open={openLanguages} onOpenChange={setOpenLanguages}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={openLanguages}
-              className="w-full justify-between"
-            >
-              {settings.languages.length > 0
-                ? `${settings.languages.length} language(s) selected`
-                : "Select languages..."}
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-full p-0">
-            <Command>
-              <CommandInput placeholder="Search languages..." />
-              <CommandList>
-                <CommandEmpty>No languages found.</CommandEmpty>
-                <CommandGroup>
-                  {[
-                    { code: "english", name: "English" },
-                    { code: "spanish", name: "Spanish" },
-                    { code: "french", name: "French" },
-                    { code: "german", name: "German" },
-                    { code: "italian", name: "Italian" },
-                    { code: "portuguese", name: "Portuguese" },
-                    { code: "russian", name: "Russian" },
-                    { code: "japanese", name: "Japanese" },
-                    { code: "korean", name: "Korean" },
-                    { code: "chinese", name: "Chinese" },
-                    { code: "arabic", name: "Arabic" },
-                    { code: "hindi", name: "Hindi" },
-                    { code: "dutch", name: "Dutch" },
-                    { code: "swedish", name: "Swedish" },
-                    { code: "indonesian", name: "Indonesian" },
-                    { code: "finnish", name: "Finnish" },
-                    { code: "hebrew", name: "Hebrew" },
-                    { code: "ukrainian", name: "Ukrainian" },
-                    { code: "greek", name: "Greek" },
-                    { code: "malay", name: "Malay" },
-                    { code: "czech", name: "Czech" },
-                    { code: "romanian", name: "Romanian" },
-                    { code: "danish", name: "Danish" },
-                    { code: "hungarian", name: "Hungarian" },
-                    { code: "norwegian", name: "Norwegian" },
-                    { code: "thai", name: "Thai" },
-                    { code: "urdu", name: "Urdu" },
-                    { code: "croatian", name: "Croatian" },
-                    { code: "bulgarian", name: "Bulgarian" },
-                    { code: "lithuanian", name: "Lithuanian" },
-                    { code: "latin", name: "Latin" },
-                    { code: "welsh", name: "Welsh" },
-                    { code: "slovak", name: "Slovak" },
-                    { code: "persian", name: "Persian" },
-                    { code: "latvian", name: "Latvian" },
-                    { code: "bengali", name: "Bengali" },
-                    { code: "serbian", name: "Serbian" },
-                    { code: "azerbaijani", name: "Azerbaijani" },
-                    { code: "slovenian", name: "Slovenian" },
-                    { code: "estonian", name: "Estonian" },
-                    { code: "macedonian", name: "Macedonian" },
-                    { code: "nepali", name: "Nepali" },
-                    { code: "mongolian", name: "Mongolian" },
-                    { code: "bosnian", name: "Bosnian" },
-                    { code: "kazakh", name: "Kazakh" },
-                    { code: "albanian", name: "Albanian" },
-                    { code: "swahili", name: "Swahili" },
-                    { code: "galician", name: "Galician" },
-                    { code: "marathi", name: "Marathi" },
-                    { code: "punjabi", name: "Punjabi" },
-                    { code: "sinhala", name: "Sinhala" },
-                    { code: "khmer", name: "Khmer" },
-                    { code: "afrikaans", name: "Afrikaans" },
-                    { code: "belarusian", name: "Belarusian" },
-                    { code: "gujarati", name: "Gujarati" },
-                    { code: "amharic", name: "Amharic" },
-                    { code: "yiddish", name: "Yiddish" },
-                    { code: "lao", name: "Lao" },
-                    { code: "uzbek", name: "Uzbek" },
-                    { code: "faroese", name: "Faroese" },
-                    { code: "pashto", name: "Pashto" },
-                    { code: "maltese", name: "Maltese" },
-                    { code: "sanskrit", name: "Sanskrit" },
-                    { code: "luxembourgish", name: "Luxembourgish" },
-                    { code: "myanmar", name: "Myanmar" },
-                    { code: "tibetan", name: "Tibetan" },
-                    { code: "tagalog", name: "Tagalog" },
-                    { code: "assamese", name: "Assamese" },
-                    { code: "tatar", name: "Tatar" },
-                    { code: "hausa", name: "Hausa" },
-                    { code: "javanese", name: "Javanese" },
-                    { code: "turkish", name: "Turkish" },
-                    { code: "polish", name: "Polish" },
-                    { code: "catalan", name: "Catalan" },
-                    { code: "malayalam", name: "Malayalam" },
-                  ].map((language) => (
-                    <CommandItem
-                      key={language.code}
-                      value={language.code}
-                      onSelect={() => handleLanguageChange(language.code as Language)}
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          settings.languages.includes(language.code as Language)
-                            ? "opacity-100"
-                            : "opacity-0"
-                        )}
-                      />
-                      {language.name}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
+        {/* Disable Audio */}
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Mic className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Disable audio recording</h3>
+                  <p className="text-xs text-muted-foreground">Turn off audio completely</p>
+                </div>
+              </div>
+              <Switch id="disableAudio" checked={settings.disableAudio} onCheckedChange={handleDisableAudioChange} />
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Audio Settings Toggles */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <Label htmlFor="disableAudio">Disable audio recording</Label>
-            <p className="text-sm text-muted-foreground">
-              Turn off audio recording completely
-            </p>
-          </div>
-          <Switch
-            id="disableAudio"
-            checked={settings.disableAudio}
-            onCheckedChange={handleDisableAudioChange}
-          />
-        </div>
-
-      </div>
-
-      {/* VAD Sensitivity */}
-      <div className="flex flex-col space-y-2">
-        <Label htmlFor="vadSensitivity" className="flex items-center space-x-2">
-          <span>Voice activity detection sensitivity</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <HelpCircle className="h-4 w-4 cursor-default" />
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>
-                  Adjust how sensitive the voice activity detection is. Higher sensitivity
-                  may capture more audio but also more background noise.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </Label>
-        <div className="flex items-center space-x-4">
-          <Slider
-            id="vadSensitivity"
-            min={0}
-            max={2}
-            step={1}
-            value={[vadSensitivityToNumber(settings.vadSensitivity as VadSensitivity)]}
-            onValueChange={handleVadSensitivityChange}
-            className="flex-grow"
-          />
-          <span className="w-16 text-right capitalize">
-            {settings.vadSensitivity}
-          </span>
-        </div>
+        {/* VAD Sensitivity */}
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center space-x-2.5">
+              <Asterisk className="h-4 w-4 text-muted-foreground shrink-0" />
+              <h3 className="text-sm font-medium text-foreground">Voice detection sensitivity</h3>
+            </div>
+            <div className="flex items-center space-x-3 mt-2 ml-[26px]">
+              <Slider id="vadSensitivity" min={0} max={2} step={1} value={[vadSensitivityToNumber(settings.vadSensitivity as VadSensitivity)]} onValueChange={handleVadSensitivityChange} className="flex-grow" />
+              <span className="text-xs text-muted-foreground w-12 text-right capitalize">{settings.vadSensitivity}</span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       
 
-      {/* Video Settings */}
-      <div className="flex flex-col space-y-4">
+      {/* Video */}
+      <div className="space-y-2 pt-2">
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Video</h2>
 
-        {/* Monitor Selection - hidden when useAllMonitors is enabled */}
-        {!settings.useAllMonitors && (
-          <div className="flex flex-col space-y-2">
-            <Label htmlFor="monitors" className="flex items-center space-x-2">
-              <span>Monitors</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="h-4 w-4 cursor-default" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>
-                      Select which monitors to record from. Multiple monitors can be selected.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {/* Default Monitor Option */}
-              <div
-                className={cn(
-                  "flex items-center space-x-3 rounded-lg border p-3 cursor-pointer transition-colors",
-                  settings.monitorIds.includes("default")
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:bg-accent"
-                )}
-                onClick={() => {
-                  const isDefaultSelected = settings.monitorIds.includes("default");
-                  if (isDefaultSelected) {
-                    // Remove default selection
-                    handleSettingsChange({
-                      monitorIds: settings.monitorIds.filter(id => id !== "default")
-                    }, true);
-                  } else {
-                    // Select default (clear other selections and add default)
-                    handleSettingsChange({ monitorIds: ["default"] }, true);
-                  }
-                }}
-              >
-                <div className="flex-1">
-                  <p className="font-medium">Default Monitor</p>
-                  <p className="text-sm text-muted-foreground">
-                    Automatically use the system&apos;s default monitor
-                  </p>
+        {/* Disable Screen Recording */}
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Disable screen recording</h3>
+                  <p className="text-xs text-muted-foreground">Turn off screen capture completely</p>
                 </div>
-                <Check
-                  className={cn(
-                    "h-4 w-4",
-                    settings.monitorIds.includes("default")
-                      ? "opacity-100"
-                      : "opacity-0"
-                  )}
-                />
               </div>
+              <Switch id="disableVision" checked={settings.disableVision} onCheckedChange={(checked) => handleSettingsChange({ disableVision: checked }, true)} />
+            </div>
+          </CardContent>
+        </Card>
 
-              {availableMonitors.map((monitor) => (
+        {/* Use All Monitors */}
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Use all monitors</h3>
+                  <p className="text-xs text-muted-foreground">Record from all available monitors</p>
+                </div>
+              </div>
+              <Switch id="useAllMonitors" checked={settings.useAllMonitors} onCheckedChange={(checked) => handleSettingsChange({ useAllMonitors: checked }, true)} />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Monitor Selection */}
+        {!settings.useAllMonitors && (
+          <Card className="border-border bg-card">
+            <CardContent className="px-3 py-2.5">
+              <div className="flex items-center space-x-2.5 mb-2">
+                <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
+                <h3 className="text-sm font-medium text-foreground">Monitors</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 ml-[26px]">
                 <div
-                  key={monitor.id}
                   className={cn(
-                    "flex items-center space-x-3 rounded-lg border p-3 cursor-pointer transition-colors",
-                    settings.monitorIds.includes(monitor.id.toString())
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:bg-accent"
+                    "flex items-center justify-between rounded-md border px-2.5 py-1.5 cursor-pointer transition-colors text-xs",
+                    settings.monitorIds.includes("default") ? "border-foreground bg-foreground/5" : "border-border hover:bg-accent"
                   )}
                   onClick={() => {
-                    const currentIds = settings.monitorIds.filter(id => id !== "default"); // Remove default when selecting specific monitors
-                    const monitorId = monitor.id.toString();
-                    const updatedIds = currentIds.includes(monitorId)
-                      ? currentIds.filter(id => id !== monitorId)
-                      : [...currentIds, monitorId];
-
-                    handleSettingsChange({ monitorIds: updatedIds }, true);
+                    const isDefaultSelected = settings.monitorIds.includes("default");
+                    if (isDefaultSelected) { handleSettingsChange({ monitorIds: settings.monitorIds.filter(id => id !== "default") }, true); }
+                    else { handleSettingsChange({ monitorIds: ["default"] }, true); }
                   }}
                 >
-                  <div className="flex-1">
-                    <p className="font-medium">{monitor.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {monitor.width}x{monitor.height}
-                      {monitor.isDefault && " (Default)"}
-                    </p>
-                  </div>
-                  <Check
-                    className={cn(
-                      "h-4 w-4",
-                      settings.monitorIds.includes(monitor.id.toString())
-                        ? "opacity-100"
-                        : "opacity-0"
-                    )}
-                  />
+                  <span>Default</span>
+                  <Check className={cn("h-3 w-3", settings.monitorIds.includes("default") ? "opacity-100" : "opacity-0")} />
                 </div>
-              ))}
-            </div>
-          </div>
+                {availableMonitors.map((monitor) => (
+                  <div
+                    key={monitor.id}
+                    className={cn(
+                      "flex items-center justify-between rounded-md border px-2.5 py-1.5 cursor-pointer transition-colors text-xs",
+                      settings.monitorIds.includes(monitor.id.toString()) ? "border-foreground bg-foreground/5" : "border-border hover:bg-accent"
+                    )}
+                    onClick={() => {
+                      const currentIds = settings.monitorIds.filter(id => id !== "default");
+                      const monitorId = monitor.id.toString();
+                      const updatedIds = currentIds.includes(monitorId) ? currentIds.filter(id => id !== monitorId) : [...currentIds, monitorId];
+                      handleSettingsChange({ monitorIds: updatedIds }, true);
+                    }}
+                  >
+                    <span>{monitor.name} <span className="text-muted-foreground">{monitor.width}x{monitor.height}</span></span>
+                    <Check className={cn("h-3 w-3", settings.monitorIds.includes(monitor.id.toString()) ? "opacity-100" : "opacity-0")} />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* OCR Engine */}
-        <div className="flex flex-col space-y-2">
-          <Label htmlFor="ocrEngine" className="flex items-center space-x-2">
-            <span>OCR engine</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>
-                    OCR (Optical Character Recognition) engine for extracting text from images.
-                    Platform-optimized engine is automatically selected.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <Select
-            value={settings.ocrEngine}
-            onValueChange={handleOcrModelChange}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select OCR engine" />
-            </SelectTrigger>
-            <SelectContent>
-              {isMacOS && <SelectItem value="apple-native">Apple Native</SelectItem>}
-              {!isMacOS && platform() === "windows" && <SelectItem value="windows-native">Windows Native</SelectItem>}
-              {!isMacOS && platform() !== "windows" && <SelectItem value="tesseract">Tesseract</SelectItem>}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Video Settings Toggles */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="disableVision">Disable screen recording</Label>
-              <p className="text-sm text-muted-foreground">
-                Turn off screen recording completely
-              </p>
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
+                <h3 className="text-sm font-medium text-foreground">OCR engine</h3>
+              </div>
+              <Select value={settings.ocrEngine} onValueChange={handleOcrModelChange}>
+                <SelectTrigger className="w-[160px] h-7 text-xs">
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  {isMacOS && <SelectItem value="apple-native">Apple Native</SelectItem>}
+                  {!isMacOS && platform() === "windows" && <SelectItem value="windows-native">Windows Native</SelectItem>}
+                  {!isMacOS && platform() !== "windows" && <SelectItem value="tesseract">Tesseract</SelectItem>}
+                </SelectContent>
+              </Select>
             </div>
-            <Switch
-              id="disableVision"
-              checked={settings.disableVision}
-              onCheckedChange={(checked) =>
-                handleSettingsChange({ disableVision: checked }, true)
-              }
-            />
-          </div>
+          </CardContent>
+        </Card>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="useAllMonitors">Use all monitors</Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically record from all available monitors
-              </p>
+        {/* PII Removal */}
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">PII removal</h3>
+                  <p className="text-xs text-muted-foreground">Redact emails, phones, SSNs, credit cards</p>
+                </div>
+              </div>
+              <Switch id="usePiiRemoval" checked={settings.usePiiRemoval} onCheckedChange={handlePiiRemovalChange} />
             </div>
-            <Switch
-              id="useAllMonitors"
-              checked={settings.useAllMonitors}
-              onCheckedChange={(checked) =>
-                handleSettingsChange({ useAllMonitors: checked }, true)
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="usePiiRemoval">PII removal (recommended)</Label>
-              <p className="text-sm text-muted-foreground">
-                Redact sensitive data from OCR and audio: emails, phones, SSNs, credit cards, IP addresses, API keys
-              </p>
-            </div>
-            <Switch
-              id="usePiiRemoval"
-              checked={settings.usePiiRemoval}
-              onCheckedChange={handlePiiRemovalChange}
-            />
-          </div>
-
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       
 
-      {/* UI Events (Accessibility) - macOS and Windows */}
+      {/* UI Events */}
       {(isMacOS || platform() === "windows") && (
-        <div className="space-y-4">
+        <div className="space-y-2 pt-2">
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">UI Events</h2>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="enableUiEvents" className="flex items-center space-x-2">
-                <span>Enable UI event capture</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-xs">
-                      <p>
-                        Capture keyboard shortcuts, mouse clicks, and clipboard activity.
-                        {isMacOS && " Requires Accessibility and Input Monitoring permissions in System Settings."}
-                        {platform() === "windows" && " Uses Windows UI Automation for context capture."}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Track keyboard, mouse, and clipboard events for enhanced context
-              </p>
-            </div>
-            <Switch
-              id="enableUiEvents"
-              checked={settings.enableUiEvents ?? false}
-              onCheckedChange={(checked) =>
-                handleSettingsChange({ enableUiEvents: checked }, true)
-              }
-            />
-          </div>
+          <Card className="border-border bg-card">
+            <CardContent className="px-3 py-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <Key className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">UI event capture</h3>
+                    <p className="text-xs text-muted-foreground">Keyboard, mouse, and clipboard events</p>
+                  </div>
+                </div>
+                <Switch
+                  id="enableUiEvents"
+                  checked={settings.enableUiEvents ?? false}
+                  onCheckedChange={(checked) => handleSettingsChange({ enableUiEvents: checked }, true)}
+                />
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
       
 
       {/* Window Filtering */}
-      <div className="space-y-4">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Window Filtering</h2>
+      <div className="space-y-2 pt-2">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Filtering</h2>
 
-        <div className="flex flex-col space-y-2">
-          <Label htmlFor="ignoredWindows" className="flex items-center space-x-2">
-            <span>Ignored windows</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>
-                    Windows that will be excluded from recording. Useful for privacy or reducing noise.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <MultiSelect
-            options={createWindowOptions(windowItems || [], settings.ignoredWindows)}
-            defaultValue={settings.ignoredWindows}
-            value={settings.ignoredWindows}
-            onValueChange={handleIgnoredWindowsChange}
-            placeholder="Select windows to ignore..."
-          />
-        </div>
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center space-x-2.5 mb-2">
+              <AppWindowMac className="h-4 w-4 text-muted-foreground shrink-0" />
+              <h3 className="text-sm font-medium text-foreground">Ignored windows</h3>
+            </div>
+            <div className="ml-[26px]">
+              <MultiSelect
+                options={createWindowOptions(windowItems || [], settings.ignoredWindows)}
+                defaultValue={settings.ignoredWindows}
+                value={settings.ignoredWindows}
+                onValueChange={handleIgnoredWindowsChange}
+                placeholder="Select windows to ignore..."
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="flex flex-col space-y-2">
-          <Label htmlFor="includedWindows" className="flex items-center space-x-2">
-            <span>Included windows (whitelist)</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>
-                    Only these windows will be recorded. Leave empty to record all windows except ignored ones.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <MultiSelect
-            options={createWindowOptions(windowItems || [], settings.includedWindows)}
-            defaultValue={settings.includedWindows}
-            value={settings.includedWindows}
-            onValueChange={handleIncludedWindowsChange}
-            placeholder="Select windows to include (optional)..."
-          />
-        </div>
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center space-x-2.5 mb-2">
+              <AppWindowMac className="h-4 w-4 text-muted-foreground shrink-0" />
+              <h3 className="text-sm font-medium text-foreground">Included windows</h3>
+            </div>
+            <div className="ml-[26px]">
+              <MultiSelect
+                options={createWindowOptions(windowItems || [], settings.includedWindows)}
+                defaultValue={settings.includedWindows}
+                value={settings.includedWindows}
+                onValueChange={handleIncludedWindowsChange}
+                placeholder="Whitelist (optional)..."
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="flex flex-col space-y-2">
-          <Label htmlFor="ignoredUrls" className="flex items-center space-x-2">
-            <span>Ignored URLs (privacy)</span>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <HelpCircle className="h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-xs">
-                  <p className="font-semibold mb-1">Block browser URLs from recording</p>
-                  <p className="text-xs mb-2">
-                    Use domain patterns like "wellsfargo.com" or "chase.com".
-                    Works best with the active browser tab. For background tabs,
-                    we also check window titles as a fallback.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Tip: Use specific domains, not generic words like "bank" which may over-match.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <MultiSelect
-            options={createUrlOptions(urlItems || [], settings.ignoredUrls || [])}
-            defaultValue={settings.ignoredUrls || []}
-            value={settings.ignoredUrls || []}
-            onValueChange={handleIgnoredUrlsChange}
-            placeholder="Type domain patterns (e.g., wellsfargo.com, chase.com)..."
-            allowCustomValues={true}
-          />
-          {(settings.ignoredUrls || []).some((url) =>
-            url.length < 5 || ['bank', 'pay', 'money', 'finance'].includes(url.toLowerCase())
-          ) && (
-            <p className="text-xs text-yellow-600 dark:text-yellow-500 flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
-              Short or generic patterns may block unintended sites. Use specific domains.
-            </p>
-          )}
-        </div>
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center space-x-2.5 mb-2">
+              <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+              <h3 className="text-sm font-medium text-foreground">Ignored URLs</h3>
+            </div>
+            <div className="ml-[26px]">
+              <MultiSelect
+                options={createUrlOptions(urlItems || [], settings.ignoredUrls || [])}
+                defaultValue={settings.ignoredUrls || []}
+                value={settings.ignoredUrls || []}
+                onValueChange={handleIgnoredUrlsChange}
+                placeholder="e.g. wellsfargo.com, chase.com..."
+                allowCustomValues={true}
+              />
+              {(settings.ignoredUrls || []).some((url) =>
+                url.length < 5 || ['bank', 'pay', 'money', 'finance'].includes(url.toLowerCase())
+              ) && (
+                <p className="text-xs text-yellow-600 dark:text-yellow-500 flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Short patterns may over-match. Use specific domains.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       
 
-      {/* System Settings */}
-      <div className="space-y-4">
+      {/* System */}
+      <div className="space-y-2 pt-2">
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">System</h2>
 
-        {/* Port Configuration */}
-        <ValidatedInput
-          id="port"
-          label="Server Port"
-          type="number"
-          value={settings.port.toString()}
-          onChange={(value, isValid) => {
-            const portValue = parseInt(value) || 3030;
-            handleSettingsChange({ port: portValue }, true);
-          }}
-          validation={(value) => validateField("port", parseInt(value) || 0)}
-          placeholder="Enter server port"
-          required={true}
-          helperText="Port for the Screenpipe server (requires restart)"
-        />
-
-
-        {/* System Toggles */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="analyticsEnabled">Enable analytics</Label>
-              <p className="text-sm text-muted-foreground">
-                Help improve Screenpipe by sharing anonymous usage data and error reports
-              </p>
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Terminal className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Server port</h3>
+                  <p className="text-xs text-muted-foreground">Requires restart</p>
+                </div>
+              </div>
+              <Input
+                id="port"
+                type="number"
+                value={settings.port}
+                onChange={(e) => {
+                  const portValue = parseInt(e.target.value) || 3030;
+                  handleSettingsChange({ port: portValue }, true);
+                }}
+                className="w-20 h-7 text-xs text-right"
+              />
             </div>
-            <Switch
-              id="analyticsEnabled"
-              checked={settings.analyticsEnabled}
-              onCheckedChange={handleAnalyticsToggle}
-            />
-          </div>
+          </CardContent>
+        </Card>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="useChineseMirror">Use Chinese mirror</Label>
-              <p className="text-sm text-muted-foreground">
-                Use Chinese mirror for downloads (for users in China)
-              </p>
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Analytics</h3>
+                  <p className="text-xs text-muted-foreground">Anonymous usage data</p>
+                </div>
+              </div>
+              <Switch id="analyticsEnabled" checked={settings.analyticsEnabled} onCheckedChange={handleAnalyticsToggle} />
             </div>
-            <Switch
-              id="useChineseMirror"
-              checked={settings.useChineseMirror}
-              onCheckedChange={handleChineseMirrorToggle}
-            />
-          </div>
+          </CardContent>
+        </Card>
 
-        </div>
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Chinese mirror</h3>
+                  <p className="text-xs text-muted-foreground">For users in China</p>
+                </div>
+              </div>
+              <Switch id="useChineseMirror" checked={settings.useChineseMirror} onCheckedChange={handleChineseMirrorToggle} />
+            </div>
+          </CardContent>
+        </Card>
       </div>
-
-      {/* Bottom spacer */}
-      <div className="h-4" />
     </div>
   );
 }

@@ -207,15 +207,15 @@ export function ConnectionsSection() {
         </p>
       </div>
 
-      <div className="space-y-6">
-        <Card className="border-border bg-card shadow-sm overflow-hidden">
+      <div className="space-y-2">
+        <Card className="border-border bg-card overflow-hidden">
           <CardContent className="p-0">
-            <div className="flex items-start p-6 gap-6">
+            <div className="flex items-start p-4 gap-4">
               {/* Claude Logo */}
               <div className="flex-shrink-0">
                 <svg
-                  width="64"
-                  height="64"
+                  width="40"
+                  height="40"
                   viewBox="0 0 512 509.64"
                   xmlns="http://www.w3.org/2000/svg"
                   className="rounded-2xl"
@@ -227,8 +227,8 @@ export function ConnectionsSection() {
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-xl font-semibold text-foreground">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Claude Desktop
                   </h3>
                   <span className="px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground rounded-full">
@@ -245,16 +245,16 @@ export function ConnectionsSection() {
                     </span>
                   )}
                 </div>
-                <p className="text-muted-foreground mb-4">
-                  Connect Screenpipe to Claude Desktop to search your screen recordings
-                  and audio transcriptions using natural language.
+                <p className="text-xs text-muted-foreground mb-3">
+                  Search your screen recordings and audio with natural language.
                 </p>
 
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={handleClaudeConnect}
                     disabled={downloadState === "downloading"}
-                    className="gap-2"
+                    size="sm"
+                    className="gap-1.5 h-7 text-xs"
                   >
                     {downloadState === "downloading" ? (
                       <>
@@ -277,9 +277,10 @@ export function ConnectionsSection() {
                   <Button
                     variant="outline"
                     onClick={openClaudeDesktop}
-                    className="gap-2"
+                    size="sm"
+                    className="gap-1.5 h-7 text-xs"
                   >
-                    <ExternalLink className="h-4 w-4" />
+                    <ExternalLink className="h-3 w-3" />
                     Open Claude
                   </Button>
                 </div>
@@ -288,9 +289,9 @@ export function ConnectionsSection() {
 
             {/* Success message */}
             {downloadState === "downloaded" && (
-              <div className="px-6 pb-6">
-                <div className="p-4 bg-muted border border-border rounded-lg">
-                  <p className="text-sm text-foreground">
+              <div className="px-4 pb-4">
+                <div className="p-3 bg-muted border border-border rounded-lg">
+                  <p className="text-xs text-foreground">
                     <strong>Screenpipe is now connected to Claude!</strong> Try asking Claude:
                     &quot;What did I do in the last 5 minutes?&quot; or &quot;Search my screen for meetings today&quot;
                   </p>
@@ -304,8 +305,8 @@ export function ConnectionsSection() {
         <ObsidianSyncCard />
 
         {/* Learn & Build section */}
-        <div className="space-y-3">
-          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+        <div className="space-y-2">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
             Learn & Build
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
