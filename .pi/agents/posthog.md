@@ -178,6 +178,51 @@ for row in r.get('results',[]):
 "
 ```
 
+### 9. Purchase Conversion Funnel (Revenue)
+
+The full purchase funnel, from pricing page to completed payment:
+
+```bash
+source /Users/louisbeaumont/Documents/screenpipe/.env.local
+echo "=== PURCHASE FUNNEL (last 7 days) ==="
+for event in "pricing_page_viewed" "checkout_email_requested" "stripe_checkout_initiated" "purchase_completed" "purchase_success_page_viewed"; do
+  result=$(curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+    -d "{\"query\":{\"kind\":\"HogQLQuery\",\"query\":\"SELECT uniq(distinct_id) FROM events WHERE event = '${event}' AND timestamp > now() - INTERVAL 7 DAY\"}}" \
+    "https://eu.i.posthog.com/api/projects/27525/query/" | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0][0])")
+  printf "  %-35s %5s users\n" "$event" "$result"
+done
+```
+
+For daily conversion trend:
+
+```bash
+source /Users/louisbeaumont/Documents/screenpipe/.env.local
+echo "=== DAILY CONVERSION (last 14 days) ==="
+for event in "checkout_email_requested" "stripe_checkout_initiated" "purchase_completed"; do
+  echo "--- $event ---"
+  curl -s -X POST -H "Authorization: Bearer $POSTHOG_API_KEY" -H "Content-Type: application/json" \
+    -d "{\"query\":{\"kind\":\"HogQLQuery\",\"query\":\"SELECT toDate(timestamp) as day, uniq(distinct_id) as users FROM events WHERE event = '${event}' AND timestamp > now() - INTERVAL 14 DAY GROUP BY day ORDER BY day\"}}" \
+    "https://eu.i.posthog.com/api/projects/27525/query/" | \
+    python3 -c "
+import sys,json
+for row in json.load(sys.stdin).get('results',[]):
+    print(f'  {row[0]}: {row[1]}')" 2>/dev/null
+done
+```
+
+**Funnel events (in order):**
+
+| Event | Source | What It Means |
+|-------|--------|---------------|
+| `pricing_page_viewed` | Website (`PricingSection`) | Saw the pricing page |
+| `checkout_email_requested` | Website (`PricingSection`) | Clicked buy, email modal shown |
+| `stripe_checkout_initiated` | Website (`PricingSection`) | Submitted email, redirected to Stripe |
+| `purchase_completed` | Stripe webhook (server-side) | **Payment succeeded** — the real conversion |
+| `purchase_success_page_viewed` | Website (success page) | Landed on download page after payment |
+
+⚠️ `purchase_completed` was added Feb 4, 2026. No historical data before that date.
+⚠️ `pricing_page_viewed` fires from both `screenpi.pe/onboarding` AND `rewind.sh` — filter by `$current_url` if needed.
+
 ---
 
 ## Event Source Reference
@@ -210,6 +255,22 @@ These fire from the frontend via `posthog.capture()`:
 `app_started`, `app_login`, `shortcut_used`, `shortcut_reminder_shown`, `shortcut_reminder_dismissed`, `permission_lost`, `permission_recovery_manual_fix`, `permission_recovery_reset_fix`, `pipe_install`, `pipe_purchase`, `cloud_plan_selected`, `telemetry`
 
 ⏳ = Added recently, may not be in released builds yet. Check version distribution before relying on these.
+
+### Website (screenpi.pe + rewind.sh)
+These fire from the Next.js website, tagged `$lib: web`:
+
+**Purchase funnel (in order):**
+| Event | Where | Notes |
+|-------|-------|-------|
+| `pricing_page_viewed` | `PricingSection` component | Fires on `/onboarding` and `/rewind` |
+| `pricing_cta_clicked` | `/onboarding` page | New subscription page CTA (if re-enabled) |
+| `checkout_email_requested` | `PricingSection` | User clicked buy, email modal shown |
+| `stripe_checkout_initiated` | `PricingSection` | Submitted email, going to Stripe |
+| `checkout_started` | `/onboarding` subscription flow | New subscription checkout (if re-enabled) |
+| `purchase_completed` | Stripe webhook (`$lib: stripe-webhook`) | **Payment succeeded.** Has `amount`, `currency`, `product_id`, `purchase_type`, `origin`. Added Feb 4 2026. |
+| `purchase_success_page_viewed` | `/purchase-success` page | Client-side backup — landed on download page |
+| `subscription_success_page_viewed` | `/subscription-success` page | Subscription flow success page |
+| `get-it-free` | `PricingSection` | Clicked "build it yourself" |
 
 ---
 
