@@ -5,7 +5,7 @@ pub mod text_similarity;
 mod types;
 mod video_db;
 
-pub use db::{parse_all_text_positions, DatabaseManager};
+pub use db::{parse_all_text_positions, DatabaseManager, ImmediateTx};
 pub use migration_worker::{
     create_migration_worker, MigrationCommand, MigrationConfig, MigrationResponse, MigrationStatus,
     MigrationWorker,

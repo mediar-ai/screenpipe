@@ -505,29 +505,10 @@ async fn migrate_ocr_data_to_frames(
 
 /// Process a batch of records
 async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Result<(i64, i64)> {
-    // Use BEGIN IMMEDIATE to avoid WAL deadlocks with DEFERRED transactions
-    let max_retries = 5;
-    let mut conn = pool.acquire().await?;
-    for attempt in 1..=max_retries {
-        match sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await {
-            Ok(_) => break,
-            Err(e) if attempt < max_retries => {
-                let msg = e.to_string().to_lowercase();
-                if msg.contains("database is locked") || msg.contains("busy") {
-                    tracing::warn!(
-                        "Migration batch BEGIN IMMEDIATE busy (attempt {}/{}), retrying...",
-                        attempt, max_retries
-                    );
-                    drop(conn);
-                    tokio::time::sleep(std::time::Duration::from_millis(100 * attempt as u64)).await;
-                    conn = pool.acquire().await?;
-                } else {
-                    return Err(e.into());
-                }
-            }
-            Err(e) => return Err(e.into()),
-        }
-    }
+    // Use a temporary DatabaseManager to get ImmediateTx with auto-rollback
+    use crate::DatabaseManager;
+    let db = DatabaseManager { pool: pool.clone() };
+    let mut tx = db.begin_immediate_with_retry().await?;
 
     // Query to get a batch of records with unique frame_ids that need migration
     let records = sqlx::query(
@@ -551,7 +532,7 @@ async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Resu
     )
     .bind(last_id)
     .bind(batch_size)
-    .fetch_all(&mut *conn)
+    .fetch_all(&mut **tx.conn())
     .await?;
 
     let mut count = 0;
@@ -578,15 +559,15 @@ async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Resu
         .bind(window_name)
         .bind(focused)
         .bind(frame_id)
-        .execute(&mut *conn)
+        .execute(&mut **tx.conn())
         .await?;
 
         count += 1;
         max_id = std::cmp::max(max_id, frame_id);
     }
 
-    // Commit the transaction
-    sqlx::query("COMMIT").execute(&mut *conn).await?;
+    // Commit the transaction (auto-rollback on drop if this fails)
+    tx.commit().await?;
 
     debug!("Processed batch: {} records, max_id={}", count, max_id);
 
