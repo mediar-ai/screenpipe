@@ -6,6 +6,7 @@ import { ZoomIn, ZoomOut, Mic } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import posthog from "posthog-js";
 import { cn } from "@/lib/utils";
+import { AppContextPopover } from "./app-context-popover";
 
 interface TimelineSliderProps {
 	frames: StreamTimeSeriesResponse[];
@@ -142,6 +143,9 @@ export const TimelineSlider = ({
 		new Set(),
 	);
 	const { setSelectionRange, selectionRange } = useTimelineSelection();
+
+	// App context popover state
+	const [activePopoverGroup, setActivePopoverGroup] = useState<number | null>(null);
 
 	// Zoom state: 1 = normal, >1 = zoomed in, <1 = zoomed out
 	// Range: 0.25 (very zoomed out) to 4 (very zoomed in)
@@ -445,6 +449,7 @@ export const TimelineSlider = ({
 		setIsDragging(true);
 		setDragStartIndex(index);
 		setHasDragMoved(false); // Reset movement tracking
+		setActivePopoverGroup(null); // Close popover when interacting with frames
 		// Don't set selection immediately - wait for movement
 	};
 
@@ -587,13 +592,19 @@ export const TimelineSlider = ({
 									// borderLeft removed — caused visible white lines between groups
 								}}
 							>
-								{/* Vertical stacked app icons - max 2 icons, hover to expand */}
+								{/* Vertical stacked app icons - click for context popover */}
 								{groupWidth > 30 && (
 									<motion.div
 										className="absolute top-1 left-1/2 -translate-x-1/2 z-10 flex flex-col cursor-pointer"
 										style={{ direction: 'ltr' }}
 										whileHover="expanded"
 										initial="collapsed"
+										onClick={(e) => {
+											e.stopPropagation();
+											setActivePopoverGroup(
+												activePopoverGroup === groupIndex ? null : groupIndex
+											);
+										}}
 									>
 										{group.appNames.slice(0, 2).map((appName, idx) => (
 											<motion.div
@@ -616,6 +627,15 @@ export const TimelineSlider = ({
 											</motion.div>
 										))}
 									</motion.div>
+								)}
+
+								{/* App context popover */}
+								{activePopoverGroup === groupIndex && (
+									<AppContextPopover
+										appName={group.appName}
+										frames={group.frames}
+										onClose={() => setActivePopoverGroup(null)}
+									/>
 								)}
 
 								{group.frames.map((frame, frameIdx) => {
