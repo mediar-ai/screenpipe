@@ -91,6 +91,135 @@ use base64::Engine;
 use health::start_health_check;
 use window_api::RewindWindowId;
 
+/// Setup macOS dock right-click menu as fallback for when tray icon is
+/// hidden behind the MacBook Pro notch.
+#[cfg(target_os = "macos")]
+fn setup_dock_menu(app_handle: AppHandle) {
+    use cocoa::base::{id, nil, NO};
+    use cocoa::foundation::{NSAutoreleasePool, NSString};
+    use objc::{class, msg_send, sel, sel_impl};
+    use objc::runtime::{Object, Sel};
+
+    unsafe {
+        // Store app handle in a global so the dock menu callbacks can use it
+        static mut DOCK_APP_HANDLE: Option<AppHandle> = None;
+        DOCK_APP_HANDLE = Some(app_handle);
+
+        // Callback functions for dock menu items
+        extern "C" fn show_screenpipe(_this: &Object, _sel: Sel, _sender: id) {
+            unsafe {
+                if let Some(ref app) = DOCK_APP_HANDLE {
+                    show_main_window(app, false);
+                }
+            }
+        }
+        extern "C" fn open_settings(_this: &Object, _sel: Sel, _sender: id) {
+            unsafe {
+                if let Some(ref app) = DOCK_APP_HANDLE {
+                    let _ = ShowRewindWindow::Settings { page: None }.show(app);
+                }
+            }
+        }
+        extern "C" fn quit_app(_this: &Object, _sel: Sel, _sender: id) {
+            unsafe {
+                if let Some(ref app) = DOCK_APP_HANDLE {
+                    app.exit(0);
+                }
+            }
+        }
+        extern "C" fn dock_menu(_this: &Object, _sel: Sel, _sender: id) -> id {
+            unsafe {
+                let menu: id = msg_send![class!(NSMenu), new];
+
+                // "Show screenpipe"
+                let title = NSString::alloc(nil).init_str("Show screenpipe");
+                let action = sel!(showScreenpipe:);
+                let key = NSString::alloc(nil).init_str("");
+                let item: id = msg_send![class!(NSMenuItem), alloc];
+                let item: id = msg_send![item, initWithTitle:title action:action keyEquivalent:key];
+                let _: () = msg_send![item, setTarget: _this];
+                let _: () = msg_send![menu, addItem: item];
+
+                // "Settings"
+                let title = NSString::alloc(nil).init_str("Settings");
+                let action = sel!(openSettings:);
+                let key = NSString::alloc(nil).init_str("");
+                let item: id = msg_send![class!(NSMenuItem), alloc];
+                let item: id = msg_send![item, initWithTitle:title action:action keyEquivalent:key];
+                let _: () = msg_send![item, setTarget: _this];
+                let _: () = msg_send![menu, addItem: item];
+
+                // Separator
+                let sep: id = msg_send![class!(NSMenuItem), separatorItem];
+                let _: () = msg_send![menu, addItem: sep];
+
+                // "Quit"
+                let title = NSString::alloc(nil).init_str("Quit screenpipe");
+                let action = sel!(quitApp:);
+                let key = NSString::alloc(nil).init_str("");
+                let item: id = msg_send![class!(NSMenuItem), alloc];
+                let item: id = msg_send![item, initWithTitle:title action:action keyEquivalent:key];
+                let _: () = msg_send![item, setTarget: _this];
+                let _: () = msg_send![menu, addItem: item];
+
+                menu
+            }
+        }
+
+        // Register a custom class that handles dock menu
+        let superclass = class!(NSObject);
+        let mut decl = objc::declare::ClassDecl::new("ScreenpipeDockMenuDelegate", superclass).unwrap();
+        decl.add_method(sel!(showScreenpipe:), show_screenpipe as extern "C" fn(&Object, Sel, id));
+        decl.add_method(sel!(openSettings:), open_settings as extern "C" fn(&Object, Sel, id));
+        decl.add_method(sel!(quitApp:), quit_app as extern "C" fn(&Object, Sel, id));
+        decl.add_method(sel!(applicationDockMenu:), dock_menu as extern "C" fn(&Object, Sel, id) -> id);
+        let delegate_class = decl.register();
+
+        let delegate: id = msg_send![delegate_class, new];
+
+        // Get NSApplication and set our delegate for dock menu
+        let ns_app: id = msg_send![class!(NSApplication), sharedApplication];
+        let current_delegate: id = msg_send![ns_app, delegate];
+
+        // Swizzle applicationDockMenu: onto the existing app delegate
+        let dock_menu_sel = sel!(applicationDockMenu:);
+        let method = objc::runtime::class_getInstanceMethod(
+            object_getClass(delegate) as *const _,
+            dock_menu_sel,
+        );
+        if !method.is_null() {
+            let imp = objc::runtime::method_getImplementation(method);
+            let encoding = b"@:@\0".as_ptr() as *const std::ffi::c_char;
+            let delegate_class = object_getClass(current_delegate);
+            objc::runtime::class_addMethod(
+                delegate_class as *mut _,
+                dock_menu_sel,
+                imp,
+                encoding,
+            );
+            // Also add the action methods
+            let void_encoding = b"v:@\0".as_ptr() as *const std::ffi::c_char;
+            for sel_name in &[sel!(showScreenpipe:), sel!(openSettings:), sel!(quitApp:)] {
+                let m = objc::runtime::class_getInstanceMethod(
+                    object_getClass(delegate) as *const _,
+                    *sel_name,
+                );
+                if !m.is_null() {
+                    let imp = objc::runtime::method_getImplementation(m);
+                    objc::runtime::class_addMethod(delegate_class as *mut _, *sel_name, imp, void_encoding);
+                }
+            }
+        }
+
+        info!("macOS dock menu set up");
+    }
+
+    #[cfg(target_os = "macos")]
+    unsafe fn object_getClass(obj: id) -> *const objc::runtime::Class {
+        msg_send![obj, class]
+    }
+}
+
 // New struct to hold shortcut configuration
 #[derive(Debug, Default)]
 struct ShortcutConfig {
@@ -1424,7 +1553,13 @@ async fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    // set_tray_unhealth_icon(app.app_handle().clone());
+    // Setup dock right-click menu (fallback for when tray is behind the notch)
+    #[cfg(target_os = "macos")]
+    {
+        let app_handle_dock = app.app_handle().clone();
+        setup_dock_menu(app_handle_dock);
+    }
+
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
