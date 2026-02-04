@@ -246,8 +246,8 @@ export function ConnectionsSection() {
                   )}
                 </div>
                 <p className="text-muted-foreground mb-4">
-                  Connect Screenpipe to Claude Desktop to search your screen recordings,
-                  audio transcriptions, and control your computer using natural language.
+                  Connect Screenpipe to Claude Desktop to search your screen recordings
+                  and audio transcriptions using natural language.
                 </p>
 
                 <div className="flex flex-wrap gap-3">
