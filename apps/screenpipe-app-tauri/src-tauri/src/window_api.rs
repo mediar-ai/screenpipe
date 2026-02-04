@@ -54,10 +54,7 @@ pub async fn show_specific_window(
         }
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
-    #[cfg(target_os = "macos")]
-    let _ = state
-        .app_handle
-        .set_activation_policy(tauri::ActivationPolicy::Accessory);
+    // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
     let url = format!("http://localhost:{}{}", payload.port, payload.path);
     let mut builder = tauri::WebviewWindowBuilder::new(
         &state.app_handle,
@@ -318,9 +315,8 @@ impl ShowRewindWindow {
                     info!("showing panel");
                     #[cfg(target_os = "macos")]
                     {
-                        // CRITICAL: Set Accessory activation policy BEFORE showing the panel
-                        // This is required for the panel to appear above fullscreen apps on macOS
-                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                        // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
+                        // NSPanel should work over fullscreen without it
 
                         let app_clone = app.clone();
                         app.run_on_main_thread(move || {
@@ -427,7 +423,7 @@ impl ShowRewindWindow {
             if id.label() == RewindWindowId::Chat.label() {
                 #[cfg(target_os = "macos")]
                 {
-                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
 
                     let app_clone = app.clone();
                     app.run_on_main_thread(move || {
@@ -476,9 +472,7 @@ impl ShowRewindWindow {
                 // macOS uses fullscreen transparent panel overlay
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // CRITICAL: Set Accessory activation policy BEFORE creating the panel
-                    // This is required for the panel to appear above fullscreen apps on macOS
-                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
 
                     // Use cursor position to find the correct monitor (not primary)
                     let (monitor, position) = {
@@ -742,8 +736,7 @@ impl ShowRewindWindow {
                 // macOS: use NSPanel for fullscreen support
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // Set Accessory policy so panel can appear above fullscreen apps
-                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
 
                     let builder = self.window_builder(app, "/chat")
                         .inner_size(500.0, 650.0)

@@ -1394,36 +1394,8 @@ async fn main() {
             #[cfg(target_os = "macos")]
             crate::window_api::reset_to_regular_and_refresh_tray(&app_handle);
 
-            // Watchdog: periodically ensure dock/tray are visible when no overlay is shown.
-            // Protects against getting stuck in Accessory mode (hides dock+tray) due to
-            // panels not properly firing focus-lost events, crashes, etc.
-            #[cfg(target_os = "macos")]
-            {
-                let app_handle_watchdog = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    use tauri_nspanel::ManagerExt;
-                    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-                    loop {
-                        interval.tick().await;
-                        // Check if any panel/overlay is currently visible
-                        let main_visible = app_handle_watchdog
-                            .get_webview_panel("main")
-                            .map(|p| p.is_visible())
-                            .unwrap_or(false);
-                        let chat_visible = app_handle_watchdog
-                            .get_webview_panel("chat")
-                            .map(|p| p.is_visible())
-                            .unwrap_or(false);
-
-                        if !main_visible && !chat_visible {
-                            // No panels visible — ensure we're in Regular mode
-                            // (This is a no-op if already Regular)
-                            let _ = app_handle_watchdog
-                                .set_activation_policy(tauri::ActivationPolicy::Regular);
-                        }
-                    }
-                });
-            }
+            // NOTE: Accessory mode watchdog removed — we no longer toggle activation policy
+            // The app stays in Regular mode permanently so dock+tray are always visible.
 
             // Initialize global shortcuts
             let app_handle_clone = app_handle.clone();
