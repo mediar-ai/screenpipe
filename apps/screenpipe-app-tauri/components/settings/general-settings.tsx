@@ -214,11 +214,16 @@ export default function GeneralSettings() {
                   return (
                     <button
                       key={option.value}
-                      onClick={() => {
+                      onClick={async () => {
                         handleSettingsChange({ overlayMode: option.value });
+                        // Close existing Main window so it gets recreated with the new mode
+                        try {
+                          const { commands } = await import("@/lib/utils/tauri");
+                          await commands.closeWindow("Main");
+                        } catch (_) {}
                         toast({
                           title: "overlay mode updated",
-                          description: `set to ${option.label.toLowerCase()}. reopen timeline to apply.`,
+                          description: `press the shortcut to open timeline in ${option.label.toLowerCase()} mode.`,
                         });
                       }}
                       type="button"

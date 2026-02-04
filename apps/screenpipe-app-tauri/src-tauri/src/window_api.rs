@@ -312,7 +312,22 @@ impl ShowRewindWindow {
 
 
             if id.label() == RewindWindowId::Main.label() {
-                    info!("showing panel");
+                    // Check current overlay mode
+                    let overlay_mode = SettingsStore::get(app)
+                        .unwrap_or_default()
+                        .unwrap_or_default()
+                        .overlay_mode;
+
+                    if overlay_mode == "window" {
+                        // Window mode: just show and focus the normal window
+                        info!("showing main window (window mode)");
+                        window.show().ok();
+                        window.set_focus().ok();
+                        let _ = app.emit("window-focused", true);
+                        return Ok(window);
+                    }
+
+                    info!("showing panel (overlay mode)");
                     #[cfg(target_os = "macos")]
                     {
                         // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
@@ -879,6 +894,21 @@ impl ShowRewindWindow {
     pub fn close(&self, app: &AppHandle) -> tauri::Result<()> {
         let id = self.id();
         if id.label() == RewindWindowId::Main.label() {
+            // Check overlay mode to decide close behavior
+            let overlay_mode = SettingsStore::get(app)
+                .unwrap_or_default()
+                .unwrap_or_default()
+                .overlay_mode;
+
+            if overlay_mode == "window" {
+                // Window mode: destroy the window so it gets recreated fresh
+                if let Some(window) = id.get(app) {
+                    window.destroy().ok();
+                }
+                return Ok(());
+            }
+
+            // Overlay mode: hide the panel (keep it alive for fast re-show)
             #[cfg(target_os = "macos")]
             {
                 let app_clone = app.clone();
