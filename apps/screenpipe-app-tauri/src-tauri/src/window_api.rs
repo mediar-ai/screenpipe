@@ -330,7 +330,7 @@ impl ShowRewindWindow {
                                     use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
                                     panel.set_level(1001);
                                     panel.set_collection_behaviour(
-                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
                                     panel.order_front_regardless();
@@ -407,10 +407,9 @@ impl ShowRewindWindow {
 
                                 // Re-apply collection behaviors
                                 panel.set_collection_behaviour(
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
 
                                 // Use order_front_regardless to show above fullscreen apps without switching spaces
@@ -470,9 +469,8 @@ impl ShowRewindWindow {
                             panel.set_level(1001);
                             let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
                             panel.set_collection_behaviour(
-                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
-                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
-                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
+                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
+                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                             );
                             panel.order_front_regardless();
                         }
@@ -530,7 +528,6 @@ impl ShowRewindWindow {
                             .visible(false)
                             .focused(false)
                             .transparent(false)
-                            .visible_on_all_workspaces(true)
                             .on_page_load(move |win, payload| {
                                 if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                                     // Panel setup already done — just show & activate
@@ -591,7 +588,7 @@ impl ShowRewindWindow {
                                     // Exclude from screen capture
                                     let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
                                     panel.set_collection_behaviour(
-                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
                                 }
@@ -691,7 +688,6 @@ impl ShowRewindWindow {
                     let min = self.id().min_size().unwrap_or((0.0, 0.0));
                     let clamped_min = (min.0.min(logical_size.width), min.1.min(logical_size.height));
                     let builder = self.window_builder(app, "/")
-                        .visible_on_all_workspaces(true)
                         .always_on_top(true)
                         .decorations(false)
                         .skip_taskbar(true)
@@ -799,10 +795,9 @@ impl ShowRewindWindow {
                                 let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
 
                                 panel.set_collection_behaviour(
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
                             }
                         }).ok();
@@ -942,9 +937,8 @@ impl ShowRewindWindow {
                                 let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
 
                                 panel.set_collection_behaviour(
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
 
                                 panel.order_front_regardless();
