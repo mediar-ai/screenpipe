@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuItem, MenuItemBuilder};
 use tauri::{Emitter, Manager, Wry};
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_dialog::MessageDialogButtons;
 use tauri_plugin_opener::OpenerExt;
@@ -124,7 +125,7 @@ impl UpdatesManager {
                 self.update_menu_item.set_text("update now")?;
             }
 
-            // Emit event to frontend for custom update dialog
+            // Emit event to frontend for in-app banner (visible if window is open)
             let update_info = serde_json::json!({
                 "version": update.version,
                 "body": update.body.clone().unwrap_or_default()
@@ -133,20 +134,41 @@ impl UpdatesManager {
                 error!("Failed to emit update-available event: {}", e);
             }
 
+            // Native OS notification — visible even when window is closed
+            let auto_update = SettingsStore::get(&self.app)
+                .ok()
+                .flatten()
+                .map(|s| s.auto_update)
+                .unwrap_or(true);
+
+            if auto_update {
+                if let Err(e) = self.app.notification()
+                    .builder()
+                    .title("screenpipe updating")
+                    .body(format!("v{} downloaded — restarting now", update.version))
+                    .show()
+                {
+                    error!("failed to send update notification: {}", e);
+                }
+            } else {
+                if let Err(e) = self.app.notification()
+                    .builder()
+                    .title("screenpipe update available")
+                    .body(format!("v{} is ready — open screenpipe to update", update.version))
+                    .show()
+                {
+                    error!("failed to send update notification: {}", e);
+                }
+            }
+
             // Auto-update: if enabled and update is downloaded, restart automatically
             // This ensures users get updates even if tray icon is hidden (e.g., behind notch)
             #[cfg(not(target_os = "windows"))]
             {
-                let auto_update = SettingsStore::get(&self.app)
-                    .ok()
-                    .flatten()
-                    .map(|s| s.auto_update)
-                    .unwrap_or(true);
-
                 if auto_update && *self.update_installed.lock().await {
                     info!("auto-update enabled, restarting to apply update v{}", update.version);
-                    // Brief delay so the user can see the notification
-                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    // Give user time to read the notification
+                    tokio::time::sleep(Duration::from_secs(5)).await;
                     if let Err(err) =
                         stop_screenpipe(self.app.state::<RecordingState>(), self.app.clone()).await
                     {
