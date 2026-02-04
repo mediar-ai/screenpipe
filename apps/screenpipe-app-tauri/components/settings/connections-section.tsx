@@ -197,13 +197,13 @@ export function ConnectionsSection() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
           Connections
         </h1>
-        <p className="text-muted-foreground text-lg">
-          Connect Screenpipe to AI assistants and other applications
+        <p className="text-muted-foreground text-sm">
+          Connect to AI assistants and other apps
         </p>
       </div>
 

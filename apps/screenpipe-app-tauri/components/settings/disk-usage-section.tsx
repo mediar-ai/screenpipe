@@ -42,23 +42,26 @@ export function DiskUsageSection() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">Disk Usage</h3>
-          <p className="text-sm text-muted-foreground">
-            Monitor storage usage for your Screenpipe data at ~/.screenpipe
-          </p>
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
+            Disk Usage
+          </h1>
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            size="sm"
+            disabled={isLoading}
+            className="h-7 text-xs"
+          >
+            <RefreshCw className={`h-3 w-3 mr-1.5 ${isLoading ? "animate-spin" : ""}`} />
+            {isLoading ? "..." : "Refresh"}
+          </Button>
         </div>
-        <Button
-          onClick={handleRefresh}
-          variant="outline"
-          size="sm"
-          disabled={isLoading}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          {isLoading ? "Calculating..." : "Refresh"}
-        </Button>
+        <p className="text-muted-foreground text-sm">
+          Storage usage at ~/.screenpipe
+        </p>
       </div>
 
       {/* Loading Progress Indicator */}

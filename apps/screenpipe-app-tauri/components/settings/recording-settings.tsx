@@ -739,49 +739,37 @@ export function RecordingSettings() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Recording Settings
-        </h1>
-        <p className="text-muted-foreground text-lg">
-          Configure screen and audio recording preferences
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
+            Recording
+          </h1>
+          {hasUnsavedChanges && (
+            <Button
+              onClick={handleUpdate}
+              disabled={isUpdating || Object.keys(validationErrors).length > 0}
+              size="sm"
+              className="flex items-center gap-1.5 h-7 text-xs bg-foreground text-background hover:bg-foreground/90"
+            >
+              {isUpdating ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              Apply & Restart
+            </Button>
+          )}
+        </div>
+        <p className="text-muted-foreground text-sm">
+          Screen and audio recording preferences
         </p>
       </div>
 
-      {/* Validation and Status Alert */}
-      {(Object.keys(validationErrors).length > 0 || hasUnsavedChanges) && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Configuration Status</AlertTitle>
-          <AlertDescription className="flex items-center justify-between">
-            <span>{getValidationStatus().message}</span>
-            {hasUnsavedChanges && Object.keys(validationErrors).length === 0 && (
-              <Button
-                onClick={handleUpdate}
-                disabled={isUpdating}
-                size="sm"
-                variant="outline"
-              >
-                {isUpdating ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Apply Changes
-              </Button>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
 
-
-      {/* Enhanced Data Directory Section */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Folder className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Data Directory</h3>
-        </div>
+      {/* Data Directory */}
+      <div className="space-y-2">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Storage</h2>
 
         {dataDirInputVisible ? (
           <ValidatedInput
@@ -944,14 +932,11 @@ export function RecordingSettings() {
         )}
       </div>
 
-      <Separator />
+      
 
       {/* Audio Transcription Engine */}
       <div className="flex flex-col space-y-2">
-        <div className="flex items-center gap-2 mb-2">
-          <Mic className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Audio Transcription</h3>
-        </div>
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Audio Transcription</h2>
         <div className="space-y-4">
           {/* Screenpipe Cloud Subscription Status */}
           {settings.user && (
@@ -1082,7 +1067,7 @@ export function RecordingSettings() {
         </div>
       </div>
 
-      <Separator />
+      
 
       {/* Follow System Default Audio */}
       <div className="flex flex-col space-y-2">
@@ -1377,14 +1362,11 @@ export function RecordingSettings() {
         </div>
       </div>
 
-      <Separator />
+      
 
       {/* Video Settings */}
       <div className="flex flex-col space-y-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Monitor className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Video Recording</h3>
-        </div>
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Video</h2>
 
         {/* Monitor Selection - hidden when useAllMonitors is enabled */}
         {!settings.useAllMonitors && (
@@ -1566,15 +1548,12 @@ export function RecordingSettings() {
         </div>
       </div>
 
-      <Separator />
+      
 
       {/* UI Events (Accessibility) - macOS and Windows */}
       {(isMacOS || platform() === "windows") && (
         <div className="space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Key className="h-5 w-5" />
-            <h3 className="text-lg font-semibold">UI Events (Accessibility)</h3>
-          </div>
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">UI Events</h2>
 
           <div className="flex items-center justify-between">
             <div className="space-y-1">
@@ -1610,14 +1589,11 @@ export function RecordingSettings() {
         </div>
       )}
 
-      <Separator />
+      
 
       {/* Window Filtering */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2 mb-2">
-          <AppWindowMac className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Window Filtering</h3>
-        </div>
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Window Filtering</h2>
 
         <div className="flex flex-col space-y-2">
           <Label htmlFor="ignoredWindows" className="flex items-center space-x-2">
@@ -1710,14 +1686,11 @@ export function RecordingSettings() {
         </div>
       </div>
 
-      <Separator />
+      
 
       {/* System Settings */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Terminal className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">System Settings</h3>
-        </div>
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">System</h2>
 
         {/* Port Configuration */}
         <ValidatedInput
@@ -1769,28 +1742,8 @@ export function RecordingSettings() {
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center justify-between pt-6 border-t">
-        <div className="text-sm text-muted-foreground">
-          {hasUnsavedChanges && "Changes require restart to take effect"}
-        </div>
-        <div className="flex gap-2">
-          {hasUnsavedChanges && (
-            <Button
-              onClick={handleUpdate}
-              disabled={isUpdating || Object.keys(validationErrors).length > 0}
-              className="flex items-center gap-2"
-            >
-              {isUpdating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              Apply Changes
-            </Button>
-          )}
-        </div>
-      </div>
+      {/* Bottom spacer */}
+      <div className="h-4" />
     </div>
   );
 }

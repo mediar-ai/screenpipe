@@ -959,13 +959,13 @@ export const AIPresets = () => {
 
   if (!settings.aiPresets?.length) {
     return (
-      <div className="space-y-8">
-        <div className="space-y-3">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+      <div className="space-y-5">
+        <div className="space-y-1">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
             AI Settings
           </h1>
-          <p className="text-muted-foreground text-lg">
-            Configure AI models, prompts, and processing preferences
+          <p className="text-muted-foreground text-sm">
+            Configure AI models and preferences
           </p>
         </div>
         
@@ -988,13 +988,13 @@ export const AIPresets = () => {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
           AI Settings
         </h1>
-        <p className="text-muted-foreground text-lg">
-          Configure AI models, prompts, and processing preferences
+        <p className="text-muted-foreground text-sm">
+          Configure AI models and preferences
         </p>
       </div>
       

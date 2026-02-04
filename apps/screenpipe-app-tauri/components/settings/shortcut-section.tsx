@@ -10,12 +10,12 @@ const ShortcutSection = () => {
 
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
           Shortcuts
         </h1>
-        <p className="text-muted-foreground text-lg">
+        <p className="text-muted-foreground text-sm">
           Keyboard shortcuts and hotkeys
         </p>
       </div>

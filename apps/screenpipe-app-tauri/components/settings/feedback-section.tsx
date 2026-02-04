@@ -7,13 +7,13 @@ import { open } from "@tauri-apps/plugin-shell";
 
 export function FeedbackSection() {
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Send Feedback
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="text-xl font-bold tracking-tight text-foreground">
+          Feedback
         </h1>
-        <p className="text-muted-foreground text-lg">
-          Help us improve screenpipe by sharing your feedback
+        <p className="text-muted-foreground text-sm">
+          Help us improve screenpipe
         </p>
       </div>
 
