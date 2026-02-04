@@ -9,6 +9,7 @@ use atspi_common::State;
 use atspi_proxies::document::DocumentProxy;
 use std::future::Future;
 use std::pin::Pin;
+use tokio::runtime::Handle;
 use tracing::{debug, error};
 use zbus::fdo::DBusProxy;
 
@@ -289,12 +290,14 @@ impl BrowserUrlDetector for LinuxUrlDetector {
         process_id: i32,
         window_title: &str,
     ) -> Result<Option<String>> {
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(Self::get_active_url_from_window(
+        // Use block_in_place to avoid blocking the runtime worker thread
+        // Then use Handle::current().block_on to run the async code
+        tokio::task::block_in_place(|| {
+            Handle::current().block_on(Self::get_active_url_from_window(
                 process_id,
                 window_title,
                 app_name,
             ))
+        })
     }
 }

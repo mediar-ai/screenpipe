@@ -49,7 +49,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::{runtime::Runtime, signal, sync::broadcast};
+use tokio::{runtime::Handle, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -826,11 +826,8 @@ async fn main() -> anyhow::Result<()> {
     let vad_sensitivity_clone = cli.vad_sensitivity.clone();
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-    let vision_runtime = Runtime::new().unwrap();
-    let pipes_runtime = Runtime::new().unwrap();
-
-    let vision_handle = vision_runtime.handle().clone();
-    let pipes_handle = pipes_runtime.handle().clone();
+    let vision_handle = Handle::current();
+    let pipes_handle = Handle::current();
 
     let db_clone = Arc::clone(&db);
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
@@ -1470,8 +1467,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     tokio::task::block_in_place(|| {
-        drop(pipes_runtime);
-        drop(vision_runtime);
         drop(audio_manager);
     });
 
