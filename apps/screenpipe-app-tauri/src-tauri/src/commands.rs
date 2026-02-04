@@ -359,16 +359,18 @@ pub fn reset_main_window(app_handle: tauri::AppHandle) {
 
     #[cfg(target_os = "macos")]
     {
-        // Try panel first, then regular window
+        // Hide the panel and close the webview so the next shortcut press
+        // creates a fresh window with the new mode config.
+        // NOTE: do NOT call window.destroy() on an NSPanel-backed window — it
+        // triggers an ObjC exception ("Rust cannot catch foreign exceptions").
+        // window.close() is safe and removes the webview from Tauri's registry.
         let app_clone = app_handle.clone();
         let _ = app_handle.run_on_main_thread(move || {
             if let Ok(panel) = app_clone.get_webview_panel(label) {
                 panel.order_out(None);
-                // Released when closed
-                panel.released_when_closed(true);
             }
             if let Some(window) = app_clone.get_webview_window(label) {
-                let _ = window.destroy();
+                let _ = window.close();
             }
         });
         crate::window_api::reset_to_regular_and_refresh_tray(&app_handle);
