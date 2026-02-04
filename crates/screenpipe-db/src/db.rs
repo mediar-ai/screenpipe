@@ -2980,7 +2980,7 @@ SELECT
 FROM frames f
 INNER JOIN ocr_text o ON f.id = o.frame_id
 WHERE {}
-ORDER BY {} DESC, f.timestamp {}
+ORDER BY f.timestamp {}, {} DESC
 LIMIT ? OFFSET ?
 "#,
             if conditions.is_empty() {
@@ -2988,11 +2988,11 @@ LIMIT ? OFFSET ?
             } else {
                 conditions.join(" AND ")
             },
-            relevance_case,
             match order {
                 Order::Ascending => "ASC",
                 Order::Descending => "DESC",
-            }
+            },
+            relevance_case
         );
 
         let mut query_builder = sqlx::query_as::<_, FrameRow>(&sql);

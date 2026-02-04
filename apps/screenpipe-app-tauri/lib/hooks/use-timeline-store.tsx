@@ -136,12 +136,15 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			clearTimeout(flushTimer);
 			flushTimer = null;
 		}
-		// DON'T clear frames - keep showing stale data while loading new
-		// Only clear the request tracking and show loading indicator
-		set((state) => ({
+		// Clear frames and timestamps so cross-day navigation starts fresh.
+		// Keeping stale frames from the old day causes the pendingNavigation
+		// effect to see mixed-day data and potentially jump to the wrong frame.
+		set(() => ({
+			frames: [],
+			frameTimestamps: new Set<string>(),
 			sentRequests: new Set<string>(),
 			isLoading: true,
-			loadingProgress: { loaded: state.frames.length, isStreaming: false },
+			loadingProgress: { loaded: 0, isStreaming: false },
 			error: null,
 			message: "loading...",
 		}));

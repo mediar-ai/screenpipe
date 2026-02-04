@@ -278,16 +278,16 @@ export default function Timeline() {
 	// Auto-select first frame when frames arrive and no frame is selected
 	// Skip during intentional navigation (day change) to prevent double-jump
 	useEffect(() => {
-		// Don't auto-select during navigation OR if there's a pending navigation
+		// Don't auto-select during navigation, pending navigation, or active seeking
 		// The pending navigation effect handles frame selection during navigation
-		if (isNavigatingRef.current || pendingNavigationRef.current) {
+		if (isNavigatingRef.current || pendingNavigationRef.current || seekingTimestamp) {
 			return;
 		}
 		if (!currentFrame && frames.length > 0) {
 			setCurrentFrame(frames[0]);
 			setCurrentIndex(0);
 		}
-	}, [frames.length, currentFrame, setCurrentFrame]);
+	}, [frames.length, currentFrame, setCurrentFrame, seekingTimestamp]);
 
 	// Track timeline opened and setup session tracking
 	useEffect(() => {
@@ -657,10 +657,13 @@ export default function Timeline() {
 
 	const jumpToTime = (targetDate: Date) => {
 		// Find the closest frame to the target date
-		if (frames.length === 0) return;
+		if (frames.length === 0) {
+			console.warn("[jumpToTime] No frames loaded, cannot jump");
+			return;
+		}
 
 		const targetTime = targetDate.getTime();
-		let closestIndex = 0;
+		let closestIndex = -1;
 		let closestDiff = Infinity;
 
 		frames.forEach((frame, index) => {
@@ -671,6 +674,13 @@ export default function Timeline() {
 				closestIndex = index;
 			}
 		});
+
+		if (closestIndex < 0) {
+			console.warn("[jumpToTime] No matching frame found");
+			return;
+		}
+
+		console.log(`[jumpToTime] Jumping to index ${closestIndex}, diff=${Math.round(closestDiff / 1000)}s from target`);
 
 		// Update cursor position
 		setCurrentIndex(closestIndex);
@@ -770,8 +780,9 @@ export default function Timeline() {
 			// correct frame once the new date's frames arrive via WebSocket.
 			console.log("[handleDateChange] Navigation initiated, waiting for frames to load...");
 
-			// Safety timeout: clear navigation state if frames don't arrive within 10s
-			// This prevents the app from getting stuck in a loading state
+			// Safety timeout: clear navigation state if frames don't arrive within 30s
+			// This prevents the app from getting stuck in a loading state.
+			// Using 30s because disk I/O can be slow (iCloud contention, large DB).
 			setTimeout(() => {
 				if (pendingNavigationRef.current && isSameDay(pendingNavigationRef.current, newDate)) {
 					console.warn("[handleDateChange] Timeout: frames didn't arrive, clearing navigation state");
@@ -779,7 +790,7 @@ export default function Timeline() {
 					setSeekingTimestamp(null);
 					isNavigatingRef.current = false;
 				}
-			}, 10000);
+			}, 30000);
 
 		} catch (error) {
 			console.error("[handleDateChange] Error:", error);
