@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import { Copy, Search, X, Globe, AppWindow, Mic, Clock } from "lucide-react";
 import { format } from "date-fns";
@@ -12,7 +13,9 @@ interface AppContextData {
 
 interface AppContextPopoverProps {
 	appName: string;
+	appNames?: string[];
 	frames: StreamTimeSeriesResponse[];
+	anchor: { x: number; y: number };
 	onClose: () => void;
 	onSearch?: () => void;
 }
@@ -27,10 +30,13 @@ function extractDomain(url: string): string {
 
 export function AppContextPopover({
 	appName,
+	appNames,
 	frames,
+	anchor,
 	onClose,
 	onSearch,
 }: AppContextPopoverProps) {
+	const allApps = appNames && appNames.length > 1 ? appNames : [appName];
 	const [copied, setCopied] = useState(false);
 
 	// compute time range from frames
@@ -130,43 +136,40 @@ export function AppContextPopover({
 		setTimeout(() => setCopied(false), 1500);
 	};
 
-	return (
+	const popover = (
 		<div
-			className="fixed z-[200] w-72 bg-popover border border-border rounded-lg shadow-2xl text-xs"
+			className="fixed z-[9999] w-72 bg-popover border border-border rounded-lg shadow-2xl text-xs"
 			style={{
 				direction: "ltr",
-				bottom: "140px",
-				left: "50%",
-				transform: "translateX(-50%)",
+				left: `clamp(144px, ${anchor.x}px, calc(100vw - 144px))`,
+				top: `${anchor.y}px`,
+				transform: "translate(-50%, -100%) translateY(-8px)",
 			}}
 			onClick={(e) => e.stopPropagation()}
 			onMouseDown={(e) => e.stopPropagation()}
 		>
 			{/* Header */}
 			<div className="flex items-center justify-between px-3 py-2 border-b border-border">
-				<div className="flex items-center gap-2">
-					<img
-						src={`http://localhost:11435/app-icon?name=${encodeURIComponent(appName)}`}
-						className="w-4 h-4 rounded"
-						alt=""
-					/>
-					<span className="font-medium text-popover-foreground truncate max-w-[180px]">
-						{appName}
+				<div className="flex items-center gap-2 min-w-0">
+					{allApps.map((name, i) => (
+						<img
+							key={i}
+							src={`http://localhost:11435/app-icon?name=${encodeURIComponent(name)}`}
+							className="w-4 h-4 rounded flex-shrink-0"
+							alt={name}
+							style={i > 0 ? { marginLeft: -6 } : undefined}
+						/>
+					))}
+					<span className="font-medium text-popover-foreground truncate">
+						{allApps.length > 1 ? allApps.join(" + ") : appName}
 					</span>
 				</div>
 				<button
 					onClick={onClose}
-					className="text-muted-foreground hover:text-foreground transition-colors"
+					className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 ml-1"
 				>
 					<X className="w-3 h-3" />
 				</button>
-			</div>
-
-			{/* Debug */}
-			<div className="px-3 py-1 text-[9px] text-red-400 bg-red-950/30 break-all">
-				frames={frames.length} windows={data.topWindows.length} urls={data.topUrls.length} 
-				{frames[0] && ` dev0keys=${Object.keys(frames[0].devices?.[0] || {}).join(",")}`}
-				{frames[0]?.devices?.[0]?.metadata && ` meta=${JSON.stringify(frames[0].devices[0].metadata).slice(0, 100)}`}
 			</div>
 
 			{/* Content */}
@@ -248,8 +251,6 @@ export function AppContextPopover({
 						</div>
 					</div>
 				)}
-
-
 			</div>
 
 			{/* Actions */}
@@ -273,4 +274,6 @@ export function AppContextPopover({
 			</div>
 		</div>
 	);
+
+	return createPortal(popover, document.body);
 }

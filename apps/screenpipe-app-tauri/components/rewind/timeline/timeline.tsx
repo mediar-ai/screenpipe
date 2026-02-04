@@ -146,6 +146,7 @@ export const TimelineSlider = ({
 
 	// App context popover state
 	const [activePopoverGroup, setActivePopoverGroup] = useState<number | null>(null);
+	const [popoverAnchor, setPopoverAnchor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
 	// Zoom state: 1 = normal, >1 = zoomed in, <1 = zoomed out
 	// Range: 0.25 (very zoomed out) to 4 (very zoomed in)
@@ -601,6 +602,8 @@ export const TimelineSlider = ({
 										initial="collapsed"
 										onClick={(e) => {
 											e.stopPropagation();
+											const rect = e.currentTarget.getBoundingClientRect();
+											setPopoverAnchor({ x: rect.left + rect.width / 2, y: rect.top });
 											setActivePopoverGroup(
 												activePopoverGroup === groupIndex ? null : groupIndex
 											);
@@ -633,7 +636,9 @@ export const TimelineSlider = ({
 								{activePopoverGroup === groupIndex && (
 									<AppContextPopover
 										appName={group.appName}
+										appNames={group.appNames}
 										frames={group.frames}
+										anchor={popoverAnchor}
 										onClose={() => setActivePopoverGroup(null)}
 									/>
 								)}
