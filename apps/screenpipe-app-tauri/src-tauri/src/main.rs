@@ -1324,6 +1324,18 @@ async fn main() {
                 }
             }
 
+            // On notched MacBooks, the tray icon created at startup gets the leftmost
+            // position (behind the notch). Recreate it once after a delay so it gets
+            // the rightmost (most visible) position among third-party status items.
+            #[cfg(target_os = "macos")]
+            {
+                let app_tray = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                    tray::recreate_tray(&app_tray);
+                });
+            }
+
             // Check analytics settings from store
             let is_analytics_enabled = store
                 .analytics_enabled;

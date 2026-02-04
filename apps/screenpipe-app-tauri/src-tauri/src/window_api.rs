@@ -12,14 +12,10 @@ use tauri_nspanel::WebviewWindowExt;
 
 use crate::{store::OnboardingStore, ServerState};
 
-/// Reset activation policy to Regular and recreate the tray icon.
-/// On MacBook Pro models with a notch, toggling between Accessory and Regular
-/// can push the tray icon behind the notch. Destroying and recreating the
-/// NSStatusItem gives it the rightmost (most visible) position.
+/// Reset activation policy to Regular so dock icon and tray are visible.
 #[cfg(target_os = "macos")]
 pub fn reset_to_regular_and_refresh_tray(app: &AppHandle) {
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
-    crate::tray::recreate_tray(app);
 }
 
 #[derive(Deserialize, Debug)]
