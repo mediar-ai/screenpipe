@@ -1002,4 +1002,52 @@ mod tests {
         // Current implementation lowercases but doesn't trim
         assert!(!filters.is_url_blocked("https://wellsfargo.com"));
     }
+
+    // ==================== is_valid focus + overlay filtering tests ====================
+
+    #[test]
+    fn test_is_valid_focused_normal_window() {
+        let filters = WindowFilters::new(&[], &[], &[]);
+        // Normal focused window (not screenpipe, not skipped) should be valid
+        assert!(filters.is_valid("Arc", "GitHub"));
+    }
+
+    #[test]
+    fn test_is_valid_rejects_screenpipe_ui() {
+        let filters = WindowFilters::new(&[], &[], &[]);
+        assert!(!filters.is_valid("screenpipe", "Main Window"));
+        assert!(!filters.is_valid("Screenpipe App", "Settings"));
+    }
+
+    #[test]
+    fn test_is_valid_rejects_ignored_window() {
+        let filters = WindowFilters::new(
+            &["wispr flow".to_string()],
+            &[],
+            &[],
+        );
+        // "Wispr Flow" app should be rejected by ignore list (case-insensitive contains)
+        assert!(!filters.is_valid("Wispr Flow", "Status"));
+        assert!(!filters.is_valid("Wispr Flow", "Hub"));
+        // Other apps should still be valid
+        assert!(filters.is_valid("Arc", "GitHub"));
+    }
+
+    #[test]
+    fn test_is_valid_overlay_app_in_ignore_list() {
+        // Typical user config: ignoring overlay apps
+        let filters = WindowFilters::new(
+            &["wispr".to_string(), "bartender".to_string()],
+            &[],
+            &[],
+        );
+        assert!(!filters.is_valid("Wispr Flow", "Status"));
+        assert!(!filters.is_valid("Bartender 4", "Menu"));
+        assert!(filters.is_valid("Arc", "Gmail"));
+    }
+
+    // Note: The overlay_pids CGWindowLayer detection in capture_all_visible_windows
+    // is macOS-only and requires actual system calls, so it can only be tested
+    // as an integration test on macOS. The unit tests above verify the filter
+    // logic that works in conjunction with overlay detection.
 }

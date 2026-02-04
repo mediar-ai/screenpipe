@@ -135,6 +135,12 @@ async closeWindow(window: ShowRewindWindow) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Destroy the Main window/panel so it gets recreated fresh (e.g. after switching overlay mode)
+ */
+async resetMainWindow() : Promise<void> {
+    await TAURI_INVOKE("reset_main_window");
+},
 async setWindowSize(window: ShowRewindWindow, width: number, height: number) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("set_window_size", { window, width, height }) };
