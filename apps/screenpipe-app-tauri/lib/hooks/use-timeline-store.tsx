@@ -136,15 +136,14 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 			clearTimeout(flushTimer);
 			flushTimer = null;
 		}
-		// Clear frames and timestamps so cross-day navigation starts fresh.
-		// Keeping stale frames from the old day causes the pendingNavigation
-		// effect to see mixed-day data and potentially jump to the wrong frame.
-		set(() => ({
-			frames: [],
-			frameTimestamps: new Set<string>(),
+		// DON'T clear frames - keep showing current data while loading new date.
+		// Clearing causes visible "jumping" as frames stream in one-by-one.
+		// The pendingNavigation effect in timeline.tsx filters by target date
+		// when selecting the correct frame after navigation completes.
+		set((state) => ({
 			sentRequests: new Set<string>(),
 			isLoading: true,
-			loadingProgress: { loaded: 0, isStreaming: false },
+			loadingProgress: { loaded: state.frames.length, isStreaming: false },
 			error: null,
 			message: "loading...",
 		}));
