@@ -181,6 +181,7 @@ fn create_dynamic_menu(
 
     // Recording status indicator
     let status_text = match get_recording_status() {
+        RecordingStatus::Starting => "○ starting…",
         RecordingStatus::Recording => "● recording",
         RecordingStatus::Stopped => "○ stopped",
         RecordingStatus::Error => "○ error",
