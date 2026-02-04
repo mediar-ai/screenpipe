@@ -1,7 +1,5 @@
 use crate::{window_api::ShowRewindWindow, store::OnboardingStore, store::SettingsStore, parse_shortcut};
 use tauri::{Manager, Emitter};
-#[cfg(target_os = "macos")]
-use tauri_nspanel::ManagerExt;
 use tracing::{error, info, warn, debug};
 
 #[tauri::command]
@@ -345,32 +343,18 @@ pub async fn close_window(
 // Permission recovery command
 #[tauri::command]
 #[specta::specta]
-/// Destroy the Main window/panel so it gets recreated fresh (e.g. after switching overlay mode)
+/// Hide the Main panel so the next shortcut press reconfigures it for the new mode.
 pub fn reset_main_window(app_handle: tauri::AppHandle) {
-    info!("reset_main_window: destroying Main panel/window for fresh recreation");
+    info!("reset_main_window: hiding Main panel for mode switch");
     let label = crate::window_api::RewindWindowId::Main.label();
-
-    // Unregister shortcuts
-    let app_clone = app_handle.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        let _ = unregister_window_shortcuts(app_clone);
-    });
 
     #[cfg(target_os = "macos")]
     {
-        // Hide the panel and close the webview so the next shortcut press
-        // creates a fresh window with the new mode config.
-        // NOTE: do NOT call window.destroy() on an NSPanel-backed window — it
-        // triggers an ObjC exception ("Rust cannot catch foreign exceptions").
-        // window.close() is safe and removes the webview from Tauri's registry.
+        use tauri_nspanel::ManagerExt;
         let app_clone = app_handle.clone();
         let _ = app_handle.run_on_main_thread(move || {
             if let Ok(panel) = app_clone.get_webview_panel(label) {
                 panel.order_out(None);
-            }
-            if let Some(window) = app_clone.get_webview_window(label) {
-                let _ = window.close();
             }
         });
         crate::window_api::reset_to_regular_and_refresh_tray(&app_handle);

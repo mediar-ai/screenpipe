@@ -1,6 +1,7 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr, sync::Mutex};
 
 use axum::{extract::State, http::StatusCode, Json};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
 #[cfg(target_os = "macos")]
@@ -11,6 +12,10 @@ use tauri_nspanel::WebviewWindowExt;
 
 
 use crate::{store::{OnboardingStore, SettingsStore}, ServerState};
+
+/// Tracks the overlay mode the Main window was last created with.
+/// When the setting changes, the show path detects the mismatch and recreates.
+static MAIN_CREATED_MODE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
 /// Reset activation policy to Regular so dock icon and tray are visible.
 #[cfg(target_os = "macos")]
@@ -318,6 +323,46 @@ impl ShowRewindWindow {
                         .unwrap_or_default()
                         .overlay_mode;
 
+                    // If mode changed since last creation, reconfigure the panel in-place
+                    {
+                        let mut created = MAIN_CREATED_MODE.lock().unwrap();
+                        if let Some(ref prev) = *created {
+                            if *prev != overlay_mode {
+                                info!("overlay mode changed from {} to {}, reconfiguring panel", prev, overlay_mode);
+                                *created = Some(overlay_mode.clone());
+                                drop(created);
+
+                                #[cfg(target_os = "macos")]
+                                {
+                                    let mode = overlay_mode.clone();
+                                    let app_clone = app.clone();
+                                    let win = window.clone();
+                                    let _ = app.run_on_main_thread(move || {
+                                        if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
+                                            use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                                            if mode == "window" {
+                                                // Switch to window mode: resize, show decorations
+                                                let _ = win.set_size(LogicalSize::new(1200.0, 800.0));
+                                                let _ = win.center();
+                                                // titled | closable | miniaturizable | resizable
+                                                panel.set_style_mask(15);
+                                            } else {
+                                                // Switch to overlay mode: borderless
+                                                panel.set_style_mask(0);
+                                            }
+                                            panel.set_level(1001);
+                                            panel.set_collection_behaviour(
+                                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
+                                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                            );
+                                        }
+                                    });
+                                }
+                                // Don't show yet — fall through to the mode-specific show logic below
+                            }
+                        }
+                    }
+
                     if overlay_mode == "window" {
                         // Window mode: show the panel (same mechanism as overlay)
                         info!("showing main window (window mode)");
@@ -507,6 +552,8 @@ impl ShowRewindWindow {
                     .unwrap_or_default()
                     .unwrap_or_default()
                     .overlay_mode;
+                // Record what mode we're creating so we can detect changes later
+                *MAIN_CREATED_MODE.lock().unwrap() = Some(overlay_mode.clone());
                 let use_window_mode = overlay_mode == "window";
 
                 if use_window_mode {

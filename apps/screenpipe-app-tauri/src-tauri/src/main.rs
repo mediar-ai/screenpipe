@@ -4,8 +4,6 @@
 use analytics::AnalyticsManager;
 use commands::show_main_window;
 use serde_json::json;
-#[cfg(target_os = "macos")]
-use tauri_nspanel::ManagerExt;
 use std::env;
 use std::fs::File;
 use std::path::PathBuf;
@@ -305,13 +303,15 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         let _ = app.emit("shortcut-show", ());
         #[cfg(target_os = "macos")]
         {
-            if let Ok(window) = app.get_webview_panel("main") {
+            // Check Tauri's webview registry (not nspanel's) so that after
+            // reset_main_window closes the webview, we create a fresh one.
+            if let Some(window) = app.get_webview_window("main") {
                 match window.is_visible() {
-                    true => {
+                    Ok(true) => {
                         info!("window is visible, hiding main window");
                         hide_main_window(app)
                     }
-                    false => {
+                    _ => {
                         info!(
                             "window is not visible or error checking visibility, showing main window"
                         );
