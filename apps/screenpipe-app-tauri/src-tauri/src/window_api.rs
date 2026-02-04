@@ -10,6 +10,18 @@ use tracing::{error, info};
 #[cfg(target_os = "macos")]
 use tauri_nspanel::WebviewWindowExt;
 
+/// Run a closure on the main thread, catching any panics so they don't abort
+/// the process (Rust panics inside `run_on_main_thread` cross the Obj-C FFI
+/// boundary in `tao::send_event`, which is `nounwind` → calls `abort()`).
+#[cfg(target_os = "macos")]
+fn run_on_main_thread_safe<F: FnOnce() + Send + 'static>(app: &AppHandle, f: F) {
+    let _ = app.run_on_main_thread(move || {
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+            error!("panic caught in run_on_main_thread: {:?}", e);
+        }
+    });
+}
+
 
 use crate::{store::{OnboardingStore, SettingsStore}, ServerState};
 
@@ -352,7 +364,7 @@ impl ShowRewindWindow {
                 let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                 let app_clone = app.clone();
                 let lbl = label.to_string();
-                app.run_on_main_thread(move || {
+                run_on_main_thread_safe(app, move || {
                     if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
                         use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
                         use objc::{msg_send, sel, sel_impl};
@@ -367,7 +379,7 @@ impl ShowRewindWindow {
                         panel.order_front_regardless();
                         let _ = app_clone.emit("window-focused", true);
                     }
-                }).ok();
+                });
             }
             #[cfg(not(target_os = "macos"))]
             {
@@ -384,7 +396,7 @@ impl ShowRewindWindow {
                 let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                 let app_clone = app.clone();
                 let lbl = label.to_string();
-                app.run_on_main_thread(move || {
+                run_on_main_thread_safe(app, move || {
                     use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
                     use tauri_nspanel::cocoa::appkit::{NSEvent, NSScreen};
                     use tauri_nspanel::cocoa::base::{id, nil};
@@ -429,7 +441,7 @@ impl ShowRewindWindow {
                         panel.order_front_regardless();
                         let _ = app_clone.emit("window-focused", true);
                     }
-                }).ok();
+                });
             }
             #[cfg(target_os = "windows")]
             {
@@ -468,7 +480,7 @@ impl ShowRewindWindow {
                 let other_label = if overlay_mode == "window" { "main" } else { "main-window" };
                 if app.get_webview_window(other_label).is_some() {
                     let app_clone = app.clone();
-                    let _ = app.run_on_main_thread(move || {
+                    run_on_main_thread_safe(app, move || {
                         if let Ok(panel) = app_clone.get_webview_panel(other_label) {
                             panel.order_out(None);
                         }
@@ -512,7 +524,7 @@ impl ShowRewindWindow {
                         .unwrap_or_default()
                         .show_overlay_in_screen_recording;
                     let app_clone = app.clone();
-                    app.run_on_main_thread(move || {
+                    run_on_main_thread_safe(app, move || {
                         use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
                         use objc::{msg_send, sel, sel_impl};
 
@@ -527,7 +539,7 @@ impl ShowRewindWindow {
                             );
                             panel.order_front_regardless();
                         }
-                    }).ok();
+                    });
 
                     return Ok(window);
                 }
@@ -633,7 +645,7 @@ impl ShowRewindWindow {
                             info!("Converted window-mode main to panel");
                             let window_clone = window.clone();
                             let capturable = show_in_recording;
-                            app.run_on_main_thread(move || {
+                            run_on_main_thread_safe(app, move || {
                                 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
                                 use objc::{msg_send, sel, sel_impl};
 
@@ -652,7 +664,7 @@ impl ShowRewindWindow {
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
                                 }
-                            }).ok();
+                            });
                         }
                     }
 
@@ -709,7 +721,13 @@ impl ShowRewindWindow {
                             let screens: id = NSScreen::screens(nil);
                             let screen_count: u64 = NSArray::count(screens);
 
-                            let mut target_monitor = app.primary_monitor().unwrap().unwrap();
+                            let mut target_monitor = match app.primary_monitor() {
+                                Ok(Some(m)) => m,
+                                _ => {
+                                    error!("failed to get primary monitor for overlay creation");
+                                    return Err(tauri::Error::Anyhow(anyhow::anyhow!("no primary monitor")));
+                                }
+                            };
                             let mut target_position = (0.0_f64, 0.0_f64);
 
                             for i in 0..screen_count {
@@ -782,7 +800,7 @@ impl ShowRewindWindow {
                             })
                         })
                         .or_else(|| app.primary_monitor().ok().flatten())
-                        .unwrap();
+                        .ok_or_else(|| tauri::Error::Anyhow(anyhow::anyhow!("no monitor found for overlay")))?;
 
                     let position = monitor.position();
                     let logical_size: tauri::LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
@@ -835,7 +853,7 @@ impl ShowRewindWindow {
                         // Set panel behaviors on main thread to avoid crashes
                         let window_clone = window.clone();
                         let capturable = show_in_recording;
-                        app.run_on_main_thread(move || {
+                        run_on_main_thread_safe(app, move || {
                             use tauri_nspanel::cocoa::appkit::{NSWindowCollectionBehavior};
                             
                             if let Ok(panel) = window_clone.to_panel() {
@@ -862,7 +880,7 @@ impl ShowRewindWindow {
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
                             }
-                        }).ok();
+                        });
                     } else {
                         error!("Failed to convert main window to panel");
                     }
@@ -900,7 +918,10 @@ impl ShowRewindWindow {
                         }
                         tauri::WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size: _,.. } => {
                             // Handle display resolution/scale changes
-                            let monitor = window_clone.app_handle().primary_monitor().unwrap().unwrap();
+                            let Some(monitor) = window_clone.app_handle().primary_monitor().ok().flatten() else {
+                                error!("failed to get primary monitor for scale factor change");
+                                return;
+                            };
                             let scale_factor = monitor.scale_factor();
                             let size = monitor.size().to_logical::<f64>(scale_factor);
                             info!("Display scale factor changed, updating window size {:?}", size.clone());
@@ -985,7 +1006,7 @@ impl ShowRewindWindow {
                         info!("Successfully converted chat window to panel");
 
                         let window_clone = window.clone();
-                        app.run_on_main_thread(move || {
+                        run_on_main_thread_safe(app, move || {
                             use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
                             use objc::{msg_send, sel, sel_impl};
 
@@ -1011,7 +1032,7 @@ impl ShowRewindWindow {
 
                                 panel.order_front_regardless();
                             }
-                        }).ok();
+                        });
                     }
 
                     // Reset activation policy when chat window closes (same as overlay)
@@ -1058,7 +1079,7 @@ impl ShowRewindWindow {
                 #[cfg(target_os = "macos")]
                 {
                     let window_clone = window.clone();
-                    app.run_on_main_thread(move || {
+                    run_on_main_thread_safe(app, move || {
                         use raw_window_handle::HasWindowHandle;
                         if let Ok(handle) = window_clone.window_handle() {
                             if let raw_window_handle::RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
@@ -1070,7 +1091,7 @@ impl ShowRewindWindow {
                                 }
                             }
                         }
-                    }).ok();
+                    });
                 }
 
                 window
@@ -1088,7 +1109,7 @@ impl ShowRewindWindow {
             {
                 // Hide whichever main panel is active (could be "main" or "main-window")
                 let app_clone = app.clone();
-                app.run_on_main_thread(move || {
+                run_on_main_thread_safe(app, move || {
                     for label in &["main", "main-window"] {
                         if let Ok(panel) = app_clone.get_webview_panel(label) {
                             if panel.is_visible() {
@@ -1096,7 +1117,7 @@ impl ShowRewindWindow {
                             }
                         }
                     }
-                }).ok();
+                });
 
                 reset_to_regular_and_refresh_tray(app);
             }

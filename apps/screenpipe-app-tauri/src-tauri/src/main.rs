@@ -257,8 +257,14 @@ async fn register_shortcut(
     global_shortcut
         .on_shortcut(shortcut, move |app, _shortcut, event| {
             // Only trigger on key press, not release
+            // Wrap in catch_unwind: shortcut handlers are called from tao::send_event
+            // which crosses the Obj-C FFI boundary (nounwind). A panic here would abort().
             if matches!(event.state, ShortcutState::Pressed) {
-                handler(app);
+                if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    handler(app);
+                })) {
+                    error!("panic in shortcut handler: {:?}", e);
+                }
             }
         })
         .map_err(|e| e.to_string())
@@ -295,7 +301,9 @@ async fn initialize_global_shortcuts(app: &AppHandle) -> Result<(), String> {
 
 async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(), String> {
     let global_shortcut = app.global_shortcut();
-    global_shortcut.unregister_all().unwrap();
+    if let Err(e) = global_shortcut.unregister_all() {
+        error!("failed to unregister all shortcuts: {}", e);
+    }
 
     // Register show shortcut
     register_shortcut(app, &config.show, config.is_disabled("show"), |app| {
@@ -879,6 +887,37 @@ async fn main() {
     } else {
         None
     };
+
+    // Install a panic hook that logs to stderr + Sentry BEFORE the default hook runs.
+    // This is critical because panics inside `tao::send_event` (called from Obj-C)
+    // hit `panic_cannot_unwind` → `abort()`, and the default hook's output may be lost.
+    // By logging here we capture the actual panic message for diagnosis.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current();
+        let thread_name = thread.name().unwrap_or("<unnamed>");
+        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "unknown panic payload".to_string()
+        };
+        let location = info.location().map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())).unwrap_or_default();
+        // Log to stderr (survives even if tracing isn't initialized yet)
+        eprintln!("PANIC on thread '{}' at {}: {}", thread_name, location, payload);
+        // Also report to Sentry if initialized
+        sentry::capture_message(
+            &format!("panic on thread '{}' at {}: {}", thread_name, location, payload),
+            sentry::Level::Fatal,
+        );
+        // Flush Sentry so the event is sent before abort
+        if let Some(client) = sentry::Hub::current().client() {
+            client.flush(Some(std::time::Duration::from_secs(2)));
+        }
+        // Call the default hook (prints backtrace etc.)
+        default_hook(info);
+    }));
 
     // Set permanent OLLAMA_ORIGINS env var on Windows if not present
     #[cfg(target_os = "windows")]

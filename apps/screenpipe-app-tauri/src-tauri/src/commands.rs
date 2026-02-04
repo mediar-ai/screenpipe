@@ -83,7 +83,9 @@ pub fn hide_main_window(app_handle: &tauri::AppHandle) {
         let _ = unregister_window_shortcuts(app_clone);
     });
 
-    ShowRewindWindow::Main.close(app_handle).unwrap();
+    if let Err(e) = ShowRewindWindow::Main.close(app_handle) {
+        error!("failed to close main window: {}", e);
+    }
 }
 
 /// Enable click-through mode on the main overlay window (Windows only)
@@ -249,10 +251,10 @@ pub async fn open_pipe_window(
             }
             *is_closing = true;
             if window_clone.is_fullscreen().unwrap_or(false) {
-                let _ = window_clone.destroy().unwrap();
+                let _ = window_clone.destroy();
             } else {
                 api.prevent_close();
-                let _ = window_clone.close().unwrap();
+                let _ = window_clone.close();
             }
         }
     });
@@ -681,8 +683,12 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
     let escape_shortcut = Shortcut::new(None, Code::Escape);
     if let Err(e) = global_shortcut.on_shortcut(escape_shortcut, |app, _, event| {
         if matches!(event.state, ShortcutState::Pressed) {
-            info!("Escape pressed, emitting escape-pressed event");
-            let _ = app.emit("escape-pressed", ());
+            if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                info!("Escape pressed, emitting escape-pressed event");
+                let _ = app.emit("escape-pressed", ());
+            })) {
+                tracing::error!("panic in escape handler: {:?}", e);
+            }
         }
     }) {
         // Ignore "already registered" errors - shortcut may already be active
@@ -712,8 +718,12 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
         Ok(search_shortcut) => {
             if let Err(e) = global_shortcut.on_shortcut(search_shortcut, |app, _, event| {
                 if matches!(event.state, ShortcutState::Pressed) {
-                    info!("Search shortcut triggered");
-                    let _ = app.emit("open-search", ());
+                    if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        info!("Search shortcut triggered");
+                        let _ = app.emit("open-search", ());
+                    })) {
+                        tracing::error!("panic in search shortcut handler: {:?}", e);
+                    }
                 }
             }) {
                 if !e.to_string().contains("already registered") {
