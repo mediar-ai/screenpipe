@@ -10,6 +10,7 @@ import { handleModelListing } from './handlers/models';
 import { handleFileTranscription, handleWebSocketUpgrade } from './handlers/transcription';
 import { handleVoiceTranscription, handleVoiceQuery, handleTextToSpeech, handleVoiceChat } from './handlers/voice';
 import { handleVertexProxy, handleVertexModels } from './handlers/vertex-proxy';
+import { handleWebSearch } from './handlers/web-search';
 // import { handleTTSWebSocketUpgrade } from './handlers/voice-ws';
 
 export { RateLimiter };
@@ -89,6 +90,24 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 			}
 
 			return await handleChatCompletions(body, env, langfuse);
+		}
+
+		// Web search endpoint - uses Gemini's Google Search grounding
+		if (path === '/v1/web-search' && request.method === 'POST') {
+			// Track usage (counts as 1 query)
+			const ipAddress = request.headers.get('cf-connecting-ip') || undefined;
+			const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId, ipAddress);
+			if (!usage.allowed) {
+				return addCorsHeaders(createErrorResponse(429, JSON.stringify({
+					error: 'daily_limit_exceeded',
+					message: `You've used all ${usage.limit} free queries for today. Resets at ${usage.resetsAt}`,
+					used_today: usage.used,
+					limit_today: usage.limit,
+					resets_at: usage.resetsAt,
+					tier: authResult.tier,
+				})));
+			}
+			return await handleWebSearch(request, env);
 		}
 
 		if (path === '/v1/listen' && request.method === 'POST') {

@@ -220,6 +220,24 @@ fn ensure_screenpipe_skill(project_dir: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Ensure the web-search extension exists in the project's .pi/extensions directory
+fn ensure_web_search_extension(project_dir: &str) -> Result<(), String> {
+    let ext_dir = std::path::Path::new(project_dir)
+        .join(".pi")
+        .join("extensions");
+    let ext_path = ext_dir.join("web-search.ts");
+
+    std::fs::create_dir_all(&ext_dir)
+        .map_err(|e| format!("Failed to create extensions dir: {}", e))?;
+
+    let ext_content = include_str!("../assets/extensions/web-search.ts");
+    std::fs::write(&ext_path, ext_content)
+        .map_err(|e| format!("Failed to write web-search extension: {}", e))?;
+
+    debug!("Web search extension installed at {:?}", ext_path);
+    Ok(())
+}
+
 /// Ensure Pi is configured to use screenpipe as the AI provider
 fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
     let config_dir = get_pi_config_dir()?;
@@ -328,6 +346,9 @@ pub async fn pi_start(
 
     // Ensure screenpipe-search skill exists in project
     ensure_screenpipe_skill(&project_dir)?;
+
+    // Ensure web-search extension exists in project
+    ensure_web_search_extension(&project_dir)?;
 
     // Ensure Pi is configured
     ensure_pi_config(user_token.as_deref())?;
