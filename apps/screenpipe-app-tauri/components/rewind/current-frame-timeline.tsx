@@ -1,8 +1,9 @@
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
-import React, { FC, useState, useRef, useEffect, useCallback } from "react";
+import React, { FC, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
-import { TextOverlay } from "@/components/text-overlay";
-import { ImageOff, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { TextOverlay, extractUrlsFromText, isUrl, normalizeUrl } from "@/components/text-overlay";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { ImageOff, ChevronLeft, ChevronRight, Loader2, ExternalLink } from "lucide-react";
 import posthog from "posthog-js";
 
 interface CurrentFrameTimelineProps {
@@ -123,6 +124,29 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	const { textPositions } = useFrameOcrData(
 		debouncedFrameId ? parseInt(debouncedFrameId, 10) : null
 	);
+
+	// Extract all unique URLs from OCR text for the clickable URL bar
+	const detectedUrls = useMemo(() => {
+		const urls = new Map<string, string>(); // normalizedUrl -> displayUrl
+		for (const pos of textPositions) {
+			// Check whole block
+			if (isUrl(pos.text)) {
+				const norm = normalizeUrl(pos.text);
+				if (!urls.has(norm)) urls.set(norm, pos.text);
+				continue;
+			}
+			// Extract embedded URLs
+			for (const ext of extractUrlsFromText(pos.text)) {
+				if (!urls.has(ext.normalizedUrl)) {
+					urls.set(ext.normalizedUrl, ext.url);
+				}
+			}
+		}
+		return Array.from(urls.entries()).map(([normalized, display]) => ({
+			normalized,
+			display,
+		}));
+	}, [textPositions]);
 
 	// Abort previous image load and start new one when debounced frame changes
 	useEffect(() => {
@@ -388,6 +412,32 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 							clickableUrls={true}
 						/>
 					</div>
+				</div>
+			)}
+			{/* Detected URLs bar - shows clickable links found in the frame */}
+			{!isLoading && !hasError && detectedUrls.length > 0 && (
+				<div
+					className="absolute top-2 left-1/2 -translate-x-1/2 flex flex-wrap gap-1.5 max-w-[80%] justify-center"
+					style={{ zIndex: 20, pointerEvents: "auto" }}
+				>
+					{detectedUrls.map((url) => (
+						<button
+							key={url.normalized}
+							onClick={async (e) => {
+								e.stopPropagation();
+								try {
+									await shellOpen(url.normalized);
+								} catch {
+									window.open(url.normalized, "_blank");
+								}
+							}}
+							className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-black/70 hover:bg-black/90 text-blue-300 hover:text-blue-200 border border-blue-500/30 hover:border-blue-400/50 backdrop-blur-sm transition-colors cursor-pointer truncate max-w-[300px]"
+							title={url.normalized}
+						>
+							<ExternalLink className="w-3 h-3 shrink-0" />
+							<span className="truncate">{url.display}</span>
+						</button>
+					))}
 				</div>
 			)}
 			{/* When frame is unavailable, just show skeleton - skip happens silently */}
