@@ -474,30 +474,72 @@ pub async fn show_shortcut_reminder(
 
     info!("show_shortcut_reminder called");
 
-    // If window exists, just show it and update shortcut
-    if let Some(window) = app_handle.get_webview_window(label) {
-        info!("shortcut-reminder window exists, showing and focusing");
-        let _ = app_handle.emit_to(label, "shortcut-reminder-update", &shortcut);
-        let _ = window.show();
-        return Ok(());
-    }
-
-    // Get primary monitor dimensions for positioning
-    let monitor = app_handle
-        .primary_monitor()
-        .map_err(|e| e.to_string())?
-        .ok_or("No primary monitor found")?;
-
-    let screen_size = monitor.size();
-    let scale_factor = monitor.scale_factor();
-
     // Window dimensions for dual-shortcut display
     let window_width = 220.0;
     let window_height = 24.0;
 
-    // Position at top center of screen
-    let x = ((screen_size.width as f64 / scale_factor) - window_width) / 2.0;
-    let y = 12.0; // 12px from top
+    // Position at top center of the screen where the cursor is
+    let (x, y) = {
+        #[cfg(target_os = "macos")]
+        {
+            use tauri_nspanel::cocoa::appkit::{NSEvent, NSScreen};
+            use tauri_nspanel::cocoa::base::{id, nil};
+            use tauri_nspanel::cocoa::foundation::{NSArray, NSPoint, NSRect};
+            unsafe {
+                let mouse: NSPoint = NSEvent::mouseLocation(nil);
+                let screens: id = NSScreen::screens(nil);
+                let count: u64 = NSArray::count(screens);
+                let mut x = 0.0_f64;
+                let mut y = 12.0_f64;
+                for i in 0..count {
+                    let screen: id = NSArray::objectAtIndex(screens, i);
+                    let frame: NSRect = NSScreen::frame(screen);
+                    if mouse.x >= frame.origin.x
+                        && mouse.x < frame.origin.x + frame.size.width
+                        && mouse.y >= frame.origin.y
+                        && mouse.y < frame.origin.y + frame.size.height
+                    {
+                        x = frame.origin.x + (frame.size.width - window_width) / 2.0;
+                        y = 12.0;
+                        break;
+                    }
+                }
+                (x, y)
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let monitor = app_handle.primary_monitor()
+                .map_err(|e| e.to_string())?
+                .ok_or("No primary monitor found")?;
+            let screen_size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+            let x = ((screen_size.width as f64 / scale_factor) - window_width) / 2.0;
+            (x, 12.0)
+        }
+    };
+
+    // If window exists, reposition to current screen and show
+    if let Some(window) = app_handle.get_webview_window(label) {
+        info!("shortcut-reminder window exists, repositioning and showing");
+        let _ = window.set_position(tauri::Position::Logical(
+            tauri::LogicalPosition::new(x, y)
+        ));
+        let _ = app_handle.emit_to(label, "shortcut-reminder-update", &shortcut);
+        let _ = window.show();
+
+        #[cfg(target_os = "macos")]
+        {
+            use tauri_nspanel::ManagerExt;
+            let app_clone = app_handle.clone();
+            let _ = app_handle.run_on_main_thread(move || {
+                if let Ok(panel) = app_clone.get_webview_panel("shortcut-reminder") {
+                    panel.order_front_regardless();
+                }
+            });
+        }
+        return Ok(());
+    }
 
     // Note: We intentionally don't set Accessory activation policy here.
     // The shortcut reminder uses always_on_top which is sufficient for a small overlay.
@@ -565,10 +607,9 @@ pub async fn show_shortcut_reminder(
                     let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
 
                     panel.set_collection_behaviour(
-                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
-                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
-                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                     );
                     // Order front regardless to show above fullscreen
                     panel.order_front_regardless();
