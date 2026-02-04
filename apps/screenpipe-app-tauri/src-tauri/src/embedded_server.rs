@@ -13,8 +13,8 @@ use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
 use screenpipe_server::{
-    PipeManager, ResourceMonitor, SCServer, start_continuous_recording, start_ui_recording, 
-    UiRecorderConfig,
+    PipeManager, ResourceMonitor, SCServer, start_continuous_recording, start_sleep_monitor,
+    start_ui_recording, UiRecorderConfig,
     vision_manager::{VisionManager, VisionManagerConfig, start_monitor_watcher, stop_monitor_watcher},
 };
 use screenpipe_vision::OcrEngine;
@@ -507,6 +507,10 @@ pub async fn start_embedded_server(
     // Start resource monitor
     let resource_monitor = ResourceMonitor::new(config.analytics_enabled);
     resource_monitor.start_monitoring(Duration::from_secs(30), Some(Duration::from_secs(60)));
+
+    // Start sleep/wake monitor for telemetry (macOS only)
+    // Tracks system sleep/wake events and checks if recording degrades after wake
+    start_sleep_monitor();
 
     // Create pipe manager (disabled)
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir.clone()));

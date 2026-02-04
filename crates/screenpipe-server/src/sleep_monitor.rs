@@ -23,17 +23,30 @@ pub fn recently_woke_from_sleep() -> bool {
 
 /// Start the sleep/wake monitor on macOS
 /// This sets up NSWorkspace notification observers for sleep and wake events.
+/// Must be called from within a tokio runtime context so we can capture the handle.
 #[cfg(target_os = "macos")]
 pub fn start_sleep_monitor() {
     use cidre::ns;
 
     info!("Starting macOS sleep/wake monitor");
 
-    std::thread::spawn(|| {
+    // Capture the tokio runtime handle BEFORE spawning the monitor thread.
+    // The monitor thread runs an NSRunLoop (not a tokio runtime), so bare
+    // tokio::spawn() would panic. We pass the handle in so on_did_wake
+    // can schedule async health checks back on the real runtime.
+    let handle = match tokio::runtime::Handle::try_current() {
+        Ok(h) => h,
+        Err(e) => {
+            error!("Sleep monitor requires a tokio runtime context: {}", e);
+            return;
+        }
+    };
+
+    std::thread::spawn(move || {
         // We need to run this on a thread with a run loop
         // cidre's notification center requires the main run loop or a dedicated one
 
-        let result = std::panic::catch_unwind(|| {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             // Get the shared workspace - cidre returns Retained<Workspace> directly
             let workspace = ns::Workspace::shared();
 
@@ -55,13 +68,14 @@ pub fn start_sleep_monitor() {
 
             // Subscribe to did_wake notification
             let did_wake_name = ns::workspace::notification::did_wake();
+            let wake_handle = handle.clone();
             let _wake_guard = notification_center.add_observer_guard(
                 did_wake_name,
                 None,
                 None,
-                |_notification| {
+                move |_notification| {
                     info!("System woke from sleep");
-                    on_did_wake();
+                    on_did_wake(&wake_handle);
                 },
             );
 
@@ -92,7 +106,7 @@ pub fn start_sleep_monitor() {
             // Run the run loop to receive notifications
             // This will block forever, which is fine since we're in a dedicated thread
             ns::RunLoop::current().run();
-        });
+        }));
 
         if let Err(e) = result {
             error!("Sleep monitor panicked: {:?}", e);
@@ -111,13 +125,14 @@ fn on_will_sleep() {
 }
 
 /// Called when system wakes from sleep
-fn on_did_wake() {
+fn on_did_wake(handle: &tokio::runtime::Handle) {
     // Mark that we recently woke
     RECENTLY_WOKE.store(true, Ordering::SeqCst);
 
-    // Spawn a task to check recording health after a short delay
-    // This gives the system time to stabilize after wake
-    tokio::spawn(async {
+    // Spawn a task on the captured tokio runtime handle to check recording
+    // health after a short delay. We can't use bare tokio::spawn() here
+    // because this callback runs on an NSRunLoop thread, not a tokio thread.
+    handle.spawn(async {
         // Wait 5 seconds for system to stabilize
         tokio::time::sleep(Duration::from_secs(5)).await;
 
