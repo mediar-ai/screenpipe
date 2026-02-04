@@ -562,10 +562,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 			setIsLoadingSuggestions(true);
 
 			const openai = new OpenAI({
-				apiKey:
-					(defaultPreset.provider === "screenpipe-cloud"
-						? settings?.user?.token
-						: defaultPreset.apiKey) || undefined,
+				apiKey: defaultPreset.apiKey || undefined,
 				baseURL: defaultPreset.url,
 				dangerouslyAllowBrowser: true,
 			});
@@ -620,10 +617,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 		const defaultPreset = settings?.aiPresets?.find(p => p.defaultPreset) || settings?.aiPresets?.[0];
 
 		const openai = new OpenAI({
-			apiKey:
-				(defaultPreset?.provider === "screenpipe-cloud"
-					? settings?.user?.token
-					: defaultPreset?.apiKey) || undefined,
+			apiKey: defaultPreset?.apiKey || undefined,
 			baseURL: defaultPreset?.url,
 			dangerouslyAllowBrowser: true,
 		});
@@ -675,10 +669,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 		const defaultPreset = settings?.aiPresets?.find(p => p.defaultPreset) || settings?.aiPresets?.[0];
 		
 		const openai = new OpenAI({
-			apiKey:
-				(defaultPreset?.provider === "screenpipe-cloud"
-					? settings?.user?.token
-					: defaultPreset?.apiKey) || undefined,
+			apiKey: defaultPreset?.apiKey || undefined,
 			baseURL: defaultPreset?.url,
 			dangerouslyAllowBrowser: true,
 		});

@@ -184,20 +184,19 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     openUrl("https://cal.com/louis030195/screenpipe-onboarding");
   };
 
-  // Create default screenpipe-cloud preset if none exists
+  // Create default Pi preset if none exists
   const ensureDefaultPreset = async () => {
     if (settings.aiPresets.length === 0) {
       const defaultPreset = {
-        id: crypto.randomUUID(),
-        provider: "screenpipe-cloud" as const,
-        url: "https://api.screenpi.pe/v1",
-        model: "claude-haiku-4-5",
-        maxContextChars: 512000,
+        id: "pi-agent",
+        provider: "pi" as const,
+        url: "",
+        model: "claude-haiku-4-5@20251001",
+        maxContextChars: 200000,
         defaultPreset: true,
-        prompt: DEFAULT_PROMPT,
-        apiKey: "",
+        prompt: "",
       };
-      await updateSettings({ aiPresets: [defaultPreset] });
+      await updateSettings({ aiPresets: [defaultPreset as any] });
     }
   };
 

@@ -13,7 +13,7 @@ export type AIProviderType =
 	| "openai"
 	| "custom"
 	| "embedded"
-	| "screenpipe-cloud";
+	| "pi";
 
 export type EmbeddedLLMConfig = {
 	enabled: boolean;
@@ -145,30 +145,11 @@ const DEFAULT_PI_PRESET: AIPreset = {
 	prompt: "",
 };
 
-// Screenpipe cloud preset (direct API, no agent)
-const DEFAULT_FREE_PRESET: AIPreset = {
-	id: "screenpipe-free",
-	provider: "screenpipe-cloud",
-	url: "https://api.screenpi.pe/v1",
-	model: "claude-haiku-4-5@20251001",
-	maxContextChars: 128000,
-	defaultPreset: false,
-	prompt: DEFAULT_PROMPT,
-};
-
-// Gemini Flash 3 preset (direct API, supports web search via Google grounding)
-const DEFAULT_GEMINI_PRESET: AIPreset = {
-	id: "gemini-flash",
-	provider: "screenpipe-cloud",
-	url: "https://api.screenpi.pe/v1",
-	model: "gemini-3-flash",
-	maxContextChars: 128000,
-	defaultPreset: false,
-	prompt: DEFAULT_PROMPT,
-};
+// Legacy presets removed — Pi agent is the only default now
+// screenpipe-cloud presets are migrated away for existing users
 
 let DEFAULT_SETTINGS: Settings = {
-			aiPresets: [DEFAULT_PI_PRESET as any, DEFAULT_FREE_PRESET as any, DEFAULT_GEMINI_PRESET as any],
+			aiPresets: [DEFAULT_PI_PRESET as any],
 			deviceId: crypto.randomUUID(),
 			deepgramApiKey: "",
 			isLoading: false,
@@ -301,16 +282,7 @@ function createSettingsStore() {
 
 		// Migration: Add default presets if user has none
 		if (!settings.aiPresets || settings.aiPresets.length === 0) {
-			settings.aiPresets = [DEFAULT_PI_PRESET as any, DEFAULT_FREE_PRESET as any, DEFAULT_GEMINI_PRESET as any];
-			needsUpdate = true;
-		}
-
-		// Migration: Add Gemini preset for existing users who don't have it
-		const hasGeminiPreset = settings.aiPresets?.some(
-			(p: any) => p.id === "gemini-flash" || p.model?.includes("gemini")
-		);
-		if (settings.aiPresets && settings.aiPresets.length > 0 && !hasGeminiPreset) {
-			settings.aiPresets = [...settings.aiPresets, DEFAULT_GEMINI_PRESET as any];
+			settings.aiPresets = [DEFAULT_PI_PRESET as any];
 			needsUpdate = true;
 		}
 
@@ -323,6 +295,26 @@ function createSettingsStore() {
 			settings.aiPresets = settings.aiPresets.map((p: any) => ({ ...p, defaultPreset: false }));
 			// Add Pi as default at the front
 			settings.aiPresets = [DEFAULT_PI_PRESET as any, ...settings.aiPresets];
+			needsUpdate = true;
+		}
+
+		// Migration: Remove screenpipe-cloud presets (replaced by Pi agent)
+		if (settings.aiPresets?.some((p: any) => p.provider === "screenpipe-cloud")) {
+			const wasDefault = settings.aiPresets.some(
+				(p: any) => p.provider === "screenpipe-cloud" && p.defaultPreset
+			);
+			settings.aiPresets = settings.aiPresets.filter(
+				(p: any) => p.provider !== "screenpipe-cloud"
+			);
+			// If a screenpipe-cloud preset was default, make Pi default
+			if (wasDefault) {
+				const piPreset = settings.aiPresets.find((p: any) => p.provider === "pi");
+				if (piPreset) (piPreset as any).defaultPreset = true;
+			}
+			// Ensure we still have at least one preset
+			if (settings.aiPresets.length === 0) {
+				settings.aiPresets = [DEFAULT_PI_PRESET as any];
+			}
 			needsUpdate = true;
 		}
 

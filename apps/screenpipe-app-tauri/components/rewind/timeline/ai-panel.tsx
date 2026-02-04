@@ -26,7 +26,6 @@ import posthog from "posthog-js";
 
 const providerIcons = {
 	openai: <Image src="/images/openai.png" alt="OpenAI" width={16} height={16} />,
-	"screenpipe-cloud": <Image src="/images/screenpipe.png" alt="Screenpipe Cloud" width={16} height={16} />,
 	"native-ollama": <Image src="/images/ollama.png" alt="Ollama" width={16} height={16} />,
 	custom: <Image src="/images/custom.png" alt="Custom" width={16} height={16} />,
 	pi: <Image src="/images/screenpipe.png" alt="Pi" width={16} height={16} />,
@@ -226,8 +225,8 @@ export function AIPanel({
 		e.preventDefault();
 		if (!selectionRange || !aiInput.trim()) return;
 
-		// Check login for screenpipe-cloud
-		if (activePreset?.provider === "screenpipe-cloud" && !checkLogin(settings.user)) {
+		// Check login for pi
+		if (activePreset?.provider === "pi" && !checkLogin(settings.user)) {
 			return;
 		}
 
@@ -304,12 +303,9 @@ export function AIPanel({
 
 			if (!activePreset) return;
 
-			const apiKey =
-			activePreset?.provider === "screenpipe-cloud"
-				? settings.user?.token || ""
-				: "apiKey" in activePreset
-					? (activePreset?.apiKey as string) || ""
-					: "";
+			const apiKey = "apiKey" in activePreset
+				? (activePreset?.apiKey as string) || ""
+				: "";
 
 			const openai = new OpenAI({
 				apiKey: apiKey,

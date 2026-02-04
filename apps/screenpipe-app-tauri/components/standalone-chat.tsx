@@ -863,7 +863,7 @@ export function StandaloneChat() {
   const hasPresets = settings.aiPresets && settings.aiPresets.length > 0;
   const isPi = activePreset?.provider === "pi";
   const hasValidModel = isPi || (activePreset?.model && activePreset.model.trim() !== "");
-  const needsLogin = (activePreset?.provider === "screenpipe-cloud" || isPi) && !settings.user?.token;
+  const needsLogin = isPi && !settings.user?.token;
   const piReady = isPi ? piInfo?.running : true;
   const canChat = hasPresets && hasValidModel && !needsLogin;
 
@@ -1277,28 +1277,14 @@ export function StandaloneChat() {
   function getOpenAIClient(): OpenAI | null {
     if (!activePreset) return null;
 
-    const apiKey =
-      activePreset.provider === "screenpipe-cloud"
-        ? settings.user?.token || "anonymous"
-        : "apiKey" in activePreset
-          ? (activePreset.apiKey as string) || ""
-          : "";
-
-    const baseURL =
-      activePreset.provider === "screenpipe-cloud"
-        ? "https://api.screenpi.pe/v1"
-        : activePreset.url;
-
-    const defaultHeaders: Record<string, string> = {};
-    if (activePreset.provider === "screenpipe-cloud" && settings.deviceId) {
-      defaultHeaders["X-Device-Id"] = settings.deviceId;
-    }
+    const apiKey = "apiKey" in activePreset
+      ? (activePreset.apiKey as string) || ""
+      : "";
 
     return new OpenAI({
       apiKey,
-      baseURL,
+      baseURL: activePreset.url,
       dangerouslyAllowBrowser: true,
-      defaultHeaders,
     });
   }
 

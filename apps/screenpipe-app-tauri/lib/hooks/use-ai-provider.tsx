@@ -53,16 +53,6 @@ export function useAiProvider(
 						}
 						break;
 
-					case "screenpipe-cloud":
-						if (!settings.user?.token) {
-							setStatus({
-								isAvailable: false,
-								error: "login required for screenpipe cloud",
-							});
-							return;
-						}
-						break;
-
 					case "custom":
 						if (!settings.aiUrl) {
 							setStatus({

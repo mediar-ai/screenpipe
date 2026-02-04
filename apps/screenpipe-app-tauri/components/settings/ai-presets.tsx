@@ -77,7 +77,7 @@ const formatPresetName = (name: string): string => {
 };
 
 export interface AIProviderCardProps {
-  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded" | "pi";
+  type: "openai" | "native-ollama" | "custom" | "embedded" | "pi";
   title: string;
   description: string;
   imageSrc: string;
@@ -361,13 +361,6 @@ const AISection = ({
       case "native-ollama":
         newUrl = "http://localhost:11434/v1";
         break;
-      case "screenpipe-cloud":
-        newUrl = "https://api.screenpi.pe/v1";
-        // Set default model for screenpipe-cloud if not already set
-        if (!newModel) {
-          newModel = "claude-haiku-4-5@20251001";
-        }
-        break;
       case "custom":
         newUrl = settingsPreset?.url || "";
         break;
@@ -396,19 +389,6 @@ const AISection = ({
     setIsLoadingModels(true);
     try {
       switch (settingsPreset?.provider) {
-        case "screenpipe-cloud":
-          const response = await fetch(
-            "https://api.screenpi.pe/v1/models",
-            {
-              headers: {
-                Authorization: `Bearer ${settings.user?.id || ""}`,
-              },
-            }
-          );
-          if (!response.ok) throw new Error("Failed to fetch models");
-          const data = await response.json();
-          setModels(data.models);
-          break;
 
         case "native-ollama":
           const ollamaResponse = await fetch("http://localhost:11434/api/tags");
@@ -539,23 +519,6 @@ const AISection = ({
             imageSrc="/images/openai.png"
             selected={settingsPreset?.provider === "openai"}
             onClick={() => handleAiProviderChange("openai")}
-          />
-
-          <AIProviderCard
-            type="screenpipe-cloud"
-            title="Screenpipe Cloud"
-            description="Use AI models instantly. Free: 25 queries/day. Login for 50/day. Subscribe for unlimited."
-            imageSrc="/images/screenpipe.png"
-            selected={settingsPreset?.provider === "screenpipe-cloud"}
-            onClick={() => handleAiProviderChange("screenpipe-cloud")}
-            disabled={false}
-            warningText={
-              !settings.user
-                ? "Free: 25/day"
-                : settings.user?.cloud_subscribed
-                ? "Unlimited"
-                : "50/day"
-            }
           />
 
           <AIProviderCard
@@ -819,9 +782,8 @@ const AISection = ({
   );
 };
 
-const providerImageSrc: Record<AIPreset["provider"], string> = {
+const providerImageSrc: Record<string, string> = {
   openai: "/images/openai.png",
-  "screenpipe-cloud": "/images/screenpipe.png",
   "native-ollama": "/images/ollama.png",
   custom: "/images/custom.png",
   pi: "/images/screenpipe.png",

@@ -98,9 +98,6 @@ type RecommendedPreset = BaseRecommendedPreset &
     | {
         provider: "native-ollama";
       }
-    | {
-        provider: "screenpipe-cloud";
-      }
   );
 
 interface AIProviderConfigProps {
@@ -262,11 +259,6 @@ export function AIProviderConfig({
     } else if (selectedProvider === "native-ollama") {
       const baseUrl = "http://localhost:11434/v1";
       fetchOllamaModels(baseUrl);
-    } else if (selectedProvider === "screenpipe-cloud") {
-      fetchOpenAIModels(
-        "https://api.screenpi.pe/v1",
-        settings?.user?.token ?? "",
-      );
     } else if (
       selectedProvider === "custom" &&
       formData.url &&
@@ -294,47 +286,7 @@ export function AIProviderConfig({
     }
   };
 
-  // Check if editing a screenpipe-cloud preset while not logged in
-  const isScreenpipeCloudWithoutLogin =
-    selectedProvider === "screenpipe-cloud" && !settings?.user?.token;
 
-  // If editing an existing screenpipe-cloud preset without being logged in, show login prompt
-  if (defaultPreset?.provider === "screenpipe-cloud" && !settings?.user?.token) {
-    return (
-      <div className="w-full space-y-4 rounded-lg bg-card p-4">
-        <div>
-          <h2 className="text-base font-semibold">edit ai provider</h2>
-          <p className="text-xs text-muted-foreground">
-            modify your ai provider settings
-          </p>
-        </div>
-
-        <div className="flex flex-col items-center justify-center py-6 space-y-3">
-          <div className="p-3 rounded-full bg-amber-500/10">
-            <LogIn className="h-6 w-6 text-amber-500" />
-          </div>
-          <div className="text-center space-y-1">
-            <h3 className="font-semibold text-base">Login Required</h3>
-            <p className="text-xs text-muted-foreground max-w-sm">
-              This preset uses Screenpipe Cloud. Please log in to edit it.
-            </p>
-          </div>
-          {showLoginCta && (
-            <Button
-              onClick={async () => {
-                await commands.showWindow({ Settings: { page: "account" } });
-              }}
-              className="gap-2 h-9"
-              size="sm"
-            >
-              <LogIn className="h-4 w-4" />
-              Go to Login
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full space-y-3 rounded-lg bg-card p-3">
@@ -413,26 +365,6 @@ export function AIProviderConfig({
           >
             <Icons.terminal className="h-4 w-4" />
             <span>ollama</span>
-          </Button>
-
-          <Button
-            type="button"
-            disabled={!settings?.user?.token}
-            variant={
-              selectedProvider === "screenpipe-cloud" ? "default" : "outline"
-            }
-            className="flex h-10 flex-col items-center justify-center gap-0.5 text-xs"
-            onClick={() => {
-              setSelectedProvider("screenpipe-cloud");
-              setFormData({
-                ...formData,
-                provider: "screenpipe-cloud",
-                url: "https://api.screenpi.pe/v1",
-              });
-            }}
-          >
-            <Icons.terminal className="h-4 w-4" />
-            <span>cloud</span>
           </Button>
 
           <Button
@@ -582,39 +514,6 @@ export function AIProviderConfig({
                 </SelectContent>
               </Select>
             </div>
-          </div>
-        )}
-
-        {selectedProvider === "screenpipe-cloud" && (
-          <div className="space-y-1">
-            <Label htmlFor="model" className="text-sm">model</Label>
-            <Select
-              value={formData.model}
-              onValueChange={(value) =>
-                setFormData({ ...formData, model: value })
-              }
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue
-                  placeholder={
-                    isLoadingModels ? "loading models..." : "select model"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {openaiModels.length > 0 ? (
-                  openaiModels.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.id}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="no-models" disabled>
-                    {isLoadingModels ? "loading..." : "no models found"}
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
           </div>
         )}
 
@@ -887,7 +786,7 @@ export const AIPresetsSelector = ({
   // Check if selected preset requires login
   const selectedPresetRequiresLogin = useMemo(() => {
     const preset = aiPresets.find((p) => p.id === selectedPreset);
-    return preset?.provider === "screenpipe-cloud" && !settings?.user?.token;
+    return preset?.provider === "pi" && !settings?.user?.token;
   }, [aiPresets, selectedPreset, settings?.user?.token]);
 
   useEffect(() => {
@@ -1254,11 +1153,9 @@ export const AIPresetsSelector = ({
                                     url:
                                       preset.provider === "openai"
                                         ? "https://api.openai.com/v1"
-                                        : preset.provider === "screenpipe-cloud"
-                                          ? "https://api.screenpi.pe/v1"
-                                          : preset.provider === "native-ollama"
-                                            ? "http://localhost:11434/v1"
-                                            : "",
+                                        : preset.provider === "native-ollama"
+                                          ? "http://localhost:11434/v1"
+                                          : "",
                                     defaultPreset: false,
                                   } as AIPreset;
                                   setSelectedPresetToEdit(fullPreset);

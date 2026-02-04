@@ -50,9 +50,8 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
       url !== "http://localhost:11434/v1";
 
     // Check if API key is required and present
-    // Screenpipe Cloud no longer requires API key - works with free tier
     const hasRequiredApiKey = !isApiKeyRequired ||
-      provider === "screenpipe-cloud" ||
+      provider === "pi" ||
       ((provider === "openai" || provider === "custom") &&
        "apiKey" in defaultPreset &&
        defaultPreset.apiKey?.trim() !== "");
@@ -82,12 +81,9 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
       const { url, model, provider } = defaultPreset;
 
       // Get API key if available based on provider
-      // For screenpipe-cloud, use "anonymous" if not logged in (free tier)
       const apiKey = (provider === "openai" || provider === "custom") && "apiKey" in defaultPreset
         ? defaultPreset.apiKey
-        : provider === "screenpipe-cloud"
-          ? settings?.user?.token || "anonymous"
-          : "";
+        : "";
 
       const t = toast({
         title: "Validating AI provider",
@@ -95,14 +91,10 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         duration: 10000,
       });
 
-      // Build headers - include device ID for screenpipe-cloud usage tracking
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       };
-      if (provider === "screenpipe-cloud" && settings?.deviceId) {
-        headers["X-Device-Id"] = settings.deviceId;
-      }
 
       const response = await fetch(`${url}/chat/completions`, {
         method: "POST",
