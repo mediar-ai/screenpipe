@@ -116,8 +116,8 @@ jobs:
               print(f"  Current patch: {current_patch}, threshold: {threshold_patch} (resolve if latest event <= {threshold_patch})")
               print()
 
-              # Fetch all unresolved issues for this project
-              url = f"https://sentry.io/api/0/projects/{ORG_SLUG}/{project}/issues/?query=is:unresolved&sort=date&limit=100"
+              # Fetch all unresolved issues for this project (use org-level endpoint for broader token compatibility)
+              url = f"https://sentry.io/api/0/organizations/{ORG_SLUG}/issues/?query=is:unresolved+project:{project}&sort=date&limit=100"
               issues = sentry_request(url)
               if not issues:
                   print(f"  No issues found or error fetching")
