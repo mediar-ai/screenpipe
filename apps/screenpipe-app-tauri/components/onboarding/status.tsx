@@ -10,7 +10,7 @@ import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { homeDir, join } from "@tauri-apps/api/path";
-import { TimelineAIDemo } from "./timeline-ai-demo";
+// TimelineAIDemo removed — shortcut gate replaces it
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { getVersion } from "@tauri-apps/api/app";
 import { version as osVersion, platform as osPlatform } from "@tauri-apps/plugin-os";
@@ -74,7 +74,6 @@ function formatShortcut(shortcut: string, isMac: boolean): string {
 
 interface OnboardingStatusProps {
   className?: string;
-  handlePrevSlide: () => void;
   handleNextSlide: () => void;
 }
 
@@ -97,6 +96,16 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const hasStartedRef = useRef(false);
   const isStartingRef = useRef(false);
   const stuckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasAdvancedRef = useRef(false);
+
+  // Auto-advance to shortcut gate when recording starts
+  useEffect(() => {
+    if (setupState === "recording" && !hasAdvancedRef.current) {
+      hasAdvancedRef.current = true;
+      handleNextSlide();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupState]);
 
   const sendLogs = async () => {
     setIsSendingLogs(true);
@@ -402,6 +411,20 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   return (
     <div className={`${className} w-full flex flex-col items-center justify-center min-h-[400px]`}>
 
+      {/* Branding */}
+      {(setupState === "checking" || setupState === "needs-permissions") && (
+        <motion.div
+          className="flex flex-col items-center mb-6"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <img className="w-14 h-14 mb-3" src="/128x128.png" alt="screenpipe" />
+          <h1 className="font-mono text-lg font-bold text-foreground">screenpipe</h1>
+          <p className="font-mono text-xs text-muted-foreground mt-1">AI memory for your screen</p>
+        </motion.div>
+      )}
+
       {/* Checking state */}
       {setupState === "checking" && (
         <motion.div
@@ -588,73 +611,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         </motion.div>
       )}
 
-      {/* Recording state */}
-      {setupState === "recording" && (
-        <motion.div
-          className="flex flex-col items-center space-y-8"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-3 h-3 bg-foreground animate-pulse" />
-            <span className="font-mono text-lg text-foreground">recording</span>
-          </div>
-
-          <div className="text-center space-y-2">
-            <p className="font-mono text-sm text-muted-foreground">
-              screenpipe is now capturing your screen and audio
-            </p>
-            <p className="font-mono text-xs text-muted-foreground">
-              find it in your menu bar anytime
-            </p>
-          </div>
-
-          {/* Shortcut reminders */}
-          <div className="border border-border px-6 py-3 space-y-1.5">
-            <div className="flex items-center justify-between gap-8 font-mono text-xs">
-              <span className="text-muted-foreground">timeline</span>
-              <span className="font-semibold text-foreground px-2 py-0.5 bg-muted border border-border">
-                {formatShortcut(settings.showScreenpipeShortcut, isMacOS)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-8 font-mono text-xs">
-              <span className="text-muted-foreground">ai chat</span>
-              <span className="font-semibold text-foreground px-2 py-0.5 bg-muted border border-border">
-                {formatShortcut(settings.showChatShortcut, isMacOS)}
-              </span>
-            </div>
-          </div>
-
-          {/* Timeline + AI Chat animation */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <TimelineAIDemo />
-          </motion.div>
-
-          <div className="flex items-center space-x-4 text-xs font-mono text-muted-foreground">
-            <div className="flex items-center space-x-2">
-              <Check className="w-4 h-4" strokeWidth={1.5} />
-              <span>screen</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Check className="w-4 h-4" strokeWidth={1.5} />
-              <span>audio</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Check className="w-4 h-4" strokeWidth={1.5} />
-              <span>local</span>
-            </div>
-          </div>
-
-          <Button onClick={handleComplete} size="lg">
-            continue
-          </Button>
-        </motion.div>
-      )}
+      {/* Recording state — auto-advances to shortcut gate via useEffect */}
 
       {/* Ready but not auto-started (fallback) */}
       {setupState === "ready" && (
