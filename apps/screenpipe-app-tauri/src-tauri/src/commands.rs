@@ -345,16 +345,17 @@ pub async fn close_window(
 #[specta::specta]
 /// Hide the Main panel so the next shortcut press reconfigures it for the new mode.
 pub fn reset_main_window(app_handle: tauri::AppHandle) {
-    info!("reset_main_window: hiding Main panel for mode switch");
-    let label = crate::window_api::RewindWindowId::Main.label();
+    info!("reset_main_window: hiding all Main panels for mode switch");
 
     #[cfg(target_os = "macos")]
     {
         use tauri_nspanel::ManagerExt;
         let app_clone = app_handle.clone();
         let _ = app_handle.run_on_main_thread(move || {
-            if let Ok(panel) = app_clone.get_webview_panel(label) {
-                panel.order_out(None);
+            for label in &["main", "main-window"] {
+                if let Ok(panel) = app_clone.get_webview_panel(label) {
+                    panel.order_out(None);
+                }
             }
         });
         crate::window_api::reset_to_regular_and_refresh_tray(&app_handle);
@@ -362,8 +363,10 @@ pub fn reset_main_window(app_handle: tauri::AppHandle) {
 
     #[cfg(not(target_os = "macos"))]
     {
-        if let Some(window) = app_handle.get_webview_window(label) {
-            let _ = window.destroy();
+        for label in &["main", "main-window"] {
+            if let Some(window) = app_handle.get_webview_window(label) {
+                let _ = window.destroy();
+            }
         }
     }
 }

@@ -303,9 +303,16 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         let _ = app.emit("shortcut-show", ());
         #[cfg(target_os = "macos")]
         {
-            // Check Tauri's webview registry (not nspanel's) so that after
-            // reset_main_window closes the webview, we create a fresh one.
-            if let Some(window) = app.get_webview_window("main") {
+            use crate::window_api::main_label_for_mode;
+            use crate::store::SettingsStore;
+            // Get current mode to find the right window label
+            let mode = SettingsStore::get(app)
+                .unwrap_or_default()
+                .unwrap_or_default()
+                .overlay_mode;
+            let label = main_label_for_mode(&mode);
+
+            if let Some(window) = app.get_webview_window(label) {
                 match window.is_visible() {
                     Ok(true) => {
                         info!("window is visible, hiding main window");
@@ -313,13 +320,13 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
                     }
                     _ => {
                         info!(
-                            "window is not visible or error checking visibility, showing main window"
+                            "window is not visible, showing main window"
                         );
                         show_main_window(app, false)
                     }
                 }
             } else {
-                debug!("main window not found, creating it");
+                debug!("main window not found for mode '{}', creating it", mode);
                 show_main_window(app, false)
             }
         }

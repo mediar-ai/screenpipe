@@ -13,9 +13,15 @@ use tauri_nspanel::WebviewWindowExt;
 
 use crate::{store::{OnboardingStore, SettingsStore}, ServerState};
 
-/// Tracks the overlay mode the Main window was last created with.
-/// When the setting changes, the show path detects the mismatch and recreates.
-static MAIN_CREATED_MODE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+/// Tracks which overlay mode the current Main window was created for.
+/// When the mode changes, show() hides the old panel and creates a fresh one
+/// under a different label to avoid NSPanel reconfiguration crashes.
+static MAIN_CREATED_MODE: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
+
+/// Returns the window label for the given overlay mode.
+pub fn main_label_for_mode(mode: &str) -> &'static str {
+    if mode == "window" { "main-window" } else { "main" }
+}
 
 /// Reset activation policy to Regular so dock icon and tray are visible.
 #[cfg(target_os = "macos")]
@@ -249,6 +255,29 @@ pub enum ShowRewindWindow {
 }
 
 impl ShowRewindWindow {
+    fn window_builder_with_label<'a>(
+        &'a self,
+        app: &'a AppHandle<Wry>,
+        url: impl Into<PathBuf>,
+        label: &str,
+    ) -> WebviewWindowBuilder<'a, Wry, AppHandle<Wry>> {
+        let id = self.id();
+
+        let mut builder = WebviewWindow::builder(app, label, WebviewUrl::App(url.into()))
+            .title(id.title())
+            .visible(true)
+            .accept_first_mouse(true)
+            .shadow(true);
+
+        if let Some(min) = id.min_size() {
+            builder = builder
+                .inner_size(min.0, min.1)
+                .min_inner_size(min.0, min.1);
+        }
+
+        builder
+    }
+
     fn window_builder<'a>(
         &'a self,
         app: &'a AppHandle<Wry>,
@@ -307,183 +336,140 @@ impl ShowRewindWindow {
         }
     }
 
+    /// Show an existing Main window (already created for the current mode).
+    fn show_existing_main(&self, app: &AppHandle, window: &WebviewWindow, overlay_mode: &str, label: &str) -> tauri::Result<WebviewWindow> {
+        if overlay_mode == "window" {
+            info!("showing existing main window (window mode)");
+            #[cfg(target_os = "macos")]
+            {
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                let app_clone = app.clone();
+                let lbl = label.to_string();
+                app.run_on_main_thread(move || {
+                    if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
+                        use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                        panel.set_level(1001);
+                        panel.set_collection_behaviour(
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                        );
+                        panel.order_front_regardless();
+                        let _ = app_clone.emit("window-focused", true);
+                    }
+                }).ok();
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                window.show().ok();
+                window.set_focus().ok();
+                let _ = app.emit("window-focused", true);
+            }
+        } else {
+            info!("showing existing panel (overlay mode)");
+            #[cfg(target_os = "macos")]
+            {
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                let app_clone = app.clone();
+                let lbl = label.to_string();
+                app.run_on_main_thread(move || {
+                    use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                    use tauri_nspanel::cocoa::appkit::{NSEvent, NSScreen};
+                    use tauri_nspanel::cocoa::base::{id, nil};
+                    use tauri_nspanel::cocoa::foundation::{NSArray, NSPoint, NSRect};
+
+                    if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
+                        use objc::{msg_send, sel, sel_impl};
+                        unsafe {
+                            let mouse_location: NSPoint = NSEvent::mouseLocation(nil);
+                            let screens: id = NSScreen::screens(nil);
+                            let screen_count: u64 = NSArray::count(screens);
+                            let mut target_screen: id = nil;
+                            for i in 0..screen_count {
+                                let screen: id = NSArray::objectAtIndex(screens, i);
+                                let frame: NSRect = NSScreen::frame(screen);
+                                if mouse_location.x >= frame.origin.x
+                                    && mouse_location.x < frame.origin.x + frame.size.width
+                                    && mouse_location.y >= frame.origin.y
+                                    && mouse_location.y < frame.origin.y + frame.size.height
+                                {
+                                    target_screen = screen;
+                                    break;
+                                }
+                            }
+                            if target_screen != nil {
+                                let frame: NSRect = NSScreen::frame(target_screen);
+                                info!("Moving panel to screen at ({}, {}), size {}x{}",
+                                    frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
+                                let _: () = msg_send![&*panel, setFrame:frame display:true];
+                            }
+                        }
+                        panel.set_level(1001);
+                        let _: () = unsafe { objc::msg_send![&*panel, setMovableByWindowBackground: false] };
+                        panel.set_collection_behaviour(
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                        );
+                        panel.order_front_regardless();
+                        let _ = app_clone.emit("window-focused", true);
+                    }
+                }).ok();
+            }
+            #[cfg(target_os = "windows")]
+            {
+                window.show().ok();
+                if let Err(e) = crate::windows_overlay::bring_to_front(window) {
+                    error!("Failed to bring window to front: {}", e);
+                }
+                let _ = app.emit("window-focused", true);
+            }
+            #[cfg(target_os = "linux")]
+            {
+                window.show().ok();
+                let _ = app.emit("window-focused", true);
+            }
+        }
+        Ok(window.clone())
+    }
+
     pub fn show(&self, app: &AppHandle) -> tauri::Result<WebviewWindow> {
         let id = self.id();
         let onboarding_store = OnboardingStore::get(app)
             .unwrap_or_else(|_| None)
             .unwrap_or_default();
 
-        if let Some(window) = id.get(app) {
+        // === Main window: use mode-specific labels to avoid NSPanel reconfiguration ===
+        if id.label() == RewindWindowId::Main.label() {
+            let overlay_mode = SettingsStore::get(app)
+                .unwrap_or_default()
+                .unwrap_or_default()
+                .overlay_mode;
+            let active_label = main_label_for_mode(&overlay_mode);
 
-
-            if id.label() == RewindWindowId::Main.label() {
-                    // Check current overlay mode
-                    let overlay_mode = SettingsStore::get(app)
-                        .unwrap_or_default()
-                        .unwrap_or_default()
-                        .overlay_mode;
-
-                    // If mode changed since last creation, reconfigure the panel in-place
-                    {
-                        let mut created = MAIN_CREATED_MODE.lock().unwrap();
-                        if let Some(ref prev) = *created {
-                            if *prev != overlay_mode {
-                                info!("overlay mode changed from {} to {}, reconfiguring panel", prev, overlay_mode);
-                                *created = Some(overlay_mode.clone());
-                                drop(created);
-
-                                #[cfg(target_os = "macos")]
-                                {
-                                    let mode = overlay_mode.clone();
-                                    let app_clone = app.clone();
-                                    let win = window.clone();
-                                    let _ = app.run_on_main_thread(move || {
-                                        if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
-                                            use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
-                                            if mode == "window" {
-                                                // Switch to window mode: resize, show decorations
-                                                let _ = win.set_size(LogicalSize::new(1200.0, 800.0));
-                                                let _ = win.center();
-                                                // titled | closable | miniaturizable | resizable
-                                                panel.set_style_mask(15);
-                                            } else {
-                                                // Switch to overlay mode: borderless
-                                                panel.set_style_mask(0);
-                                            }
-                                            panel.set_level(1001);
-                                            panel.set_collection_behaviour(
-                                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
-                                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
-                                            );
-                                        }
-                                    });
-                                }
-                                // Don't show yet — fall through to the mode-specific show logic below
-                            }
+            // Hide the OTHER mode's panel if it exists
+            #[cfg(target_os = "macos")]
+            {
+                let other_label = if overlay_mode == "window" { "main" } else { "main-window" };
+                if app.get_webview_window(other_label).is_some() {
+                    let app_clone = app.clone();
+                    let _ = app.run_on_main_thread(move || {
+                        if let Ok(panel) = app_clone.get_webview_panel(other_label) {
+                            panel.order_out(None);
                         }
-                    }
-
-                    if overlay_mode == "window" {
-                        // Window mode: show the panel (same mechanism as overlay)
-                        info!("showing main window (window mode)");
-                        #[cfg(target_os = "macos")]
-                        {
-                            let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                            let app_clone = app.clone();
-                            app.run_on_main_thread(move || {
-                                if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
-                                    use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
-                                    panel.set_level(1001);
-                                    panel.set_collection_behaviour(
-                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
-                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
-                                    );
-                                    panel.order_front_regardless();
-                                    let _ = app_clone.emit("window-focused", true);
-                                }
-                            }).ok();
-                        }
-                        #[cfg(not(target_os = "macos"))]
-                        {
-                            window.show().ok();
-                            window.set_focus().ok();
-                            let _ = app.emit("window-focused", true);
-                        }
-                        return Ok(window);
-                    }
-
-                    info!("showing panel (overlay mode)");
-                    #[cfg(target_os = "macos")]
-                    {
-                        // Temporarily set Accessory policy so the panel can appear
-                        // above fullscreen apps. Restored to Regular when panel hides.
-                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
-                        let app_clone = app.clone();
-                        app.run_on_main_thread(move || {
-                            use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
-                            use tauri_nspanel::cocoa::appkit::{NSEvent, NSScreen};
-                            use tauri_nspanel::cocoa::base::{id, nil};
-                            use tauri_nspanel::cocoa::foundation::{NSArray, NSPoint, NSRect};
-
-                            if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
-                                use objc::{msg_send, sel, sel_impl};
-
-                                // Get mouse cursor position and find the screen it's on
-                                unsafe {
-                                    let mouse_location: NSPoint = NSEvent::mouseLocation(nil);
-                                    let screens: id = NSScreen::screens(nil);
-                                    let screen_count: u64 = NSArray::count(screens);
-
-                                    let mut target_screen: id = nil;
-                                    for i in 0..screen_count {
-                                        let screen: id = NSArray::objectAtIndex(screens, i);
-                                        let frame: NSRect = NSScreen::frame(screen);
-
-                                        // Check if mouse is within this screen's bounds
-                                        // Note: macOS uses bottom-left origin, so we check accordingly
-                                        if mouse_location.x >= frame.origin.x
-                                            && mouse_location.x < frame.origin.x + frame.size.width
-                                            && mouse_location.y >= frame.origin.y
-                                            && mouse_location.y < frame.origin.y + frame.size.height
-                                        {
-                                            target_screen = screen;
-                                            break;
-                                        }
-                                    }
-
-                                    // If we found the screen with cursor, resize and reposition panel to it
-                                    if target_screen != nil {
-                                        let frame: NSRect = NSScreen::frame(target_screen);
-                                        info!("Moving panel to screen at ({}, {}), size {}x{}",
-                                            frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
-
-                                        // Resize and reposition the panel to cover the target screen
-                                        let _: () = msg_send![&*panel, setFrame:frame display:true];
-                                    }
-                                }
-
-                                // Re-apply window level each time we show to ensure it stays above fullscreen
-                                // CGShieldingWindowLevel (1000) + 1 ensures it appears above everything
-                                panel.set_level(1001);
-
-                                // Disable window dragging by clicking on background
-                                let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
-
-                                // Re-apply collection behaviors
-                                panel.set_collection_behaviour(
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
-                                );
-
-                                // Use order_front_regardless to show above fullscreen apps without switching spaces
-                                panel.order_front_regardless();
-
-                                // Manually emit window-focused event since order_front_regardless doesn't trigger WindowEvent::Focused
-                                // This ensures the timeline refreshes data when the overlay is shown
-                                let _ = app_clone.emit("window-focused", true);
-                            }
-                        }).ok();
-                    }
-                    #[cfg(target_os = "windows")]
-                    {
-                        window.show().ok();
-                        // Re-assert topmost position to ensure we're above the taskbar
-                        if let Err(e) = crate::windows_overlay::bring_to_front(&window) {
-                            error!("Failed to bring window to front: {}", e);
-                        }
-                        // Manually emit window-focused event to refresh timeline data
-                        let _ = app.emit("window-focused", true);
-                    }
-                    #[cfg(target_os = "linux")]
-                    {
-                        window.show().ok();
-                        // Manually emit window-focused event to refresh timeline data
-                        let _ = app.emit("window-focused", true);
-                    }
-                    return Ok(window);
+                    });
+                }
             }
+
+            // If we already have a window for the current mode, show it
+            if let Some(window) = app.get_webview_window(active_label) {
+                return self.show_existing_main(app, &window, &overlay_mode, active_label);
+            }
+
+            // No existing window for this mode — fall through to creation below
+            // (record the mode so we know what was created)
+            *MAIN_CREATED_MODE.lock().unwrap() = overlay_mode.clone();
+        // === Other windows: standard show path ===
+        } else if let Some(window) = id.get(app) {
 
             if id.label() == RewindWindowId::Onboarding.label() {
                 if onboarding_store.is_completed {
@@ -553,7 +539,7 @@ impl ShowRewindWindow {
                     .unwrap_or_default()
                     .overlay_mode;
                 // Record what mode we're creating so we can detect changes later
-                *MAIN_CREATED_MODE.lock().unwrap() = Some(overlay_mode.clone());
+                *MAIN_CREATED_MODE.lock().unwrap() = overlay_mode.clone();
                 let use_window_mode = overlay_mode == "window";
 
                 if use_window_mode {
@@ -567,7 +553,7 @@ impl ShowRewindWindow {
                     let window = {
                         let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                         let app_clone = app.clone();
-                        let builder = self.window_builder(app, "/")
+                        let builder = self.window_builder_with_label(app, "/", main_label_for_mode("window"))
                             .title("screenpipe")
                             .inner_size(1200.0, 800.0)
                             .min_inner_size(800.0, 600.0)
@@ -596,7 +582,7 @@ impl ShowRewindWindow {
                     #[cfg(not(target_os = "macos"))]
                     let window = {
                         let app_clone = app.clone();
-                        let builder = self.window_builder(app, "/")
+                        let builder = self.window_builder_with_label(app, "/", main_label_for_mode("window"))
                             .title("screenpipe")
                             .inner_size(1200.0, 800.0)
                             .min_inner_size(800.0, 600.0)
@@ -734,7 +720,7 @@ impl ShowRewindWindow {
                     // when monitor is smaller than the default min_size (e.g. M1 Air 1280x800 < 1200x850)
                     let min = self.id().min_size().unwrap_or((0.0, 0.0));
                     let clamped_min = (min.0.min(logical_size.width), min.1.min(logical_size.height));
-                    let builder = self.window_builder(app, "/")
+                    let builder = self.window_builder_with_label(app, "/", main_label_for_mode("fullscreen"))
                         .always_on_top(true)
                         .decorations(false)
                         .skip_taskbar(true)
@@ -775,7 +761,7 @@ impl ShowRewindWindow {
                     // Clamp min_inner_size to monitor dimensions to prevent panic
                     let min = self.id().min_size().unwrap_or((0.0, 0.0));
                     let clamped_min = (min.0.min(logical_size.width), min.1.min(logical_size.height));
-                    let builder = self.window_builder(app, "/")
+                    let builder = self.window_builder_with_label(app, "/", main_label_for_mode("fullscreen"))
                         .title("screenpipe")
                         .visible_on_all_workspaces(true)
                         .always_on_top(true)
@@ -802,7 +788,7 @@ impl ShowRewindWindow {
                 // Linux uses a normal decorated window (overlay not yet implemented)
                 #[cfg(target_os = "linux")]
                 let window = {
-                    let builder = self.window_builder(app, "/")
+                    let builder = self.window_builder_with_label(app, "/", main_label_for_mode("fullscreen"))
                         .title("screenpipe")
                         .inner_size(1200.0, 800.0)
                         .min_inner_size(800.0, 600.0)
@@ -1065,11 +1051,15 @@ impl ShowRewindWindow {
         if id.label() == RewindWindowId::Main.label() {
             #[cfg(target_os = "macos")]
             {
-                // Try to hide the panel (works for both overlay and window-mode panels)
+                // Hide whichever main panel is active (could be "main" or "main-window")
                 let app_clone = app.clone();
                 app.run_on_main_thread(move || {
-                    if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
-                        panel.order_out(None);
+                    for label in &["main", "main-window"] {
+                        if let Ok(panel) = app_clone.get_webview_panel(label) {
+                            if panel.is_visible() {
+                                panel.order_out(None);
+                            }
+                        }
                     }
                 }).ok();
 
@@ -1078,8 +1068,10 @@ impl ShowRewindWindow {
 
             #[cfg(not(target_os = "macos"))]
             {
-                if let Some(window) = id.get(app) {
-                    window.close().ok();
+                for label in &["main", "main-window"] {
+                    if let Some(window) = app.get_webview_window(label) {
+                        window.close().ok();
+                    }
                 }
             }
 
