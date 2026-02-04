@@ -40,18 +40,34 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle) {
 pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
    info!("show_main_window called, attempting to show Main window");
 
-   // Close Settings window if open to avoid confusion (Main overlay is transparent
-   // and Settings would show through, making it look like Settings is being toggled)
-   let _ = ShowRewindWindow::Settings { page: None }.close(app_handle);
+   let overlay_mode = crate::store::SettingsStore::get(app_handle)
+       .unwrap_or_default()
+       .unwrap_or_default()
+       .overlay_mode;
+   let is_window_mode = overlay_mode == "window";
+
+   // In overlay mode, close Settings (transparent overlay would show Settings through)
+   // In window mode, no need — it's an opaque window
+   if !is_window_mode {
+       let _ = ShowRewindWindow::Settings { page: None }.close(app_handle);
+   }
 
    match ShowRewindWindow::Main.show(app_handle) {
        Ok(window) => {
            info!("ShowRewindWindow::Main.show succeeded, window label: {}", window.label());
-           // Don't call set_focus() on macOS as it causes space switching
-           // The panel's order_front_regardless() already handles visibility
-           #[cfg(not(target_os = "macos"))]
-           if let Err(e) = window.set_focus() {
-               error!("Failed to set focus on main window: {}", e);
+
+           if is_window_mode {
+               // Window mode: focus the window on all platforms including macOS
+               if let Err(e) = window.set_focus() {
+                   error!("Failed to set focus on main window: {}", e);
+               }
+           } else {
+               // Overlay mode: Don't call set_focus() on macOS as it causes space switching
+               // The panel's order_front_regardless() already handles visibility
+               #[cfg(not(target_os = "macos"))]
+               if let Err(e) = window.set_focus() {
+                   error!("Failed to set focus on main window: {}", e);
+               }
            }
 
            // Register window-specific shortcuts (Escape, Ctrl+Cmd+K) on a separate task

@@ -319,11 +319,36 @@ impl ShowRewindWindow {
                         .overlay_mode;
 
                     if overlay_mode == "window" {
-                        // Window mode: just show and focus the normal window
+                        // Window mode: show and focus the normal window
                         info!("showing main window (window mode)");
                         window.show().ok();
-                        window.set_focus().ok();
-                        let _ = app.emit("window-focused", true);
+
+                        #[cfg(target_os = "macos")]
+                        {
+                            // Activate the app and bring window to front on the current space
+                            use objc::{msg_send, sel, sel_impl};
+                            use tauri_nspanel::cocoa::base::{id, nil};
+                            let app_clone = app.clone();
+                            let _ = app.run_on_main_thread(move || {
+                                unsafe {
+                                    let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                                    // activateIgnoringOtherApps brings our app to front
+                                    let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                                }
+                                // Also use Tauri's set_focus for good measure
+                                if let Some(w) = RewindWindowId::Main.get(&app_clone) {
+                                    w.set_focus().ok();
+                                }
+                                let _ = app_clone.emit("window-focused", true);
+                            });
+                        }
+
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            window.set_focus().ok();
+                            let _ = app.emit("window-focused", true);
+                        }
+
                         return Ok(window);
                     }
 
@@ -494,6 +519,8 @@ impl ShowRewindWindow {
                 if use_window_mode {
                     // ============================================================
                     // Window mode: normal resizable window with title bar
+                    // Visible on all workspaces so it appears on the current space
+                    // without triggering macOS space-switch animations.
                     // ============================================================
                     let builder = self.window_builder(app, "/")
                         .title("screenpipe")
@@ -502,9 +529,12 @@ impl ShowRewindWindow {
                         .decorations(true)
                         .visible(true)
                         .focused(true)
-                        .transparent(false);
+                        .transparent(false)
+                        .visible_on_all_workspaces(true);
                     #[cfg(target_os = "macos")]
-                    let builder = builder.hidden_title(false);
+                    let builder = builder
+                        .hidden_title(false)
+                        .title_bar_style(tauri::TitleBarStyle::Visible);
                     let window = builder.build()?;
 
                     // Emit window-focused so timeline data loads
