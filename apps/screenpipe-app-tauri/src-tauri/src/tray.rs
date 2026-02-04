@@ -57,56 +57,65 @@ pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> 
 /// On MacBook Pro models with a notch, the tray icon can get pushed behind
 /// the notch when there are many status bar items. Recreating it assigns
 /// the rightmost (most visible) position.
+///
+/// IMPORTANT: NSStatusBar operations must happen on the main thread.
+/// This function dispatches the work to the main thread automatically.
 pub fn recreate_tray(app: &AppHandle) {
-    let update_item = match UPDATE_MENU_ITEM.lock() {
-        Ok(guard) => guard.clone(),
-        Err(_) => {
-            error!("failed to lock UPDATE_MENU_ITEM for tray recreation");
-            return;
-        }
-    };
-
-    let update_item = match update_item {
-        Some(item) => item,
-        None => {
-            debug!("update_item not yet stored, skipping tray recreation");
-            return;
-        }
-    };
-
-    // Remove the old tray icon
-    let _old = app.remove_tray_by_id("screenpipe_main");
-
-    // Create a new tray icon — macOS assigns it the rightmost position
-    let icon = match app.path().resolve("assets/screenpipe-logo-tray-white.png", tauri::path::BaseDirectory::Resource) {
-        Ok(path) => tauri::image::Image::from_path(path).ok(),
-        Err(_) => tauri::image::Image::from_path("assets/screenpipe-logo-tray-white.png").ok(),
-    };
-
-    let mut builder = TrayIconBuilder::<Wry>::with_id("screenpipe_main")
-        .icon_as_template(true)
-        .show_menu_on_left_click(true);
-
-    if let Some(icon) = icon {
-        builder = builder.icon(icon);
-    } else {
-        error!("failed to load tray icon for recreation");
-    }
-
-    match builder.build(app) {
-        Ok(new_tray) => {
-            // Setup menu
-            if let Ok(menu) = create_dynamic_menu(app, &MenuState::default(), &update_item) {
-                let _ = new_tray.set_menu(Some(menu));
+    let app_for_thread = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let app = app_for_thread;
+        let update_item = match UPDATE_MENU_ITEM.lock() {
+            Ok(guard) => guard.clone(),
+            Err(_) => {
+                error!("failed to lock UPDATE_MENU_ITEM for tray recreation");
+                return;
             }
-            // Setup click handlers
-            let _ = setup_tray_click_handlers(&new_tray);
-            info!("tray icon recreated at rightmost position");
+        };
+
+        let update_item = match update_item {
+            Some(item) => item,
+            None => {
+                debug!("update_item not yet stored, skipping tray recreation");
+                return;
+            }
+        };
+
+        // Remove the old tray icon (must be on main thread for NSStatusBar)
+        let _old = app.remove_tray_by_id("screenpipe_main");
+        // Drop the old tray icon explicitly on main thread
+        drop(_old);
+
+        // Create a new tray icon — macOS assigns it the rightmost position
+        let icon = match app.path().resolve("assets/screenpipe-logo-tray-white.png", tauri::path::BaseDirectory::Resource) {
+            Ok(path) => tauri::image::Image::from_path(path).ok(),
+            Err(_) => tauri::image::Image::from_path("assets/screenpipe-logo-tray-white.png").ok(),
+        };
+
+        let mut builder = TrayIconBuilder::<Wry>::with_id("screenpipe_main")
+            .icon_as_template(true)
+            .show_menu_on_left_click(true);
+
+        if let Some(icon) = icon {
+            builder = builder.icon(icon);
+        } else {
+            error!("failed to load tray icon for recreation");
         }
-        Err(e) => {
-            error!("failed to recreate tray icon: {}", e);
+
+        match builder.build(&app) {
+            Ok(new_tray) => {
+                // Setup menu
+                if let Ok(menu) = create_dynamic_menu(&app, &MenuState::default(), &update_item) {
+                    let _ = new_tray.set_menu(Some(menu));
+                }
+                // Setup click handlers
+                let _ = setup_tray_click_handlers(&new_tray);
+                info!("tray icon recreated at rightmost position");
+            }
+            Err(e) => {
+                error!("failed to recreate tray icon: {}", e);
+            }
         }
-    }
+    });
 }
 
 fn create_dynamic_menu(
@@ -395,10 +404,19 @@ async fn update_menu_if_needed(
     };
 
     if should_update {
-        if let Some(tray) = app.tray_by_id("screenpipe_main") {
-            let menu = create_dynamic_menu(app, &new_state, update_item)?;
-            tray.set_menu(Some(menu))?;
-        }
+        // IMPORTANT: All NSStatusItem/TrayIcon operations must happen on the main thread.
+        // If the TrayIcon is dropped on a tokio thread (e.g., after recreate_tray removed
+        // the old one from the manager), NSStatusBar _removeStatusItem fires on the wrong
+        // thread and crashes.
+        let app_for_thread = app.clone();
+        let update_item = update_item.clone();
+        let _ = app.run_on_main_thread(move || {
+            if let Some(tray) = app_for_thread.tray_by_id("screenpipe_main") {
+                if let Ok(menu) = create_dynamic_menu(&app_for_thread, &new_state, &update_item) {
+                    let _ = tray.set_menu(Some(menu));
+                }
+            }
+        });
     }
 
     Ok(())
