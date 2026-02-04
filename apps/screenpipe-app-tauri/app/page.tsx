@@ -13,7 +13,7 @@ import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { commands } from "@/lib/utils/tauri";
 import localforage from "localforage";
 import { LoginDialog } from "../components/login-dialog";
-import { UpdateBanner } from "../components/update-banner";
+import { UpdateBanner, useUpdateListener } from "../components/update-banner";
 import { ModelDownloadTracker } from "../components/model-download-tracker";
 import Timeline from "@/components/rewind/timeline";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,9 @@ export default function Home() {
   const { isMac } = usePlatform();
   const [isRestarting, setIsRestarting] = useState(false);
   const isProcessingRef = useRef(false);
+  
+  // Listen for update events from Rust backend
+  useUpdateListener();
   
   // Optimistic UI: track if user has any data (cached or live)
   const { frames, isConnected, loadFromCache } = useTimelineStore();
@@ -173,10 +176,10 @@ export default function Home() {
           <BreakingChangesInstructionsDialog />
           <LoginDialog />
           <ModelDownloadTracker />
+          <UpdateBanner />
           
           {showTimeline ? (
             <div className="w-full scrollbar-hide bg-background relative">
-              <UpdateBanner />
               {/* Subtle disconnected indicator - only show if we have data but no connection */}
               {hasAnyData && !isConnected && isServerDown && (
                 <div className="fixed top-10 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-muted/90 backdrop-blur-sm rounded-full text-xs text-muted-foreground border">
