@@ -323,6 +323,7 @@ impl ShowRewindWindow {
                         info!("showing main window (window mode)");
                         #[cfg(target_os = "macos")]
                         {
+                            let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                             let app_clone = app.clone();
                             app.run_on_main_thread(move || {
                                 if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
@@ -349,8 +350,9 @@ impl ShowRewindWindow {
                     info!("showing panel (overlay mode)");
                     #[cfg(target_os = "macos")]
                     {
-                        // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
-                        // NSPanel should work over fullscreen without it
+                        // Temporarily set Accessory policy so the panel can appear
+                        // above fullscreen apps. Restored to Regular when panel hides.
+                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                         let app_clone = app.clone();
                         app.run_on_main_thread(move || {
@@ -465,9 +467,9 @@ impl ShowRewindWindow {
                         use objc::{msg_send, sel, sel_impl};
 
                         if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Chat.label()) {
-                            // Level 1002 = above timeline overlay (1001), so chat appears on top
-                            panel.set_level(1002);
-                            // Enable dragging by clicking anywhere on the window background
+                            panel.set_level(101); // NSPopUpMenuWindowLevel
+                            panel.set_floating_panel(true);
+                            panel.set_hides_on_deactivate(false);
                             let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
                             panel.set_collection_behaviour(
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
@@ -519,6 +521,7 @@ impl ShowRewindWindow {
 
                     #[cfg(target_os = "macos")]
                     let window = {
+                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                         let app_clone = app.clone();
                         let builder = self.window_builder(app, "/")
                             .title("screenpipe")
@@ -626,7 +629,8 @@ impl ShowRewindWindow {
                 // macOS uses fullscreen transparent panel overlay
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
+                    // Set Accessory policy so panel appears above fullscreen apps
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                     // Use cursor position to find the correct monitor (not primary)
                     let (monitor, position) = {
@@ -897,6 +901,7 @@ impl ShowRewindWindow {
                         .min_inner_size(400.0, 500.0)
                         .focused(true)
                         .always_on_top(true)
+                        .visible_on_all_workspaces(true)
                         .hidden_title(true);
                     let window = builder.build()?;
 
@@ -910,8 +915,10 @@ impl ShowRewindWindow {
                             use objc::{msg_send, sel, sel_impl};
 
                             if let Ok(panel) = window_clone.to_panel() {
-                                // Level 1002 = above timeline overlay (1001), so chat appears on top
-                                panel.set_level(1002);
+                                // NSPopUpMenuWindowLevel (101) shows above full-screen apps
+                                panel.set_level(101);
+                                panel.set_floating_panel(true);
+                                panel.set_hides_on_deactivate(false);
 
                                 // Enable dragging by clicking anywhere on the window background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
@@ -920,7 +927,7 @@ impl ShowRewindWindow {
                                 let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
 
                                 panel.set_collection_behaviour(
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
 
