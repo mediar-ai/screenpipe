@@ -96,8 +96,8 @@ pub async fn process_transcription_result(
                 .await
             {
                 Ok(_) => {}
-                Err(e) => error!(
-                    "Failed to update transcription for {}: audio_chunk_id {}",
+                Err(e) => debug!(
+                    "Failed to update transcription for {}: audio_chunk_id {} (likely benign UNIQUE constraint)",
                     result.input.device, e
                 ),
             }
