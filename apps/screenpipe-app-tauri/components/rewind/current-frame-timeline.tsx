@@ -2,9 +2,13 @@ import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import React, { FC, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
 import { TextOverlay, extractUrlsFromText, isUrl, normalizeUrl } from "@/components/text-overlay";
-import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import { ImageOff, ChevronLeft, ChevronRight, Loader2, ExternalLink } from "lucide-react";
+import { ImageOff, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import posthog from "posthog-js";
+
+export interface DetectedUrl {
+	normalized: string;
+	display: string;
+}
 
 interface CurrentFrameTimelineProps {
 	currentFrame: StreamTimeSeriesResponse;
@@ -13,6 +17,7 @@ interface CurrentFrameTimelineProps {
 	canNavigateNext?: boolean;
 	onFrameUnavailable?: () => void;
 	onFrameLoadError?: () => void;
+	onUrlsDetected?: (urls: DetectedUrl[]) => void;
 }
 
 export const SkeletonLoader: FC = () => {
@@ -40,6 +45,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	canNavigateNext = true,
 	onFrameUnavailable,
 	onFrameLoadError,
+	onUrlsDetected,
 }) => {
 	const [isLoading, setIsLoading] = useState(true);
 	const [hasError, setHasError] = useState(false);
@@ -121,32 +127,52 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 
 	// Fetch OCR text positions for text selection overlay
 	// Use debounced frame ID to avoid unnecessary fetches
-	const { textPositions } = useFrameOcrData(
+	const { textPositions, isLoading: ocrLoading } = useFrameOcrData(
 		debouncedFrameId ? parseInt(debouncedFrameId, 10) : null
 	);
 
+	// Track which frame the OCR data is for — only show URLs when OCR matches displayed frame
+	const ocrFrameIdRef = useRef<string | null>(null);
+	useEffect(() => {
+		if (!ocrLoading && debouncedFrameId) {
+			ocrFrameIdRef.current = debouncedFrameId;
+		}
+	}, [ocrLoading, debouncedFrameId]);
+
 	// Extract all unique URLs from OCR text for the clickable URL bar
 	const detectedUrls = useMemo(() => {
+		// Don't show URLs while OCR is still loading (prevents stale data from previous frame)
+		if (ocrLoading) return [];
+
 		const urls = new Map<string, string>(); // normalizedUrl -> displayUrl
 		for (const pos of textPositions) {
+			const b = pos.bounds;
+			// Skip off-screen OCR blocks (multi-monitor artifacts)
+			if (b.left < 0 || b.top < 0 || b.left > 1 || b.top > 1) continue;
+
 			// Check whole block
 			if (isUrl(pos.text)) {
 				const norm = normalizeUrl(pos.text);
-				if (!urls.has(norm)) urls.set(norm, pos.text);
+				// Skip very short URLs (OCR noise like "a.io")
+				if (norm.length >= 12 && !urls.has(norm)) urls.set(norm, pos.text);
 				continue;
 			}
-			// Extract embedded URLs
+			// Extract embedded URLs (only https:// and www. prefixed)
 			for (const ext of extractUrlsFromText(pos.text)) {
-				if (!urls.has(ext.normalizedUrl)) {
+				if (ext.normalizedUrl.length >= 12 && !urls.has(ext.normalizedUrl)) {
 					urls.set(ext.normalizedUrl, ext.url);
 				}
 			}
 		}
-		return Array.from(urls.entries()).map(([normalized, display]) => ({
-			normalized,
-			display,
-		}));
-	}, [textPositions]);
+		return Array.from(urls.entries())
+			.map(([normalized, display]) => ({ normalized, display }))
+			.slice(0, 3);
+	}, [textPositions, ocrLoading]);
+
+	// Notify parent of detected URLs
+	useEffect(() => {
+		onUrlsDetected?.(detectedUrls);
+	}, [detectedUrls, onUrlsDetected]);
 
 	// Abort previous image load and start new one when debounced frame changes
 	useEffect(() => {
@@ -378,14 +404,13 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					}}
 				/>
 			)}
-			{/* Text selection overlay for timeline view */}
-			{/* Position overlay to match the actual rendered image (object-contain letterboxing) */}
-			{!isLoading && !hasError && naturalDimensions && renderedImageInfo && textPositions.length > 0 && (
+			{/* In-frame clickable URL overlay — links in middle/bottom of frame are clickable
+			     (top area blocked by z-40 controls, but pills bar handles those) */}
+			{!isLoading && !hasError && !ocrLoading && naturalDimensions && renderedImageInfo && textPositions.length > 0 && (
 				<div
 					className="absolute overflow-hidden"
 					style={{
 						zIndex: 2,
-						// Clip to container bounds
 						top: 0,
 						left: 0,
 						right: 0,
@@ -394,8 +419,6 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 				>
 					<div
 						style={{
-							// Position the overlay to match where the image actually renders
-							// For object-contain, offsets are positive when letterboxed
 							position: 'absolute',
 							left: renderedImageInfo.offsetX,
 							top: renderedImageInfo.offsetY,
@@ -412,32 +435,6 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 							clickableUrls={true}
 						/>
 					</div>
-				</div>
-			)}
-			{/* Detected URLs bar - shows clickable links found in the frame */}
-			{!isLoading && !hasError && detectedUrls.length > 0 && (
-				<div
-					className="absolute top-2 left-1/2 -translate-x-1/2 flex flex-wrap gap-1.5 max-w-[80%] justify-center"
-					style={{ zIndex: 20, pointerEvents: "auto" }}
-				>
-					{detectedUrls.map((url) => (
-						<button
-							key={url.normalized}
-							onClick={async (e) => {
-								e.stopPropagation();
-								try {
-									await shellOpen(url.normalized);
-								} catch {
-									window.open(url.normalized, "_blank");
-								}
-							}}
-							className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-black/70 hover:bg-black/90 text-blue-300 hover:text-blue-200 border border-blue-500/30 hover:border-blue-400/50 backdrop-blur-sm transition-colors cursor-pointer truncate max-w-[300px]"
-							title={url.normalized}
-						>
-							<ExternalLink className="w-3 h-3 shrink-0" />
-							<span className="truncate">{url.display}</span>
-						</button>
-					))}
 				</div>
 			)}
 			{/* When frame is unavailable, just show skeleton - skip happens silently */}

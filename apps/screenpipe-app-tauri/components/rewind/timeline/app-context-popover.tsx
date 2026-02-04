@@ -132,8 +132,13 @@ export function AppContextPopover({
 
 	return (
 		<div
-			className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[60] w-72 bg-popover border border-border rounded-lg shadow-2xl text-xs"
-			style={{ direction: "ltr" }}
+			className="fixed z-[200] w-72 bg-popover border border-border rounded-lg shadow-2xl text-xs"
+			style={{
+				direction: "ltr",
+				bottom: "140px",
+				left: "50%",
+				transform: "translateX(-50%)",
+			}}
 			onClick={(e) => e.stopPropagation()}
 			onMouseDown={(e) => e.stopPropagation()}
 		>
@@ -155,6 +160,13 @@ export function AppContextPopover({
 				>
 					<X className="w-3 h-3" />
 				</button>
+			</div>
+
+			{/* Debug */}
+			<div className="px-3 py-1 text-[9px] text-red-400 bg-red-950/30 break-all">
+				frames={frames.length} windows={data.topWindows.length} urls={data.topUrls.length} 
+				{frames[0] && ` dev0keys=${Object.keys(frames[0].devices?.[0] || {}).join(",")}`}
+				{frames[0]?.devices?.[0]?.metadata && ` meta=${JSON.stringify(frames[0].devices[0].metadata).slice(0, 100)}`}
 			</div>
 
 			{/* Content */}

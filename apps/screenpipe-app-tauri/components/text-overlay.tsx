@@ -3,6 +3,7 @@
 import { useCallback, useMemo, memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { commands } from "@/lib/utils/tauri";
 import type { TextPosition } from "@/lib/hooks/use-frame-ocr-data";
 
 /**
@@ -27,9 +28,10 @@ export function isUrl(text: string): boolean {
 		return true;
 	}
 
-	// Check for domain-like patterns with any 2-13 char alphabetic TLD
+	// Only match bare domains with well-known TLDs to avoid OCR false positives
+	// (garbled terminal text like "ostnuo.co" or "10a2SV.Om" must not match)
 	const domainPattern =
-		/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,13}(\/[^\s]*)?$/;
+		/^[a-zA-Z][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](\.[a-zA-Z][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*\.(com|org|net|io|dev|app|ai|edu|gov)(\/[^\s]*)?$/i;
 
 	return domainPattern.test(trimmed);
 }
@@ -42,7 +44,7 @@ export function isUrl(text: string): boolean {
  *   - domain.tld/path (common TLDs only, to avoid false positives in prose)
  */
 const URL_IN_TEXT_RE =
-	/https?:\/\/[^\s]+|www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,13}[^\s]*|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.(?:com|org|net|io|dev|app|co|ai|edu|gov|me|tv|pe|chat|xyz|live|news|pro|tech|cloud|page|link|site|store|blog)(?:\/[^\s]*)?|[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.(?:com|org|net|io|dev|app|co|ai|edu|gov|me|tv|pe|chat|xyz|live|news|pro|tech|cloud|page|link|site|store|blog)(?:\/[^\s]*)?/gi;
+	/https?:\/\/[^\s]+|www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,13}[^\s]*/gi;
 
 /**
  * Extract URLs from a text block and compute their approximate bounding boxes
@@ -224,15 +226,12 @@ export const TextOverlay = memo(function TextOverlay({
 	}, [textPositions, displayedWidth, displayedHeight, minConfidence]);
 
 	const handleUrlClick = useCallback(
-		async (url: string, e: React.MouseEvent) => {
+		(url: string, e: React.MouseEvent) => {
 			e.preventDefault();
 			e.stopPropagation();
-			try {
-				await shellOpen(url);
-			} catch (err) {
-				console.error("failed to open URL:", url, err);
-				window.open(url, "_blank", "noopener,noreferrer");
-			}
+			// Close timeline and open URL in browser
+			commands.closeWindow("Main").catch(() => {});
+			shellOpen(url).catch(() => {});
 		},
 		[]
 	);

@@ -206,10 +206,10 @@ describe("TextOverlay", () => {
 		expect(height).toBeGreaterThanOrEqual(24);
 	});
 
-	it("should detect URLs with uncommon TLDs", () => {
+	it("should detect URLs with well-known TLDs", () => {
 		const positions = [
-			createTextPosition("app.crisp.chat", 0.1, 0.1, 0.15, 0.02),
-			createTextPosition("screenpi.pe", 0.1, 0.2, 0.1, 0.02),
+			createTextPosition("github.com", 0.1, 0.1, 0.15, 0.02),
+			createTextPosition("example.org", 0.1, 0.2, 0.1, 0.02),
 		];
 		const { container } = render(
 			<TextOverlay
@@ -268,9 +268,16 @@ describe("extractUrlsFromText", () => {
 		expect(urls[0].normalizedUrl).toBe("https://www.example.com");
 	});
 
-	it("should extract domain URLs with known TLDs", () => {
+	it("should not extract bare domains (only https/www)", () => {
 		const urls = extractUrlsFromText(
 			"Check app.crisp.chat and screenpi.pe/demo"
+		);
+		expect(urls.length).toBe(0);
+	});
+
+	it("should extract explicit https domains", () => {
+		const urls = extractUrlsFromText(
+			"Visit https://github.com and https://screenpi.pe/demo"
 		);
 		expect(urls.length).toBe(2);
 	});
@@ -328,11 +335,18 @@ describe("isUrl", () => {
 		expect(isUrl("www.example.com")).toBe(true);
 	});
 
-	it("should detect domain-like strings", () => {
+	it("should detect domain-like strings with well-known TLDs", () => {
 		expect(isUrl("example.com")).toBe(true);
 		expect(isUrl("example.io")).toBe(true);
-		expect(isUrl("app.crisp.chat")).toBe(true);
-		expect(isUrl("screenpi.pe")).toBe(true);
+		expect(isUrl("github.dev")).toBe(true);
+	});
+
+	it("should not match OCR garbled text or uncommon TLDs", () => {
+		expect(isUrl("ostnuo.co")).toBe(false);
+		expect(isUrl("10a2SV.Om")).toBe(false);
+		expect(isUrl("gaunvo.co")).toBe(false);
+		expect(isUrl("screenpi.pe")).toBe(false);
+		expect(isUrl("app.crisp.chat")).toBe(false);
 	});
 
 	it("should not detect regular text", () => {
