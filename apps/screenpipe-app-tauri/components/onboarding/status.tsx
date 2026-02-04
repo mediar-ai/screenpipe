@@ -97,12 +97,16 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const isStartingRef = useRef(false);
   const stuckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAdvancedRef = useRef(false);
+  const mountTimeRef = useRef(Date.now());
 
-  // Auto-advance to shortcut gate when recording starts
+  // Auto-advance to shortcut gate when recording starts (with min display time)
   useEffect(() => {
     if (setupState === "recording" && !hasAdvancedRef.current) {
       hasAdvancedRef.current = true;
-      handleNextSlide();
+      const elapsed = Date.now() - mountTimeRef.current;
+      const minDisplay = 1500; // show branding for at least 1.5s
+      const delay = Math.max(0, minDisplay - elapsed);
+      setTimeout(() => handleNextSlide(), delay);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setupState]);
@@ -412,18 +416,16 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     <div className={`${className} w-full flex flex-col items-center justify-center min-h-[400px]`}>
 
       {/* Branding */}
-      {(setupState === "checking" || setupState === "needs-permissions") && (
-        <motion.div
-          className="flex flex-col items-center mb-6"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <img className="w-14 h-14 mb-3" src="/128x128.png" alt="screenpipe" />
-          <h1 className="font-mono text-lg font-bold text-foreground">screenpipe</h1>
-          <p className="font-mono text-xs text-muted-foreground mt-1">AI memory for your screen</p>
-        </motion.div>
-      )}
+      <motion.div
+        className="flex flex-col items-center mb-6"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <img className="w-14 h-14 mb-3" src="/128x128.png" alt="screenpipe" />
+        <h1 className="font-mono text-lg font-bold text-foreground">screenpipe</h1>
+        <p className="font-mono text-xs text-muted-foreground mt-1">AI memory for your screen</p>
+      </motion.div>
 
       {/* Checking state */}
       {setupState === "checking" && (
