@@ -622,7 +622,7 @@ autoUpdate?: boolean;
  * Timeline overlay mode: "fullscreen" (floating panel above everything) or
  * "window" (normal resizable window with title bar).
  */
-overlayMode?: string }
+overlayMode?: string; showOverlayInScreenRecording?: boolean }
 export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding" | "Chat" | "PermissionRecovery"
 /**
  * Sync configuration.

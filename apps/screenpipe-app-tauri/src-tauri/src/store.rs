@@ -211,6 +211,10 @@ pub struct SettingsStore {
     /// "window" (normal resizable window with title bar).
     #[serde(rename = "overlayMode", default = "default_overlay_mode")]
     pub overlay_mode: String,
+    /// Allow screen recording apps to capture the overlay.
+    /// Disabled by default so the overlay doesn't appear in screenpipe's own recordings.
+    #[serde(rename = "showOverlayInScreenRecording", default)]
+    pub show_overlay_in_screen_recording: bool,
 }
 
 fn generate_device_id() -> String {
@@ -497,6 +501,7 @@ impl Default for SettingsStore {
             enable_ui_events: false,
             auto_update: true,
             overlay_mode: "fullscreen".to_string(),
+            show_overlay_in_screen_recording: false,
         }
     }
 }

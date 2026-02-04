@@ -271,6 +271,41 @@ export default function GeneralSettings() {
             </div>
           </CardContent>
         </Card>
+        <Card className="border-border bg-card shadow-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-start space-x-4">
+                <div className="p-2 bg-muted rounded-lg">
+                  <Monitor className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Show Overlay in Screen Recording
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Allow screen recording apps (Screen Studio, OBS, etc.) to capture the overlay.
+                    Disabled by default so screenpipe&apos;s own recordings don&apos;t include the UI.
+                    Enable this when making product demos.
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={settings?.showOverlayInScreenRecording ?? false}
+                onCheckedChange={(checked) => {
+                  handleSettingsChange({ showOverlayInScreenRecording: checked });
+                  // Hide existing panels so they get recreated with new sharing type
+                  import("@tauri-apps/api/core").then(({ invoke }) => {
+                    invoke("reset_main_window").catch(() => {});
+                  });
+                  toast({
+                    title: checked ? "overlay visible to screen recorders" : "overlay hidden from screen recorders",
+                    description: "press the shortcut to open the overlay with the new setting.",
+                  });
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="pt-4">

@@ -338,6 +338,11 @@ impl ShowRewindWindow {
 
     /// Show an existing Main window (already created for the current mode).
     fn show_existing_main(&self, app: &AppHandle, window: &WebviewWindow, overlay_mode: &str, label: &str) -> tauri::Result<WebviewWindow> {
+        let capturable = SettingsStore::get(app)
+            .unwrap_or_default()
+            .unwrap_or_default()
+            .show_overlay_in_screen_recording;
+
         if overlay_mode == "window" {
             info!("showing existing main window (window mode)");
             #[cfg(target_os = "macos")]
@@ -348,11 +353,15 @@ impl ShowRewindWindow {
                 app.run_on_main_thread(move || {
                     if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
                         use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                        use objc::{msg_send, sel, sel_impl};
                         panel.set_level(1001);
                         panel.set_collection_behaviour(
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                         );
+                        // Update screen capture sharing type
+                        let sharing: u64 = if capturable { 1 } else { 0 };
+                        let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
                         panel.order_front_regardless();
                         let _ = app_clone.emit("window-focused", true);
                     }
@@ -405,6 +414,9 @@ impl ShowRewindWindow {
                         }
                         panel.set_level(1001);
                         let _: () = unsafe { objc::msg_send![&*panel, setMovableByWindowBackground: false] };
+                        // Update screen capture sharing type
+                        let sharing: u64 = if capturable { 1 } else { 0 };
+                        let _: () = unsafe { objc::msg_send![&*panel, setSharingType: sharing] };
                         panel.set_collection_behaviour(
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
@@ -534,10 +546,11 @@ impl ShowRewindWindow {
                 }
 
                 // Read overlay mode from settings: "fullscreen" (panel) or "window" (normal)
-                let overlay_mode = SettingsStore::get(app)
+                let settings = SettingsStore::get(app)
                     .unwrap_or_default()
-                    .unwrap_or_default()
-                    .overlay_mode;
+                    .unwrap_or_default();
+                let overlay_mode = settings.overlay_mode;
+                let show_in_recording = settings.show_overlay_in_screen_recording;
                 // Record what mode we're creating so we can detect changes later
                 *MAIN_CREATED_MODE.lock().unwrap() = overlay_mode.clone();
                 let use_window_mode = overlay_mode == "window";
@@ -607,6 +620,7 @@ impl ShowRewindWindow {
                         if let Ok(_panel) = window.to_panel() {
                             info!("Converted window-mode main to panel");
                             let window_clone = window.clone();
+                            let capturable = show_in_recording;
                             app.run_on_main_thread(move || {
                                 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
                                 use objc::{msg_send, sel, sel_impl};
@@ -618,8 +632,9 @@ impl ShowRewindWindow {
                                     // Keep decorations! Don't call set_style_mask(0)
                                     // Enable dragging by title bar (normal window behavior)
                                     let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
-                                    // Exclude from screen capture
-                                    let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
+                                    // NSWindowSharingNone=0 hides from screen recorders, NSWindowSharingReadOnly=1 allows capture
+                                    let sharing: u64 = if capturable { 1 } else { 0 };
+                                    let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
                                     panel.set_collection_behaviour(
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
@@ -806,6 +821,7 @@ impl ShowRewindWindow {
                         
                         // Set panel behaviors on main thread to avoid crashes
                         let window_clone = window.clone();
+                        let capturable = show_in_recording;
                         app.run_on_main_thread(move || {
                             use tauri_nspanel::cocoa::appkit::{NSWindowCollectionBehavior};
                             
@@ -823,9 +839,9 @@ impl ShowRewindWindow {
                                 // Disable window dragging by clicking on background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
 
-                                // Exclude from screen capture so the overlay doesn't appear
-                                // in screenshots of other apps (NSWindowSharingNone = 0)
-                                let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
+                                // NSWindowSharingNone=0 hides from screen recorders, NSWindowSharingReadOnly=1 allows capture
+                                let sharing: u64 = if capturable { 1 } else { 0 };
+                                let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
 
                                 panel.set_collection_behaviour(
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
@@ -966,8 +982,13 @@ impl ShowRewindWindow {
                                 // Enable dragging by clicking anywhere on the window background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
 
-                                // Exclude from screen capture (NSWindowSharingNone = 0)
-                                let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
+                                // NSWindowSharingNone=0 hides from screen recorders, NSWindowSharingReadOnly=1 allows capture
+                                let capturable = SettingsStore::get(window_clone.app_handle())
+                                    .unwrap_or_default()
+                                    .unwrap_or_default()
+                                    .show_overlay_in_screen_recording;
+                                let sharing: u64 = if capturable { 1 } else { 0 };
+                                let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
 
                                 panel.set_collection_behaviour(
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
