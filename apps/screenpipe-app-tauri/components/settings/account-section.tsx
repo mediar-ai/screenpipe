@@ -184,7 +184,7 @@ export function AccountSection() {
               <span>✓</span> encrypted cloud sync — 50GB, 3 devices
             </div>
             <div className="flex items-center gap-2">
-              <span>✓</span> cloud transcription
+              <span>✓</span> cloud transcription — higher quality
             </div>
             <div className="flex items-center gap-2">
               <span>✓</span> priority support
@@ -234,7 +234,7 @@ export function AccountSection() {
                 </div>
                 <div className="flex items-center gap-2 text-foreground">
                   <Zap className="h-3.5 w-3.5 shrink-0" />
-                  cloud transcription — saves 2-3GB RAM
+                  cloud transcription — higher quality, saves 2-3GB RAM
                 </div>
                 <div className="flex items-center gap-2 text-foreground">
                   <Sparkles className="h-3.5 w-3.5 shrink-0" />
