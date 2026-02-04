@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useSettings, ChatMessage, ChatConversation } from "@/lib/hooks/use-settings";
@@ -31,7 +31,7 @@ import {
   buildAppMentionSuggestions,
   normalizeAppTag,
   formatShortcutDisplay,
-} from "@/components/global-chat";
+} from "@/lib/chat-utils";
 
 const SCREENPIPE_API = "http://localhost:3030";
 
@@ -190,6 +190,16 @@ export function StandaloneChat() {
   const [pastedImage, setPastedImage] = useState<string | null>(null); // Base64 data URL
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
+
+  // Pi agent state
+  const [piInfo, setPiInfo] = useState<{ running: boolean; projectDir: string | null; pid: number | null } | null>(null);
+  const [piProjectDir, setPiProjectDir] = useState<string>("");
+  const [piStarting, setPiStarting] = useState(false);
+  const piStreamingTextRef = useRef<string>("");
+  const piMessageIdRef = useRef<string | null>(null);
+  const piStartInFlightRef = useRef(false);
+  const piRestartCountRef = useRef(0);
+  const piStoppedIntentionallyRef = useRef(false);
 
   // Chat history state
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -659,17 +669,19 @@ export function StandaloneChat() {
   }, [settings.aiPresets]);
 
   const hasPresets = settings.aiPresets && settings.aiPresets.length > 0;
-  const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
-  const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
-  const needsPiLogin = activePreset?.provider === "pi" && !settings.user?.token;
-  const canChat = hasPresets && hasValidModel && !needsLogin && !needsPiLogin;
+  const isPi = activePreset?.provider === "pi";
+  const hasValidModel = isPi || (activePreset?.model && activePreset.model.trim() !== "");
+  const needsLogin = (activePreset?.provider === "screenpipe-cloud" || isPi) && !settings.user?.token;
+  const piReady = isPi ? piInfo?.running : true;
+  const canChat = hasPresets && hasValidModel && !needsLogin;
 
   const getDisabledReason = (): string | null => {
     if (!hasPresets) return "No AI presets configured";
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset`;
-    if (needsLogin) return "Login required for Screenpipe Cloud";
-    if (needsPiLogin) return "Login required for Pi";
+    if (needsLogin) return "Login required";
+    if (isPi && piStarting) return "Starting Pi agent...";
+    if (isPi && !piReady) return "Connecting to Pi agent...";
     return null;
   };
   const disabledReason = getDisabledReason();
@@ -693,6 +705,221 @@ export function StandaloneChat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Auto-set Pi project dir
+  useEffect(() => {
+    if (isPi && !piProjectDir) {
+      setPiProjectDir("/tmp/screenpipe-pi-chat");
+    }
+  }, [isPi, piProjectDir]);
+
+  // Start Pi when needed
+  useEffect(() => {
+    const shouldStart = isPi && !needsLogin && piProjectDir && !piStarting && !piInfo?.running;
+
+    if (!shouldStart) return;
+    if (piStartInFlightRef.current) return;
+    if (piRestartCountRef.current >= 3) {
+      console.warn("[Pi] Too many restart attempts, giving up");
+      return;
+    }
+
+    const startPi = async () => {
+      piStartInFlightRef.current = true;
+      piStoppedIntentionallyRef.current = false;
+      setPiStarting(true);
+      console.log("[Pi] Starting with dir:", piProjectDir, "attempt:", piRestartCountRef.current + 1);
+      try {
+        const result = await commands.piStart(piProjectDir, settings.user?.token ?? null);
+        console.log("[Pi] Start result:", result);
+        if (result.status === "ok") {
+          setPiInfo(result.data);
+          piRestartCountRef.current = 0;
+        } else {
+          piRestartCountRef.current += 1;
+          console.error("[Pi] Start failed:", result.error);
+          if (piRestartCountRef.current >= 3) {
+            toast({ title: "Failed to start Pi", description: result.error, variant: "destructive" });
+          }
+        }
+      } catch (e) {
+        piRestartCountRef.current += 1;
+        console.error("[Pi] Start exception:", e);
+      } finally {
+        piStartInFlightRef.current = false;
+        setPiStarting(false);
+      }
+    };
+    startPi();
+  }, [isPi, needsLogin, piProjectDir, piStarting, piInfo?.running, settings.user?.token]);
+
+  // Listen for Pi events
+  useEffect(() => {
+    if (!isPi) return;
+
+    let unlistenEvent: UnlistenFn | null = null;
+    let unlistenTerminated: UnlistenFn | null = null;
+    let mounted = true;
+
+    const setup = async () => {
+      unlistenEvent = await listen<any>("pi_event", (event) => {
+        if (!mounted) return;
+        const data = event.payload;
+
+        if (data.type === "message_update" && data.assistantMessageEvent) {
+          const evt = data.assistantMessageEvent;
+          if (evt.type === "text_delta" && evt.delta) {
+            piStreamingTextRef.current += evt.delta;
+            if (piMessageIdRef.current) {
+              const msgId = piMessageIdRef.current;
+              const content = piStreamingTextRef.current;
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content } : m)
+              );
+            }
+          }
+        } else if (data.type === "tool_execution_start") {
+          if (piMessageIdRef.current) {
+            const msgId = piMessageIdRef.current;
+            const currentText = piStreamingTextRef.current;
+            const toolInfo = `\n\n*Running ${data.toolName}...*`;
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content: currentText + toolInfo } : m)
+            );
+          }
+        } else if (data.type === "tool_execution_end") {
+          if (piMessageIdRef.current) {
+            const msgId = piMessageIdRef.current;
+            const content = piStreamingTextRef.current;
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content } : m)
+            );
+          }
+        } else if (data.type === "agent_end") {
+          piRestartCountRef.current = 0;
+          if (piMessageIdRef.current) {
+            const msgId = piMessageIdRef.current;
+            const content = piStreamingTextRef.current || "Done";
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content } : m)
+            );
+          }
+          piStreamingTextRef.current = "";
+          piMessageIdRef.current = null;
+          setIsLoading(false);
+          setIsStreaming(false);
+        } else if (data.type === "response" && data.success === false) {
+          if (piMessageIdRef.current) {
+            const msgId = piMessageIdRef.current;
+            setMessages((prev) =>
+              prev.map((m) => m.id === msgId ? { ...m, content: `Error: ${data.error}` } : m)
+            );
+          }
+          piStreamingTextRef.current = "";
+          piMessageIdRef.current = null;
+          setIsLoading(false);
+          setIsStreaming(false);
+        }
+      });
+
+      unlistenTerminated = await listen("pi_terminated", () => {
+        if (!mounted) return;
+        if (piStoppedIntentionallyRef.current) {
+          piStoppedIntentionallyRef.current = false;
+          return;
+        }
+        console.log("[Pi] Process terminated unexpectedly, restart count:", piRestartCountRef.current);
+        piRestartCountRef.current += 1;
+        setTimeout(() => {
+          if (!mounted) return;
+          setPiInfo(null);
+        }, Math.min(1000 * piRestartCountRef.current, 5000));
+      });
+    };
+
+    setup();
+
+    return () => {
+      mounted = false;
+      unlistenEvent?.();
+      unlistenTerminated?.();
+    };
+  }, [isPi]);
+
+  // Send message using Pi agent
+  async function sendPiMessage(userMessage: string) {
+    if (!piInfo?.running) {
+      toast({ title: "Pi not running", description: "Please wait for Pi to start", variant: "destructive" });
+      return;
+    }
+
+    const newUserMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: userMessage,
+      timestamp: Date.now(),
+    };
+
+    const assistantMessageId = (Date.now() + 1).toString();
+
+    piStreamingTextRef.current = "";
+    piMessageIdRef.current = assistantMessageId;
+
+    setMessages((prev) => [...prev, newUserMessage]);
+    setInput("");
+    setIsLoading(true);
+    setIsStreaming(true);
+
+    const timeoutId = setTimeout(() => {
+      if (piMessageIdRef.current === assistantMessageId) {
+        piMessageIdRef.current = null;
+        setIsLoading(false);
+        setIsStreaming(false);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId && m.content === "Processing..."
+              ? { ...m, content: "Request timed out. Check if Pi is running correctly." }
+              : m
+          )
+        );
+      }
+    }, 180000);
+
+    try {
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantMessageId, role: "assistant", content: "Processing...", timestamp: Date.now() },
+      ]);
+
+      const result = await commands.piPrompt(userMessage);
+
+      if (result.status === "error") {
+        clearTimeout(timeoutId);
+        piMessageIdRef.current = null;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId
+              ? { ...m, content: `Error: ${result.error}` }
+              : m
+          )
+        );
+        setIsLoading(false);
+        setIsStreaming(false);
+      }
+    } catch (error) {
+      clearTimeout(timeoutId);
+      piMessageIdRef.current = null;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMessageId
+            ? { ...m, content: `Error: ${error instanceof Error ? error.message : "Unknown error"}` }
+            : m
+        )
+      );
+      setIsLoading(false);
+      setIsStreaming(false);
+    }
+  }
 
   async function executeSearchTool(args: Record<string, unknown>): Promise<string> {
     const MAX_LIMIT = 10;
@@ -781,17 +1008,6 @@ export function StandaloneChat() {
   function getOpenAIClient(): OpenAI | null {
     if (!activePreset) return null;
 
-    // Handle pi provider - uses screenpipe-cloud directly with Claude models
-    // Pi uses RPC mode locally, so for chat we use the cloud directly
-    if (activePreset.provider === "pi") {
-      return new OpenAI({
-        apiKey: settings.user?.token || "anonymous",
-        baseURL: "https://api.screenpi.pe/v1",
-        dangerouslyAllowBrowser: true,
-        defaultHeaders: settings.deviceId ? { "X-Device-Id": settings.deviceId } : {},
-      });
-    }
-
     const apiKey =
       activePreset.provider === "screenpipe-cloud"
         ? settings.user?.token || "anonymous"
@@ -819,6 +1035,11 @@ export function StandaloneChat() {
 
   async function sendMessage(userMessage: string) {
     if (!canChat || !activePreset) return;
+
+    // Use Pi agent if selected
+    if (isPi) {
+      return sendPiMessage(userMessage);
+    }
 
     const openai = getOpenAIClient();
     if (!openai) return;
@@ -1343,13 +1564,13 @@ export function StandaloneChat() {
             </div>
             <div className="text-center space-y-2">
               <h3 className="font-semibold tracking-tight">
-                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : (needsLogin || needsPiLogin ? "Login Required" : "Setup Required")}
+                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : (needsLogin ? "Login Required" : "Setup Required")}
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
                 {disabledReason}
               </p>
             </div>
-            {(needsLogin || needsPiLogin) && (
+            {needsLogin && (
               <Button
                 variant="default"
                 onClick={() => openUrl("https://screenpi.pe/login")}

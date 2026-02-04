@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import "../../vitest.setup";
-import { buildAppMentionSuggestions, parseMentions } from "../global-chat";
+import { buildAppMentionSuggestions, parseMentions } from "../../lib/chat-utils";
 
 describe("global chat mentions", () => {
   it("builds app suggestions from most-used apps", () => {

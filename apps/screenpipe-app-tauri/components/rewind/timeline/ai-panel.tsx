@@ -16,7 +16,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { formatShortcutDisplay } from "@/components/global-chat";
+import { formatShortcutDisplay } from "@/lib/chat-utils";
 import { useLoginDialog } from "@/components/login-dialog";
 import { ExportButton } from "../export-button";
 import Image from "next/image";
