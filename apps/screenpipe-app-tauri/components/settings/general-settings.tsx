@@ -69,22 +69,15 @@ export default function GeneralSettings() {
         </p>
       </div>
 
-      <div className="space-y-3">
-        <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-4">
+      <div className="space-y-2">
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-3">
-                <div className="p-1.5 bg-primary/10 rounded-lg">
-                  <Rocket className="h-4 w-4 text-primary" />
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Auto-start Application
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Automatically launch screenpipe when your computer starts up. 
-                    This ensures you never miss capturing important moments.
-                  </p>
+              <div className="flex items-center space-x-2.5">
+                <Rocket className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Auto-start</h3>
+                  <p className="text-xs text-muted-foreground">Launch when your computer starts</p>
                 </div>
               </div>
               <Switch
@@ -99,21 +92,14 @@ export default function GeneralSettings() {
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-4">
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-3">
-                <div className="p-1.5 bg-primary/10 rounded-lg">
-                  <RefreshCw className="h-4 w-4 text-primary" />
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Auto-update
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Automatically install updates and restart when a new version is available.
-                    When disabled, you&apos;ll be notified but must update manually.
-                  </p>
+              <div className="flex items-center space-x-2.5">
+                <RefreshCw className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Auto-update</h3>
+                  <p className="text-xs text-muted-foreground">Install updates automatically</p>
                 </div>
               </div>
               <Switch
@@ -128,30 +114,20 @@ export default function GeneralSettings() {
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-4">
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-1.5 bg-primary/10 rounded-lg">
-                  <Monitor className="h-4 w-4 text-primary" />
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Theme
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Choose your preferred theme. System follows your device settings automatically.
-                  </p>
-                </div>
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="space-y-2.5">
+              <div className="flex items-center space-x-2.5">
+                <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
+                <h3 className="text-sm font-medium text-foreground">Theme</h3>
               </div>
-              
-              <div className="space-y-3 ml-16">
+              <div className="flex gap-3 ml-[26px]">
                 {themeOptions.map((option) => {
                   const IconComponent = option.icon;
                   return (
                     <label
                       key={option.value}
-                      className="flex items-center space-x-3 cursor-pointer group"
+                      className="flex items-center space-x-2 cursor-pointer group"
                     >
                       <input
                         type="radio"
@@ -162,24 +138,19 @@ export default function GeneralSettings() {
                         className="sr-only"
                       />
                       <div className={`
-                        flex items-center justify-center w-4 h-4 rounded-full border-2 transition-colors
+                        flex items-center justify-center w-3.5 h-3.5 rounded-full border-2 transition-colors
                         ${theme === option.value 
                           ? 'border-primary bg-primary' 
                           : 'border-muted-foreground group-hover:border-primary'
                         }
                       `}>
                         {theme === option.value && (
-                          <div className="w-2 h-2 rounded-full bg-primary-foreground" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground" />
                         )}
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <IconComponent className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium text-foreground">
-                          {option.label}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {option.description}
-                        </span>
+                      <div className="flex items-center space-x-1.5">
+                        <IconComponent className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm text-foreground">{option.label}</span>
                       </div>
                     </label>
                   );
@@ -189,26 +160,20 @@ export default function GeneralSettings() {
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-4">
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-1.5 bg-primary/10 rounded-lg">
-                  <Layers className="h-4 w-4 text-primary" />
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Timeline Overlay Mode
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Choose how the timeline appears when activated. Requires reopening the timeline to take effect.
-                  </p>
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="space-y-2.5">
+              <div className="flex items-center space-x-2.5">
+                <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Timeline Mode</h3>
+                  <p className="text-xs text-muted-foreground">Reopen timeline to apply</p>
                 </div>
               </div>
-              <div className="flex gap-3 ml-[52px]">
+              <div className="flex gap-2 ml-[26px]">
                 {([
-                  { value: "fullscreen", label: "Overlay", desc: "Full-screen floating panel" },
-                  { value: "window", label: "Window", desc: "Normal resizable window" },
+                  { value: "fullscreen", label: "Overlay", desc: "Floating panel" },
+                  { value: "window", label: "Window", desc: "Resizable window" },
                 ]).map((option) => {
                   const isActive = (settings?.overlayMode ?? "fullscreen") === option.value;
                   return (
@@ -216,7 +181,6 @@ export default function GeneralSettings() {
                       key={option.value}
                       onClick={async () => {
                         handleSettingsChange({ overlayMode: option.value });
-                        // Destroy existing Main panel so it gets recreated with the new mode
                         try {
                           const { invoke } = await import("@tauri-apps/api/core");
                           await invoke("reset_main_window");
@@ -227,14 +191,14 @@ export default function GeneralSettings() {
                         });
                       }}
                       type="button"
-                      className={`flex-1 p-3 rounded-lg border-2 transition-all text-left cursor-pointer ${
+                      className={`flex-1 px-2.5 py-1.5 rounded-md border-2 transition-all text-left cursor-pointer ${
                         isActive
                           ? "border-primary bg-primary/5"
                           : "border-border hover:border-muted-foreground/30"
                       }`}
                     >
-                      <div className="font-medium text-sm text-foreground">{option.label}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{option.desc}</div>
+                      <div className="font-medium text-xs text-foreground">{option.label}</div>
+                      <div className="text-[11px] text-muted-foreground">{option.desc}</div>
                     </button>
                   );
                 })}
@@ -243,57 +207,43 @@ export default function GeneralSettings() {
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-4">
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-3">
-                <div className="p-1.5 bg-primary/10 rounded-lg">
-                  <FlaskConical className="h-4 w-4 text-primary" />
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Try Beta Version
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Get early access to new features. The beta app runs separately alongside this stable version.
-                  </p>
+              <div className="flex items-center space-x-2.5">
+                <FlaskConical className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Beta Version</h3>
+                  <p className="text-xs text-muted-foreground">Runs alongside stable</p>
                 </div>
               </div>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={handleDownloadBeta}
-                className="ml-4 flex items-center gap-2"
+                className="ml-4 flex items-center gap-1.5 h-7 text-xs"
               >
-                <FlaskConical className="h-4 w-4" />
-                Download Beta
+                Download
                 <ExternalLink className="h-3 w-3" />
               </Button>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-4">
+
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-3">
-                <div className="p-1.5 bg-muted rounded-lg">
-                  <Monitor className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="space-y-1 flex-1">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Show Overlay in Screen Recording
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Allow screen recording apps (Screen Studio, OBS, etc.) to capture the overlay.
-                    Disabled by default so screenpipe&apos;s own recordings don&apos;t include the UI.
-                    Enable this when making product demos.
-                  </p>
+              <div className="flex items-center space-x-2.5">
+                <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Show Overlay in Screen Recording</h3>
+                  <p className="text-xs text-muted-foreground">Let OBS, Screen Studio capture the overlay</p>
                 </div>
               </div>
               <Switch
                 checked={settings?.showOverlayInScreenRecording ?? false}
                 onCheckedChange={(checked) => {
                   handleSettingsChange({ showOverlayInScreenRecording: checked });
-                  // Hide existing panels so they get recreated with new sharing type
                   import("@tauri-apps/api/core").then(({ invoke }) => {
                     invoke("reset_main_window").catch(() => {});
                   });
@@ -308,13 +258,6 @@ export default function GeneralSettings() {
         </Card>
       </div>
 
-      <div className="pt-2">
-        <div className="px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
-          <p className="text-xs text-primary">
-            Auto-start ensures continuous recording so you never miss capturing important moments.
-          </p>
-        </div>
-      </div>
     </div>
   );
 }
