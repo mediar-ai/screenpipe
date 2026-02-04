@@ -1,6 +1,7 @@
 {
   "name": "@screenpipe/js",
-  "version": "1.0.21",
+  "version": "2.0.0",
+  "description": "Screenpipe Node.js SDK",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -19,27 +20,11 @@
     "bun-types": "latest",
     "tsup": "^8.0.0"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.7.0",
-    "@types/express": "^5.0.0",
-    "@types/node-cron": "^3.0.11",
-    "@types/uuid": "^10.0.0",
-    "eventsource": "^3.0.2",
-    "express": "^4.21.1",
-    "node-cron": "^3.0.3",
-    "posthog-js": "^1.205.0",
-    "zod": "^3.24.2"
-  },
+  "dependencies": {},
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "publishConfig": {
     "access": "public"
-  },
-  "typesVersions": {
-    "*": {
-      "node": ["./dist/node.d.ts"],
-      "browser": ["./dist/browser.d.ts"]
-    }
   }
 }

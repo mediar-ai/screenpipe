@@ -1,68 +1,101 @@
-// types.ts
+// types.ts — Screenpipe JS SDK types
+// Auto-aligned with crates/screenpipe-server/src/server.rs
+
+// ─── Content Types ───────────────────────────────────────────────────────────
 
 /**
  * Types of content that can be queried in Screenpipe.
+ *
+ * - `vision` — Screen content (OCR text + accessibility text)
+ * - `audio` — Transcribed speech
+ * - `input` — User actions (clicks, keystrokes, clipboard)
  */
 export type ContentType =
   | "all"
-  | "ocr"
+  | "vision"
   | "audio"
-  | "ui"
-  | "audio+ui"
-  | "ocr+ui"
-  | "audio+ocr";
+  | "input"
+  | "vision+input"
+  | "audio+input"
+  | "vision+audio+input";
+
+// ─── Search / Query ──────────────────────────────────────────────────────────
 
 /**
- * Parameters for querying Screenpipe.
+ * Parameters for querying Screenpipe via `GET /search`.
  */
-export interface ScreenpipeQueryParams {
-  /** Optional search query text */
+export interface SearchParams {
+  /** Full-text search query */
   q?: string;
-
   /** Type of content to search for (default: "all") */
   contentType?: ContentType;
-
-  /** Maximum number of results to return (default: 10) */
+  /** Maximum number of results to return (default: 20) */
   limit?: number;
-
-  /** Number of results to skip (for pagination) */
+  /** Number of results to skip for pagination */
   offset?: number;
-
-  /** Filter results after this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
+  /** Filter results after this ISO timestamp */
   startTime?: string;
-
-  /** Filter results before this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
+  /** Filter results before this ISO timestamp */
   endTime?: string;
-
-  /** Filter by application name (e.g. "chrome", "vscode") */
+  /** Filter by application name (e.g. "Chrome", "VSCode") */
   appName?: string;
-
   /** Filter by window title */
   windowName?: string;
-
-  /** Include base64-encoded screenshot frames in results */
-  includeFrames?: boolean;
-
-  /** Filter by minimum text length */
-  minLength?: number;
-
-  /** Filter by maximum text length */
-  maxLength?: number;
-
-  /** Filter by specific speaker IDs */
-  speakerIds?: number[];
-
   /** Filter by frame name */
   frameName?: string;
-
+  /** Include base64-encoded screenshot frames in results */
+  includeFrames?: boolean;
+  /** Filter by minimum text length */
+  minLength?: number;
+  /** Filter by maximum text length */
+  maxLength?: number;
+  /** Filter by specific speaker IDs (audio) */
+  speakerIds?: number[];
   /** Filter by browser URL (for web content) */
+  browserUrl?: string;
+  /** Filter by whether the window was focused */
+  focused?: boolean;
+  /** Filter audio transcriptions by speaker name (case-insensitive partial match) */
+  speakerName?: string;
+  /** Include cloud-synced data in search results */
+  includeCloud?: boolean;
+}
+
+// ─── Search Response ─────────────────────────────────────────────────────────
+
+/**
+ * Union type for content items returned by search.
+ *
+ * Note: The server uses `"OCR"` as the tag for vision content
+ * and may still return `"UI"` for accessibility-based text.
+ */
+export type ContentItem =
+  | { type: "OCR"; content: VisionContent }
+  | { type: "Audio"; content: AudioContent }
+  | { type: "UI"; content: UiContent }
+  | { type: "Input"; content: InputContent };
+
+/**
+ * @deprecated UI content (accessibility-based text). Use vision content type instead.
+ */
+export interface UiContent {
+  id: number;
+  text: string;
+  timestamp: string;
+  appName: string;
+  windowName: string;
+  initialTraversalAt?: string;
+  filePath: string;
+  offsetIndex: number;
+  frameName?: string;
   browserUrl?: string;
 }
 
 /**
- * Structure of OCR (Optical Character Recognition) content.
+ * Vision content (OCR / screen capture).
+ * Note: The server still returns `type: "OCR"` for backwards compat.
  */
-export interface OCRContent {
+export interface VisionContent {
   frameId: number;
   text: string;
   timestamp: string;
@@ -79,7 +112,7 @@ export interface OCRContent {
 }
 
 /**
- * Structure of audio content.
+ * Audio transcription content.
  */
 export interface AudioContent {
   chunkId: number;
@@ -89,47 +122,49 @@ export interface AudioContent {
   offsetIndex: number;
   tags: string[];
   deviceName: string;
-  deviceType: string;
+  deviceType: "Input" | "Output";
   speaker?: Speaker;
   startTime?: number;
   endTime?: number;
 }
 
 /**
- * Structure of UI content.
+ * User input event content (clicks, keystrokes, clipboard, etc.).
  */
-export interface UiContent {
+export interface InputContent {
   id: number;
-  text: string;
   timestamp: string;
-  appName: string;
-  windowName: string;
-  initialTraversalAt?: string;
-  filePath: string;
-  offsetIndex: number;
-  frameName?: string;
+  eventType: string;
+  appName?: string;
+  windowTitle?: string;
   browserUrl?: string;
+  /** Text content for text/clipboard events */
+  textContent?: string;
+  /** X position for mouse events */
+  x?: number;
+  /** Y position for mouse events */
+  y?: number;
+  /** Key code for keyboard events */
+  keyCode?: number;
+  /** Modifier keys bitmask (shift, ctrl, alt, etc.) */
+  modifiers?: number;
+  /** Element role from accessibility APIs */
+  elementRole?: string;
+  /** Element name from accessibility APIs */
+  elementName?: string;
 }
 
 /**
- * Speaker information
+ * Speaker information.
  */
 export interface Speaker {
   id: number;
-  name?: string;
-  metadata?: string;
+  name: string;
+  metadata: string;
 }
 
 /**
- * Union type for different types of content items.
- */
-export type ContentItem =
-  | { type: "OCR"; content: OCRContent }
-  | { type: "Audio"; content: AudioContent }
-  | { type: "UI"; content: UiContent };
-
-/**
- * Pagination information for search results.
+ * Pagination information.
  */
 export interface PaginationInfo {
   limit: number;
@@ -137,164 +172,295 @@ export interface PaginationInfo {
   total: number;
 }
 
+/** Cloud sync status */
+export type CloudStatus =
+  | "Available"
+  | "Disabled"
+  | "NotInitialized"
+  | "Error";
+
+/** Metadata about cloud search availability */
+export interface CloudSearchMetadata {
+  cloudSearchAvailable: boolean;
+  cloudHasRelevantData: boolean;
+  cloudQueryHint?: string;
+  status: CloudStatus;
+}
+
 /**
- * Structure of the response from a Screenpipe query.
+ * Response from `GET /search`.
  */
-export interface ScreenpipeResponse {
+export interface SearchResponse {
   data: ContentItem[];
   pagination: PaginationInfo;
+  /** Present only when cloud sync is available */
+  cloud?: CloudSearchMetadata;
 }
 
-/**
- * Input control action types
- */
-export type InputAction =
-  | { type: "WriteText"; data: string }
-  | { type: "KeyPress"; data: string }
-  | { type: "MouseMove"; data: { x: number; y: number } }
-  | { type: "MouseClick"; data: "left" | "right" | "middle" };
+// ─── Keyword Search ──────────────────────────────────────────────────────────
 
-/**
- * Response from input control operations
- */
-export interface InputControlResponse {
-  success: boolean;
+/** Parameters for `GET /search/keyword` */
+export interface KeywordSearchParams {
+  query: string;
+  limit?: number;
+  offset?: number;
+  startTime?: string;
+  endTime?: string;
+  /** Enable fuzzy matching */
+  fuzzyMatch?: boolean;
+  /** Result order: "ascending" or "descending" (default) */
+  order?: "ascending" | "descending";
+  /** Filter by app names (comma-separated) */
+  appNames?: string[];
 }
 
-/**
- * Notification options
- */
-export interface NotificationOptions {
-  title: string;
-  body: string;
-  actions?: NotificationAction[];
-  timeout?: number;
-  persistent?: boolean;
+/** Text bounding box */
+export interface TextBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
-export interface NotificationAction {
-  id: string;
-  label: string;
-  callback?: () => Promise<void>;
+/** Text position with bounding box */
+export interface TextPosition {
+  text: string;
+  confidence: number;
+  bounds: TextBounds;
 }
 
-/**
- * Inbox message structure
- */
-export interface InboxMessage {
-  title: string;
-  body: string;
-  actions?: InboxMessageAction[];
+/** A single match from keyword search */
+export interface SearchMatch {
+  frameId: number;
+  timestamp: string;
+  textPositions: TextPosition[];
+  appName: string;
+  windowName: string;
+  confidence: number;
+  text: string;
+  url: string;
 }
 
-export interface InboxMessageAction {
-  label: string;
-  action: string;
-  callback: () => Promise<void>;
+// ─── Semantic Search ─────────────────────────────────────────────────────────
+
+/** Parameters for `GET /semantic-search` */
+export interface SemanticSearchParams {
+  text: string;
+  limit?: number;
+  threshold?: number;
 }
 
-export interface ActionResponse {
-  action: string;
+/** A result from semantic search */
+export interface SemanticSearchResult {
+  frameId: number;
+  frameName: string;
+  ocrText: string;
+  textJson: string;
+  timestamp: string;
+  filePath: string;
+  offsetIndex: number;
+  appName: string;
+  ocrEngine: string;
+  windowName: string;
+  tags: string[];
+  browserUrl?: string;
+  focused?: boolean;
+  deviceName: string;
 }
 
-/**
- * Settings types
- */
-export type AIProviderType =
-  | "native-ollama"
-  | "openai"
-  | "custom"
-  | "embedded"
-  | "screenpipe-cloud";
+// ─── Frames ──────────────────────────────────────────────────────────────────
 
-export interface EmbeddedLLMConfig {
-  enabled: boolean;
-  model: string;
-  port: number;
+/** Parameters for getting a frame */
+export interface GetFrameParams {
+  /** If true, redact detected PII (credit cards, SSNs, emails) */
+  redactPii?: boolean;
 }
 
-export interface User {
-  id?: string;
-  email?: string;
+/** Parameters for getting the next valid frame */
+export interface NextValidFrameParams {
+  frameId: number;
+  /** "forward" (default) or "backward" */
+  direction?: "forward" | "backward";
+  /** Max frames to check (default: 50) */
+  limit?: number;
+}
+
+/** Response from next-valid-frame endpoint */
+export interface NextValidFrameResponse {
+  frameId: number;
+  timestamp: string;
+  skippedCount: number;
+}
+
+/** Response from `GET /frames/:frame_id/ocr` */
+export interface FrameOcrResponse {
+  frameId: number;
+  textPositions: TextPosition[];
+}
+
+// ─── Health ──────────────────────────────────────────────────────────────────
+
+/** Response from `GET /health` */
+export interface HealthCheckResponse {
+  status: string;
+  statusCode: number;
+  lastFrameTimestamp?: string;
+  lastAudioTimestamp?: string;
+  frameStatus: string;
+  audioStatus: string;
+  message: string;
+  verboseInstructions?: string;
+  deviceStatusDetails?: string;
+}
+
+// ─── Devices ─────────────────────────────────────────────────────────────────
+
+/** Audio device from `GET /audio/list` */
+export interface AudioDevice {
+  name: string;
+  isDefault: boolean;
+}
+
+/** Monitor from `GET /vision/list` */
+export interface MonitorInfo {
+  id: number;
+  name: string;
+  width: number;
+  height: number;
+  isDefault: boolean;
+}
+
+// ─── Tags ────────────────────────────────────────────────────────────────────
+
+/** Content type for tag operations */
+export type TagContentType = "vision" | "audio";
+
+// ─── Speakers ────────────────────────────────────────────────────────────────
+
+/** Parameters for `POST /speakers/update` */
+export interface UpdateSpeakerParams {
+  id: number;
   name?: string;
-  image?: string;
-  token?: string;
-  clerk_id?: string;
-  credits?: {
-    amount: number;
+  metadata?: string;
+}
+
+/** Parameters for `GET /speakers/unnamed` */
+export interface GetUnnamedSpeakersParams {
+  limit: number;
+  offset: number;
+  speakerIds?: number[];
+}
+
+/** Parameters for `POST /speakers/reassign` */
+export interface ReassignSpeakerParams {
+  audioChunkId: number;
+  newSpeakerName: string;
+  /** Whether to propagate to similar transcriptions (default: true) */
+  propagateSimilar?: boolean;
+}
+
+/** Response from `POST /speakers/reassign` */
+export interface ReassignSpeakerResponse {
+  newSpeakerId: number;
+  newSpeakerName: string;
+  transcriptionsUpdated: number;
+  embeddingsMoved: number;
+}
+
+/** Parameters for `POST /speakers/merge` */
+export interface MergeSpeakersParams {
+  speakerToKeepId: number;
+  speakerToMergeId: number;
+}
+
+/** Parameters for `GET /speakers/similar` */
+export interface GetSimilarSpeakersParams {
+  speakerId: number;
+  limit: number;
+}
+
+// ─── UI Events (Input Events) ────────────────────────────────────────────────
+
+/** UI event types */
+export type UiEventType =
+  | "click"
+  | "move"
+  | "scroll"
+  | "key"
+  | "text"
+  | "app_switch"
+  | "window_focus"
+  | "clipboard";
+
+/** Element context from accessibility APIs */
+export interface UiElementContext {
+  role?: string;
+  name?: string;
+  value?: string;
+  description?: string;
+  automationId?: string;
+  bounds?: string;
+}
+
+/** A UI event record */
+export interface UiEventRecord {
+  id: number;
+  timestamp: string;
+  sessionId?: string;
+  relativeMs: number;
+  eventType: UiEventType;
+  x?: number;
+  y?: number;
+  deltaX?: number;
+  deltaY?: number;
+  button?: number;
+  clickCount?: number;
+  keyCode?: number;
+  modifiers?: number;
+  textContent?: string;
+  textLength?: number;
+  appName?: string;
+  appPid?: number;
+  windowTitle?: string;
+  browserUrl?: string;
+  element?: UiElementContext;
+  frameId?: number;
+}
+
+/** Parameters for `GET /ui-events` */
+export interface UiEventsSearchParams {
+  q?: string;
+  eventType?: UiEventType;
+  appName?: string;
+  windowName?: string;
+  startTime?: string;
+  endTime?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** Response from `GET /ui-events` */
+export interface UiEventsResponse {
+  data: UiEventRecord[];
+  pagination: {
+    limit: number;
+    offset: number;
+    total: number;
   };
 }
 
-export type AIPreset = {
-  id: string;
-  maxContextChars: number;
-  url: string;
-  model: string;
-  defaultPreset: boolean;
-  prompt: string;
-  //provider: AIProviderType;
-} & (
-  | {
-      provider: "openai";
-      apiKey: string;
-    }
-  | {
-      provider: "native-ollama";
-    }
-  | {
-      provider: "screenpipe-cloud";
-    }
-  | {
-      provider: "custom";
-      apiKey?: string;
-    }
-);
-
-export interface Settings {
-  openaiApiKey: string;
-  deepgramApiKey: string;
-  aiModel: string;
-  aiUrl: string;
-  customPrompt: string;
-  port: number;
-  dataDir: string;
-  disableAudio: boolean;
-  ignoredWindows: string[];
-  includedWindows: string[];
-  aiProviderType: AIProviderType;
-  embeddedLLM: EmbeddedLLMConfig;
-  enableFrameCache: boolean;
-  aiMaxContextChars: number;
-  analyticsEnabled: boolean;
-  user: User;
-  customSettings?: Record<string, any>;
-  monitorIds: string[];
-  audioDevices: string[];
-  audioTranscriptionEngine: string;
-  enableRealtimeAudioTranscription: boolean;
-  realtimeAudioTranscriptionEngine: string;
-  disableVision: boolean;
-  aiPresets: AIPreset[];
+/** UI event stats entry from `GET /ui-events/stats` */
+export interface UiEventStats {
+  appName: string;
+  eventType: string;
+  count: number;
 }
 
-/**
- * Pipe configuration types
- */
-export interface PipeConfig {
-  [key: string]: any;
-}
-
-export interface ParsedConfig<T = unknown> {
-  fields: {
-    name: string;
-    value?: T;
-    default?: T;
-  }[];
-}
+// ─── Streaming / WebSocket ───────────────────────────────────────────────────
 
 export interface TranscriptionChunk {
   transcription: string;
-  timestamp: string; // ISO string
+  timestamp: string;
   device: string;
   is_input: boolean;
   is_final: boolean;
@@ -320,7 +486,7 @@ export interface TranscriptionStreamResponse {
 }
 
 export interface VisionEvent {
-  image?: string; // base64 encoded image
+  image?: string;
   text: string;
   timestamp: string;
   app_name?: string;
@@ -335,5 +501,52 @@ export interface VisionStreamResponse {
 
 export interface EventStreamResponse {
   name: string;
-  data: VisionEvent | TranscriptionChunk | any;
+  data: VisionEvent | TranscriptionChunk | unknown;
+}
+
+// ─── Notifications (via Tauri sidecar at :11435) ─────────────────────────────
+
+export interface NotificationOptions {
+  title: string;
+  body: string;
+  actions?: NotificationAction[];
+  timeout?: number;
+  persistent?: boolean;
+}
+
+export interface NotificationAction {
+  id: string;
+  label: string;
+}
+
+// ─── Add Content ─────────────────────────────────────────────────────────────
+
+export interface AddContentRequest {
+  deviceName: string;
+  content: AddContentData;
+}
+
+export interface AddContentData {
+  contentType: string;
+  data: FrameContent[] | AudioTranscription;
+}
+
+export interface FrameContent {
+  filePath: string;
+  timestamp?: string;
+  appName?: string;
+  windowName?: string;
+  ocrResults?: { text: string; textJson?: string; ocrEngine?: string; focused?: boolean }[];
+  tags?: string[];
+}
+
+export interface AudioTranscription {
+  transcription: string;
+  transcriptionEngine: string;
+}
+
+// ─── Raw SQL ─────────────────────────────────────────────────────────────────
+
+export interface RawSqlRequest {
+  query: string;
 }

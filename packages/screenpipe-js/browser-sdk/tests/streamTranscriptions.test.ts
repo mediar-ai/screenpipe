@@ -1,28 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import { pipe } from "../src/index";
+import { ScreenpipeClient } from "../src/index";
 
 describe("streamTranscriptions", () => {
   test(
     "should receive and format transcription chunks",
     async () => {
+      const client = new ScreenpipeClient();
       const chunks = [];
 
-      for await (const chunk of pipe.streamTranscriptions()) {
+      for await (const chunk of client.streamTranscriptions()) {
         chunks.push(chunk);
-        if (chunks.length === 2) break; // Break after receiving both chunks
+        if (chunks.length === 2) break;
       }
 
       expect(chunks).toHaveLength(2);
-
-      // verify first chunk format
       expect(chunks.length > 0).toBe(true);
     },
     { timeout: 10_000 }
   );
 
   test("should handle server errors gracefully", async () => {
+    const client = new ScreenpipeClient({ baseUrl: "http://localhost:99999" });
     try {
-      const generator = pipe.streamTranscriptions();
+      const generator = client.streamTranscriptions();
       await generator.next();
       expect(true).toBe(false); // should not reach here
     } catch (error) {

@@ -1,17 +1,20 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { pipe } from "@screenpipe/browser";
-import { VisionEvent } from "@screenpipe/browser";
+import { useEffect, useRef, useState } from "react";
+import { ScreenpipeClient, type VisionEvent } from "@screenpipe/browser";
 
 export default function Home() {
   const [visionEvent, setVisionEvent] = useState<VisionEvent | null>(null);
+  const clientRef = useRef<ScreenpipeClient | null>(null);
 
   useEffect(() => {
+    const client = new ScreenpipeClient();
+    clientRef.current = client;
+
     const streamVision = async () => {
       try {
-        for await (const event of pipe.streamVision(true)) {
+        for await (const event of client.streamVision(true)) {
           setVisionEvent(event.data);
           console.log("vision event received");
         }
@@ -21,10 +24,6 @@ export default function Home() {
     };
 
     streamVision();
-
-    return () => {
-      pipe.disconnect();
-    };
   }, []);
 
   return (

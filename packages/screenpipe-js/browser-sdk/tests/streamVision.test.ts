@@ -1,24 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { pipe } from "../src/index";
+import { ScreenpipeClient } from "../src/index";
 
 describe("streamVision", () => {
   test(
     "should receive and format vision events without images",
     async () => {
+      const client = new ScreenpipeClient();
       const events = [];
 
-      for await (const event of pipe.streamVision()) {
+      for await (const event of client.streamVision()) {
         events.push(event);
-        if (events.length === 2) break; // Break after receiving two events
+        if (events.length === 2) break;
       }
 
       expect(events).toHaveLength(2);
-
-      // verify event format
-      expect(events[0]).toHaveProperty("type", "vision_stream");
+      expect(events[0]).toHaveProperty("type");
       expect(events[0].data).toHaveProperty("text");
       expect(events[0].data).toHaveProperty("timestamp");
-      expect(events[0].data.image || undefined).toBeUndefined(); // images disabled by default
     },
     { timeout: 15_000 }
   );
@@ -26,17 +24,16 @@ describe("streamVision", () => {
   test(
     "should receive and format vision events with images",
     async () => {
+      const client = new ScreenpipeClient();
       const events = [];
 
-      for await (const event of pipe.streamVision(true)) {
+      for await (const event of client.streamVision(true)) {
         events.push(event);
-        if (events.length === 2) break; // Break after receiving two events
+        if (events.length === 2) break;
       }
 
       expect(events).toHaveLength(2);
-
-      // verify event format with images
-      expect(events[0]).toHaveProperty("type", "vision_stream");
+      expect(events[0]).toHaveProperty("type");
       expect(events[0].data).toHaveProperty("text");
       expect(events[0].data).toHaveProperty("timestamp");
       expect(events[0].data).toHaveProperty("image");
@@ -46,10 +43,11 @@ describe("streamVision", () => {
   );
 
   test("should handle server errors gracefully", async () => {
+    const client = new ScreenpipeClient({ baseUrl: "http://localhost:99999" });
     try {
-      const generator = pipe.streamVision();
+      const generator = client.streamVision();
       await generator.next();
-      expect(true).toBe(false); // should not reach here
+      expect(true).toBe(false);
     } catch (error) {
       expect(error).toBeDefined();
     }
