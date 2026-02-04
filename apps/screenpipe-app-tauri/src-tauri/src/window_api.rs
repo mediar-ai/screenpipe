@@ -467,13 +467,12 @@ impl ShowRewindWindow {
                         use objc::{msg_send, sel, sel_impl};
 
                         if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Chat.label()) {
-                            panel.set_level(101); // NSPopUpMenuWindowLevel
-                            panel.set_floating_panel(true);
-                            panel.set_hides_on_deactivate(false);
+                            panel.set_level(1001);
                             let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
                             panel.set_collection_behaviour(
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
-                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
+                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
                             );
                             panel.order_front_regardless();
                         }
@@ -600,18 +599,27 @@ impl ShowRewindWindow {
                         }
                     }
 
-                    // Auto-hide on focus loss + handle display changes
+                    // Auto-hide on focus loss (debounced to survive workspace swipe animations)
                     let app_clone = app.clone();
-                    let _window_clone = window.clone();
+                    let focus_cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
                     window.on_window_event(move |event| {
                         match event {
                             tauri::WindowEvent::Focused(is_focused) => {
                                 if !is_focused {
-                                    info!("Window-mode main lost focus, hiding");
-                                    #[cfg(target_os = "macos")]
-                                    reset_to_regular_and_refresh_tray(&app_clone);
-                                    let _ = app_clone.emit("window-focused", false);
+                                    focus_cancel.store(false, std::sync::atomic::Ordering::SeqCst);
+                                    let cancel = focus_cancel.clone();
+                                    let app = app_clone.clone();
+                                    std::thread::spawn(move || {
+                                        std::thread::sleep(std::time::Duration::from_millis(300));
+                                        if cancel.load(std::sync::atomic::Ordering::SeqCst) {
+                                            return;
+                                        }
+                                        #[cfg(target_os = "macos")]
+                                        reset_to_regular_and_refresh_tray(&app);
+                                        let _ = app.emit("window-focused", false);
+                                    });
                                 } else {
+                                    focus_cancel.store(true, std::sync::atomic::Ordering::SeqCst);
                                     let _ = app_clone.emit("window-focused", true);
                                 }
                             }
@@ -803,24 +811,33 @@ impl ShowRewindWindow {
                     }
                 }
 
-                // Add event listener to hide window when it loses focus and handle display changes
+                // Add event listener to hide window when it loses focus and handle display changes.
+                // Debounce focus-loss so three-finger workspace swipes don't hide mid-animation.
                 let app_clone = app.clone();
                 let window_clone = window.clone();
+                let focus_cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
                 window.on_window_event(move |event| {
                     match event {
                         tauri::WindowEvent::Focused(is_focused) => {
                             if !is_focused {
-                                info!("Main window lost focus, hiding window");
-                                
-                                // Reset activation policy to Regular when main overlay loses focus
-                                // This restores the dock icon and tray menu which are hidden in Accessory mode
-                                #[cfg(target_os = "macos")]
-                                {
-                                    reset_to_regular_and_refresh_tray(&app_clone);
-                                }
-
-                                let _ = app_clone.emit("window-focused", false).ok();
+                                info!("Main window lost focus, scheduling hide (300ms debounce)");
+                                focus_cancel.store(false, std::sync::atomic::Ordering::SeqCst);
+                                let cancel = focus_cancel.clone();
+                                let app = app_clone.clone();
+                                std::thread::spawn(move || {
+                                    std::thread::sleep(std::time::Duration::from_millis(300));
+                                    if cancel.load(std::sync::atomic::Ordering::SeqCst) {
+                                        info!("Focus-loss hide cancelled (panel regained focus)");
+                                        return;
+                                    }
+                                    info!("Main window hiding after debounce");
+                                    #[cfg(target_os = "macos")]
+                                    reset_to_regular_and_refresh_tray(&app);
+                                    let _ = app.emit("window-focused", false).ok();
+                                });
                             } else {
+                                // Cancel any pending hide
+                                focus_cancel.store(true, std::sync::atomic::Ordering::SeqCst);
                                 let _ = app_clone.emit("window-focused", true).ok();
                             }
                         }
@@ -891,10 +908,10 @@ impl ShowRewindWindow {
                 window
             }
             ShowRewindWindow::Chat => {
-                // macOS: use NSPanel for fullscreen support
+                // macOS: use NSPanel with Accessory policy (same as overlay) to show above fullscreen
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                     let builder = self.window_builder(app, "/chat")
                         .inner_size(500.0, 650.0)
@@ -915,10 +932,8 @@ impl ShowRewindWindow {
                             use objc::{msg_send, sel, sel_impl};
 
                             if let Ok(panel) = window_clone.to_panel() {
-                                // NSPopUpMenuWindowLevel (101) shows above full-screen apps
-                                panel.set_level(101);
-                                panel.set_floating_panel(true);
-                                panel.set_hides_on_deactivate(false);
+                                // Same level as overlay (1001) to appear above fullscreen apps
+                                panel.set_level(1001);
 
                                 // Enable dragging by clicking anywhere on the window background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
@@ -928,7 +943,8 @@ impl ShowRewindWindow {
 
                                 panel.set_collection_behaviour(
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
                                 );
 
                                 panel.order_front_regardless();
@@ -936,7 +952,7 @@ impl ShowRewindWindow {
                         }).ok();
                     }
 
-                    // Add event listener to reset activation policy when chat window closes or loses focus
+                    // Reset activation policy when chat window closes (same as overlay)
                     let app_clone = app.clone();
                     window.on_window_event(move |event| {
                         match event {
