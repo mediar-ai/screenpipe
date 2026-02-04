@@ -570,6 +570,9 @@ export function GlobalChat() {
   const [piStarting, setPiStarting] = useState(false);
   const piStreamingTextRef = useRef<string>("");
   const piMessageIdRef = useRef<string | null>(null);
+  const piStartInFlightRef = useRef(false); // guards against concurrent pi_start calls
+  const piRestartCountRef = useRef(0); // consecutive restarts without a successful prompt
+  const piStoppedIntentionallyRef = useRef(false); // true when we killed Pi on purpose
 
   // Chat history state
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -1081,9 +1084,22 @@ export function GlobalChat() {
       return;
     }
 
+    // Prevent concurrent pi_start calls (ref doesn't trigger re-renders)
+    if (piStartInFlightRef.current) {
+      return;
+    }
+
+    // Stop auto-restarting after 3 consecutive failures
+    if (piRestartCountRef.current >= 3) {
+      console.warn("[Pi] Too many restart attempts, giving up");
+      return;
+    }
+
     const startPi = async () => {
+      piStartInFlightRef.current = true;
+      piStoppedIntentionallyRef.current = false;
       setPiStarting(true);
-      console.log("[Pi] Starting with dir:", piProjectDir);
+      console.log("[Pi] Starting with dir:", piProjectDir, "attempt:", piRestartCountRef.current + 1);
       try {
         const result = await commands.piStart(piProjectDir, settings.user?.token ?? null);
         console.log("[Pi] Start result:", result);
@@ -1091,12 +1107,17 @@ export function GlobalChat() {
           setPiInfo(result.data);
           console.log("[Pi] Started successfully, piInfo:", result.data);
         } else {
+          piRestartCountRef.current += 1;
           console.error("[Pi] Start failed:", result.error);
-          toast({ title: "Failed to start Pi", description: result.error, variant: "destructive" });
+          if (piRestartCountRef.current >= 3) {
+            toast({ title: "Failed to start Pi", description: result.error, variant: "destructive" });
+          }
         }
       } catch (e) {
+        piRestartCountRef.current += 1;
         console.error("[Pi] Start exception:", e);
       } finally {
+        piStartInFlightRef.current = false;
         setPiStarting(false);
       }
     };
@@ -1159,6 +1180,7 @@ export function GlobalChat() {
         } else if (data.type === "agent_end") {
           // Agent finished - final update
           console.log("[Pi] Agent ended");
+          piRestartCountRef.current = 0; // successful round-trip, reset restart counter
           if (piMessageIdRef.current) {
             const msgId = piMessageIdRef.current;
             const content = piStreamingTextRef.current || "Done";
@@ -1188,8 +1210,19 @@ export function GlobalChat() {
 
       unlistenTerminated = await listen("pi_terminated", () => {
         if (!mounted) return;
-        console.log("[Pi] Process terminated");
-        setPiInfo(null);
+        // If we intentionally stopped Pi (e.g. to restart), don't auto-restart
+        if (piStoppedIntentionallyRef.current) {
+          console.log("[Pi] Process terminated (intentional)");
+          piStoppedIntentionallyRef.current = false;
+          return;
+        }
+        console.log("[Pi] Process terminated unexpectedly, restart count:", piRestartCountRef.current);
+        piRestartCountRef.current += 1;
+        // Delay before allowing restart to break rapid crash loops
+        setTimeout(() => {
+          if (!mounted) return;
+          setPiInfo(null); // triggers the auto-start useEffect
+        }, Math.min(1000 * piRestartCountRef.current, 5000));
       });
 
       // Also listen for raw output for debugging
@@ -1265,6 +1298,7 @@ export function GlobalChat() {
   useEffect(() => {
     if (open) {
       posthog.capture("chat_opened");
+      piRestartCountRef.current = 0; // reset restart counter on manual open
       setTimeout(() => inputRef.current?.focus(), 100);
     } else {
       // Reset chat state when dialog closes

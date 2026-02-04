@@ -375,6 +375,16 @@ pub async fn pi_start(
         m.project_dir = Some(project_dir.clone());
     }
 
+    // Snapshot the state BEFORE dropping the lock, so we don't hold it during I/O
+    let snapshot = match manager_guard.as_ref() {
+        Some(m) => m.snapshot(),
+        None => PiInfo::default(),
+    };
+
+    // Drop the lock before spawning reader threads — this is critical to prevent
+    // queued pi_start calls from stacking behind a 500ms sleep while holding the lock
+    drop(manager_guard);
+
     // Spawn stdout reader thread
     let app_handle = app.clone();
     std::thread::spawn(move || {
@@ -383,12 +393,9 @@ pub async fn pi_start(
         for line in reader.lines() {
             match line {
                 Ok(line) => {
-                    // Log all output at info level for debugging
-                    info!("Pi stdout: {}", line);
                     // Try to parse as JSON and emit event
                     match serde_json::from_str::<Value>(&line) {
                         Ok(event) => {
-                            info!("Pi event type: {:?}", event.get("type"));
                             if let Err(e) = app_handle.emit("pi_event", &event) {
                                 error!("Failed to emit pi_event: {}", e);
                             }
@@ -420,7 +427,6 @@ pub async fn pi_start(
             for line in reader.lines() {
                 match line {
                     Ok(line) => {
-                        // Log all stderr at info level for debugging
                         info!("Pi stderr: {}", line);
                         let _ = app_handle.emit("pi_log", &line);
                     }
@@ -431,13 +437,32 @@ pub async fn pi_start(
         });
     }
 
-    // Wait a moment for initialization
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    match manager_guard.as_ref() {
-        Some(m) => Ok(m.snapshot()),
-        None => Ok(PiInfo::default()),
+    // Brief wait then check if process died immediately (e.g. bad config, missing deps)
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    {
+        let mut manager_guard = state.0.lock().await;
+        if let Some(m) = manager_guard.as_mut() {
+            if let Some(ref mut child) = m.child {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let code = status.code().unwrap_or(-1);
+                        error!("Pi process exited immediately with code {}", code);
+                        m.child = None;
+                        m.stdin = None;
+                        return Err(format!("Pi exited immediately with code {}", code));
+                    }
+                    Ok(None) => {
+                        // Still running — good
+                    }
+                    Err(e) => {
+                        warn!("Failed to check pi process status: {}", e);
+                    }
+                }
+            }
+        }
     }
+
+    Ok(snapshot)
 }
 
 /// Send a prompt to Pi
