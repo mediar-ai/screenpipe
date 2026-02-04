@@ -12,25 +12,14 @@ use tauri_nspanel::WebviewWindowExt;
 
 use crate::{store::OnboardingStore, ServerState};
 
-/// Reset activation policy to Regular and refresh the tray icon.
+/// Reset activation policy to Regular and recreate the tray icon.
 /// On MacBook Pro models with a notch, toggling between Accessory and Regular
-/// can cause macOS to re-layout status bar items, pushing the tray icon behind
-/// the notch. Re-setting the icon forces macOS to re-render and reposition it.
+/// can push the tray icon behind the notch. Destroying and recreating the
+/// NSStatusItem gives it the rightmost (most visible) position.
 #[cfg(target_os = "macos")]
 pub fn reset_to_regular_and_refresh_tray(app: &AppHandle) {
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
-    
-    if let Some(tray) = app.tray_by_id("screenpipe_main") {
-        // Re-set the icon to force macOS to re-render the NSStatusItem
-        // This works around a macOS bug where the tray icon disappears
-        // or gets stuck behind the notch after activation policy changes
-        if let Ok(icon) = tauri::image::Image::from_path("assets/screenpipe-logo-tray-white.png") {
-            let _ = tray.set_visible(false);
-            let _ = tray.set_visible(true);
-            let _ = tray.set_icon(Some(icon));
-            let _ = tray.set_icon_as_template(true);
-        }
-    }
+    crate::tray::recreate_tray(app);
 }
 
 #[derive(Deserialize, Debug)]
