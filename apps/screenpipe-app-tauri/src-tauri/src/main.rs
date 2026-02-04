@@ -1570,11 +1570,16 @@ async fn main() {
             });
         }
         tauri::RunEvent::ExitRequested { api, .. } => {
-            // Always prevent auto-exit — the app should stay alive in the
-            // tray even when all windows are closed / destroyed.
-            // Only the explicit "Quit screenpipe" menu item calls app.exit().
-            info!("ExitRequested event — preventing (app stays in tray)");
-            api.prevent_exit();
+            // When the user clicks "quit screenpipe" in the tray menu,
+            // QUIT_REQUESTED is set to true — let the exit proceed.
+            // Otherwise, prevent auto-exit so the app stays alive in the
+            // tray when all windows are closed / destroyed.
+            if tray::QUIT_REQUESTED.load(std::sync::atomic::Ordering::SeqCst) {
+                info!("ExitRequested event — quit was requested, allowing exit");
+            } else {
+                info!("ExitRequested event — preventing (app stays in tray)");
+                api.prevent_exit();
+            }
         }
 
         tauri::RunEvent::Exit => {

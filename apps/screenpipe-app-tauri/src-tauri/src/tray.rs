@@ -7,6 +7,7 @@ use crate::window_api::ShowRewindWindow;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::Emitter;
@@ -18,6 +19,10 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_opener::OpenerExt;
 
 use tracing::{debug, error, info};
+
+/// Flag set by the "quit screenpipe" menu item so that the ExitRequested
+/// handler in main.rs knows this is an intentional quit (not just a window close).
+pub static QUIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 /// Global storage for the update menu item so we can recreate the tray
 /// without needing to pass the update_item through every call chain.
@@ -337,6 +342,10 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         }
         "quit" => {
             debug!("Quit requested");
+
+            // Signal that this is an intentional quit so the ExitRequested
+            // handler in main.rs won't prevent it.
+            QUIT_REQUESTED.store(true, Ordering::SeqCst);
 
             // Stop recording before exiting
             let app_handle_clone = app_handle.clone();
