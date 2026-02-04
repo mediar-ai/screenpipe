@@ -56,29 +56,29 @@ export default function GeneralSettings() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
+    <div className="space-y-5">
+      <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            General Settings
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
+            General
           </h1>
           <UpdateBanner compact />
         </div>
-        <p className="text-muted-foreground text-lg">
-          Configure basic application preferences and behavior
+        <p className="text-muted-foreground text-sm">
+          App preferences and behavior
         </p>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-3">
         <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-4">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Rocket className="h-5 w-5 text-primary" />
+              <div className="flex items-start space-x-3">
+                <div className="p-1.5 bg-primary/10 rounded-lg">
+                  <Rocket className="h-4 w-4 text-primary" />
                 </div>
                 <div className="space-y-1 flex-1">
-                  <h3 className="text-lg font-semibold text-foreground">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Auto-start Application
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -100,14 +100,14 @@ export default function GeneralSettings() {
         </Card>
 
         <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-4">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <RefreshCw className="h-5 w-5 text-primary" />
+              <div className="flex items-start space-x-3">
+                <div className="p-1.5 bg-primary/10 rounded-lg">
+                  <RefreshCw className="h-4 w-4 text-primary" />
                 </div>
                 <div className="space-y-1 flex-1">
-                  <h3 className="text-lg font-semibold text-foreground">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Auto-update
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -129,14 +129,14 @@ export default function GeneralSettings() {
         </Card>
 
         <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="space-y-4">
-              <div className="flex items-start space-x-4">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Monitor className="h-5 w-5 text-primary" />
+              <div className="flex items-start space-x-3">
+                <div className="p-1.5 bg-primary/10 rounded-lg">
+                  <Monitor className="h-4 w-4 text-primary" />
                 </div>
                 <div className="space-y-1 flex-1">
-                  <h3 className="text-lg font-semibold text-foreground">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Theme
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -190,14 +190,14 @@ export default function GeneralSettings() {
         </Card>
 
         <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="space-y-4">
-              <div className="flex items-start space-x-4">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Layers className="h-5 w-5 text-primary" />
+              <div className="flex items-start space-x-3">
+                <div className="p-1.5 bg-primary/10 rounded-lg">
+                  <Layers className="h-4 w-4 text-primary" />
                 </div>
                 <div className="space-y-1 flex-1">
-                  <h3 className="text-lg font-semibold text-foreground">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Timeline Overlay Mode
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -244,14 +244,14 @@ export default function GeneralSettings() {
         </Card>
 
         <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-4">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <FlaskConical className="h-5 w-5 text-primary" />
+              <div className="flex items-start space-x-3">
+                <div className="p-1.5 bg-primary/10 rounded-lg">
+                  <FlaskConical className="h-4 w-4 text-primary" />
                 </div>
                 <div className="space-y-1 flex-1">
-                  <h3 className="text-lg font-semibold text-foreground">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Try Beta Version
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -272,14 +272,14 @@ export default function GeneralSettings() {
           </CardContent>
         </Card>
         <Card className="border-border bg-card shadow-sm">
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-4">
-                <div className="p-2 bg-muted rounded-lg">
-                  <Monitor className="h-5 w-5 text-muted-foreground" />
+              <div className="flex items-start space-x-3">
+                <div className="p-1.5 bg-muted rounded-lg">
+                  <Monitor className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div className="space-y-1 flex-1">
-                  <h3 className="text-lg font-semibold text-foreground">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Show Overlay in Screen Recording
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -308,9 +308,9 @@ export default function GeneralSettings() {
         </Card>
       </div>
 
-      <div className="pt-4">
-        <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
-          <p className="text-sm text-primary">
+      <div className="pt-2">
+        <div className="px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
+          <p className="text-xs text-primary">
             Auto-start ensures continuous recording so you never miss capturing important moments.
           </p>
         </div>
