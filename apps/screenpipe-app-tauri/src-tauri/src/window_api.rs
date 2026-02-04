@@ -519,26 +519,39 @@ impl ShowRewindWindow {
                 if use_window_mode {
                     // ============================================================
                     // Window mode: normal resizable window with title bar
-                    // Visible on all workspaces so it appears on the current space
-                    // without triggering macOS space-switch animations.
+                    // Created hidden — shown after webview loads to avoid black flash.
                     // ============================================================
+                    let app_clone = app.clone();
                     let builder = self.window_builder(app, "/")
                         .title("screenpipe")
                         .inner_size(1200.0, 800.0)
                         .min_inner_size(800.0, 600.0)
                         .decorations(true)
-                        .visible(true)
-                        .focused(true)
+                        .visible(false)  // hidden until content loads
+                        .focused(false)
                         .transparent(false)
-                        .visible_on_all_workspaces(true);
+                        .visible_on_all_workspaces(true)
+                        .on_page_load(move |win, payload| {
+                            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                                win.show().ok();
+                                win.set_focus().ok();
+                                #[cfg(target_os = "macos")]
+                                {
+                                    use objc::{msg_send, sel, sel_impl};
+                                    use tauri_nspanel::cocoa::base::id;
+                                    unsafe {
+                                        let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                                        let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                                    }
+                                }
+                                let _ = app_clone.emit("window-focused", true);
+                            }
+                        });
                     #[cfg(target_os = "macos")]
                     let builder = builder
                         .hidden_title(false)
                         .title_bar_style(tauri::TitleBarStyle::Visible);
                     let window = builder.build()?;
-
-                    // Emit window-focused so timeline data loads
-                    let _ = app.emit("window-focused", true);
 
                     return Ok(window);
                 }
