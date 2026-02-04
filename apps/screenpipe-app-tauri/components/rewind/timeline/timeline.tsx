@@ -584,7 +584,7 @@ export const TimelineSlider = ({
 								className="flex flex-nowrap items-end h-full group/appgroup relative"
 								dir="rtl"
 								style={{
-									borderLeft: groupIndex > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+									// borderLeft removed — caused visible white lines between groups
 								}}
 							>
 								{/* Vertical stacked app icons - max 2 icons, hover to expand */}
