@@ -2,13 +2,13 @@
 
 **One-liner to connect Screenpipe to your AI agent.**
 
-Set up full Screenpipe integration with any AI agent (Clawdbot, Moltbot, etc.) in one command. Includes data sync, skills, and optional morning summaries.
+Set up full Screenpipe integration with any AI agent (OpenClaw, OpenClaw, etc.) in one command. Includes data sync, skills, and optional morning summaries.
 
 ## Quick Start
 
 ```bash
 # Full setup with morning summaries at 8am
-bunx @screenpipe/agent --setup clawdbot --morning 08:00
+bunx @screenpipe/agent --setup openclaw --morning 08:00
 
 # That's it! You'll get daily briefings via Telegram/WhatsApp/etc.
 ```
@@ -55,7 +55,7 @@ bunx @screenpipe/agent --remove user@server
 
 - [Screenpipe](https://screenpi.pe) running locally
 - SSH access to your agent server
-- AI agent that supports skills (Clawdbot, Moltbot, etc.)
+- AI agent that supports skills (OpenClaw, OpenClaw, etc.)
 
 ## What You Get
 
@@ -95,7 +95,7 @@ Your Computer                    Your Agent Server
                                           ▼
                                  ┌─────────────────┐
                                  │  AI Agent       │
-                                 │  (Clawdbot)     │
+                                 │  (OpenClaw)     │
                                  │                 │
                                  │  Skills query   │
                                  │  the database   │
@@ -110,4 +110,4 @@ Your Computer                    Your Agent Server
 
 ## License
 
-MIT - Part of [Screenpipe](https://github.com/mediar-ai/screenpipe)
+MIT - Part of [Screenpipe](https://github.com/screenpipe/screenpipe)

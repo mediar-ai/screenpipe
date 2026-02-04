@@ -1,7 +1,7 @@
 {
   "name": "@screenpipe/skills",
   "version": "0.1.1",
-  "description": "Screenpipe skills for AI agents (Clawdbot, Claude Code, etc). Query your screen history, get daily digests, search memories.",
+  "description": "Screenpipe skills for AI agents (OpenClaw, Claude Code, etc). Query your screen history, get daily digests, search memories.",
   "type": "module",
   "bin": {
     "screenpipe-skills": "dist/index.js"
@@ -18,7 +18,7 @@
   "keywords": [
     "screenpipe",
     "ai-agent",
-    "clawdbot",
+    "openclaw",
     "skills",
     "memory",
     "screen-recording"
@@ -27,7 +27,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mediar-ai/screenpipe",
+    "url": "https://github.com/screenpipe/screenpipe",
     "directory": "packages/skills"
   },
   "devDependencies": {

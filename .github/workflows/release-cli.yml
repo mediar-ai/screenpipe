@@ -45,7 +45,8 @@ jobs:
           echo "Commit message: $COMMIT_MSG"
 
           # Release CLI when app is released or explicitly requested
-          if echo "$COMMIT_MSG" | grep -qE "(release-app|release-cli)"; then
+          # Match: "release-app", "release-cli", "Bump app to vX.Y.Z", "Bump CLI to vX.Y.Z"
+          if echo "$COMMIT_MSG" | grep -qiE "(release-app|release-cli|Bump app to v|Bump CLI to v)"; then
             echo "should_release=true" >> $GITHUB_OUTPUT
             echo "Commit message contains release trigger - will release"
           else
@@ -123,6 +124,14 @@ jobs:
             export CXXFLAGS="-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8"
           fi
           cargo build --release --features metal --target ${{ matrix.target }}
+
+      - name: Upload debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: mediar
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-cli target/${{ matrix.target }}/release/
 
       - name: Set version
         run: |
@@ -210,12 +219,21 @@ jobs:
 
       - name: Build CLI
         env:
-          CARGO_PROFILE_RELEASE_STRIP: "symbols"
+          CARGO_PROFILE_RELEASE_STRIP: "none"
           CARGO_PROFILE_RELEASE_PANIC: "abort"
           CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
           RUSTFLAGS: "-C target-feature=+crt-static -C link-arg=/LTCG"
         run: |
           cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Upload debug symbols to Sentry
+        shell: powershell
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: mediar
+        run: |
+          Invoke-WebRequest -Uri "https://release-registry.services.sentry.io/apps/sentry-cli/latest?response=download&arch=x86_64&platform=Windows&package=sentry-cli" -OutFile sentry-cli.exe
+          .\sentry-cli.exe debug-files upload --org $env:SENTRY_ORG --project screenpipe-cli target/x86_64-pc-windows-msvc/release/
 
       - name: Set version
         shell: pwsh
@@ -339,6 +357,14 @@ jobs:
       - name: Build CLI
         run: |
           cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: mediar
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-cli target/${{ matrix.target }}/release/
 
       - name: Set version
         run: |

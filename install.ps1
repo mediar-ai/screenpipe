@@ -2,7 +2,7 @@ Write-Host "installing screenpipe..."
 
 try {
     # Get latest version
-    $releases = Invoke-RestMethod "https://api.github.com/repos/mediar-ai/screenpipe/releases"
+    $releases = Invoke-RestMethod "https://api.github.com/repos/screenpipe/screenpipe/releases"
     $latestRelease = $releases | Where-Object { -not $_.prerelease } | Select-Object -First 1
     if (-not $latestRelease) {
         throw "no releases found"

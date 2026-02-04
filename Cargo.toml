@@ -1,21 +1,15 @@
 [workspace]
 members = [
-    "screenpipe-core",
-    "screenpipe-vision",
-    "screenpipe-audio",
-    "screenpipe-server",
-    "screenpipe-integrations",
-    "screenpipe-events",
-    "screenpipe-db",
+    "crates/*",
 ]
-exclude = ["screenpipe-app-tauri/src-tauri"]
+exclude = ["apps/screenpipe-app-tauri/src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.3.5"
+version = "0.3.68"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
-repository = "https://github.com/mediar-ai/screenpipe"
+repository = "https://github.com/screenpipe/screenpipe"
 license = "MIT OR Apache-2.0"
 edition = "2021"
 

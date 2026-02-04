@@ -1,0 +1,74 @@
+---
+title: "screenpipe FAQ - common questions about screen recording & AI"
+sidebarTitle: "faq"
+description: "Frequently asked questions about screenpipe: hardware requirements, data storage, plugins, monetization, backup, and more."
+icon: "question"
+---
+
+<Expandable title="how can i create and share custom pipes (plugins)?">
+  - create pipes using: `bunx --bun @screenpipe/dev@latest pipe create`
+  - pipes run locally in the screenpipe app
+  - share your pipes by publishing to GitHub
+  - install pipes via URL in the screenpipe desktop app
+  - check our [plugins guide](/plugins) for more details
+</Expandable>
+
+<Expandable title="what are some example pipes (plugins) available?">
+  - **search**: search through your screen history with AI
+  - **obsidian**: sync your screen activities to obsidian notes
+  - **meeting**: automatic meeting notes and summaries
+  - **timeline**: visual timeline of your screen activity
+  - **identify-speakers**: automatically identify and label speakers
+  - see available pipes on [GitHub](https://github.com/screenpipe/screenpipe/tree/main/pipes)
+</Expandable>
+
+<Expandable title="how do i develop and test a pipe locally?">
+  - create a new pipe with: `bunx --bun @screenpipe/dev@latest pipe create`
+  - navigate to your pipe directory: `cd your-pipe-name`
+  - start development server: `bun run dev`
+  - test your pipe locally in the screenpipe app
+  - debug and iterate on your implementation
+  - when ready, build for production: `bun run build`
+  - see our [pipe development guide](/docs/plugins) for detailed instructions
+</Expandable>
+
+<Expandable title="what are the hardware requirements for running screenpipe?">
+  - **minimum requirements**:
+    - dual-core processor (2ghz+)
+    - 2gb ram
+    - 20gb free disk space
+    - any modern graphics card for hardware acceleration
+  - **recommended specifications**:
+    - quad-core processor or better
+    - 4gb+ ram
+    - 50gb+ free ssd space
+    - dedicated graphics card with at least 2gb vram
+  - screenpipe is optimized to use hardware acceleration when available, significantly reducing cpu usage
+</Expandable>
+
+<Expandable title="how can i contribute to the screenpipe project?">
+  - screenpipe is open source and welcomes contributions
+  - check our [github issues](https://github.com/screenpipe/screenpipe/issues) for tasks to work on
+
+  - join our [discord community](https://discord.gg/dU9EBuw7Uq) to collaborate with other contributors
+  - follow our [contribution guidelines](https://github.com/screenpipe/screenpipe/blob/main/CONTRIBUTING.md) for code standards
+  - submit pull requests with features, bug fixes, or documentation improvements
+</Expandable>
+
+<Expandable title="what file formats does screenpipe use for recording?">
+  - screen recordings are stored as mp4 files
+  - audio recordings are stored as mp3 files
+  - all files are saved in $home/.screenpipe/ directory
+  - metadata and indexes are stored in sqlite database
+  - ocr and transcription data are also indexed in the database
+  - you can access all data programmatically via our api
+</Expandable>
+
+<Expandable title="how can i backup or transfer my screenpipe data?">
+  - all data is stored in $home/.screenpipe/ directory
+  - to backup, simply copy this directory to another location
+  - to transfer to another machine, copy the directory to the same location
+  - you can also use our export api to selectively export data
+  - database can be accessed directly with sqlite tools
+  - note: when transferring between different operating systems, some paths may need adjustment
+</Expandable>

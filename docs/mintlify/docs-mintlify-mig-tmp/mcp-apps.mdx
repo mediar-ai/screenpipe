@@ -1,0 +1,308 @@
+---
+title: "MCP apps - create interactive UIs for screenpipe"
+sidebarTitle: "mcp apps"
+description: "Build interactive UI components that render in Claude, ChatGPT, VS Code, and other AI assistants using the MCP Apps protocol."
+icon: "window"
+---
+
+MCP Apps let you create interactive UIs that render directly inside AI chat interfaces. Instead of plain text responses, your tools can return dashboards, forms, visualizations, and more.
+
+## how it works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  1. Tool declares a UI resource                             │
+│     { _meta: { ui: { resourceUri: "ui://search" } } }       │
+│                                                              │
+│  2. Host fetches the HTML from the MCP server               │
+│     GET ui://search → Returns HTML/JS bundle                │
+│                                                              │
+│  3. Host renders in sandboxed iframe                        │
+│     <iframe sandbox="allow-scripts" srcdoc={html} />        │
+│                                                              │
+│  4. Bidirectional communication via postMessage             │
+│     Host ◄──── JSON-RPC ────► App                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+your UI works in:
+- Claude Desktop & Web
+- ChatGPT
+- VS Code
+- Goose
+- screenpipe's built-in chat
+
+## creating an MCP app
+
+### 1. create your HTML UI
+
+create a single HTML file with embedded CSS and JavaScript:
+
+```html
+<!-- crates/screenpipe-integrations/screenpipe-mcp/ui/my-app.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 16px;
+      background: #0a0a0a;
+      color: #fafafa;
+    }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 18px; margin-bottom: 16px; }
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    button {
+      background: #fff;
+      color: #000;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button:hover { background: #e0e0e0; }
+    input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #1a1a1a;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>my screenpipe app</h1>
+    <input type="text" id="query" placeholder="search your recordings..." />
+    <button onclick="search()">search</button>
+    <div id="results"></div>
+  </div>
+
+  <script>
+    // MCP App communication
+    const app = {
+      // call an MCP tool from the UI
+      callTool: (name, args) => {
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: { name, arguments: args }
+        }, '*');
+      },
+
+      // send a message to the chat
+      sendMessage: (text) => {
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          method: 'message/send',
+          params: { content: text }
+        }, '*');
+      }
+    };
+
+    // listen for tool results from host
+    window.addEventListener('message', (event) => {
+      if (event.data?.method === 'tool/result') {
+        displayResults(event.data.params.result);
+      }
+    });
+
+    function search() {
+      const query = document.getElementById('query').value;
+      // available params: q, content_type, limit, offset, start_time, end_time,
+      // app_name, window_name, speaker_ids, speaker_name, include_frames
+      app.callTool('search-content', {
+        q: query,
+        limit: 10,
+        content_type: 'all'  // 'ocr', 'audio', 'ui', or 'all'
+      });
+    }
+
+    function displayResults(results) {
+      const container = document.getElementById('results');
+      container.innerHTML = results.map(r => `
+        <div class="card">
+          <strong>${r.type}</strong> - ${r.app_name || 'unknown'}
+          <p>${r.text?.substring(0, 200) || r.transcription?.substring(0, 200) || ''}</p>
+        </div>
+      `).join('');
+    }
+  </script>
+</body>
+</html>
+```
+
+### 2. register the UI resource
+
+in your MCP server, add the UI as a resource:
+
+```typescript
+// add to RESOURCES array
+{
+  uri: "ui://my-app",
+  name: "My App",
+  description: "Interactive search interface",
+  mimeType: "text/html",
+}
+```
+
+### 3. serve the HTML
+
+in the `ReadResourceRequestSchema` handler:
+
+```typescript
+case "ui://my-app":
+  // read from file or embed directly
+  const html = fs.readFileSync(
+    path.join(__dirname, 'ui/my-app.html'),
+    'utf-8'
+  );
+  return {
+    contents: [{
+      uri,
+      mimeType: "text/html",
+      text: html,
+    }],
+  };
+```
+
+### 4. declare UI in tool response
+
+when a tool returns results, include the UI reference:
+
+```typescript
+return {
+  content: [{ type: "text", text: "Search results" }],
+  _meta: {
+    ui: { resourceUri: "ui://my-app" }
+  }
+};
+```
+
+## contributing an MCP app
+
+want to add your UI to screenpipe? here's how:
+
+### file structure
+
+```
+crates/screenpipe-integrations/screenpipe-mcp/
+├── src/
+│   └── index.ts          # MCP server
+├── ui/
+│   ├── search.html       # search dashboard UI
+│   ├── timeline.html     # timeline viewer UI
+│   └── your-app.html     # your new UI
+└── package.json
+```
+
+### submission checklist
+
+1. **create your HTML file** in the `ui/` directory
+2. **keep it self-contained** - all CSS/JS should be inline
+3. **use dark theme** - match screenpipe's aesthetic
+4. **test locally** with MCP Inspector
+5. **submit a PR** with:
+   - your HTML file
+   - updates to `index.ts` to register and serve it
+   - a screenshot in the PR description
+
+### design guidelines
+
+| aspect | guideline |
+|--------|-----------|
+| background | `#0a0a0a` (dark) |
+| cards | `#1a1a1a` with `#333` border |
+| text | `#fafafa` (light) |
+| accent | `#fff` buttons, `#666` secondary |
+| font | `system-ui, sans-serif` |
+| radius | `6-8px` for cards and buttons |
+
+### example UIs to build
+
+- **timeline viewer** - scroll through your day visually
+- **meeting notes** - display transcriptions with speakers
+- **activity chart** - visualize app usage over time
+- **search dashboard** - rich search with filters
+- **memory cards** - google photos-style flashbacks
+
+## testing your app
+
+use MCP Inspector to test:
+
+```bash
+cd crates/screenpipe-integrations/screenpipe-mcp
+npm run build
+npx @modelcontextprotocol/inspector node dist/index.js
+```
+
+1. open the inspector at http://localhost:5173
+2. navigate to **resources**
+3. click your `ui://` resource
+4. verify the HTML renders correctly
+
+## api reference
+
+### host → app messages
+
+```typescript
+// tool result delivered to app
+{
+  jsonrpc: "2.0",
+  method: "tool/result",
+  params: {
+    toolName: "search-content",
+    result: { /* tool output */ }
+  }
+}
+```
+
+### app → host messages
+
+```typescript
+// call an MCP tool
+{
+  jsonrpc: "2.0",
+  method: "tools/call",
+  params: { name: "search-content", arguments: { q: "meeting" } }
+}
+
+// send message to chat
+{
+  jsonrpc: "2.0",
+  method: "message/send",
+  params: { content: "Found 5 results" }
+}
+
+// open external link
+{
+  jsonrpc: "2.0",
+  method: "link/open",
+  params: { url: "https://example.com" }
+}
+```
+
+## security
+
+MCP Apps run in sandboxed iframes with:
+- no access to parent DOM
+- no cookies or localStorage from host
+- restricted permissions (`allow-scripts` only)
+- all communication via postMessage
+
+## resources
+
+- [MCP Apps specification](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/)
+- [ext-apps SDK](https://github.com/modelcontextprotocol/ext-apps)
+- [screenpipe MCP source](https://github.com/screenpipe/screenpipe/tree/main/crates/screenpipe-integrations/screenpipe-mcp)

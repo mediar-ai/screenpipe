@@ -1,25 +1,23 @@
-# screenpipe-sync
+# @screenpipe/sync
 
 **Sync your Screenpipe data to remote AI agents.**
 
-One-liner to permanently sync your screen memory to a remote server (e.g., [Clawdbot](https://github.com/moltinginstar/moltbot), any SSH server). Your AI agent can then query your full history via SQLite.
-
-Also extracts structured daily summaries: todos, goals, decisions, and AI insights.
+One-liner to sync daily summaries to a remote server (e.g., [OpenClaw](https://github.com/openclaw/openclaw)). Uses Claude Code CLI for AI-powered extraction.
 
 ## Quick Start
 
 ```bash
-# One-liner - AI summary to stdout
+# AI summary to stdout
 bunx @screenpipe/sync
 
 # Save daily summaries locally
 bunx @screenpipe/sync --output ~/Documents/brain/context --git
 
-# Sync raw SQLite database to remote (full history!)
-bunx @screenpipe/sync --db --remote user@host:~/.screenpipe/
+# Sync summaries to remote server
+bunx @screenpipe/sync --output /tmp/summaries --remote user@host:~/screenpipe-pkm
 
-# Full sync: DB + daily summary
-bunx @screenpipe/sync --db -r clawdbot:~/.screenpipe && bunx @screenpipe/sync -o ~/context -g
+# Persistent daemon (survives reboot)
+bunx @screenpipe/sync --daemon --output /tmp/summaries --remote user@host:~/clawd/screenpipe-pkm
 ```
 
 ## What It Extracts
@@ -37,28 +35,27 @@ bunx @screenpipe/sync --db -r clawdbot:~/.screenpipe && bunx @screenpipe/sync -o
 ## Example Output
 
 ```markdown
-# Daily Context - 2026-01-29
+# Daily Context - 2026-01-31
 
 > Analyzed 480 minutes of screen activity
 
-## 📱 Apps Used
+## Apps Used
 - **VS Code**: ~180 min
 - **Chrome**: ~120 min
 - **Slack**: ~60 min
 
-## ✅ Todos Extracted
+## Todos Extracted
 - Fix authentication bug in login.ts
 - Review PR #234 for payment integration
 - Send weekly update to investors
 
-## 🎯 Goals Mentioned
+## Goals Mentioned
 - Ship v2.9 by Friday
 - Reach 50% activation rate
 
-## 💡 AI Insights
-- Heavy context switching between Slack and VS Code (17 switches/hour)
+## AI Insights
+- Heavy context switching between Slack and VS Code
 - Deep focus block from 2-4pm on auth refactor
-- Late session (after 10pm) - consider sleep impact
 ```
 
 ## Options
@@ -69,80 +66,84 @@ bunx @screenpipe/sync --db -r clawdbot:~/.screenpipe && bunx @screenpipe/sync -o
 | `-h, --hours <n>` | Hours to analyze | 12 |
 | `-g, --git` | Auto commit & push | false |
 | `-r, --remote <host>` | Sync via SSH | - |
+| `-d, --daemon` | Install persistent sync | false |
+| `--interval <secs>` | Daemon interval | 3600 |
+| `--stop` | Stop daemon | - |
 | `--json` | JSON output | markdown |
 | `-v, --verbose` | Debug output | false |
 
-## Environment Variables
+## AI Summarization
+
+Uses [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) if available:
 
 ```bash
-# AI Provider (uses first available)
-export ANTHROPIC_API_KEY="sk-..."     # Claude (recommended)
-export OPENAI_API_KEY="sk-..."        # OpenAI fallback
-export OLLAMA_URL="http://localhost:11434"  # Local Ollama
-export OLLAMA_MODEL="llama3.2"        # Ollama model
+# Install Claude Code CLI
+npm install -g @anthropic-ai/claude-code
 
-# Screenpipe
-export SCREENPIPE_URL="http://localhost:3030"  # Default
+# Verify it works
+claude --version
 ```
 
-**AI Priority:** Claude → OpenAI → Ollama → No AI (basic summary)
+Falls back to structured extraction (no AI) if CLI not found.
+
+## OpenClaw Integration
+
+For daily digests via Telegram:
+
+1. **Local Mac** syncs summaries hourly:
+```bash
+bunx @screenpipe/sync --daemon --output /tmp/summaries --remote openclaw:~/clawd/screenpipe-pkm
+```
+
+2. **OpenClaw** has native cron that reads files and sends digest:
+```bash
+# Already configured - runs at 9pm PT
+sudo docker exec openclaw-gateway node dist/index.js cron list
+```
 
 ## Use Cases
 
 ### Daily Journaling
 ```bash
-# Run at end of day
 bunx @screenpipe/sync --output ~/journal --hours 16
-```
-
-### Sync to Remote AI Assistant
-```bash
-# Sync context to Clawdbot/Moltbot instance
-bunx @screenpipe/sync --output ~/brain/context --git
-# Remote pulls via cron
 ```
 
 ### Weekly Review Prep
 ```bash
-# Get full week
 bunx @screenpipe/sync --hours 168 --json > week.json
 ```
 
-### Automated Daily Sync (cron)
+### Daemon Mode (Recommended)
 ```bash
-# Add to crontab
-0 22 * * * ANTHROPIC_API_KEY=sk-... bunx @screenpipe/sync -o ~/context -g
+# Install persistent sync - survives reboot
+bunx @screenpipe/sync --daemon -r user@host:~/screenpipe-pkm
+
+# Check status
+# macOS: cat /tmp/screenpipe-sync.log
+# Linux: systemctl --user status screenpipe-sync.timer
+
+# Stop daemon
+bunx @screenpipe/sync --stop
 ```
 
 ## How It Works
 
-### Summary Mode (default)
 1. **Query** - Fetches OCR data from local Screenpipe API
 2. **Dedupe** - Removes duplicate/similar screen captures
-3. **Extract** - Claude analyzes content for structured data
+3. **Extract** - Claude Code CLI analyzes for structured data
 4. **Format** - Outputs markdown or JSON
-5. **Sync** - Optionally git pushes or SCPs to remote
-
-### DB Sync Mode (`--db`)
-1. **Copy** - Copies `~/.screenpipe/db.sqlite` (your full history)
-2. **Sync** - Uses rsync/scp to transfer to remote
-3. **Query** - Remote can query SQLite directly
-
-```bash
-# On remote, query your full history:
-sqlite3 ~/.screenpipe/db.sqlite "SELECT text FROM ocr_text WHERE text LIKE '%meeting%' LIMIT 10;"
-```
+5. **Sync** - SCPs to remote server
 
 ## Requirements
 
-- [Screenpipe](https://github.com/mediar-ai/screenpipe) running locally
+- [Screenpipe](https://github.com/screenpipe/screenpipe) running locally
 - [Bun](https://bun.sh) runtime
-- Anthropic API key for AI extraction (optional but recommended)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (optional, for AI extraction)
 
 ## Privacy
 
-All processing happens locally. Screen data never leaves your machine unless you explicitly sync to a remote.
+All processing happens locally. Screen data never leaves your machine unless you explicitly sync summaries to a remote.
 
 ## License
 
-MIT - Part of the [Screenpipe](https://github.com/mediar-ai/screenpipe) project.
+MIT - Part of the [Screenpipe](https://github.com/screenpipe/screenpipe) project.

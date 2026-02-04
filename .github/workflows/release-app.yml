@@ -70,9 +70,9 @@ jobs:
         if: github.event.inputs.commit_hash && github.event.inputs.version
         run: |
           if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+            sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' apps/screenpipe-app-tauri/src-tauri/Cargo.toml
           else
-            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+            sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' apps/screenpipe-app-tauri/src-tauri/Cargo.toml
           fi
 
       - name: create draft release
@@ -135,15 +135,15 @@ jobs:
         if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform != 'macos-latest'
         shell: pwsh
         run: |
-          $content = Get-Content screenpipe-app-tauri/src-tauri/Cargo.toml
+          $content = Get-Content apps/screenpipe-app-tauri/src-tauri/Cargo.toml
           $content = $content -replace '^version = ".*"', ('version = "' + '${{ github.event.inputs.version }}' + '"')
-          $content | Set-Content screenpipe-app-tauri/src-tauri/Cargo.toml -Force
+          $content | Set-Content apps/screenpipe-app-tauri/src-tauri/Cargo.toml -Force
 
       - name: Update version in Cargo.toml
         if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform == 'macos-latest'
         shell: bash
         run: |
-          sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+          sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' apps/screenpipe-app-tauri/src-tauri/Cargo.toml
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -199,7 +199,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/${{ matrix.target }}
-            screenpipe-app-tauri/src-tauri/target
+            apps/screenpipe-app-tauri/src-tauri/target
           # Shared cache across branches
           shared-key: "rust-cache-${{ matrix.target }}"
           # Save cache even on failed builds
@@ -213,7 +213,7 @@ jobs:
             ~/.cargo/.crates.toml
             ~/.cargo/.crates2.json
             target/${{ matrix.target }}/release
-            screenpipe-app-tauri/src-tauri/target/release
+            apps/screenpipe-app-tauri/src-tauri/target/release
           key: ${{ runner.os }}-artifacts-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-artifacts-${{ matrix.target }}-
@@ -235,23 +235,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            screenpipe-app-tauri/src-tauri/ffmpeg
-            screenpipe-app-tauri/src-tauri/tesseract-*
-            screenpipe-app-tauri/node_modules
-            screenpipe-app-tauri/src-tauri/target
-            screenpipe-app-tauri/.tauri
-            screenpipe-app-tauri/src-tauri/WixTools
-            screenpipe-app-tauri/src-tauri/mkl
+            apps/screenpipe-app-tauri/src-tauri/ffmpeg
+            apps/screenpipe-app-tauri/src-tauri/tesseract-*
+            apps/screenpipe-app-tauri/node_modules
+            apps/screenpipe-app-tauri/src-tauri/target
+            apps/screenpipe-app-tauri/.tauri
+            apps/screenpipe-app-tauri/src-tauri/WixTools
+            apps/screenpipe-app-tauri/src-tauri/mkl
             # Ollama binaries and libs
-            screenpipe-app-tauri/src-tauri/ollama-*
-            screenpipe-app-tauri/src-tauri/lib/ollama
+            apps/screenpipe-app-tauri/src-tauri/ollama-*
+            apps/screenpipe-app-tauri/src-tauri/lib/ollama
             # Swift UI monitoring binaries
-            screenpipe-app-tauri/src-tauri/ui_monitor-*
+            apps/screenpipe-app-tauri/src-tauri/ui_monitor-*
             # FFmpeg downloads
-            screenpipe-app-tauri/src-tauri/ffmpeg-*
+            apps/screenpipe-app-tauri/src-tauri/ffmpeg-*
             # Platform specific bins
-            screenpipe-app-tauri/src-tauri/bun-*
-            screenpipe-app-tauri/src-tauri/screenpipe-*
+            apps/screenpipe-app-tauri/src-tauri/bun-*
           key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build-${{ hashFiles('**/Cargo.lock', '**/bun.lockb') }}
           restore-keys: |
             ${{ matrix.platform }}-${{ matrix.target }}-pre-build-
@@ -321,7 +320,7 @@ jobs:
           sudo apt-get install -y /tmp/ubuntu-packages/*.deb
 
       - name: Install frontend dependencies
-        working-directory: ./screenpipe-app-tauri
+        working-directory: ${{ github.workspace }}/apps/screenpipe-app-tauri
         run: bun install
 
       - name: Install vcpkg
@@ -424,41 +423,7 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./screenpipe-app-tauri
-
-      - name: Build CLI
-        if: matrix.os_type != 'windows'
-        shell: bash
-        run: |
-          if [[ "${{ matrix.os_type }}" == "macos" ]]; then
-            export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
-            export PKG_CONFIG_ALLOW_CROSS=1
-            # Fix i8mm build error - force M1 compatible architecture
-            # M1 = armv8.4-a (no i8mm), M2+ = armv8.5-a+ (has i8mm)
-            # -U__ARM_FEATURE_MATMUL_INT8 undefines the i8mm macro to prevent
-            # the code from using i8mm intrinsics that aren't available on M1
-            # See: https://github.com/ggml-org/whisper.cpp/issues/3427
-            if [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
-              export CFLAGS="-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8"
-              export CXXFLAGS="-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8"
-            fi
-          fi
-          cargo build --release -p screenpipe-server ${{ matrix.args }}
-
-      - name: Build CLI on Windows
-        if: matrix.os_type == 'windows'
-        shell: powershell
-        env:
-          CARGO_PROFILE_RELEASE_STRIP: symbols
-          CARGO_PROFILE_RELEASE_PANIC: abort
-          CARGO_PROFILE_RELEASE_INCREMENTAL: false
-        run: cargo build --release -p screenpipe-server ${{ matrix.args }}
-
-        # Run pre build again to copy the CLI into app
-      - name: Run pre_build.js
-        run: |
-          bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
-        working-directory: ./screenpipe-app-tauri
+        working-directory: ${{ github.workspace }}/apps/screenpipe-app-tauri
 
       - uses: actions/setup-python@v5
         if: matrix.os_type == 'windows'
@@ -470,7 +435,7 @@ jobs:
         shell: powershell
         run: |
           # Create target directory
-          $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
+          $mkl_dir = "apps/screenpipe-app-tauri/src-tauri/mkl"
           New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
 
           # Install and copy Intel OpenMP
@@ -501,7 +466,7 @@ jobs:
         shell: powershell
         run: |
           # Create target directory
-          $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+          $vcredist_dir = "apps/screenpipe-app-tauri/src-tauri/vcredist"
           New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
 
           # Copy vcruntime DLLs from System32 (already present on Windows runners with VS installed)
@@ -519,7 +484,14 @@ jobs:
 
       - name: Use production config for release
         shell: bash
-        run: cp screenpipe-app-tauri/src-tauri/tauri.prod.conf.json screenpipe-app-tauri/src-tauri/tauri.conf.json
+        run: cp apps/screenpipe-app-tauri/src-tauri/tauri.prod.conf.json apps/screenpipe-app-tauri/src-tauri/tauri.conf.json
+
+      - name: Set macOS deployment target
+        if: matrix.os_type == 'macos'
+        shell: bash
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=10.15" >> $GITHUB_ENV
+          echo "Setting MACOSX_DEPLOYMENT_TARGET=10.15 for std::filesystem support"
 
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
@@ -538,19 +510,27 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
+          # Fix std::filesystem availability - requires macOS 10.15+
+          # whisper.cpp ggml uses std::filesystem::path which needs 10.15
+          # All these vars needed to ensure cmake picks up the deployment target
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os_type == 'macos' && '10.15' || '' }}
+          CMAKE_OSX_DEPLOYMENT_TARGET: ${{ matrix.os_type == 'macos' && '10.15' || '' }}
           # Fix i8mm build error - force M1 compatible architecture
           # -U__ARM_FEATURE_MATMUL_INT8 undefines i8mm macro
+          # -mmacosx-version-min=10.15 ensures std::filesystem is available
           # See: https://github.com/ggml-org/whisper.cpp/issues/3427
-          CFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8' || '' }}
-          CXXFLAGS: ${{ matrix.target == 'aarch64-apple-darwin' && '-mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8' || '' }}
+          CFLAGS: ${{ matrix.os_type == 'macos' && (matrix.target == 'aarch64-apple-darwin' && '-mmacosx-version-min=10.15 -mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8' || '-mmacosx-version-min=10.15') || '' }}
+          CXXFLAGS: ${{ matrix.os_type == 'macos' && (matrix.target == 'aarch64-apple-darwin' && '-mmacosx-version-min=10.15 -mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8' || '-mmacosx-version-min=10.15') || '' }}
+          CMAKE_C_FLAGS: ${{ matrix.os_type == 'macos' && '-mmacosx-version-min=10.15' || '' }}
+          CMAKE_CXX_FLAGS: ${{ matrix.os_type == 'macos' && '-mmacosx-version-min=10.15' || '' }}
           # Optimize for build speed on Windows
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.os_type == 'windows' && 'thin' || 'false' }}
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.os_type == 'windows' && '2' || '3' }}
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.os_type == 'windows' && '16' || '16' }}
           # Enable incremental compilation for Windows
           CARGO_INCREMENTAL: ${{ matrix.os_type == 'windows' && 'true' || 'false' }}
-          # Windows specific optimizations
-          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.os_type == 'windows' && 'symbols' || 'none' }}
+          # Windows: keep symbols for Sentry upload, macOS: none
+          CARGO_PROFILE_RELEASE_STRIP: none
           CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.os_type == 'windows' && 'abort' || 'unwind' }}
           CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.os_type == 'windows' && 'false' || 'true' }}
           RUSTFLAGS: ${{ matrix.os_type == 'windows' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
@@ -562,9 +542,39 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.os_type == 'linux' && '1' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
-          projectPath: "./screenpipe-app-tauri"
+          projectPath: "./apps/screenpipe-app-tauri"
           tauriScript: bunx tauri -vvv
           retryAttempts: 3
+
+      - name: Upload debug symbols to Sentry (Windows)
+        if: matrix.os_type == 'windows'
+        continue-on-error: true
+        shell: powershell
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: mediar
+        run: |
+          # Install sentry-cli
+          Invoke-WebRequest -Uri "https://release-registry.services.sentry.io/apps/sentry-cli/latest?response=download&arch=x86_64&platform=Windows&package=sentry-cli" -OutFile sentry-cli.exe
+
+          # Upload debug symbols (.pdb files) for the app
+          Write-Host "Uploading debug symbols to Sentry..."
+          .\sentry-cli.exe debug-files upload --org $env:SENTRY_ORG --project screenpipe-app apps/screenpipe-app-tauri/src-tauri/target/release/
+
+      - name: Upload debug symbols to Sentry (macOS)
+        if: matrix.os_type == 'macos'
+        continue-on-error: true
+        shell: bash
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: mediar
+        run: |
+          # Install sentry-cli
+          curl -sL https://sentry.io/get-cli/ | bash
+
+          # Upload debug symbols (dSYM files) for the app
+          echo "Uploading debug symbols to Sentry..."
+          sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-app apps/screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/
 
       - name: Download and Run CLI Manually (Windows)
         if: matrix.os_type == 'windows'
@@ -587,7 +597,7 @@ jobs:
           Invoke-WebRequest -Uri $cliUrl -UserAgent $env:USER_AGENT -OutFile $cliExe
 
           # move to the directory we want to upload from
-          cd screenpipe-app-tauri/src-tauri
+          cd apps/screenpipe-app-tauri/src-tauri
 
           # upload assets with retry logic
           $cliFullPath = Join-Path $cliDir "cn.exe"
@@ -629,7 +639,7 @@ jobs:
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
           api-key: ${{ secrets.CN_API_KEY }}
-          path: ./screenpipe-app-tauri/src-tauri
+          path: ./apps/screenpipe-app-tauri/src-tauri
 
   publish-release:
     needs: [check_commit, publish-tauri]
@@ -645,7 +655,7 @@ jobs:
       - name: Get version from Cargo.toml
         id: get_version
         run: |
-          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Publish Release on CrabNebula Cloud
@@ -670,7 +680,7 @@ jobs:
             this release needs community testing. a testing bounty issue will be created shortly.
             
             - download the release: [crabnebula cloud](${ releaseUrl })
-            - testing guidelines: [testing.md](https://github.com/mediar-ai/screenpipe/blob/main/TESTING.md)
+            - testing guidelines: [testing.md](https://github.com/screenpipe/screenpipe/blob/main/TESTING.md)
             
             each tester who provides quality feedback will receive a $20 bounty through algora.
             `;

@@ -59,7 +59,7 @@ jobs:
       - name: Copy test image
         run: |
           mkdir -p target/debug/deps
-          cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
+          cp crates/screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
       - name: Run cargo tests
         run: cargo test
@@ -67,7 +67,7 @@ jobs:
       # todo: need to run backend ...
       # - name: Run bun tests
       #   run: bun test
-      #   working-directory: ./screenpipe-js
+      #   working-directory: ./packages/screenpipe-js
 
   test-windows:
     runs-on: windows-2019
@@ -119,13 +119,13 @@ jobs:
       - name: Run pre_build.js
         shell: bash
         run: bun ./scripts/pre_build.js
-        working-directory: ./screenpipe-app-tauri
+        working-directory: ./apps/screenpipe-app-tauri
 
       - name: Copy test image
         shell: bash
         run: |
           mkdir -p target/debug/deps || true
-          cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
+          cp crates/screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
       - name: Run specific Windows OCR cargo test
         run: cargo test test_process_ocr_task_windows --release
@@ -168,18 +168,18 @@ jobs:
         env:
           SKIP_SCREENPIPE_SETUP: true # avoid trying to copy screenpipe binaries, not yet built (next step)
         run: bun ./scripts/pre_build.js
-        working-directory: ./screenpipe-app-tauri
+        working-directory: ./apps/screenpipe-app-tauri
 
       - name: Copy test image
         shell: bash
         run: |
           mkdir -p target/debug/deps || true
-          cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
+          cp crates/screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
       - name: Run specific Apple OCR cargo test
         shell: bash
         env:
-          DYLD_LIBRARY_PATH: /Users/runner/work/screenpipe/screenpipe/screenpipe-vision/lib
+          DYLD_LIBRARY_PATH: /Users/runner/work/screenpipe/screenpipe/crates/screenpipe-vision/lib
         # Only test vision package to avoid whisper-rs build issues on macOS CI
         run: cargo test -p screenpipe-vision test_apple_native_ocr
 

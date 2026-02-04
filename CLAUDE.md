@@ -5,19 +5,15 @@
 - Use `cargo` for Rust
 
 ## Key Directories
-- `screenpipe-app-tauri/` - Desktop app (Tauri + Next.js)
-- `screenpipe-server/` - Core backend (Rust)
-- `screenpipe-audio/` - Audio capture/transcription (Rust)
-- `screenpipe-vision/` - Screen capture/OCR (Rust)
+- `apps/screenpipe-app-tauri/` - Desktop app (Tauri + Next.js)
+- `crates/screenpipe-server/` - Core backend (Rust)
+- `crates/screenpipe-audio/` - Audio capture/transcription (Rust)
+- `crates/screenpipe-vision/` - Screen capture/OCR (Rust)
 
 ## Analytics
 - PostHog API key: source from `.env.local` (gitignored)
 - Project ID: 27525
 - Host: eu.i.posthog.com
-
-## What NOT to mention
-- Pipe store (removed)
-- Pipes marketplace (removed)
 
 ## Testing
 - `cargo test` for Rust
@@ -25,6 +21,6 @@
 
 ## macOS Dev Builds
 - Dev builds are signed with a developer certificate for consistent permissions
-- Config: `screenpipe-app-tauri/src-tauri/tauri.conf.json` → `bundle.macOS.signingIdentity`
+- Config: `apps/screenpipe-app-tauri/src-tauri/tauri.conf.json` → `bundle.macOS.signingIdentity`
 - This ensures macOS TCC recognizes the app across rebuilds (permissions persist)
 - Other devs without the cert will see permission issues - onboarding has "continue anyway" button after 5s

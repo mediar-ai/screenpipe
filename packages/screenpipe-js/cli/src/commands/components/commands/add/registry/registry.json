@@ -1,0 +1,136 @@
+{
+  "use-health": {
+    "name": "use-health",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/pipes/example-pipe/lib/hooks/use-health-check.tsx",
+    "target": "./src/hooks/use-health.tsx",
+    "dependencies": [
+      "lodash"
+    ],
+    "devDependencies": [
+      "@types/lodash"
+    ]
+  },
+  "update-pipe-config": {
+    "name": "update-pipe-config",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/pipes/example-pipe/lib/actions/update-pipe-config.ts",
+    "target": "./src/lib/actions/update-pipe-config.tsx",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "registryDependencies": [
+      "types"
+    ]
+  },
+  "use-pipe-settings": {
+    "name": "use-pipe-settings",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/pipes/example-pipe/lib/hooks/use-pipe-settings.tsx",
+    "target": "./src/lib/hooks/use-pipe-settings.ts",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "registryDependencies": [
+      "get-screenpipe-app-settings",
+      "types",
+      "use-settings"
+    ]
+  },
+  "get-screenpipe-app-settings": {
+    "name": "get-screenpipe-app-settings",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/pipes/example-pipe/lib/actions/get-screenpipe-app-settings.ts",
+    "target": "./src/lib/actions/get-screenpipe-app-settings.ts",
+    "dependencies": [
+      "@screenpipe/js"
+    ],
+    "registryDependencies": []
+  },
+  "types": {
+    "name": "types",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/pipes/obsidian/src/lib/types.ts",
+    "target": "./src/lib/types.ts",
+    "dependencies": [
+      "@screenpipe/js"
+    ],
+    "registryDependencies": []
+  },
+  "use-sql-autocomplete": {
+    "name": "use-sql-autocomplete",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/apps/screenpipe-app-tauri/components/sql-autocomplete-input.tsx",
+    "target": "./src/hooks/use-sql-autocomplete.ts"
+  },
+  "sql-autocomplete-input": {
+    "name": "sql-autocomplete-input",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/apps/screenpipe-app-tauri/components/sql-autocomplete-input.tsx",
+    "target": "./src/components/sql-autocomplete-input.ts",
+    "dependencies": [
+      "cmdk",
+      "lucide-react"
+    ],
+    "registryDependencies": [
+      "use-sql-autocomplete"
+    ]
+  },
+  "use-ai-provider": {
+    "name": "use-ai-provider",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/pipes/search/src/lib/hooks/use-ai-provider.tsx",
+    "target": "./src/hooks/use-ai-provider.tsx",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "registryDependencies": [],
+    "devDependencies": []
+  },
+  "ai-presets-selector": {
+    "name": "ai-presets-selector",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/pipes/example-pipe/components/ai-presets-selector.tsx",
+    "target": "./src/components/ai-presets-selector.tsx",
+    "registryDependencies": [
+      "use-pipe-settings",
+      "use-settings"
+    ],
+    "shadcnComponent": [
+      "button",
+      "command",
+      "dialog",
+      "popover",
+      "tooltip",
+      "input",
+      "label",
+      "select",
+      "textarea",
+      "slider",
+      "sonner"
+    ]
+  },
+  "ai-presets-dialog": {
+    "name": "ai-presets-dialog",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/pipes/example-pipe/components/ai-presets-dialog.tsx",
+    "target": "./src/components/ai-presets-dialog.tsx",
+    "registryDependencies": [
+      "use-pipe-settings",
+      "use-settings"
+    ],
+    "shadcnComponent": [
+      "button",
+      "command",
+      "dialog",
+      "tooltip",
+      "input",
+      "label",
+      "select",
+      "textarea",
+      "slider",
+      "sonner"
+    ]
+  },
+  "use-settings": {
+    "name": "use-settings",
+    "src": "https://api.github.com/repos/screenpipe/screenpipe/contents/pipes/example-pipe/lib/hooks/use-settings.tsx",
+    "target": "./src/lib/hooks/use-settings.ts",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "registryDependencies": [
+      "get-screenpipe-app-settings"
+    ]
+  }  
+}

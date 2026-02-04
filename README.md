@@ -1,4 +1,3 @@
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=c3628864-a0cb-47a1-a822-2f936cff50b2" />
 
 <p align="center">
    <a href ="https://screenpi.pe">
@@ -9,8 +8,8 @@
 <h1 align="center">[ screenpipe ]</h1>
 
 
-<p align="center">24/7 memory for your desktop</p>
-<p align="center">rewind but open source. 100% local. you own your data.</p>
+<p align="center">AI memory for your screen</p>
+<p align="center">AI finally knows what you're doing</p>
 
 
 
@@ -34,7 +33,7 @@
     <a href="https://screenpi.pe" target="_blank">
         <img src="https://img.shields.io/badge/download-desktop%20app-black?style=for-the-badge" alt="download">
     </a>
-    <a href="https://github.com/mediar-ai/screenpipe/raw/main/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb" target="_blank">
+    <a href="https://github.com/screenpipe/screenpipe/raw/main/crates/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb" target="_blank">
         <img src="https://img.shields.io/badge/install-Claude%20Extension-D97706?style=for-the-badge&logo=anthropic&logoColor=white" alt="install claude extension">
     </a>
 </p>
@@ -55,7 +54,7 @@
 
 ## what is this?
 
-screenpipe records your screen and audio 24/7, stores everything locally, and lets you connect digital history to ai.
+screenpipe turns your computer into a personal AI that knows everything you've done. record. search. automate. all local, all private, all yours
 
 ```
 ┌─────────────────────────────────────────┐
@@ -96,9 +95,10 @@ or [download the desktop app](https://screenpi.pe)
 ## specs
 
 - 10% cpu usage
-- 4gb ram
+- 0.5-3gb ram
 - ~15gb storage/month
 - works offline
+- optional encrypted device sync
 
 ## use with claude code
 

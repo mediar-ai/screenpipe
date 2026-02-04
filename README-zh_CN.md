@@ -28,7 +28,7 @@
     <a href="https://screenpi.pe" target="_blank">
         <img src="https://img.shields.io/badge/下载-桌面应用-black?style=for-the-badge" alt="下载">
     </a>
-    <a href="https://github.com/mediar-ai/screenpipe/raw/main/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb" target="_blank">
+    <a href="https://github.com/screenpipe/screenpipe/raw/main/crates/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb" target="_blank">
         <img src="https://img.shields.io/badge/安装-Claude%20扩展-D97706?style=for-the-badge&logo=anthropic&logoColor=white" alt="安装 claude 扩展">
     </a>
 </p>

@@ -2,13 +2,13 @@
 
 **Screenpipe skills for AI agents.**
 
-One-liner to install Screenpipe skills to your AI agent (Clawdbot, Claude Code, etc). Your agent can then query your screen history, get daily digests, and search memories.
+One-liner to install Screenpipe skills to your AI agent (OpenClaw, Claude Code, etc). Your agent can then query your screen history, get daily digests, and search memories.
 
 ## Quick Start
 
 ```bash
-# Install to remote agent (e.g., Clawdbot)
-bunx @screenpipe/skills install --remote clawdbot
+# Install to remote agent (e.g., OpenClaw)
+bunx @screenpipe/skills install --remote openclaw
 
 # Install locally
 bunx @screenpipe/skills install
@@ -36,10 +36,10 @@ bunx @screenpipe/skills list
 
 ```bash
 # 1. Sync your screen data to the agent
-bunx @screenpipe/sync --daemon --remote clawdbot:~/.screenpipe/
+bunx @screenpipe/sync --daemon --remote openclaw:~/.screenpipe/
 
 # 2. Install skills
-bunx @screenpipe/skills install --remote clawdbot
+bunx @screenpipe/skills install --remote openclaw
 
 # 3. Ask your agent
 "What was I doing at 3pm yesterday?"
@@ -65,4 +65,4 @@ The agent reads these skill files and uses them to answer your questions about y
 
 ## License
 
-MIT - Part of [Screenpipe](https://github.com/mediar-ai/screenpipe)
+MIT - Part of [Screenpipe](https://github.com/screenpipe/screenpipe)

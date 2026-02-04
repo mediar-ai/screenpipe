@@ -231,7 +231,7 @@ this document outlines the manual testing procedure for screenpipe. it's designe
   - ai provider used
 
 ### issue reporting
-report any failures or unexpected behavior to https://github.com/mediar-ai/screenpipe/issues with:
+report any failures or unexpected behavior to https://github.com/screenpipe/screenpipe/issues with:
 - detailed steps to reproduce
 - expected vs. actual behavior
 - system information

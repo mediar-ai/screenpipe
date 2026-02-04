@@ -54,6 +54,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 
 [[package]]
+name = "aead"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0"
+dependencies = [
+ "crypto-common",
+ "generic-array",
+]
+
+[[package]]
 name = "aes"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -234,6 +244,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.100",
+]
+
+[[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures",
+ "password-hash 0.5.0",
 ]
 
 [[package]]
@@ -651,7 +673,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "regex",
@@ -669,7 +691,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -732,6 +754,15 @@ name = "bitstream-io"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6099cdc01846bc367c4e7dd630dc5966dccf36b652fae7a74e17b640411a91b2"
+
+[[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest",
+]
 
 [[package]]
 name = "block"
@@ -1079,6 +1110,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "chacha20"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3613f74bd2eac03dad61bd53dbe620703d4371614fe0bc3b9f04dd36fe4e818"
+dependencies = [
+ "cfg-if",
+ "cipher",
+ "cpufeatures",
+]
+
+[[package]]
+name = "chacha20poly1305"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10cd79432192d1c0f4e1a0fef9527696cc039165d729fb41b3f4f4f354c2dc35"
+dependencies = [
+ "aead",
+ "chacha20",
+ "cipher",
+ "poly1305",
+ "zeroize",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1123,9 +1178,21 @@ dependencies = [
 [[package]]
 name = "cidre"
 version = "0.13.1"
-source = "git+https://github.com/yury/cidre.git#0146b38468898cb779e6798e0ac01752b399652d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aeb5b1ace98faf1a55e3631d63427f267897cfab7b65b1d5928cb0b8e6a4a194"
 dependencies = [
- "cidre-macros",
+ "cidre-macros 0.4.0",
+ "half",
+ "parking_lot",
+ "tokio",
+]
+
+[[package]]
+name = "cidre"
+version = "0.14.0"
+source = "git+https://github.com/yury/cidre.git#a69a71811b6442f367d41ff3b36956e58670439c"
+dependencies = [
+ "cidre-macros 0.5.0",
  "half",
  "parking_lot",
  "tokio",
@@ -1138,6 +1205,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5da2cdee573cf967cf4fec1f95f12a16dce31efb6d104238a8cb114cbdae1780"
 
 [[package]]
+name = "cidre-macros"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6facfeffa8b9792dc014bb4e65e364d13518b74e06783d56249810a3e48cfad7"
+
+[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1145,6 +1218,7 @@ checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
  "crypto-common",
  "inout",
+ "zeroize",
 ]
 
 [[package]]
@@ -1281,7 +1355,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1498,10 +1572,10 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/louis030195/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
+source = "git+https://github.com/screenpipe/cpal.git?branch=main#c3eaee9cb793c90ec54da63f50908c2cb6ce95a7"
 dependencies = [
  "alsa",
- "cidre",
+ "cidre 0.14.0",
  "core-foundation-sys",
  "coreaudio-rs",
  "dasp_sample",
@@ -1669,6 +1743,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
 dependencies = [
  "generic-array",
+ "rand_core 0.6.4",
  "typenum",
 ]
 
@@ -4186,6 +4261,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "md5"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
+
+[[package]]
 name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5167,6 +5248,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
+name = "opaque-debug"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+
+[[package]]
 name = "openapiv3-extended"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5331,6 +5418,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5344,7 +5442,7 @@ checksum = "83a0692ec44e4cf1ef28ca317f14f8f07da2d95ec3fa01f86e4467b725e60917"
 dependencies = [
  "digest",
  "hmac",
- "password-hash",
+ "password-hash 0.4.2",
  "sha2",
 ]
 
@@ -5525,6 +5623,17 @@ dependencies = [
  "rustix 0.38.44",
  "tracing",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "poly1305"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8159bd90725d2df49889a078b54f4f79e87f1f8a8444194cdca81d38f5393abf"
+dependencies = [
+ "cpufeatures",
+ "opaque-debug",
+ "universal-hash",
 ]
 
 [[package]]
@@ -6398,7 +6507,7 @@ checksum = "eded382c5f5f786b989652c49544c4877d9f015cc22e145a5ea8ea66c2921cd2"
 [[package]]
 name = "rusty-tesseract"
 version = "1.1.10"
-source = "git+https://github.com/louis030195/rusty-tesseract.git?branch=main#08346c1de08d122c7121425abc79081c30dbf778"
+source = "git+https://github.com/screenpipe/rusty-tesseract.git?branch=main#08346c1de08d122c7121425abc79081c30dbf778"
 dependencies = [
  "dirs",
  "image",
@@ -6474,11 +6583,9 @@ dependencies = [
 [[package]]
 name = "sck-rs"
 version = "0.1.0"
-source = "git+https://github.com/louis030195/sck-rs#f3667badac256c097ee616e452c9acf0708b6516"
+source = "git+https://github.com/screenpipe/sck-rs#d9a2c545fce6368530fb629423aae9e437b23660"
 dependencies = [
- "cidre",
- "core-foundation 0.10.0",
- "core-graphics",
+ "cidre 0.14.0",
  "image",
  "once_cell",
  "thiserror 1.0.69",
@@ -6499,15 +6606,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "screenpipe-accessibility"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "cidre 0.13.1",
+ "crossbeam-channel",
+ "parking_lot",
+ "regex",
+ "screenpipe-core",
+ "screenpipe-db",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "windows 0.58.0",
+]
+
+[[package]]
 name = "screenpipe-audio"
-version = "0.3.5"
+version = "0.3.67"
 dependencies = [
  "anyhow",
  "bytemuck",
  "bytes",
  "chrono",
  "clap",
- "cpal 0.15.3 (git+https://github.com/louis030195/cpal.git?branch=main)",
+ "cpal 0.15.3 (git+https://github.com/screenpipe/cpal.git?branch=main)",
  "criterion",
  "crossbeam",
  "dashmap",
@@ -6553,14 +6679,18 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-core"
-version = "0.3.5"
+version = "0.3.67"
 dependencies = [
  "accessibility",
  "accessibility-sys",
  "anyhow",
+ "argon2",
+ "async-trait",
+ "base64 0.22.1",
  "candle-core",
  "candle-nn",
  "candle-transformers",
+ "chacha20poly1305",
  "chrono",
  "clap",
  "core-foundation 0.10.0",
@@ -6568,7 +6698,9 @@ dependencies = [
  "cron",
  "dirs",
  "ffmpeg-sidecar",
+ "hex",
  "hf-hub",
+ "hmac",
  "http-cache-reqwest",
  "lazy_static",
  "log",
@@ -6582,7 +6714,9 @@ dependencies = [
  "sentry",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
+ "thiserror 1.0.69",
  "tokenizers",
  "tokio",
  "tracing",
@@ -6590,12 +6724,13 @@ dependencies = [
  "uiautomation",
  "url",
  "which 6.0.3",
+ "zeroize",
  "zip 0.6.6",
 ]
 
 [[package]]
 name = "screenpipe-db"
-version = "0.3.5"
+version = "0.3.67"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6619,7 +6754,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-events"
-version = "0.3.5"
+version = "0.3.67"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6637,7 +6772,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-integrations"
-version = "0.3.5"
+version = "0.3.67"
 dependencies = [
  "anyhow",
  "image",
@@ -6652,9 +6787,10 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-server"
-version = "0.3.5"
+version = "0.3.67"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "base64 0.22.1",
  "bincode",
@@ -6662,6 +6798,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "chrono",
+ "cidre 0.14.0",
  "clap",
  "clap_complete",
  "colored",
@@ -6674,10 +6811,12 @@ dependencies = [
  "fastrand",
  "futures",
  "hf-hub",
+ "hostname",
  "image",
  "imageproc",
  "killport",
  "lru",
+ "md5",
  "moka",
  "ndarray 0.15.6",
  "nix 0.29.0",
@@ -6687,6 +6826,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.12",
  "rust-stemmers",
+ "screenpipe-accessibility",
  "screenpipe-audio",
  "screenpipe-core",
  "screenpipe-db",
@@ -6716,7 +6856,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-vision"
-version = "0.3.5"
+version = "0.3.67"
 dependencies = [
  "accessibility-sys",
  "anyhow",
@@ -6725,9 +6865,10 @@ dependencies = [
  "atspi-proxies",
  "base64 0.22.1",
  "chrono",
- "cidre",
+ "cidre 0.14.0",
  "clap",
  "core-foundation 0.10.0",
+ "core-graphics",
  "criterion",
  "futures-util",
  "image",
@@ -6738,6 +6879,7 @@ dependencies = [
  "reqwest 0.12.12",
  "rusty-tesseract",
  "sck-rs",
+ "screenpipe-accessibility",
  "screenpipe-core",
  "screenpipe-db",
  "screenpipe-integrations",
@@ -8660,6 +8802,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39ec24b3121d976906ece63c9daad25b85969647682eee313cb5779fdd69e14e"
 
 [[package]]
+name = "universal-hash"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
+dependencies = [
+ "crypto-common",
+ "subtle",
+]
+
+[[package]]
 name = "unsafe-libyaml"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8751,7 +8903,7 @@ dependencies = [
 [[package]]
 name = "vad-rs"
 version = "0.2.0"
-source = "git+https://github.com/mediar-ai/vad-rs-1.git#3af3b1829ab4d8f018f271fe53c6f382f15ca3a6"
+source = "git+https://github.com/screenpipe/vad-rs-1.git#3af3b1829ab4d8f018f271fe53c6f382f15ca3a6"
 dependencies = [
  "eyre",
  "ndarray 0.16.1",
@@ -9084,8 +9236,8 @@ dependencies = [
 
 [[package]]
 name = "whisper-rs"
-version = "0.14.3"
-source = "git+https://github.com/tazz4843/whisper-rs.git?rev=135b60b85a15714862806b6ea9f76abec38156f1#135b60b85a15714862806b6ea9f76abec38156f1"
+version = "0.15.1"
+source = "git+https://codeberg.org/tazz4843/whisper-rs.git?rev=d38738df8dc54b12d2918494586ba0817c3cb12f#d38738df8dc54b12d2918494586ba0817c3cb12f"
 dependencies = [
  "tracing",
  "whisper-rs-sys",
@@ -9093,8 +9245,8 @@ dependencies = [
 
 [[package]]
 name = "whisper-rs-sys"
-version = "0.13.0"
-source = "git+https://github.com/tazz4843/whisper-rs.git?rev=135b60b85a15714862806b6ea9f76abec38156f1#135b60b85a15714862806b6ea9f76abec38156f1"
+version = "0.14.1"
+source = "git+https://codeberg.org/tazz4843/whisper-rs.git?rev=d38738df8dc54b12d2918494586ba0817c3cb12f#d38738df8dc54b12d2918494586ba0817c3cb12f"
 dependencies = [
  "bindgen 0.71.1",
  "cfg-if",
@@ -9150,7 +9302,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

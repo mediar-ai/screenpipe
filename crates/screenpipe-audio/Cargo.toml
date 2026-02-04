@@ -1,0 +1,120 @@
+[package]
+name = "screenpipe-audio"
+version = { workspace = true }
+authors = { workspace = true }
+description = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[build-dependencies]
+reqwest = { workspace = true }
+which = "7.0.0"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+oasgen = { workspace = true }
+
+# Cross-platform audio capture
+# Using fork with unified cidre version (compatible with sck-rs)
+cpal = { git = "https://github.com/screenpipe/cpal.git", branch = "main" }
+
+# Wav encoding
+hound = "3.5"
+
+# Cli ! shouldn't be required if using as lib
+clap = { version = "4.3", features = ["derive"] }
+
+# Dates
+chrono = { version = "0.4.31", features = ["serde"] }
+
+# Local Embeddings + STT
+# Using fork of vad-rs with Silero VAD v5/v6 support
+# v5/v6: 3x faster, 6000+ languages, better accuracy
+vad-rs = { git = "https://github.com/screenpipe/vad-rs-1.git", default-features = false }
+anyhow = "1.0.86"
+hf-hub = "0.3.2"
+# https://github.com/pdeljanov/Symphonia/tree/master?tab=readme-ov-file#optimizations
+symphonia = { version = "0.5.4", features = ["aac", "isomp4", "opt-simd"] }
+rubato = "0.15.0"
+whisper-rs = { git = "https://codeberg.org/tazz4843/whisper-rs.git", rev = "d38738df8dc54b12d2918494586ba0817c3cb12f", features = [
+  "tracing_backend",
+] } # pin revision to avoid breaking changes
+
+# Log
+log = { workspace = true }
+tracing = { workspace = true }
+env_logger = "0.10"
+
+# Bytes
+bytemuck = "1.16.1"
+
+# Async
+tokio = { workspace = true }
+
+# Detect speech/silence
+webrtc-vad = "0.4.0"
+
+# Deepgram
+reqwest = { workspace = true }
+
+screenpipe-core = { path = "../screenpipe-core" }
+screenpipe-events = { path = "../screenpipe-events" }
+screenpipe-db = { path = "../screenpipe-db" }
+
+# crossbeam
+crossbeam = { workspace = true }
+dashmap = { workspace = true }
+
+# Directories
+dirs = "5.0.1"
+
+lazy_static = { version = "1.4.0" }
+realfft = "3.4.0"
+ndarray = "0.16"
+ort = "=2.0.0-rc.6"
+ort-sys = "=2.0.0-rc.6"
+knf-rs = { git = "https://github.com/Neptune650/knf-rs.git" }
+futures = "0.3.31"
+deepgram = "0.6.4"
+bytes = { version = "1.9.0", features = ["serde"] }
+rand = "0.9.0"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+ort = { version = "=2.0.0-rc.6", features = [
+  "download-binaries",
+  "copy-dylibs",
+  "directml",
+  "cuda",
+] }
+esaxx-rs = "0.1.10"
+samplerate = { version = "0.2.4" }
+libsamplerate-sys = "0.1.10"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+once_cell = "1.17.1"
+objc = "0.2.7"
+ort = { version = "=2.0.0-rc.6", features = ["download-binaries"] }
+
+[dev-dependencies]
+tempfile = "3.3.0"
+infer = "0.15"
+criterion = { workspace = true }
+strsim = "0.10.0"
+futures = "0.3.31"
+tracing-subscriber = "0.3.16"
+
+
+[features]
+metal = ["whisper-rs/metal"]
+cuda = ["whisper-rs/cuda"]
+
+[[example]]
+name = "screenpipe-audio"
+path = "examples/screenpipe-audio.rs"
+
+[package.metadata.cargo-machete]
+ignored = ["ort-sys"]

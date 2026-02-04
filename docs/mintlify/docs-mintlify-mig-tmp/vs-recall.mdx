@@ -1,0 +1,111 @@
+---
+title: "screenpipe vs Microsoft Recall - privacy-focused alternative"
+sidebarTitle: "vs microsoft recall"
+description: "Compare screenpipe to Microsoft Recall. screenpipe is the privacy-focused, open source alternative that works on all platforms with no cloud dependency."
+icon: "scale-balanced"
+---
+
+Microsoft Recall is a Windows 11 feature that captures screenshots and makes them searchable. screenpipe offers similar functionality but with complete privacy, open source code, and cross-platform support.
+
+## comparison
+
+| feature | screenpipe | microsoft recall |
+|---------|-----------|------------------|
+| **open source** | yes (MIT) | no |
+| **platforms** | macOS, Windows, Linux | Windows 11 only |
+| **data location** | 100% local | local (with cloud concerns) |
+| **NPU required** | no | yes (Copilot+ PCs) |
+| **privacy** | auditable source code | closed source |
+| **AI provider** | your choice (local or cloud) | Microsoft AI |
+| **extensibility** | plugins (pipes) | none |
+
+## why choose screenpipe?
+
+### true privacy
+
+- open source: you can audit every line of code
+- no Microsoft account required
+- no telemetry or data collection
+- use completely local AI (Ollama)
+
+### works everywhere
+
+- macOS, Windows, Linux
+- no special hardware required
+- runs on any modern computer
+
+### you control the AI
+
+- use Ollama for 100% local AI
+- or connect to OpenAI, Claude, etc.
+- your choice, not Microsoft's
+
+### extensible
+
+build custom integrations with the pipes system:
+
+```typescript
+import { pipe } from "@screenpipe/js";
+
+// build anything on top of your screen data
+const data = await pipe.queryScreenpipe({
+  q: "meeting notes",
+  contentType: "all"
+});
+```
+
+## recall privacy concerns
+
+Microsoft Recall has faced criticism for:
+
+- storing sensitive data (passwords, financial info)
+- potential security vulnerabilities
+- data being accessible to other apps
+- unclear data handling policies
+
+screenpipe addresses these:
+
+- **PII removal**: optional automatic redaction of sensitive data
+- **window filtering**: exclude apps like password managers
+- **local-only**: data never leaves your device
+- **open source**: security researchers can audit the code
+
+## filtering sensitive content
+
+```bash
+# exclude password managers and banking apps
+screenpipe \
+  --ignored-windows "1Password" \
+  --ignored-windows "Bitwarden" \
+  --ignored-windows "Chase" \
+  --use-pii-removal
+```
+
+## get started
+
+```bash
+# macos/linux
+curl -fsSL get.screenpi.pe/cli | sh
+
+# windows
+iwr get.screenpi.pe/cli.ps1 | iex
+```
+
+or [download the desktop app](https://screenpi.pe)
+
+---
+
+## more comparisons
+
+looking for detailed feature comparisons? check out our main comparison pages:
+
+- [screenpipe vs Microsoft Recall (full comparison)](https://screenpi.pe/compare/microsoft-recall) - in-depth privacy analysis
+- [screenpipe vs Limitless](https://screenpi.pe/compare/limitless) - hardware vs software approach
+- [screenpipe vs Rewind](https://screenpi.pe/compare/limitless) - open source alternative
+- [all comparisons](https://screenpi.pe/compare) - see how screenpipe stacks up
+
+## resources
+
+- [AI recall tools guide](https://screenpi.pe/resources/use-cases/ai-recall-tools) - how screen memory works
+- [local AI assistant setup](https://screenpi.pe/resources/use-cases/local-ai-assistant) - complete privacy with Ollama
+- [screenpipe blog](https://screenpi.pe/blog) - latest updates and tutorials

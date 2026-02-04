@@ -1,0 +1,101 @@
+---
+title: "continue - open-source copilot with screen context"
+sidebarTitle: "continue"
+description: "Connect screenpipe to Continue to give this open-source AI coding assistant access to your screen history."
+icon: "forward"
+---
+
+[Continue](https://github.com/continuedev/continue) is an open-source AI coding assistant with 20k+ GitHub stars. it works in VS Code and JetBrains IDEs, and supports MCP servers for external context.
+
+## setup
+
+### VS Code
+
+1. install Continue from the VS Code marketplace
+2. open Continue settings
+3. edit `~/.continue/config.json`:
+
+```json
+{
+  "mcpServers": [
+    {
+      "name": "screenpipe",
+      "command": "npx",
+      "args": ["-y", "screenpipe-mcp"]
+    }
+  ]
+}
+```
+
+4. restart VS Code
+
+### JetBrains
+
+1. install Continue from JetBrains marketplace
+2. open Continue settings
+3. add the same MCP configuration
+4. restart the IDE
+
+## usage
+
+once configured, Continue can access your screen history:
+
+```
+> @screenpipe what was I working on this morning?
+
+> find the error I saw in my terminal and help me fix it
+
+> what documentation was I reading about react hooks?
+```
+
+## context providers
+
+Continue also supports context providers. you can add screenpipe as a custom context provider for more control:
+
+```json
+{
+  "contextProviders": [
+    {
+      "name": "screenpipe",
+      "params": {
+        "apiUrl": "http://localhost:3030"
+      }
+    }
+  ]
+}
+```
+
+## example workflows
+
+**code with context:**
+```
+> I was looking at how another project handles authentication,
+> find that code and help me implement something similar
+```
+
+**recall errors:**
+```
+> there was a typescript error earlier about types,
+> find it and explain how to fix it
+```
+
+**meeting follow-up:**
+```
+> what did we discuss in the standup about the API changes?
+> help me implement those changes
+```
+
+## available tools
+
+via MCP, Continue gets access to:
+
+- **search-content** - search screen OCR and audio transcriptions
+- **search-ui-events** - search accessibility data: keyboard input, clicks, app switches, clipboard (macOS)
+- **get-ui-event-stats** - aggregated app usage statistics
+- **export-video** - create video exports from screen recordings
+
+## requirements
+
+- screenpipe running on localhost:3030
+- Continue extension in VS Code or JetBrains
+- Node.js >= 18.0.0

@@ -1,0 +1,195 @@
+name: Sentry Cleanup - Resolve Stale Issues
+
+on:
+  # Run after app releases
+  workflow_run:
+    workflows: ["Release App (Beta)"]
+    types: [completed]
+  # Weekly sweep
+  schedule:
+    - cron: "0 9 * * 1" # Monday 9am UTC
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      version_gap:
+        description: "Minimum version gap to auto-resolve (default: 5)"
+        required: false
+        default: "5"
+      dry_run:
+        description: "Dry run - only log what would be resolved"
+        type: boolean
+        default: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get current versions
+        id: versions
+        run: |
+          APP_VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          SERVER_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
+          echo "server_version=$SERVER_VERSION" >> $GITHUB_OUTPUT
+          echo "Current app version: $APP_VERSION"
+          echo "Current server version: $SERVER_VERSION"
+
+      - name: Resolve stale Sentry issues
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          APP_VERSION: ${{ steps.versions.outputs.app_version }}
+          SERVER_VERSION: ${{ steps.versions.outputs.server_version }}
+          VERSION_GAP: ${{ github.event.inputs.version_gap || '5' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          python3 << 'SCRIPT'
+          import json
+          import os
+          import re
+          import urllib.request
+          import urllib.error
+
+          SENTRY_TOKEN = os.environ["SENTRY_AUTH_TOKEN"]
+          APP_VERSION = os.environ["APP_VERSION"]
+          SERVER_VERSION = os.environ["SERVER_VERSION"]
+          VERSION_GAP = int(os.environ.get("VERSION_GAP", "5"))
+          DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
+          ORG_SLUG = "mediar"
+
+          def sentry_request(url, method="GET", data=None):
+              req = urllib.request.Request(url, method=method)
+              req.add_header("Authorization", f"Bearer {SENTRY_TOKEN}")
+              req.add_header("Content-Type", "application/json")
+              if data:
+                  req.data = json.dumps(data).encode()
+              try:
+                  resp = urllib.request.urlopen(req)
+                  return json.loads(resp.read())
+              except urllib.error.HTTPError as e:
+                  print(f"  HTTP {e.code} for {url}")
+                  return None
+
+          def parse_version(release_str):
+              """Extract the patch version number from release strings like 'screenpipe-app@2.0.259' or 'screenpipe-server@0.3.51'"""
+              m = re.search(r"@(\d+\.\d+\.(\d+))", release_str)
+              if m:
+                  return int(m.group(2)), m.group(1)
+              return None, None
+
+          def get_current_patch(project_slug):
+              """Get the current patch version for a project"""
+              if project_slug == "screenpipe-app":
+                  parts = APP_VERSION.split(".")
+                  return int(parts[-1]) if len(parts) >= 3 else None
+              elif project_slug == "screenpipe-cli":
+                  parts = SERVER_VERSION.split(".")
+                  return int(parts[-1]) if len(parts) >= 3 else None
+              return None
+
+          def get_release_prefix(project_slug):
+              if project_slug == "screenpipe-app":
+                  return "screenpipe-app@"
+              elif project_slug == "screenpipe-cli":
+                  return "screenpipe-server@"
+              return None
+
+          print(f"=== Sentry Cleanup ===")
+          print(f"App version: {APP_VERSION} (patch: {APP_VERSION.split('.')[-1]})")
+          print(f"Server version: {SERVER_VERSION} (patch: {SERVER_VERSION.split('.')[-1]})")
+          print(f"Version gap threshold: {VERSION_GAP}")
+          print(f"Dry run: {DRY_RUN}")
+          print()
+
+          resolved_count = 0
+          skipped_count = 0
+
+          for project in ["screenpipe-app", "screenpipe-cli"]:
+              current_patch = get_current_patch(project)
+              if current_patch is None:
+                  print(f"Could not determine current version for {project}, skipping")
+                  continue
+
+              threshold_patch = current_patch - VERSION_GAP
+              print(f"--- {project} ---")
+              print(f"  Current patch: {current_patch}, threshold: {threshold_patch} (resolve if latest event <= {threshold_patch})")
+              print()
+
+              # Fetch all unresolved issues for this project (use org-level endpoint for broader token compatibility)
+              url = f"https://sentry.io/api/0/organizations/{ORG_SLUG}/issues/?query=is:unresolved+project:{project}&sort=date&limit=100"
+              issues = sentry_request(url)
+              if not issues:
+                  print(f"  No issues found or error fetching")
+                  continue
+
+              for issue in issues:
+                  short_id = issue["shortId"]
+                  title = issue["title"][:80]
+                  event_count = int(issue["count"])
+                  user_count = int(issue.get("userCount", 0))
+                  assignee = issue.get("assignedTo")
+                  issue_id = issue["id"]
+
+                  # Skip if has assignee (someone is working on it)
+                  if assignee:
+                      print(f"  SKIP [{short_id}] has assignee - {title}")
+                      skipped_count += 1
+                      continue
+
+                  # Skip if high user count (widespread, worth investigating)
+                  if user_count >= 10:
+                      print(f"  SKIP [{short_id}] {user_count} users affected - {title}")
+                      skipped_count += 1
+                      continue
+
+                  # Get latest event to check its release version
+                  event_url = f"https://sentry.io/api/0/organizations/{ORG_SLUG}/issues/{issue_id}/events/latest/"
+                  event = sentry_request(event_url)
+                  if not event:
+                      continue
+
+                  # Find release tag
+                  release_tag = None
+                  for tag in event.get("tags", []):
+                      if tag["key"] == "release":
+                          release_tag = tag["value"]
+                          break
+
+                  if not release_tag:
+                      # No release tag, skip
+                      continue
+
+                  event_patch, full_ver = parse_version(release_tag)
+                  if event_patch is None:
+                      continue
+
+                  gap = current_patch - event_patch
+
+                  if gap >= VERSION_GAP:
+                      if DRY_RUN:
+                          print(f"  WOULD RESOLVE [{short_id}] v{full_ver} (gap={gap}) {event_count} events, {user_count} users - {title}")
+                      else:
+                          # Resolve as "resolvedInNextRelease" so it auto-reopens if bug persists
+                          resolve_url = f"https://sentry.io/api/0/issues/{issue_id}/"
+                          result = sentry_request(resolve_url, method="PUT", data={
+                              "status": "resolved",
+                              "statusDetails": {"inNextRelease": True}
+                          })
+                          if result:
+                              print(f"  RESOLVED [{short_id}] v{full_ver} (gap={gap}) {event_count} events, {user_count} users - {title}")
+                              resolved_count += 1
+                          else:
+                              print(f"  FAILED to resolve [{short_id}]")
+                  else:
+                      print(f"  KEEP [{short_id}] v{full_ver} (gap={gap}) {event_count} events, {user_count} users - {title}")
+                      skipped_count += 1
+
+              print()
+
+          print(f"=== Summary ===")
+          print(f"Resolved: {resolved_count}")
+          print(f"Skipped/Kept: {skipped_count}")
+          if DRY_RUN:
+              print("(DRY RUN - nothing was actually resolved)")
+          SCRIPT

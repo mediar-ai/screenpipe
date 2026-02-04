@@ -32,7 +32,7 @@ before you begin:
 
 3. **clone the repository**:
    ```bash
-   git clone https://github.com/mediar-ai/screenpipe
+   git clone https://github.com/screenpipe/screenpipe
    cd screenpipe
    ```
 
@@ -48,7 +48,7 @@ before you begin:
 
 6. **build the desktop app**:
    ```bash
-   cd screenpipe-app-tauri
+   cd apps/screenpipe-app-tauri
    bun install
    bun tauri build
    ```
@@ -91,7 +91,7 @@ before you begin:
    ```
 5. **clone the project**:
    ```powershell
-      git clone https://github.com/mediar-ai/screenpipe.git
+      git clone https://github.com/screenpipe/screenpipe.git
       cd screenpipe
    ```
 6. **setup Intel OpenMP DLLs**:
@@ -101,7 +101,7 @@ before you begin:
    ```powershell
    cd screenpipe
    # Define the target directory where Intel OpenMP DLLs will be copied 
-   $mkl_dir = (pwd).Path + "\screenpipe-app-tauri\src-tauri\mkl"
+   $mkl_dir = (pwd).Path + "\apps\screenpipe-app-tauri\src-tauri\mkl"
    New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
 
    python -m pip install --upgrade pip
@@ -144,7 +144,7 @@ before you begin:
    }
    
    # Copy vcruntime140.dll to the specified directory
-   $vcredist_dir = (pwd).Path + "\screenpipe-app-tauri\src-tauri\vcredist"
+   $vcredist_dir = (pwd).Path + "\apps\screenpipe-app-tauri\src-tauri\vcredist"
    New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
    Copy-Item $path -Destination $vcredist_dir -Force
    
@@ -155,7 +155,7 @@ before you begin:
    ```powershell
    cd screenpipe
    cargo build --release
-   cd screenpipe-app-tauri
+   cd apps/screenpipe-app-tauri
    bun install
    bun tauri build
    ```
@@ -175,7 +175,7 @@ before you begin:
 
 3. **clone and build**:
    ```bash
-   git clone https://github.com/mediar-ai/screenpipe
+   git clone https://github.com/screenpipe/screenpipe
    cd screenpipe
    cargo build --release
    ```
@@ -187,7 +187,7 @@ before you begin:
 
 5. **build the desktop app**:
    ```bash
-   cd screenpipe-app-tauri
+   cd apps/screenpipe-app-tauri
    bun install
    bun tauri build
    ```
@@ -346,7 +346,7 @@ then open the file in `target/release/instruments` using xcode -> open developer
 cargo bench
 ```
 
-[check benchmark visuals](https://mediar-ai.github.io/screenpipe/dev/bench/)
+[check benchmark visuals](https://screenpipe.github.io/screenpipe/dev/bench/)
 
 ### creating new migrations
 
@@ -456,7 +456,7 @@ we use this for our docs through mintlify, usually the output is broken and i us
 
 ```
 please run this command:
-npx @mintlify/scraping@latest openapi-file content/docs-mintlify-mig-tmp/openapi.yaml -o /tmp
+npx @mintlify/scraping@latest openapi-file docs/mintlify/openapi.yaml -o /tmp
 and fix the openapi.yaml file and rerun the command until it works
 ```
 
@@ -471,7 +471,7 @@ get rid of semantic search bcs not prod rdy also
 
 make sure to run 
 
-`npx @mintlify/scraping@latest openapi-file content/docs-mintlify-mig-tmp/openapi.yaml -o /tmp`
+`npx @mintlify/scraping@latest openapi-file docs/mintlify/openapi.yaml -o /tmp`
 
 to validate the openapi.yaml file is valid btw before pushing 
 

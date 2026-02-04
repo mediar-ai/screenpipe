@@ -1,5 +1,0 @@
-# Empty config - using root .cargo/config.toml settings
-# This file exists to prevent cargo from looking for missing config
-
-[env]
-CMAKE_POLICY_VERSION_MINIMUM = "3.5"
