@@ -232,7 +232,7 @@ impl RewindWindowId {
             RewindWindowId::Main => (1200.0, 850.0),
             RewindWindowId::Settings => (1200.0, 850.0),
             RewindWindowId::Search => (1200.0, 850.0),
-            RewindWindowId::Onboarding => (900.0, 800.0),
+            RewindWindowId::Onboarding => (450.0, 500.0),
             RewindWindowId::Chat => (500.0, 600.0),
             RewindWindowId::PermissionRecovery => (500.0, 400.0),
         })
@@ -939,9 +939,9 @@ impl ShowRewindWindow {
                 // Clamp onboarding window size to primary monitor to prevent min > max panic
                 let (width, height) = if let Ok(Some(monitor)) = app.primary_monitor() {
                     let logical: tauri::LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
-                    (1000.0_f64.min(logical.width), 850.0_f64.min(logical.height))
+                    (500.0_f64.min(logical.width), 560.0_f64.min(logical.height))
                 } else {
-                    (1000.0, 850.0)
+                    (500.0, 560.0)
                 };
                 let min = self.id().min_size().unwrap_or((0.0, 0.0));
                 let clamped_min = (min.0.min(width), min.1.min(height));

@@ -103,7 +103,8 @@ export default function ShortcutGate() {
       console.error("failed to schedule notification:", e);
     }
 
-    // Main window is already shown by the shortcut handler
+    // The shortcut handler already showed the main window (it was hidden/nonexistent
+    // during onboarding, so the toggle creates & shows it). Just close onboarding.
     try {
       window.close();
     } catch {
