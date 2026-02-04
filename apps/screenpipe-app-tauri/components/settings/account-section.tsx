@@ -7,7 +7,7 @@ import {
   ExternalLinkIcon,
   Sparkles,
   Zap,
-  Brain,
+  Shield,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
@@ -181,84 +181,93 @@ export function AccountSection() {
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
-              <span className="text-green-500">✓</span> cloud sync - 50GB, 3 devices
+              <span>✓</span> encrypted cloud sync — 50GB, 3 devices
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-green-500">✓</span> unlimited ai queries, all models
+              <span>✓</span> cloud transcription
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-green-500">✓</span> cloud transcription
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-green-500">✓</span> priority support
+              <span>✓</span> priority support
             </div>
           </div>
         </Card>
       ) : (
         /* Non-subscriber: pricing-first layout */
         <>
-          {/* Pro plan card with CTA */}
-          <Card className="p-5 border-primary/30 bg-gradient-to-b from-primary/[0.03] to-transparent">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  <h3 className="text-lg font-semibold">screenpipe pro</h3>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold">{isAnnual ? "$19" : "$29"}</span>
-                  <span className="text-muted-foreground text-sm">/month</span>
+          {/* Pro plan card with animated border */}
+          <div className="group relative rounded-lg p-[1px] overflow-hidden">
+            {/* Animated spinning border — oversized rotated square with conic gradient */}
+            <div
+              className="absolute inset-[-100%] animate-[spin-border_4s_linear_infinite]"
+              style={{
+                background: "conic-gradient(from 0deg, transparent 0%, transparent 35%, hsl(var(--foreground)) 50%, transparent 65%, transparent 100%)",
+              }}
+            />
+            {/* Inner card */}
+            <Card className="relative p-5 bg-background border-0">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Sparkles className="h-5 w-5" />
+                    <h3 className="text-lg font-semibold">screenpipe pro</h3>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold">{isAnnual ? "$19" : "$29"}</span>
+                    <span className="text-muted-foreground text-sm">/month</span>
+                    {isAnnual && (
+                      <span className="text-xs border border-foreground/20 text-foreground px-2 py-0.5 rounded-full font-medium">
+                        save 34%
+                      </span>
+                    )}
+                  </div>
                   {isAnnual && (
-                    <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">
-                      save 34%
-                    </span>
+                    <p className="text-xs text-muted-foreground mt-0.5">$228/year, billed annually</p>
                   )}
                 </div>
-                {isAnnual && (
-                  <p className="text-xs text-muted-foreground mt-0.5">$228/year, billed annually</p>
-                )}
+                <PricingToggle isAnnual={isAnnual} onToggle={setIsAnnual} />
               </div>
-              <PricingToggle isAnnual={isAnnual} onToggle={setIsAnnual} />
-            </div>
 
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm mb-4">
-              <div className="flex items-center gap-2 text-foreground">
-                <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
-                cloud sync — 50GB, 3 devices
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm mb-4">
+                <div className="flex items-center gap-2 text-foreground">
+                  <Shield className="h-3.5 w-3.5 shrink-0" />
+                  encrypted cloud sync — 50GB, 3 devices
+                </div>
+                <div className="flex items-center gap-2 text-foreground">
+                  <Zap className="h-3.5 w-3.5 shrink-0" />
+                  cloud transcription — saves 2-3GB RAM
+                </div>
+                <div className="flex items-center gap-2 text-foreground">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  priority support
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-foreground">
-                <Brain className="h-3.5 w-3.5 text-primary shrink-0" />
-                unlimited ai, all models
-              </div>
-              <div className="flex items-center gap-2 text-foreground">
-                <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
-                cloud transcription — saves 2-3GB RAM
-              </div>
-              <div className="flex items-center gap-2 text-foreground">
-                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
-                priority support
-              </div>
-            </div>
 
-            <Button
-              className="w-full"
-              size="lg"
-              onClick={handleCheckout}
-            >
-              {settings.user?.token ? "upgrade to pro" : "login & upgrade to pro"}
-              <ExternalLinkIcon className="w-4 h-4 ml-2" />
-            </Button>
-          </Card>
+              <Button
+                className="w-full bg-foreground text-background hover:bg-foreground/90"
+                size="lg"
+                onClick={handleCheckout}
+              >
+                {settings.user?.token ? "upgrade to pro" : "login & upgrade to pro"}
+                <ExternalLinkIcon className="w-4 h-4 ml-2" />
+              </Button>
+            </Card>
+          </div>
 
           {/* Current free tier - compact */}
-          <div className="px-3 py-2 rounded-lg border border-border/50 bg-secondary/5">
+          <div className="px-3 py-2 rounded-lg border border-border/50">
             <p className="text-xs text-muted-foreground">
               <span className="font-medium text-foreground">free tier:</span>{" "}
-              {settings.user?.token ? "50" : "25"} ai queries/day with claude haiku
-              {settings.user?.token && " & sonnet"}
-              {" · "}local whisper transcription (uses ~2GB RAM)
+              local whisper transcription (uses ~2GB RAM)
             </p>
           </div>
+
+          {/* CSS animation for spinning border */}
+          <style>{`
+            @keyframes spin-border {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
         </>
       )}
     </div>
