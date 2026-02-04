@@ -214,8 +214,15 @@ export default function GeneralSettings() {
                   return (
                     <button
                       key={option.value}
-                      onClick={() => handleSettingsChange({ overlayMode: option.value })}
-                      className={`flex-1 p-3 rounded-lg border-2 transition-all text-left ${
+                      onClick={() => {
+                        handleSettingsChange({ overlayMode: option.value });
+                        toast({
+                          title: "overlay mode updated",
+                          description: `set to ${option.label.toLowerCase()}. reopen timeline to apply.`,
+                        });
+                      }}
+                      type="button"
+                      className={`flex-1 p-3 rounded-lg border-2 transition-all text-left cursor-pointer ${
                         isActive
                           ? "border-primary bg-primary/5"
                           : "border-border hover:border-muted-foreground/30"
