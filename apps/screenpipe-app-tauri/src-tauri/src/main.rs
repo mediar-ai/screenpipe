@@ -121,13 +121,6 @@ fn setup_dock_menu(app_handle: AppHandle) {
                 }
             }
         }
-        extern "C" fn quit_app(_this: &Object, _sel: Sel, _sender: id) {
-            unsafe {
-                if let Some(ref app) = DOCK_APP_HANDLE {
-                    app.exit(0);
-                }
-            }
-        }
         extern "C" fn dock_menu(_this: &Object, _sel: Sel, _sender: id) -> id {
             unsafe {
                 let menu: id = msg_send![class!(NSMenu), new];
@@ -150,19 +143,7 @@ fn setup_dock_menu(app_handle: AppHandle) {
                 let _: () = msg_send![item, setTarget: _this];
                 let _: () = msg_send![menu, addItem: item];
 
-                // Separator
-                let sep: id = msg_send![class!(NSMenuItem), separatorItem];
-                let _: () = msg_send![menu, addItem: sep];
-
-                // "Quit"
-                let title = NSString::alloc(nil).init_str("Quit screenpipe");
-                let action = sel!(quitApp:);
-                let key = NSString::alloc(nil).init_str("");
-                let item: id = msg_send![class!(NSMenuItem), alloc];
-                let item: id = msg_send![item, initWithTitle:title action:action keyEquivalent:key];
-                let _: () = msg_send![item, setTarget: _this];
-                let _: () = msg_send![menu, addItem: item];
-
+                // Note: macOS adds native "Quit" to dock menu automatically
                 menu
             }
         }
@@ -172,7 +153,6 @@ fn setup_dock_menu(app_handle: AppHandle) {
         let mut decl = objc::declare::ClassDecl::new("ScreenpipeDockMenuDelegate", superclass).unwrap();
         decl.add_method(sel!(showScreenpipe:), show_screenpipe as extern "C" fn(&Object, Sel, id));
         decl.add_method(sel!(openSettings:), open_settings as extern "C" fn(&Object, Sel, id));
-        decl.add_method(sel!(quitApp:), quit_app as extern "C" fn(&Object, Sel, id));
         decl.add_method(sel!(applicationDockMenu:), dock_menu as extern "C" fn(&Object, Sel, id) -> id);
         let delegate_class = decl.register();
 
@@ -200,7 +180,7 @@ fn setup_dock_menu(app_handle: AppHandle) {
             );
             // Also add the action methods
             let void_encoding = b"v:@\0".as_ptr() as *const std::ffi::c_char;
-            for sel_name in &[sel!(showScreenpipe:), sel!(openSettings:), sel!(quitApp:)] {
+            for sel_name in &[sel!(showScreenpipe:), sel!(openSettings:)] {
                 let m = objc::runtime::class_getInstanceMethod(
                     object_getClass(delegate) as *const _,
                     *sel_name,
