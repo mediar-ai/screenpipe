@@ -233,23 +233,10 @@ fn create_dynamic_menu(
             .item(&MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?);
     }
 
-    // Auto-update toggle
-    let auto_update_enabled = SettingsStore::get(app)
-        .ok()
-        .flatten()
-        .map(|s| s.auto_update)
-        .unwrap_or(true);
-    let auto_update_text = if auto_update_enabled {
-        "✓ auto-update"
-    } else {
-        "  auto-update"
-    };
-
     // Settings, feedback and quit
     menu_builder = menu_builder
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("settings", "settings").build(app)?)
-        .item(&MenuItemBuilder::with_id("toggle_auto_update", auto_update_text).build(app)?)
         .item(&MenuItemBuilder::with_id("feedback", "send feedback").build(app)?)
         .item(&MenuItemBuilder::with_id("book_call", "book a call with founder").build(app)?)
         .item(&MenuItemBuilder::with_id("onboarding", "onboarding").build(app)?)
@@ -333,22 +320,6 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
         }
         "settings" => {
             let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
-        }
-        "toggle_auto_update" => {
-            let current = SettingsStore::get(app_handle)
-                .ok()
-                .flatten()
-                .map(|s| s.auto_update)
-                .unwrap_or(true);
-            let new_value = !current;
-            
-            // Update the store
-            if let Ok(store) = get_store(app_handle, None) {
-                let _ = store.set("autoUpdate", serde_json::json!(new_value));
-                let _ = store.save();
-            }
-            
-            info!("auto-update toggled to: {}", new_value);
         }
         "feedback" => {
             let _ = ShowRewindWindow::Settings { page: Some("feedback".to_string()) }.show(app_handle);

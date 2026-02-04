@@ -6,7 +6,7 @@ import { useTheme } from "@/components/theme-provider";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Rocket, Moon, Sun, Monitor, FlaskConical, Shield, ExternalLink, Layers } from "lucide-react";
+import { Rocket, Moon, Sun, Monitor, FlaskConical, Shield, ExternalLink, Layers, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Settings, OverlayMode } from "@/lib/hooks/use-settings";
@@ -92,6 +92,35 @@ export default function GeneralSettings() {
                 checked={settings?.autoStartEnabled ?? false}
                 onCheckedChange={(checked) =>
                   handleSettingsChange({ autoStartEnabled: checked })
+                }
+                className="ml-4"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border bg-card shadow-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-start space-x-4">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <RefreshCw className="h-5 w-5 text-primary" />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Auto-update
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Automatically install updates and restart when a new version is available.
+                    When disabled, you&apos;ll be notified but must update manually.
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="auto-update-toggle"
+                checked={settings?.autoUpdate ?? true}
+                onCheckedChange={(checked) =>
+                  handleSettingsChange({ autoUpdate: checked })
                 }
                 className="ml-4"
               />
