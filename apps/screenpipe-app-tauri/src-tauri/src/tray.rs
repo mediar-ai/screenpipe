@@ -47,6 +47,9 @@ pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> 
         // Setup click handlers
         setup_tray_click_handlers(&main_tray)?;
 
+        // Set autosaveName so macOS remembers position after user Cmd+drags it
+        set_autosave_name();
+
         // Start menu updater
         setup_tray_menu_updater(app.clone(), update_item);
     }
@@ -109,6 +112,10 @@ pub fn recreate_tray(app: &AppHandle) {
                 }
                 // Setup click handlers
                 let _ = setup_tray_click_handlers(&new_tray);
+
+                // Set autosaveName so macOS remembers user's Cmd+drag position
+                set_autosave_name();
+
                 info!("tray icon recreated at rightmost position");
             }
             Err(e) => {
@@ -117,6 +124,43 @@ pub fn recreate_tray(app: &AppHandle) {
         }
     });
 }
+
+/// Set autosaveName on the NSStatusItem so macOS remembers the user's
+/// preferred position (after they Cmd+drag it). Without this, the tray
+/// icon position resets every launch.
+#[cfg(target_os = "macos")]
+fn set_autosave_name() {
+    use cocoa::base::{id, nil};
+    use cocoa::foundation::NSString;
+    use objc::{class, msg_send, sel, sel_impl};
+
+    unsafe {
+        let status_bar: id = msg_send![class!(NSStatusBar), systemStatusBar];
+        let items: id = msg_send![status_bar, items];
+        let count: usize = msg_send![items, count];
+        
+        for i in 0..count {
+            let item: id = msg_send![items, objectAtIndex: i];
+            // Check if this is our item by looking at the button title or length
+            let autosave: id = msg_send![item, autosaveName];
+            let has_autosave = !autosave.is_null() && {
+                let len: usize = msg_send![autosave, length];
+                len > 0
+            };
+            
+            if !has_autosave {
+                // This is likely our newly created item (no autosave yet)
+                let name = NSString::alloc(nil).init_str("screenpipe_tray");
+                let _: () = msg_send![item, setAutosaveName: name];
+                debug!("Set autosaveName on NSStatusItem");
+                break;
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_autosave_name() {}
 
 fn create_dynamic_menu(
     app: &AppHandle,
