@@ -1,4 +1,5 @@
 import { homeDir } from "@tauri-apps/api/path";
+import { getVersion } from "@tauri-apps/api/app";
 import { platform } from "@tauri-apps/plugin-os";
 import { Store } from "@tauri-apps/plugin-store";
 import React, { createContext, useContext, useEffect, useState } from "react";
@@ -433,14 +434,28 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 	// Identify with persistent analyticsId for consistent tracking across frontend/backend
 	useEffect(() => {
 		if (settings.analyticsId) {
-			posthog.identify(settings.analyticsId, {
-				email: settings.user?.email,
-				name: settings.user?.name,
-				user_id: settings.user?.id,
-				github_username: settings.user?.github_username,
-				website: settings.user?.website,
-				contact: settings.user?.contact,
-			});
+			getVersion()
+				.then((appVersion) => {
+					posthog.identify(settings.analyticsId, {
+						email: settings.user?.email,
+						name: settings.user?.name,
+						user_id: settings.user?.id,
+						github_username: settings.user?.github_username,
+						website: settings.user?.website,
+						contact: settings.user?.contact,
+						app_version: appVersion,
+					});
+				})
+				.catch(() => {
+					posthog.identify(settings.analyticsId, {
+						email: settings.user?.email,
+						name: settings.user?.name,
+						user_id: settings.user?.id,
+						github_username: settings.user?.github_username,
+						website: settings.user?.website,
+						contact: settings.user?.contact,
+					});
+				});
 		}
 	}, [settings.analyticsId, settings.user?.id]);
 

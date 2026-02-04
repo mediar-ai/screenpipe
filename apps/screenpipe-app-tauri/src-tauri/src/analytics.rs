@@ -56,6 +56,8 @@ impl AnalyticsManager {
         let posthog_url = format!("{}/capture/", self.api_host);
         let system = System::new_all();
 
+        let app_version = env!("CARGO_PKG_VERSION");
+
         let mut payload = json!({
             "api_key": self.posthog_api_key,
             "event": event,
@@ -69,6 +71,7 @@ impl AnalyticsManager {
                 "host_name": system.host_name().unwrap_or_default(),
                 "cpu_count": system.cpus().len(),
                 "total_memory": system.total_memory(),
+                "app_version": app_version,
             },
         });
 
