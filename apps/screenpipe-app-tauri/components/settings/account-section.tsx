@@ -138,8 +138,8 @@ export function AccountSection() {
       price: settings.user?.cloud_subscribed
         ? "active"
         : isAnnual
-        ? "$400/year"
-        : "$50/mo",
+        ? "$228/year"
+        : "$29/mo",
       features: settings.user?.cloud_subscribed
         ? [
             "cloud sync - 50GB storage, 3 devices",
@@ -169,7 +169,7 @@ export function AccountSection() {
             "unlimited ai queries, all models",
             "cloud transcription (better quality, saves RAM)",
             "priority support",
-            isAnnual ? "2 months free" : "switch to annual for 2 months free",
+            isAnnual ? "save 34% vs monthly" : "switch to annual to save 34%",
           ],
     },
   ];

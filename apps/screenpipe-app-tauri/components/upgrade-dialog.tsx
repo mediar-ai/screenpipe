@@ -30,8 +30,8 @@ export function UpgradeDialog({
 
   const handleSubscribe = async (isAnnual: boolean) => {
     const baseUrl = isAnnual
-      ? "https://buy.stripe.com/eVadRzfOCgAi5W0fZu"
-      : "https://buy.stripe.com/5kA6p79qefweacg5kJ";
+      ? "https://buy.stripe.com/00w7sL5sT0kCdzX7tD7ss0H"
+      : "https://buy.stripe.com/9B63cv1cD1oG2Vjg097ss0G";
     const params = new URLSearchParams();
     if (settings.user?.id) {
       params.set("client_reference_id", settings.user.id);
@@ -90,13 +90,13 @@ export function UpgradeDialog({
             <Star className="h-5 w-5 shrink-0" />
             <div className="text-left flex-1 min-w-0">
               <div className="font-medium flex items-center gap-2 flex-wrap">
-                <span>$200/year</span>
+                <span>$228/year</span>
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                  save 17%
+                  save 34%
                 </Badge>
               </div>
               <div className="text-xs opacity-80">
-                unlimited queries, all models, priority support
+                unlimited queries, all models, cloud sync, priority support
               </div>
             </div>
           </Button>
@@ -109,9 +109,9 @@ export function UpgradeDialog({
           >
             <Zap className="h-5 w-5 shrink-0" />
             <div className="text-left flex-1 min-w-0">
-              <div className="font-medium">$30/mo</div>
+              <div className="font-medium">$29/mo</div>
               <div className="text-xs text-muted-foreground">
-                unlimited queries, all models, priority support
+                unlimited queries, all models, cloud sync, priority support
               </div>
             </div>
           </Button>

@@ -471,7 +471,7 @@ export function RecordingSettings() {
         settings.user?.id
       }&customer_email=${encodeURIComponent(settings.user?.email ?? "")}`;
       openUrl(
-        `https://buy.stripe.com/7sIdRzbym4RA98c7sX?client_reference_id=${clientRefId}`
+        `https://buy.stripe.com/9B63cv1cD1oG2Vjg097ss0G?client_reference_id=${clientRefId}`
       );
       // Revert back to previous value in the Select component
       return;
@@ -1000,7 +1000,7 @@ export function RecordingSettings() {
                   size="sm"
                   onClick={() => {
                     const clientRefId = `${settings.user?.id}&customer_email=${encodeURIComponent(settings.user?.email ?? "")}`;
-                    openUrl(`https://buy.stripe.com/7sIdRzbym4RA98c7sX?client_reference_id=${clientRefId}`);
+                    openUrl(`https://buy.stripe.com/9B63cv1cD1oG2Vjg097ss0G?client_reference_id=${clientRefId}`);
                   }}
                 >
                   Subscribe
