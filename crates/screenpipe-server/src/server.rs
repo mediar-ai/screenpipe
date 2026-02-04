@@ -49,7 +49,7 @@ use screenpipe_audio::{
 };
 use screenpipe_core::pii_removal::detect_pii_regions;
 use screenpipe_core::sync::SyncServiceHandle;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::sync_api::{self, SyncState};
 
@@ -3842,7 +3842,7 @@ async fn handle_stream_frames_socket(
                 // Send keep-alive message to prevent connection timeout
                 _ = keepalive_timer.tick() => {
                     if let Err(e) = sender.send(Message::Text("\"keep-alive-text\"".to_string())).await {
-                        error!("failed to send keepalive: {}", e);
+                        warn!("failed to send keepalive: {}", e);
                         break;
                     }
                 }

@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use stream::AudioStream;
-use tracing::error;
+use tracing::{error, warn};
 
 lazy_static! {
     // Global fallback timestamp for backward compatibility
@@ -76,7 +76,7 @@ pub async fn record_and_transcribe(
                 if is_normal_shutdown(&is_running) {
                     return Err(e);
                 }
-                error!("record_and_transcribe error, restarting: {}", e);
+                warn!("record_and_transcribe error, restarting: {}", e);
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         }
