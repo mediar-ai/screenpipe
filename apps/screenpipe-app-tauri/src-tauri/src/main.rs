@@ -893,9 +893,7 @@ async fn main() {
                 let _ = window.set_always_on_top(false);
                 let _ = window.set_visible_on_all_workspaces(false);
                 #[cfg(target_os = "macos")]
-                let _ = window
-                    .app_handle()
-                    .set_activation_policy(tauri::ActivationPolicy::Regular);
+                crate::window_api::reset_to_regular_and_refresh_tray(window.app_handle());
                 let _ = window.hide();
                 api.prevent_close();
             }
@@ -1382,7 +1380,7 @@ async fn main() {
             });
 
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Regular);
+            crate::window_api::reset_to_regular_and_refresh_tray(&app_handle);
 
             // Initialize global shortcuts
             let app_handle_clone = app_handle.clone();

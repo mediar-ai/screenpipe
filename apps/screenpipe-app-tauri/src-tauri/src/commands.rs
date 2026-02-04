@@ -265,9 +265,7 @@ pub async fn open_pipe_window(
     }
 
     #[cfg(target_os = "macos")]
-    if let Err(e) = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular) {
-        error!("failed to set activation policy: {}", e);
-    }
+    crate::window_api::reset_to_regular_and_refresh_tray(&app_handle);
 
     Ok(())
 }

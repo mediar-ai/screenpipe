@@ -12,6 +12,27 @@ use tauri_nspanel::WebviewWindowExt;
 
 use crate::{store::OnboardingStore, ServerState};
 
+/// Reset activation policy to Regular and refresh the tray icon.
+/// On MacBook Pro models with a notch, toggling between Accessory and Regular
+/// can cause macOS to re-layout status bar items, pushing the tray icon behind
+/// the notch. Re-setting the icon forces macOS to re-render and reposition it.
+#[cfg(target_os = "macos")]
+pub fn reset_to_regular_and_refresh_tray(app: &AppHandle) {
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    
+    if let Some(tray) = app.tray_by_id("screenpipe_main") {
+        // Re-set the icon to force macOS to re-render the NSStatusItem
+        // This works around a macOS bug where the tray icon disappears
+        // or gets stuck behind the notch after activation policy changes
+        if let Ok(icon) = tauri::image::Image::from_path("assets/screenpipe-logo-tray-white.png") {
+            let _ = tray.set_visible(false);
+            let _ = tray.set_visible(true);
+            let _ = tray.set_icon(Some(icon));
+            let _ = tray.set_icon_as_template(true);
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct OpenLocalPathPayload {
     path: String,
@@ -89,7 +110,7 @@ pub async fn show_specific_window(
                     match event {
                         tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } => {
                             info!("Custom window closed, resetting activation policy");
-                            let _ = app_clone.set_activation_policy(tauri::ActivationPolicy::Regular);
+                            reset_to_regular_and_refresh_tray(&app_clone);
                         }
                         _ => {}
                     }
@@ -658,7 +679,7 @@ impl ShowRewindWindow {
                                 // This restores the dock icon and tray menu which are hidden in Accessory mode
                                 #[cfg(target_os = "macos")]
                                 {
-                                    let _ = app_clone.set_activation_policy(tauri::ActivationPolicy::Regular);
+                                    reset_to_regular_and_refresh_tray(&app_clone);
                                 }
 
                                 let _ = app_clone.emit("window-focused", false).ok();
@@ -783,7 +804,7 @@ impl ShowRewindWindow {
                         match event {
                             tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } => {
                                 info!("Chat window closed, resetting activation policy");
-                                let _ = app_clone.set_activation_policy(tauri::ActivationPolicy::Regular);
+                                reset_to_regular_and_refresh_tray(&app_clone);
                             }
                             _ => {}
                         }
@@ -858,7 +879,7 @@ impl ShowRewindWindow {
 
                 // Reset to Regular activation policy when hiding the panel
                 // so other windows (like Settings) work normally
-                let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                reset_to_regular_and_refresh_tray(app);
             }
 
             #[cfg(not(target_os = "macos"))]
