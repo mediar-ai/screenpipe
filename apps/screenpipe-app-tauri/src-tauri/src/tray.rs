@@ -125,42 +125,9 @@ pub fn recreate_tray(app: &AppHandle) {
     });
 }
 
-/// Set autosaveName on the NSStatusItem so macOS remembers the user's
-/// preferred position (after they Cmd+drag it). Without this, the tray
-/// icon position resets every launch.
-#[cfg(target_os = "macos")]
 fn set_autosave_name() {
-    use cocoa::base::{id, nil};
-    use cocoa::foundation::NSString;
-    use objc::{class, msg_send, sel, sel_impl};
-
-    unsafe {
-        let status_bar: id = msg_send![class!(NSStatusBar), systemStatusBar];
-        let items: id = msg_send![status_bar, items];
-        let count: usize = msg_send![items, count];
-        
-        for i in 0..count {
-            let item: id = msg_send![items, objectAtIndex: i];
-            // Check if this is our item by looking at the button title or length
-            let autosave: id = msg_send![item, autosaveName];
-            let has_autosave = !autosave.is_null() && {
-                let len: usize = msg_send![autosave, length];
-                len > 0
-            };
-            
-            if !has_autosave {
-                // This is likely our newly created item (no autosave yet)
-                let name = NSString::alloc(nil).init_str("screenpipe_tray");
-                let _: () = msg_send![item, setAutosaveName: name];
-                debug!("Set autosaveName on NSStatusItem");
-                break;
-            }
-        }
-    }
+    // no-op: removed due to crash from objc interop
 }
-
-#[cfg(not(target_os = "macos"))]
-fn set_autosave_name() {}
 
 fn create_dynamic_menu(
     app: &AppHandle,
