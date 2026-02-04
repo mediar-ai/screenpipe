@@ -488,12 +488,30 @@ pub async fn pi_start(
     Ok(snapshot)
 }
 
-/// Send a prompt to Pi
+/// Image content for Pi RPC protocol
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
+pub struct PiImageContent {
+    #[serde(rename = "type")]
+    pub content_type: String, // always "image"
+    pub source: PiImageSource,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
+pub struct PiImageSource {
+    #[serde(rename = "type")]
+    pub source_type: String, // "base64"
+    #[serde(rename = "mediaType")]
+    pub media_type: String, // e.g. "image/png"
+    pub data: String, // base64-encoded image data
+}
+
+/// Send a prompt to Pi, optionally with images
 #[tauri::command]
 #[specta::specta]
 pub async fn pi_prompt(
     state: State<'_, PiState>,
     message: String,
+    images: Option<Vec<PiImageContent>>,
 ) -> Result<(), String> {
     let mut manager = state.0.lock().await;
     let m = manager.as_mut().ok_or("Pi not initialized")?;
@@ -502,10 +520,16 @@ pub async fn pi_prompt(
         return Err("Pi is not running".to_string());
     }
 
-    let cmd = json!({
+    let mut cmd = json!({
         "type": "prompt",
         "message": message
     });
+
+    if let Some(imgs) = images {
+        if !imgs.is_empty() {
+            cmd["images"] = serde_json::to_value(imgs).map_err(|e| e.to_string())?;
+        }
+    }
 
     m.send_command(cmd)
 }

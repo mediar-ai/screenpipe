@@ -49,6 +49,9 @@ export type AIPreset = {
 			provider: "custom";
 			apiKey?: string;
 	  }
+	| {
+			provider: "pi";
+	  }
 );
 
 export type UpdateChannel = "stable" | "beta";
@@ -129,19 +132,29 @@ const DEFAULT_IGNORED_WINDOWS_PER_OS: Record<string, string[]> = {
 	linux: ["Info center", "Discover", "Parted"],
 };
 
-// Default free AI preset that works without login
-// Note: screenpipe-cloud provider doesn't require apiKey
+// Default Pi agent preset — local coding agent with screenpipe search skill
+const DEFAULT_PI_PRESET: AIPreset = {
+	id: "pi-agent",
+	provider: "pi",
+	url: "",
+	model: "claude-haiku-4-5@20251001",
+	maxContextChars: 200000,
+	defaultPreset: true,
+	prompt: "",
+};
+
+// Screenpipe cloud preset (direct API, no agent)
 const DEFAULT_FREE_PRESET: AIPreset = {
 	id: "screenpipe-free",
 	provider: "screenpipe-cloud",
 	url: "https://api.screenpi.pe/v1",
 	model: "claude-haiku-4-5@20251001",
 	maxContextChars: 128000,
-	defaultPreset: true,
+	defaultPreset: false,
 	prompt: DEFAULT_PROMPT,
 };
 
-// Second default preset with Gemini Flash 3 (also free, supports web search)
+// Gemini Flash 3 preset (direct API, supports web search via Google grounding)
 const DEFAULT_GEMINI_PRESET: AIPreset = {
 	id: "gemini-flash",
 	provider: "screenpipe-cloud",
@@ -153,7 +166,7 @@ const DEFAULT_GEMINI_PRESET: AIPreset = {
 };
 
 let DEFAULT_SETTINGS: Settings = {
-			aiPresets: [DEFAULT_FREE_PRESET as any, DEFAULT_GEMINI_PRESET as any],
+			aiPresets: [DEFAULT_PI_PRESET as any, DEFAULT_FREE_PRESET as any, DEFAULT_GEMINI_PRESET as any],
 			deviceId: crypto.randomUUID(),
 			deepgramApiKey: "",
 			isLoading: false,
@@ -282,9 +295,9 @@ function createSettingsStore() {
 			needsUpdate = true;
 		}
 
-		// Migration: Add default free preset if user has no presets
+		// Migration: Add default presets if user has none
 		if (!settings.aiPresets || settings.aiPresets.length === 0) {
-			settings.aiPresets = [DEFAULT_FREE_PRESET as any, DEFAULT_GEMINI_PRESET as any];
+			settings.aiPresets = [DEFAULT_PI_PRESET as any, DEFAULT_FREE_PRESET as any, DEFAULT_GEMINI_PRESET as any];
 			needsUpdate = true;
 		}
 
@@ -294,6 +307,18 @@ function createSettingsStore() {
 		);
 		if (settings.aiPresets && settings.aiPresets.length > 0 && !hasGeminiPreset) {
 			settings.aiPresets = [...settings.aiPresets, DEFAULT_GEMINI_PRESET as any];
+			needsUpdate = true;
+		}
+
+		// Migration: Add Pi agent preset for existing users and make it default
+		const hasPiPreset = settings.aiPresets?.some(
+			(p: any) => p.id === "pi-agent" || p.provider === "pi"
+		);
+		if (settings.aiPresets && settings.aiPresets.length > 0 && !hasPiPreset) {
+			// Demote all existing presets from default
+			settings.aiPresets = settings.aiPresets.map((p: any) => ({ ...p, defaultPreset: false }));
+			// Add Pi as default at the front
+			settings.aiPresets = [DEFAULT_PI_PRESET as any, ...settings.aiPresets];
 			needsUpdate = true;
 		}
 

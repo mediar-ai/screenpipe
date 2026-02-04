@@ -1116,12 +1116,51 @@ export function StandaloneChat() {
     }, 180000);
 
     try {
+      // Collect images (pasted image + prefill frame)
+      const piImages: Array<{ type: string; source: { type: string; mediaType: string; data: string } }> = [];
+
+      if (prefillFrameId) {
+        try {
+          const response = await fetch(`http://localhost:3030/frames/${prefillFrameId}`);
+          if (response.ok) {
+            const blob = await response.blob();
+            const arrayBuffer = await blob.arrayBuffer();
+            const base64 = btoa(
+              new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+            );
+            const mimeType = blob.type || 'image/png';
+            piImages.push({
+              type: "image",
+              source: { type: "base64", mediaType: mimeType, data: base64 },
+            });
+          }
+        } catch (error) {
+          console.error("Failed to fetch frame image for Pi:", error);
+        }
+        setPrefillFrameId(null);
+      }
+
+      if (pastedImage) {
+        // pastedImage is a data URL like "data:image/png;base64,..."
+        const match = pastedImage.match(/^data:(image\/[^;]+);base64,(.+)$/);
+        if (match) {
+          piImages.push({
+            type: "image",
+            source: { type: "base64", mediaType: match[1], data: match[2] },
+          });
+        }
+        setPastedImage(null);
+      }
+
       setMessages((prev) => [
         ...prev,
         { id: assistantMessageId, role: "assistant", content: "Processing...", timestamp: Date.now() },
       ]);
 
-      const result = await commands.piPrompt(userMessage);
+      const result = await commands.piPrompt(
+        userMessage,
+        piImages.length > 0 ? piImages : null,
+      );
 
       if (result.status === "error") {
         clearTimeout(timeoutId);

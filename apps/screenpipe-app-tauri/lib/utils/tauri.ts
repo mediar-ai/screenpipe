@@ -136,7 +136,7 @@ async closeWindow(window: ShowRewindWindow) : Promise<Result<null, string>> {
 }
 },
 /**
- * Destroy the Main window/panel so it gets recreated fresh (e.g. after switching overlay mode)
+ * Hide the Main panel so the next shortcut press reconfigures it for the new mode.
  */
 async resetMainWindow() : Promise<void> {
     await TAURI_INVOKE("reset_main_window");
@@ -414,11 +414,11 @@ async piInstall() : Promise<Result<null, string>> {
 }
 },
 /**
- * Send a prompt to Pi
+ * Send a prompt to Pi, optionally with images
  */
-async piPrompt(message: string) : Promise<Result<null, string>> {
+async piPrompt(message: string, images: PiImageContent[] | null) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("pi_prompt", { message }) };
+    return { status: "ok", data: await TAURI_INVOKE("pi_prompt", { message, images }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -593,6 +593,11 @@ export type OnboardingStore = { isCompleted: boolean; completedAt: string | null
  */
 currentStep?: string | null }
 export type PiCheckResult = { available: boolean; path: string | null }
+/**
+ * Image content for Pi RPC protocol
+ */
+export type PiImageContent = { type: string; source: PiImageSource }
+export type PiImageSource = { type: string; mediaType: string; data: string }
 export type PiInfo = { running: boolean; projectDir: string | null; pid: number | null; sessionId: string | null }
 export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; userId: string; 
 /**

@@ -120,6 +120,40 @@ curl "http://localhost:3030/search?app_name=Google%20Chrome&content_type=ocr&lim
 }
 ```
 
+## Fetching Frames (Screenshots)
+
+You can fetch actual screenshot frames from search results. Each OCR result has a `frame_id`.
+
+```bash
+# Get a specific frame as an image
+curl -o /tmp/frame.png "http://localhost:3030/frames/{frame_id}"
+```
+
+This returns the raw PNG image. Use the `read` tool to view it (pi supports images).
+
+### When to fetch frames
+- When the user asks "show me what I was looking at" or "what was on screen"
+- When you need visual context to answer a question (e.g. UI layout, charts, design)
+- When OCR text is ambiguous and you need to see the actual screen
+
+### CRITICAL: Token budget for frames
+- Each frame is ~1000-2000 tokens when sent to the LLM
+- **NEVER fetch more than 2-3 frames per query** — it's expensive and slow
+- Prefer using OCR text from search results first. Only fetch frames when text isn't enough.
+- If the user asks about many moments, summarize from OCR text and only fetch 1-2 key frames.
+
+### Example workflow
+```bash
+# 1. Search for relevant content
+curl "http://localhost:3030/search?q=dashboard&app_name=Chrome&content_type=ocr&limit=5&start_time=2024-01-15T10:00:00Z"
+
+# 2. Pick the most relevant frame_id from results
+# 3. Fetch that specific frame
+curl -o /tmp/frame_12345.png "http://localhost:3030/frames/12345"
+
+# 4. Read/view the image
+```
+
 ## Other Useful Endpoints
 
 ### Health Check
