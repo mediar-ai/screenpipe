@@ -347,7 +347,9 @@ impl ShowRewindWindow {
             info!("showing existing main window (window mode)");
             #[cfg(target_os = "macos")]
             {
-                // Accessory removed - hides dock icon
+                // Accessory mode is required for NSPanel to appear above fullscreen apps.
+                // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                 let app_clone = app.clone();
                 let lbl = label.to_string();
                 app.run_on_main_thread(move || {
@@ -377,7 +379,9 @@ impl ShowRewindWindow {
             info!("showing existing panel (overlay mode)");
             #[cfg(target_os = "macos")]
             {
-                // Accessory removed - hides dock icon
+                // Accessory mode is required for NSPanel to appear above fullscreen apps.
+                // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                 let app_clone = app.clone();
                 let lbl = label.to_string();
                 app.run_on_main_thread(move || {
@@ -570,7 +574,9 @@ impl ShowRewindWindow {
 
                     #[cfg(target_os = "macos")]
                     let window = {
-                        // Accessory removed - hides dock icon
+                        // Accessory mode is required for NSPanel to appear above fullscreen apps.
+                        // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
+                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                         let app_clone = app.clone();
                         let builder = self.window_builder_with_label(app, "/", main_label_for_mode("window"))
                             .title("screenpipe")
@@ -688,7 +694,9 @@ impl ShowRewindWindow {
                 // macOS uses fullscreen transparent panel overlay
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // Accessory removed - hides dock icon
+                    // Accessory mode is required for NSPanel to appear above fullscreen apps.
+                    // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                     // Use cursor position to find the correct monitor (not primary)
                     let (monitor, position) = {
@@ -959,7 +967,9 @@ impl ShowRewindWindow {
             ShowRewindWindow::Chat => {
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // Accessory removed - hides dock icon
+                    // Accessory mode is required for NSPanel to appear above fullscreen apps.
+                    // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
                     let builder = self.window_builder(app, "/chat")
                         .inner_size(500.0, 650.0)
