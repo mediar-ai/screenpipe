@@ -601,7 +601,12 @@ deviceId?: string;
  * Enable UI event capture (keyboard, mouse, clipboard).
  * Requires accessibility and input monitoring permissions on macOS.
  */
-enableUiEvents?: boolean }
+enableUiEvents?: boolean; 
+/**
+ * Auto-install updates and restart when a new version is available.
+ * When disabled, users must click "update now" in the tray menu.
+ */
+autoUpdate?: boolean }
 export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding" | "Chat" | "PermissionRecovery"
 /**
  * Sync configuration.
