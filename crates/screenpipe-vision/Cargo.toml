@@ -96,6 +96,7 @@ libc = "0.2.168"
 cidre = { git = "https://github.com/yury/cidre.git", features = ["vn", "cv", "cg"] }
 accessibility-sys = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
 core-foundation = "0.10"
+core-graphics = "0.24"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 xcap = "0.8.1"
