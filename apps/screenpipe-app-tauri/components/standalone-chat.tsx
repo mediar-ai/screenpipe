@@ -865,7 +865,7 @@ export function StandaloneChat() {
   const hasValidModel = isPi || (activePreset?.model && activePreset.model.trim() !== "");
   const needsLogin = isPi && !settings.user?.token;
   const piReady = isPi ? piInfo?.running : true;
-  const canChat = hasPresets && hasValidModel && !needsLogin;
+  const canChat = hasPresets && hasValidModel && !needsLogin && piReady;
 
   const getDisabledReason = (): string | null => {
     if (!hasPresets) return "No AI presets configured";
@@ -927,7 +927,9 @@ export function StandaloneChat() {
         console.log("[Pi] Start result:", result);
         if (result.status === "ok") {
           setPiInfo(result.data);
-          piRestartCountRef.current = 0;
+          // Don't reset restart counter here — only reset after Pi has been running
+          // stably for a while (see pi_event listener). This prevents infinite loops
+          // when Pi spawns successfully but crashes immediately.
         } else {
           piRestartCountRef.current += 1;
           console.error("[Pi] Start failed:", result.error);
@@ -957,6 +959,8 @@ export function StandaloneChat() {
     const setup = async () => {
       unlistenEvent = await listen<any>("pi_event", (event) => {
         if (!mounted) return;
+        // Pi sent an event — it's running stably, reset restart counter
+        piRestartCountRef.current = 0;
         const data = event.payload;
 
         if (data.type === "message_update" && data.assistantMessageEvent) {
@@ -1809,17 +1813,19 @@ export function StandaloneChat() {
               "relative p-6 rounded-2xl border",
               needsLogin
                 ? "bg-muted/50 border-border/50"
-                : "bg-destructive/5 border-destructive/20"
+                : (isPi && (piStarting || !piReady))
+                  ? "bg-muted/50 border-border/50"
+                  : "bg-destructive/5 border-destructive/20"
             )}>
-              {needsLogin ? (
-                <PipeAIIconLarge size={48} className="text-muted-foreground" />
+              {needsLogin || (isPi && (piStarting || !piReady)) ? (
+                <PipeAIIconLarge size={48} thinking={piStarting || !piReady} className="text-muted-foreground" />
               ) : (
                 <Settings className="h-12 w-12 text-destructive/70" />
               )}
             </div>
             <div className="text-center space-y-2">
               <h3 className="font-semibold tracking-tight">
-                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : (needsLogin ? "Login Required" : "Setup Required")}
+                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : needsLogin ? "Login Required" : (isPi && (piStarting || !piReady)) ? "Setting up Pi..." : "Setup Required"}
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
                 {disabledReason}
