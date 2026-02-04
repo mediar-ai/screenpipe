@@ -376,14 +376,40 @@ struct WindowData {
     image_buffer: image::RgbaImage,
 }
 
+/// Query the frontmost application PID once, so all windows in a capture cycle
+/// agree on which app is focused. Without this, each window.is_focused() call
+/// independently queries NSWorkspace, and the active app can change mid-iteration
+/// causing multiple apps to appear as "focused" simultaneously.
+#[cfg(target_os = "macos")]
+fn get_frontmost_pid() -> Option<i32> {
+    let workspace = cidre::ns::Workspace::shared();
+    let apps = workspace.running_apps();
+    for app in apps.iter() {
+        if app.is_active() {
+            return Some(app.pid());
+        }
+    }
+    None
+}
+
 /// Get all visible windows using the appropriate backend
 #[cfg(target_os = "macos")]
 fn get_all_windows() -> Result<Vec<WindowData>, Box<dyn Error>> {
-    if use_sck_rs() {
-        get_all_windows_sck()
+    let mut windows = if use_sck_rs() {
+        get_all_windows_sck()?
     } else {
-        get_all_windows_xcap()
+        get_all_windows_xcap()?
+    };
+
+    // Fix focus: query frontmost PID once and apply consistently to all windows.
+    // This prevents multiple apps from being marked focused in the same capture cycle.
+    if let Some(frontmost_pid) = get_frontmost_pid() {
+        for window in &mut windows {
+            window.is_focused = window.process_id == frontmost_pid;
+        }
     }
+
+    Ok(windows)
 }
 
 #[cfg(target_os = "macos")]

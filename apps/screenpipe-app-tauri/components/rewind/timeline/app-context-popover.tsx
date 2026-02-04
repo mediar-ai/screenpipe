@@ -72,24 +72,30 @@ export function AppContextPopover({
 		const escapedApp = appName.replace(/'/g, "''");
 
 		const query = `
-			SELECT 'summary' as type, COUNT(*) as val, COUNT(DISTINCT window_name) as val2, NULL as name
-			FROM frames
-			WHERE app_name = '${escapedApp}'
-				AND timestamp BETWEEN '${startISO}' AND '${endISO}'
+			SELECT * FROM (
+				SELECT 'summary' as type, COUNT(*) as val, COUNT(DISTINCT window_name) as val2, NULL as name
+				FROM frames
+				WHERE app_name = '${escapedApp}'
+					AND timestamp BETWEEN '${startISO}' AND '${endISO}'
+			)
 			UNION ALL
-			SELECT 'window' as type, COUNT(*) as val, NULL as val2, window_name as name
-			FROM frames
-			WHERE app_name = '${escapedApp}'
-				AND timestamp BETWEEN '${startISO}' AND '${endISO}'
-				AND window_name IS NOT NULL AND window_name != ''
-			GROUP BY window_name ORDER BY val DESC LIMIT 5
+			SELECT * FROM (
+				SELECT 'window' as type, COUNT(*) as val, NULL as val2, window_name as name
+				FROM frames
+				WHERE app_name = '${escapedApp}'
+					AND timestamp BETWEEN '${startISO}' AND '${endISO}'
+					AND window_name IS NOT NULL AND window_name != ''
+				GROUP BY window_name ORDER BY val DESC LIMIT 5
+			)
 			UNION ALL
-			SELECT 'url' as type, COUNT(*) as val, NULL as val2, browser_url as name
-			FROM frames
-			WHERE app_name = '${escapedApp}'
-				AND timestamp BETWEEN '${startISO}' AND '${endISO}'
-				AND browser_url IS NOT NULL AND browser_url != ''
-			GROUP BY browser_url ORDER BY val DESC LIMIT 5
+			SELECT * FROM (
+				SELECT 'url' as type, COUNT(*) as val, NULL as val2, browser_url as name
+				FROM frames
+				WHERE app_name = '${escapedApp}'
+					AND timestamp BETWEEN '${startISO}' AND '${endISO}'
+					AND browser_url IS NOT NULL AND browser_url != ''
+				GROUP BY browser_url ORDER BY val DESC LIMIT 5
+			)
 		`;
 
 		fetch("http://localhost:3030/raw_sql", {
