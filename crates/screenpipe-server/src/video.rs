@@ -419,6 +419,19 @@ impl VideoCapture {
     }
 }
 
+impl Drop for VideoCapture {
+    fn drop(&mut self) {
+        info!(
+            "Dropping VideoCapture for monitor {}, aborting all tasks",
+            self.monitor_id
+        );
+        self.capture_thread_handle.abort();
+        self.queue_thread_handle.abort();
+        self.video_thread_handle.abort();
+        self.monitor_check_handle.abort();
+    }
+}
+
 pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
     // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
