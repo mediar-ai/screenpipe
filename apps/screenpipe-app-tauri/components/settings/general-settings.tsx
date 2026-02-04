@@ -6,10 +6,10 @@ import { useTheme } from "@/components/theme-provider";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Rocket, Moon, Sun, Monitor, FlaskConical, Shield, ExternalLink } from "lucide-react";
+import { Rocket, Moon, Sun, Monitor, FlaskConical, Shield, ExternalLink, Layers } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
-import { Settings } from "@/lib/hooks/use-settings";
+import { Settings, OverlayMode } from "@/lib/hooks/use-settings";
 import { open } from "@tauri-apps/plugin-shell";
 import { UpdateBanner } from "@/components/update-banner";
 
@@ -153,6 +153,49 @@ export default function GeneralSettings() {
                         </span>
                       </div>
                     </label>
+                  );
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border bg-card shadow-sm">
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <div className="flex items-start space-x-4">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Layers className="h-5 w-5 text-primary" />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Timeline Overlay Mode
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Choose how the timeline appears when activated. Compact mode shows a
+                    minimal bar at the bottom — press Enter to expand.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3 ml-[52px]">
+                {([
+                  { value: "fullscreen" as OverlayMode, label: "Fullscreen", desc: "Full-screen overlay with screenshot" },
+                  { value: "compact" as OverlayMode, label: "Compact", desc: "Bottom bar with timeline" },
+                ]).map((option) => {
+                  const isActive = (settings?.overlayMode ?? "fullscreen") === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={() => handleSettingsChange({ overlayMode: option.value })}
+                      className={`flex-1 p-3 rounded-lg border-2 transition-all text-left ${
+                        isActive
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-muted-foreground/30"
+                      }`}
+                    >
+                      <div className="font-medium text-sm text-foreground">{option.label}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{option.desc}</div>
+                    </button>
                   );
                 })}
               </div>

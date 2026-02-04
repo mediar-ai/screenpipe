@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { Loader2, RotateCcw, AlertCircle, X, Sparkles } from "lucide-react";
+import { Loader2, RotateCcw, AlertCircle, X, Sparkles, Maximize2 } from "lucide-react";
 import { SearchModal } from "@/components/rewind/search-modal";
 import { commands } from "@/lib/utils/tauri";
 import { listen, emit } from "@tauri-apps/api/event";
@@ -16,6 +16,7 @@ import { TimelineSlider } from "@/components/rewind/timeline/timeline";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { hasFramesForDate } from "@/lib/actions/has-frames-date";
 import { CurrentFrameTimeline } from "@/components/rewind/current-frame-timeline";
+import { useSettings } from "@/lib/hooks/use-settings";
 import posthog from "posthog-js";
 
 export interface StreamTimeSeriesResponse {
@@ -63,6 +64,11 @@ const easeOutCubic = (x: number): number => {
 };
 
 export default function Timeline() {
+	const { settings } = useSettings();
+	const isCompactDefault = settings.overlayMode === "compact";
+	// In compact mode, start collapsed. In fullscreen mode, always expanded.
+	const [isExpanded, setIsExpanded] = useState(!isCompactDefault);
+
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [showAudioTranscript, setShowAudioTranscript] = useState(true);
 	const [showSearchModal, setShowSearchModal] = useState(false);
@@ -472,6 +478,51 @@ export default function Timeline() {
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [showSearchModal]);
 
+	// Handle Escape: in compact mode, Esc collapses expanded → compact → close.
+	// In fullscreen mode (or when already compact), Esc closes the window.
+	useEffect(() => {
+		const unlisten = listen("escape-pressed", () => {
+			if (showSearchModal) {
+				// Let the search modal handle its own close
+				setShowSearchModal(false);
+				return;
+			}
+			if (isCompactDefault && isExpanded) {
+				// Collapse back to compact bar
+				setIsExpanded(false);
+			} else {
+				// Close the window (same as before)
+				commands.closeWindow("Main");
+			}
+		});
+		return () => { unlisten.then((fn) => fn()); };
+	}, [isCompactDefault, isExpanded, showSearchModal]);
+
+	// In compact mode, Enter or ArrowUp expands the view
+	useEffect(() => {
+		if (!isCompactDefault || isExpanded) return;
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+			if (e.key === "Enter" || e.key === "ArrowUp") {
+				e.preventDefault();
+				setIsExpanded(true);
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [isCompactDefault, isExpanded]);
+
+	// Reset to compact when overlay is re-shown (window-focused)
+	useEffect(() => {
+		if (!isCompactDefault) return;
+		const unlisten = listen<boolean>("window-focused", (event) => {
+			if (event.payload) {
+				setIsExpanded(false);
+			}
+		});
+		return () => { unlisten.then((fn) => fn()); };
+	}, [isCompactDefault]);
+
 	useEffect(() => {
 		const getStartDateAndSet = async () => {
 			const data = await getStartDate();
@@ -818,6 +869,147 @@ export default function Timeline() {
 		requestAnimationFrame(animate);
 	};
 
+	// Compact mode: thin bottom bar with timeline + thumbnail
+	const isCompact = isCompactDefault && !isExpanded;
+
+	const compactThumbnailUrl = currentFrame?.devices?.[0]?.frame_id
+		? `http://localhost:3030/frames/${currentFrame.devices[0].frame_id}`
+		: null;
+
+	const compactTimestamp = currentFrame?.timestamp
+		? new Date(currentFrame.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+		: "--:--";
+
+	if (isCompact) {
+		return (
+			<TimelineProvider>
+				<div
+					ref={containerRef}
+					className="inset-0 flex flex-col relative"
+					style={{
+						height: "100vh",
+						WebkitUserSelect: "none",
+						userSelect: "none",
+					}}
+				>
+					{/* Transparent area — click to dismiss */}
+					<div
+						className="flex-1"
+						onClick={() => commands.closeWindow("Main")}
+					/>
+
+					{/* Compact bottom bar */}
+					<div className="relative z-40 bg-card/95 backdrop-blur-xl border-t border-border shadow-2xl">
+						<div className="flex items-center gap-3 px-4 py-2 h-[72px]">
+							{/* Thumbnail */}
+							<button
+								onClick={() => setIsExpanded(true)}
+								className="relative flex-shrink-0 w-[88px] h-[52px] rounded-md overflow-hidden border border-border/50 hover:border-primary/50 transition-colors group cursor-pointer bg-muted"
+								title="Expand (Enter)"
+							>
+								{compactThumbnailUrl ? (
+									<img
+										src={compactThumbnailUrl}
+										alt="Current frame"
+										className="w-full h-full object-cover"
+									/>
+								) : (
+									<div className="w-full h-full flex items-center justify-center">
+										<Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+									</div>
+								)}
+								<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+									<Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+								</div>
+							</button>
+
+							{/* Timestamp */}
+							<span className="text-xs font-mono text-muted-foreground flex-shrink-0 w-12 text-center">
+								{compactTimestamp}
+							</span>
+
+							{/* Timeline slider — fills remaining space */}
+							<div className="flex-1 min-w-0">
+								{frames.length > 0 ? (
+									<TimelineSlider
+										frames={frames}
+										currentIndex={currentIndex}
+										onFrameChange={(index) => {
+											setCurrentIndex(index);
+											if (frames[index]) {
+												setCurrentFrame(frames[index]);
+											}
+										}}
+										fetchNextDayData={fetchNextDayData}
+										currentDate={currentDate}
+										startAndEndDates={startAndEndDates}
+										newFramesCount={newFramesCount}
+										lastFlushTimestamp={lastFlushTimestamp}
+										isSearchModalOpen={showSearchModal}
+									/>
+								) : (
+									<div className="text-xs text-muted-foreground text-center">
+										{isLoading ? "Loading..." : "No frames"}
+									</div>
+								)}
+							</div>
+
+							{/* Action buttons */}
+							<div className="flex items-center gap-1 flex-shrink-0">
+								<button
+									onClick={() => setShowSearchModal(true)}
+									className="p-2 hover:bg-muted rounded-md transition-colors"
+									title="Search (/)"
+								>
+									<svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+									</svg>
+								</button>
+								<button
+									onClick={() => setIsExpanded(true)}
+									className="p-2 hover:bg-muted rounded-md transition-colors"
+									title="Expand (Enter)"
+								>
+									<Maximize2 className="w-4 h-4 text-muted-foreground" />
+								</button>
+								<button
+									onClick={() => commands.closeWindow("Main")}
+									className="p-2 hover:bg-muted rounded-md transition-colors"
+									title="Close (Esc)"
+								>
+									<X className="w-4 h-4 text-muted-foreground" />
+								</button>
+							</div>
+						</div>
+					</div>
+
+					{/* Search Modal */}
+					<SearchModal
+						isOpen={showSearchModal}
+						onClose={() => setShowSearchModal(false)}
+						onNavigateToTimestamp={(timestamp) => {
+							const targetDate = new Date(timestamp);
+							setSeekingTimestamp(timestamp);
+							// Expand to show the result
+							setIsExpanded(true);
+							if (!isSameDay(targetDate, currentDate)) {
+								pendingNavigationRef.current = targetDate;
+								handleDateChange(targetDate);
+							} else {
+								pendingNavigationRef.current = null;
+								jumpToTime(targetDate);
+								setSeekingTimestamp(null);
+							}
+						}}
+					/>
+				</div>
+			</TimelineProvider>
+		);
+	}
+
+	// =====================================================================
+	// Expanded / Fullscreen mode (original layout)
+	// =====================================================================
 	return (
 		<TimelineProvider>
 			<div

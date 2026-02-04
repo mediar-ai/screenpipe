@@ -76,6 +76,8 @@ export interface ChatHistoryStore {
 }
 
 // Extend SettingsStore with fields added before Rust types are regenerated
+export type OverlayMode = "fullscreen" | "compact";
+
 export type Settings = SettingsStore & {
 	deviceId?: string;
 	updateChannel?: UpdateChannel;
@@ -84,6 +86,8 @@ export type Settings = SettingsStore & {
 	searchShortcut?: string;
 	adaptiveFps?: boolean;
 	enableUiEvents?: boolean;
+	/** Timeline overlay mode: "fullscreen" (default) or "compact" (bottom bar) */
+	overlayMode?: OverlayMode;
 }
 
 export const DEFAULT_PROMPT = `Rules:
@@ -229,6 +233,7 @@ let DEFAULT_SETTINGS: Settings = {
 				historyEnabled: true,
 			},
 			enableUiEvents: false,
+			overlayMode: "fullscreen",
 		};
 
 export function createDefaultSettingsObject(): Settings {

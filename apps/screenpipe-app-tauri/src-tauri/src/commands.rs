@@ -324,6 +324,17 @@ pub async fn close_window(
 ) -> Result<(), String> {
     // Emit window-hidden event so React components can clean up
     let _ = app_handle.emit("window-hidden", ());
+
+    // If closing the main window, also unregister window-specific shortcuts
+    // (Escape, search shortcut) so they don't interfere with other apps
+    if matches!(window, ShowRewindWindow::Main) {
+        let app_clone = app_handle.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            let _ = unregister_window_shortcuts(app_clone);
+        });
+    }
+
     window.close(&app_handle).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -593,12 +604,13 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
 
     let global_shortcut = app_handle.global_shortcut();
 
-    // Register Escape shortcut to hide the main timeline window
+    // Register Escape shortcut — emits event so frontend can decide
+    // whether to collapse compact mode or fully close the window
     let escape_shortcut = Shortcut::new(None, Code::Escape);
     if let Err(e) = global_shortcut.on_shortcut(escape_shortcut, |app, _, event| {
         if matches!(event.state, ShortcutState::Pressed) {
-            info!("Escape pressed, hiding main window");
-            hide_main_window(app);
+            info!("Escape pressed, emitting escape-pressed event");
+            let _ = app.emit("escape-pressed", ());
         }
     }) {
         // Ignore "already registered" errors - shortcut may already be active
