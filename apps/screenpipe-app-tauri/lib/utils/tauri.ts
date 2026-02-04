@@ -231,19 +231,6 @@ async unregisterWindowShortcuts() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-/**
- * Resize the main overlay panel to a compact bottom bar or back to fullscreen.
- * `compact = true` → thin strip at bottom of current screen.
- * `compact = false` → full screen (same as initial overlay).
- */
-async setOverlayCompact(compact: boolean, barHeight: number) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("set_overlay_compact", { compact, barHeight }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async setTrayUnhealthIcon() : Promise<void> {
     await TAURI_INVOKE("set_tray_unhealth_icon");
 },
@@ -619,7 +606,12 @@ enableUiEvents?: boolean;
  * Auto-install updates and restart when a new version is available.
  * When disabled, users must click "update now" in the tray menu.
  */
-autoUpdate?: boolean }
+autoUpdate?: boolean; 
+/**
+ * Timeline overlay mode: "fullscreen" (floating panel above everything) or
+ * "window" (normal resizable window with title bar).
+ */
+overlayMode?: string }
 export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding" | "Chat" | "PermissionRecovery"
 /**
  * Sync configuration.

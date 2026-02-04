@@ -10,7 +10,7 @@ use tracing::{error, info};
 use tauri_nspanel::WebviewWindowExt;
 
 
-use crate::{store::OnboardingStore, ServerState};
+use crate::{store::{OnboardingStore, SettingsStore}, ServerState};
 
 /// Reset activation policy to Regular so dock icon and tray are visible.
 #[cfg(target_os = "macos")]
@@ -468,6 +468,39 @@ impl ShowRewindWindow {
                 if !onboarding_store.is_completed {
                     return ShowRewindWindow::Onboarding.show(app);
                 }
+
+                // Read overlay mode from settings: "fullscreen" (panel) or "window" (normal)
+                let overlay_mode = SettingsStore::get(app)
+                    .unwrap_or_default()
+                    .unwrap_or_default()
+                    .overlay_mode;
+                let use_window_mode = overlay_mode == "window";
+
+                if use_window_mode {
+                    // ============================================================
+                    // Window mode: normal resizable window with title bar
+                    // ============================================================
+                    let builder = self.window_builder(app, "/")
+                        .title("screenpipe")
+                        .inner_size(1200.0, 800.0)
+                        .min_inner_size(800.0, 600.0)
+                        .decorations(true)
+                        .visible(true)
+                        .focused(true)
+                        .transparent(false);
+                    #[cfg(target_os = "macos")]
+                    let builder = builder.hidden_title(false);
+                    let window = builder.build()?;
+
+                    // Emit window-focused so timeline data loads
+                    let _ = app.emit("window-focused", true);
+
+                    return Ok(window);
+                }
+
+                // ============================================================
+                // Fullscreen overlay mode (default): transparent panel
+                // ============================================================
 
                 // macOS uses fullscreen transparent panel overlay
                 #[cfg(target_os = "macos")]

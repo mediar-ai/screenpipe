@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Rocket, Moon, Sun, Monitor, FlaskConical, Shield, ExternalLink, Layers, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
-import { Settings, OverlayMode } from "@/lib/hooks/use-settings";
+import { Settings } from "@/lib/hooks/use-settings";
 import { open } from "@tauri-apps/plugin-shell";
 import { UpdateBanner } from "@/components/update-banner";
 
@@ -201,15 +201,14 @@ export default function GeneralSettings() {
                     Timeline Overlay Mode
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Choose how the timeline appears when activated. Compact mode shows a
-                    minimal bar at the bottom — press Enter to expand.
+                    Choose how the timeline appears when activated. Requires reopening the timeline to take effect.
                   </p>
                 </div>
               </div>
               <div className="flex gap-3 ml-[52px]">
                 {([
-                  { value: "fullscreen" as OverlayMode, label: "Fullscreen", desc: "Full-screen overlay with screenshot" },
-                  { value: "compact" as OverlayMode, label: "Compact", desc: "Bottom bar with timeline" },
+                  { value: "fullscreen", label: "Overlay", desc: "Full-screen floating panel" },
+                  { value: "window", label: "Window", desc: "Normal resizable window" },
                 ]).map((option) => {
                   const isActive = (settings?.overlayMode ?? "fullscreen") === option.value;
                   return (

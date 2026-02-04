@@ -207,6 +207,10 @@ pub struct SettingsStore {
     /// When disabled, users must click "update now" in the tray menu.
     #[serde(rename = "autoUpdate", default = "default_true")]
     pub auto_update: bool,
+    /// Timeline overlay mode: "fullscreen" (floating panel above everything) or
+    /// "window" (normal resizable window with title bar).
+    #[serde(rename = "overlayMode", default = "default_overlay_mode")]
+    pub overlay_mode: String,
 }
 
 fn generate_device_id() -> String {
@@ -215,6 +219,10 @@ fn generate_device_id() -> String {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_overlay_mode() -> String {
+    "fullscreen".to_string()
 }
 
 #[derive(Serialize, Deserialize, Type,Clone,Default)]
@@ -488,6 +496,7 @@ impl Default for SettingsStore {
             adaptive_fps: false,
             enable_ui_events: false,
             auto_update: true,
+            overlay_mode: "fullscreen".to_string(),
         }
     }
 }
