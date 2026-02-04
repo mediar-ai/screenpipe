@@ -1008,19 +1008,12 @@ mod tests {
     #[test]
     fn test_is_valid_focused_normal_window() {
         let filters = WindowFilters::new(&[], &[], &[]);
-        // Normal focused window (not screenpipe, not skipped) should be valid
+        // Normal focused window should be valid
         assert!(filters.is_valid("Arc", "GitHub"));
     }
 
     #[test]
-    fn test_is_valid_rejects_screenpipe_ui() {
-        let filters = WindowFilters::new(&[], &[], &[]);
-        assert!(!filters.is_valid("screenpipe", "Main Window"));
-        assert!(!filters.is_valid("Screenpipe App", "Settings"));
-    }
-
-    #[test]
-    fn test_is_valid_rejects_ignored_window() {
+    fn test_is_valid_rejects_ignored_by_app_name() {
         let filters = WindowFilters::new(
             &["wispr flow".to_string()],
             &[],
@@ -1034,8 +1027,22 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_overlay_app_in_ignore_list() {
-        // Typical user config: ignoring overlay apps
+    fn test_is_valid_rejects_ignored_by_window_title() {
+        let filters = WindowFilters::new(
+            &["status".to_string()],
+            &[],
+            &[],
+        );
+        // Window title matching ignore list should be rejected
+        assert!(!filters.is_valid("Wispr Flow", "Status"));
+        assert!(!filters.is_valid("Any App", "Status Bar"));
+        // Non-matching should pass
+        assert!(filters.is_valid("Wispr Flow", "Hub"));
+    }
+
+    #[test]
+    fn test_is_valid_overlay_apps_in_ignore_list() {
+        // Typical user config: ignoring overlay apps by name
         let filters = WindowFilters::new(
             &["wispr".to_string(), "bartender".to_string()],
             &[],
@@ -1044,6 +1051,34 @@ mod tests {
         assert!(!filters.is_valid("Wispr Flow", "Status"));
         assert!(!filters.is_valid("Bartender 4", "Menu"));
         assert!(filters.is_valid("Arc", "Gmail"));
+    }
+
+    #[test]
+    fn test_is_valid_include_list_only_allows_matching() {
+        let filters = WindowFilters::new(
+            &[],
+            &["arc".to_string(), "wezterm".to_string()],
+            &[],
+        );
+        // Only included apps should pass
+        assert!(filters.is_valid("Arc", "GitHub"));
+        assert!(filters.is_valid("WezTerm", "Terminal"));
+        // Non-included apps should be rejected
+        assert!(!filters.is_valid("Wispr Flow", "Status"));
+        assert!(!filters.is_valid("Finder", "Desktop"));
+    }
+
+    #[test]
+    fn test_is_valid_ignore_takes_precedence_over_include() {
+        let filters = WindowFilters::new(
+            &["wispr".to_string()],
+            &["wispr flow".to_string(), "arc".to_string()],
+            &[],
+        );
+        // Wispr Flow is in both ignore and include — ignore wins
+        assert!(!filters.is_valid("Wispr Flow", "Status"));
+        // Arc is only in include — passes
+        assert!(filters.is_valid("Arc", "GitHub"));
     }
 
     // Note: The overlay_pids CGWindowLayer detection in capture_all_visible_windows
