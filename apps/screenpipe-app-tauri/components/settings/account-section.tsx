@@ -2,10 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
 import {
-  RefreshCw,
   UserCog,
   ExternalLinkIcon,
   Sparkles,
@@ -16,64 +13,12 @@ import { toast } from "@/components/ui/use-toast";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Card } from "../ui/card";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { invoke } from "@tauri-apps/api/core";
 import { PricingToggle } from "./pricing-toggle";
 import posthog from "posthog-js";
-import { platform } from "@tauri-apps/plugin-os";
 
-
-function PlanCard({
-  title,
-  price,
-  features,
-  isActive,
-  isSelected,
-  onSelect,
-}: {
-  title: string;
-  price: string;
-  features: (string | JSX.Element)[];
-  isActive?: boolean;
-  isSelected?: boolean;
-  onSelect?: () => void;
-}) {
-  return (
-    <Card
-      className={cn(
-        "rounded-xl border px-6 py-4 flex items-start gap-6 cursor-pointer transition-all",
-        isActive
-          ? "border-gray-500/50 bg-gray-500/5"
-          : "border-border/50 bg-secondary/5",
-        isSelected && !isActive && "border-primary ring-1 ring-primary",
-        !isActive && "hover:border-primary/50"
-      )}
-      onClick={onSelect}
-    >
-      <div className="space-y-2 min-w-[200px]">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-medium opacity-80">{title}</h3>
-        </div>
-        <p className="text-lg">{price}</p>
-      </div>
-
-      <ul className="flex-grow space-y-2">
-        {features.map((feature, i) => (
-          <li
-            key={i}
-            className="flex items-center text-sm text-muted-foreground"
-          >
-            <span className="mr-2">•</span>
-            {feature}
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
 
 export function AccountSection() {
   const { settings, updateSettings, loadUser } = useSettings();
-  const [isConnectingStripe, setIsConnectingStripe] = useState(false);
   const [isAnnual, setIsAnnual] = useState(true);
 
   useEffect(() => {
@@ -126,107 +71,56 @@ export function AccountSection() {
     };
   }, [settings.user?.token, updateSettings]);
 
-  const clientRefId = `${settings.user?.id}&customer_email=${encodeURIComponent(
-    settings.user?.email ?? ""
-  )}`;
-
-  const plans = [
-    {
-      title: settings.user?.cloud_subscribed
-        ? "screenpipe pro"
-        : "screenpipe pro",
-      price: settings.user?.cloud_subscribed
-        ? "active"
-        : isAnnual
-        ? "$228/year"
-        : "$29/mo",
-      features: settings.user?.cloud_subscribed
-        ? [
-            "cloud sync - 50GB storage, 3 devices",
-            "unlimited ai queries, all models",
-            "cloud transcription (better quality, saves RAM)",
-            "priority support",
-            <a
-              key="portal"
-              href={`https://billing.stripe.com/p/login/3cs6pT8Qbd846yc9AA?email=${encodeURIComponent(
-                settings.user?.email || ""
-              )}`}
-              className="text-primary hover:underline cursor-pointer"
-              onClick={(e) => {
-                e.preventDefault();
-                openUrl(
-                  `https://billing.stripe.com/p/login/3cs6pT8Qbd846yc9AA?email=${encodeURIComponent(
-                    settings.user?.email || ""
-                  )}`
-                );
-              }}
-            >
-              manage subscription
-            </a>,
-          ]
-        : [
-            "cloud sync - 50GB storage, 3 devices",
-            "unlimited ai queries, all models",
-            "cloud transcription (better quality, saves RAM)",
-            "priority support",
-            isAnnual ? "save 34% vs monthly" : "switch to annual to save 34%",
-          ],
-    },
-  ];
-
-  const handleConnectStripe = async () => {
-    setIsConnectingStripe(true);
-    try {
-      // const host = `${BASE_URL}/api/dev-stripe`;
-      const host = `https://screenpi.pe/api/dev/stripe-connect`;
-      const response = await fetch(host, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${settings.user?.token}`,
-        },
-      });
-
-      const { url } = await response.json();
-      await openUrl(url);
-    } catch (error) {
-      console.warn("failed to connect stripe", error);
-      toast({
-        title: "failed to connect stripe",
-        description: "please try again later",
-        variant: "destructive",
-      });
-    } finally {
-      setIsConnectingStripe(false);
+  const handleCheckout = async () => {
+    if (!settings.user?.id) {
+      await openUrl("https://screenpi.pe/login");
+      return;
+    }
+    if (!settings.user?.cloud_subscribed) {
+      posthog.capture("cloud_plan_selected", { billing: isAnnual ? "yearly" : "monthly" });
+      try {
+        const response = await fetch("https://screenpi.pe/api/cloud-sync/checkout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${settings.user?.token}`,
+          },
+          body: JSON.stringify({
+            tier: "pro",
+            billingPeriod: isAnnual ? "yearly" : "monthly",
+            userId: settings.user?.id,
+            email: settings.user?.email,
+          }),
+        });
+        const data = await response.json();
+        if (data.url) {
+          openUrl(data.url);
+        } else {
+          throw new Error(data.error || "failed to create checkout");
+        }
+      } catch (error) {
+        toast({
+          title: "failed to start checkout",
+          description: String(error),
+          variant: "destructive",
+        });
+      }
     }
   };
 
-
-
   return (
-    <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Account Settings
-        </h1>
-        <p className="text-muted-foreground text-lg">
-          Manage your account and authentication settings
-        </p>
-      </div>
-      
+    <div className="space-y-6">
+      {/* Header + login status */}
       <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          {settings.user?.token ? (
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <span className="inline-flex h-2 w-2 rounded-full bg-foreground" />
-              logged in as {settings.user.email}
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <span className="inline-flex h-2 w-2 rounded-full bg-muted-foreground" />
-              not logged in - some features will be limited
-            </p>
-          )}
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Account
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {settings.user?.token
+              ? `logged in as ${settings.user.email}`
+              : "not logged in"}
+          </p>
         </div>
         <div className="flex gap-2">
           {settings.user?.token ? (
@@ -235,23 +129,19 @@ export function AccountSection() {
                 variant="outline"
                 size="sm"
                 onClick={() => openUrl("https://screenpi.pe/user-dashboard")}
-                className="hover:bg-secondary/80"
               >
-                manage account <UserCog className="w-4 h-4 ml-2" />
+                <UserCog className="w-4 h-4 mr-1.5" />
+                manage
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   updateSettings({ user: undefined });
-                  toast({
-                    title: "logged out",
-                    description: "you have been logged out",
-                  });
+                  toast({ title: "logged out" });
                 }}
-                className="hover:bg-secondary/80"
               >
-                logout <ExternalLinkIcon className="w-4 h-4 ml-2" />
+                logout
               </Button>
             </>
           ) : (
@@ -259,134 +149,118 @@ export function AccountSection() {
               variant="outline"
               size="sm"
               onClick={() => openUrl("https://screenpi.pe/login")}
-              className="hover:bg-secondary/80"
             >
-              login <ExternalLinkIcon className="w-4 h-4 ml-2" />
+              login <ExternalLinkIcon className="w-3.5 h-3.5 ml-1.5" />
             </Button>
           )}
         </div>
       </div>
 
-      {/* Cloud features info - only show for non-subscribers */}
-      {!settings.user?.cloud_subscribed && (
-        <div className="space-y-4">
-          {/* AI tier */}
-          <Card className="p-4 space-y-3 bg-secondary/5">
+      {/* Subscribed view */}
+      {settings.user?.cloud_subscribed ? (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <h4 className="font-medium">screenpipe cloud ai</h4>
+              <h3 className="text-lg font-semibold">screenpipe pro</h3>
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">active</span>
             </div>
-            <div className="grid gap-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-                {settings.user?.token ? "50 free ai queries per day" : "25 free ai queries per day"}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-                {settings.user?.token ? "access to claude haiku & sonnet" : "access to claude haiku"}
-              </div>
-            </div>
-            <Separator className="my-2" />
-            <div className="text-sm">
-              <span className="text-muted-foreground">upgrade benefits: </span>
-              <span className="text-foreground">unlimited queries, all models (claude opus), priority support</span>
-            </div>
-          </Card>
-
-          {/* Cloud transcription */}
-          <Card className="p-4 space-y-3 bg-secondary/5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                openUrl(
+                  `https://billing.stripe.com/p/login/3cs6pT8Qbd846yc9AA?email=${encodeURIComponent(
+                    settings.user?.email || ""
+                  )}`
+                )
+              }
+            >
+              manage subscription <ExternalLinkIcon className="w-3.5 h-3.5 ml-1.5" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-primary" />
-              <h4 className="font-medium">cloud audio transcription</h4>
+              <span className="text-green-500">✓</span> cloud sync - 50GB, 3 devices
             </div>
-            <div className="grid gap-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
-                save 2-3 GB of RAM
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
-                ~50% less CPU usage
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
-                higher quality transcription
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-green-500">✓</span> unlimited ai queries, all models
             </div>
-            <Separator className="my-2" />
-            <div className="text-sm text-muted-foreground">
-              local whisper model uses significant resources. cloud transcription offloads this to our servers.
+            <div className="flex items-center gap-2">
+              <span className="text-green-500">✓</span> cloud transcription
             </div>
-          </Card>
-        </div>
-      )}
-
-      <div className="space-y-8">
-        <div className="space-y-6">
-          <div className="grid gap-4">
-            <div className="space-y-6">
-              <h4 className="text-lg font-medium">plans</h4>
-
-              <PricingToggle isAnnual={isAnnual} onToggle={setIsAnnual} />
-
-              <div className="flex flex-col gap-4">
-                {plans.map((plan) => (
-                  <PlanCard
-                    key={plan.title}
-                    title={plan.title}
-                    price={plan.price}
-                    features={plan.features}
-                    onSelect={async () => {
-                      if (!settings.user?.id) {
-                        toast({
-                          title: "not logged in",
-                          description: "please login first to subscribe",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      if (!settings.user?.cloud_subscribed) {
-                        posthog.capture("cloud_plan_selected", { billing: isAnnual ? "yearly" : "monthly" });
-                        try {
-                          const response = await fetch("https://screenpi.pe/api/cloud-sync/checkout", {
-                            method: "POST",
-                            headers: {
-                              "Content-Type": "application/json",
-                              "Authorization": `Bearer ${settings.user?.token}`,
-                            },
-                            body: JSON.stringify({
-                              tier: "pro",
-                              billingPeriod: isAnnual ? "yearly" : "monthly",
-                              userId: settings.user?.id,
-                              email: settings.user?.email,
-                            }),
-                          });
-                          const data = await response.json();
-                          if (data.url) {
-                            openUrl(data.url);
-                          } else {
-                            throw new Error(data.error || "failed to create checkout");
-                          }
-                        } catch (error) {
-                          toast({
-                            title: "failed to start checkout",
-                            description: String(error),
-                            variant: "destructive",
-                          });
-                        }
-                      }
-                    }}
-                  />
-                ))}
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-green-500">✓</span> priority support
             </div>
           </div>
-        </div>
+        </Card>
+      ) : (
+        /* Non-subscriber: pricing-first layout */
+        <>
+          {/* Pro plan card with CTA */}
+          <Card className="p-5 border-primary/30 bg-gradient-to-b from-primary/[0.03] to-transparent">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  <h3 className="text-lg font-semibold">screenpipe pro</h3>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold">{isAnnual ? "$19" : "$29"}</span>
+                  <span className="text-muted-foreground text-sm">/month</span>
+                  {isAnnual && (
+                    <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">
+                      save 34%
+                    </span>
+                  )}
+                </div>
+                {isAnnual && (
+                  <p className="text-xs text-muted-foreground mt-0.5">$228/year, billed annually</p>
+                )}
+              </div>
+              <PricingToggle isAnnual={isAnnual} onToggle={setIsAnnual} />
+            </div>
 
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm mb-4">
+              <div className="flex items-center gap-2 text-foreground">
+                <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
+                cloud sync — 50GB, 3 devices
+              </div>
+              <div className="flex items-center gap-2 text-foreground">
+                <Brain className="h-3.5 w-3.5 text-primary shrink-0" />
+                unlimited ai, all models
+              </div>
+              <div className="flex items-center gap-2 text-foreground">
+                <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
+                cloud transcription — saves 2-3GB RAM
+              </div>
+              <div className="flex items-center gap-2 text-foreground">
+                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                priority support
+              </div>
+            </div>
 
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={handleCheckout}
+            >
+              {settings.user?.token ? "upgrade to pro" : "login & upgrade to pro"}
+              <ExternalLinkIcon className="w-4 h-4 ml-2" />
+            </Button>
+          </Card>
 
-
-      </div>
+          {/* Current free tier - compact */}
+          <div className="px-3 py-2 rounded-lg border border-border/50 bg-secondary/5">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">free tier:</span>{" "}
+              {settings.user?.token ? "50" : "25"} ai queries/day with claude haiku
+              {settings.user?.token && " & sonnet"}
+              {" · "}local whisper transcription (uses ~2GB RAM)
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
