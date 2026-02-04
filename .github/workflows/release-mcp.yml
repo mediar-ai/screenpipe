@@ -23,15 +23,15 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
-        working-directory: screenpipe-integrations/screenpipe-mcp
+        working-directory: crates/screenpipe-integrations/screenpipe-mcp
         run: npm install
 
       - name: Build
-        working-directory: screenpipe-integrations/screenpipe-mcp
+        working-directory: crates/screenpipe-integrations/screenpipe-mcp
         run: npm run build
 
       - name: Publish to npm
-        working-directory: screenpipe-integrations/screenpipe-mcp
+        working-directory: crates/screenpipe-integrations/screenpipe-mcp
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -40,7 +40,7 @@ jobs:
         run: npm install -g @anthropic-ai/mcpb
 
       - name: Build mcpb bundle
-        working-directory: screenpipe-integrations/screenpipe-mcp
+        working-directory: crates/screenpipe-integrations/screenpipe-mcp
         run: mcpb pack
 
       - name: Get version from tag
@@ -55,6 +55,6 @@ jobs:
             --title "MCP Server ${{ steps.version.outputs.VERSION }}" \
             --generate-notes \
             --prerelease \
-            screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb \
+            crates/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb \
             || gh release upload ${{ steps.version.outputs.VERSION }} \
-            screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb --clobber
+            crates/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb --clobber
