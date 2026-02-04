@@ -1,7 +1,7 @@
 use crate::commands::show_main_window;
 use crate::health::{get_recording_status, RecordingStatus};
 use crate::recording::RecordingState;
-use crate::store::{get_store, OnboardingStore, SettingsStore};
+use crate::store::{get_store, OnboardingStore};
 use crate::updates::is_source_build;
 use crate::window_api::ShowRewindWindow;
 use anyhow::Result;

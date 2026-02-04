@@ -94,9 +94,10 @@ use window_api::RewindWindowId;
 /// Setup macOS dock right-click menu as fallback for when tray icon is
 /// hidden behind the MacBook Pro notch.
 #[cfg(target_os = "macos")]
+#[allow(deprecated)]
 fn setup_dock_menu(app_handle: AppHandle) {
-    use cocoa::base::{id, nil, NO};
-    use cocoa::foundation::{NSAutoreleasePool, NSString};
+    use cocoa::base::{id, nil};
+    use cocoa::foundation::NSString;
     use objc::{class, msg_send, sel, sel_impl};
     use objc::runtime::{Object, Sel};
 
@@ -215,6 +216,7 @@ fn setup_dock_menu(app_handle: AppHandle) {
     }
 
     #[cfg(target_os = "macos")]
+    #[allow(non_snake_case, deprecated)]
     unsafe fn object_getClass(obj: id) -> *const objc::runtime::Class {
         msg_send![obj, class]
     }

@@ -599,7 +599,7 @@ impl ShowRewindWindow {
 
                     // Auto-hide on focus loss + handle display changes
                     let app_clone = app.clone();
-                    let window_clone = window.clone();
+                    let _window_clone = window.clone();
                     window.on_window_event(move |event| {
                         match event {
                             tauri::WindowEvent::Focused(is_focused) => {
