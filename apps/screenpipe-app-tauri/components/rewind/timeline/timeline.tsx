@@ -730,21 +730,8 @@ export const TimelineSlider = ({
 				</motion.div>
 			</div>
 
-			{/* Time axis legend at bottom */}
-			<div className="absolute bottom-0 left-0 right-0 h-6 flex items-center justify-center pointer-events-none">
-				<div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-					<span className="flex items-center gap-1">
-						<div className="w-3 h-3 rounded bg-foreground" />
-						<span>current</span>
-					</span>
-					<span className="flex items-center gap-1">
-						<div className="w-3 h-3 rounded bg-muted-foreground/50 relative">
-							<div className="absolute top-0 left-0 right-0 h-0.5 bg-foreground rounded-t" />
-						</div>
-						<span>has audio</span>
-					</span>
-					<span className="opacity-60">scroll to navigate • pinch to zoom</span>
-				</div>
+			{/* Time axis legend - hidden, too small to be useful */}
+			<div className="hidden">
 			</div>
 		</div>
 	);
