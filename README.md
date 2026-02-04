@@ -76,21 +76,7 @@ screenpipe turns your computer into a personal AI that knows everything you've d
 
 ## install
 
-macos, linux:
-
-```bash
-curl -fsSL get.screenpi.pe/cli | sh
-screenpipe
-```
-
-windows:
-
-```bash
-iwr get.screenpi.pe/cli.ps1 | iex
-screenpipe
-```
-
-or [download the desktop app](https://screenpi.pe)
+[download the desktop app](https://screenpi.pe)
 
 ## specs
 
