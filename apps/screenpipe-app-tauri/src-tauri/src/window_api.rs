@@ -503,6 +503,10 @@ impl ShowRewindWindow {
                 {
                     // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
 
+                    let capturable = SettingsStore::get(app)
+                        .unwrap_or_default()
+                        .unwrap_or_default()
+                        .show_overlay_in_screen_recording;
                     let app_clone = app.clone();
                     app.run_on_main_thread(move || {
                         use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
@@ -511,6 +515,8 @@ impl ShowRewindWindow {
                         if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Chat.label()) {
                             panel.set_level(1001);
                             let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
+                            let sharing: u64 = if capturable { 1 } else { 0 };
+                            let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
                             panel.set_collection_behaviour(
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
