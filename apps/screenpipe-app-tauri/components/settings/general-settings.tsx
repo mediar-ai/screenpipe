@@ -216,10 +216,10 @@ export default function GeneralSettings() {
                       key={option.value}
                       onClick={async () => {
                         handleSettingsChange({ overlayMode: option.value });
-                        // Close existing Main window so it gets recreated with the new mode
+                        // Destroy existing Main panel so it gets recreated with the new mode
                         try {
-                          const { commands } = await import("@/lib/utils/tauri");
-                          await commands.closeWindow("Main");
+                          const { invoke } = await import("@tauri-apps/api/core");
+                          await invoke("reset_main_window");
                         } catch (_) {}
                         toast({
                           title: "overlay mode updated",

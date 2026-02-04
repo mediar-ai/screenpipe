@@ -945,6 +945,7 @@ async fn main() {
                 commands::update_show_screenpipe_shortcut,
                 commands::show_window,
                 commands::close_window,
+                commands::reset_main_window,
                 commands::set_window_size,
                 // Onboarding commands
                 commands::get_onboarding_status,
@@ -1084,6 +1085,7 @@ async fn main() {
             commands::open_pipe_window,
             commands::show_window,
             commands::close_window,
+            commands::reset_main_window,
             commands::set_window_size,
             // Permission recovery commands
             commands::show_permission_recovery_window,
@@ -1626,17 +1628,8 @@ async fn main() {
             if let Ok(window_id) = RewindWindowId::from_str(label.as_str()) {
                 match window_id {
                     RewindWindowId::Settings => {
-                        // In overlay mode, closing Settings also cleans up the transparent
-                        // overlay panel. In window mode, Main is a normal window — keep it.
-                        let overlay_mode = crate::store::SettingsStore::get(&app_handle)
-                            .unwrap_or_default()
-                            .unwrap_or_default()
-                            .overlay_mode;
-                        if overlay_mode != "window" {
-                            if let Some(window) = RewindWindowId::Main.get(&app_handle) {
-                                let _ = window.destroy();
-                            }
-                        }
+                        // Closing Settings hides the Main panel (it's always a panel now)
+                        let _ = ShowRewindWindow::Main.close(&app_handle);
                         return;
                     }
 

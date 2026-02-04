@@ -23,6 +23,9 @@ use crate::monitor::SafeMonitor;
 use crate::monitor::macos_version::use_sck_rs;
 use url::Url;
 
+#[cfg(target_os = "macos")]
+use std::collections::HashMap;
+
 const BROWSER_NAMES: [&str; 9] = [
     "chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera",
 ];
@@ -373,6 +376,72 @@ struct WindowData {
     image_buffer: image::RgbaImage,
 }
 
+/// Build a map of window_id -> kCGWindowLayer for all on-screen windows.
+/// Normal app windows have layer 0; floating panels, overlays, status items
+/// and always-on-top windows have layer > 0.
+#[cfg(target_os = "macos")]
+fn get_window_levels() -> HashMap<u32, i32> {
+    use core_foundation::base::TCFType;
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use core_graphics::window::{
+        copy_window_info, kCGWindowListOptionOnScreenOnly, kCGWindowListExcludeDesktopElements,
+        kCGNullWindowID,
+    };
+
+    let mut levels = HashMap::new();
+
+    let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
+    if let Some(window_list) = copy_window_info(options, kCGNullWindowID) {
+        let count = unsafe { core_foundation::array::CFArrayGetCount(window_list.as_concrete_TypeRef()) };
+        for i in 0..count {
+            unsafe {
+                let dict_ref = core_foundation::array::CFArrayGetValueAtIndex(
+                    window_list.as_concrete_TypeRef(),
+                    i,
+                );
+                if dict_ref.is_null() {
+                    continue;
+                }
+                let dict = dict_ref as core_foundation::dictionary::CFDictionaryRef;
+
+                // Get kCGWindowNumber
+                let num_key = CFString::new("kCGWindowNumber");
+                let mut value = std::ptr::null();
+                if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                    dict,
+                    num_key.as_concrete_TypeRef() as *const _,
+                    &mut value,
+                ) != 0 && !value.is_null()
+                {
+                    let cf_num =
+                        CFNumber::wrap_under_get_rule(value as core_foundation::number::CFNumberRef);
+                    if let Some(window_id) = cf_num.to_i64() {
+                        // Get kCGWindowLayer
+                        let layer_key = CFString::new("kCGWindowLayer");
+                        let mut layer_value = std::ptr::null();
+                        if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                            dict,
+                            layer_key.as_concrete_TypeRef() as *const _,
+                            &mut layer_value,
+                        ) != 0 && !layer_value.is_null()
+                        {
+                            let layer_num = CFNumber::wrap_under_get_rule(
+                                layer_value as core_foundation::number::CFNumberRef,
+                            );
+                            if let Some(layer) = layer_num.to_i64() {
+                                levels.insert(window_id as u32, layer as i32);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    levels
+}
+
 /// Get all visible windows using the appropriate backend
 #[cfg(target_os = "macos")]
 fn get_all_windows() -> Result<Vec<WindowData>, Box<dyn Error>> {
@@ -589,6 +658,83 @@ pub async fn capture_all_visible_windows(
         return Err(Box::new(CaptureError::NoWindows));
     }
 
+    // On macOS, detect overlay-only apps (all windows at layer > 0) so we can
+    // demote them from "focused" status. Apps like Wispr Flow have always-on-top
+    // overlay windows that macOS reports as the "active application", polluting
+    // capture data. Normal app windows are at layer 0; floating panels, status
+    // items, and overlays are at layer > 0.
+    #[cfg(target_os = "macos")]
+    let overlay_pids: HashSet<u32> = {
+        let mut pid_layers: HashMap<u32, Vec<i32>> = HashMap::new();
+        use core_foundation::base::TCFType;
+        use core_foundation::number::CFNumber;
+        use core_foundation::string::CFString;
+        use core_graphics::window::{
+            copy_window_info, kCGNullWindowID, kCGWindowListExcludeDesktopElements,
+            kCGWindowListOptionOnScreenOnly,
+        };
+        let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
+        if let Some(window_list) = copy_window_info(options, kCGNullWindowID) {
+            let count = unsafe {
+                core_foundation::array::CFArrayGetCount(window_list.as_concrete_TypeRef())
+            };
+            for i in 0..count {
+                unsafe {
+                    let dict_ref = core_foundation::array::CFArrayGetValueAtIndex(
+                        window_list.as_concrete_TypeRef(),
+                        i,
+                    );
+                    if dict_ref.is_null() {
+                        continue;
+                    }
+                    let dict = dict_ref as core_foundation::dictionary::CFDictionaryRef;
+
+                    let pid_key = CFString::new("kCGWindowOwnerPID");
+                    let mut pid_val = std::ptr::null();
+                    if !core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                        dict,
+                        pid_key.as_concrete_TypeRef() as *const _,
+                        &mut pid_val,
+                    ) || pid_val.is_null()
+                    {
+                        continue;
+                    }
+                    let pid_num = CFNumber::wrap_under_get_rule(
+                        pid_val as core_foundation::number::CFNumberRef,
+                    );
+                    let Some(w_pid) = pid_num.to_i64() else {
+                        continue;
+                    };
+
+                    let layer_key = CFString::new("kCGWindowLayer");
+                    let mut layer_val = std::ptr::null();
+                    if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                        dict,
+                        layer_key.as_concrete_TypeRef() as *const _,
+                        &mut layer_val,
+                    ) && !layer_val.is_null()
+                    {
+                        let layer_num = CFNumber::wrap_under_get_rule(
+                            layer_val as core_foundation::number::CFNumberRef,
+                        );
+                        if let Some(layer) = layer_num.to_i64() {
+                            pid_layers
+                                .entry(w_pid as u32)
+                                .or_default()
+                                .push(layer as i32);
+                        }
+                    }
+                }
+            }
+        }
+        // PIDs where ALL on-screen windows are overlay-level (layer > 0)
+        pid_layers
+            .into_iter()
+            .filter(|(_, layers)| !layers.is_empty() && layers.iter().all(|&l| l > 0))
+            .map(|(pid, _)| pid)
+            .collect()
+    };
+
     // Process the captured data
     for window_data in windows_data {
         let WindowData {
@@ -602,6 +748,20 @@ pub async fn capture_all_visible_windows(
             window_height,
             image_buffer,
         } = window_data;
+
+        // On macOS, demote overlay-only apps from "focused" status.
+        // If an app has ONLY overlay-level windows (all kCGWindowLayer > 0),
+        // it's a floating overlay like Wispr Flow — don't treat as focused.
+        #[cfg(target_os = "macos")]
+        let is_focused = if is_focused && overlay_pids.contains(&(process_id as u32)) {
+            debug!(
+                "Demoting overlay app '{}' ('{}') from focused - all windows are layer > 0",
+                app_name, window_name
+            );
+            false
+        } else {
+            is_focused
+        };
 
         // Convert to DynamicImage
         let image = DynamicImage::ImageRgba8(image_buffer);

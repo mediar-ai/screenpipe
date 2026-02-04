@@ -1,5 +1,7 @@
 use crate::{window_api::ShowRewindWindow, store::OnboardingStore, store::SettingsStore, parse_shortcut};
 use tauri::{Manager, Emitter};
+#[cfg(target_os = "macos")]
+use tauri_nspanel::ManagerExt;
 use tracing::{error, info, warn, debug};
 
 #[tauri::command]
@@ -40,34 +42,18 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle) {
 pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
    info!("show_main_window called, attempting to show Main window");
 
-   let overlay_mode = crate::store::SettingsStore::get(app_handle)
-       .unwrap_or_default()
-       .unwrap_or_default()
-       .overlay_mode;
-   let is_window_mode = overlay_mode == "window";
-
-   // In overlay mode, close Settings (transparent overlay would show Settings through)
-   // In window mode, no need — it's an opaque window
-   if !is_window_mode {
-       let _ = ShowRewindWindow::Settings { page: None }.close(app_handle);
-   }
+   // Close Settings window if open (transparent overlay would show it through)
+   let _ = ShowRewindWindow::Settings { page: None }.close(app_handle);
 
    match ShowRewindWindow::Main.show(app_handle) {
        Ok(window) => {
            info!("ShowRewindWindow::Main.show succeeded, window label: {}", window.label());
-
-           if is_window_mode {
-               // Window mode: focus the window on all platforms including macOS
-               if let Err(e) = window.set_focus() {
-                   error!("Failed to set focus on main window: {}", e);
-               }
-           } else {
-               // Overlay mode: Don't call set_focus() on macOS as it causes space switching
-               // The panel's order_front_regardless() already handles visibility
-               #[cfg(not(target_os = "macos"))]
-               if let Err(e) = window.set_focus() {
-                   error!("Failed to set focus on main window: {}", e);
-               }
+           // Don't call set_focus() on macOS — both overlay and window modes use
+           // NSPanel with order_front_regardless() which handles visibility correctly.
+           // Calling set_focus() causes macOS space switching.
+           #[cfg(not(target_os = "macos"))]
+           if let Err(e) = window.set_focus() {
+               error!("Failed to set focus on main window: {}", e);
            }
 
            // Register window-specific shortcuts (Escape, Ctrl+Cmd+K) on a separate task
@@ -357,6 +343,45 @@ pub async fn close_window(
 }
 
 // Permission recovery command
+#[tauri::command]
+#[specta::specta]
+/// Destroy the Main window/panel so it gets recreated fresh (e.g. after switching overlay mode)
+pub fn reset_main_window(app_handle: tauri::AppHandle) {
+    info!("reset_main_window: destroying Main panel/window for fresh recreation");
+    let label = crate::window_api::RewindWindowId::Main.label();
+
+    // Unregister shortcuts
+    let app_clone = app_handle.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let _ = unregister_window_shortcuts(app_clone);
+    });
+
+    #[cfg(target_os = "macos")]
+    {
+        // Try panel first, then regular window
+        let app_clone = app_handle.clone();
+        let _ = app_handle.run_on_main_thread(move || {
+            if let Ok(panel) = app_clone.get_webview_panel(label) {
+                panel.order_out(None);
+                // Released when closed
+                panel.released_when_closed(true);
+            }
+            if let Some(window) = app_clone.get_webview_window(label) {
+                let _ = window.destroy();
+            }
+        });
+        crate::window_api::reset_to_regular_and_refresh_tray(&app_handle);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(window) = app_handle.get_webview_window(label) {
+            let _ = window.destroy();
+        }
+    }
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn show_permission_recovery_window(app_handle: tauri::AppHandle) -> Result<(), String> {

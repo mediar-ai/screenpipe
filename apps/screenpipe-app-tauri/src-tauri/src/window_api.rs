@@ -319,36 +319,30 @@ impl ShowRewindWindow {
                         .overlay_mode;
 
                     if overlay_mode == "window" {
-                        // Window mode: show and focus the normal window
+                        // Window mode: show the panel (same mechanism as overlay)
                         info!("showing main window (window mode)");
-                        window.show().ok();
-
                         #[cfg(target_os = "macos")]
                         {
-                            // Activate the app and bring window to front on the current space
-                            use objc::{msg_send, sel, sel_impl};
-                            use tauri_nspanel::cocoa::base::{id, nil};
                             let app_clone = app.clone();
-                            let _ = app.run_on_main_thread(move || {
-                                unsafe {
-                                    let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
-                                    // activateIgnoringOtherApps brings our app to front
-                                    let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                            app.run_on_main_thread(move || {
+                                if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
+                                    use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                                    panel.set_level(1001);
+                                    panel.set_collection_behaviour(
+                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                    );
+                                    panel.order_front_regardless();
+                                    let _ = app_clone.emit("window-focused", true);
                                 }
-                                // Also use Tauri's set_focus for good measure
-                                if let Some(w) = RewindWindowId::Main.get(&app_clone) {
-                                    w.set_focus().ok();
-                                }
-                                let _ = app_clone.emit("window-focused", true);
-                            });
+                            }).ok();
                         }
-
                         #[cfg(not(target_os = "macos"))]
                         {
+                            window.show().ok();
                             window.set_focus().ok();
                             let _ = app.emit("window-focused", true);
                         }
-
                         return Ok(window);
                     }
 
@@ -518,40 +512,109 @@ impl ShowRewindWindow {
 
                 if use_window_mode {
                     // ============================================================
-                    // Window mode: normal resizable window with title bar
-                    // Created hidden — shown after webview loads to avoid black flash.
+                    // Window mode: NSPanel at normal size (not fullscreen).
+                    // Still uses NSPanel so it can appear above fullscreen apps.
+                    // Created hidden — shown after webview + panel setup.
                     // ============================================================
-                    let app_clone = app.clone();
-                    let builder = self.window_builder(app, "/")
-                        .title("screenpipe")
-                        .inner_size(1200.0, 800.0)
-                        .min_inner_size(800.0, 600.0)
-                        .decorations(true)
-                        .visible(false)  // hidden until content loads
-                        .focused(false)
-                        .transparent(false)
-                        .visible_on_all_workspaces(true)
-                        .on_page_load(move |win, payload| {
-                            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                                win.show().ok();
-                                win.set_focus().ok();
-                                #[cfg(target_os = "macos")]
-                                {
+
+                    #[cfg(target_os = "macos")]
+                    let window = {
+                        let app_clone = app.clone();
+                        let builder = self.window_builder(app, "/")
+                            .title("screenpipe")
+                            .inner_size(1200.0, 800.0)
+                            .min_inner_size(800.0, 600.0)
+                            .decorations(true)
+                            .visible(false)
+                            .focused(false)
+                            .transparent(false)
+                            .visible_on_all_workspaces(true)
+                            .on_page_load(move |win, payload| {
+                                if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                                    // Panel setup already done — just show & activate
+                                    win.show().ok();
+                                    win.set_focus().ok();
                                     use objc::{msg_send, sel, sel_impl};
                                     use tauri_nspanel::cocoa::base::id;
                                     unsafe {
                                         let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
                                         let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
                                     }
+                                    let _ = app_clone.emit("window-focused", true);
                                 }
-                                let _ = app_clone.emit("window-focused", true);
-                            }
-                        });
+                            });
+                        builder.build()?
+                    };
+
+                    // Windows/Linux: normal window
+                    #[cfg(not(target_os = "macos"))]
+                    let window = {
+                        let app_clone = app.clone();
+                        let builder = self.window_builder(app, "/")
+                            .title("screenpipe")
+                            .inner_size(1200.0, 800.0)
+                            .min_inner_size(800.0, 600.0)
+                            .decorations(true)
+                            .visible(false)
+                            .focused(false)
+                            .transparent(false)
+                            .on_page_load(move |win, payload| {
+                                if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                                    win.show().ok();
+                                    win.set_focus().ok();
+                                    let _ = app_clone.emit("window-focused", true);
+                                }
+                            });
+                        builder.build()?
+                    };
+
+                    // Convert to NSPanel on macOS (same as overlay) so it
+                    // can appear above fullscreen apps
                     #[cfg(target_os = "macos")]
-                    let builder = builder
-                        .hidden_title(false)
-                        .title_bar_style(tauri::TitleBarStyle::Visible);
-                    let window = builder.build()?;
+                    {
+                        if let Ok(_panel) = window.to_panel() {
+                            info!("Converted window-mode main to panel");
+                            let window_clone = window.clone();
+                            app.run_on_main_thread(move || {
+                                use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                                use objc::{msg_send, sel, sel_impl};
+
+                                if let Ok(panel) = window_clone.to_panel() {
+                                    // Same level as overlay — above fullscreen
+                                    panel.set_level(1001);
+                                    panel.released_when_closed(true);
+                                    // Keep decorations! Don't call set_style_mask(0)
+                                    // Enable dragging by title bar (normal window behavior)
+                                    let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
+                                    // Exclude from screen capture
+                                    let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
+                                    panel.set_collection_behaviour(
+                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                    );
+                                }
+                            }).ok();
+                        }
+                    }
+
+                    // Auto-hide on focus loss + handle display changes
+                    let app_clone = app.clone();
+                    let window_clone = window.clone();
+                    window.on_window_event(move |event| {
+                        match event {
+                            tauri::WindowEvent::Focused(is_focused) => {
+                                if !is_focused {
+                                    info!("Window-mode main lost focus, hiding");
+                                    #[cfg(target_os = "macos")]
+                                    reset_to_regular_and_refresh_tray(&app_clone);
+                                    let _ = app_clone.emit("window-focused", false);
+                                } else {
+                                    let _ = app_clone.emit("window-focused", true);
+                                }
+                            }
+                            _ => {}
+                        }
+                    });
 
                     return Ok(window);
                 }
@@ -834,7 +897,6 @@ impl ShowRewindWindow {
                         .min_inner_size(400.0, 500.0)
                         .focused(true)
                         .always_on_top(true)
-                        .visible_on_all_workspaces(true)
                         .hidden_title(true);
                     let window = builder.build()?;
 
@@ -858,7 +920,7 @@ impl ShowRewindWindow {
                                 let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
 
                                 panel.set_collection_behaviour(
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
 
@@ -937,23 +999,9 @@ impl ShowRewindWindow {
     pub fn close(&self, app: &AppHandle) -> tauri::Result<()> {
         let id = self.id();
         if id.label() == RewindWindowId::Main.label() {
-            // Check overlay mode to decide close behavior
-            let overlay_mode = SettingsStore::get(app)
-                .unwrap_or_default()
-                .unwrap_or_default()
-                .overlay_mode;
-
-            if overlay_mode == "window" {
-                // Window mode: destroy the window so it gets recreated fresh
-                if let Some(window) = id.get(app) {
-                    window.destroy().ok();
-                }
-                return Ok(());
-            }
-
-            // Overlay mode: hide the panel (keep it alive for fast re-show)
             #[cfg(target_os = "macos")]
             {
+                // Try to hide the panel (works for both overlay and window-mode panels)
                 let app_clone = app.clone();
                 app.run_on_main_thread(move || {
                     if let Ok(panel) = app_clone.get_webview_panel(RewindWindowId::Main.label()) {
@@ -961,16 +1009,14 @@ impl ShowRewindWindow {
                     }
                 }).ok();
 
-                // Reset to Regular activation policy when hiding the panel
-                // so other windows (like Settings) work normally
                 reset_to_regular_and_refresh_tray(app);
             }
 
             #[cfg(not(target_os = "macos"))]
             {
-        if let Some(window) = id.get(app) {
-            window.close().ok();
-        }
+                if let Some(window) = id.get(app) {
+                    window.close().ok();
+                }
             }
 
             return Ok(());
