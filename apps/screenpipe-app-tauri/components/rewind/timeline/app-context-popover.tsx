@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import { Copy, Search, X, Globe, AppWindow, Mic, Clock } from "lucide-react";
 import { format } from "date-fns";
@@ -31,7 +31,6 @@ export function AppContextPopover({
 	onClose,
 	onSearch,
 }: AppContextPopoverProps) {
-	const [data, setData] = useState<AppContextData | null>(null);
 	const [copied, setCopied] = useState(false);
 
 	// compute time range from frames
@@ -63,75 +62,40 @@ export function AppContextPopover({
 		return transcripts;
 	}, [frames]);
 
-	// fetch window/url stats via raw_sql (one query)
-	useEffect(() => {
-		if (!timeRange) return;
+	// compute window/url stats from the frames we already have (no fetch needed)
+	const statsFromFrames = useMemo(() => {
+		const windowCounts = new Map<string, number>();
+		const urlCounts = new Map<string, number>();
 
-		const startISO = timeRange.start.toISOString();
-		const endISO = timeRange.end.toISOString();
-		const escapedApp = appName.replace(/'/g, "''");
+		for (const frame of frames) {
+			for (const device of frame.devices) {
+				const wn = device.metadata?.window_name;
+				if (wn) windowCounts.set(wn, (windowCounts.get(wn) || 0) + 1);
+				const url = device.metadata?.browser_url;
+				if (url) urlCounts.set(url, (urlCounts.get(url) || 0) + 1);
+			}
+		}
 
-		const query = `
-			SELECT * FROM (
-				SELECT 'summary' as type, COUNT(*) as val, COUNT(DISTINCT window_name) as val2, NULL as name
-				FROM frames
-				WHERE app_name = '${escapedApp}'
-					AND timestamp BETWEEN '${startISO}' AND '${endISO}'
-			)
-			UNION ALL
-			SELECT * FROM (
-				SELECT 'window' as type, COUNT(*) as val, NULL as val2, window_name as name
-				FROM frames
-				WHERE app_name = '${escapedApp}'
-					AND timestamp BETWEEN '${startISO}' AND '${endISO}'
-					AND window_name IS NOT NULL AND window_name != ''
-				GROUP BY window_name ORDER BY val DESC LIMIT 5
-			)
-			UNION ALL
-			SELECT * FROM (
-				SELECT 'url' as type, COUNT(*) as val, NULL as val2, browser_url as name
-				FROM frames
-				WHERE app_name = '${escapedApp}'
-					AND timestamp BETWEEN '${startISO}' AND '${endISO}'
-					AND browser_url IS NOT NULL AND browser_url != ''
-				GROUP BY browser_url ORDER BY val DESC LIMIT 5
-			)
-		`;
+		const topWindows = [...windowCounts.entries()]
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 5)
+			.map(([name, count]) => ({ name, count }));
 
-		fetch("http://localhost:3030/raw_sql", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ query }),
-		})
-			.then((r) => r.json())
-			.then((rows: any[]) => {
-				const summary = rows.find((r) => r.type === "summary");
-				const windows = rows
-					.filter((r) => r.type === "window")
-					.map((r) => ({ name: r.name, count: Number(r.val) }));
-				const urls = rows
-					.filter((r) => r.type === "url")
-					.map((r) => ({ url: r.name, count: Number(r.val) }));
+		const topUrls = [...urlCounts.entries()]
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 5)
+			.map(([url, count]) => ({ url, count }));
 
-				setData({
-					frameCount: Number(summary?.val ?? frames.length),
-					uniqueWindows: Number(summary?.val2 ?? 0),
-					topWindows: windows,
-					topUrls: urls,
-				});
-			})
-			.catch(() => {
-				// fallback: just use frame count
-				setData({
-					frameCount: frames.length,
-					uniqueWindows: 0,
-					topWindows: [],
-					topUrls: [],
-				});
-			});
-	}, [appName, timeRange, frames.length]);
+		return {
+			frameCount: frames.length,
+			uniqueWindows: windowCounts.size,
+			topWindows,
+			topUrls,
+		} satisfies AppContextData;
+	}, [frames]);
 
-	const approxMinutes = Math.max(1, Math.round(((data?.frameCount ?? frames.length) * 10) / 60));
+	const data = statsFromFrames;
+	const approxMinutes = Math.max(1, Math.round((data.frameCount * 10) / 60));
 
 	const handleCopy = () => {
 		if (!timeRange) return;
@@ -207,7 +171,7 @@ export function AppContextPopover({
 				)}
 
 				{/* Top windows */}
-				{data && data.topWindows.length > 0 && (
+				{data.topWindows.length > 0 && (
 					<div className="space-y-1">
 						<div className="flex items-center gap-1.5 text-muted-foreground">
 							<AppWindow className="w-3 h-3 flex-shrink-0" />
@@ -228,7 +192,7 @@ export function AppContextPopover({
 				)}
 
 				{/* Top URLs */}
-				{data && data.topUrls.length > 0 && (
+				{data.topUrls.length > 0 && (
 					<div className="space-y-1">
 						<div className="flex items-center gap-1.5 text-muted-foreground">
 							<Globe className="w-3 h-3 flex-shrink-0" />
@@ -273,10 +237,7 @@ export function AppContextPopover({
 					</div>
 				)}
 
-				{/* Loading state */}
-				{!data && (
-					<div className="text-muted-foreground text-center py-2">loading...</div>
-				)}
+
 			</div>
 
 			{/* Actions */}
