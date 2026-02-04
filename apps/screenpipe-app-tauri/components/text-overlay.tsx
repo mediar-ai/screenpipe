@@ -18,6 +18,11 @@ export function isUrl(text: string): boolean {
 		return false;
 	}
 
+	// Reject email addresses
+	if (trimmed.includes("@")) {
+		return false;
+	}
+
 	// Check for explicit protocol
 	if (/^https?:\/\//i.test(trimmed)) {
 		return true;
@@ -73,6 +78,8 @@ export function extractUrlsFromText(text: string): ExtractedUrl[] {
 		// Clean trailing punctuation that's unlikely part of the URL
 		const cleaned = url.replace(/[),;:!?.'"\]]+$/, "");
 		if (cleaned.length < 4) continue;
+		// Skip email addresses
+		if (cleaned.includes("@")) continue;
 
 		const startIdx = match.index;
 		const startFraction = startIdx / totalLen;
