@@ -603,7 +603,11 @@ export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isL
 /**
  * Persistent analytics ID used for PostHog tracking (both frontend and backend)
  */
-analyticsId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngine: string; monitorIds: string[]; audioDevices: string[]; usePiiRemoval: boolean; restartInterval: number; port: number; dataDir: string; disableAudio: boolean; ignoredWindows: string[]; includedWindows: string[]; ignoredUrls?: string[]; fps: number; vadSensitivity: string; analyticsEnabled: boolean; audioChunkDuration: number; useChineseMirror: boolean; languages: string[]; embeddedLLM: EmbeddedLLM; enableBeta: boolean; isFirstTimeUser: boolean; autoStartEnabled: boolean; enableFrameCache: boolean; platform: string; disabledShortcuts: string[]; user: User; showScreenpipeShortcut: string; startRecordingShortcut: string; stopRecordingShortcut: string; startAudioShortcut: string; stopAudioShortcut: string; showChatShortcut: string; searchShortcut: string; enableRealtimeAudioTranscription: boolean; realtimeAudioTranscriptionEngine: string; disableVision: boolean; useAllMonitors: boolean; adaptiveFps?: boolean; enableRealtimeVision: boolean; showShortcutOverlay?: boolean; 
+analyticsId: string; devMode: boolean; audioTranscriptionEngine: string; ocrEngine: string; monitorIds: string[]; audioDevices: string[]; 
+/**
+ * When true, automatically follow system default audio devices
+ */
+useSystemDefaultAudio?: boolean; usePiiRemoval: boolean; restartInterval: number; port: number; dataDir: string; disableAudio: boolean; ignoredWindows: string[]; includedWindows: string[]; ignoredUrls?: string[]; fps: number; vadSensitivity: string; analyticsEnabled: boolean; audioChunkDuration: number; useChineseMirror: boolean; languages: string[]; embeddedLLM: EmbeddedLLM; enableBeta: boolean; isFirstTimeUser: boolean; autoStartEnabled: boolean; enableFrameCache: boolean; platform: string; disabledShortcuts: string[]; user: User; showScreenpipeShortcut: string; startRecordingShortcut: string; stopRecordingShortcut: string; startAudioShortcut: string; stopAudioShortcut: string; showChatShortcut: string; searchShortcut: string; enableRealtimeAudioTranscription: boolean; realtimeAudioTranscriptionEngine: string; disableVision: boolean; useAllMonitors: boolean; adaptiveFps?: boolean; enableRealtimeVision: boolean; showShortcutOverlay?: boolean; 
 /**
  * Unique device ID for AI usage tracking (generated on first launch)
  */
@@ -622,7 +626,12 @@ autoUpdate?: boolean;
  * Timeline overlay mode: "fullscreen" (floating panel above everything) or
  * "window" (normal resizable window with title bar).
  */
-overlayMode?: string; showOverlayInScreenRecording?: boolean }
+overlayMode?: string; 
+/**
+ * Allow screen recording apps to capture the overlay.
+ * Disabled by default so the overlay doesn't appear in screenpipe's own recordings.
+ */
+showOverlayInScreenRecording?: boolean }
 export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding" | "Chat" | "PermissionRecovery"
 /**
  * Sync configuration.
