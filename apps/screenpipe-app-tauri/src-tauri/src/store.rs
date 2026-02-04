@@ -203,6 +203,10 @@ pub struct SettingsStore {
     /// Requires accessibility and input monitoring permissions on macOS.
     #[serde(rename = "enableUiEvents", default)]
     pub enable_ui_events: bool,
+    /// Auto-install updates and restart when a new version is available.
+    /// When disabled, users must click "update now" in the tray menu.
+    #[serde(rename = "autoUpdate", default = "default_true")]
+    pub auto_update: bool,
 }
 
 fn generate_device_id() -> String {
@@ -483,6 +487,7 @@ impl Default for SettingsStore {
             device_id: uuid::Uuid::new_v4().to_string(),
             adaptive_fps: false,
             enable_ui_events: false,
+            auto_update: true,
         }
     }
 }

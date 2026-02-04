@@ -1,4 +1,5 @@
 use crate::stop_screenpipe;
+use crate::store::SettingsStore;
 use crate::RecordingState;
 use anyhow::Error;
 use dark_light::Mode;
@@ -130,6 +131,29 @@ impl UpdatesManager {
             });
             if let Err(e) = self.app.emit("update-available", update_info) {
                 error!("Failed to emit update-available event: {}", e);
+            }
+
+            // Auto-update: if enabled and update is downloaded, restart automatically
+            // This ensures users get updates even if tray icon is hidden (e.g., behind notch)
+            #[cfg(not(target_os = "windows"))]
+            {
+                let auto_update = SettingsStore::get(&self.app)
+                    .ok()
+                    .flatten()
+                    .map(|s| s.auto_update)
+                    .unwrap_or(true);
+
+                if auto_update && *self.update_installed.lock().await {
+                    info!("auto-update enabled, restarting to apply update v{}", update.version);
+                    // Brief delay so the user can see the notification
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    if let Err(err) =
+                        stop_screenpipe(self.app.state::<RecordingState>(), self.app.clone()).await
+                    {
+                        error!("Failed to stop recording before auto-update: {}", err);
+                    }
+                    self.app.restart();
+                }
             }
 
             if show_dialog {
