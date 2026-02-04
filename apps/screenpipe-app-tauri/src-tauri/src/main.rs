@@ -1578,10 +1578,18 @@ async fn main() {
                 }
             });
         }
-        tauri::RunEvent::ExitRequested { .. } => {
-            debug!("ExitRequested event");
+        tauri::RunEvent::ExitRequested { api, .. } => {
+            // Always prevent auto-exit — the app should stay alive in the
+            // tray even when all windows are closed / destroyed.
+            // Only the explicit "Quit screenpipe" menu item calls app.exit().
+            info!("ExitRequested event — preventing (app stays in tray)");
+            api.prevent_exit();
+        }
 
-            // Send app closed event before shutdown
+        tauri::RunEvent::Exit => {
+            info!("App exiting — running cleanup");
+
+            // Send app closed analytics
             let app_handle_v2 = app_handle.app_handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Some(analytics) = app_handle_v2.try_state::<Arc<AnalyticsManager>>() {
@@ -1618,10 +1626,17 @@ async fn main() {
             if let Ok(window_id) = RewindWindowId::from_str(label.as_str()) {
                 match window_id {
                     RewindWindowId::Settings => {
-                        if let Some(window) = RewindWindowId::Main.get(&app_handle) {
-                            let _ = window.destroy();
+                        // In overlay mode, closing Settings also cleans up the transparent
+                        // overlay panel. In window mode, Main is a normal window — keep it.
+                        let overlay_mode = crate::store::SettingsStore::get(&app_handle)
+                            .unwrap_or_default()
+                            .unwrap_or_default()
+                            .overlay_mode;
+                        if overlay_mode != "window" {
+                            if let Some(window) = RewindWindowId::Main.get(&app_handle) {
+                                let _ = window.destroy();
+                            }
                         }
-
                         return;
                     }
 
