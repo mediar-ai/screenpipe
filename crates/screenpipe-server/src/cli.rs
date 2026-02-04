@@ -183,6 +183,12 @@ pub struct Cli {
     #[arg(short = 'i', long)]
     pub audio_device: Vec<String>,
 
+    /// Follow system default audio devices. When enabled, screenpipe automatically
+    /// switches to the current system default when devices are plugged/unplugged
+    /// or the default changes in system settings.
+    #[arg(long, default_value_t = true)]
+    pub use_system_default_audio: bool,
+
     // Audio devices to use for realtime audio transcription
     #[arg(short = 'r', long)]
     pub realtime_audio_device: Vec<String>,

@@ -51,6 +51,7 @@ pub struct EmbeddedServerConfig {
     pub use_all_monitors: bool,
     pub use_chinese_mirror: bool,
     pub user_id: Option<String>,
+    pub use_system_default_audio: bool,
 }
 
 impl EmbeddedServerConfig {
@@ -98,6 +99,7 @@ impl EmbeddedServerConfig {
             } else {
                 None
             },
+            use_system_default_audio: store.use_system_default_audio,
         }
     }
 }
@@ -289,6 +291,7 @@ pub async fn start_embedded_server(
             _ => AudioTranscriptionEngine::WhisperLargeV3Turbo,
         })
         .enabled_devices(audio_devices.clone())
+        .use_system_default_audio(config.use_system_default_audio)
         .deepgram_api_key(config.deepgram_api_key.clone())
         .output_path(data_path.clone())
         .build(db.clone())
