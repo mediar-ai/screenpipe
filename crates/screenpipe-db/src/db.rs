@@ -23,10 +23,10 @@ use futures::future::try_join_all;
 
 use crate::{
     text_similarity::is_similar_transcription, AudioChunksResponse, AudioDevice, AudioEntry,
-    AudioResult, AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, InsertUiEvent,
-    OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock, Order, SearchMatch, SearchResult,
-    Speaker, TagContentType, TextBounds, TextPosition, TimeSeriesChunk, UiContent, UiEventRecord,
-    UiEventRow, VideoMetadata,
+    AudioResult, AudioResultRaw, ContentType, DeviceType, FrameData, FrameRow, FrameWindowData,
+    InsertUiEvent, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock, Order, SearchMatch,
+    SearchResult, Speaker, TagContentType, TextBounds, TextPosition, TimeSeriesChunk, UiContent,
+    UiEventRecord, UiEventRow, VideoMetadata,
 };
 
 /// Time window (in seconds) to check for similar transcriptions across devices.
@@ -104,7 +104,7 @@ impl DatabaseManager {
     /// when a deferred reader tries to upgrade to writer after another commit.
     ///
     /// Returns the connection ready for writes. Caller must COMMIT or ROLLBACK.
-    async fn begin_immediate_with_retry(
+    pub async fn begin_immediate_with_retry(
         &self,
     ) -> Result<PoolConnection<Sqlite>, sqlx::Error> {
         let max_retries = 5;
@@ -138,14 +138,14 @@ impl DatabaseManager {
     }
 
     pub async fn insert_audio_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
         let id = sqlx::query("INSERT INTO audio_chunks (file_path, timestamp) VALUES (?1, ?2)")
             .bind(file_path)
             .bind(Utc::now())
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?
             .last_insert_rowid();
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         Ok(id)
     }
 
@@ -212,7 +212,7 @@ impl DatabaseManager {
         }
 
         let text_length = transcription.len() as i64;
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
 
         // Insert the transcription, ignoring duplicates (same audio_chunk_id + transcription)
         // This prevents duplicates from VAD segment overlap issues within the same device
@@ -230,11 +230,11 @@ impl DatabaseManager {
         .bind(start_time)
         .bind(end_time)
         .bind(text_length)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
 
         // Commit the transaction
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
 
         // Returns 0 if the insert was ignored (duplicate), otherwise returns the new id
         // Note: last_insert_rowid() returns the previous successful insert's id when ignored,
@@ -280,7 +280,7 @@ impl DatabaseManager {
         transcription: &str,
     ) -> Result<i64, sqlx::Error> {
         let text_length = transcription.len() as i64;
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
 
         // Insert the full transcription
         let affected = sqlx::query(
@@ -289,20 +289,20 @@ impl DatabaseManager {
         .bind(transcription)
         .bind(text_length)
         .bind(audio_chunk_id)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?
         .rows_affected();
 
         // Commit the transaction for the full transcription
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         Ok(affected as i64)
     }
 
     pub async fn insert_speaker(&self, embedding: &[f32]) -> Result<Speaker, SqlxError> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
 
         let id = sqlx::query("INSERT INTO speakers (name) VALUES (NULL)")
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?
             .last_insert_rowid();
 
@@ -312,9 +312,9 @@ impl DatabaseManager {
         )
         .bind(bytes)
         .bind(id)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
 
         Ok(Speaker {
             id,
@@ -328,13 +328,13 @@ impl DatabaseManager {
         speaker_id: i64,
         metadata: &str,
     ) -> Result<i64, SqlxError> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
         sqlx::query("UPDATE speakers SET metadata = ?1 WHERE id = ?2")
             .bind(metadata)
             .bind(speaker_id)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         Ok(speaker_id)
     }
 
@@ -374,13 +374,13 @@ impl DatabaseManager {
     }
 
     pub async fn update_speaker_name(&self, speaker_id: i64, name: &str) -> Result<i64, SqlxError> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
         sqlx::query("UPDATE speakers SET name = ?1 WHERE id = ?2")
             .bind(name)
             .bind(speaker_id)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         Ok(speaker_id)
     }
 
@@ -389,14 +389,14 @@ impl DatabaseManager {
         file_path: &str,
         device_name: &str,
     ) -> Result<i64, sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
         let id = sqlx::query("INSERT INTO video_chunks (file_path, device_name) VALUES (?1, ?2)")
             .bind(file_path)
             .bind(device_name)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?
             .last_insert_rowid();
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         Ok(id)
     }
 
@@ -416,7 +416,7 @@ impl DatabaseManager {
         focused: bool,
         offset_index: Option<i64>,
     ) -> Result<i64, sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
         debug!("insert_frame Transaction started");
 
         // Get the most recent video_chunk_id and file_path
@@ -424,7 +424,7 @@ impl DatabaseManager {
             "SELECT id, file_path FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1",
         )
         .bind(device_name)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut *conn)
         .await?;
         debug!("Fetched most recent video_chunk: {:?}", video_chunk);
 
@@ -433,7 +433,7 @@ impl DatabaseManager {
             Some((id, path)) => (id, path),
             None => {
                 debug!("No video chunk found, rolling back transaction");
-                tx.rollback().await?;
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
                 return Ok(0);
             }
         };
@@ -448,7 +448,7 @@ impl DatabaseManager {
                     "SELECT COALESCE(MAX(offset_index), -1) + 1 FROM frames WHERE video_chunk_id = ?1",
                 )
                 .bind(video_chunk_id)
-                .fetch_one(&mut *tx)
+                .fetch_one(&mut *conn)
                 .await?
             }
         };
@@ -469,13 +469,13 @@ impl DatabaseManager {
         .bind(window_name)
         .bind(focused)
         .bind(device_name)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?
         .last_insert_rowid();
         debug!("insert_frame Inserted new frame with id: {}", id);
 
         // Commit the transaction
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
 
         Ok(id)
     }
@@ -515,19 +515,98 @@ impl DatabaseManager {
         ocr_engine: Arc<OcrEngine>,
     ) -> Result<(), sqlx::Error> {
         let text_length = text.len() as i64;
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
         sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, ocr_engine, text_length) VALUES (?1, ?2, ?3, ?4, ?5)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
             .bind(format!("{:?}", *ocr_engine))
             .bind(text_length)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
 
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         debug!("OCR text inserted into db successfully");
         Ok(())
+    }
+
+    /// Batch insert frames and their OCR text in a single transaction.
+    /// This dramatically reduces write lock contention in the hot path by acquiring
+    /// the lock once per capture cycle instead of 2× per window result.
+    ///
+    /// Returns a Vec of (frame_id, window_index) pairs for each successfully inserted window.
+    pub async fn insert_frames_with_ocr_batch(
+        &self,
+        device_name: &str,
+        timestamp: Option<DateTime<Utc>>,
+        offset_index: i64,
+        windows: &[FrameWindowData],
+        ocr_engine: Arc<OcrEngine>,
+    ) -> Result<Vec<(i64, usize)>, sqlx::Error> {
+        let mut conn = self.begin_immediate_with_retry().await?;
+
+        // Get the most recent video_chunk_id and file_path
+        let video_chunk: Option<(i64, String)> = sqlx::query_as(
+            "SELECT id, file_path FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1",
+        )
+        .bind(device_name)
+        .fetch_optional(&mut *conn)
+        .await?;
+
+        let (video_chunk_id, file_path) = match video_chunk {
+            Some((id, path)) => (id, path),
+            None => {
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
+                return Ok(vec![]);
+            }
+        };
+
+        let timestamp = timestamp.unwrap_or_else(Utc::now);
+        let ocr_engine_str = format!("{:?}", *ocr_engine);
+        let mut results = Vec::with_capacity(windows.len());
+
+        for (idx, window) in windows.iter().enumerate() {
+            // Insert frame
+            let frame_id = sqlx::query(
+                "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url, app_name, window_name, focused, device_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            )
+            .bind(video_chunk_id)
+            .bind(offset_index)
+            .bind(timestamp)
+            .bind(&file_path)
+            .bind(window.browser_url.as_deref())
+            .bind(window.app_name.as_deref())
+            .bind(window.window_name.as_deref())
+            .bind(window.focused)
+            .bind(device_name)
+            .execute(&mut *conn)
+            .await?
+            .last_insert_rowid();
+
+            // Insert OCR text
+            let text_length = window.text.len() as i64;
+            sqlx::query(
+                "INSERT INTO ocr_text (frame_id, text, text_json, ocr_engine, text_length) VALUES (?1, ?2, ?3, ?4, ?5)",
+            )
+            .bind(frame_id)
+            .bind(&window.text)
+            .bind(&window.text_json)
+            .bind(&ocr_engine_str)
+            .bind(text_length)
+            .execute(&mut *conn)
+            .await?;
+
+            results.push((frame_id, idx));
+        }
+
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
+        debug!(
+            "Batch inserted {} frames with OCR for device {}",
+            results.len(),
+            device_name
+        );
+
+        Ok(results)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1716,7 +1795,7 @@ impl DatabaseManager {
     }
 
     async fn add_tags_to_vision(&self, frame_id: i64, tags: Vec<String>) -> Result<(), SqlxError> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
 
         for tag in tags {
             // Insert tag if it doesn't exist
@@ -1724,7 +1803,7 @@ impl DatabaseManager {
                 "INSERT INTO tags (name) VALUES (?) ON CONFLICT(name) DO UPDATE SET name=name RETURNING id",
             )
             .bind(&tag)
-            .fetch_one(&mut *tx)
+            .fetch_one(&mut *conn)
             .await?;
 
             // Insert into vision_tags
@@ -1733,11 +1812,11 @@ impl DatabaseManager {
             )
             .bind(frame_id)
             .bind(tag_id)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
         }
 
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         Ok(())
     }
 
@@ -1746,7 +1825,7 @@ impl DatabaseManager {
         audio_chunk_id: i64,
         tags: Vec<String>,
     ) -> Result<(), SqlxError> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
 
         for tag in tags {
             // Insert tag if it doesn't exist
@@ -1754,7 +1833,7 @@ impl DatabaseManager {
                 "INSERT INTO tags (name) VALUES (?) ON CONFLICT(name) DO UPDATE SET name=name RETURNING id",
             )
             .bind(&tag)
-            .fetch_one(&mut *tx)
+            .fetch_one(&mut *conn)
             .await?;
 
             // Insert into audio_tags
@@ -1763,11 +1842,11 @@ impl DatabaseManager {
             )
             .bind(audio_chunk_id)
             .bind(tag_id)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
         }
 
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         Ok(())
     }
 
@@ -1825,7 +1904,7 @@ impl DatabaseManager {
     }
 
     async fn remove_vision_tags(&self, vision_id: i64, tags: Vec<String>) -> Result<(), SqlxError> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
 
         for tag in tags {
             sqlx::query(
@@ -1836,11 +1915,11 @@ impl DatabaseManager {
             )
             .bind(vision_id)
             .bind(&tag)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
         }
 
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         Ok(())
     }
 
@@ -1849,7 +1928,7 @@ impl DatabaseManager {
         audio_chunk_id: i64,
         tags: Vec<String>,
     ) -> Result<(), SqlxError> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
 
         for tag in tags {
             sqlx::query(
@@ -1860,11 +1939,11 @@ impl DatabaseManager {
             )
             .bind(audio_chunk_id)
             .bind(&tag)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
         }
 
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         Ok(())
     }
     pub async fn execute_raw_sql(&self, query: &str) -> Result<serde_json::Value, sqlx::Error> {
@@ -2359,29 +2438,29 @@ impl DatabaseManager {
         speaker_to_keep_id: i64,
         speaker_to_merge_id: i64,
     ) -> Result<Speaker, sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
 
         // for each audio transcription of the speaker to merge, update the speaker_id to the speaker to keep
         sqlx::query("UPDATE audio_transcriptions SET speaker_id = ? WHERE speaker_id = ?")
             .bind(speaker_to_keep_id)
             .bind(speaker_to_merge_id)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
 
         // update speaker_embeddings
         sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE speaker_id = ?")
             .bind(speaker_to_keep_id)
             .bind(speaker_to_merge_id)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
 
         // delete the speaker to merge
         sqlx::query("DELETE FROM speakers WHERE id = ?")
             .bind(speaker_to_merge_id)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
 
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
 
         self.get_speaker_by_id(speaker_to_keep_id).await
     }
@@ -2396,7 +2475,7 @@ impl DatabaseManager {
     }
 
     pub async fn delete_speaker(&self, id: i64) -> Result<(), sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
 
         // Array of (query, operation description) tuples
         let operations = [
@@ -2420,15 +2499,15 @@ impl DatabaseManager {
 
         // Execute each deletion operation
         for (query, operation) in operations {
-            if let Err(e) = sqlx::query(query).bind(id).execute(&mut *tx).await {
+            if let Err(e) = sqlx::query(query).bind(id).execute(&mut *conn).await {
                 error!("Failed to delete {} for speaker {}: {}", operation, id, e);
-                tx.rollback().await?;
+                let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
                 return Err(e);
             }
             debug!("Successfully deleted {} for speaker {}", operation, id);
         }
 
-        tx.commit().await.map_err(|e| {
+        sqlx::query("COMMIT").execute(&mut *conn).await.map_err(|e| {
             error!("Failed to commit speaker deletion transaction: {}", e);
             e
         })?;
@@ -2520,7 +2599,7 @@ impl DatabaseManager {
         frames: Vec<DynamicImage>,
         metadata: VideoMetadata,
     ) -> Result<Vec<i64>, sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
         debug!(
             "creating video chunk {}, metadata: {:?}",
             &file_path, &metadata
@@ -2535,7 +2614,7 @@ impl DatabaseManager {
             sqlx::query("INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)")
                 .bind(device_name)
                 .bind(file_path)
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await?
                 .last_insert_rowid();
 
@@ -2555,14 +2634,14 @@ impl DatabaseManager {
             .bind(i as i64)
             .bind(frame_timestamp)
             .bind(metadata.name.as_deref().unwrap_or(file_path))  // Use reference instead of clone
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?
             .last_insert_rowid();
 
             frame_ids.push(frame_id);
         }
 
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         debug!(
             "created {} frames for video chunk {}",
             frames.len(),
@@ -3326,7 +3405,7 @@ LIMIT ? OFFSET ?
             return Ok(0);
         }
 
-        let mut tx = self.pool.begin().await?;
+        let mut conn = self.begin_immediate_with_retry().await?;
         let mut count = 0;
 
         for event in events {
@@ -3378,13 +3457,13 @@ LIMIT ? OFFSET ?
             .bind(&event.element_automation_id)
             .bind(&event.element_bounds)
             .bind(event.frame_id)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
 
             count += 1;
         }
 
-        tx.commit().await?;
+        sqlx::query("COMMIT").execute(&mut *conn).await?;
         debug!("Inserted {} UI events in batch", count);
         Ok(count)
     }

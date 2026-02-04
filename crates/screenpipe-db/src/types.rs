@@ -5,6 +5,18 @@ use sqlx::FromRow;
 use std::error::Error as StdError;
 use std::fmt::{self, Display};
 
+/// Data for a single window result to be batch-inserted with its frame.
+/// Used by `insert_frames_with_ocr_batch` to reduce write lock contention.
+#[derive(Debug, Clone)]
+pub struct FrameWindowData {
+    pub app_name: Option<String>,
+    pub window_name: Option<String>,
+    pub browser_url: Option<String>,
+    pub focused: bool,
+    pub text: String,
+    pub text_json: String,
+}
+
 #[derive(OaSchema, Debug)]
 pub struct DatabaseError(pub String);
 

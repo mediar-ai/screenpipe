@@ -3,7 +3,7 @@ use anyhow::Result;
 use futures::future::join_all;
 use screenpipe_core::pii_removal::{remove_pii, remove_pii_from_text_json};
 use screenpipe_core::Language;
-use screenpipe_db::{DatabaseManager, Speaker};
+use screenpipe_db::{DatabaseManager, FrameWindowData, Speaker};
 use screenpipe_events::{poll_meetings_events, send_event};
 use screenpipe_vision::core::WindowOcr;
 use screenpipe_vision::OcrEngine;
@@ -273,49 +273,66 @@ pub async fn record_video(
                 }
             };
 
+            // Prepare batch data: apply PII removal and collect window data
+            let mut batch_windows = Vec::with_capacity(frame.window_ocr_results.len());
+            let mut window_metadata = Vec::with_capacity(frame.window_ocr_results.len());
+
             for window_result in &frame.window_ocr_results {
-                let insert_frame_start = std::time::Instant::now();
-                let result = db
-                    .insert_frame(
-                        &device_name,
-                        Some(frame.captured_at),
-                        window_result.browser_url.as_deref(),
-                        Some(window_result.app_name.as_str()),
-                        Some(window_result.window_name.as_str()),
-                        window_result.focused,
-                        Some(video_frame_offset), // All windows share the same video frame offset
-                    )
-                    .await;
+                let (text, sanitized_text_json) = if use_pii_removal {
+                    let sanitized_text = remove_pii(&window_result.text);
+                    let sanitized_json = remove_pii_from_text_json(&window_result.text_json);
+                    (sanitized_text, sanitized_json)
+                } else {
+                    (window_result.text.clone(), window_result.text_json.clone())
+                };
+                let text_json = serde_json::to_string(&sanitized_text_json).unwrap_or_default();
 
-                let insert_duration = insert_frame_start.elapsed();
-                if insert_duration.as_millis() > 100 {
-                    warn!(
-                        "Slow DB insert_frame operation: {}ms",
-                        insert_duration.as_millis()
-                    );
-                }
+                batch_windows.push(FrameWindowData {
+                    app_name: Some(window_result.app_name.clone()),
+                    window_name: Some(window_result.window_name.clone()),
+                    browser_url: window_result.browser_url.clone(),
+                    focused: window_result.focused,
+                    text: text.clone(),
+                    text_json: text_json.clone(),
+                });
 
-                match result {
-                    Ok(frame_id) => {
-                        debug!(
-                            "Successfully inserted frame {} in {}ms",
-                            frame_id,
-                            insert_duration.as_millis()
+                // Store metadata for realtime events (sent after DB insert)
+                window_metadata.push((text, sanitized_text_json, text_json, window_result));
+            }
+
+            // Batch insert all frames + OCR in a single transaction
+            let batch_start = std::time::Instant::now();
+            match db
+                .insert_frames_with_ocr_batch(
+                    &device_name,
+                    Some(frame.captured_at),
+                    video_frame_offset,
+                    &batch_windows,
+                    Arc::new((*ocr_engine).clone().into()),
+                )
+                .await
+            {
+                Ok(results) => {
+                    let batch_duration = batch_start.elapsed();
+                    if batch_duration.as_millis() > 200 {
+                        warn!(
+                            "Slow DB batch insert: {}ms for {} windows",
+                            batch_duration.as_millis(),
+                            results.len()
                         );
+                    }
+                    debug!(
+                        "Batch inserted {} frames in {}ms",
+                        results.len(),
+                        batch_duration.as_millis()
+                    );
+                    consecutive_db_errors = 0;
 
-                        // Apply PII removal if enabled
-                        let (text, sanitized_text_json) = if use_pii_removal {
-                            let sanitized_text = remove_pii(&window_result.text);
-                            let sanitized_json =
-                                remove_pii_from_text_json(&window_result.text_json);
-                            (sanitized_text, sanitized_json)
-                        } else {
-                            (window_result.text.clone(), window_result.text_json.clone())
-                        };
-                        let text_json =
-                            serde_json::to_string(&sanitized_text_json).unwrap_or_default();
-
-                        if realtime_vision {
+                    // Send realtime events after successful DB insert
+                    if realtime_vision {
+                        for (frame_id, idx) in &results {
+                            let (ref text, ref sanitized_text_json, _, window_result) =
+                                window_metadata[*idx];
                             let send_event_start = std::time::Instant::now();
                             match send_event(
                                 "ocr_result",
@@ -335,53 +352,21 @@ pub async fn record_video(
                                     let event_duration = send_event_start.elapsed();
                                     if event_duration.as_millis() > 100 {
                                         warn!(
-                                            "Slow event sending: {}ms",
-                                            event_duration.as_millis()
+                                            "Slow event sending: {}ms for frame {}",
+                                            event_duration.as_millis(),
+                                            frame_id
                                         );
                                     }
                                 }
                                 Err(e) => error!("Failed to send OCR event: {}", e),
                             }
                         }
-
-                        let insert_ocr_start = std::time::Instant::now();
-                        if let Err(e) = db
-                            .insert_ocr_text(
-                                frame_id,
-                                &text,
-                                &text_json,
-                                Arc::new((*ocr_engine).clone().into()),
-                            )
-                            .await
-                        {
-                            error!(
-                                "Failed to insert OCR text: {}, skipping window {} of frame {}",
-                                e, window_result.window_name, frame_id
-                            );
-                            consecutive_db_errors += 1;
-                            continue;
-                        } else {
-                            let ocr_insert_duration = insert_ocr_start.elapsed();
-                            if ocr_insert_duration.as_millis() > 100 {
-                                warn!(
-                                    "Slow DB insert_ocr_text operation: {}ms",
-                                    ocr_insert_duration.as_millis()
-                                );
-                            }
-                            consecutive_db_errors = 0; // Reset on success
-                            debug!(
-                                "OCR text inserted for frame {} in {}ms",
-                                frame_id,
-                                ocr_insert_duration.as_millis()
-                            );
-                        }
                     }
-                    Err(e) => {
-                        warn!("Failed to insert frame: {}", e);
-                        consecutive_db_errors += 1;
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                        continue;
-                    }
+                }
+                Err(e) => {
+                    warn!("Failed to batch insert frames: {}", e);
+                    consecutive_db_errors += 1;
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
         } else {

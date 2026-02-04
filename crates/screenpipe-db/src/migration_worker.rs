@@ -505,7 +505,29 @@ async fn migrate_ocr_data_to_frames(
 
 /// Process a batch of records
 async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Result<(i64, i64)> {
-    let mut tx = pool.begin().await?;
+    // Use BEGIN IMMEDIATE to avoid WAL deadlocks with DEFERRED transactions
+    let max_retries = 5;
+    let mut conn = pool.acquire().await?;
+    for attempt in 1..=max_retries {
+        match sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await {
+            Ok(_) => break,
+            Err(e) if attempt < max_retries => {
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("database is locked") || msg.contains("busy") {
+                    tracing::warn!(
+                        "Migration batch BEGIN IMMEDIATE busy (attempt {}/{}), retrying...",
+                        attempt, max_retries
+                    );
+                    drop(conn);
+                    tokio::time::sleep(std::time::Duration::from_millis(100 * attempt as u64)).await;
+                    conn = pool.acquire().await?;
+                } else {
+                    return Err(e.into());
+                }
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
 
     // Query to get a batch of records with unique frame_ids that need migration
     let records = sqlx::query(
@@ -529,7 +551,7 @@ async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Resu
     )
     .bind(last_id)
     .bind(batch_size)
-    .fetch_all(&mut *tx)
+    .fetch_all(&mut *conn)
     .await?;
 
     let mut count = 0;
@@ -556,7 +578,7 @@ async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Resu
         .bind(window_name)
         .bind(focused)
         .bind(frame_id)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
 
         count += 1;
@@ -564,7 +586,7 @@ async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Resu
     }
 
     // Commit the transaction
-    tx.commit().await?;
+    sqlx::query("COMMIT").execute(&mut *conn).await?;
 
     debug!("Processed batch: {} records, max_id={}", count, max_id);
 
