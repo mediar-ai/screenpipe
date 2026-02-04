@@ -1,15 +1,24 @@
 "use client";
 
-import { useCallback, useMemo, memo } from "react";
+import { useCallback, useMemo, memo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import type { TextPosition } from "@/lib/hooks/use-frame-ocr-data";
 
 /**
  * Check if a string looks like a URL.
- * Matches http(s)://, www., and common domain patterns.
+ * Matches http(s)://, www., and domain-like patterns.
+ * Uses a permissive TLD check: any 2-13 char alphabetic TLD is accepted
+ * because OCR text won't produce false positives like "hello.world"
+ * in a screenshot context — the text is already rendered UI.
  */
 export function isUrl(text: string): boolean {
 	const trimmed = text.trim();
+
+	// Reject if contains spaces (URLs don't have spaces)
+	if (/\s/.test(trimmed)) {
+		return false;
+	}
 
 	// Check for explicit protocol
 	if (/^https?:\/\//i.test(trimmed)) {
@@ -21,11 +30,12 @@ export function isUrl(text: string): boolean {
 		return true;
 	}
 
-	// Check for domain-like patterns (word.tld or word.word.tld)
-	// Common TLDs
-	const tldPattern = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.(com|org|net|io|dev|app|co|ai|edu|gov|info|biz|me|tv|uk|de|fr|jp|au|ca|nl|ru|br|es|it|ch|se|no|at|be|dk|fi|nz|za|mx|kr|tw|hk|sg|id|tr|xyz|online|site|tech|store|blog|cloud|page|link|click|space|fun|live|news|world|email|today|top|pro|club|shop|website)(\/.*)?$/i;
+	// Check for domain-like patterns: word.tld or sub.word.tld
+	// Accept any alphabetic TLD with 2-13 chars (covers .com, .chat, .pe, .website, etc.)
+	const domainPattern =
+		/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,13}(\/[^\s]*)?$/;
 
-	return tldPattern.test(trimmed);
+	return domainPattern.test(trimmed);
 }
 
 /**
@@ -78,13 +88,15 @@ interface ScaledTextPositionWithUrl extends ScaledTextPosition {
 	normalizedUrl?: string;
 }
 
+// Minimum click target height in pixels — OCR boxes can be tiny (8-13px)
+const MIN_LINK_HEIGHT = 24;
+// Extra horizontal padding on each side for easier clicking
+const LINK_PADDING_X = 4;
+
 /**
- * TextOverlay renders transparent, selectable text positioned over a screenshot.
- * This enables native text selection (Cmd+C / Ctrl+C) on OCR-extracted text.
- * URLs are automatically detected and made clickable.
- *
- * NOTE: Currently disabled due to buggy text selection experience.
- * TODO: Re-enable once text selection UX is improved.
+ * TextOverlay renders clickable URL links positioned over a screenshot.
+ * URLs are detected from OCR text and rendered as visible, hoverable links.
+ * Clicking opens the URL in the system default browser via Tauri shell.
  */
 export const TextOverlay = memo(function TextOverlay({
 	textPositions,
@@ -97,8 +109,7 @@ export const TextOverlay = memo(function TextOverlay({
 	debug = false,
 	clickableUrls = true,
 }: TextOverlayProps) {
-	// Text selection is disabled due to buggy UX, but URLs remain clickable
-	const textSelectionDisabled = true;
+	const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
 	// Scale and filter text positions, detect URLs
 	// Note: OCR bounds are normalized (0-1 range), so we multiply directly by displayed dimensions
@@ -129,32 +140,33 @@ export const TextOverlay = memo(function TextOverlay({
 					pos.scaledBounds.height > 0 &&
 					pos.scaledBounds.left >= 0 &&
 					pos.scaledBounds.top >= 0 &&
-					pos.scaledBounds.left + pos.scaledBounds.width <= displayedWidth + 1 &&
-					pos.scaledBounds.top + pos.scaledBounds.height <= displayedHeight + 1
+					// Allow small overflow (1px tolerance) for rounding
+					pos.scaledBounds.left + pos.scaledBounds.width <=
+						displayedWidth + 1 &&
+					pos.scaledBounds.top + pos.scaledBounds.height <=
+						displayedHeight + 1
 			);
-	}, [
-		textPositions,
-		displayedWidth,
-		displayedHeight,
-		minConfidence,
-	]);
+	}, [textPositions, displayedWidth, displayedHeight, minConfidence]);
 
-	// Calculate font size based on scaled height
-	const getFontSize = useCallback((height: number): number => {
-		// Use 90% of the height as font size for better alignment
-		return Math.max(8, height * 0.9);
-	}, []);
+	const handleUrlClick = useCallback(
+		async (url: string, e: React.MouseEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			try {
+				await shellOpen(url);
+			} catch (err) {
+				console.error("failed to open URL:", url, err);
+				// Fallback: try window.open
+				window.open(url, "_blank", "noopener,noreferrer");
+			}
+		},
+		[]
+	);
 
-	const handleUrlClick = useCallback((url: string, e: React.MouseEvent) => {
-		e.preventDefault();
-		e.stopPropagation();
-		window.open(url, "_blank", "noopener,noreferrer");
-	}, []);
-
-	// Filter to only URLs if text selection is disabled
-	const positionsToRender = textSelectionDisabled
-		? scaledPositions.filter((pos) => pos.isUrl && pos.normalizedUrl)
-		: scaledPositions;
+	// Only render URLs (text selection is disabled for now)
+	const positionsToRender = scaledPositions.filter(
+		(pos) => pos.isUrl && pos.normalizedUrl
+	);
 
 	if (positionsToRender.length === 0) {
 		return null;
@@ -162,73 +174,80 @@ export const TextOverlay = memo(function TextOverlay({
 
 	return (
 		<div
-			className={cn(
-				"absolute inset-0 pointer-events-auto select-text overflow-hidden",
-				className
-			)}
+			className={cn("absolute inset-0 overflow-hidden", className)}
 			style={{
 				width: displayedWidth,
 				height: displayedHeight,
+				pointerEvents: "none",
 			}}
 		>
 			{positionsToRender.map((pos, index) => {
-				const isClickableUrl = clickableUrls && pos.isUrl && pos.normalizedUrl;
+				if (!clickableUrls || !pos.normalizedUrl) return null;
 
-				if (isClickableUrl) {
-					return (
-						<a
-							key={`${index}-${pos.text.slice(0, 10)}`}
-							href={pos.normalizedUrl}
-							onClick={(e) => handleUrlClick(pos.normalizedUrl!, e)}
-							className={cn(
-								"absolute whitespace-pre leading-none",
-								debug
-									? "border border-blue-500/50 bg-blue-500/20 text-blue-600"
-									: "text-transparent hover:text-blue-500/70 hover:underline"
-							)}
-							style={{
-								left: pos.scaledBounds.left,
-								top: pos.scaledBounds.top,
-								width: pos.scaledBounds.width,
-								height: pos.scaledBounds.height,
-								fontSize: getFontSize(pos.scaledBounds.height),
-								lineHeight: `${pos.scaledBounds.height}px`,
-								cursor: "pointer",
-								textDecoration: "none",
-							}}
-							title={debug ? `URL: ${pos.normalizedUrl}` : `Open ${pos.normalizedUrl}`}
-							target="_blank"
-							rel="noopener noreferrer"
-						>
-							{pos.text}
-						</a>
-					);
-				}
+				const isHovered = hoveredIndex === index;
+
+				// Enlarge the click target for small OCR boxes
+				const rawH = pos.scaledBounds.height;
+				const targetH = Math.max(rawH, MIN_LINK_HEIGHT);
+				const extraY = (targetH - rawH) / 2;
+				const targetW = pos.scaledBounds.width + LINK_PADDING_X * 2;
 
 				return (
-					<span
-						key={`${index}-${pos.text.slice(0, 10)}`}
-						className={cn(
-							"absolute whitespace-pre leading-none",
-							debug
-								? "border border-red-500/50 bg-red-500/10"
-								: "text-transparent"
-						)}
+					<a
+						key={`${index}-${pos.text.slice(0, 20)}`}
+						href={pos.normalizedUrl}
+						onClick={(e) => handleUrlClick(pos.normalizedUrl!, e)}
+						onMouseEnter={() => setHoveredIndex(index)}
+						onMouseLeave={() => setHoveredIndex(null)}
+						className="absolute block"
 						style={{
-							left: pos.scaledBounds.left,
-							top: pos.scaledBounds.top,
-							width: pos.scaledBounds.width,
-							height: pos.scaledBounds.height,
-							fontSize: getFontSize(pos.scaledBounds.height),
-							lineHeight: `${pos.scaledBounds.height}px`,
-							userSelect: "text",
-							WebkitUserSelect: "text",
-							cursor: "text",
+							left: pos.scaledBounds.left - LINK_PADDING_X,
+							top: pos.scaledBounds.top - extraY,
+							width: targetW,
+							height: targetH,
+							cursor: "pointer",
+							pointerEvents: "auto",
+							// Visible underline always, highlight on hover
+							borderBottom: isHovered
+								? "2px solid rgba(96, 165, 250, 0.9)"
+								: "2px solid rgba(96, 165, 250, 0.45)",
+							backgroundColor: isHovered
+								? "rgba(96, 165, 250, 0.15)"
+								: "transparent",
+							borderRadius: "2px",
+							transition:
+								"background-color 0.15s, border-color 0.15s",
+							// Debug mode
+							...(debug
+								? {
+										border: "1px solid rgba(59, 130, 246, 0.7)",
+										backgroundColor:
+											"rgba(59, 130, 246, 0.2)",
+									}
+								: {}),
 						}}
-						title={debug ? `Confidence: ${(pos.confidence * 100).toFixed(1)}%` : undefined}
+						title={`Open ${pos.normalizedUrl}`}
+						target="_blank"
+						rel="noopener noreferrer"
 					>
-						{pos.text}
-					</span>
+						{/* Tooltip on hover showing the URL */}
+						{isHovered && (
+							<span
+								className="absolute left-0 whitespace-nowrap text-xs px-2 py-1 rounded shadow-lg border z-50"
+								style={{
+									bottom: targetH + 4,
+									backgroundColor: "rgba(0, 0, 0, 0.85)",
+									color: "rgba(96, 165, 250, 1)",
+									borderColor: "rgba(96, 165, 250, 0.3)",
+									maxWidth: "400px",
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+								}}
+							>
+								{pos.normalizedUrl}
+							</span>
+						)}
+					</a>
 				);
 			})}
 		</div>
