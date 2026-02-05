@@ -31,49 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { platform } from "@tauri-apps/plugin-os";
 
-// Apple Intelligence logo — the colorful swirl glyph
-const AppleIntelligenceLogo = ({ className }: { className?: string }) => (
-  <svg
-    viewBox="0 0 120 120"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-  >
-    <defs>
-      <linearGradient id="ai-grad-1" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#FF6723" />
-        <stop offset="25%" stopColor="#FF2D55" />
-        <stop offset="50%" stopColor="#AF52DE" />
-        <stop offset="75%" stopColor="#5E5CE6" />
-        <stop offset="100%" stopColor="#007AFF" />
-      </linearGradient>
-      <linearGradient id="ai-grad-2" x1="100%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stopColor="#007AFF" />
-        <stop offset="25%" stopColor="#5AC8FA" />
-        <stop offset="50%" stopColor="#34C759" />
-        <stop offset="75%" stopColor="#FFCC00" />
-        <stop offset="100%" stopColor="#FF9500" />
-      </linearGradient>
-    </defs>
-    {/* Outer swirl */}
-    <path
-      d="M60 10 C85 10, 110 30, 110 55 C110 80, 90 105, 65 105"
-      fill="none"
-      stroke="url(#ai-grad-1)"
-      strokeWidth="7"
-      strokeLinecap="round"
-    />
-    {/* Inner swirl */}
-    <path
-      d="M60 110 C35 110, 10 90, 10 65 C10 40, 30 15, 55 15"
-      fill="none"
-      stroke="url(#ai-grad-2)"
-      strokeWidth="7"
-      strokeLinecap="round"
-    />
-    {/* Center glow dot */}
-    <circle cx="60" cy="60" r="8" fill="url(#ai-grad-1)" opacity="0.8" />
-  </svg>
-);
+// Apple Intelligence logo — loaded from static asset
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -310,9 +268,11 @@ export function AppleIntelligenceCard() {
       <CardContent className="p-0">
         <div className="flex items-start p-4 gap-4">
           <div className="flex-shrink-0">
-            <div className="w-10 h-10 rounded-xl bg-black/5 dark:bg-white/10 flex items-center justify-center">
-              <AppleIntelligenceLogo className="w-8 h-8" />
-            </div>
+            <img
+              src="/apple-intelligence-logo.svg"
+              alt="Apple Intelligence"
+              className="w-10 h-10 rounded-xl"
+            />
           </div>
 
           <div className="flex-1 min-w-0">
