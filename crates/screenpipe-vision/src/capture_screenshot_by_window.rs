@@ -392,6 +392,278 @@ fn get_frontmost_pid() -> Option<i32> {
     None
 }
 
+/// Rectangle bounds for overlap calculations
+#[derive(Debug, Clone, Copy)]
+pub struct Rect {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Rect {
+    /// Check if two rectangles overlap (share any area)
+    pub fn overlaps(&self, other: &Rect) -> bool {
+        let self_right = self.x + self.width as i32;
+        let self_bottom = self.y + self.height as i32;
+        let other_right = other.x + other.width as i32;
+        let other_bottom = other.y + other.height as i32;
+
+        self.x < other_right
+            && self_right > other.x
+            && self.y < other_bottom
+            && self_bottom > other.y
+    }
+
+    /// Compute the intersection area between two rectangles (0 if no overlap)
+    pub fn intersection_area(&self, other: &Rect) -> u64 {
+        let self_right = self.x + self.width as i32;
+        let self_bottom = self.y + self.height as i32;
+        let other_right = other.x + other.width as i32;
+        let other_bottom = other.y + other.height as i32;
+
+        let left = self.x.max(other.x);
+        let top = self.y.max(other.y);
+        let right = self_right.min(other_right);
+        let bottom = self_bottom.min(other_bottom);
+
+        if right > left && bottom > top {
+            (right - left) as u64 * (bottom - top) as u64
+        } else {
+            0
+        }
+    }
+}
+
+/// Info about a window from CGWindowList (z-ordered, front to back)
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone)]
+pub struct CGWindowInfo {
+    pid: i32,
+    layer: i32,
+    bounds: Rect,
+    owner_name: String,
+    window_name: String,
+}
+
+/// Query CGWindowListCopyWindowInfo to get on-screen windows in z-order.
+/// Returns windows front-to-back with their PID, layer, bounds, and names.
+/// Also returns overlay PIDs (apps where ALL windows have layer > 0).
+#[cfg(target_os = "macos")]
+fn get_cg_window_list() -> (Vec<CGWindowInfo>, HashSet<u32>) {
+    use core_foundation::base::TCFType;
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use core_graphics::window::{
+        copy_window_info, kCGNullWindowID, kCGWindowListExcludeDesktopElements,
+        kCGWindowListOptionOnScreenOnly,
+    };
+
+    let mut windows = Vec::new();
+    let mut pid_layers: HashMap<u32, Vec<i32>> = HashMap::new();
+
+    let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
+    if let Some(window_list) = copy_window_info(options, kCGNullWindowID) {
+        let count =
+            unsafe { core_foundation::array::CFArrayGetCount(window_list.as_concrete_TypeRef()) };
+        for i in 0..count {
+            unsafe {
+                let dict_ref = core_foundation::array::CFArrayGetValueAtIndex(
+                    window_list.as_concrete_TypeRef(),
+                    i,
+                );
+                if dict_ref.is_null() {
+                    continue;
+                }
+                let dict = dict_ref as core_foundation::dictionary::CFDictionaryRef;
+
+                // Extract PID
+                let pid_key = CFString::new("kCGWindowOwnerPID");
+                let mut pid_val = std::ptr::null();
+                if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                    dict,
+                    pid_key.as_concrete_TypeRef() as *const _,
+                    &mut pid_val,
+                ) == 0
+                    || pid_val.is_null()
+                {
+                    continue;
+                }
+                let pid_num =
+                    CFNumber::wrap_under_get_rule(pid_val as core_foundation::number::CFNumberRef);
+                let Some(w_pid) = pid_num.to_i64() else {
+                    continue;
+                };
+
+                // Extract layer
+                let layer_key = CFString::new("kCGWindowLayer");
+                let mut layer_val = std::ptr::null();
+                let layer = if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                    dict,
+                    layer_key.as_concrete_TypeRef() as *const _,
+                    &mut layer_val,
+                ) != 0
+                    && !layer_val.is_null()
+                {
+                    let layer_num = CFNumber::wrap_under_get_rule(
+                        layer_val as core_foundation::number::CFNumberRef,
+                    );
+                    layer_num.to_i64().unwrap_or(0) as i32
+                } else {
+                    0
+                };
+
+                // Track layers per PID for overlay detection
+                pid_layers
+                    .entry(w_pid as u32)
+                    .or_default()
+                    .push(layer);
+
+                // Extract bounds
+                let bounds_key = CFString::new("kCGWindowBounds");
+                let mut bounds_val = std::ptr::null();
+                let bounds = if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                    dict,
+                    bounds_key.as_concrete_TypeRef() as *const _,
+                    &mut bounds_val,
+                ) != 0
+                    && !bounds_val.is_null()
+                {
+                    let bounds_dict =
+                        bounds_val as core_foundation::dictionary::CFDictionaryRef;
+                    let x = get_cf_number_from_dict(bounds_dict, "X").unwrap_or(0.0);
+                    let y = get_cf_number_from_dict(bounds_dict, "Y").unwrap_or(0.0);
+                    let w = get_cf_number_from_dict(bounds_dict, "Width").unwrap_or(0.0);
+                    let h = get_cf_number_from_dict(bounds_dict, "Height").unwrap_or(0.0);
+                    Rect {
+                        x: x as i32,
+                        y: y as i32,
+                        width: w.max(0.0) as u32,
+                        height: h.max(0.0) as u32,
+                    }
+                } else {
+                    continue;
+                };
+
+                // Extract owner name
+                let owner_key = CFString::new("kCGWindowOwnerName");
+                let mut owner_val = std::ptr::null();
+                let owner_name = if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                    dict,
+                    owner_key.as_concrete_TypeRef() as *const _,
+                    &mut owner_val,
+                ) != 0
+                    && !owner_val.is_null()
+                {
+                    let cf_str = core_foundation::string::CFString::wrap_under_get_rule(
+                        owner_val as core_foundation::string::CFStringRef,
+                    );
+                    cf_str.to_string()
+                } else {
+                    String::new()
+                };
+
+                // Extract window name
+                let name_key = CFString::new("kCGWindowName");
+                let mut name_val = std::ptr::null();
+                let window_name = if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                    dict,
+                    name_key.as_concrete_TypeRef() as *const _,
+                    &mut name_val,
+                ) != 0
+                    && !name_val.is_null()
+                {
+                    let cf_str = core_foundation::string::CFString::wrap_under_get_rule(
+                        name_val as core_foundation::string::CFStringRef,
+                    );
+                    cf_str.to_string()
+                } else {
+                    String::new()
+                };
+
+                windows.push(CGWindowInfo {
+                    pid: w_pid as i32,
+                    layer,
+                    bounds,
+                    owner_name,
+                    window_name,
+                });
+            }
+        }
+    }
+
+    // PIDs where ALL on-screen windows are overlay-level (layer > 0)
+    let overlay_pids: HashSet<u32> = pid_layers
+        .into_iter()
+        .filter(|(_, layers)| !layers.is_empty() && layers.iter().all(|&l| l > 0))
+        .map(|(pid, _)| pid)
+        .collect();
+
+    (windows, overlay_pids)
+}
+
+/// Helper to extract a number from a CFDictionary by key
+#[cfg(target_os = "macos")]
+unsafe fn get_cf_number_from_dict(
+    dict: core_foundation::dictionary::CFDictionaryRef,
+    key: &str,
+) -> Option<f64> {
+    use core_foundation::base::TCFType;
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    let cf_key = CFString::new(key);
+    let mut val = std::ptr::null();
+    if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+        dict,
+        cf_key.as_concrete_TypeRef() as *const _,
+        &mut val,
+    ) != 0
+        && !val.is_null()
+    {
+        let num = CFNumber::wrap_under_get_rule(val as core_foundation::number::CFNumberRef);
+        num.to_f64()
+    } else {
+        None
+    }
+}
+
+/// Find the PID of the topmost normal (layer 0) window that overlaps a given monitor.
+/// Uses CGWindowList z-order: the list is front-to-back, so the first match is topmost.
+/// Skips overlay windows (layer > 0), system apps, and screenpipe's own UI.
+#[cfg(target_os = "macos")]
+pub fn find_topmost_pid_on_monitor(
+    cg_windows: &[CGWindowInfo],
+    monitor_bounds: &Rect,
+) -> Option<i32> {
+    for w in cg_windows {
+        // Skip overlay layers (menu bar, floating panels, etc.)
+        if w.layer != 0 {
+            continue;
+        }
+        // Skip tiny windows (< 100x100 — status icons, tracking areas)
+        if w.bounds.width < 100 || w.bounds.height < 100 {
+            continue;
+        }
+        // Skip system apps
+        if SKIP_APPS.contains(w.owner_name.as_str()) {
+            continue;
+        }
+        // Skip screenpipe's own UI
+        if w.owner_name.to_lowercase().contains("screenpipe") {
+            continue;
+        }
+        // Skip known system title windows
+        if !w.window_name.is_empty() && SKIP_TITLES.contains(w.window_name.as_str()) {
+            continue;
+        }
+        // Check if window overlaps with this monitor
+        if w.bounds.overlaps(monitor_bounds) {
+            return Some(w.pid);
+        }
+    }
+    None
+}
+
 /// Get all visible windows using the appropriate backend
 #[cfg(target_os = "macos")]
 fn get_all_windows() -> Result<Vec<WindowData>, Box<dyn Error>> {
@@ -618,81 +890,38 @@ pub async fn capture_all_visible_windows(
         return Err(Box::new(CaptureError::NoWindows));
     }
 
-    // On macOS, detect overlay-only apps (all windows at layer > 0) so we can
-    // demote them from "focused" status. Apps like Wispr Flow have always-on-top
-    // overlay windows that macOS reports as the "active application", polluting
-    // capture data. Normal app windows are at layer 0; floating panels, status
-    // items, and overlays are at layer > 0.
+    // On macOS, use CGWindowList to:
+    // 1. Get z-order to find the topmost window on this specific monitor
+    // 2. Detect overlay-only apps to demote from "focused" status
     #[cfg(target_os = "macos")]
-    let overlay_pids: HashSet<u32> = {
-        let mut pid_layers: HashMap<u32, Vec<i32>> = HashMap::new();
-        use core_foundation::base::TCFType;
-        use core_foundation::number::CFNumber;
-        use core_foundation::string::CFString;
-        use core_graphics::window::{
-            copy_window_info, kCGNullWindowID, kCGWindowListExcludeDesktopElements,
-            kCGWindowListOptionOnScreenOnly,
-        };
-        let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
-        if let Some(window_list) = copy_window_info(options, kCGNullWindowID) {
-            let count = unsafe {
-                core_foundation::array::CFArrayGetCount(window_list.as_concrete_TypeRef())
-            };
-            for i in 0..count {
-                unsafe {
-                    let dict_ref = core_foundation::array::CFArrayGetValueAtIndex(
-                        window_list.as_concrete_TypeRef(),
-                        i,
-                    );
-                    if dict_ref.is_null() {
-                        continue;
-                    }
-                    let dict = dict_ref as core_foundation::dictionary::CFDictionaryRef;
+    let (cg_windows, overlay_pids) = get_cg_window_list();
 
-                    let pid_key = CFString::new("kCGWindowOwnerPID");
-                    let mut pid_val = std::ptr::null();
-                    if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
-                        dict,
-                        pid_key.as_concrete_TypeRef() as *const _,
-                        &mut pid_val,
-                    ) == 0 || pid_val.is_null()
-                    {
-                        continue;
-                    }
-                    let pid_num = CFNumber::wrap_under_get_rule(
-                        pid_val as core_foundation::number::CFNumberRef,
-                    );
-                    let Some(w_pid) = pid_num.to_i64() else {
-                        continue;
-                    };
+    // Build the monitor bounds for window-to-monitor matching
+    let monitor_bounds = Rect {
+        x: monitor.x(),
+        y: monitor.y(),
+        width: monitor.width(),
+        height: monitor.height(),
+    };
 
-                    let layer_key = CFString::new("kCGWindowLayer");
-                    let mut layer_val = std::ptr::null();
-                    if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
-                        dict,
-                        layer_key.as_concrete_TypeRef() as *const _,
-                        &mut layer_val,
-                    ) != 0 && !layer_val.is_null()
-                    {
-                        let layer_num = CFNumber::wrap_under_get_rule(
-                            layer_val as core_foundation::number::CFNumberRef,
-                        );
-                        if let Some(layer) = layer_num.to_i64() {
-                            pid_layers
-                                .entry(w_pid as u32)
-                                .or_default()
-                                .push(layer as i32);
-                        }
-                    }
-                }
-            }
-        }
-        // PIDs where ALL on-screen windows are overlay-level (layer > 0)
-        pid_layers
-            .into_iter()
-            .filter(|(_, layers)| !layers.is_empty() && layers.iter().all(|&l| l > 0))
-            .map(|(pid, _)| pid)
-            .collect()
+    // When capture_unfocused_windows is false, we want to capture only the
+    // topmost visible window on THIS monitor — not the system-wide "focused" app.
+    // This fixes the bug where WezTerm fills the screen but Arc/Finder briefly
+    // steals macOS focus, causing wrong app_name and OCR data.
+    #[cfg(target_os = "macos")]
+    let topmost_pid = if !capture_unfocused_windows {
+        find_topmost_pid_on_monitor(&cg_windows, &monitor_bounds)
+    } else {
+        None // Not needed when capturing all windows
+    };
+
+    // On non-macOS, fall back to the frontmost PID (no CGWindowList available)
+    #[cfg(not(target_os = "macos"))]
+    let topmost_pid: Option<i32> = if !capture_unfocused_windows {
+        // Use platform-specific focus detection as fallback
+        None
+    } else {
+        None
     };
 
     // Process the captured data
@@ -726,6 +955,31 @@ pub async fn capture_all_visible_windows(
         // Convert to DynamicImage
         let image = DynamicImage::ImageRgba8(image_buffer);
 
+        // Determine if this window should be captured:
+        // - capture_unfocused_windows=true: capture ALL valid windows
+        // - capture_unfocused_windows=false: capture only the topmost window on
+        //   this monitor (using CGWindowList z-order), falling back to focused
+        let window_bounds = Rect {
+            x: window_x,
+            y: window_y,
+            width: window_width,
+            height: window_height,
+        };
+
+        let is_on_this_monitor = window_bounds.overlaps(&monitor_bounds);
+
+        let should_capture = if capture_unfocused_windows {
+            // When capturing all windows, still filter to this monitor
+            is_on_this_monitor
+        } else if let Some(top_pid) = topmost_pid {
+            // Capture windows belonging to the topmost app on this monitor
+            process_id == top_pid && is_on_this_monitor
+        } else {
+            // Fallback: use focused status (original behavior for non-macOS
+            // or when topmost detection fails)
+            is_focused && is_on_this_monitor
+        };
+
         // Apply filters
         // Note: Empty window_name/app_name check fixes frame-window mismatch bug where apps like Arc
         // have internal windows with empty titles that create duplicate DB records
@@ -737,7 +991,7 @@ pub async fn capture_all_visible_windows(
             && !app_name.is_empty()
             && !window_name.is_empty()
             && !SKIP_TITLES.contains(window_name.as_str())
-            && (capture_unfocused_windows || (is_focused && monitor.id() == monitor.id()))
+            && should_capture
             && window_filters.is_valid(&app_name, &window_name);
 
         if is_valid {
@@ -1111,4 +1365,279 @@ mod tests {
     // is macOS-only and requires actual system calls, so it can only be tested
     // as an integration test on macOS. The unit tests above verify the filter
     // logic that works in conjunction with overlay detection.
+
+    // ==================== Rect overlap / intersection tests ====================
+
+    #[test]
+    fn test_rect_overlaps_basic() {
+        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let b = Rect { x: 50, y: 50, width: 100, height: 100 };
+        assert!(a.overlaps(&b));
+        assert!(b.overlaps(&a));
+    }
+
+    #[test]
+    fn test_rect_no_overlap_right() {
+        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let b = Rect { x: 100, y: 0, width: 100, height: 100 };
+        // Touching edges — no overlap (right edge of a == left edge of b)
+        assert!(!a.overlaps(&b));
+    }
+
+    #[test]
+    fn test_rect_no_overlap_below() {
+        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let b = Rect { x: 0, y: 100, width: 100, height: 100 };
+        assert!(!a.overlaps(&b));
+    }
+
+    #[test]
+    fn test_rect_no_overlap_far_away() {
+        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let b = Rect { x: 500, y: 500, width: 100, height: 100 };
+        assert!(!a.overlaps(&b));
+    }
+
+    #[test]
+    fn test_rect_contained() {
+        let outer = Rect { x: 0, y: 0, width: 1920, height: 1080 };
+        let inner = Rect { x: 100, y: 100, width: 400, height: 300 };
+        assert!(outer.overlaps(&inner));
+        assert!(inner.overlaps(&outer));
+    }
+
+    #[test]
+    fn test_rect_negative_coordinates() {
+        // macOS: secondary monitor can be at negative x (left of primary)
+        let monitor = Rect { x: -1920, y: 0, width: 1920, height: 1080 };
+        let window = Rect { x: -1000, y: 200, width: 800, height: 600 };
+        assert!(monitor.overlaps(&window));
+    }
+
+    #[test]
+    fn test_rect_window_spans_two_monitors() {
+        let monitor1 = Rect { x: 0, y: 0, width: 1920, height: 1080 };
+        let monitor2 = Rect { x: 1920, y: 0, width: 1920, height: 1080 };
+        // Window straddles the boundary
+        let window = Rect { x: 1800, y: 100, width: 400, height: 600 };
+        assert!(monitor1.overlaps(&window));
+        assert!(monitor2.overlaps(&window));
+    }
+
+    #[test]
+    fn test_rect_intersection_area() {
+        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let b = Rect { x: 50, y: 50, width: 100, height: 100 };
+        // Intersection: (50,50) to (100,100) = 50*50 = 2500
+        assert_eq!(a.intersection_area(&b), 2500);
+    }
+
+    #[test]
+    fn test_rect_intersection_area_no_overlap() {
+        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let b = Rect { x: 200, y: 200, width: 100, height: 100 };
+        assert_eq!(a.intersection_area(&b), 0);
+    }
+
+    #[test]
+    fn test_rect_intersection_area_contained() {
+        let outer = Rect { x: 0, y: 0, width: 1920, height: 1080 };
+        let inner = Rect { x: 100, y: 100, width: 400, height: 300 };
+        assert_eq!(outer.intersection_area(&inner), 400 * 300);
+    }
+
+    #[test]
+    fn test_rect_zero_dimension() {
+        let a = Rect { x: 0, y: 0, width: 0, height: 100 };
+        let b = Rect { x: 0, y: 0, width: 100, height: 100 };
+        assert!(!a.overlaps(&b));
+        assert_eq!(a.intersection_area(&b), 0);
+    }
+
+    // ==================== find_topmost_pid_on_monitor tests ====================
+    // These tests use synthetic CGWindowInfo data to verify the z-order logic
+    // without requiring actual macOS system calls.
+
+    #[cfg(target_os = "macos")]
+    mod topmost_tests {
+        use super::*;
+
+        fn make_window(pid: i32, layer: i32, x: i32, y: i32, w: u32, h: u32, owner: &str, title: &str) -> CGWindowInfo {
+            CGWindowInfo {
+                pid,
+                layer,
+                bounds: Rect { x, y, width: w, height: h },
+                owner_name: owner.to_string(),
+                window_name: title.to_string(),
+            }
+        }
+
+        fn monitor_1080p() -> Rect {
+            Rect { x: 0, y: 0, width: 1920, height: 1080 }
+        }
+
+        #[test]
+        fn test_topmost_simple_single_window() {
+            let windows = vec![
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_skips_overlay_layers() {
+            // Wispr Flow overlay (layer 25) is first in z-order but should be skipped
+            let windows = vec![
+                make_window(200, 25, 0, 0, 300, 40, "Wispr Flow", "Status"),
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_skips_system_apps() {
+            let windows = vec![
+                make_window(1, 0, 0, 0, 1920, 25, "SystemUIServer", "Menu Bar"),
+                make_window(100, 0, 0, 25, 1920, 1055, "WezTerm", "π - brain"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_skips_screenpipe_ui() {
+            let windows = vec![
+                make_window(999, 0, 0, 0, 1920, 1080, "screenpipe", "Main"),
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_skips_screenpipe_dev() {
+            let windows = vec![
+                make_window(999, 0, 0, 0, 1920, 1080, "screenpipe - Development", "Overlay"),
+                make_window(100, 0, 0, 0, 1920, 1080, "Arc", "GitHub"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_skips_tiny_windows() {
+            // Status bar icon window (50x50) should be skipped
+            let windows = vec![
+                make_window(300, 0, 100, 0, 50, 50, "SomeApp", "StatusIcon"),
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_multi_monitor_different_windows() {
+            // Monitor 1: primary at (0,0), Monitor 2: right at (1920,0)
+            let monitor1 = Rect { x: 0, y: 0, width: 1920, height: 1080 };
+            let monitor2 = Rect { x: 1920, y: 0, width: 1920, height: 1080 };
+
+            let windows = vec![
+                // Arc is on monitor 2
+                make_window(200, 0, 1920, 0, 1920, 1080, "Arc", "GitHub"),
+                // WezTerm is on monitor 1
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+            ];
+
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor1), Some(100));
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor2), Some(200));
+        }
+
+        #[test]
+        fn test_topmost_arc_behind_wezterm() {
+            // The exact bug reported: WezTerm fills screen, Arc is behind it
+            // In z-order, WezTerm is on top (listed first)
+            let windows = vec![
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+                make_window(200, 0, 0, 0, 1920, 1080, "Arc", "PostHog"),
+            ];
+            // WezTerm should be detected, NOT Arc
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_finder_behind_wezterm() {
+            // The exact bug: Finder "Downloads" is behind WezTerm but macOS says Finder is "focused"
+            let windows = vec![
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+                make_window(300, 0, 200, 200, 800, 600, "Finder", "Downloads"),
+            ];
+            // WezTerm should be detected, NOT Finder
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_small_dialog_on_top() {
+            // Save dialog on top of large app — dialog IS what user sees
+            let windows = vec![
+                make_window(100, 0, 400, 300, 500, 300, "WezTerm", "Save As"),
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+            ];
+            // Both are WezTerm (same PID), first match wins
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_no_windows_on_monitor() {
+            // All windows are on a different monitor
+            let monitor_left = Rect { x: -1920, y: 0, width: 1920, height: 1080 };
+            let windows = vec![
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_left), None);
+        }
+
+        #[test]
+        fn test_topmost_empty_window_list() {
+            assert_eq!(find_topmost_pid_on_monitor(&[], &monitor_1080p()), None);
+        }
+
+        #[test]
+        fn test_topmost_all_overlay_layers() {
+            let windows = vec![
+                make_window(200, 25, 0, 0, 300, 40, "Wispr Flow", "Status"),
+                make_window(300, 3, 0, 0, 1920, 25, "SystemUIServer", "Menu Bar"),
+            ];
+            // All are overlay-level, no normal window
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), None);
+        }
+
+        #[test]
+        fn test_topmost_monitor_with_negative_coords() {
+            // Secondary monitor to the left of primary
+            let monitor_left = Rect { x: -1920, y: 0, width: 1920, height: 1080 };
+            let windows = vec![
+                make_window(100, 0, -1920, 0, 1920, 1080, "Firefox", "Google"),
+                make_window(200, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_left), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_window_partially_on_monitor() {
+            // Window straddles two monitors — should match on both
+            let monitor1 = Rect { x: 0, y: 0, width: 1920, height: 1080 };
+            let monitor2 = Rect { x: 1920, y: 0, width: 1920, height: 1080 };
+            let windows = vec![
+                make_window(100, 0, 1800, 100, 400, 600, "Arc", "Tab"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor1), Some(100));
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor2), Some(100));
+        }
+
+        #[test]
+        fn test_topmost_skip_titles() {
+            // Windows with system titles like "Desktop" should be skipped
+            let windows = vec![
+                make_window(300, 0, 0, 0, 1920, 1080, "Finder", "Desktop"),
+                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
+            ];
+            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+        }
+    }
 }

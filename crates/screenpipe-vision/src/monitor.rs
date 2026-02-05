@@ -43,10 +43,14 @@ pub struct SafeMonitor {
     use_sck: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MonitorData {
     pub width: u32,
     pub height: u32,
+    /// Monitor X position in the virtual desktop coordinate space (points)
+    pub x: i32,
+    /// Monitor Y position in the virtual desktop coordinate space (points)
+    pub y: i32,
     pub name: String,
     pub is_primary: bool,
 }
@@ -96,6 +100,8 @@ impl SafeMonitor {
         let monitor_data = Arc::new(MonitorData {
             width: monitor.width().unwrap_or(0),
             height: monitor.height().unwrap_or(0),
+            x: monitor.x(),
+            y: monitor.y(),
             name: monitor.name().to_string(),
             is_primary: monitor.is_primary(),
         });
@@ -114,6 +120,8 @@ impl SafeMonitor {
         let monitor_data = Arc::new(MonitorData {
             width: monitor.width().unwrap_or(0),
             height: monitor.height().unwrap_or(0),
+            x: monitor.x().unwrap_or(0),
+            y: monitor.y().unwrap_or(0),
             name: monitor.name().unwrap_or_default().to_string(),
             is_primary: monitor.is_primary().unwrap_or(false),
         });
@@ -132,6 +140,8 @@ impl SafeMonitor {
         let monitor_data = Arc::new(MonitorData {
             width: monitor.width().unwrap_or(0),
             height: monitor.height().unwrap_or(0),
+            x: monitor.x().unwrap_or(0),
+            y: monitor.y().unwrap_or(0),
             name: monitor.name().unwrap_or_default().to_string(),
             is_primary: monitor.is_primary().unwrap_or(false),
         });
@@ -236,6 +246,16 @@ impl SafeMonitor {
 
     pub fn is_primary(&self) -> bool {
         self.monitor_data.is_primary
+    }
+
+    /// Monitor X position in the virtual desktop coordinate space (points)
+    pub fn x(&self) -> i32 {
+        self.monitor_data.x
+    }
+
+    /// Monitor Y position in the virtual desktop coordinate space (points)
+    pub fn y(&self) -> i32 {
+        self.monitor_data.y
     }
 
     pub fn get_info(&self) -> MonitorData {
