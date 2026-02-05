@@ -31,14 +31,47 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { platform } from "@tauri-apps/plugin-os";
 
-const AppleLogo = ({ className }: { className?: string }) => (
+// Apple Intelligence logo — the colorful swirl glyph
+const AppleIntelligenceLogo = ({ className }: { className?: string }) => (
   <svg
-    viewBox="0 0 814 1000"
+    viewBox="0 0 120 120"
     xmlns="http://www.w3.org/2000/svg"
     className={className}
-    fill="currentColor"
   >
-    <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57.8-155.5-127.4c-58.3-81.6-105.6-207.2-105.6-326.4C-1.4 320.7 77.8 210.4 182.7 210.4c65.2 0 119.6 42.8 160.5 42.8 39 0 99.8-45.4 174.7-45.4 28.2 0 129.7 2.6 196.2 133.1zm-270-244.9c31.5-37 53.5-88.4 53.5-139.8 0-7.1-.6-14.3-1.9-20.1-51 1.9-111.4 33.9-147.8 76.5-27.6 31.5-56.5 82.3-56.5 134.6 0 7.8.6 15.6 1.3 18.2 2.6.6 6.5 1.3 10.4 1.3 45.9-.1 103-30.5 141-70.7z" />
+    <defs>
+      <linearGradient id="ai-grad-1" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#FF6723" />
+        <stop offset="25%" stopColor="#FF2D55" />
+        <stop offset="50%" stopColor="#AF52DE" />
+        <stop offset="75%" stopColor="#5E5CE6" />
+        <stop offset="100%" stopColor="#007AFF" />
+      </linearGradient>
+      <linearGradient id="ai-grad-2" x1="100%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stopColor="#007AFF" />
+        <stop offset="25%" stopColor="#5AC8FA" />
+        <stop offset="50%" stopColor="#34C759" />
+        <stop offset="75%" stopColor="#FFCC00" />
+        <stop offset="100%" stopColor="#FF9500" />
+      </linearGradient>
+    </defs>
+    {/* Outer swirl */}
+    <path
+      d="M60 10 C85 10, 110 30, 110 55 C110 80, 90 105, 65 105"
+      fill="none"
+      stroke="url(#ai-grad-1)"
+      strokeWidth="7"
+      strokeLinecap="round"
+    />
+    {/* Inner swirl */}
+    <path
+      d="M60 110 C35 110, 10 90, 10 65 C10 40, 30 15, 55 15"
+      fill="none"
+      stroke="url(#ai-grad-2)"
+      strokeWidth="7"
+      strokeLinecap="round"
+    />
+    {/* Center glow dot */}
+    <circle cx="60" cy="60" r="8" fill="url(#ai-grad-1)" opacity="0.8" />
   </svg>
 );
 
@@ -277,8 +310,8 @@ export function AppleIntelligenceCard() {
       <CardContent className="p-0">
         <div className="flex items-start p-4 gap-4">
           <div className="flex-shrink-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#147CE5] to-[#0E5FC2] flex items-center justify-center">
-              <AppleLogo className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-black/5 dark:bg-white/10 flex items-center justify-center">
+              <AppleIntelligenceLogo className="w-8 h-8" />
             </div>
           </div>
 
@@ -308,8 +341,16 @@ export function AppleIntelligenceCard() {
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
-                onClick={runExtraction}
-                disabled={isExtracting || aiStatus !== "available"}
+                onClick={() => {
+                  if (aiStatus !== "available") {
+                    setError(
+                      "Apple Intelligence not available. Requires macOS 26+ with Apple Intelligence enabled, and the server built with --features apple-intelligence."
+                    );
+                    return;
+                  }
+                  runExtraction();
+                }}
+                disabled={isExtracting}
                 size="sm"
                 className="gap-1.5 h-7 text-xs"
               >
