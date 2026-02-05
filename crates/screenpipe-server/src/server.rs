@@ -1691,7 +1691,7 @@ async fn write_frames_to_video(
     video_file_path: &str,
     fps: f64,
 ) -> Result<(), anyhow::Error> {
-    let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps).await?;
+    let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps, "balanced").await?;
     let mut ffmpeg_stdin = ffmpeg_child
         .stdin
         .take()

@@ -30,6 +30,7 @@ pub struct VisionManagerConfig {
     pub capture_unfocused_windows: bool,
     pub realtime_vision: bool,
     pub activity_feed: screenpipe_vision::ActivityFeedOption,
+    pub video_quality: String,
 }
 
 /// Status of the VisionManager
@@ -165,6 +166,7 @@ impl VisionManager {
         let capture_unfocused_windows = self.config.capture_unfocused_windows;
         let realtime_vision = self.config.realtime_vision;
         let activity_feed = self.config.activity_feed;
+        let video_quality = self.config.video_quality.clone();
 
         // Spawn the recording task using the existing record_video function
         let handle = self.vision_handle.spawn(async move {
@@ -184,6 +186,7 @@ impl VisionManager {
                     capture_unfocused_windows,
                     realtime_vision,
                     activity_feed,
+                    video_quality.clone(),
                 )
                 .await
                 {

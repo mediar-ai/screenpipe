@@ -128,6 +128,7 @@ impl VideoCapture {
         languages: Vec<Language>,
         capture_unfocused_windows: bool,
         activity_feed: screenpipe_vision::ActivityFeedOption,
+        video_quality: String,
     ) -> Self {
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
@@ -314,6 +315,7 @@ impl VideoCapture {
         let frame_write_tracker_clone = frame_write_tracker.clone();
 
         let output_path = output_path.to_string();
+        let video_quality_clone = video_quality;
         let video_thread = tokio::spawn(async move {
             info!(
                 "Starting save_frames_as_video task for monitor {}",
@@ -327,6 +329,7 @@ impl VideoCapture {
                 monitor_id,
                 video_chunk_duration,
                 &frame_write_tracker_clone,
+                &video_quality_clone,
             )
             .await
             {
@@ -432,7 +435,29 @@ impl Drop for VideoCapture {
     }
 }
 
-pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
+/// Map video quality preset to H.265 CRF value.
+/// Lower CRF = higher quality, larger files.
+pub fn video_quality_to_crf(quality: &str) -> &'static str {
+    match quality {
+        "low" => "32",
+        "high" => "18",
+        "max" => "14",
+        _ => "23", // "balanced" or any unknown
+    }
+}
+
+/// Map video quality preset to JPEG quality for frame extraction.
+/// Lower value = higher quality (scale 2-31).
+pub fn video_quality_to_jpeg_q(quality: &str) -> &'static str {
+    match quality {
+        "low" => "18",
+        "high" => "4",
+        "max" => "2",
+        _ => "10", // "balanced" or any unknown
+    }
+}
+
+pub async fn start_ffmpeg_process(output_file: &str, fps: f64, video_quality: &str) -> Result<Child, anyhow::Error> {
     // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
         warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
@@ -459,6 +484,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "scale=trunc(iw/2)*2:trunc(ih/2)*2",
     ];
 
+    let crf = video_quality_to_crf(video_quality);
     args.extend_from_slice(&[
         "-vcodec",
         "libx265",
@@ -467,7 +493,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "-preset",
         "ultrafast",
         "-crf",
-        "23",
+        crf,
     ]);
 
     // Use fragmented MP4 to allow reading frames while file is still being written
@@ -523,6 +549,7 @@ async fn save_frames_as_video(
     monitor_id: u32,
     video_chunk_duration: Duration,
     frame_write_tracker: &Arc<FrameWriteTracker>,
+    video_quality: &str,
 ) -> Result<(), anyhow::Error> {
     info!(
         "Starting save_frames_as_video function for monitor {}",
@@ -570,7 +597,7 @@ async fn save_frames_as_video(
                 output_file, monitor_id
             );
 
-            match start_ffmpeg_process(&output_file, fps).await {
+            match start_ffmpeg_process(&output_file, fps, video_quality).await {
                 Ok(mut child) => {
                     let mut stdin = child.stdin.take().expect("Failed to open stdin");
                     spawn_ffmpeg_loggers(child.stderr.take(), child.stdout.take());

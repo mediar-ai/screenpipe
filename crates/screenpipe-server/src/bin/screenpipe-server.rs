@@ -911,6 +911,7 @@ async fn main() -> anyhow::Result<()> {
             capture_unfocused_windows: cli.capture_unfocused_windows,
             realtime_vision: cli.enable_realtime_audio_transcription,
             activity_feed: activity_feed,
+            video_quality: cli.video_quality.clone(),
         };
         Some(Arc::new(VisionManager::new(
             config,
@@ -921,6 +922,7 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    let video_quality_for_server = cli.video_quality.clone();
     let handle = if let Some(ref vm) = vision_manager {
         // Use VisionManager for dynamic monitor detection
         let vm_clone = vm.clone();
@@ -997,6 +999,7 @@ async fn main() -> anyhow::Result<()> {
                     cli.capture_unfocused_windows,
                     cli.enable_realtime_audio_transcription,
                     activity_feed_legacy,
+                    cli.video_quality.clone(),
                 );
 
                 let result = tokio::select! {
@@ -1041,6 +1044,7 @@ async fn main() -> anyhow::Result<()> {
         audio_manager.clone(),
         cli.enable_pipe_manager,
         cli.use_pii_removal,
+        video_quality_for_server,
     );
 
     // Attach sync handle if sync is enabled

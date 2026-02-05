@@ -701,7 +701,7 @@ impl VideoMetadataOverride {
     }
 }
 
-pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Result<String> {
+pub async fn extract_frame_from_video(file_path: &str, offset_index: i64, jpeg_quality: &str) -> Result<String> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
     // Check if file exists first
@@ -805,7 +805,7 @@ pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Res
             "-pix_fmt",
             "yuvj420p", // Ensure proper pixel format
             "-q:v",
-            "10",
+            jpeg_quality,
             "-y", // Force overwrite
             output_path.to_str().unwrap(),
         ])

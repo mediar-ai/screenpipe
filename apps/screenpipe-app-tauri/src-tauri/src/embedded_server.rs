@@ -52,6 +52,7 @@ pub struct EmbeddedServerConfig {
     pub use_chinese_mirror: bool,
     pub user_id: Option<String>,
     pub use_system_default_audio: bool,
+    pub video_quality: String,
 }
 
 impl EmbeddedServerConfig {
@@ -100,6 +101,7 @@ impl EmbeddedServerConfig {
                 None
             },
             use_system_default_audio: store.use_system_default_audio,
+            video_quality: store.video_quality.clone(),
         }
     }
 }
@@ -357,6 +359,7 @@ pub async fn start_embedded_server(
             // Use VisionManager for dynamic monitor detection (handles connect/disconnect)
             info!("Using dynamic monitor detection (use_all_monitors=true)");
             
+            let video_quality = config.video_quality.clone();
             let vision_config = VisionManagerConfig {
                 output_path,
                 fps,
@@ -370,6 +373,7 @@ pub async fn start_embedded_server(
                 capture_unfocused_windows: false,
                 realtime_vision: false,
                 activity_feed: None,
+                video_quality,
             };
 
             let vision_manager = Arc::new(VisionManager::new(
@@ -432,6 +436,7 @@ pub async fn start_embedded_server(
             info!("Using static monitor list: {:?}", monitor_ids);
             let output_path = Arc::new(output_path);
             let shutdown_rx = shutdown_tx_clone.subscribe();
+            let video_quality = config.video_quality.clone();
 
             tokio::spawn(async move {
                 let mut shutdown_rx = shutdown_rx;
@@ -453,6 +458,7 @@ pub async fn start_embedded_server(
                         false,
                         false,
                         None,
+                        video_quality.clone(),
                     );
 
                     tokio::select! {
@@ -526,6 +532,7 @@ pub async fn start_embedded_server(
         audio_manager.clone(),
         false, // disable pipes
         config.use_pii_removal,
+        config.video_quality.clone(),
     );
 
     // Start server in background

@@ -642,7 +642,13 @@ overlayMode?: string;
  * Allow screen recording apps to capture the overlay.
  * Disabled by default so the overlay doesn't appear in screenpipe's own recordings.
  */
-showOverlayInScreenRecording?: boolean }
+showOverlayInScreenRecording?: boolean; 
+/**
+ * Video quality preset controlling storage vs quality tradeoff.
+ * Affects H.265 CRF during recording and JPEG quality during frame extraction.
+ * Values: "low", "balanced", "high", "max". Default: "balanced".
+ */
+videoQuality?: string }
 export type ShowRewindWindow = "Main" | { Settings: { page: string | null } } | { Search: { query: string | null } } | "Onboarding" | "Chat" | "PermissionRecovery"
 /**
  * Sync configuration.

@@ -34,6 +34,7 @@ import {
   Loader2,
   Globe,
   Shield,
+  Film,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -826,6 +827,35 @@ export function RecordingSettings() {
               <span className="text-xs text-muted-foreground w-12 text-right">{settings.fps.toFixed(1)} fps</span>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Video Quality */}
+      <Card className="border-border bg-card">
+        <CardContent className="px-3 py-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <Film className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Video quality</h3>
+                <p className="text-xs text-muted-foreground">Higher quality = larger files</p>
+              </div>
+            </div>
+            <Select
+              value={settings.videoQuality || "balanced"}
+              onValueChange={(value) => handleSettingsChange({ videoQuality: value }, true)}
+            >
+              <SelectTrigger className="w-[130px] h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="balanced">Balanced</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="max">Max</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 

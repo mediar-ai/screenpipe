@@ -218,6 +218,15 @@ pub struct SettingsStore {
     /// Disabled by default so the overlay doesn't appear in screenpipe's own recordings.
     #[serde(rename = "showOverlayInScreenRecording", default)]
     pub show_overlay_in_screen_recording: bool,
+    /// Video quality preset controlling storage vs quality tradeoff.
+    /// Affects H.265 CRF during recording and JPEG quality during frame extraction.
+    /// Values: "low", "balanced", "high", "max". Default: "balanced".
+    #[serde(rename = "videoQuality", default = "default_video_quality")]
+    pub video_quality: String,
+}
+
+fn default_video_quality() -> String {
+    "balanced".to_string()
 }
 
 fn generate_device_id() -> String {
@@ -506,6 +515,7 @@ impl Default for SettingsStore {
             auto_update: true,
             overlay_mode: "fullscreen".to_string(),
             show_overlay_in_screen_recording: false,
+            video_quality: "balanced".to_string(),
         }
     }
 }

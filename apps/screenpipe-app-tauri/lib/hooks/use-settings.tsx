@@ -229,6 +229,7 @@ let DEFAULT_SETTINGS: Settings = {
 			enableUiEvents: false,
 			overlayMode: "fullscreen",
 			showOverlayInScreenRecording: false,
+			videoQuality: "balanced",
 		};
 
 export function createDefaultSettingsObject(): Settings {

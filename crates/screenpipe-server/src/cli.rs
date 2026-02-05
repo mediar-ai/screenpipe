@@ -311,6 +311,12 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub capture_unfocused_windows: bool,
 
+    /// Video quality preset: low, balanced, high, max.
+    /// Controls H.265 CRF during recording and JPEG quality during frame extraction.
+    /// low=smallest files, balanced=default, high=sharper, max=best quality.
+    #[arg(long, default_value = "balanced")]
+    pub video_quality: String,
+
     /// Enable pipe functionality (default: false)
     #[arg(long, default_value_t = false)]
     pub enable_pipe_manager: bool,
