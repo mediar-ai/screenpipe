@@ -36,6 +36,7 @@ pub fn setup_space_listener(app: AppHandle) {
                 // Create the block that will be called when space changes
                 let block = block::ConcreteBlock::new(move |_notification: id| {
                     debug!("macOS Space changed, hiding overlay");
+                    crate::window_api::restore_frontmost_app();
                     hide_main_window(&app_for_block);
                 });
                 let block = block.copy();

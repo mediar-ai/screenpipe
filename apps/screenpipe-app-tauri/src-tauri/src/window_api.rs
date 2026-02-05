@@ -25,6 +25,55 @@ fn run_on_main_thread_safe<F: FnOnce() + Send + 'static>(app: &AppHandle, f: F) 
 
 use crate::{store::{OnboardingStore, SettingsStore}, ServerState};
 
+/// Stores the previously frontmost application so we can re-activate it
+/// when the overlay hides. This prevents macOS from switching Spaces when
+/// the overlay resigns key window. Stored as a raw pointer (usize) because
+/// `id` (*mut Object) is not Send.
+#[cfg(target_os = "macos")]
+static PREVIOUS_FRONTMOST_APP: Lazy<Mutex<usize>> = Lazy::new(|| Mutex::new(0));
+
+/// Save the current frontmost app before activating our overlay.
+#[cfg(target_os = "macos")]
+fn save_frontmost_app() {
+    use objc::{class, msg_send, sel, sel_impl};
+    use tauri_nspanel::cocoa::base::{id, nil};
+    unsafe {
+        let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let frontmost: id = msg_send![workspace, frontmostApplication];
+        if frontmost != nil {
+            let _: () = msg_send![frontmost, retain];
+            let mut prev = PREVIOUS_FRONTMOST_APP.lock().unwrap();
+            if *prev != 0 {
+                let old = *prev as id;
+                let _: () = msg_send![old, release];
+            }
+            *prev = frontmost as usize;
+        }
+    }
+}
+
+/// Re-activate the previously frontmost app (saved on show).
+/// This keeps macOS in the same Space instead of switching.
+#[cfg(target_os = "macos")]
+pub fn restore_frontmost_app() {
+    use objc::{msg_send, sel, sel_impl};
+    let ptr = {
+        let mut prev = PREVIOUS_FRONTMOST_APP.lock().unwrap();
+        let p = *prev;
+        *prev = 0;
+        p
+    };
+    if ptr != 0 {
+        use tauri_nspanel::cocoa::base::id;
+        unsafe {
+            let app: id = ptr as id;
+            // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
+            let _: bool = msg_send![app, activateWithOptions: 2u64];
+            let _: () = msg_send![app, release];
+        }
+    }
+}
+
 /// Tracks which overlay mode the current Main window was created for.
 /// When the mode changes, show() hides the old panel and creates a fresh one
 /// under a different label to avoid NSPanel reconfiguration crashes.
@@ -364,8 +413,14 @@ impl ShowRewindWindow {
                         // Update screen capture sharing type
                         let sharing: u64 = if capturable { 1 } else { 0 };
                         let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
+                        save_frontmost_app();
                         panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
+                        unsafe {
+                            use tauri_nspanel::cocoa::base::id;
+                            let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                        }
                         panel.make_key_window();
                         let _ = app_clone.emit("window-focused", true);
                     }
@@ -425,13 +480,18 @@ impl ShowRewindWindow {
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                         );
-                        // Set content view as first responder so the WKWebView
-                        // receives keyboard input (matches RawNSPanel::show() behavior).
+                        // Save frontmost app before we steal activation so we
+                        // can restore it on hide (prevents Space switching).
+                        save_frontmost_app();
+
                         panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
-                        // Panel has NSNonactivatingPanelMask + canBecomeKeyWindow=YES,
-                        // so makeKeyWindow works without activating the app.
-                        // This avoids stealing activation from fullscreen apps (no Space switch).
+                        // Activate app so WKWebView receives keyboard input,
+                        // then make panel key window.
+                        unsafe {
+                            let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                        }
                         panel.make_key_window();
                         let _ = app_clone.emit("window-focused", true);
                     }
@@ -667,6 +727,8 @@ impl ShowRewindWindow {
                                         if cancel.load(std::sync::atomic::Ordering::SeqCst) {
                                             return;
                                         }
+                                        #[cfg(target_os = "macos")]
+                                        restore_frontmost_app();
                                         let _ = app.emit("window-focused", false);
                                     });
                                 } else {
@@ -887,6 +949,8 @@ impl ShowRewindWindow {
                                         return;
                                     }
                                     info!("Main window hiding after debounce");
+                                    #[cfg(target_os = "macos")]
+                                    restore_frontmost_app();
                                     let _ = app.emit("window-focused", false).ok();
                                 });
                             } else {
@@ -1073,6 +1137,8 @@ impl ShowRewindWindow {
             #[cfg(target_os = "macos")]
             {
                 // Hide whichever main panel is active (could be "main" or "main-window")
+                // Restore the previously frontmost app to prevent Space switching.
+                restore_frontmost_app();
                 let app_clone = app.clone();
                 run_on_main_thread_safe(app, move || {
                     for label in &["main", "main-window"] {
