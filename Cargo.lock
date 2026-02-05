@@ -6629,12 +6629,15 @@ name = "screenpipe-apple-intelligence"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "chrono",
  "reqwest 0.12.12",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-stream",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
