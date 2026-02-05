@@ -435,6 +435,9 @@ impl ShowRewindWindow {
                         let sharing: u64 = if capturable { 1 } else { 0 };
                         let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
                         save_frontmost_app();
+                        unsafe {
+                            let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
+                        }
                         panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
                         unsafe {
@@ -512,6 +515,10 @@ impl ShowRewindWindow {
                         // can restore it on hide (prevents Space switching).
                         save_frontmost_app();
 
+                        // Restore alpha in case it was set to 0 by focus-loss handler
+                        unsafe {
+                            let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
+                        }
                         panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
                         // Activate app so WKWebView receives keyboard input,
@@ -740,8 +747,9 @@ impl ShowRewindWindow {
                                     // NSWindowSharingNone=0 hides from screen recorders, NSWindowSharingReadOnly=1 allows capture
                                     let sharing: u64 = if capturable { 1 } else { 0 };
                                     let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
+                                    // Don't set MoveToActiveSpace here — it's set temporarily
+                                    // in show_existing_main and removed after showing.
                                     panel.set_collection_behaviour(
-                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
                                 }
@@ -756,6 +764,20 @@ impl ShowRewindWindow {
                         match event {
                             tauri::WindowEvent::Focused(is_focused) => {
                                 if !is_focused {
+                                    // Immediately make panel invisible to prevent
+                                    // blink during Space transition animations.
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        let app_for_alpha = app_clone.clone();
+                                        run_on_main_thread_safe(&app_clone, move || {
+                                            use objc::{msg_send, sel, sel_impl};
+                                            if let Ok(panel) = app_for_alpha.get_webview_panel("main-window") {
+                                                unsafe {
+                                                    let _: () = msg_send![&*panel, setAlphaValue: 0.0f64];
+                                                }
+                                            }
+                                        });
+                                    }
                                     focus_cancel.store(false, std::sync::atomic::Ordering::SeqCst);
                                     let cancel = focus_cancel.clone();
                                     let app = app_clone.clone();
@@ -770,6 +792,18 @@ impl ShowRewindWindow {
                                     });
                                 } else {
                                     focus_cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        let app_for_alpha = app_clone.clone();
+                                        run_on_main_thread_safe(&app_clone, move || {
+                                            use objc::{msg_send, sel, sel_impl};
+                                            if let Ok(panel) = app_for_alpha.get_webview_panel("main-window") {
+                                                unsafe {
+                                                    let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
+                                                }
+                                            }
+                                        });
+                                    }
                                     let _ = app_clone.emit("window-focused", true);
                                 }
                             }
@@ -954,8 +988,10 @@ impl ShowRewindWindow {
                                 let sharing: u64 = if capturable { 1 } else { 0 };
                                 let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
 
+                                // Don't set MoveToActiveSpace here — it's set temporarily
+                                // in show_existing_main and removed after showing so the
+                                // panel doesn't follow Space transitions.
                                 panel.set_collection_behaviour(
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
@@ -976,6 +1012,25 @@ impl ShowRewindWindow {
                         tauri::WindowEvent::Focused(is_focused) => {
                             if !is_focused {
                                 info!("Main window lost focus, scheduling hide (300ms debounce)");
+                                // Immediately make panel invisible so it doesn't
+                                // show during Space transition animations. The
+                                // actual order_out happens after the debounce.
+                                #[cfg(target_os = "macos")]
+                                {
+                                    let lbl = {
+                                        let mode = MAIN_CREATED_MODE.lock().unwrap().clone();
+                                        main_label_for_mode(&mode).to_string()
+                                    };
+                                    let app_for_alpha = app_clone.clone();
+                                    run_on_main_thread_safe(&app_clone, move || {
+                                        use objc::{msg_send, sel, sel_impl};
+                                        if let Ok(panel) = app_for_alpha.get_webview_panel(&lbl) {
+                                            unsafe {
+                                                let _: () = msg_send![&*panel, setAlphaValue: 0.0f64];
+                                            }
+                                        }
+                                    });
+                                }
                                 focus_cancel.store(false, std::sync::atomic::Ordering::SeqCst);
                                 let cancel = focus_cancel.clone();
                                 let app = app_clone.clone();
@@ -991,8 +1046,24 @@ impl ShowRewindWindow {
                                     let _ = app.emit("window-focused", false).ok();
                                 });
                             } else {
-                                // Cancel any pending hide
+                                // Cancel any pending hide and restore visibility
                                 focus_cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+                                #[cfg(target_os = "macos")]
+                                {
+                                    let lbl = {
+                                        let mode = MAIN_CREATED_MODE.lock().unwrap().clone();
+                                        main_label_for_mode(&mode).to_string()
+                                    };
+                                    let app_for_alpha = app_clone.clone();
+                                    run_on_main_thread_safe(&app_clone, move || {
+                                        use objc::{msg_send, sel, sel_impl};
+                                        if let Ok(panel) = app_for_alpha.get_webview_panel(&lbl) {
+                                            unsafe {
+                                                let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
+                                            }
+                                        }
+                                    });
+                                }
                                 let _ = app_clone.emit("window-focused", true).ok();
                             }
                         }
