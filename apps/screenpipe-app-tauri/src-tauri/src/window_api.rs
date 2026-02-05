@@ -443,6 +443,10 @@ impl ShowRewindWindow {
                             let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
                         }
                         panel.make_key_window();
+                        // Remove MoveToActiveSpace so panel stays pinned to this Space
+                        panel.set_collection_behaviour(
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                        );
                         let _ = app_clone.emit("window-focused", true);
                     }
                 });
@@ -496,6 +500,9 @@ impl ShowRewindWindow {
                         // Update screen capture sharing type
                         let sharing: u64 = if capturable { 1 } else { 0 };
                         let _: () = unsafe { objc::msg_send![&*panel, setSharingType: sharing] };
+                        // MoveToActiveSpace so the panel appears on the current Space,
+                        // then we remove it after showing so the panel doesn't
+                        // follow the user to other Spaces (which caused a blink).
                         panel.set_collection_behaviour(
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
@@ -514,6 +521,15 @@ impl ShowRewindWindow {
                             let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
                         }
                         panel.make_key_window();
+
+                        // Remove MoveToActiveSpace now that the panel is shown.
+                        // This keeps it pinned to THIS Space so it won't follow
+                        // three-finger swipes (no blink on the destination Space).
+                        panel.set_collection_behaviour(
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                        );
+
                         let _ = app_clone.emit("window-focused", true);
                     }
                 });
