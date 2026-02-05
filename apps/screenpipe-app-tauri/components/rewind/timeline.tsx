@@ -12,7 +12,7 @@ import { addDays, endOfDay, isAfter, isSameDay, startOfDay, subDays } from "date
 import { getStartDate } from "@/lib/actions/get-start-date";
 import { useTimelineData } from "@/lib/hooks/use-timeline-data";
 import { useCurrentFrame } from "@/lib/hooks/use-current-frame";
-import { TimelineSlider } from "@/components/rewind/timeline/timeline";
+import { TimelineSlider, getFrameAppName } from "@/components/rewind/timeline/timeline";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { hasFramesForDate } from "@/lib/actions/has-frames-date";
 import { CurrentFrameTimeline } from "@/components/rewind/current-frame-timeline";
@@ -563,13 +563,15 @@ export default function Timeline() {
 				});
 			} else if (dir === "prev-app" || dir === "next-app") {
 				setCurrentIndex((prev) => {
-					const currentApp = frames[prev]?.devices?.[0]?.metadata?.app_name;
+					const currentApp = getFrameAppName(frames[prev]);
+					// prev-app = go back in time = increase index
+					// next-app = go forward in time = decrease index
 					const step = dir === "prev-app" ? 1 : -1;
 					let i = prev + step;
-					// Skip frames with the same app
+					// Skip frames with the same app to find the boundary
 					while (i >= 0 && i < frames.length) {
-						const app = frames[i]?.devices?.[0]?.metadata?.app_name;
-						if (app && app !== currentApp) {
+						const app = getFrameAppName(frames[i]);
+						if (app !== currentApp) {
 							if (frames[i]) setCurrentFrame(frames[i]);
 							return i;
 						}

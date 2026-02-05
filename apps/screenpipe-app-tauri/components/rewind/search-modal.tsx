@@ -8,7 +8,7 @@ import { format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { commands } from "@/lib/utils/tauri";
 import { emit } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -77,48 +77,20 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
     resetSearch,
   } = useKeywordSearchStore();
 
-  // Focus input when modal opens - use multiple strategies to ensure focus works
+  // Focus input when modal opens
   useEffect(() => {
     if (isOpen) {
       setSelectedIndex(0);
       setQuery("");
       resetSearch();
 
-      // Multiple focus attempts to handle various timing scenarios
-      const focusInput = () => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          // Also set selection to end of any existing text
-          const len = inputRef.current.value.length;
-          inputRef.current.setSelectionRange(len, len);
-        }
-      };
-
-      // First, ensure the Tauri window has focus (important for global shortcuts)
-      getCurrentWindow().setFocus().catch(() => {});
-
-      // Immediate attempt
-      focusInput();
-
-      // After microtask (React state updates)
-      queueMicrotask(focusInput);
-
-      // After paint (requestAnimationFrame)
+      // Single rAF is enough — the NSPanel is now made key window
+      // on show, so the input can receive focus immediately.
       const rafId = requestAnimationFrame(() => {
-        focusInput();
-        // And once more after another frame for good measure
-        requestAnimationFrame(focusInput);
+        inputRef.current?.focus();
       });
 
-      // Fallback with longer delay for Tauri window focus scenarios
-      const timer = setTimeout(focusInput, 100);
-      const timer2 = setTimeout(focusInput, 200);
-
-      return () => {
-        cancelAnimationFrame(rafId);
-        clearTimeout(timer);
-        clearTimeout(timer2);
-      };
+      return () => cancelAnimationFrame(rafId);
     }
   }, [isOpen, resetSearch]);
 

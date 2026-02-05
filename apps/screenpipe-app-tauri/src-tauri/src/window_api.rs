@@ -377,6 +377,7 @@ impl ShowRewindWindow {
                         let sharing: u64 = if capturable { 1 } else { 0 };
                         let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
                         panel.order_front_regardless();
+                        panel.make_key_window();
                         let _ = app_clone.emit("window-focused", true);
                     }
                 });
@@ -439,6 +440,7 @@ impl ShowRewindWindow {
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                         );
                         panel.order_front_regardless();
+                        panel.make_key_window();
                         let _ = app_clone.emit("window-focused", true);
                     }
                 });
