@@ -1282,20 +1282,36 @@ impl ShowRewindWindow {
         if id.label() == RewindWindowId::Main.label() {
             #[cfg(target_os = "macos")]
             {
-                // Hide whichever main panel is active (could be "main" or "main-window")
-                // Restore the previously frontmost app to prevent Space switching.
-                restore_frontmost_app();
+                // Hide whichever main panel is active (could be "main" or "main-window").
+                //
+                // IMPORTANT: order_out MUST happen BEFORE restore_frontmost_app().
+                // Previously restore ran first (synchronous) while order_out was
+                // dispatched async. This caused a focus bounce: the panel lost key
+                // status (alpha→0), then NSNonactivatingPanelMask let it reassert
+                // key (alpha→1), and only THEN did order_out run — creating a
+                // visible "blink and comes back" artifact.
+                //
+                // By doing both inside one run_on_main_thread_safe closure with
+                // order_out first, the panel is off-screen before the previous app
+                // is reactivated, so no focus events can bounce back to it.
                 let app_clone = app.clone();
                 run_on_main_thread_safe(app, move || {
+                    use objc::{msg_send, sel, sel_impl};
                     for label in &["main", "main-window"] {
                         if let Ok(panel) = app_clone.get_webview_panel(label) {
                             if panel.is_visible() {
+                                // Alpha=0 first for instant visual hide
+                                unsafe {
+                                    let _: () = msg_send![&*panel, setAlphaValue: 0.0f64];
+                                }
                                 panel.order_out(None);
                             }
                         }
                     }
+                    // Now that the panel is off-screen, safely restore the
+                    // previous app without triggering focus events on our panel.
+                    restore_frontmost_app();
                 });
-
             }
 
             #[cfg(not(target_os = "macos"))]

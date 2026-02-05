@@ -185,11 +185,39 @@ pub fn update_show_screenpipe_shortcut(
         return Ok(());
     }
 
-    // Register the new shortcut
+    // Register the new shortcut with toggle logic (show if hidden, hide if visible)
     if let Err(e) = app_handle.global_shortcut().on_shortcut(
         show_window_shortcut,
         move |app_handle, _event, _shortcut| {
-            show_main_window(app_handle, true);
+            #[cfg(target_os = "macos")]
+            {
+                use crate::window_api::main_label_for_mode;
+                use crate::store::SettingsStore;
+                let mode = SettingsStore::get(app_handle)
+                    .unwrap_or_default()
+                    .unwrap_or_default()
+                    .overlay_mode;
+                let label = main_label_for_mode(&mode);
+                if let Some(window) = app_handle.get_webview_window(label) {
+                    match window.is_visible() {
+                        Ok(true) => hide_main_window(app_handle),
+                        _ => show_main_window(app_handle, true),
+                    }
+                } else {
+                    show_main_window(app_handle, true);
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    match window.is_visible() {
+                        Ok(true) => hide_main_window(app_handle),
+                        _ => show_main_window(app_handle, true),
+                    }
+                } else {
+                    show_main_window(app_handle, true);
+                }
+            }
         },
     ) {
         info!("failed to register shortcut: {}", e);
