@@ -56,6 +56,11 @@ pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
                error!("Failed to set focus on main window: {}", e);
            }
 
+           // Emit window-focused so the timeline refreshes immediately.
+           // Without this, opening via tray/shortcut (where the window was
+           // already "focused" or never lost focus) wouldn't trigger a re-fetch.
+           let _ = app_handle.emit("window-focused", true);
+
            // Register window-specific shortcuts (Escape, Ctrl+Cmd+K) on a separate task
            // IMPORTANT: This MUST be spawned async to avoid deadlock when called from
            // within a global shortcut callback (the callback holds the shortcut manager lock)

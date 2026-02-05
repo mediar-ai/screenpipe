@@ -238,7 +238,7 @@ async unregisterWindowShortcuts() : Promise<Result<null, string>> {
 }
 },
 /**
- * Suspend arrow key shortcuts (call when search/chat modal opens)
+ * Suspend arrow shortcuts (called from JS when search/chat modal opens)
  */
 async suspendArrowShortcuts() : Promise<Result<null, string>> {
     try {
@@ -249,7 +249,7 @@ async suspendArrowShortcuts() : Promise<Result<null, string>> {
 }
 },
 /**
- * Resume arrow key shortcuts (call when search/chat modal closes)
+ * Resume arrow shortcuts (called from JS when search/chat modal closes)
  */
 async resumeArrowShortcuts() : Promise<Result<null, string>> {
     try {
