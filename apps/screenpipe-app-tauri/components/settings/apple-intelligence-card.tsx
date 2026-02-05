@@ -316,17 +316,17 @@ export function AppleIntelligenceCard() {
                 }}
                 disabled={isExtracting}
                 size="sm"
-                className="gap-1.5 h-7 text-xs"
+                className="gap-1.5 h-7 text-xs min-w-[120px]"
               >
                 {isExtracting ? (
                   <>
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Extracting...
+                    <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+                    <span>extracting...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="h-3 w-3" />
-                    Extract TODOs
+                    <Sparkles className="h-3 w-3 flex-shrink-0" />
+                    <span>extract todos</span>
                   </>
                 )}
               </Button>
