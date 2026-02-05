@@ -93,22 +93,20 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         });
         if (res.ok) {
           const data = await res.json();
+          // Server responded — engine is running
+          // audio_status/frame_status: "ok" = capturing, "not_started" = waiting, "disabled" = off, "stale" = old
+          const audioOk = data.audio_status === "ok" || data.audio_status === "disabled";
+          const visionOk = data.frame_status === "ok" || data.frame_status === "disabled";
+
           setProgress((prev) => ({
             ...prev,
             serverStarted: true,
-            audioReady:
-              data.status === "healthy" ||
-              (data.frame_status === "ok") ||
-              (data.audio_status === "ok") ||
-              prev.audioReady,
-            visionReady:
-              data.status === "healthy" ||
-              (data.frame_status === "ok") ||
-              prev.visionReady,
+            audioReady: audioOk || prev.audioReady,
+            visionReady: visionOk || prev.visionReady,
           }));
 
-          // If health says healthy, we're recording
-          if (data.status === "healthy") {
+          // If both subsystems are ok/disabled, we're recording
+          if (data.status === "healthy" || (audioOk && visionOk)) {
             setSetupState("recording");
           }
         }
@@ -411,7 +409,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                 <span className="font-mono text-xs">screen recording</span>
               </div>
               {screenGranted ? (
-                <Check className="w-4 h-4 text-green-400" strokeWidth={2} />
+                <Check className="w-4 h-4 text-foreground" strokeWidth={2} />
               ) : (
                 <span className="font-mono text-[10px] text-muted-foreground group-hover:text-background/70">enable</span>
               )}
@@ -426,7 +424,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                 <span className="font-mono text-xs">microphone</span>
               </div>
               {audioGranted ? (
-                <Check className="w-4 h-4 text-green-400" strokeWidth={2} />
+                <Check className="w-4 h-4 text-foreground" strokeWidth={2} />
               ) : (
                 <span className="font-mono text-[10px] text-muted-foreground group-hover:text-background/70">enable</span>
               )}
@@ -442,7 +440,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
                   <span className="font-mono text-xs">accessibility</span>
                 </div>
                 {accessibilityGranted ? (
-                  <Check className="w-4 h-4 text-green-400" strokeWidth={2} />
+                  <Check className="w-4 h-4 text-foreground" strokeWidth={2} />
                 ) : (
                   <span className="font-mono text-[10px] text-muted-foreground group-hover:text-background/70">enable</span>
                 )}

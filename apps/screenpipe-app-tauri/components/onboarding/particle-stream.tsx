@@ -1,56 +1,46 @@
 "use client";
 
-import React, { useEffect, useRef, useMemo } from "react";
-import { motion, useAnimation, AnimatePresence } from "framer-motion";
+import React, { useEffect, useRef } from "react";
+import { motion } from "framer-motion";
 
-interface Particle {
-  id: number;
-  x: number;
-  y: number;
-  size: number;
-  speed: number;
-  opacity: number;
-  delay: number;
-}
-
-interface ParticleStreamProps {
-  /** 0 → 1 progress. Controls density, speed, glow intensity */
+interface MemoryGridProps {
   progress: number;
-  /** Width of the container */
   width?: number;
-  /** Height of the container */
   height?: number;
   className?: string;
 }
 
 /**
- * Animated particle stream that flows through a pipe shape.
- * Particles are sparse at low progress, dense and fast at high progress.
- * The pipe glows brighter as progress increases.
+ * Memory Grid — sharp monochrome animation.
+ * A grid of screen-frame rectangles that materialize as the system boots.
+ * Scan line sweeps across, "capturing" each cell. Cells fill with faint
+ * data patterns. Connected by thin circuit-like lines.
+ * 
+ * Evokes: screen capture, infinite memory, AI indexing.
+ * Style: black & white, sharp corners, no curves.
  */
 export function ParticleStream({
   progress,
   width = 400,
   height = 200,
   className = "",
-}: ParticleStreamProps) {
+}: MemoryGridProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
-  const particlesRef = useRef<Array<{
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    size: number;
-    opacity: number;
-    life: number;
-    maxLife: number;
-    hue: number;
-  }>>([]);
   const timeRef = useRef(0);
   const progressRef = useRef(progress);
+  const cellsRef = useRef<Array<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    revealed: boolean;
+    revealTime: number;
+    brightness: number;
+    scanLines: number[];
+  }>>([]);
+  const initializedRef = useRef(false);
 
-  // Keep progress ref in sync
   useEffect(() => {
     progressRef.current = progress;
   }, [progress]);
@@ -62,177 +52,205 @@ export function ParticleStream({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // HiDPI support
     const dpr = window.devicePixelRatio || 1;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
 
-    const pipeY = height / 2;
-    const pipeHeight = 40;
-    const pipeLeft = width * 0.1;
-    const pipeRight = width * 0.9;
-    const pipeWidth = pipeRight - pipeLeft;
+    // Grid setup
+    const cols = 8;
+    const rows = 4;
+    const gap = 3;
+    const marginX = 20;
+    const marginY = 16;
+    const cellW = (width - marginX * 2 - gap * (cols - 1)) / cols;
+    const cellH = (height - marginY * 2 - gap * (rows - 1)) / rows;
 
-    // Pipe entrance/exit shapes
-    const capRadius = pipeHeight / 2;
-
-    function spawnParticle() {
-      const p = progressRef.current;
-      // More particles at higher progress
-      const baseCount = 2 + Math.floor(p * 8);
-      const speed = 1.5 + p * 4;
-
-      for (let i = 0; i < baseCount; i++) {
-        // Spawn from left side with slight random spread
-        const yOffset = (Math.random() - 0.5) * pipeHeight * 0.7;
-        particlesRef.current.push({
-          x: pipeLeft - 10 + Math.random() * 20,
-          y: pipeY + yOffset,
-          vx: speed * (0.7 + Math.random() * 0.6),
-          vy: (Math.random() - 0.5) * 0.3,
-          size: 1.5 + Math.random() * 2.5 + p * 1.5,
-          opacity: 0.3 + Math.random() * 0.5 + p * 0.2,
-          life: 0,
-          maxLife: 100 + Math.random() * 60,
-          hue: 200 + Math.random() * 40 + p * 20, // blue → cyan as progress increases
-        });
+    // Initialize cells once
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      const cells: typeof cellsRef.current = [];
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const x = marginX + col * (cellW + gap);
+          const y = marginY + row * (cellH + gap);
+          // Generate random scan line positions for each cell
+          const numLines = 3 + Math.floor(Math.random() * 4);
+          const scanLines: number[] = [];
+          for (let l = 0; l < numLines; l++) {
+            scanLines.push(Math.random());
+          }
+          cells.push({
+            x, y,
+            w: cellW,
+            h: cellH,
+            revealed: false,
+            revealTime: 0,
+            brightness: 0,
+            scanLines,
+          });
+        }
       }
+      cellsRef.current = cells;
     }
+
+    // Scan line state
+    let scanX = -40;
+    let scanSpeed = 0.8;
 
     function draw() {
       const p = progressRef.current;
       timeRef.current += 1;
+      const t = timeRef.current;
 
-      // Clear canvas fully each frame (transparent background blends with page)
-      ctx!.globalCompositeOperation = "source-over";
       ctx!.clearRect(0, 0, width, height);
 
-      // Draw pipe body (subtle)
-      const pipeOpacity = 0.06 + p * 0.08;
-      ctx!.save();
-      ctx!.beginPath();
-      ctx!.roundRect(pipeLeft, pipeY - pipeHeight / 2, pipeWidth, pipeHeight, capRadius);
-      ctx!.fillStyle = `rgba(120, 180, 255, ${pipeOpacity})`;
-      ctx!.fill();
-
-      // Pipe border glow
-      ctx!.strokeStyle = `rgba(100, 160, 255, ${0.1 + p * 0.15})`;
-      ctx!.lineWidth = 1;
-      ctx!.stroke();
-      ctx!.restore();
-
-      // Center glow that intensifies with progress
-      if (p > 0.3) {
-        const glowIntensity = (p - 0.3) / 0.7;
-        const gradient = ctx!.createRadialGradient(
-          width / 2, pipeY, 0,
-          width / 2, pipeY, pipeWidth * 0.4
-        );
-        gradient.addColorStop(0, `rgba(100, 180, 255, ${glowIntensity * 0.12})`);
-        gradient.addColorStop(0.5, `rgba(80, 140, 255, ${glowIntensity * 0.05})`);
-        gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
-        ctx!.fillStyle = gradient;
-        ctx!.fillRect(0, 0, width, height);
+      // Update scan line
+      scanSpeed = 0.6 + p * 2.0;
+      scanX += scanSpeed;
+      if (scanX > width + 40) {
+        scanX = -40;
       }
 
-      // Spawn particles
-      if (timeRef.current % Math.max(1, Math.floor(4 - p * 3)) === 0) {
-        spawnParticle();
-      }
+      const cells = cellsRef.current;
 
-      // Update & draw particles
-      ctx!.globalCompositeOperation = "lighter";
-      const particles = particlesRef.current;
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const particle = particles[i];
-        particle.life += 1;
-        particle.x += particle.vx;
-        particle.y += particle.vy;
+      // How many cells should be revealed based on progress
+      const targetRevealed = Math.floor(p * cells.length);
 
-        // Gentle sine wave motion
-        particle.y += Math.sin(particle.life * 0.05 + particle.x * 0.01) * 0.3;
-
-        // Constrain to pipe vertically (soft bounce)
-        const distFromCenter = Math.abs(particle.y - pipeY);
-        if (distFromCenter > pipeHeight * 0.4) {
-          particle.vy -= (particle.y - pipeY) * 0.02;
+      // Reveal cells as scan line passes over them
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        if (!cell.revealed && scanX > cell.x + cell.w * 0.5 && i < targetRevealed + 4) {
+          cell.revealed = true;
+          cell.revealTime = t;
         }
 
-        // Fade in at start, fade out at end
-        const lifeRatio = particle.life / particle.maxLife;
-        const fadeIn = Math.min(1, particle.life / 10);
-        const fadeOut = particle.x > pipeRight - 30 ? Math.max(0, (pipeRight - particle.x) / 30) : 1;
-        const alpha = particle.opacity * fadeIn * fadeOut;
+        // Animate brightness
+        if (cell.revealed) {
+          const age = t - cell.revealTime;
+          const targetBright = i < targetRevealed ? 1 : 0.3;
+          cell.brightness += (targetBright - cell.brightness) * 0.05;
+        } else {
+          cell.brightness *= 0.95;
+        }
+      }
 
-        if (particle.x > pipeRight + 20 || particle.life > particle.maxLife || alpha <= 0) {
-          particles.splice(i, 1);
-          continue;
+      // Draw connection lines between revealed cells (circuit-board style)
+      ctx!.strokeStyle = `rgba(120, 120, 120, ${0.06 + p * 0.08})`;
+      ctx!.lineWidth = 0.5;
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        if (!cell.revealed || cell.brightness < 0.1) continue;
+
+        const cx = cell.x + cell.w / 2;
+        const cy = cell.y + cell.h / 2;
+
+        // Connect to right neighbor
+        if (i % cols < cols - 1) {
+          const right = cells[i + 1];
+          if (right.revealed && right.brightness > 0.1) {
+            const rx = right.x + right.w / 2;
+            ctx!.globalAlpha = Math.min(cell.brightness, right.brightness) * 0.5;
+            ctx!.beginPath();
+            ctx!.moveTo(cell.x + cell.w, cy);
+            ctx!.lineTo(right.x, cy);
+            ctx!.stroke();
+          }
         }
 
-        // Draw particle with glow
-        const glowSize = particle.size * 3;
-        const gradient = ctx!.createRadialGradient(
-          particle.x, particle.y, 0,
-          particle.x, particle.y, glowSize
-        );
-        gradient.addColorStop(0, `hsla(${particle.hue}, 85%, 75%, ${alpha})`);
-        gradient.addColorStop(0.3, `hsla(${particle.hue}, 75%, 65%, ${alpha * 0.6})`);
-        gradient.addColorStop(0.6, `hsla(${particle.hue}, 65%, 55%, ${alpha * 0.2})`);
-        gradient.addColorStop(1, `hsla(${particle.hue}, 60%, 50%, 0)`);
+        // Connect to bottom neighbor
+        if (i + cols < cells.length) {
+          const bottom = cells[i + cols];
+          if (bottom.revealed && bottom.brightness > 0.1) {
+            ctx!.globalAlpha = Math.min(cell.brightness, bottom.brightness) * 0.4;
+            ctx!.beginPath();
+            ctx!.moveTo(cx, cell.y + cell.h);
+            ctx!.lineTo(cx, bottom.y);
+            ctx!.stroke();
+          }
+        }
+      }
+      ctx!.globalAlpha = 1;
 
-        ctx!.beginPath();
-        ctx!.arc(particle.x, particle.y, glowSize, 0, Math.PI * 2);
-        ctx!.fillStyle = gradient;
-        ctx!.fill();
+      // Draw cells
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        if (cell.brightness < 0.01) continue;
 
-        // Core bright dot
-        ctx!.beginPath();
-        ctx!.arc(particle.x, particle.y, particle.size * 0.5, 0, Math.PI * 2);
-        ctx!.fillStyle = `hsla(${particle.hue}, 90%, 85%, ${alpha})`;
-        ctx!.fill();
+        const b = cell.brightness;
+
+        // Cell background — sharp rectangle
+        const bgGray = Math.round(30 + b * 20);
+        ctx!.fillStyle = `rgba(${bgGray}, ${bgGray}, ${bgGray}, ${b * 0.35})`;
+        ctx!.fillRect(cell.x, cell.y, cell.w, cell.h);
+
+        // Cell border — sharp
+        const borderGray = Math.round(80 + b * 60);
+        ctx!.strokeStyle = `rgba(${borderGray}, ${borderGray}, ${borderGray}, ${b * 0.4})`;
+        ctx!.lineWidth = 0.5;
+        ctx!.strokeRect(cell.x, cell.y, cell.w, cell.h);
+
+        // Scan line pattern inside cell (faint horizontal lines = "screen data")
+        if (b > 0.3) {
+          for (const linePos of cell.scanLines) {
+            const ly = cell.y + linePos * cell.h;
+            const lineAlpha = (b - 0.3) * 0.25;
+            const lineGray = 100 + Math.round(b * 40);
+            ctx!.strokeStyle = `rgba(${lineGray}, ${lineGray}, ${lineGray}, ${lineAlpha})`;
+            ctx!.lineWidth = 0.5;
+            ctx!.beginPath();
+            ctx!.moveTo(cell.x + 2, ly);
+            ctx!.lineTo(cell.x + cell.w - 2, ly);
+            ctx!.stroke();
+          }
+        }
+
+        // Subtle flicker on recently revealed cells
+        if (cell.revealed) {
+          const age = t - cell.revealTime;
+          if (age < 30) {
+            const flickerAlpha = (1 - age / 30) * 0.15;
+            ctx!.fillStyle = `rgba(200, 200, 200, ${flickerAlpha})`;
+            ctx!.fillRect(cell.x, cell.y, cell.w, cell.h);
+          }
+        }
+
+        // Small "node" dot at top-left corner of revealed cells
+        if (b > 0.5) {
+          const nodeSize = 1.5;
+          const nodeGray = Math.round(150 + b * 80);
+          const nodePulse = 0.6 + Math.sin(t * 0.03 + i * 0.7) * 0.4;
+          ctx!.fillStyle = `rgba(${nodeGray}, ${nodeGray}, ${nodeGray}, ${b * nodePulse * 0.7})`;
+          ctx!.fillRect(cell.x - nodeSize / 2, cell.y - nodeSize / 2, nodeSize, nodeSize);
+        }
       }
 
-      // Draw entrance/exit caps with glow
-      ctx!.globalCompositeOperation = "source-over";
+      // Scan line — sharp vertical line sweeping across
+      const scanAlpha = 0.15 + p * 0.2;
+      const scanWidth = 2;
+      // Main line
+      ctx!.fillStyle = `rgba(200, 200, 200, ${scanAlpha})`;
+      ctx!.fillRect(scanX, marginY - 4, scanWidth, height - marginY * 2 + 8);
 
-      // Left cap (entrance) — brighter glow when particles enter
-      const entranceGlow = ctx!.createRadialGradient(
-        pipeLeft, pipeY, capRadius * 0.5,
-        pipeLeft, pipeY, capRadius * 2.5
-      );
-      entranceGlow.addColorStop(0, `rgba(100, 180, 255, ${0.15 + p * 0.2})`);
-      entranceGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-      ctx!.fillStyle = entranceGlow;
-      ctx!.fillRect(pipeLeft - capRadius * 2.5, pipeY - capRadius * 2.5, capRadius * 5, capRadius * 5);
-
-      // Right cap (exit) — glows green when progress is high
-      const exitHue = p > 0.7 ? 140 : 210; // blue → green
-      const exitGlow = ctx!.createRadialGradient(
-        pipeRight, pipeY, capRadius * 0.5,
-        pipeRight, pipeY, capRadius * 2.5
-      );
-      exitGlow.addColorStop(0, `hsla(${exitHue}, 70%, 60%, ${0.1 + p * 0.25})`);
-      exitGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-      ctx!.fillStyle = exitGlow;
-      ctx!.fillRect(pipeRight - capRadius * 2.5, pipeY - capRadius * 2.5, capRadius * 5, capRadius * 5);
-
-      // "Ready" burst when progress reaches 1
-      if (p >= 1) {
-        const burstPhase = (timeRef.current % 120) / 120;
-        const burstRadius = capRadius * 3 * burstPhase;
-        const burstAlpha = (1 - burstPhase) * 0.3;
-        const burstGradient = ctx!.createRadialGradient(
-          pipeRight, pipeY, 0,
-          pipeRight, pipeY, burstRadius
-        );
-        burstGradient.addColorStop(0, `rgba(100, 255, 150, ${burstAlpha})`);
-        burstGradient.addColorStop(1, "rgba(100, 255, 150, 0)");
-        ctx!.fillStyle = burstGradient;
-        ctx!.beginPath();
-        ctx!.arc(pipeRight, pipeY, burstRadius, 0, Math.PI * 2);
-        ctx!.fill();
+      // Glow around scan line (using rectangles, not gradients — sharp feel)
+      for (let g = 1; g <= 4; g++) {
+        const glowAlpha = scanAlpha * (0.15 / g);
+        const glowWidth = g * 4;
+        ctx!.fillStyle = `rgba(180, 180, 180, ${glowAlpha})`;
+        ctx!.fillRect(scanX - glowWidth, marginY - 4, glowWidth, height - marginY * 2 + 8);
       }
+
+      // Progress bar at very bottom — thin, sharp
+      const barY = height - 6;
+      const barH = 1;
+      const barWidth = width - marginX * 2;
+      // Track
+      ctx!.fillStyle = `rgba(80, 80, 80, 0.2)`;
+      ctx!.fillRect(marginX, barY, barWidth, barH);
+      // Fill
+      const fillWidth = barWidth * Math.min(1, p);
+      ctx!.fillStyle = `rgba(180, 180, 180, ${0.4 + p * 0.4})`;
+      ctx!.fillRect(marginX, barY, fillWidth, barH);
 
       animFrameRef.current = requestAnimationFrame(draw);
     }
@@ -248,14 +266,13 @@ export function ParticleStream({
     <canvas
       ref={canvasRef}
       style={{ width, height }}
-      className={`${className}`}
+      className={className}
     />
   );
 }
 
 /**
- * Progress steps shown below the particle stream.
- * Minimal — just dots with tiny labels.
+ * Minimal progress dots — monochrome, sharp.
  */
 export function ProgressSteps({
   steps,
@@ -265,38 +282,37 @@ export function ProgressSteps({
   className?: string;
 }) {
   return (
-    <div className={`flex items-center justify-center gap-6 ${className}`}>
+    <div className={`flex items-center justify-center gap-5 ${className}`}>
       {steps.map((step, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={i} className="flex items-center gap-1.5">
           <motion.div
-            className={`w-2 h-2 rounded-full ${
+            className={`w-1 h-1 ${
               step.done
-                ? "bg-green-400"
+                ? "bg-foreground"
                 : step.active
-                ? "bg-blue-400"
-                : "bg-muted-foreground/30"
+                ? "bg-foreground/50"
+                : "bg-foreground/15"
             }`}
             animate={
               step.active
                 ? {
-                    scale: [1, 1.4, 1],
-                    opacity: [0.7, 1, 0.7],
+                    opacity: [0.4, 1, 0.4],
                   }
                 : {}
             }
             transition={
               step.active
-                ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+                ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" }
                 : {}
             }
           />
           <span
-            className={`font-mono text-[10px] ${
+            className={`font-mono text-[9px] tracking-wider uppercase ${
               step.done
-                ? "text-green-400/80"
+                ? "text-foreground"
                 : step.active
-                ? "text-foreground/80"
-                : "text-muted-foreground/40"
+                ? "text-foreground/60"
+                : "text-foreground/20"
             }`}
           >
             {step.label}
