@@ -120,7 +120,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     return () => clearInterval(interval);
   }, [setupState]);
 
-  // Auto-advance to shortcut gate when recording starts OR engine has been running 15s
+  // Auto-advance to shortcut gate when recording starts
   useEffect(() => {
     if (setupState === "recording" && !hasAdvancedRef.current) {
       hasAdvancedRef.current = true;
@@ -136,17 +136,32 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     }
   }, [setupState]);
 
-  // If engine is started but subsystems are slow (model loading), advance after 15s
+  // Unconditional auto-advance: move to shortcut gate after 20s max
+  // regardless of server state. Server boots in background. Don't let
+  // backend issues kill 29% of the funnel.
+  const statusScreenEnteredRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!progress.serverStarted || hasAdvancedRef.current) return;
+    if ((setupState === "starting" || setupState === "ready") && !statusScreenEnteredRef.current) {
+      statusScreenEnteredRef.current = Date.now();
+    }
+    if (!statusScreenEnteredRef.current || hasAdvancedRef.current) return;
+    if (setupState !== "starting" && setupState !== "ready") return;
+
     const timer = setTimeout(() => {
       if (!hasAdvancedRef.current) {
         hasAdvancedRef.current = true;
+        posthog.capture("onboarding_auto_advanced", {
+          reason: "timeout_20s",
+          server_started: progress.serverStarted,
+          audio_ready: progress.audioReady,
+          vision_ready: progress.visionReady,
+          time_spent_ms: Date.now() - mountTimeRef.current,
+        });
         handleNextSlide();
       }
-    }, 15000);
+    }, 20000);
     return () => clearTimeout(timer);
-  }, [progress.serverStarted]);
+  }, [setupState, progress.serverStarted]);
 
   const sendLogs = async () => {
     setIsSendingLogs(true);
