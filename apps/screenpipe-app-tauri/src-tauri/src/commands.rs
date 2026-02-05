@@ -727,6 +727,8 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
                 if matches!(event.state, ShortcutState::Pressed) {
                     if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         info!("Search shortcut triggered");
+                        // Ensure the panel is key window so the search input can receive focus
+                        show_main_window(app, false);
                         let _ = app.emit("open-search", ());
                     })) {
                         tracing::error!("panic in search shortcut handler: {:?}", e);
