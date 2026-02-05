@@ -201,10 +201,12 @@ describe("URL Detection Benchmark", () => {
 			}
 		}
 
-		// Assertions: set reasonable baselines to track regressions
-		expect(precision).toBeGreaterThan(0.5); // at least 50% precision
-		expect(recall).toBeGreaterThan(0.3); // at least 30% recall
-		expect(f1).toBeGreaterThan(0.3); // at least 30% F1
+		// Assertions: baselines to track regressions
+		// Note: many "false positives" are actually real URLs (npmjs.com, chatgpt.com, etc.)
+		// that the ground truth labeling missed. True precision is likely >95%.
+		expect(precision).toBeGreaterThan(0.8); // at least 80% precision
+		expect(recall).toBeGreaterThan(0.9); // at least 90% recall
+		expect(f1).toBeGreaterThan(0.85); // at least 85% F1
 	});
 
 	it("should measure browser_url detection rate", () => {
@@ -437,7 +439,7 @@ describe("URL Detection Benchmark", () => {
 		console.log("╚══════════════════════════════════╝");
 
 		// These are the baselines — any future change should not drop below
-		expect(precision).toBeGreaterThan(0.5);
-		expect(recall).toBeGreaterThan(0.3);
+		expect(precision).toBeGreaterThan(0.8);
+		expect(recall).toBeGreaterThan(0.9);
 	});
 });

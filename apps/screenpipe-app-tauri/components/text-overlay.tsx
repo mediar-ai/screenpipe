@@ -48,8 +48,8 @@ export function isUrl(text: string): boolean {
 		return false;
 	}
 
-	// Reject if any hostname label has 4+ consecutive consonants
-	// (real domains rarely do: "hcnsleodian" has "hcnsl", "npmjs" is borderline but short)
+	// Reject if any hostname label has 5+ consecutive consonants
+	// (real domains like "chatgpt" have 4, but OCR garbage like "hcnsleodian" has 5+)
 	// Only apply to labels longer than 5 chars to allow short acronyms like "npmjs"
 	const labels = hostname.split(".");
 	const vowels = new Set(["a", "e", "i", "o", "u"]);
@@ -59,7 +59,7 @@ export function isUrl(text: string): boolean {
 		for (const ch of label) {
 			if (/[a-z]/.test(ch) && !vowels.has(ch)) {
 				consecutive++;
-				if (consecutive >= 4) return false;
+				if (consecutive >= 5) return false;
 			} else {
 				consecutive = 0;
 			}
