@@ -364,6 +364,7 @@ impl ShowRewindWindow {
                         // Update screen capture sharing type
                         let sharing: u64 = if capturable { 1 } else { 0 };
                         let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
+                        panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
                         panel.make_key_window();
                         let _ = app_clone.emit("window-focused", true);
@@ -424,6 +425,9 @@ impl ShowRewindWindow {
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                         );
+                        // Set content view as first responder so the WKWebView
+                        // receives keyboard input (matches RawNSPanel::show() behavior).
+                        panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
                         // Panel has NSNonactivatingPanelMask + canBecomeKeyWindow=YES,
                         // so makeKeyWindow works without activating the app.

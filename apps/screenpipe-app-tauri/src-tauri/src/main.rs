@@ -1224,10 +1224,10 @@ async fn main() {
                     }
                 });
 
-                // Space monitor disabled — panel uses nonactivating mask so it
-                // no longer triggers Space switches. The monitor was fighting with
-                // the panel's own show/hide and causing feedback loops.
-                // space_monitor::setup_space_listener(app.handle().clone());
+                // Hide overlay when user switches Spaces (e.g. three-finger swipe).
+                // This no longer causes feedback loops because we removed
+                // activateIgnoringOtherApps + activation policy toggling.
+                space_monitor::setup_space_listener(app.handle().clone());
             }
 
             // Logging setup
