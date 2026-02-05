@@ -2,105 +2,39 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Loader2,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  Check,
-  AlertCircle,
-  Sparkles,
-  X,
-  Trash2,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/components/ui/use-toast";
+import { AlertCircle } from "lucide-react";
 import { platform } from "@tauri-apps/plugin-os";
-
-// Apple Intelligence logo — loaded from static asset
-
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-interface TodoItem {
-  text: string;
-  app?: string;
-  urgency: "low" | "medium" | "high";
-}
 
 const API = "http://localhost:3030";
 
-const SYSTEM_PROMPT = `Extract action items as JSON. Output ONLY a JSON array, nothing else.
-Each item must have exactly these fields: "text" (string), "app" (string), "urgency" (one of: "high", "medium", "low").
-Example: [{"text":"Review PR #42","app":"GitHub","urgency":"high"}]
-If no action items, output: []`;
-
-// ─── Component ──────────────────────────────────────────────────────────────
-
 export function AppleIntelligenceCard() {
-  const { toast } = useToast();
   const [os, setOs] = useState<string>("");
-  const [isExpanded, setIsExpanded] = useState(false);
   const [aiStatus, setAiStatus] = useState<
     "unknown" | "available" | "unavailable"
   >("unknown");
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [todosOpen, setTodosOpen] = useState(true);
-  const [lastRun, setLastRun] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [lookbackMinutes, setLookbackMinutes] = useState(30);
+  const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
     setOs(platform());
   }, []);
 
-  // Load cached results
+  // Load enabled state
   useEffect(() => {
     try {
-      const saved = localStorage?.getItem("apple-intelligence-todos");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setTodos(parsed.items || []);
-        if (parsed.lastRun) setLastRun(new Date(parsed.lastRun));
-      }
-      const lb = localStorage?.getItem("apple-intelligence-lookback");
-      if (lb) setLookbackMinutes(parseInt(lb));
+      const stored = localStorage?.getItem("apple-intelligence-enabled");
+      if (stored !== null) setEnabled(stored !== "false");
     } catch {}
   }, []);
 
-  // Persist
-  useEffect(() => {
+  // Save enabled state
+  const toggleEnabled = (val: boolean) => {
+    setEnabled(val);
     try {
-      localStorage?.setItem(
-        "apple-intelligence-todos",
-        JSON.stringify({ items: todos, lastRun: lastRun?.toISOString() })
-      );
+      localStorage?.setItem("apple-intelligence-enabled", String(val));
     } catch {}
-  }, [todos, lastRun]);
-
-  useEffect(() => {
-    try {
-      localStorage?.setItem(
-        "apple-intelligence-lookback",
-        String(lookbackMinutes)
-      );
-    } catch {}
-  }, [lookbackMinutes]);
+  };
 
   // Check AI availability
   const checkStatus = useCallback(async () => {
@@ -124,146 +58,6 @@ export function AppleIntelligenceCard() {
     const interval = setInterval(checkStatus, 30000);
     return () => clearInterval(interval);
   }, [checkStatus]);
-
-  // ─── Extract TODOs ──────────────────────────────────────────────────────
-
-  const runExtraction = async () => {
-    if (isExtracting || aiStatus !== "available") return;
-    setIsExtracting(true);
-    setError(null);
-
-    try {
-      // 1. Fetch recent data from screenpipe
-      const now = new Date();
-      const start = new Date(now.getTime() - lookbackMinutes * 60 * 1000);
-      const params = new URLSearchParams({
-        content_type: "all",
-        start_time: start.toISOString(),
-        end_time: now.toISOString(),
-        limit: "50",
-        min_length: "20",
-      });
-
-      const searchResp = await fetch(`${API}/search?${params}`);
-      if (!searchResp.ok) throw new Error("Failed to fetch screenpipe data");
-      const searchData = await searchResp.json();
-
-      // 2. Build context string from results
-      const parts: string[] = [];
-      for (const item of searchData.data || []) {
-        if (item.type === "OCR") {
-          const c = item.content;
-          const text = c?.text?.trim();
-          if (text) parts.push(`[${c.app_name || "?"}] ${text}`);
-        } else if (item.type === "Audio") {
-          const c = item.content;
-          const text = c?.transcription?.trim();
-          if (text) parts.push(`[Audio] ${text}`);
-        }
-      }
-
-      if (parts.length === 0) {
-        setError("No recent data found");
-        return;
-      }
-
-      // 3. Truncate to fit model context (~1500 chars for content)
-      let context = parts.join("\n");
-      if (context.length > 1500) {
-        context = context.slice(0, 1500);
-      }
-
-      // 4. Single call to generic AI endpoint
-      const aiResp = await fetch(`${API}/ai/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: context },
-          ],
-        }),
-      });
-
-      if (!aiResp.ok) {
-        const err = await aiResp.json().catch(() => ({}));
-        throw new Error(err.error || `AI error: ${aiResp.status}`);
-      }
-
-      const aiData = await aiResp.json();
-      const raw = aiData.choices?.[0]?.message?.content || "[]";
-
-      // 5. Parse JSON (strip markdown fences if present)
-      let jsonStr = raw.trim();
-      if (jsonStr.startsWith("```")) {
-        jsonStr = jsonStr
-          .split("\n")
-          .slice(1)
-          .filter((l: string) => !l.startsWith("```"))
-          .join("\n");
-      }
-
-      const rawItems: any[] = JSON.parse(jsonStr);
-      // Normalize — model sometimes uses "task"/"category" instead of "text"/"app"
-      const valid: TodoItem[] = rawItems
-        .map((t: any) => ({
-          text: t.text || t.task || t.action || t.item || "",
-          app: t.app || t.category || t.source || "",
-          urgency: (["high", "medium", "low"].includes(t.urgency)
-            ? t.urgency
-            : "medium") as "high" | "medium" | "low",
-        }))
-        .filter((t) => t.text.trim());
-
-      setTodos(valid);
-      setLastRun(new Date());
-
-      if (valid.length > 0) {
-        toast({
-          title: `Found ${valid.length} action item${valid.length > 1 ? "s" : ""}`,
-        });
-      } else {
-        toast({ title: "No action items found" });
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-    } finally {
-      setIsExtracting(false);
-    }
-  };
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
-
-  const copyTodos = () => {
-    const text = todos
-      .map(
-        (t, i) =>
-          `${i + 1}. ${t.text}${t.app ? ` (${t.app})` : ""}${t.urgency === "high" ? " ⚡" : ""}`
-      )
-      .join("\n");
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const formatLastRun = (date: Date | null) => {
-    if (!date) return "Never";
-    const diff = Date.now() - date.getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "Just now";
-    if (mins < 60) return `${mins}m ago`;
-    return `${Math.floor(mins / 60)}h ago`;
-  };
-
-  const urgencyIcon = (u: string) =>
-    u === "high" ? "⚡" : u === "medium" ? "●" : "○";
-  const urgencyColor = (u: string) =>
-    u === "high"
-      ? "text-red-500"
-      : u === "medium"
-        ? "text-yellow-500"
-        : "text-muted-foreground";
 
   if (os && os !== "macos") return null;
 
@@ -293,178 +87,39 @@ export function AppleIntelligenceCard() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mb-3">
-              Extract action items from your screen & audio using on-device AI.
-              {aiStatus === "unavailable" && (
-                <span className="block mt-1">
-                  <AlertCircle className="h-3 w-3 inline mr-1" />
-                  Requires macOS 26+ with Apple Intelligence enabled.
-                </span>
-              )}
+
+            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+              Generates a daily summary of your activity in the timeline at 6pm.
+              Includes time breakdown, key moments, action items, and people
+              mentioned. Runs entirely on-device using Apple&apos;s Foundation
+              Models. Only processes when plugged in.
             </p>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                onClick={() => {
-                  if (aiStatus !== "available") {
-                    setError(
-                      "Apple Intelligence not available. Requires macOS 26+ with Apple Intelligence enabled, and the server built with --features apple-intelligence."
-                    );
-                    return;
-                  }
-                  runExtraction();
-                }}
-                disabled={isExtracting}
-                size="sm"
-                className="gap-1.5 h-7 text-xs min-w-[120px]"
-              >
-                {isExtracting ? (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
-                    <span>extracting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-3 w-3 flex-shrink-0" />
-                    <span>extract todos</span>
-                  </>
-                )}
-              </Button>
+            {aiStatus === "unavailable" && (
+              <p className="text-xs text-muted-foreground mb-3">
+                <AlertCircle className="h-3 w-3 inline mr-1" />
+                Requires macOS 26+ with Apple Intelligence enabled.
+              </p>
+            )}
 
-              <Select
-                value={String(lookbackMinutes)}
-                onValueChange={(v) => setLookbackMinutes(parseInt(v))}
-              >
-                <SelectTrigger className="h-7 text-xs w-[90px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="15">15 min</SelectItem>
-                  <SelectItem value="30">30 min</SelectItem>
-                  <SelectItem value="60">1 hour</SelectItem>
-                  <SelectItem value="120">2 hours</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {todos.length > 0 && (
-                <Button
-                  onClick={() => {
-                    setTodos([]);
-                    setLastRun(null);
-                  }}
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 h-7 text-xs text-muted-foreground"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              )}
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={enabled}
+                onCheckedChange={toggleEnabled}
+                disabled={aiStatus !== "available"}
+              />
+              <Label className="text-xs text-muted-foreground">
+                {enabled ? "Daily summaries enabled" : "Daily summaries disabled"}
+              </Label>
             </div>
           </div>
         </div>
-
-        {/* TODO items */}
-        {todos.length > 0 && (
-          <div className="border-t border-border">
-            <Collapsible open={todosOpen} onOpenChange={setTodosOpen}>
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center justify-between w-full px-4 py-2 hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center gap-2">
-                    {todosOpen ? (
-                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                    )}
-                    <span className="text-xs font-medium">Action Items</span>
-                    <Badge
-                      variant="secondary"
-                      className="h-4 px-1.5 text-[10px]"
-                    >
-                      {todos.length}
-                    </Badge>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-[10px] gap-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      copyTodos();
-                    }}
-                  >
-                    {copied ? (
-                      <Check className="h-3 w-3" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="px-4 pb-3 space-y-1">
-                  {todos.map((todo, i) => (
-                    <div
-                      key={i}
-                      className="flex items-start gap-2 py-1.5 px-2 rounded hover:bg-muted/50 group"
-                    >
-                      <span
-                        className={`text-xs mt-0.5 ${urgencyColor(todo.urgency)}`}
-                      >
-                        {urgencyIcon(todo.urgency)}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-foreground leading-relaxed">
-                          {todo.text}
-                        </p>
-                        {todo.app && (
-                          <span className="text-[10px] text-muted-foreground">
-                            {todo.app}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
-                        onClick={() => {
-                          navigator.clipboard.writeText(todo.text);
-                          toast({ title: "Copied" });
-                        }}
-                      >
-                        <Copy className="h-2.5 w-2.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="px-4 py-2 border-t border-border">
-            <div className="flex items-center gap-2 text-xs text-red-500">
-              <AlertCircle className="h-3 w-3 flex-shrink-0" />
-              <span className="truncate">{error}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 w-5 p-0 ml-auto"
-                onClick={() => setError(null)}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Status bar */}
         <div className="px-4 py-2 bg-muted/50 border-t border-border">
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span>
-              Last:{" "}
-              <span className="text-foreground">{formatLastRun(lastRun)}</span>
+              Summaries appear in your timeline · you can also generate manually
             </span>
             <span
               className={`ml-auto ${aiStatus === "available" ? "text-green-500" : ""}`}

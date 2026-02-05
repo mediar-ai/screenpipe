@@ -18,6 +18,7 @@ import { hasFramesForDate } from "@/lib/actions/has-frames-date";
 import { CurrentFrameTimeline } from "@/components/rewind/current-frame-timeline";
 
 import posthog from "posthog-js";
+import { DailySummaryCard } from "@/components/rewind/daily-summary";
 
 export interface StreamTimeSeriesResponse {
 	timestamp: string;
@@ -1093,6 +1094,11 @@ export default function Timeline() {
 							<RotateCcw className="w-4 h-4 text-muted-foreground" />
 						</button>
 					</div>
+				</div>
+
+				{/* Daily Summary — top right, below controls */}
+				<div className="absolute top-[calc(env(safe-area-inset-top)+56px)] right-4 z-40">
+					<DailySummaryCard currentDate={currentDate} />
 				</div>
 
 				{/* Loading/Error States - Progressive loading: only block when no frames yet */}
