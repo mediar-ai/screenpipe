@@ -66,6 +66,21 @@ export function isUrl(text: string): boolean {
 		}
 	}
 
+	// Reject if the registered domain label (right before TLD) has 3+ consecutive
+	// digits embedded between letters (OCR garbage like "var24248qmail.com").
+	// Only check the domain label, not subdomains (which can have hashes like Vercel previews).
+	if (labels.length >= 2) {
+		const domainLabel = labels[labels.length - 2]; // e.g. "var24248qmail" in "var24248qmail.com"
+		if (/[a-z]\d{3,}[a-z]/i.test(domainLabel)) return false;
+	}
+
+	// Reject if any path segment has 3+ consecutive identical characters
+	// (OCR garbage like "sssuesh" — real URL paths never have this)
+	const path = trimmed.split("/").slice(1);
+	for (const seg of path) {
+		if (/(.)\1{2,}/.test(seg)) return false;
+	}
+
 	return true;
 }
 

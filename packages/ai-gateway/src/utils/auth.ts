@@ -165,11 +165,30 @@ async function validateSubscriptionWithId(env: Env, token: string): Promise<{ is
     }
   }
 
-  // Clerk user IDs - for now allow all as subscribed (Agent SDK)
-  // TODO: Add proper subscription checks for Clerk users
+  // Clerk user IDs - check actual subscription via Supabase
   if (CLERK_USER_ID_REGEX.test(token)) {
-    console.log('Allowing Clerk user ID for Agent SDK:', token);
-    return { isValid: true, userId: token };
+    console.log('Clerk user ID detected, checking subscription:', token);
+    try {
+      const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_active_cloud_subscription`, {
+        method: 'POST',
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ input_user_id: token }),
+      });
+      if (response.ok) {
+        const hasSubscription: boolean = await response.json();
+        if (hasSubscription) {
+          return { isValid: true, userId: token };
+        }
+      }
+    } catch (error) {
+      console.error('Error checking Clerk user subscription:', error);
+    }
+    // Not subscribed - don't auto-grant, return false so it falls through
+    return { isValid: false, userId: token };
   }
 
   return { isValid: false };

@@ -30,7 +30,7 @@ export const TIER_CONFIG: Record<UserTier, TierLimits> = {
     ],
   },
   subscribed: {
-    dailyQueries: -1, // unlimited
+    dailyQueries: 200, // hard cap to control Vertex AI costs
     rpm: 30,
     allowedModels: ['*'], // all models
   },
@@ -69,17 +69,6 @@ export async function trackUsage(
 ): Promise<UsageResult> {
   const today = getTodayUTC();
   const limits = TIER_CONFIG[tier];
-
-  // Subscribed users have unlimited queries
-  if (tier === 'subscribed') {
-    return {
-      used: 0,
-      limit: -1,
-      remaining: -1,
-      allowed: true,
-      resetsAt: getNextResetTime(),
-    };
-  }
 
   try {
     // IP-based abuse prevention (catches device ID spoofing)
@@ -178,22 +167,20 @@ export async function getUsageStatus(
 
   let usedToday = 0;
 
-  if (tier !== 'subscribed') {
-    try {
-      const existing = await env.DB.prepare(
-        'SELECT daily_count, last_reset FROM usage WHERE device_id = ?'
-      ).bind(deviceId).first<{ daily_count: number; last_reset: string }>();
+  try {
+    const existing = await env.DB.prepare(
+      'SELECT daily_count, last_reset FROM usage WHERE device_id = ?'
+    ).bind(deviceId).first<{ daily_count: number; last_reset: string }>();
 
-      if (existing && existing.last_reset >= today) {
-        usedToday = existing.daily_count;
-      }
-    } catch (error) {
-      console.error('Error getting usage status:', error);
+    if (existing && existing.last_reset >= today) {
+      usedToday = existing.daily_count;
     }
+  } catch (error) {
+    console.error('Error getting usage status:', error);
   }
 
-  const limitToday = tier === 'subscribed' ? -1 : limits.dailyQueries;
-  const remaining = tier === 'subscribed' ? -1 : Math.max(0, limits.dailyQueries - usedToday);
+  const limitToday = limits.dailyQueries;
+  const remaining = Math.max(0, limits.dailyQueries - usedToday);
 
   const status: UsageStatus = {
     tier,

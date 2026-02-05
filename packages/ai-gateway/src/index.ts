@@ -144,6 +144,47 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 		// The Agent SDK sends requests to ANTHROPIC_VERTEX_BASE_URL/v1/messages
 		if (path === '/v1/messages' && request.method === 'POST') {
 			console.log('Vertex AI proxy request to /v1/messages');
+
+			// Require authentication for Agent SDK
+			if (authResult.tier === 'anonymous') {
+				return addCorsHeaders(createErrorResponse(401, JSON.stringify({
+					error: 'authentication_required',
+					message: 'Vertex AI proxy requires authentication. Please log in to screenpipe.',
+				})));
+			}
+
+			// Check model from body (clone request so proxy can still read it)
+			const clonedRequest = request.clone();
+			try {
+				const body = (await clonedRequest.json()) as { model?: string };
+				const model = body.model || 'claude-haiku-4-5@20251001';
+				if (!isModelAllowed(model, authResult.tier)) {
+					const allowedModels = TIER_CONFIG[authResult.tier].allowedModels;
+					return addCorsHeaders(createErrorResponse(403, JSON.stringify({
+						error: 'model_not_allowed',
+						message: `Model "${model}" is not available for your tier (${authResult.tier}). Available models: ${allowedModels.join(', ')}`,
+						tier: authResult.tier,
+						allowed_models: allowedModels,
+					})));
+				}
+			} catch (e) {
+				// If body parse fails, let the proxy handle the error downstream
+			}
+
+			// Track usage and check daily limit
+			const ipAddress = request.headers.get('cf-connecting-ip') || undefined;
+			const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId, ipAddress);
+			if (!usage.allowed) {
+				return addCorsHeaders(createErrorResponse(429, JSON.stringify({
+					error: 'daily_limit_exceeded',
+					message: `You've used all ${usage.limit} AI queries for today. Resets at ${usage.resetsAt}`,
+					used_today: usage.used,
+					limit_today: usage.limit,
+					resets_at: usage.resetsAt,
+					tier: authResult.tier,
+				})));
+			}
+
 			return await handleVertexProxy(request, env);
 		}
 
