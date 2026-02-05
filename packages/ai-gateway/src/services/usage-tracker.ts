@@ -207,12 +207,12 @@ export async function getUsageStatus(
   // Add upgrade options for non-subscribed users
   if (tier === 'anonymous') {
     status.upgrade_options = {
-      login: { benefit: '+25 daily queries, access to Sonnet model' },
-      subscribe: { benefit: 'Unlimited queries, all models including GPT-4 and Claude Opus' },
+      login: { benefit: '+25 daily queries, more models' },
+      subscribe: { benefit: 'Unlimited queries, all models including Claude Opus' },
     };
   } else if (tier === 'logged_in') {
     status.upgrade_options = {
-      subscribe: { benefit: 'Unlimited queries, all models including GPT-4 and Claude Opus' },
+      subscribe: { benefit: 'Unlimited queries, all models including Claude Opus' },
     };
   }
 
