@@ -800,6 +800,17 @@ impl ShowRewindWindow {
                                         }
                                         #[cfg(target_os = "macos")]
                                         restore_frontmost_app();
+                                        // order_out removes the invisible panel from
+                                        // the screen so it can't receive stray clicks.
+                                        #[cfg(target_os = "macos")]
+                                        {
+                                            let app2 = app.clone();
+                                            let _ = app.run_on_main_thread(move || {
+                                                if let Ok(panel) = app2.get_webview_panel("main-window") {
+                                                    panel.order_out(None);
+                                                }
+                                            });
+                                        }
                                         let _ = app.emit("window-focused", false);
                                     });
                                 } else {
@@ -1048,6 +1059,21 @@ impl ShowRewindWindow {
                                     info!("Main window hiding after debounce");
                                     #[cfg(target_os = "macos")]
                                     restore_frontmost_app();
+                                    // order_out removes the invisible panel so it
+                                    // can't receive stray clicks at alpha=0.
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        let app2 = app.clone();
+                                        let lbl = {
+                                            let mode = MAIN_CREATED_MODE.lock().unwrap().clone();
+                                            main_label_for_mode(&mode).to_string()
+                                        };
+                                        let _ = app.run_on_main_thread(move || {
+                                            if let Ok(panel) = app2.get_webview_panel(&lbl) {
+                                                panel.order_out(None);
+                                            }
+                                        });
+                                    }
                                     let _ = app.emit("window-focused", false).ok();
                                 });
                             } else {
