@@ -711,6 +711,13 @@ jobs:
         with:
           command: release publish ${{ secrets.CN_APP_SLUG }} ${{ env.VERSION }}
           api-key: ${{ secrets.CN_API_KEY }}
+
+      - name: Also publish Beta release
+        uses: crabnebula-dev/cloud-release@v0.2.6
+        continue-on-error: true
+        with:
+          command: release publish ${{ secrets.CN_APP_SLUG_BETA }} ${{ env.VERSION }}
+          api-key: ${{ secrets.CN_API_KEY }}
           
       - name: Create testing notification
         if: needs.check_commit.outputs.should_test == 'true'
