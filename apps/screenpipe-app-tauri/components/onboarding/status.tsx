@@ -125,6 +125,11 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     if (setupState === "recording" && !hasAdvancedRef.current) {
       hasAdvancedRef.current = true;
       const elapsed = Date.now() - mountTimeRef.current;
+      posthog.capture("onboarding_step_reached", {
+        step_name: "recording_started",
+        step_index: 3,
+        time_spent_ms: elapsed,
+      });
       const minDisplay = 1500;
       const delay = Math.max(0, minDisplay - elapsed);
       setTimeout(() => handleNextSlide(), delay);
@@ -240,8 +245,23 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         const accessibilityOk = perms.accessibility === "granted" || perms.accessibility === "notNeeded";
         if (screenOk && audioOk && accessibilityOk && !hasStartedRef.current) {
           setProgress((prev) => ({ ...prev, permissions: true }));
+          posthog.capture("onboarding_step_reached", {
+            step_name: "permissions_granted",
+            step_index: 1,
+            time_spent_ms: Date.now() - mountTimeRef.current,
+            screen: perms.screenRecording,
+            mic: perms.microphone,
+            accessibility: perms.accessibility,
+          });
           setSetupState("ready");
         } else if (!hasStartedRef.current) {
+          posthog.capture("onboarding_step_reached", {
+            step_name: "permissions_needed",
+            step_index: 0,
+            screen: perms.screenRecording,
+            mic: perms.microphone,
+            accessibility: perms.accessibility,
+          });
           setSetupState("needs-permissions");
         }
       } catch (error) {
@@ -311,7 +331,17 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     }
     if (setupState === "ready" || setupState === "starting") {
       setIsStuck(false);
-      stuckTimeoutRef.current = setTimeout(() => setIsStuck(true), STUCK_TIMEOUT_MS);
+      stuckTimeoutRef.current = setTimeout(() => {
+        setIsStuck(true);
+        posthog.capture("onboarding_stuck", {
+          setup_state: setupState,
+          time_spent_ms: Date.now() - mountTimeRef.current,
+          progress_permissions: progress.permissions,
+          progress_server: progress.serverStarted,
+          progress_audio: progress.audioReady,
+          progress_vision: progress.visionReady,
+        });
+      }, STUCK_TIMEOUT_MS);
     } else {
       setIsStuck(false);
     }
@@ -333,7 +363,13 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const handleStartRecording = async () => {
     if (isStartingRef.current) return;
     isStartingRef.current = true;
+    const timeToStart = Date.now() - mountTimeRef.current;
     posthog.capture("screenpipe_setup_start");
+    posthog.capture("onboarding_step_reached", {
+      step_name: "recording_start",
+      step_index: 2,
+      time_spent_ms: timeToStart,
+    });
     setSetupState("starting");
     try {
       const healthCheck = await fetch("http://localhost:3030/health", {

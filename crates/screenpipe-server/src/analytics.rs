@@ -182,3 +182,14 @@ pub fn check_macos_version() {
 pub fn check_macos_version() {
     // Only relevant on macOS
 }
+
+/// Track API usage (called periodically from the server router).
+/// Fires a PostHog event with the number of API requests in the last interval.
+pub fn track_api_usage(request_count: usize) {
+    capture_event_nonblocking(
+        "api_usage_5min",
+        json!({
+            "request_count": request_count,
+        }),
+    );
+}

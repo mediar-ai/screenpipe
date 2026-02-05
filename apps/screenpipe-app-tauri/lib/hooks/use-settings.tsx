@@ -527,11 +527,22 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 				token
 			} as User;
 
-			// if user was not logged in, send posthog event app_login with email
+			// if user was not logged in, send posthog event and bridge identity
 			if (!settings.user?.id) {
 				posthog.capture("app_login", {
 					email: userData.email,
 				});
+				// Bridge app identity → website identity via email alias
+				// This merges the anonymous app profile with any website profile
+				// that used the same email during checkout
+				if (userData.email) {
+					posthog.alias(userData.email);
+					posthog.people?.set({
+						email: userData.email,
+						app_user_id: userData.id,
+						login_source: "app",
+					});
+				}
 			}
 
 			// cache the result

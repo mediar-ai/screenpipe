@@ -121,6 +121,10 @@ pub struct AppState {
     pub sync_handle: Option<Arc<SyncServiceHandle>>,
     /// Runtime sync state (initialized via /sync/init endpoint)
     pub sync_state: SyncState,
+    /// Video quality preset for frame extraction (JPEG quality).
+    pub video_quality: String,
+    /// API request counter for usage analytics
+    pub api_request_count: Arc<AtomicUsize>,
 }
 
 // Update the SearchQuery struct
@@ -1315,6 +1319,7 @@ pub struct SCServer {
     enable_pipe: bool,
     use_pii_removal: bool,
     sync_handle: Option<Arc<SyncServiceHandle>>,
+    video_quality: String,
 }
 
 impl SCServer {
@@ -1329,6 +1334,7 @@ impl SCServer {
         audio_manager: Arc<AudioManager>,
         enable_pipe: bool,
         use_pii_removal: bool,
+        video_quality: String,
     ) -> Self {
         SCServer {
             db,
@@ -1341,6 +1347,7 @@ impl SCServer {
             enable_pipe,
             use_pii_removal,
             sync_handle: None,
+            video_quality,
         }
     }
 
@@ -1376,6 +1383,23 @@ impl SCServer {
     }
 
     pub async fn create_router(&self, enable_frame_cache: bool) -> Router {
+        let api_request_count = Arc::new(AtomicUsize::new(0));
+
+        // Spawn periodic API usage reporter (every 5 minutes)
+        let counter_clone = api_request_count.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(300));
+            loop {
+                interval.tick().await;
+                let count = counter_clone.swap(0, Ordering::Relaxed);
+                if count > 0 {
+                    info!("api_usage_5min: {} requests", count);
+                    // Fire analytics event for API usage tracking
+                    analytics::track_api_usage(count);
+                }
+            }
+        });
+
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
             audio_manager: self.audio_manager.clone(),
@@ -1421,6 +1445,8 @@ impl SCServer {
             sync_handle: self.sync_handle.clone(),
             // Runtime sync state (initialized via /sync/init)
             sync_state: sync_api::new_sync_state(),
+            video_quality: self.video_quality.clone(),
+            api_request_count: api_request_count.clone(),
         });
 
         let cors = CorsLayer::new()
@@ -1497,7 +1523,14 @@ impl SCServer {
             .route("/ws/events", get(ws_events_handler))
             .route("/ws/health", get(ws_health_handler))
             .route("/frames/export", get(handle_video_export_ws))
-            .with_state(app_state)
+            .with_state(app_state.clone())
+            .layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
+                let counter = app_state.api_request_count.clone();
+                async move {
+                    counter.fetch_add(1, Ordering::Relaxed);
+                    next.run(req).await
+                }
+            }))
             .layer(cors)
             .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()))
     }
@@ -3210,7 +3243,8 @@ pub async fn get_frame_data(
         // If not in cache or cache disabled, get from database
         match state.db.get_frame(frame_id).await {
             Ok(Some((file_path, offset_index))) => {
-                match extract_frame_from_video(&file_path, offset_index).await {
+                let jpeg_q = crate::video::video_quality_to_jpeg_q(&state.video_quality);
+                match extract_frame_from_video(&file_path, offset_index, jpeg_q).await {
                     Ok(frame_path) => {
                         // Apply PII redaction if requested
                         if query.redact_pii {

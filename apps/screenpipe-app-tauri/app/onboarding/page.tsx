@@ -86,6 +86,10 @@ export default function OnboardingPage() {
     setIsTransitioning(true);
 
     posthog.capture(`onboarding_${currentSlide}_completed`);
+    posthog.capture("onboarding_step_reached", {
+      step_name: `${currentSlide}_completed`,
+      step_index: currentSlide === "setup" ? 4 : 5,
+    });
 
     try {
       await commands.setOnboardingStep("shortcut");

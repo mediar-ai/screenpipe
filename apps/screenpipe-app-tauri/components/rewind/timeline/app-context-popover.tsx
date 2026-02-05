@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
-import { Copy, Search, X, Globe, AppWindow, Mic, Clock } from "lucide-react";
+import { Copy, Search, X, Globe, AppWindow, Mic, Clock, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
+import { open } from "@tauri-apps/plugin-shell";
+import { commands } from "@/lib/utils/tauri";
 
 interface AppContextData {
 	frameCount: number;
@@ -206,7 +208,7 @@ export function AppContextPopover({
 					</div>
 				)}
 
-				{/* Top URLs */}
+				{/* Top URLs — clickable */}
 				{data.topUrls.length > 0 && (
 					<div className="space-y-1">
 						<div className="flex items-center gap-1.5 text-muted-foreground">
@@ -215,13 +217,18 @@ export function AppContextPopover({
 						</div>
 						<div className="pl-4 space-y-0.5">
 							{data.topUrls.map((u, i) => (
-								<div
+								<button
 									key={i}
-									className="text-popover-foreground truncate"
+									className="flex items-center gap-1 text-blue-400 hover:text-blue-300 truncate w-full text-left transition-colors"
 									title={u.url}
+									onClick={() => {
+										open(u.url).catch(() => {});
+										commands.closeWindow("Main").catch(() => {});
+									}}
 								>
-									{extractDomain(u.url)}
-								</div>
+									<ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
+									<span className="truncate">{extractDomain(u.url)}</span>
+								</button>
 							))}
 						</div>
 					</div>
