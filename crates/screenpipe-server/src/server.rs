@@ -1382,6 +1382,26 @@ impl SCServer {
         Ok(())
     }
 
+    /// Start the server with a pre-bound TcpListener.
+    /// Use this when the caller needs to confirm the port is bound before proceeding.
+    pub async fn start_with_listener(
+        self,
+        listener: TcpListener,
+        enable_frame_cache: bool,
+    ) -> Result<(), std::io::Error> {
+        let app = self.create_router(enable_frame_cache).await;
+        info!("Server listening on {}", self.addr);
+
+        serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .map_err(std::io::Error::other)?;
+
+        Ok(())
+    }
+
     pub async fn create_router(&self, enable_frame_cache: bool) -> Router {
         let api_request_count = Arc::new(AtomicUsize::new(0));
 

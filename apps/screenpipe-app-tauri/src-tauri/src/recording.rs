@@ -165,17 +165,19 @@ pub async fn spawn_screenpipe(
 
     // Wait for port to be fully released (our own server threads may still be
     // shutting down after handle.shutdown() or stop_screenpipe()).
-    for i in 0..10 {
+    // The embedded server will fail to bind if the port is still occupied,
+    // so this is critical for restart reliability.
+    for i in 0..20 {
         match tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await {
             Ok(_) => {
-                debug!("Port {} is free after {}ms", port, i * 200);
+                debug!("Port {} is free after {}ms", port, i * 250);
                 break;
             }
             Err(_) => {
-                if i == 9 {
-                    warn!("Port {} still in use after 2s, proceeding anyway", port);
+                if i == 19 {
+                    warn!("Port {} still in use after 5s, will attempt start anyway", port);
                 } else {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
                 }
             }
         }

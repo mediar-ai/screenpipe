@@ -535,9 +535,21 @@ pub async fn start_embedded_server(
         config.video_quality.clone(),
     );
 
-    // Start server in background
+    // Bind the HTTP listener BEFORE returning success.
+    // This ensures port conflicts (AddrInUse) are caught and propagated
+    // instead of silently failing in a background task.
+    let listener = tokio::net::TcpListener::bind(
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.port),
+    )
+    .await
+    .map_err(|e| format!("Failed to bind port {}: {}", config.port, e))?;
+
+    info!("HTTP server bound to port {}", config.port);
+
+    // Start serving in background with the pre-bound listener
+    let enable_frame_cache = config.enable_frame_cache;
     tokio::spawn(async move {
-        if let Err(e) = server.start(config.enable_frame_cache).await {
+        if let Err(e) = server.start_with_listener(listener, enable_frame_cache).await {
             error!("Server error: {:?}", e);
         }
     });
