@@ -6626,7 +6626,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-audio"
-version = "0.3.94"
+version = "0.3.95"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -6679,7 +6679,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-core"
-version = "0.3.94"
+version = "0.3.95"
 dependencies = [
  "accessibility",
  "accessibility-sys",
@@ -6730,7 +6730,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-db"
-version = "0.3.94"
+version = "0.3.95"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6754,7 +6754,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-events"
-version = "0.3.94"
+version = "0.3.95"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6772,7 +6772,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-integrations"
-version = "0.3.94"
+version = "0.3.95"
 dependencies = [
  "anyhow",
  "image",
@@ -6787,7 +6787,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-server"
-version = "0.3.94"
+version = "0.3.95"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6856,7 +6856,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-vision"
-version = "0.3.94"
+version = "0.3.95"
 dependencies = [
  "accessibility-sys",
  "anyhow",

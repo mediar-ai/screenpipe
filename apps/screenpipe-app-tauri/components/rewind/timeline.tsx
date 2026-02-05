@@ -510,6 +510,78 @@ export default function Timeline() {
 		return () => { unlisten.then((fn) => fn()); };
 	}, [showSearchModal]);
 
+	// Suspend/resume arrow shortcuts when search modal opens/closes
+	useEffect(() => {
+		if (showSearchModal) {
+			commands.suspendArrowShortcuts().catch(() => {});
+		} else {
+			commands.resumeArrowShortcuts().catch(() => {});
+		}
+	}, [showSearchModal]);
+
+	// Suspend arrow shortcuts when any text input is focused (AI panel, etc.)
+	// so arrow keys work normally for cursor movement in text fields
+	useEffect(() => {
+		const handleFocusIn = (e: FocusEvent) => {
+			const target = e.target as HTMLElement;
+			if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable) {
+				commands.suspendArrowShortcuts().catch(() => {});
+			}
+		};
+		const handleFocusOut = (e: FocusEvent) => {
+			const target = e.target as HTMLElement;
+			if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable) {
+				// Only resume if search modal isn't open
+				if (!showSearchModal) {
+					commands.resumeArrowShortcuts().catch(() => {});
+				}
+			}
+		};
+		document.addEventListener("focusin", handleFocusIn);
+		document.addEventListener("focusout", handleFocusOut);
+		return () => {
+			document.removeEventListener("focusin", handleFocusIn);
+			document.removeEventListener("focusout", handleFocusOut);
+		};
+	}, [showSearchModal]);
+
+	// Handle arrow key navigation from Rust global shortcuts
+	useEffect(() => {
+		const unlisten = listen<string>("timeline-navigate", (event) => {
+			const dir = event.payload;
+			if (dir === "prev-frame") {
+				setCurrentIndex((prev) => {
+					const next = Math.min(prev + 1, frames.length - 1);
+					if (frames[next]) setCurrentFrame(frames[next]);
+					return next;
+				});
+			} else if (dir === "next-frame") {
+				setCurrentIndex((prev) => {
+					const next = Math.max(prev - 1, 0);
+					if (frames[next]) setCurrentFrame(frames[next]);
+					return next;
+				});
+			} else if (dir === "prev-app" || dir === "next-app") {
+				setCurrentIndex((prev) => {
+					const currentApp = frames[prev]?.devices?.[0]?.metadata?.app_name;
+					const step = dir === "prev-app" ? 1 : -1;
+					let i = prev + step;
+					// Skip frames with the same app
+					while (i >= 0 && i < frames.length) {
+						const app = frames[i]?.devices?.[0]?.metadata?.app_name;
+						if (app && app !== currentApp) {
+							if (frames[i]) setCurrentFrame(frames[i]);
+							return i;
+						}
+						i += step;
+					}
+					return prev; // no boundary found
+				});
+			}
+		});
+		return () => { unlisten.then((fn) => fn()); };
+	}, [frames, setCurrentFrame]);
+
 	useEffect(() => {
 		const getStartDateAndSet = async () => {
 			const data = await getStartDate();
