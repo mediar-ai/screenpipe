@@ -162,7 +162,7 @@ lazy_static = "1.5.0"
 
 [features]
 cudart = []
-metal = []
+metal = ["screenpipe-audio/metal"]
 mkl = []
 llm = []
 cargo-clippy = []
