@@ -10,6 +10,12 @@ import {
   Check,
   X,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { platform } from "@tauri-apps/plugin-os";
 import { Command } from "@tauri-apps/plugin-shell";
 
@@ -363,6 +369,31 @@ export function DailySummaryCard({
       : u === "medium"
         ? "text-yellow-400"
         : "text-muted-foreground";
+
+  // Compact icon button when no summary and not generating
+  if (!summary && !isGenerating && !error) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => generateSummary()}
+              className="w-10 h-10 backdrop-blur-xl bg-black/60 border border-white/10 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors shadow-2xl"
+            >
+              <img
+                src="/apple-intelligence-logo.svg"
+                alt="Generate daily summary"
+                className="w-5 h-5 rounded"
+              />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="bg-black/80 border-white/10 text-white text-xs">
+            <p>click to generate a daily summary</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
 
   return (
     <div className="w-72 backdrop-blur-xl bg-black/60 border border-white/10 rounded-xl overflow-hidden shadow-2xl">
