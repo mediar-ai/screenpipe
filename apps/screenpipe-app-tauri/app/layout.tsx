@@ -30,6 +30,23 @@ export default function RootLayout({
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // Patch Tauri event listener race condition (APP-2/5/9/W, 69 users)
+    // Tauri's unregisterListener doesn't null-check listeners[eventId]
+    // causing TypeError when unlisten is called on already-removed listener
+    try {
+      const internals = (window as any).__TAURI_EVENT_PLUGIN_INTERNALS__;
+      if (internals?.unregisterListener) {
+        const original = internals.unregisterListener;
+        internals.unregisterListener = function(event: string, eventId: number) {
+          try {
+            return original(event, eventId);
+          } catch {
+            // listener already removed — race condition, ignore
+          }
+        };
+      }
+    } catch {}
+
     const logs: string[] = [];
     const MAX_LOGS = 1000;
     const originalConsole = { ...console };
