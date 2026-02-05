@@ -551,6 +551,87 @@ describe('Model ID format consistency', () => {
 });
 
 // ============================================================================
+// Backwards compatibility: old app sends @YYYYMMDD model IDs
+// ============================================================================
+describe('Backwards compatibility with @YYYYMMDD model IDs', () => {
+	const originalFetch = globalThis.fetch;
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	it('proxyToAnthropic should normalize @ to - in model ID', async () => {
+		let capturedBody: any = null;
+
+		globalThis.fetch = async (_url: any, init: any) => {
+			capturedBody = JSON.parse(init.body);
+			return new Response(JSON.stringify({ type: 'message', content: [] }), { status: 200 });
+		};
+
+		const request = new Request('http://localhost/v1/messages', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				model: 'claude-haiku-4-5@20251001',
+				max_tokens: 100,
+				messages: [{ role: 'user', content: 'test' }],
+			}),
+		});
+
+		await proxyToAnthropic(request, 'sk-ant-test-key');
+
+		// The @ should be converted to - before sending to Anthropic API
+		expect(capturedBody.model).toBe('claude-haiku-4-5-20251001');
+	});
+
+	it('proxyToAnthropic should not modify model IDs without @', async () => {
+		let capturedBody: any = null;
+
+		globalThis.fetch = async (_url: any, init: any) => {
+			capturedBody = JSON.parse(init.body);
+			return new Response(JSON.stringify({ type: 'message', content: [] }), { status: 200 });
+		};
+
+		const request = new Request('http://localhost/v1/messages', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				model: 'claude-opus-4-6',
+				max_tokens: 100,
+				messages: [{ role: 'user', content: 'test' }],
+			}),
+		});
+
+		await proxyToAnthropic(request, 'sk-ant-test-key');
+
+		expect(capturedBody.model).toBe('claude-opus-4-6');
+	});
+
+	it('proxyToAnthropic should handle opus @YYYYMMDD format', async () => {
+		let capturedBody: any = null;
+
+		globalThis.fetch = async (_url: any, init: any) => {
+			capturedBody = JSON.parse(init.body);
+			return new Response(JSON.stringify({ type: 'message', content: [] }), { status: 200 });
+		};
+
+		const request = new Request('http://localhost/v1/messages', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				model: 'claude-opus-4-5@20251101',
+				max_tokens: 100,
+				messages: [{ role: 'user', content: 'test' }],
+			}),
+		});
+
+		await proxyToAnthropic(request, 'sk-ant-test-key');
+
+		expect(capturedBody.model).toBe('claude-opus-4-5-20251101');
+	});
+});
+
+// ============================================================================
 // Regression: sanitizeMessages still works (from vertex.ts, shared)
 // ============================================================================
 describe('sanitizeMessages (shared)', () => {

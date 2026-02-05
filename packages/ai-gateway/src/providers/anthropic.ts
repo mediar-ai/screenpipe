@@ -50,12 +50,20 @@ export class AnthropicProvider implements AIProvider {
 		return parts.length > 0 ? parts.join('\n\n') : undefined;
 	}
 
+	/**
+	 * Normalize model ID: convert Vertex @YYYYMMDD format to Anthropic -YYYYMMDD
+	 * Old app versions may send e.g. "claude-haiku-4-5@20251001"
+	 */
+	private normalizeModel(model: string): string {
+		return model.includes('@') ? model.replace('@', '-') : model;
+	}
+
 	async createCompletion(body: RequestBody): Promise<Response> {
 		const messages = this.formatMessages(body.messages);
 
 		const response = await this.client.messages.create({
 			messages,
-			model: body.model,
+			model: this.normalizeModel(body.model),
 			max_tokens: body.max_tokens || 4096,
 			temperature: body.temperature,
 			system: this.buildSystemPrompt(body),
@@ -70,7 +78,7 @@ export class AnthropicProvider implements AIProvider {
 	async createStreamingCompletion(body: RequestBody): Promise<ReadableStream> {
 		const stream = await this.client.messages.create({
 			messages: this.formatMessages(body.messages),
-			model: body.model,
+			model: this.normalizeModel(body.model),
 			stream: true,
 			max_tokens: body.max_tokens || 4096,
 			temperature: body.temperature,

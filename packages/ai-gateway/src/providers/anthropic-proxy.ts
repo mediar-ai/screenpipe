@@ -36,6 +36,14 @@ export async function proxyToAnthropic(
 			[key: string]: any;
 		};
 
+		// Normalize Vertex-style @YYYYMMDD model IDs to Anthropic-style -YYYYMMDD
+		// Old app versions send e.g. "claude-haiku-4-5@20251001" which Anthropic API won't accept
+		if (body.model && body.model.includes('@')) {
+			const original = body.model;
+			body.model = body.model.replace('@', '-');
+			console.log('proxyToAnthropic: normalized model', original, '->', body.model);
+		}
+
 		console.log('proxyToAnthropic: model=', body.model, 'stream=', body.stream, 'messages count=', body.messages?.length);
 
 		// Sanitize messages to fix common formatting issues (e.g. nested {text: {text: '...'}})
