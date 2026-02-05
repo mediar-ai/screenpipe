@@ -1,6 +1,6 @@
 ---
 name: posthog
-description: Query PostHog for product analytics, create insights, dashboards, and track user behavior. Auto-activates when user asks about analytics, user behavior, funnels, retention, or dashboards. Trigger words: "check posthog", "create insight", "analytics", "user behavior", "dashboard", "funnel", "retention", "user metrics", "usage stats"
+description: 'Query PostHog for product analytics, create insights, dashboards, and track user behavior. Auto-activates when user asks about analytics, user behavior, funnels, retention, or dashboards. Trigger words: "check posthog", "create insight", "analytics", "user behavior", "dashboard", "funnel", "retention", "user metrics", "usage stats"'
 allowed-tools: Bash, Read
 ---
 
