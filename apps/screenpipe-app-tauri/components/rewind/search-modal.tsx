@@ -16,6 +16,136 @@ interface SearchModalProps {
   onNavigateToTimestamp: (timestamp: string) => void;
 }
 
+// stopwords to filter out from suggestions
+const STOP_WORDS = new Set([
+  "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+  "of", "with", "by", "from", "is", "it", "this", "that", "was", "are",
+  "be", "has", "had", "have", "not", "no", "do", "does", "did", "will",
+  "can", "could", "would", "should", "may", "might", "shall", "if", "so",
+  "as", "he", "she", "we", "they", "you", "i", "my", "your", "his", "her",
+  "its", "our", "their", "me", "him", "us", "them", "am", "been", "being",
+  "were", "what", "which", "who", "whom", "when", "where", "why", "how",
+  "all", "each", "every", "both", "few", "more", "most", "other", "some",
+  "such", "than", "too", "very", "just", "about", "above", "after", "again",
+  "also", "any", "because", "before", "between", "here", "there", "then",
+  "these", "those", "through", "under", "until", "while", "into", "over",
+  "only", "own", "same", "still", "up", "out", "off", "down", "now", "new",
+  "one", "two", "first", "last", "long", "great", "little", "right", "old",
+  "big", "high", "small", "large", "next", "early", "young", "important",
+  "public", "bad", "com", "www", "http", "https", "html", "css", "div",
+  "span", "class", "true", "false", "null", "undefined", "var", "let",
+  "const", "function", "return", "import", "export", "default", "type",
+  "interface", "string", "number", "boolean", "object", "array", "void",
+  "png", "jpg", "svg", "gif", "pdf", "tsx", "jsx", "src", "img", "alt",
+  "width", "height", "style", "font", "size", "color", "text", "data",
+  "value", "name", "index", "item", "list", "page", "file", "path",
+  "error", "log", "get", "set", "app", "use", "end", "start", "time",
+  "date", "day", "year", "month", "week", "like", "make", "know", "take",
+  "come", "see", "look", "find", "give", "tell", "think", "say", "help",
+  "show", "try", "ask", "need", "feel", "become", "leave", "put", "mean",
+  "keep", "let", "begin", "seem", "talk", "turn", "hand", "run", "move",
+  "play", "back", "way", "home", "work", "even", "good", "much", "well",
+  "part", "made", "got", "going", "went", "done", "said", "line", "click",
+  "button", "menu", "view", "open", "close", "save", "edit", "delete",
+  "copy", "paste", "select", "search", "enter", "tab", "window", "screen",
+]);
+
+function isGarbageWord(word: string): boolean {
+  if (word.length < 3 || word.length > 20) return true;
+  if (/[bcdfghjklmnpqrstvwxyz]{5,}/i.test(word)) return true;
+  if (/\d/.test(word) && /[a-z]/i.test(word)) return true;
+  if (word === word.toUpperCase() && word.length < 5) return true;
+  if (/(.)\1{3,}/.test(word)) return true;
+  return false;
+}
+
+function useSuggestions(isOpen: boolean) {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+    setIsLoading(true);
+
+    (async () => {
+      try {
+        const now = new Date();
+        const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+        const endTime = new Date(now.getTime() - 10 * 60000);
+
+        const params = new URLSearchParams({
+          content_type: "ocr",
+          limit: "50",
+          offset: "0",
+          start_time: sixHoursAgo.toISOString(),
+          end_time: endTime.toISOString(),
+        });
+
+        const resp = await fetch(`http://localhost:3030/search?${params}`);
+        if (!resp.ok || cancelled) return;
+
+        const data = await resp.json();
+        const items = data?.data || [];
+
+        const appCounts = new Map<string, number>();
+        const wordCounts = new Map<string, number>();
+
+        for (const item of items) {
+          const content = item?.content || {};
+          const appName = content.app_name || "";
+          if (appName && !appName.toLowerCase().includes("screenpipe")) {
+            appCounts.set(appName, (appCounts.get(appName) || 0) + 1);
+          }
+
+          const text = content.text || "";
+          const words = text.split(/[\s\n\r\t,;:!?()[\]{}<>="'/\\|`~@#$%^&*+]+/);
+          for (const raw of words) {
+            const word = raw.toLowerCase().trim();
+            if (STOP_WORDS.has(word)) continue;
+            if (isGarbageWord(word)) continue;
+            wordCounts.set(word, (wordCounts.get(word) || 0) + 1);
+          }
+        }
+
+        if (cancelled) return;
+
+        const topApps = [...appCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 4)
+          .map(([name]) => name);
+
+        const appNamesLower = new Set(topApps.map((a) => a.toLowerCase()));
+        const meaningfulWords = [...wordCounts.entries()]
+          .filter(([word]) => !appNamesLower.has(word))
+          .filter(([, count]) => count >= 2)
+          .sort((a, b) => b[1] - a[1]);
+
+        // take top 15 then randomly pick 6 for variety
+        const topPool = meaningfulWords.slice(0, 15);
+        const shuffled = topPool.sort(() => Math.random() - 0.5);
+        const pickedWords = shuffled.slice(0, 6).map(([word]) => word);
+
+        const combined = [...topApps, ...pickedWords].slice(0, 8);
+
+        if (!cancelled) {
+          setSuggestions(combined);
+          setIsLoading(false);
+        }
+      } catch {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  return { suggestions, isLoading };
+}
+
 // Frame thumbnail component with loading state
 const FrameThumbnail = ({ frameId, alt }: { frameId: number; alt: string }) => {
   const [isLoading, setIsLoading] = useState(true);
@@ -69,6 +199,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
   const gridRef = useRef<HTMLDivElement>(null);
 
   const debouncedQuery = useDebounce(query, 200);
+  const { suggestions, isLoading: suggestionsLoading } = useSuggestions(isOpen);
 
   const {
     searchResults,
@@ -337,10 +468,37 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
             </div>
           )}
 
-          {/* Placeholder when no query */}
+          {/* Suggestions when no query */}
           {!debouncedQuery && !isSearching && (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              type to search your screen history
+            <div className="py-8 px-2">
+              {suggestions.length > 0 ? (
+                <>
+                  <p className="text-xs text-muted-foreground mb-3 text-center">
+                    from your recent activity
+                  </p>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {suggestions.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        onClick={() => setQuery(suggestion)}
+                        className="px-3 py-1.5 text-sm border border-border rounded-md
+                          hover:bg-muted hover:border-foreground/30 transition-colors
+                          text-foreground/80 hover:text-foreground cursor-pointer"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : suggestionsLoading ? (
+                <div className="text-center text-sm text-muted-foreground">
+                  loading suggestions...
+                </div>
+              ) : (
+                <div className="text-center text-sm text-muted-foreground">
+                  type to search your screen history
+                </div>
+              )}
             </div>
           )}
         </div>
