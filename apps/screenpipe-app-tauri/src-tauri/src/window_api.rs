@@ -684,11 +684,8 @@ impl ShowRewindWindow {
 
                     #[cfg(target_os = "macos")]
                     let window = {
-                        // Accessory mode is required for new windows to appear on
-                        // fullscreen Spaces. We reset to Regular after panel setup
-                        // (not on close, which caused Space-switch bugs).
-                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                        let app_clone = app.clone();
+                        // Created invisible — panel setup below will show it
+                        // on the correct Space via activation + order_front.
                         let builder = self.window_builder_with_label(app, "/", main_label_for_mode("window"))
                             .title("screenpipe")
                             .inner_size(1200.0, 800.0)
@@ -696,14 +693,7 @@ impl ShowRewindWindow {
                             .decorations(true)
                             .visible(false)
                             .focused(false)
-                            .transparent(false)
-                            .on_page_load(move |win, payload| {
-                                if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                                    win.show().ok();
-                                    win.set_focus().ok();
-                                    let _ = app_clone.emit("window-focused", true);
-                                }
-                            });
+                            .transparent(false);
                         builder.build()?
                     };
 
@@ -737,6 +727,7 @@ impl ShowRewindWindow {
                             info!("Converted window-mode main to panel");
                             let window_clone = window.clone();
                             let capturable = show_in_recording;
+                            let app_for_emit = window_clone.app_handle().clone();
                             run_on_main_thread_safe(app, move || {
                                 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
                                 use objc::{msg_send, sel, sel_impl};
@@ -751,26 +742,23 @@ impl ShowRewindWindow {
                                     // NSWindowSharingNone=0 hides from screen recorders, NSWindowSharingReadOnly=1 allows capture
                                     let sharing: u64 = if capturable { 1 } else { 0 };
                                     let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
-                                    // MoveToActiveSpace so the panel appears on the current
-                                    // fullscreen Space on first creation. show_existing_main
-                                    // manages this for subsequent shows.
                                     panel.set_collection_behaviour(
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
+                                    // Activate + show on correct Space (same as overlay/chat)
+                                    unsafe {
+                                        use tauri_nspanel::cocoa::base::id;
+                                        let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                                        let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                                    }
+                                    panel.order_front_regardless();
+                                    panel.make_key_window();
+                                    let _ = app_for_emit.emit("window-focused", true);
                                 }
                             });
                         }
                     }
-
-                    // Reset to Regular now that the panel is set up on the
-                    // correct Space. Delayed slightly so the panel setup
-                    // completes first (run_on_main_thread_safe is async).
-                    let app_for_reset = app.clone();
-                    std::thread::spawn(move || {
-                        std::thread::sleep(std::time::Duration::from_millis(500));
-                        let _ = app_for_reset.set_activation_policy(tauri::ActivationPolicy::Regular);
-                    });
 
                     // Auto-hide on focus loss (debounced to survive workspace swipe animations)
                     let app_clone = app.clone();
@@ -1167,14 +1155,15 @@ impl ShowRewindWindow {
             ShowRewindWindow::Chat => {
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // Accessory mode required for new windows on fullscreen Spaces.
-                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    // Create invisible — the panel setup below will show it
+                    // on the correct Space via MoveToActiveSpace + activation.
+                    // No Accessory mode needed (avoids Space-jump on reset).
                     let builder = self.window_builder(app, "/chat")
                         .inner_size(500.0, 650.0)
                         .min_inner_size(400.0, 500.0)
-                        .focused(true)
+                        .focused(false)
+                        .visible(false)
                         .always_on_top(true)
-                        .visible_on_all_workspaces(true)
                         .hidden_title(true);
                     let window = builder.build()?;
 
@@ -1207,25 +1196,19 @@ impl ShowRewindWindow {
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
 
-                                panel.order_front_regardless();
-                                // Activate so the chat window appears on the
-                                // current fullscreen Space, not the leftmost desktop.
+                                // Activate THEN show — same pattern as the fullscreen
+                                // overlay's show_existing_main. This places the panel
+                                // on the current fullscreen Space without Accessory mode.
                                 unsafe {
                                     use tauri_nspanel::cocoa::base::id;
                                     let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
                                     let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
                                 }
+                                panel.order_front_regardless();
                                 panel.make_key_window();
                             }
                         });
                     }
-
-                    // Reset to Regular after panel is set up on the correct Space.
-                    let app_for_reset = app.clone();
-                    std::thread::spawn(move || {
-                        std::thread::sleep(std::time::Duration::from_millis(500));
-                        let _ = app_for_reset.set_activation_policy(tauri::ActivationPolicy::Regular);
-                    });
 
                     window
                 };
