@@ -366,7 +366,7 @@ const AISection = ({
         break;
       case "pi":
         newUrl = ""; // Pi uses RPC mode, not HTTP
-        newModel = "claude-haiku-4-5@20251001";
+        newModel = "claude-haiku-4-5-20251001";
         break;
     }
 

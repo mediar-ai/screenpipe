@@ -6827,6 +6827,7 @@ dependencies = [
  "reqwest 0.12.12",
  "rust-stemmers",
  "screenpipe-accessibility",
+ "screenpipe-apple-intelligence",
  "screenpipe-audio",
  "screenpipe-core",
  "screenpipe-db",

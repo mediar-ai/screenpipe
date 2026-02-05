@@ -66,6 +66,7 @@ export interface RequestBody {
 	stream?: boolean;
 	tools?: any[];
 	temperature?: number;
+	max_tokens?: number;
 	tool_choice?: string | { type: 'function'; function: { name: string } };
 	response_format?: ResponseFormat;
 }

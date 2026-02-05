@@ -1,4 +1,5 @@
 import { OpenAIProvider } from './openai';
+import { AnthropicProvider } from './anthropic';
 import { VertexAIProvider } from './vertex';
 import { GeminiProvider } from './gemini';
 import { AIProvider } from './base';
@@ -6,15 +7,13 @@ import { Env } from '../types';
 
 export function createProvider(model: string, env: Env): AIProvider {
 	if (model.toLowerCase().includes('claude')) {
-		// Use Vertex AI for Claude models
-		if (!env.VERTEX_SERVICE_ACCOUNT_JSON || !env.VERTEX_PROJECT_ID) {
-			throw new Error('Vertex AI credentials not configured');
+		// Use direct Anthropic API for Claude models
+		// This gives us: dynamic model availability (Opus 4.6 etc.), simpler auth,
+		// no model ID mapping, and no silent fallback to wrong models
+		if (!env.ANTHROPIC_API_KEY) {
+			throw new Error('Anthropic API key not configured');
 		}
-		return new VertexAIProvider(
-			env.VERTEX_SERVICE_ACCOUNT_JSON,
-			env.VERTEX_PROJECT_ID,
-			env.VERTEX_REGION || 'us-east5'
-		);
+		return new AnthropicProvider(env.ANTHROPIC_API_KEY);
 	}
 	if (model.toLowerCase().includes('gemini')) {
 		// Use Vertex AI for Gemini models

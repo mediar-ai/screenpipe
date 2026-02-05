@@ -1,7 +1,7 @@
 import { Env, UserTier } from '../types';
-import { createProvider } from '../providers';
 import { createSuccessResponse, createErrorResponse, addCorsHeaders } from '../utils/cors';
 import { TIER_CONFIG, isModelAllowed } from '../services/usage-tracker';
+import { listAnthropicModels } from '../providers/anthropic-proxy';
 
 /**
  * Handles model listing requests
@@ -11,18 +11,28 @@ import { TIER_CONFIG, isModelAllowed } from '../services/usage-tracker';
  */
 export async function handleModelListing(env: Env, tier: UserTier = 'subscribed'): Promise<Response> {
   try {
-    // Only use Vertex AI which provides both Claude and Gemini
-    const vertex = createProvider('claude-opus-4-20250514', env);
-    const results = await Promise.allSettled([
-      vertex.listModels(),
+    // Fetch Claude models from Anthropic API (dynamic — new models appear automatically)
+    // and include Gemini models statically
+    const [anthropicModels] = await Promise.all([
+      env.ANTHROPIC_API_KEY
+        ? listAnthropicModels(env.ANTHROPIC_API_KEY)
+        : Promise.resolve([]),
     ]);
 
-    let models = results
-      .filter(
-        (result): result is PromiseFulfilledResult<{ id: string; name: string; provider: string }[]> =>
-          result.status === 'fulfilled'
-      )
-      .flatMap((result) => result.value);
+    const geminiModels = [
+      { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', provider: 'google' },
+      { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'google' },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google' },
+    ];
+
+    let models: { id: string; name: string; provider: string; tier_available?: boolean }[] = [
+      ...anthropicModels.map(m => ({
+        id: m.id,
+        name: m.id, // Anthropic API returns id, display_name handled in listAnthropicModels
+        provider: 'anthropic',
+      })),
+      ...geminiModels,
+    ];
 
     // Filter models based on tier
     if (tier !== 'subscribed') {

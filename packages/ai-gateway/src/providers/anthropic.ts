@@ -20,15 +20,45 @@ export class AnthropicProvider implements AIProvider {
 		this.client = new Anthropic({ apiKey });
 	}
 
+	/**
+	 * Build the system prompt from system messages and response_format
+	 */
+	private buildSystemPrompt(body: RequestBody): string | undefined {
+		const parts: string[] = [];
+
+		// Extract system messages from the conversation
+		const systemMessages = body.messages.filter(m => m.role === 'system');
+		for (const msg of systemMessages) {
+			const text = typeof msg.content === 'string' ? msg.content : '';
+			if (text) parts.push(text);
+		}
+
+		// Add response_format instructions
+		if (body.response_format) {
+			switch (body.response_format.type) {
+				case 'json_object':
+					parts.push('Respond with valid JSON only.');
+					break;
+				case 'json_schema':
+					if (body.response_format.schema) {
+						parts.push(`Respond with valid JSON that strictly follows this schema:\n${JSON.stringify(body.response_format.schema, null, 2)}\nDo not include any explanatory text - output valid JSON only.`);
+					}
+					break;
+			}
+		}
+
+		return parts.length > 0 ? parts.join('\n\n') : undefined;
+	}
+
 	async createCompletion(body: RequestBody): Promise<Response> {
 		const messages = this.formatMessages(body.messages);
 
 		const response = await this.client.messages.create({
 			messages,
 			model: body.model,
-			max_tokens: 4096,
+			max_tokens: body.max_tokens || 4096,
 			temperature: body.temperature,
-			system: this.createSystemPrompt(body.response_format),
+			system: this.buildSystemPrompt(body),
 			tools: body.tools ? this.formatTools(body.tools) : undefined,
 		});
 
@@ -37,30 +67,14 @@ export class AnthropicProvider implements AIProvider {
 		});
 	}
 
-	private createSystemPrompt(responseFormat?: ResponseFormat): string | undefined {
-		if (!responseFormat) return undefined;
-	
-		switch (responseFormat.type) {
-		  case 'json_object':
-			return 'Respond with valid JSON only.';
-		  case 'json_schema':
-			if (!responseFormat.schema) return undefined;
-			
-			return `Respond with valid JSON that strictly follows this schema:
-	${JSON.stringify(responseFormat.schema, null, 2)}
-	Do not include any explanatory text - output valid JSON only.`;
-		  default:
-			return undefined;
-		}
-	  }
-
 	async createStreamingCompletion(body: RequestBody): Promise<ReadableStream> {
 		const stream = await this.client.messages.create({
 			messages: this.formatMessages(body.messages),
 			model: body.model,
 			stream: true,
-			max_tokens: 4096,
+			max_tokens: body.max_tokens || 4096,
 			temperature: body.temperature,
+			system: this.buildSystemPrompt(body),
 			tools: body.tools ? this.formatTools(body.tools) : undefined,
 		});
 
@@ -157,12 +171,55 @@ export class AnthropicProvider implements AIProvider {
 	}
 
 	formatMessages(messages: Message[]): MessageParam[] {
-		return messages.map((msg) => {
+		const result: MessageParam[] = [];
+
+		for (const msg of messages) {
+			// Skip system messages — they're extracted into the system parameter
+			if (msg.role === 'system') continue;
+
+			// Handle tool results (OpenAI role: 'tool' → Anthropic role: 'user' with tool_result)
+			if (msg.role === 'tool') {
+				result.push({
+					role: 'user',
+					content: [{
+						type: 'tool_result',
+						tool_use_id: (msg as any).tool_call_id || '',
+						content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+					}] as any,
+				});
+				continue;
+			}
+
+			// Handle assistant messages with tool_calls
+			if (msg.role === 'assistant' && (msg as any).tool_calls) {
+				const content: any[] = [];
+				if (msg.content) {
+					const text = typeof msg.content === 'string' ? msg.content : '';
+					if (text) content.push({ type: 'text', text });
+				}
+				for (const tc of (msg as any).tool_calls) {
+					content.push({
+						type: 'tool_use',
+						id: tc.id,
+						name: tc.function?.name || tc.name,
+						input: typeof tc.function?.arguments === 'string'
+							? JSON.parse(tc.function.arguments)
+							: tc.function?.arguments || {},
+					});
+				}
+				result.push({
+					role: 'assistant',
+					content: content as any,
+				});
+				continue;
+			}
+
+			// Regular user/assistant messages
 			const content: ContentBlockParam[] = Array.isArray(msg.content)
 				? msg.content.map((part) => {
 						// Handle OpenAI vision format (image_url)
-						if (part.type === 'image_url' && part.image_url?.url) {
-							const url = part.image_url.url;
+						if (part.type === 'image_url' && (part as any).image_url?.url) {
+							const url = (part as any).image_url.url;
 							const dataUrlMatch = url.match(/^data:([^;]+);base64,(.+)$/);
 							if (dataUrlMatch) {
 								return {
@@ -174,7 +231,6 @@ export class AnthropicProvider implements AIProvider {
 									},
 								} as ImageBlockParam;
 							}
-							// For non-base64 URLs, Anthropic requires base64 so we can't support external URLs directly
 							return {
 								type: 'text',
 								text: `[Image URL: ${url}]`,
@@ -215,11 +271,13 @@ export class AnthropicProvider implements AIProvider {
 						},
 				  ];
 
-			return {
+			result.push({
 				role: msg.role === 'user' ? 'user' : 'assistant',
 				content,
-			};
-		});
+			});
+		}
+
+		return result;
 	}
 
 	formatResponse(response: AnthropicMessage): {

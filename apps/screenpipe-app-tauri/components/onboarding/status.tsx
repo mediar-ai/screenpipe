@@ -227,7 +227,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         id: "pi-agent",
         provider: "pi" as const,
         url: "",
-        model: "claude-haiku-4-5@20251001",
+        model: "claude-haiku-4-5-20251001",
         maxContextChars: 200000,
         defaultPreset: true,
         prompt: "",

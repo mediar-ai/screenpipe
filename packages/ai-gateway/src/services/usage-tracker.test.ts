@@ -5,51 +5,49 @@ describe('TIER_CONFIG', () => {
   it('should have correct limits for anonymous tier', () => {
     expect(TIER_CONFIG.anonymous.dailyQueries).toBe(25);
     expect(TIER_CONFIG.anonymous.rpm).toBe(5);
-    expect(TIER_CONFIG.anonymous.allowedModels).toContain('claude-haiku-4-5@20251001');
+    expect(TIER_CONFIG.anonymous.allowedModels).toContain('claude-haiku-4-5');
   });
 
   it('should have correct limits for logged_in tier', () => {
     expect(TIER_CONFIG.logged_in.dailyQueries).toBe(50);
     expect(TIER_CONFIG.logged_in.rpm).toBe(10);
-    expect(TIER_CONFIG.logged_in.allowedModels).toContain('claude-sonnet-4-20250514');
+    expect(TIER_CONFIG.logged_in.allowedModels).toContain('claude-sonnet-4-5');
   });
 
-  it('should have unlimited queries for subscribed tier', () => {
-    expect(TIER_CONFIG.subscribed.dailyQueries).toBe(-1);
+  it('should have correct limits for subscribed tier', () => {
+    expect(TIER_CONFIG.subscribed.dailyQueries).toBe(200);
     expect(TIER_CONFIG.subscribed.allowedModels).toContain('*');
   });
 });
 
 describe('isModelAllowed', () => {
   it('should allow haiku for anonymous users', () => {
-    expect(isModelAllowed('claude-haiku-4-5@20251001', 'anonymous')).toBe(true);
-    expect(isModelAllowed('claude-3-haiku-20240307', 'anonymous')).toBe(true);
+    expect(isModelAllowed('claude-haiku-4-5-20251001', 'anonymous')).toBe(true);
+    // Partial match via substring
+    expect(isModelAllowed('claude-haiku-4-5', 'anonymous')).toBe(true);
   });
 
   it('should deny sonnet for anonymous users', () => {
-    expect(isModelAllowed('claude-sonnet-4-20250514', 'anonymous')).toBe(false);
-    expect(isModelAllowed('claude-3-5-sonnet-20241022', 'anonymous')).toBe(false);
+    expect(isModelAllowed('claude-sonnet-4-5-20250929', 'anonymous')).toBe(false);
   });
 
   it('should allow sonnet for logged_in users', () => {
-    expect(isModelAllowed('claude-sonnet-4-20250514', 'logged_in')).toBe(true);
+    expect(isModelAllowed('claude-sonnet-4-5-20250929', 'logged_in')).toBe(true);
     expect(isModelAllowed('gpt-4o-mini', 'logged_in')).toBe(true);
   });
 
   it('should deny opus for logged_in users', () => {
-    expect(isModelAllowed('claude-opus-4-20250514', 'logged_in')).toBe(false);
-    // Note: gpt-4o partially matches gpt-4o-mini due to substring matching
-    // This is acceptable - the API will reject if the model doesn't exist
+    expect(isModelAllowed('claude-opus-4-6', 'logged_in')).toBe(false);
   });
 
   it('should allow any model for subscribed users', () => {
-    expect(isModelAllowed('claude-opus-4-20250514', 'subscribed')).toBe(true);
+    expect(isModelAllowed('claude-opus-4-6', 'subscribed')).toBe(true);
     expect(isModelAllowed('gpt-4o', 'subscribed')).toBe(true);
     expect(isModelAllowed('any-random-model', 'subscribed')).toBe(true);
   });
 
   it('should handle partial model name matches', () => {
-    // Model names might have slight variations
+    // Model names might have slight variations — substring matching
     expect(isModelAllowed('claude-haiku', 'anonymous')).toBe(true);
     expect(isModelAllowed('haiku', 'anonymous')).toBe(true);
   });

@@ -9,8 +9,7 @@ export const TIER_CONFIG: Record<UserTier, TierLimits> = {
     dailyQueries: 25,
     rpm: 5,
     allowedModels: [
-      'claude-haiku-4-5@20251001',
-      'claude-3-haiku-20240307',
+      'claude-haiku-4-5',
       'gemini-3-flash',
       'gemini-2.5-flash',
     ],
@@ -19,10 +18,8 @@ export const TIER_CONFIG: Record<UserTier, TierLimits> = {
     dailyQueries: 50,
     rpm: 10,
     allowedModels: [
-      'claude-haiku-4-5@20251001',
-      'claude-3-haiku-20240307',
-      'claude-sonnet-4-20250514',
-      'claude-3-5-sonnet-20241022',
+      'claude-haiku-4-5',
+      'claude-sonnet-4-5',
       'gpt-4o-mini',
       'gemini-3-flash',
       'gemini-2.5-flash',

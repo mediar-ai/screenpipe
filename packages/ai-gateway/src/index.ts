@@ -157,7 +157,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 			const clonedRequest = request.clone();
 			try {
 				const body = (await clonedRequest.json()) as { model?: string };
-				const model = body.model || 'claude-haiku-4-5@20251001';
+				const model = body.model || 'claude-haiku-4-5-20251001';
 				if (!isModelAllowed(model, authResult.tier)) {
 					const allowedModels = TIER_CONFIG[authResult.tier].allowedModels;
 					return addCorsHeaders(createErrorResponse(403, JSON.stringify({
@@ -281,7 +281,7 @@ curl -X POST $HOST/v1/chat/completions \
 -H "Content-Type: application/json" \
 -H "X-Device-Id: test-device-123" \
 -d '{
-"model": "claude-haiku-4-5@20251001",
+"model": "claude-haiku-4-5-20251001",
 "messages": [
 	{
 	"role": "user",

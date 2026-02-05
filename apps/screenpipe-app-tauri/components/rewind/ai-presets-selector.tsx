@@ -396,7 +396,7 @@ export function AIProviderConfig({
                   ...formData,
                   provider: "pi",
                   url: "", // Pi uses RPC mode
-                  model: "claude-haiku-4-5@20251001",
+                  model: "claude-haiku-4-5-20251001",
                 });
               }}
             >
@@ -606,8 +606,8 @@ export function AIProviderConfig({
                 <SelectValue placeholder="select model" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="claude-haiku-4-5@20251001">Haiku 4.5 (fast)</SelectItem>
-                <SelectItem value="claude-opus-4-5@20251101">Opus 4.5 (powerful)</SelectItem>
+                <SelectItem value="claude-haiku-4-5-20251001">Haiku 4.5 (fast)</SelectItem>
+                <SelectItem value="claude-opus-4-6">Opus 4.6 (powerful)</SelectItem>
               </SelectContent>
             </Select>
           </div>
