@@ -1,76 +1,19 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Check, Monitor, Mic, Keyboard, AlertTriangle, Upload, Loader, Calendar } from "lucide-react";
 import { Button } from "../ui/button";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { commands, type OSPermissionsCheck } from "@/lib/utils/tauri";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useSettings, DEFAULT_PROMPT } from "@/lib/hooks/use-settings";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { homeDir, join } from "@tauri-apps/api/path";
-// TimelineAIDemo removed — shortcut gate replaces it
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { getVersion } from "@tauri-apps/api/app";
 import { version as osVersion, platform as osPlatform } from "@tauri-apps/plugin-os";
-import Lottie from "lottie-react";
-import pipeFlowAnimation from "@/public/animations/pipe-flow.json";
-
-/**
- * Format a shortcut string for display with consistent modifier ordering.
- * On macOS: Command (⌘) → Control (⌃) → Option (⌥) → Shift (⇧) → Key
- * On Windows/Linux: Ctrl → Alt → Shift → Key
- */
-function formatShortcut(shortcut: string, isMac: boolean): string {
-  if (!shortcut) return "";
-
-  // Parse the shortcut into parts
-  const parts = shortcut.split("+").map(p => p.trim().toLowerCase());
-
-  // Define modifier priorities (lower = comes first)
-  const modifierPriority: Record<string, number> = {
-    "super": 0, "command": 0, "cmd": 0,
-    "ctrl": 1, "control": 1,
-    "alt": 2, "option": 2,
-    "shift": 3,
-  };
-
-  // Separate modifiers from the key
-  const modifiers: string[] = [];
-  let key = "";
-
-  for (const part of parts) {
-    if (modifierPriority[part] !== undefined) {
-      modifiers.push(part);
-    } else {
-      key = part;
-    }
-  }
-
-  // Sort modifiers by priority (Command first)
-  modifiers.sort((a, b) => (modifierPriority[a] ?? 99) - (modifierPriority[b] ?? 99));
-
-  if (isMac) {
-    const macSymbols: Record<string, string> = {
-      "super": "⌘", "command": "⌘", "cmd": "⌘",
-      "ctrl": "⌃", "control": "⌃",
-      "alt": "⌥", "option": "⌥",
-      "shift": "⇧",
-    };
-    const formattedMods = modifiers.map(m => macSymbols[m] || m).join("");
-    return formattedMods + " " + key.toUpperCase();
-  } else {
-    const winNames: Record<string, string> = {
-      "super": "Win", "command": "Ctrl", "cmd": "Ctrl",
-      "ctrl": "Ctrl", "control": "Ctrl",
-      "alt": "Alt", "option": "Alt",
-      "shift": "Shift",
-    };
-    const formattedMods = modifiers.map(m => winNames[m] || m);
-    return [...formattedMods, key.toUpperCase()].join("+");
-  }
-}
+import { ParticleStream, ProgressSteps } from "./particle-stream";
 
 interface OnboardingStatusProps {
   className?: string;
@@ -79,7 +22,14 @@ interface OnboardingStatusProps {
 
 type SetupState = "checking" | "needs-permissions" | "ready" | "starting" | "recording";
 
-const STUCK_TIMEOUT_MS = 30000; // 30 seconds
+interface SetupProgress {
+  permissions: boolean;
+  serverStarted: boolean;
+  audioReady: boolean;
+  visionReady: boolean;
+}
+
+const STUCK_TIMEOUT_MS = 30000;
 
 const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   className = "",
@@ -99,16 +49,88 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const hasAdvancedRef = useRef(false);
   const mountTimeRef = useRef(Date.now());
 
-  // Auto-advance to shortcut gate when recording starts (with min display time)
+  // Progress tracking
+  const [progress, setProgress] = useState<SetupProgress>({
+    permissions: false,
+    serverStarted: false,
+    audioReady: false,
+    visionReady: false,
+  });
+  const [animatedProgress, setAnimatedProgress] = useState(0);
+
+  // Compute overall progress 0→1
+  const computeProgress = useCallback((p: SetupProgress): number => {
+    let val = 0;
+    if (p.permissions) val += 0.25;
+    if (p.serverStarted) val += 0.25;
+    if (p.audioReady) val += 0.25;
+    if (p.visionReady) val += 0.25;
+    return val;
+  }, []);
+
+  // Smooth progress animation
+  useEffect(() => {
+    const target = computeProgress(progress);
+    const step = () => {
+      setAnimatedProgress((prev) => {
+        const diff = target - prev;
+        if (Math.abs(diff) < 0.005) return target;
+        return prev + diff * 0.08;
+      });
+    };
+    const interval = setInterval(step, 16);
+    return () => clearInterval(interval);
+  }, [progress, computeProgress]);
+
+  // Poll health endpoint for real progress
+  useEffect(() => {
+    if (setupState !== "starting" && setupState !== "ready") return;
+
+    const poll = async () => {
+      try {
+        const res = await fetch("http://localhost:3030/health", {
+          signal: AbortSignal.timeout(2000),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProgress((prev) => ({
+            ...prev,
+            serverStarted: true,
+            audioReady:
+              data.status === "healthy" ||
+              (data.frame_status === "ok") ||
+              (data.audio_status === "ok") ||
+              prev.audioReady,
+            visionReady:
+              data.status === "healthy" ||
+              (data.frame_status === "ok") ||
+              prev.visionReady,
+          }));
+
+          // If health says healthy, we're recording
+          if (data.status === "healthy") {
+            setSetupState("recording");
+          }
+        }
+      } catch {
+        // Server not ready yet
+      }
+    };
+
+    const interval = setInterval(poll, 1500);
+    poll(); // immediate first check
+    return () => clearInterval(interval);
+  }, [setupState]);
+
+  // Auto-advance to shortcut gate when recording starts
   useEffect(() => {
     if (setupState === "recording" && !hasAdvancedRef.current) {
       hasAdvancedRef.current = true;
       const elapsed = Date.now() - mountTimeRef.current;
-      const minDisplay = 1500; // show branding for at least 1.5s
+      const minDisplay = 1500;
       const delay = Math.max(0, minDisplay - elapsed);
       setTimeout(() => handleNextSlide(), delay);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setupState]);
 
   const sendLogs = async () => {
@@ -117,17 +139,12 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       const BASE_URL = "https://screenpi.pe";
       const machineId = localStorage.getItem("machineId") || crypto.randomUUID();
       localStorage.setItem("machineId", machineId);
-
       const identifier = settings.user?.id || machineId;
       const type = settings.user?.id ? "user" : "machine";
-
-      // Get log files
       const logFilesResult = await commands.getLogFiles();
       if (logFilesResult.status !== "ok") throw new Error("Failed to get log files");
-
-      const logFiles = logFilesResult.data.slice(0, 3); // Last 3 log files
-      const MAX_LOG_SIZE = 50 * 1024; // 50KB per file for onboarding
-
+      const logFiles = logFilesResult.data.slice(0, 3);
+      const MAX_LOG_SIZE = 50 * 1024;
       const logContents = await Promise.all(
         logFiles.map(async (file) => {
           try {
@@ -141,50 +158,27 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           }
         })
       );
-
-      // Get signed URL
       const signedRes = await fetch(`${BASE_URL}/api/logs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, type }),
       });
       const { data: { signedUrl, path } } = await signedRes.json();
-
-      // Get browser console logs (same as share-logs-button.tsx)
-      const consoleLog = (localStorage.getItem("console_logs") || "").slice(-50000); // Last 50KB
-
-      // Upload logs
+      const consoleLog = (localStorage.getItem("console_logs") || "").slice(-50000);
       const combinedLogs = logContents
         .map((log) => `\n=== ${log.name} ===\n${log.content}`)
         .join("\n\n") +
         "\n\n=== Browser Console Logs ===\n" + consoleLog +
         "\n\n=== Onboarding Stuck ===\nUser experienced startup issues during onboarding.";
-
-      await fetch(signedUrl, {
-        method: "PUT",
-        body: combinedLogs,
-        headers: { "Content-Type": "text/plain" },
-      });
-
-      // Confirm upload
+      await fetch(signedUrl, { method: "PUT", body: combinedLogs, headers: { "Content-Type": "text/plain" } });
       const os = osPlatform();
       const os_version = osVersion();
       const app_version = await getVersion();
-
       await fetch(`${BASE_URL}/api/logs/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path,
-          identifier,
-          type,
-          os,
-          os_version,
-          app_version,
-          feedback_text: "Onboarding stuck - automatic log submission",
-        }),
+        body: JSON.stringify({ path, identifier, type, os, os_version, app_version, feedback_text: "Onboarding stuck - automatic log submission" }),
       });
-
       setLogsSent(true);
     } catch (err) {
       console.error("Failed to send logs:", err);
@@ -197,7 +191,6 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     openUrl("https://cal.com/louis030195/screenpipe-onboarding");
   };
 
-  // Create default Pi preset if none exists
   const ensureDefaultPreset = async () => {
     if (settings.aiPresets.length === 0) {
       const defaultPreset = {
@@ -214,92 +207,75 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   };
 
   const handleComplete = async () => {
-    // Try to ensure default preset, but don't block onboarding if it fails
     try {
       await ensureDefaultPreset();
     } catch (error) {
       console.error("Failed to ensure default preset:", error);
-      // Continue anyway - user can set up AI later
     }
-    // Note: Shortcut reminder and notification are shown after entire onboarding completes (in page.tsx)
     handleNextSlide();
   };
 
-  // Check screen permission once on mount (no polling - requires app restart)
+  // Check screen permission once on mount
   const screenPermissionRef = useRef<string | null>(null);
 
   useEffect(() => {
     const checkScreenPermissionOnce = async () => {
       if (!isMacOS || hasStartedRef.current) return;
-
       try {
         const perms = await commands.doPermissionsCheck(true);
         screenPermissionRef.current = perms.screenRecording;
         setPermissions(perms);
-
         const screenOk = perms.screenRecording === "granted" || perms.screenRecording === "notNeeded";
         const audioOk = perms.microphone === "granted" || perms.microphone === "notNeeded";
         const accessibilityOk = perms.accessibility === "granted" || perms.accessibility === "notNeeded";
-
         if (screenOk && audioOk && accessibilityOk && !hasStartedRef.current) {
+          setProgress((prev) => ({ ...prev, permissions: true }));
           setSetupState("ready");
         } else if (!hasStartedRef.current) {
           setSetupState("needs-permissions");
         }
       } catch (error) {
         console.error("Failed to check permissions:", error);
-        if (!hasStartedRef.current) {
-          setSetupState("ready");
-        }
+        if (!hasStartedRef.current) setSetupState("ready");
       }
     };
-
     if (!isMacOS) {
+      setProgress((prev) => ({ ...prev, permissions: true }));
       setSetupState("ready");
       return;
     }
-
     checkScreenPermissionOnce();
   }, [isMacOS]);
 
-  // Poll microphone and accessibility permissions (screen permission requires app restart)
+  // Poll mic and accessibility permissions
   useEffect(() => {
     if (!isMacOS || screenPermissionRef.current === null) return;
-
     const checkPermissions = async () => {
       if (hasStartedRef.current) return;
-
       try {
-        // Use individual checks to avoid triggering screen capture permission dialogs
         const [micStatus, accessibilityStatus] = await Promise.all([
           commands.checkMicrophonePermission(),
           commands.checkAccessibilityPermissionCmd(),
         ]);
-
-        setPermissions(prev => prev ? {
-          ...prev,
-          microphone: micStatus,
-          accessibility: accessibilityStatus,
-        } : null);
-
+        setPermissions((prev) =>
+          prev ? { ...prev, microphone: micStatus, accessibility: accessibilityStatus } : null
+        );
         const screenOk = screenPermissionRef.current === "granted" || screenPermissionRef.current === "notNeeded";
         const audioOk = micStatus === "granted" || micStatus === "notNeeded";
         const accessibilityOk = accessibilityStatus === "granted" || accessibilityStatus === "notNeeded";
-
         if (screenOk && audioOk && accessibilityOk && !hasStartedRef.current) {
+          setProgress((prev) => ({ ...prev, permissions: true }));
           setSetupState("ready");
         }
       } catch (error) {
         console.error("Failed to check permissions:", error);
       }
     };
-
     const interval = setInterval(checkPermissions, 2000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMacOS]);
 
-  // Auto-start when ready (only once)
+  // Auto-start when ready
   useEffect(() => {
     if (setupState === "ready" && !hasStartedRef.current) {
       hasStartedRef.current = true;
@@ -307,40 +283,30 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     }
   }, [setupState]);
 
-  // Show "continue anyway" button after 5 seconds on permission screen
+  // Show "continue anyway" after 5s on permission screen
   const continueAnywayTimerStarted = useRef(false);
   useEffect(() => {
     if (setupState === "needs-permissions" && !continueAnywayTimerStarted.current) {
       continueAnywayTimerStarted.current = true;
-      const timer = setTimeout(() => {
-        setShowContinueAnyway(true);
-      }, 5000);
+      const timer = setTimeout(() => setShowContinueAnyway(true), 5000);
       return () => clearTimeout(timer);
     }
   }, [setupState]);
 
-  // Track stuck state with timeout
+  // Track stuck state
   useEffect(() => {
-    // Clear any existing timeout
     if (stuckTimeoutRef.current) {
       clearTimeout(stuckTimeoutRef.current);
       stuckTimeoutRef.current = null;
     }
-
-    // Set timeout for "ready" or "starting" states
     if (setupState === "ready" || setupState === "starting") {
       setIsStuck(false);
-      stuckTimeoutRef.current = setTimeout(() => {
-        setIsStuck(true);
-      }, STUCK_TIMEOUT_MS);
+      stuckTimeoutRef.current = setTimeout(() => setIsStuck(true), STUCK_TIMEOUT_MS);
     } else {
       setIsStuck(false);
     }
-
     return () => {
-      if (stuckTimeoutRef.current) {
-        clearTimeout(stuckTimeoutRef.current);
-      }
+      if (stuckTimeoutRef.current) clearTimeout(stuckTimeoutRef.current);
     };
   }, [setupState]);
 
@@ -355,39 +321,24 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   };
 
   const handleStartRecording = async () => {
-    // Prevent concurrent calls
-    if (isStartingRef.current) {
-      console.log("handleStartRecording already in progress, skipping");
-      return;
-    }
+    if (isStartingRef.current) return;
     isStartingRef.current = true;
-
     posthog.capture("screenpipe_setup_start");
     setSetupState("starting");
-
     try {
-      // First check if server is already running and healthy
       const healthCheck = await fetch("http://localhost:3030/health", {
         method: "GET",
         signal: AbortSignal.timeout(3000),
       }).catch(() => null);
-
       if (healthCheck?.ok) {
-        // Server is already running, no need to restart
-        console.log("Server already running and healthy, skipping restart");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        setProgress({ permissions: true, serverStarted: true, audioReady: true, visionReady: true });
+        await new Promise((resolve) => setTimeout(resolve, 500));
         setSetupState("recording");
         return;
       }
-
-      // Server not running, start it
       await invoke("spawn_screenpipe");
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      setSetupState("recording");
     } catch (error) {
       console.error("Failed to start screenpipe:", error);
-      // Don't reset to "ready" on error to prevent retry loops
-      // User can use the stuck timeout UI to retry or continue
       setSetupState("starting");
     } finally {
       isStartingRef.current = false;
@@ -396,13 +347,9 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   const requestPermission = async (type: "screen" | "audio" | "accessibility") => {
     try {
-      if (type === "screen") {
-        await commands.requestPermission("screenRecording");
-      } else if (type === "audio") {
-        await commands.requestPermission("microphone");
-      } else {
-        await commands.requestPermission("accessibility");
-      }
+      if (type === "screen") await commands.requestPermission("screenRecording");
+      else if (type === "audio") await commands.requestPermission("microphone");
+      else await commands.requestPermission("accessibility");
     } catch (error) {
       console.error("Failed to request permission:", error);
     }
@@ -412,104 +359,92 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const audioGranted = permissions?.microphone === "granted" || permissions?.microphone === "notNeeded";
   const accessibilityGranted = permissions?.accessibility === "granted" || permissions?.accessibility === "notNeeded";
 
+  const progressSteps = [
+    { label: "permissions", done: progress.permissions, active: setupState === "needs-permissions" || setupState === "checking" },
+    { label: "engine", done: progress.serverStarted, active: !progress.serverStarted && progress.permissions },
+    { label: "audio", done: progress.audioReady, active: progress.serverStarted && !progress.audioReady },
+    { label: "vision", done: progress.visionReady, active: progress.serverStarted && !progress.visionReady && progress.audioReady },
+  ];
+
   return (
     <div className={`${className} w-full flex flex-col items-center justify-center min-h-[400px]`}>
 
-      {/* Branding */}
+      {/* Branding — always visible */}
       <motion.div
-        className="flex flex-col items-center mb-6"
+        className="flex flex-col items-center mb-4"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <img className="w-14 h-14 mb-3" src="/128x128.png" alt="screenpipe" />
-        <h1 className="font-mono text-lg font-bold text-foreground">screenpipe</h1>
-        <p className="font-mono text-xs text-muted-foreground mt-1">AI memory for your screen</p>
+        <img className="w-12 h-12 mb-2" src="/128x128.png" alt="screenpipe" />
+        <h1 className="font-mono text-base font-bold text-foreground">screenpipe</h1>
       </motion.div>
 
-      {/* Checking state */}
+      {/* Checking state — particle stream at low progress */}
       {setupState === "checking" && (
         <motion.div
-          className="flex flex-col items-center space-y-4"
+          className="flex flex-col items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <Lottie
-            animationData={pipeFlowAnimation}
-            loop={true}
-            className="w-24 h-10"
-          />
-          <p className="font-mono text-sm text-muted-foreground">checking permissions...</p>
+          <ParticleStream progress={0.05} width={380} height={140} />
+          <ProgressSteps steps={progressSteps} className="mt-2" />
         </motion.div>
       )}
 
       {/* Needs permissions */}
       {setupState === "needs-permissions" && (
         <motion.div
-          className="flex flex-col items-center space-y-8 max-w-md"
+          className="flex flex-col items-center space-y-5 w-full max-w-sm"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="text-center space-y-2">
-            <h2 className="font-mono text-xl text-foreground">grant access</h2>
-            <p className="font-mono text-xs text-muted-foreground">
-              screenpipe needs these permissions to work
-            </p>
-          </div>
+          <ParticleStream progress={0.1} width={380} height={100} />
 
-          <div className="space-y-3 w-full">
+          <div className="space-y-2 w-full">
             <button
               onClick={() => requestPermission("screen")}
-              className="w-full flex items-center justify-between p-4 border border-border hover:bg-foreground hover:text-background transition-all group"
+              className="w-full flex items-center justify-between px-4 py-3 border border-border/50 hover:bg-foreground hover:text-background transition-all group"
             >
               <div className="flex items-center space-x-3">
-                <Monitor className="w-5 h-5" strokeWidth={1.5} />
-                <div className="text-left">
-                  <span className="font-mono text-sm block">screen recording</span>
-                  <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">capture what&apos;s on screen</span>
-                </div>
+                <Monitor className="w-4 h-4 opacity-60" strokeWidth={1.5} />
+                <span className="font-mono text-xs">screen recording</span>
               </div>
               {screenGranted ? (
-                <Check className="w-5 h-5 text-foreground group-hover:text-background" strokeWidth={1.5} />
+                <Check className="w-4 h-4 text-green-400" strokeWidth={2} />
               ) : (
-                <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">enable</span>
+                <span className="font-mono text-[10px] text-muted-foreground group-hover:text-background/70">enable</span>
               )}
             </button>
 
             <button
               onClick={() => requestPermission("audio")}
-              className="w-full flex items-center justify-between p-4 border border-border hover:bg-foreground hover:text-background transition-all group"
+              className="w-full flex items-center justify-between px-4 py-3 border border-border/50 hover:bg-foreground hover:text-background transition-all group"
             >
               <div className="flex items-center space-x-3">
-                <Mic className="w-5 h-5" strokeWidth={1.5} />
-                <div className="text-left">
-                  <span className="font-mono text-sm block">microphone</span>
-                  <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">transcribe speech</span>
-                </div>
+                <Mic className="w-4 h-4 opacity-60" strokeWidth={1.5} />
+                <span className="font-mono text-xs">microphone</span>
               </div>
               {audioGranted ? (
-                <Check className="w-5 h-5 text-foreground group-hover:text-background" strokeWidth={1.5} />
+                <Check className="w-4 h-4 text-green-400" strokeWidth={2} />
               ) : (
-                <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">enable</span>
+                <span className="font-mono text-[10px] text-muted-foreground group-hover:text-background/70">enable</span>
               )}
             </button>
 
             {isMacOS && (
               <button
                 onClick={() => requestPermission("accessibility")}
-                className="w-full flex items-center justify-between p-4 border border-border hover:bg-foreground hover:text-background transition-all group"
+                className="w-full flex items-center justify-between px-4 py-3 border border-border/50 hover:bg-foreground hover:text-background transition-all group"
               >
                 <div className="flex items-center space-x-3">
-                  <Keyboard className="w-5 h-5" strokeWidth={1.5} />
-                  <div className="text-left">
-                    <span className="font-mono text-sm block">accessibility</span>
-                    <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">keyboard shortcuts</span>
-                  </div>
+                  <Keyboard className="w-4 h-4 opacity-60" strokeWidth={1.5} />
+                  <span className="font-mono text-xs">accessibility</span>
                 </div>
                 {accessibilityGranted ? (
-                  <Check className="w-5 h-5 text-foreground group-hover:text-background" strokeWidth={1.5} />
+                  <Check className="w-4 h-4 text-green-400" strokeWidth={2} />
                 ) : (
-                  <span className="font-mono text-xs text-muted-foreground group-hover:text-background/70">enable</span>
+                  <span className="font-mono text-[10px] text-muted-foreground group-hover:text-background/70">enable</span>
                 )}
               </button>
             )}
@@ -520,9 +455,10 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
               onClick={() => {
                 posthog.capture("onboarding_permission_skipped");
                 hasStartedRef.current = true;
+                setProgress((prev) => ({ ...prev, permissions: true }));
                 setSetupState("ready");
               }}
-              className="font-mono text-xs text-muted-foreground hover:text-foreground"
+              className="font-mono text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors"
             >
               continue anyway →
             </button>
@@ -530,180 +466,76 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         </motion.div>
       )}
 
-      {/* Starting state */}
-      {setupState === "starting" && (
+      {/* Starting / Ready — the big particle animation */}
+      {(setupState === "starting" || setupState === "ready") && (
         <motion.div
-          className="flex flex-col items-center space-y-6"
+          className="flex flex-col items-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
+          transition={{ duration: 0.6 }}
         >
-          <Lottie
-            animationData={pipeFlowAnimation}
-            loop={true}
-            className="w-32 h-12"
+          <ParticleStream
+            progress={Math.max(0.15, animatedProgress)}
+            width={420}
+            height={180}
           />
-          <div className="text-center space-y-2">
-            <p className="font-mono text-sm text-foreground">starting screenpipe...</p>
-            <p className="font-mono text-xs text-muted-foreground">downloading AI models</p>
-          </div>
 
-          {isStuck && (
-            <motion.div
-              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-border bg-muted/50 rounded-lg max-w-md"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="flex items-center space-x-2 text-muted-foreground">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="font-mono text-sm">taking longer than expected</span>
-              </div>
-              <p className="font-mono text-xs text-muted-foreground text-center">
-                this might be due to missing permissions or a startup issue.
-                {isMacOS && " try granting screen recording & microphone access in system settings."}
-              </p>
-              <div className="flex flex-col items-center space-y-2 w-full">
-                <div className="flex items-center space-x-2">
+          <ProgressSteps steps={progressSteps} className="mt-3" />
+
+          {/* Stuck state — minimal */}
+          <AnimatePresence>
+            {isStuck && (
+              <motion.div
+                className="flex flex-col items-center space-y-3 mt-5"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <div className="flex items-center gap-3">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={openLogsFolder}
-                    className="font-mono text-xs"
+                    className="font-mono text-[10px] h-7 px-2"
                   >
-                    open logs folder
+                    logs
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={sendLogs}
                     disabled={isSendingLogs || logsSent}
-                    className="font-mono text-xs"
+                    className="font-mono text-[10px] h-7 px-2"
                   >
                     {isSendingLogs ? (
-                      <><Loader className="w-3 h-3 mr-1 animate-spin" /> sending...</>
+                      <Loader className="w-3 h-3 animate-spin" />
                     ) : logsSent ? (
-                      <><Check className="w-3 h-3 mr-1" /> logs sent</>
+                      <><Check className="w-3 h-3 mr-1" /> sent</>
                     ) : (
                       <><Upload className="w-3 h-3 mr-1" /> send logs</>
                     )}
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={openBookingLink}
+                    className="font-mono text-[10px] h-7 px-2"
+                  >
+                    <Calendar className="w-3 h-3 mr-1" /> help
+                  </Button>
                 </div>
-                <Button
-                  variant="link"
-                  size="sm"
-                  onClick={openBookingLink}
-                  className="font-mono text-xs text-primary"
-                >
-                  <Calendar className="w-3 h-3 mr-1" />
-                  book a call for help
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
+                <button
                   onClick={() => {
                     posthog.capture("onboarding_startup_skipped");
                     handleComplete();
                   }}
-                  className="font-mono text-xs mt-2"
+                  className="font-mono text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors"
                 >
-                  skip waiting →
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </motion.div>
-      )}
-
-      {/* Recording state — auto-advances to shortcut gate via useEffect */}
-
-      {/* Ready but not auto-started (fallback) */}
-      {setupState === "ready" && (
-        <motion.div
-          className="flex flex-col items-center space-y-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          <Lottie
-            animationData={pipeFlowAnimation}
-            loop={true}
-            className="w-32 h-12"
-          />
-          <p className="font-mono text-sm text-muted-foreground">starting screenpipe...</p>
-
-          {isStuck && (
-            <motion.div
-              className="flex flex-col items-center space-y-4 mt-4 p-4 border border-border bg-muted/50 rounded-lg max-w-md"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <div className="flex items-center space-x-2 text-muted-foreground">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="font-mono text-sm">taking longer than expected</span>
-              </div>
-              <p className="font-mono text-xs text-muted-foreground text-center">
-                this might be due to missing permissions or a startup issue.
-                {isMacOS && " try granting screen recording & microphone access in system settings."}
-              </p>
-              <div className="flex flex-col items-center space-y-2 w-full">
-                <div className="flex items-center space-x-2">
-                  {isMacOS && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => requestPermission("screen")}
-                      className="font-mono text-xs"
-                    >
-                      check permissions
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={openLogsFolder}
-                    className="font-mono text-xs"
-                  >
-                    open logs folder
-                  </Button>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={sendLogs}
-                    disabled={isSendingLogs || logsSent}
-                    className="font-mono text-xs"
-                  >
-                    {isSendingLogs ? (
-                      <><Loader className="w-3 h-3 mr-1 animate-spin" /> sending...</>
-                    ) : logsSent ? (
-                      <><Check className="w-3 h-3 mr-1" /> logs sent</>
-                    ) : (
-                      <><Upload className="w-3 h-3 mr-1" /> send logs</>
-                    )}
-                  </Button>
-                </div>
-                <Button
-                  variant="link"
-                  size="sm"
-                  onClick={openBookingLink}
-                  className="font-mono text-xs text-primary"
-                >
-                  <Calendar className="w-3 h-3 mr-1" />
-                  book a call for help
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    posthog.capture("onboarding_startup_skipped");
-                    handleComplete();
-                  }}
-                  className="font-mono text-xs mt-2"
-                >
-                  skip waiting →
-                </Button>
-              </div>
-            </motion.div>
-          )}
+                  skip →
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       )}
     </div>
