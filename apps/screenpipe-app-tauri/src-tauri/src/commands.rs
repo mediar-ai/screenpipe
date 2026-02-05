@@ -727,8 +727,22 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
                 if matches!(event.state, ShortcutState::Pressed) {
                     if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         info!("Search shortcut triggered");
-                        // Ensure the panel is key window so the search input can receive focus
-                        show_main_window(app, false);
+                        // Only show the main window if it's not already visible.
+                        // Re-showing when already visible re-runs activation logic
+                        // which can cause Space switching on macOS.
+                        use crate::window_api::main_label_for_mode;
+                        use crate::store::SettingsStore;
+                        let mode = SettingsStore::get(app)
+                            .unwrap_or_default()
+                            .unwrap_or_default()
+                            .overlay_mode;
+                        let label = main_label_for_mode(&mode);
+                        let already_visible = app.get_webview_window(label)
+                            .and_then(|w| w.is_visible().ok())
+                            .unwrap_or(false);
+                        if !already_visible {
+                            show_main_window(app, false);
+                        }
                         let _ = app.emit("open-search", ());
                     })) {
                         tracing::error!("panic in search shortcut handler: {:?}", e);

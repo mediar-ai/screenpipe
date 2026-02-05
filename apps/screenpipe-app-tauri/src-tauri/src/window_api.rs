@@ -110,16 +110,7 @@ pub async fn show_specific_window(
             // Add event handler to reset activation policy when window closes
             #[cfg(target_os = "macos")]
             {
-                let app_clone = state.app_handle.clone();
-                window.on_window_event(move |event| {
-                    match event {
-                        tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } => {
-                            info!("Custom window closed, resetting activation policy");
-                            reset_to_regular_and_refresh_tray(&app_clone);
-                        }
-                        _ => {}
-                    }
-                });
+                // No longer toggling activation policy — panel uses nonactivating mask
             }
 
             if let Err(e) = window.show() {
@@ -359,16 +350,12 @@ impl ShowRewindWindow {
             info!("showing existing main window (window mode)");
             #[cfg(target_os = "macos")]
             {
-                // Accessory mode is required for NSPanel to appear above fullscreen apps.
-                // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
-                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                 let app_clone = app.clone();
                 let lbl = label.to_string();
                 run_on_main_thread_safe(app, move || {
                     if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
                         use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
-                        use tauri_nspanel::cocoa::base::id;
-                        use objc::{class, msg_send, sel, sel_impl};
+                        use objc::{msg_send, sel, sel_impl};
                         panel.set_level(1001);
                         panel.set_collection_behaviour(
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
@@ -378,10 +365,6 @@ impl ShowRewindWindow {
                         let sharing: u64 = if capturable { 1 } else { 0 };
                         let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
                         panel.order_front_regardless();
-                        unsafe {
-                            let ns_app: id = msg_send![class!(NSApplication), sharedApplication];
-                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
-                        }
                         panel.make_key_window();
                         let _ = app_clone.emit("window-focused", true);
                     }
@@ -397,9 +380,6 @@ impl ShowRewindWindow {
             info!("showing existing panel (overlay mode)");
             #[cfg(target_os = "macos")]
             {
-                // Accessory mode is required for NSPanel to appear above fullscreen apps.
-                // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
-                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                 let app_clone = app.clone();
                 let lbl = label.to_string();
                 run_on_main_thread_safe(app, move || {
@@ -409,7 +389,7 @@ impl ShowRewindWindow {
                     use tauri_nspanel::cocoa::foundation::{NSArray, NSPoint, NSRect};
 
                     if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
-                        use objc::{class, msg_send, sel, sel_impl};
+                        use objc::{msg_send, sel, sel_impl};
                         unsafe {
                             let mouse_location: NSPoint = NSEvent::mouseLocation(nil);
                             let screens: id = NSScreen::screens(nil);
@@ -445,13 +425,9 @@ impl ShowRewindWindow {
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                         );
                         panel.order_front_regardless();
-                        // Activate the app so the panel can become key window
-                        // and receive keyboard input (Accessory policy prevents
-                        // activation by default).
-                        unsafe {
-                            let ns_app: id = msg_send![class!(NSApplication), sharedApplication];
-                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
-                        }
+                        // Panel has NSNonactivatingPanelMask + canBecomeKeyWindow=YES,
+                        // so makeKeyWindow works without activating the app.
+                        // This avoids stealing activation from fullscreen apps (no Space switch).
                         panel.make_key_window();
                         let _ = app_clone.emit("window-focused", true);
                     }
@@ -600,9 +576,6 @@ impl ShowRewindWindow {
 
                     #[cfg(target_os = "macos")]
                     let window = {
-                        // Accessory mode is required for NSPanel to appear above fullscreen apps.
-                        // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
-                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                         let app_clone = app.clone();
                         let builder = self.window_builder_with_label(app, "/", main_label_for_mode("window"))
                             .title("screenpipe")
@@ -614,15 +587,8 @@ impl ShowRewindWindow {
                             .transparent(false)
                             .on_page_load(move |win, payload| {
                                 if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                                    // Panel setup already done — just show & activate
                                     win.show().ok();
                                     win.set_focus().ok();
-                                    use objc::{msg_send, sel, sel_impl};
-                                    use tauri_nspanel::cocoa::base::id;
-                                    unsafe {
-                                        let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
-                                        let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
-                                    }
                                     let _ = app_clone.emit("window-focused", true);
                                 }
                             });
@@ -697,8 +663,6 @@ impl ShowRewindWindow {
                                         if cancel.load(std::sync::atomic::Ordering::SeqCst) {
                                             return;
                                         }
-                                        #[cfg(target_os = "macos")]
-                                        reset_to_regular_and_refresh_tray(&app);
                                         let _ = app.emit("window-focused", false);
                                     });
                                 } else {
@@ -720,10 +684,6 @@ impl ShowRewindWindow {
                 // macOS uses fullscreen transparent panel overlay
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // Accessory mode is required for NSPanel to appear above fullscreen apps.
-                    // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
-                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
                     // Use cursor position to find the correct monitor (not primary)
                     let (monitor, position) = {
                         use tauri_nspanel::cocoa::appkit::{NSEvent, NSScreen};
@@ -879,7 +839,10 @@ impl ShowRewindWindow {
 
                                 panel.released_when_closed(true);
 
-                                panel.set_style_mask(0);
+                                // Keep NSNonactivatingPanelMask (128) so the panel can become
+                                // key window without activating the app — this prevents
+                                // macOS Space switching when showing/hiding over fullscreen apps.
+                                panel.set_style_mask(128);
 
                                 // Disable window dragging by clicking on background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
@@ -920,8 +883,6 @@ impl ShowRewindWindow {
                                         return;
                                     }
                                     info!("Main window hiding after debounce");
-                                    #[cfg(target_os = "macos")]
-                                    reset_to_regular_and_refresh_tray(&app);
                                     let _ = app.emit("window-focused", false).ok();
                                 });
                             } else {
@@ -1002,10 +963,6 @@ impl ShowRewindWindow {
             ShowRewindWindow::Chat => {
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // Accessory mode is required for NSPanel to appear above fullscreen apps.
-                    // Dock icon is restored in close() via reset_to_regular_and_refresh_tray().
-                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
                     let builder = self.window_builder(app, "/chat")
                         .inner_size(500.0, 650.0)
                         .min_inner_size(400.0, 500.0)
@@ -1049,17 +1006,7 @@ impl ShowRewindWindow {
                         });
                     }
 
-                    // Reset activation policy when chat window closes (same as overlay)
-                    let app_clone = app.clone();
-                    window.on_window_event(move |event| {
-                        match event {
-                            tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } => {
-                                info!("Chat window closed, resetting activation policy");
-                                reset_to_regular_and_refresh_tray(&app_clone);
-                            }
-                            _ => {}
-                        }
-                    });
+                    // No longer toggling activation policy
 
                     window
                 };
@@ -1133,7 +1080,6 @@ impl ShowRewindWindow {
                     }
                 });
 
-                reset_to_regular_and_refresh_tray(app);
             }
 
             #[cfg(not(target_os = "macos"))]

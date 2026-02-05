@@ -1033,12 +1033,14 @@ async fn main() {
             .typ::<obsidian_sync::ObsidianSyncSettings>()
             .typ::<obsidian_sync::ObsidianSyncStatus>();
 
-        builder
+        if let Err(e) = builder
             .export(
                 Typescript::default().bigint(specta_typescript::BigIntExportBehavior::BigInt),
                 "../lib/utils/tauri.ts",
             )
-            .expect("Failed to export TypeScript bindings");
+        {
+            eprintln!("Warning: Failed to export TypeScript bindings: {e}");
+        }
     }
 
     let recording_state = RecordingState(Arc::new(tokio::sync::Mutex::new(None)));
@@ -1222,8 +1224,10 @@ async fn main() {
                     }
                 });
 
-                // Set up Space change listener to hide overlay when switching Spaces
-                space_monitor::setup_space_listener(app.handle().clone());
+                // Space monitor disabled — panel uses nonactivating mask so it
+                // no longer triggers Space switches. The monitor was fighting with
+                // the panel's own show/hide and causing feedback loops.
+                // space_monitor::setup_space_listener(app.handle().clone());
             }
 
             // Logging setup
