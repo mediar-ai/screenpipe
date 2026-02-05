@@ -684,6 +684,16 @@ impl ShowRewindWindow {
 
                     #[cfg(target_os = "macos")]
                     let window = {
+                        // Activate BEFORE building so macOS places the window
+                        // on the current fullscreen Space, not the leftmost desktop.
+                        {
+                            use objc::{msg_send, sel, sel_impl};
+                            use tauri_nspanel::cocoa::base::id;
+                            unsafe {
+                                let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                                let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                            }
+                        }
                         let app_clone = app.clone();
                         let builder = self.window_builder_with_label(app, "/", main_label_for_mode("window"))
                             .title("screenpipe")
@@ -697,14 +707,6 @@ impl ShowRewindWindow {
                                 if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                                     win.show().ok();
                                     win.set_focus().ok();
-                                    // Activate so the window appears on the current
-                                    // fullscreen Space (not the leftmost desktop).
-                                    use objc::{msg_send, sel, sel_impl};
-                                    use tauri_nspanel::cocoa::base::id;
-                                    unsafe {
-                                        let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
-                                        let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
-                                    }
                                     let _ = app_clone.emit("window-focused", true);
                                 }
                             });
@@ -1136,6 +1138,16 @@ impl ShowRewindWindow {
             ShowRewindWindow::Chat => {
                 #[cfg(target_os = "macos")]
                 let window = {
+                    // Activate BEFORE building so macOS places the window
+                    // on the current fullscreen Space.
+                    {
+                        use objc::{msg_send, sel, sel_impl};
+                        use tauri_nspanel::cocoa::base::id;
+                        unsafe {
+                            let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                        }
+                    }
                     let builder = self.window_builder(app, "/chat")
                         .inner_size(500.0, 650.0)
                         .min_inner_size(400.0, 500.0)
