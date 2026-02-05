@@ -1132,7 +1132,14 @@ export function StandaloneChat() {
             // Check if content was already set by error handlers above
             setMessages((prev) => {
               const existing = prev.find((m) => m.id === msgId);
-              // Don't overwrite meaningful error messages with "Done"
+              // Don't overwrite error messages with "Done" or empty content
+              const isErrorMessage = existing?.content?.includes("used all your free queries") ||
+                existing?.content?.includes("requires an upgrade") ||
+                existing?.content?.startsWith("Error:");
+              if (isErrorMessage) {
+                return prev;
+              }
+              // Don't overwrite if we have no new content and existing isn't "Processing..."
               if (existing && existing.content !== "Processing..." && !content) {
                 return prev;
               }
