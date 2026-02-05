@@ -367,7 +367,8 @@ impl ShowRewindWindow {
                 run_on_main_thread_safe(app, move || {
                     if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
                         use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
-                        use objc::{msg_send, sel, sel_impl};
+                        use tauri_nspanel::cocoa::base::id;
+                        use objc::{class, msg_send, sel, sel_impl};
                         panel.set_level(1001);
                         panel.set_collection_behaviour(
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
@@ -377,6 +378,10 @@ impl ShowRewindWindow {
                         let sharing: u64 = if capturable { 1 } else { 0 };
                         let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
                         panel.order_front_regardless();
+                        unsafe {
+                            let ns_app: id = msg_send![class!(NSApplication), sharedApplication];
+                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                        }
                         panel.make_key_window();
                         let _ = app_clone.emit("window-focused", true);
                     }
@@ -404,7 +409,7 @@ impl ShowRewindWindow {
                     use tauri_nspanel::cocoa::foundation::{NSArray, NSPoint, NSRect};
 
                     if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
-                        use objc::{msg_send, sel, sel_impl};
+                        use objc::{class, msg_send, sel, sel_impl};
                         unsafe {
                             let mouse_location: NSPoint = NSEvent::mouseLocation(nil);
                             let screens: id = NSScreen::screens(nil);
@@ -440,6 +445,13 @@ impl ShowRewindWindow {
                             NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                         );
                         panel.order_front_regardless();
+                        // Activate the app so the panel can become key window
+                        // and receive keyboard input (Accessory policy prevents
+                        // activation by default).
+                        unsafe {
+                            let ns_app: id = msg_send![class!(NSApplication), sharedApplication];
+                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                        }
                         panel.make_key_window();
                         let _ = app_clone.emit("window-focused", true);
                     }
