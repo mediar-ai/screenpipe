@@ -697,6 +697,14 @@ impl ShowRewindWindow {
                                 if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                                     win.show().ok();
                                     win.set_focus().ok();
+                                    // Activate so the window appears on the current
+                                    // fullscreen Space (not the leftmost desktop).
+                                    use objc::{msg_send, sel, sel_impl};
+                                    use tauri_nspanel::cocoa::base::id;
+                                    unsafe {
+                                        let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                                        let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                                    }
                                     let _ = app_clone.emit("window-focused", true);
                                 }
                             });
@@ -747,9 +755,11 @@ impl ShowRewindWindow {
                                     // NSWindowSharingNone=0 hides from screen recorders, NSWindowSharingReadOnly=1 allows capture
                                     let sharing: u64 = if capturable { 1 } else { 0 };
                                     let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
-                                    // Don't set MoveToActiveSpace here — it's set temporarily
-                                    // in show_existing_main and removed after showing.
+                                    // MoveToActiveSpace so the panel appears on the current
+                                    // fullscreen Space on first creation. show_existing_main
+                                    // manages this for subsequent shows.
                                     panel.set_collection_behaviour(
+                                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
                                 }
@@ -1165,11 +1175,17 @@ impl ShowRewindWindow {
                                 );
 
                                 panel.order_front_regardless();
+                                // Activate so the chat window appears on the
+                                // current fullscreen Space, not the leftmost desktop.
+                                unsafe {
+                                    use tauri_nspanel::cocoa::base::id;
+                                    let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                                    let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                                }
+                                panel.make_key_window();
                             }
                         });
                     }
-
-                    // No longer toggling activation policy
 
                     window
                 };
