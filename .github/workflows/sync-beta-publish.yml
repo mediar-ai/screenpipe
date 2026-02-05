@@ -1,7 +1,8 @@
 name: Sync Beta Publish
 
-# When production is published on CrabNebula, also publish beta
-# Checks every 5 minutes. No-ops if already in sync.
+# Automatically publish beta whenever production is published on CrabNebula.
+# Runs every 15 min. Idempotent — safe to run repeatedly.
+# Production publish → beta publish (not the other way around).
 
 on:
   schedule:
@@ -19,49 +20,10 @@ jobs:
         run: |
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Current version: $VERSION"
 
-      - name: Install CrabNebula CLI
-        run: |
-          curl -L -o cn https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/linux-binary-x86_64
-          chmod +x cn
-          sudo mv cn /usr/local/bin/cn
-
-      - name: Check production release status
-        id: check-prod
-        env:
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-        run: |
-          # Try to publish production — if already published, this is a no-op
-          # If it's still a draft, this will fail (which means user hasn't clicked publish yet)
-          # We use the exit code to determine status
-          if cn release publish ${{ secrets.CN_APP_SLUG }} ${{ steps.version.outputs.version }} 2>&1 | tee /tmp/cn-prod.log; then
-            echo "Production is published (or was just published)"
-            echo "prod_published=true" >> $GITHUB_OUTPUT
-          else
-            if grep -qi "already published\|already been published\|is published" /tmp/cn-prod.log; then
-              echo "Production already published"
-              echo "prod_published=true" >> $GITHUB_OUTPUT
-            else
-              echo "Production not yet published (still draft)"
-              echo "prod_published=false" >> $GITHUB_OUTPUT
-            fi
-          fi
-
-      - name: Publish beta if production is published
-        if: steps.check-prod.outputs.prod_published == 'true'
-        env:
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-        run: |
-          echo "Publishing beta v${{ steps.version.outputs.version }}..."
-          if cn release publish ${{ secrets.CN_APP_SLUG_BETA }} ${{ steps.version.outputs.version }} 2>&1 | tee /tmp/cn-beta.log; then
-            echo "✅ Beta published successfully"
-          else
-            if grep -qi "already published\|already been published\|is published" /tmp/cn-beta.log; then
-              echo "✅ Beta already published — in sync"
-            else
-              echo "⚠️ Beta publish failed (may not have a matching draft)"
-              cat /tmp/cn-beta.log
-              # Don't fail — beta might not have a draft for this version
-            fi
-          fi
+      - name: Publish beta release (idempotent)
+        uses: crabnebula-dev/cloud-release@v0.2.6
+        continue-on-error: true
+        with:
+          command: release publish ${{ secrets.CN_APP_SLUG_BETA }} ${{ steps.version.outputs.version }}
+          api-key: ${{ secrets.CN_API_KEY }}
