@@ -160,10 +160,26 @@ pub async fn spawn_screenpipe(
     }
 
     // No handle — either cold start, or stop_screenpipe() already cleared it.
-    // Kill whatever is on the port. We never "reuse" a handleless server because
-    // it may be a dying process from stop_screenpipe() that hasn't released the
-    // port yet. Always start fresh.
+    // Kill orphaned processes (but never our own PID).
     kill_process_on_port(port).await;
+
+    // Wait for port to be fully released (our own server threads may still be
+    // shutting down after handle.shutdown() or stop_screenpipe()).
+    for i in 0..10 {
+        match tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await {
+            Ok(_) => {
+                debug!("Port {} is free after {}ms", port, i * 200);
+                break;
+            }
+            Err(_) => {
+                if i == 9 {
+                    warn!("Port {} still in use after 2s, proceeding anyway", port);
+                } else {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                }
+            }
+        }
+    }
 
     // Check permissions before starting
     let permissions_check = do_permissions_check(false);
@@ -269,6 +285,8 @@ pub async fn spawn_screenpipe(
 /// from previous crashes, CLI runs, etc. Safe because we already verified the port
 /// is NOT serving a healthy screenpipe (that case returns early above).
 async fn kill_process_on_port(port: u16) {
+    let my_pid = std::process::id().to_string();
+
     #[cfg(unix)]
     {
         // lsof -ti:PORT gives PIDs of processes using that port
@@ -279,13 +297,18 @@ async fn kill_process_on_port(port: u16) {
         {
             Ok(output) if output.status.success() => {
                 let pids = String::from_utf8_lossy(&output.stdout);
-                let pids: Vec<&str> = pids.trim().split('\n').filter(|s| !s.is_empty()).collect();
+                let pids: Vec<&str> = pids
+                    .trim()
+                    .split('\n')
+                    .filter(|s| !s.is_empty() && *s != my_pid)
+                    .collect();
                 if pids.is_empty() {
+                    debug!("No orphaned processes on port {} (only our own PID)", port);
                     return;
                 }
                 warn!(
-                    "Found {} process(es) on port {}: {:?}. Killing to free port.",
-                    pids.len(), port, pids
+                    "Found {} orphaned process(es) on port {}: {:?}. Killing to free port (our pid: {}).",
+                    pids.len(), port, pids, my_pid
                 );
                 for pid in &pids {
                     let _ = tokio::process::Command::new("kill")
@@ -305,6 +328,7 @@ async fn kill_process_on_port(port: u16) {
 
     #[cfg(windows)]
     {
+        let my_pid_num: u32 = std::process::id();
         // netstat -ano | findstr :PORT
         match tokio::process::Command::new("cmd")
             .args(["/C", &format!("netstat -ano | findstr :{}", port)])
@@ -318,18 +342,19 @@ async fn kill_process_on_port(port: u16) {
                     // Lines look like: TCP 0.0.0.0:3030 ... LISTENING 12345
                     if let Some(pid) = line.split_whitespace().last() {
                         if let Ok(pid_num) = pid.parse::<u32>() {
-                            if pid_num > 0 {
+                            if pid_num > 0 && pid_num != my_pid_num {
                                 pids.insert(pid_num);
                             }
                         }
                     }
                 }
                 if pids.is_empty() {
+                    debug!("No orphaned processes on port {} (only our own PID)", port);
                     return;
                 }
                 warn!(
-                    "Found {} process(es) on port {}: {:?}. Killing to free port.",
-                    pids.len(), port, pids
+                    "Found {} orphaned process(es) on port {}: {:?}. Killing to free port (our pid: {}).",
+                    pids.len(), port, pids, my_pid_num
                 );
                 for pid in &pids {
                     let _ = tokio::process::Command::new("taskkill")
