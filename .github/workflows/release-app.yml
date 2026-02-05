@@ -22,6 +22,9 @@ on:
 jobs:
   check_commit:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       should_publish: ${{ steps.check.outputs.should_publish }}
