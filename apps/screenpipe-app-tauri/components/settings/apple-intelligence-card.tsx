@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {
   Collapsible,
   CollapsibleContent,
@@ -54,17 +53,15 @@ interface TodoItem {
 }
 
 interface ExtractStats {
-  chunks_processed: number;
-  chunks_with_results: number;
+  data_sources: number;
   total_input_chars: number;
   filtered_input_chars: number;
+  chunks_processed: number;
   total_time_ms: number;
-  pre_filter_ratio: number;
 }
 
 interface AppleIntelligenceSettings {
   enabled: boolean;
-  serverUrl: string;
   intervalMinutes: number; // 0 = manual
   lookbackMinutes: number;
   chunkSize: number;
@@ -72,62 +69,13 @@ interface AppleIntelligenceSettings {
 
 const DEFAULT_SETTINGS: AppleIntelligenceSettings = {
   enabled: false,
-  serverUrl: "http://localhost:5273",
   intervalMinutes: 0,
   lookbackMinutes: 60,
   chunkSize: 1200,
 };
 
-// ─── Screenpipe data fetching ───────────────────────────────────────────────
-
-async function fetchScreenpipeData(
-  lookbackMinutes: number
-): Promise<string[]> {
-  const now = new Date();
-  const start = new Date(now.getTime() - lookbackMinutes * 60 * 1000);
-
-  const params = new URLSearchParams({
-    content_type: "all",
-    start_time: start.toISOString(),
-    end_time: now.toISOString(),
-    limit: "100",
-    min_length: "10",
-  });
-
-  const response = await fetch(
-    `http://localhost:3030/search?${params.toString()}`
-  );
-  if (!response.ok) {
-    throw new Error(`Screenpipe API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const chunks: string[] = [];
-
-  // Group by content type and build text chunks
-  for (const item of data.data || []) {
-    if (item.type === "OCR") {
-      const content = item.content;
-      const app = content?.app_name || "Unknown";
-      const window = content?.window_name || "";
-      const text = content?.text || "";
-      if (text.trim()) {
-        chunks.push(`[${app}${window ? " - " + window : ""}]\n${text}`);
-      }
-    } else if (item.type === "Audio") {
-      const content = item.content;
-      const text = content?.transcription || "";
-      const speaker = content?.speaker_name || content?.speaker_id || "";
-      if (text.trim()) {
-        chunks.push(
-          `[Audio${speaker ? " - " + speaker : ""}]\n${text}`
-        );
-      }
-    }
-  }
-
-  return chunks;
-}
+// Screenpipe server (same server that's already running)
+const SCREENPIPE_API = "http://localhost:3030";
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -138,8 +86,8 @@ export function AppleIntelligenceCard() {
     useState<AppleIntelligenceSettings>(DEFAULT_SETTINGS);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [serverStatus, setServerStatus] = useState<
-    "unknown" | "connected" | "unavailable"
+  const [aiStatus, setAiStatus] = useState<
+    "unknown" | "available" | "unavailable"
   >("unknown");
   const [isExtracting, setIsExtracting] = useState(false);
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -207,28 +155,31 @@ export function AppleIntelligenceCard() {
     }
   }, [todos, lastRun, settingsLoaded]);
 
-  // Check server status
-  const checkServer = useCallback(async () => {
+  // Check AI status via screenpipe server
+  const checkStatus = useCallback(async () => {
     try {
-      const resp = await fetch(`${settings.serverUrl}/health`, {
+      const resp = await fetch(`${SCREENPIPE_API}/ai/status`, {
         signal: AbortSignal.timeout(3000),
       });
       if (resp.ok) {
         const data = await resp.json();
-        setServerStatus(data.status === "ok" ? "connected" : "unavailable");
+        setAiStatus(data.available ? "available" : "unavailable");
+      } else if (resp.status === 404) {
+        // Endpoint doesn't exist — server not built with apple-intelligence feature
+        setAiStatus("unavailable");
       } else {
-        setServerStatus("unavailable");
+        setAiStatus("unavailable");
       }
     } catch {
-      setServerStatus("unavailable");
+      setAiStatus("unavailable");
     }
-  }, [settings.serverUrl]);
+  }, []);
 
   useEffect(() => {
-    checkServer();
-    const interval = setInterval(checkServer, 30000);
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000);
     return () => clearInterval(interval);
-  }, [checkServer]);
+  }, [checkStatus]);
 
   // Auto-extraction interval
   useEffect(() => {
@@ -240,7 +191,7 @@ export function AppleIntelligenceCard() {
     if (
       settings.enabled &&
       settings.intervalMinutes > 0 &&
-      serverStatus === "connected"
+      aiStatus === "available"
     ) {
       intervalRef.current = setInterval(
         () => runExtraction(),
@@ -251,44 +202,41 @@ export function AppleIntelligenceCard() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [settings.enabled, settings.intervalMinutes, serverStatus]);
+  }, [settings.enabled, settings.intervalMinutes, aiStatus]);
 
-  // ─── Extraction logic ───────────────────────────────────────────────────
+  // ─── Extraction — single POST to screenpipe server ──────────────────────
 
   const runExtraction = async () => {
-    if (isExtracting || serverStatus !== "connected") return;
+    if (isExtracting || aiStatus !== "available") return;
 
     setIsExtracting(true);
     setError(null);
 
     try {
-      // Step 1: Fetch data from screenpipe
-      const chunks = await fetchScreenpipeData(settings.lookbackMinutes);
-
-      if (chunks.length === 0) {
-        setError("No recent data found in screenpipe");
-        setIsExtracting(false);
-        return;
-      }
-
-      // Step 2: Send to fm-server for extraction
-      const response = await fetch(
-        `${settings.serverUrl}/v1/extract-todos`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chunks,
-            chunk_size: settings.chunkSize,
-          }),
-        }
-      );
+      // Single call to screenpipe server — it queries DB directly,
+      // pre-filters, chunks, and processes with Foundation Models.
+      // No separate server, no data fetching from frontend.
+      const response = await fetch(`${SCREENPIPE_API}/ai/extract-todos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lookback_minutes: settings.lookbackMinutes,
+          chunk_size: settings.chunkSize,
+        }),
+      });
 
       if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `Server error: ${response.status}`);
       }
 
       const result = await response.json();
+
+      if (!result.available) {
+        setError("Apple Intelligence not available on this device");
+        setAiStatus("unavailable");
+        return;
+      }
 
       setTodos(result.items || []);
       setLastStats(result.stats);
@@ -383,9 +331,9 @@ export function AppleIntelligenceCard() {
               <span className="px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground rounded-full">
                 on-device
               </span>
-              {serverStatus === "connected" && (
+              {aiStatus === "available" && (
                 <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded-full">
-                  connected
+                  available
                 </span>
               )}
               {settings.enabled && settings.intervalMinutes > 0 && (
@@ -396,13 +344,10 @@ export function AppleIntelligenceCard() {
             </div>
             <p className="text-xs text-muted-foreground mb-3">
               Extract action items from your screen & audio using on-device AI.
-              {serverStatus === "unavailable" && (
+              {aiStatus === "unavailable" && (
                 <span className="block mt-1">
                   <AlertCircle className="h-3 w-3 inline mr-1" />
-                  Server not running. Start with:{" "}
-                  <code className="text-[10px] bg-muted px-1 py-0.5 rounded">
-                    cargo run --features server --bin fm-server
-                  </code>
+                  Requires macOS 26+ with Apple Intelligence enabled.
                 </span>
               )}
             </p>
@@ -419,9 +364,7 @@ export function AppleIntelligenceCard() {
 
               <Button
                 onClick={runExtraction}
-                disabled={
-                  isExtracting || serverStatus !== "connected"
-                }
+                disabled={isExtracting || aiStatus !== "available"}
                 size="sm"
                 className="gap-1.5 h-7 text-xs"
               >
@@ -460,18 +403,6 @@ export function AppleIntelligenceCard() {
         {/* Settings panel */}
         {isExpanded && (
           <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Server URL</Label>
-              <Input
-                value={settings.serverUrl}
-                onChange={(e) =>
-                  setSettings((s) => ({ ...s, serverUrl: e.target.value }))
-                }
-                placeholder="http://localhost:5273"
-                className="h-7 text-xs font-mono"
-              />
-            </div>
-
             <div className="grid grid-cols-3 gap-2">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Lookback</Label>
@@ -549,9 +480,9 @@ export function AppleIntelligenceCard() {
 
             {lastStats && (
               <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 font-mono">
-                {lastStats.chunks_processed} chunks processed ·{" "}
-                {lastStats.total_input_chars.toLocaleString()} chars input ·{" "}
-                {(lastStats.pre_filter_ratio * 100).toFixed(0)}% filtered ·{" "}
+                {lastStats.data_sources} sources ·{" "}
+                {lastStats.total_input_chars.toLocaleString()} chars ·{" "}
+                {lastStats.chunks_processed} chunks ·{" "}
                 {(lastStats.total_time_ms / 1000).toFixed(1)}s
               </div>
             )}
@@ -570,9 +501,7 @@ export function AppleIntelligenceCard() {
                     ) : (
                       <ChevronRight className="h-3 w-3 text-muted-foreground" />
                     )}
-                    <span className="text-xs font-medium">
-                      Action Items
-                    </span>
+                    <span className="text-xs font-medium">Action Items</span>
                     <Badge
                       variant="secondary"
                       className="h-4 px-1.5 text-[10px]"
@@ -682,12 +611,12 @@ export function AppleIntelligenceCard() {
               </span>
             )}
             <span
-              className={`ml-auto ${serverStatus === "connected" ? "text-green-500" : "text-muted-foreground"}`}
+              className={`ml-auto ${aiStatus === "available" ? "text-green-500" : "text-muted-foreground"}`}
             >
-              {serverStatus === "connected"
+              {aiStatus === "available"
                 ? "● on-device"
-                : serverStatus === "unavailable"
-                  ? "○ offline"
+                : aiStatus === "unavailable"
+                  ? "○ not available"
                   : "○ checking..."}
             </span>
           </div>
