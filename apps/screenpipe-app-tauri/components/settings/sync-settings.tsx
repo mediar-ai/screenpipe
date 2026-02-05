@@ -575,7 +575,7 @@ function ActiveSyncSettings({
 }
 
 export function SyncSettings() {
-  const { settings, isSettingsLoaded } = useSettings();
+  const { settings, isSettingsLoaded, updateSettings } = useSettings();
   const [step, setStep] = useState<"loading" | "onboarding" | "password" | "active">("loading");
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [status, setStatus] = useState<SyncStatus | null>(null);
@@ -605,7 +605,7 @@ export function SyncSettings() {
           description: "you can now set up your encryption password",
         });
       }
-    }, 5000); // Poll every 5 seconds
+    }, 1000); // Poll every 1 second
 
     return () => clearInterval(pollInterval);
   }, [step]);
@@ -638,6 +638,12 @@ export function SyncSettings() {
         });
 
         if (data.hasSubscription) {
+          // Update user.cloud_subscribed so account-section shows correct state
+          if (settings.user && !settings.user.cloud_subscribed) {
+            await updateSettings({
+              user: { ...settings.user, cloud_subscribed: true },
+            });
+          }
           try {
             const [statusResult, configResult, devicesResult] = await Promise.all([
               invoke<SyncStatus>("get_sync_status"),
@@ -716,7 +722,7 @@ export function SyncSettings() {
 
         // Poll for subscription status - stop when subscription is detected
         let pollCount = 0;
-        const maxPolls = 100; // 5 minutes at 3 second intervals
+        const maxPolls = 300; // 5 minutes at 1 second intervals
         const checkInterval = setInterval(async () => {
           pollCount++;
           console.log(`polling for subscription... attempt ${pollCount}`);
@@ -732,7 +738,7 @@ export function SyncSettings() {
             console.log("stopping subscription poll - max attempts reached");
             clearInterval(checkInterval);
           }
-        }, 3000);
+        }, 1000);
       } else {
         throw new Error(data.error || "failed to create checkout");
       }

@@ -95,6 +95,40 @@ export function AccountSection() {
         const data = await response.json();
         if (data.url) {
           openUrl(data.url);
+
+          // Poll for subscription status every 1 second after checkout
+          let pollCount = 0;
+          const maxPolls = 300; // 5 minutes
+          const checkInterval = setInterval(async () => {
+            pollCount++;
+            try {
+              const subResponse = await fetch(
+                `https://screenpi.pe/api/cloud-sync/subscription?userId=${settings.user?.id}&email=${encodeURIComponent(settings.user?.email || "")}`,
+                {
+                  headers: { Authorization: `Bearer ${settings.user?.token}` },
+                }
+              );
+              if (subResponse.ok) {
+                const subData = await subResponse.json();
+                if (subData.hasSubscription) {
+                  clearInterval(checkInterval);
+                  // Update user state with subscription
+                  updateSettings({
+                    user: { ...settings.user!, cloud_subscribed: true },
+                  });
+                  toast({
+                    title: "subscription activated",
+                    description: "welcome to screenpipe pro!",
+                  });
+                }
+              }
+            } catch (e) {
+              console.error("polling error:", e);
+            }
+            if (pollCount >= maxPolls) {
+              clearInterval(checkInterval);
+            }
+          }, 1000);
         } else {
           throw new Error(data.error || "failed to create checkout");
         }
