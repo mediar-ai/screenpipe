@@ -3,53 +3,192 @@
 import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 
-interface MemoryGridProps {
+interface Props {
   progress: number;
   width?: number;
   height?: number;
   className?: string;
 }
 
-/**
- * Memory Grid — sharp monochrome animation.
- * A grid of screen-frame rectangles that materialize as the system boots.
- * Scan line sweeps across, "capturing" each cell. Cells fill with faint
- * data patterns. Connected by thin circuit-like lines.
- * 
- * Evokes: screen capture, infinite memory, AI indexing.
- * Style: black & white, sharp corners, no curves.
- */
+// ─── constants ───────────────────────────────────────────
+const GLITCH_CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}|/=+~";
+const TEXT_L1 = "plugging into";
+const TEXT_L2 = "superintelligence";
+const MEMORY_FRAGMENTS = [
+  "13:42:07", "chrome", "screenshot", "meeting", "2026-02-02",
+  "email_draft", "slack", "terminal", "vscode", "figma",
+  "notion", "14:08:33", "recording_", "memory_03", "frame_2847",
+  "audio_in", "ocr_batch", "context_q", "index_07", "recall",
+];
+
+// ─── types ───────────────────────────────────────────────
+interface Node {
+  x: number; y: number;
+  ring: number;          // 0=outer, 1=mid, 2=inner
+  activation: number;    // progress threshold to activate
+  brightness: number;
+}
+interface Connection {
+  from: number; to: number;
+  activation: number;    // progress threshold
+  drawProg: number;      // 0→1 animated draw
+  heat: number;          // brightens when pulse passes
+}
+interface Pulse {
+  connIdx: number;
+  t: number;             // 0→1 along connection
+  speed: number;
+  brightness: number;
+}
+interface RainCol {
+  x: number;
+  chars: { y: number; ch: string; speed: number; opacity: number }[];
+}
+interface TextGlyph {
+  target: string;
+  current: string;
+  decodeFrame: number;   // frame at which it decodes
+  decoded: boolean;
+}
+interface Fragment {
+  x: number; y: number;
+  text: string;
+  life: number; maxLife: number;
+  opacity: number;
+}
+interface State {
+  nodes: Node[];
+  conns: Connection[];
+  pulses: Pulse[];
+  rain: RainCol[];
+  line1: TextGlyph[];
+  line2: TextGlyph[];
+  frags: Fragment[];
+  scanY: number;
+  centerGlow: number;
+  decodeFlash: number;  // 0→1→0 flash when text fully decoded
+}
+
+// ─── helpers ─────────────────────────────────────────────
+const rng = () => Math.random();
+const pick = <T,>(a: T[]) => a[Math.floor(rng() * a.length)];
+const randChar = () => GLITCH_CHARS[Math.floor(rng() * GLITCH_CHARS.length)];
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+function initState(w: number, h: number): State {
+  const cx = w / 2, cy = h * 0.42;
+
+  // ── nodes in 3 rings ──
+  const nodes: Node[] = [];
+  const rings = [
+    { count: 10, radius: Math.min(w, h) * 0.44, act: 0.10 },
+    { count: 8,  radius: Math.min(w, h) * 0.28, act: 0.25 },
+    { count: 5,  radius: Math.min(w, h) * 0.13, act: 0.40 },
+  ];
+  rings.forEach((ring, ri) => {
+    for (let i = 0; i < ring.count; i++) {
+      const angle = (i / ring.count) * Math.PI * 2 + ri * 0.3;
+      const jitter = ring.radius * 0.15;
+      nodes.push({
+        x: cx + Math.cos(angle) * ring.radius + (rng() - 0.5) * jitter,
+        y: cy + Math.sin(angle) * ring.radius * 0.6 + (rng() - 0.5) * jitter * 0.6,
+        ring: ri,
+        activation: ring.act + rng() * 0.1,
+        brightness: 0,
+      });
+    }
+  });
+
+  // ── connections: outer→mid, mid→inner, inner→center ──
+  const conns: Connection[] = [];
+  const byRing = (r: number) => nodes.map((n, i) => ({ n, i })).filter(x => x.n.ring === r);
+  const outer = byRing(0), mid = byRing(1), inner = byRing(2);
+
+  // Connect each mid node to 1-2 nearest outer nodes
+  mid.forEach(m => {
+    const sorted = [...outer].sort((a, b) =>
+      Math.hypot(a.n.x - m.n.x, a.n.y - m.n.y) - Math.hypot(b.n.x - m.n.x, b.n.y - m.n.y)
+    );
+    const count = 1 + Math.floor(rng() * 2);
+    for (let i = 0; i < count && i < sorted.length; i++) {
+      conns.push({ from: sorted[i].i, to: m.i, activation: 0.15 + rng() * 0.15, drawProg: 0, heat: 0 });
+    }
+  });
+  // Connect each inner node to 1-2 nearest mid nodes
+  inner.forEach(n => {
+    const sorted = [...mid].sort((a, b) =>
+      Math.hypot(a.n.x - n.n.x, a.n.y - n.n.y) - Math.hypot(b.n.x - n.n.x, b.n.y - n.n.y)
+    );
+    const count = 1 + Math.floor(rng() * 2);
+    for (let i = 0; i < count && i < sorted.length; i++) {
+      conns.push({ from: sorted[i].i, to: n.i, activation: 0.30 + rng() * 0.15, drawProg: 0, heat: 0 });
+    }
+  });
+  // Connect inner nodes to center point (virtual — we draw toward cx,cy)
+  inner.forEach(n => {
+    conns.push({ from: n.i, to: -1, activation: 0.45 + rng() * 0.1, drawProg: 0, heat: 0 });
+  });
+
+  // ── rain columns ──
+  const rain: RainCol[] = [];
+  const colCount = Math.floor(w / 28);
+  for (let c = 0; c < colCount; c++) {
+    const x = 8 + c * (w / colCount) + (rng() - 0.5) * 8;
+    const chars: RainCol["chars"] = [];
+    const count = 3 + Math.floor(rng() * 4);
+    for (let i = 0; i < count; i++) {
+      chars.push({
+        y: rng() * h,
+        ch: randChar(),
+        speed: 0.3 + rng() * 0.5,
+        opacity: 0.03 + rng() * 0.05,
+      });
+    }
+    rain.push({ x, chars });
+  }
+
+  // ── text glyphs ──
+  const makeGlyphs = (text: string, baseFrame: number): TextGlyph[] =>
+    text.split("").map((ch, i) => ({
+      target: ch,
+      current: ch === " " ? " " : randChar(),
+      decodeFrame: baseFrame + i * 4 + Math.floor(rng() * 8),
+      decoded: ch === " ",
+    }));
+  const line1 = makeGlyphs(TEXT_L1, 30);   // starts decoding ~0.5s in
+  const line2 = makeGlyphs(TEXT_L2, 60);   // starts ~1s in
+
+  return {
+    nodes, conns, pulses: [], rain,
+    line1, line2,
+    frags: [],
+    scanY: 0,
+    centerGlow: 0,
+    decodeFlash: 0,
+  };
+}
+
+// ─── component ───────────────────────────────────────────
 export function ParticleStream({
   progress,
-  width = 400,
-  height = 200,
+  width = 420,
+  height = 180,
   className = "",
-}: MemoryGridProps) {
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animFrameRef = useRef<number>(0);
-  const timeRef = useRef(0);
+  const animRef = useRef(0);
   const progressRef = useRef(progress);
-  const cellsRef = useRef<Array<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    revealed: boolean;
-    revealTime: number;
-    brightness: number;
-    scanLines: number[];
-  }>>([]);
-  const initializedRef = useRef(false);
+  const stateRef = useRef<State | null>(null);
+  const frameRef = useRef(0);
 
-  useEffect(() => {
-    progressRef.current = progress;
-  }, [progress]);
+  useEffect(() => { progressRef.current = progress; }, [progress]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d")!;
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
@@ -57,209 +196,318 @@ export function ParticleStream({
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
 
-    // Grid setup
-    const cols = 8;
-    const rows = 4;
-    const gap = 3;
-    const marginX = 20;
-    const marginY = 16;
-    const cellW = (width - marginX * 2 - gap * (cols - 1)) / cols;
-    const cellH = (height - marginY * 2 - gap * (rows - 1)) / rows;
+    const state = initState(width, height);
+    stateRef.current = state;
 
-    // Initialize cells once
-    if (!initializedRef.current) {
-      initializedRef.current = true;
-      const cells: typeof cellsRef.current = [];
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          const x = marginX + col * (cellW + gap);
-          const y = marginY + row * (cellH + gap);
-          // Generate random scan line positions for each cell
-          const numLines = 3 + Math.floor(Math.random() * 4);
-          const scanLines: number[] = [];
-          for (let l = 0; l < numLines; l++) {
-            scanLines.push(Math.random());
-          }
-          cells.push({
-            x, y,
-            w: cellW,
-            h: cellH,
-            revealed: false,
-            revealTime: 0,
-            brightness: 0,
-            scanLines,
-          });
-        }
-      }
-      cellsRef.current = cells;
-    }
-
-    // Scan line state
-    let scanX = -40;
-    let scanSpeed = 0.8;
+    const cx = width / 2, cy = height * 0.42;
 
     function draw() {
       const p = progressRef.current;
-      timeRef.current += 1;
-      const t = timeRef.current;
+      const f = ++frameRef.current;
+      const s = state;
 
-      ctx!.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, height);
 
-      // Update scan line
-      scanSpeed = 0.6 + p * 2.0;
-      scanX += scanSpeed;
-      if (scanX > width + 40) {
-        scanX = -40;
-      }
-
-      const cells = cellsRef.current;
-
-      // How many cells should be revealed based on progress
-      const targetRevealed = Math.floor(p * cells.length);
-
-      // Reveal cells as scan line passes over them
-      for (let i = 0; i < cells.length; i++) {
-        const cell = cells[i];
-        if (!cell.revealed && scanX > cell.x + cell.w * 0.5 && i < targetRevealed + 4) {
-          cell.revealed = true;
-          cell.revealTime = t;
-        }
-
-        // Animate brightness
-        if (cell.revealed) {
-          const age = t - cell.revealTime;
-          const targetBright = i < targetRevealed ? 1 : 0.3;
-          cell.brightness += (targetBright - cell.brightness) * 0.05;
-        } else {
-          cell.brightness *= 0.95;
+      // ════════════════════════════════════════════════════
+      // LAYER 1: Rain — faint falling characters
+      // ════════════════════════════════════════════════════
+      ctx.font = "9px monospace";
+      ctx.textAlign = "center";
+      for (const col of s.rain) {
+        for (const ch of col.chars) {
+          ch.y += ch.speed * (0.8 + p * 1.2);
+          if (ch.y > height + 10) { ch.y = -10; ch.ch = randChar(); }
+          // cycle char occasionally
+          if (rng() < 0.02) ch.ch = randChar();
+          const alpha = ch.opacity * (0.5 + p * 0.8);
+          const gray = 120 + Math.floor(rng() * 40);
+          ctx.fillStyle = `rgba(${gray},${gray},${gray},${alpha})`;
+          ctx.fillText(ch.ch, col.x, ch.y);
         }
       }
 
-      // Draw connection lines between revealed cells (circuit-board style)
-      ctx!.strokeStyle = `rgba(120, 120, 120, ${0.06 + p * 0.08})`;
-      ctx!.lineWidth = 0.5;
-      for (let i = 0; i < cells.length; i++) {
-        const cell = cells[i];
-        if (!cell.revealed || cell.brightness < 0.1) continue;
-
-        const cx = cell.x + cell.w / 2;
-        const cy = cell.y + cell.h / 2;
-
-        // Connect to right neighbor
-        if (i % cols < cols - 1) {
-          const right = cells[i + 1];
-          if (right.revealed && right.brightness > 0.1) {
-            const rx = right.x + right.w / 2;
-            ctx!.globalAlpha = Math.min(cell.brightness, right.brightness) * 0.5;
-            ctx!.beginPath();
-            ctx!.moveTo(cell.x + cell.w, cy);
-            ctx!.lineTo(right.x, cy);
-            ctx!.stroke();
-          }
+      // ════════════════════════════════════════════════════
+      // LAYER 2: Network connections
+      // ════════════════════════════════════════════════════
+      for (const conn of s.conns) {
+        // animate draw progress
+        if (p > conn.activation) {
+          conn.drawProg = Math.min(1, conn.drawProg + 0.012);
         }
+        conn.heat *= 0.96; // decay heat
 
-        // Connect to bottom neighbor
-        if (i + cols < cells.length) {
-          const bottom = cells[i + cols];
-          if (bottom.revealed && bottom.brightness > 0.1) {
-            ctx!.globalAlpha = Math.min(cell.brightness, bottom.brightness) * 0.4;
-            ctx!.beginPath();
-            ctx!.moveTo(cx, cell.y + cell.h);
-            ctx!.lineTo(cx, bottom.y);
-            ctx!.stroke();
-          }
-        }
+        if (conn.drawProg < 0.01) continue;
+
+        const fromN = s.nodes[conn.from];
+        const toX = conn.to === -1 ? cx : s.nodes[conn.to].x;
+        const toY = conn.to === -1 ? cy : s.nodes[conn.to].y;
+
+        const dx = toX - fromN.x, dy = toY - fromN.y;
+        const endX = fromN.x + dx * conn.drawProg;
+        const endY = fromN.y + dy * conn.drawProg;
+
+        const baseAlpha = 0.06 + conn.heat * 0.5;
+        const gray = 130 + Math.floor(conn.heat * 125);
+        ctx.strokeStyle = `rgba(${gray},${gray},${gray},${baseAlpha + conn.drawProg * 0.08})`;
+        ctx.lineWidth = 0.5 + conn.heat * 1.5;
+        ctx.beginPath();
+        ctx.moveTo(fromN.x, fromN.y);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
       }
-      ctx!.globalAlpha = 1;
 
-      // Draw cells
-      for (let i = 0; i < cells.length; i++) {
-        const cell = cells[i];
-        if (cell.brightness < 0.01) continue;
-
-        const b = cell.brightness;
-
-        // Cell background — sharp rectangle
-        const bgGray = Math.round(30 + b * 20);
-        ctx!.fillStyle = `rgba(${bgGray}, ${bgGray}, ${bgGray}, ${b * 0.35})`;
-        ctx!.fillRect(cell.x, cell.y, cell.w, cell.h);
-
-        // Cell border — sharp
-        const borderGray = Math.round(80 + b * 60);
-        ctx!.strokeStyle = `rgba(${borderGray}, ${borderGray}, ${borderGray}, ${b * 0.4})`;
-        ctx!.lineWidth = 0.5;
-        ctx!.strokeRect(cell.x, cell.y, cell.w, cell.h);
-
-        // Scan line pattern inside cell (faint horizontal lines = "screen data")
-        if (b > 0.3) {
-          for (const linePos of cell.scanLines) {
-            const ly = cell.y + linePos * cell.h;
-            const lineAlpha = (b - 0.3) * 0.25;
-            const lineGray = 100 + Math.round(b * 40);
-            ctx!.strokeStyle = `rgba(${lineGray}, ${lineGray}, ${lineGray}, ${lineAlpha})`;
-            ctx!.lineWidth = 0.5;
-            ctx!.beginPath();
-            ctx!.moveTo(cell.x + 2, ly);
-            ctx!.lineTo(cell.x + cell.w - 2, ly);
-            ctx!.stroke();
-          }
-        }
-
-        // Subtle flicker on recently revealed cells
-        if (cell.revealed) {
-          const age = t - cell.revealTime;
-          if (age < 30) {
-            const flickerAlpha = (1 - age / 30) * 0.15;
-            ctx!.fillStyle = `rgba(200, 200, 200, ${flickerAlpha})`;
-            ctx!.fillRect(cell.x, cell.y, cell.w, cell.h);
-          }
-        }
-
-        // Small "node" dot at top-left corner of revealed cells
-        if (b > 0.5) {
-          const nodeSize = 1.5;
-          const nodeGray = Math.round(150 + b * 80);
-          const nodePulse = 0.6 + Math.sin(t * 0.03 + i * 0.7) * 0.4;
-          ctx!.fillStyle = `rgba(${nodeGray}, ${nodeGray}, ${nodeGray}, ${b * nodePulse * 0.7})`;
-          ctx!.fillRect(cell.x - nodeSize / 2, cell.y - nodeSize / 2, nodeSize, nodeSize);
+      // ════════════════════════════════════════════════════
+      // LAYER 3: Data pulses
+      // ════════════════════════════════════════════════════
+      // spawn pulses on active connections
+      if (f % Math.max(2, Math.floor(12 - p * 10)) === 0) {
+        const active = s.conns.filter(c => c.drawProg > 0.8);
+        if (active.length > 0) {
+          const conn = pick(active);
+          const ci = s.conns.indexOf(conn);
+          s.pulses.push({
+            connIdx: ci,
+            t: 0,
+            speed: 0.015 + p * 0.02 + rng() * 0.01,
+            brightness: 0.6 + rng() * 0.4,
+          });
         }
       }
 
-      // Scan line — sharp vertical line sweeping across
-      const scanAlpha = 0.15 + p * 0.2;
-      const scanWidth = 2;
-      // Main line
-      ctx!.fillStyle = `rgba(200, 200, 200, ${scanAlpha})`;
-      ctx!.fillRect(scanX, marginY - 4, scanWidth, height - marginY * 2 + 8);
+      for (let i = s.pulses.length - 1; i >= 0; i--) {
+        const pulse = s.pulses[i];
+        pulse.t += pulse.speed;
 
-      // Glow around scan line (using rectangles, not gradients — sharp feel)
-      for (let g = 1; g <= 4; g++) {
-        const glowAlpha = scanAlpha * (0.15 / g);
-        const glowWidth = g * 4;
-        ctx!.fillStyle = `rgba(180, 180, 180, ${glowAlpha})`;
-        ctx!.fillRect(scanX - glowWidth, marginY - 4, glowWidth, height - marginY * 2 + 8);
+        if (pulse.t > 1) {
+          // heat up the connection
+          s.conns[pulse.connIdx].heat = Math.min(1, s.conns[pulse.connIdx].heat + 0.5);
+          s.pulses.splice(i, 1);
+          continue;
+        }
+
+        const conn = s.conns[pulse.connIdx];
+        const fromN = s.nodes[conn.from];
+        const toX = conn.to === -1 ? cx : s.nodes[conn.to].x;
+        const toY = conn.to === -1 ? cy : s.nodes[conn.to].y;
+
+        const px = lerp(fromN.x, toX, pulse.t);
+        const py = lerp(fromN.y, toY, pulse.t);
+        const sz = 1.5 + pulse.brightness;
+
+        // glow
+        const gray = Math.floor(180 + pulse.brightness * 75);
+        ctx.shadowColor = `rgba(${gray},${gray},${gray},0.8)`;
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = `rgba(${gray},${gray},${gray},${pulse.brightness * 0.9})`;
+        ctx.fillRect(px - sz / 2, py - sz / 2, sz, sz);
+        ctx.shadowBlur = 0;
       }
 
-      // Progress bar at very bottom — thin, sharp
-      const barY = height - 6;
-      const barH = 1;
-      const barWidth = width - marginX * 2;
-      // Track
-      ctx!.fillStyle = `rgba(80, 80, 80, 0.2)`;
-      ctx!.fillRect(marginX, barY, barWidth, barH);
-      // Fill
-      const fillWidth = barWidth * Math.min(1, p);
-      ctx!.fillStyle = `rgba(180, 180, 180, ${0.4 + p * 0.4})`;
-      ctx!.fillRect(marginX, barY, fillWidth, barH);
+      // ════════════════════════════════════════════════════
+      // LAYER 4: Central singularity
+      // ════════════════════════════════════════════════════
+      s.centerGlow = lerp(s.centerGlow, p, 0.02);
+      const g = s.centerGlow;
 
-      animFrameRef.current = requestAnimationFrame(draw);
+      if (g > 0.05) {
+        // Radial glow
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 50 + g * 40);
+        grad.addColorStop(0, `rgba(200,200,200,${g * 0.15})`);
+        grad.addColorStop(0.5, `rgba(150,150,150,${g * 0.06})`);
+        grad.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(cx - 100, cy - 80, 200, 160);
+
+        // Nested rotating sharp squares
+        ctx.save();
+        ctx.translate(cx, cy);
+        for (let sq = 0; sq < 3; sq++) {
+          const size = 4 + sq * 6 + g * 8;
+          const rotation = f * (0.003 + sq * 0.002) * (sq % 2 === 0 ? 1 : -1);
+          const alpha = g * (0.15 - sq * 0.03);
+          ctx.save();
+          ctx.rotate(rotation);
+          ctx.strokeStyle = `rgba(200,200,200,${alpha})`;
+          ctx.lineWidth = 0.7;
+          ctx.strokeRect(-size / 2, -size / 2, size, size);
+          ctx.restore();
+        }
+        ctx.restore();
+
+        // Bright core dot
+        const coreAlpha = g * (0.4 + Math.sin(f * 0.05) * 0.15);
+        ctx.shadowColor = `rgba(220,220,220,${coreAlpha})`;
+        ctx.shadowBlur = 12 + g * 8;
+        ctx.fillStyle = `rgba(230,230,230,${coreAlpha})`;
+        ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+        ctx.shadowBlur = 0;
+      }
+
+      // ════════════════════════════════════════════════════
+      // LAYER 5: Scan line
+      // ════════════════════════════════════════════════════
+      s.scanY += 0.4 + p * 0.3;
+      if (s.scanY > height + 2) s.scanY = -2;
+
+      ctx.fillStyle = `rgba(180,180,180,${0.03 + p * 0.04})`;
+      ctx.fillRect(0, s.scanY, width, 1);
+      ctx.fillStyle = `rgba(150,150,150,${0.015 + p * 0.02})`;
+      ctx.fillRect(0, s.scanY - 1, width, 3);
+
+      // ════════════════════════════════════════════════════
+      // LAYER 6: Nodes
+      // ════════════════════════════════════════════════════
+      for (const node of s.nodes) {
+        if (p > node.activation) {
+          node.brightness = Math.min(1, node.brightness + 0.02);
+        }
+        if (node.brightness < 0.01) continue;
+
+        const nb = node.brightness;
+        const pulse = 0.6 + Math.sin(f * 0.025 + node.x * 0.01) * 0.4;
+        const sz = 2 + nb * 1.5;
+        const gray = Math.floor(120 + nb * 100 * pulse);
+        const alpha = nb * 0.5 * pulse;
+
+        ctx.shadowColor = `rgba(${gray},${gray},${gray},${alpha})`;
+        ctx.shadowBlur = 3;
+        ctx.fillStyle = `rgba(${gray},${gray},${gray},${alpha})`;
+        ctx.fillRect(node.x - sz / 2, node.y - sz / 2, sz, sz);
+        ctx.shadowBlur = 0;
+      }
+
+      // ════════════════════════════════════════════════════
+      // LAYER 7: Memory fragments (edge flashes)
+      // ════════════════════════════════════════════════════
+      if (p > 0.1 && f % 35 === 0 && s.frags.length < 4) {
+        const edge = Math.floor(rng() * 4); // 0=top, 1=right, 2=bottom, 3=left
+        let fx: number, fy: number;
+        switch (edge) {
+          case 0: fx = rng() * width; fy = 6; break;
+          case 1: fx = width - 8; fy = rng() * height; break;
+          case 2: fx = rng() * width; fy = height - 8; break;
+          default: fx = 8; fy = rng() * height; break;
+        }
+        s.frags.push({
+          x: fx, y: fy,
+          text: pick(MEMORY_FRAGMENTS),
+          life: 0, maxLife: 50 + Math.floor(rng() * 30),
+          opacity: 0.06 + rng() * 0.08,
+        });
+      }
+
+      ctx.font = "7px monospace";
+      ctx.textAlign = "left";
+      for (let i = s.frags.length - 1; i >= 0; i--) {
+        const frag = s.frags[i];
+        frag.life++;
+        if (frag.life > frag.maxLife) { s.frags.splice(i, 1); continue; }
+        const fadeIn = Math.min(1, frag.life / 8);
+        const fadeOut = Math.max(0, 1 - (frag.life - frag.maxLife + 12) / 12);
+        const a = frag.opacity * fadeIn * fadeOut;
+        ctx.fillStyle = `rgba(150,150,150,${a})`;
+        ctx.fillText(frag.text, frag.x, frag.y);
+      }
+
+      // ════════════════════════════════════════════════════
+      // LAYER 8: Text — decode effect
+      // ════════════════════════════════════════════════════
+      const allDecoded1 = updateTextGlyphs(s.line1, f);
+      const allDecoded2 = updateTextGlyphs(s.line2, f);
+
+      // Flash when fully decoded
+      if (allDecoded1 && allDecoded2 && s.decodeFlash === 0) {
+        s.decodeFlash = 1;
+      }
+      if (s.decodeFlash > 0) {
+        s.decodeFlash *= 0.96;
+        if (s.decodeFlash < 0.01) s.decodeFlash = 0;
+        const flashGrad = ctx.createRadialGradient(cx, cy + 10, 0, cx, cy + 10, 120);
+        flashGrad.addColorStop(0, `rgba(220,220,220,${s.decodeFlash * 0.25})`);
+        flashGrad.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = flashGrad;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      // Draw line 1: "plugging into"
+      const charW1 = 8.2;
+      const totalW1 = s.line1.length * charW1;
+      const startX1 = cx - totalW1 / 2;
+      const textY = height * 0.78;
+
+      ctx.font = "600 11px monospace";
+      ctx.textAlign = "left";
+      for (let i = 0; i < s.line1.length; i++) {
+        const gl = s.line1[i];
+        const isDecoding = !gl.decoded && f > gl.decodeFrame - 10;
+        const gray = gl.decoded ? 200 : (isDecoding ? 140 : 80);
+        const alpha = gl.decoded ? 0.85 : (isDecoding ? 0.6 : 0.3);
+
+        if (gl.decoded) {
+          ctx.shadowColor = `rgba(200,200,200,0.3)`;
+          ctx.shadowBlur = 4;
+        }
+        ctx.fillStyle = `rgba(${gray},${gray},${gray},${alpha})`;
+        ctx.fillText(gl.current, startX1 + i * charW1, textY);
+        ctx.shadowBlur = 0;
+      }
+
+      // Draw line 2: "superintelligence"
+      const charW2 = 10.5;
+      const totalW2 = s.line2.length * charW2;
+      const startX2 = cx - totalW2 / 2;
+      const textY2 = textY + 20;
+
+      ctx.font = "700 15px monospace";
+      for (let i = 0; i < s.line2.length; i++) {
+        const gl = s.line2[i];
+        const isDecoding = !gl.decoded && f > gl.decodeFrame - 10;
+        const gray = gl.decoded ? 220 : (isDecoding ? 150 : 70);
+        const alpha = gl.decoded ? 0.95 : (isDecoding ? 0.6 : 0.25);
+
+        if (gl.decoded) {
+          ctx.shadowColor = `rgba(220,220,220,0.4)`;
+          ctx.shadowBlur = 6;
+        }
+        ctx.fillStyle = `rgba(${gray},${gray},${gray},${alpha})`;
+        ctx.fillText(gl.current, startX2 + i * charW2, textY2);
+        ctx.shadowBlur = 0;
+
+        // Brief flash when this char just decoded
+        if (gl.decoded && f - gl.decodeFrame < 8) {
+          const flashA = (1 - (f - gl.decodeFrame) / 8) * 0.4;
+          ctx.shadowColor = `rgba(220,220,220,${flashA})`;
+          ctx.shadowBlur = 10;
+          ctx.fillStyle = `rgba(220,220,220,${flashA})`;
+          ctx.fillText(gl.current, startX2 + i * charW2, textY2);
+          ctx.shadowBlur = 0;
+        }
+      }
+
+      // ════════════════════════════════════════════════════
+      // LAYER 9: Vignette
+      // ════════════════════════════════════════════════════
+      const vig = ctx.createRadialGradient(cx, cy, Math.min(w, h) * 0.15, cx, cy, Math.max(w, h) * 0.65);
+      vig.addColorStop(0, "rgba(0,0,0,0)");
+      vig.addColorStop(1, `rgba(0,0,0,${0.03 + (1 - p) * 0.05})`);
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, width, height);
+
+      // Thin progress bar at absolute bottom
+      const barW = width * 0.6;
+      const barX = (width - barW) / 2;
+      const barY = height - 3;
+      ctx.fillStyle = "rgba(100,100,100,0.15)";
+      ctx.fillRect(barX, barY, barW, 1);
+      ctx.fillStyle = `rgba(200,200,200,${0.3 + p * 0.5})`;
+      ctx.fillRect(barX, barY, barW * clamp(p, 0, 1), 1);
+
+      animRef.current = requestAnimationFrame(draw);
     }
 
+    const w = width, h = height; // closure
     draw();
-
-    return () => {
-      cancelAnimationFrame(animFrameRef.current);
-    };
+    return () => cancelAnimationFrame(animRef.current);
   }, [width, height]);
 
   return (
@@ -271,9 +519,34 @@ export function ParticleStream({
   );
 }
 
-/**
- * Minimal progress dots — monochrome, sharp.
- */
+// ─── text glyph updater ─────────────────────────────────
+function updateTextGlyphs(glyphs: TextGlyph[], frame: number): boolean {
+  let allDone = true;
+  for (const gl of glyphs) {
+    if (gl.target === " ") continue;
+    if (!gl.decoded) {
+      // Cycle through random chars
+      if (frame % 3 === 0) gl.current = randChar();
+      // Decode when frame reaches threshold
+      if (frame >= gl.decodeFrame) {
+        gl.decoded = true;
+        gl.current = gl.target;
+        gl.decodeFrame = frame; // record actual decode frame
+      } else {
+        allDone = false;
+      }
+    } else {
+      // Occasional re-glitch on decoded chars (very rare)
+      if (rng() < 0.002) {
+        gl.current = randChar();
+        setTimeout(() => { gl.current = gl.target; }, 80);
+      }
+    }
+  }
+  return allDone;
+}
+
+// ─── progress steps ──────────────────────────────────────
 export function ProgressSteps({
   steps,
   className = "",
@@ -295,9 +568,7 @@ export function ProgressSteps({
             }`}
             animate={
               step.active
-                ? {
-                    opacity: [0.4, 1, 0.4],
-                  }
+                ? { opacity: [0.4, 1, 0.4] }
                 : {}
             }
             transition={

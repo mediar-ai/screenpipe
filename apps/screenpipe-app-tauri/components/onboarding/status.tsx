@@ -385,7 +385,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <ParticleStream progress={0.05} width={380} height={140} />
+          <ParticleStream progress={0.05} width={420} height={160} />
           <ProgressSteps steps={progressSteps} className="mt-2" />
         </motion.div>
       )}
@@ -397,7 +397,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <ParticleStream progress={0.1} width={380} height={100} />
+          <ParticleStream progress={0.1} width={420} height={120} />
 
           <div className="space-y-2 w-full">
             <button
@@ -474,8 +474,8 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         >
           <ParticleStream
             progress={Math.max(0.15, animatedProgress)}
-            width={420}
-            height={180}
+            width={440}
+            height={220}
           />
 
           <ProgressSteps steps={progressSteps} className="mt-3" />
