@@ -128,26 +128,28 @@ pub async fn spawn_screenpipe(
 ) -> Result<(), String> {
     info!("Starting screenpipe server");
 
-    // Check if already running
+    // Check if already running — first check the port regardless of handle state
+    let store = SettingsStore::get(&app).ok().flatten().unwrap_or_default();
+    let port = store.port;
+    let health_url = format!("http://localhost:{}/health", port);
+
     {
         let handle_guard = state.0.lock().await;
-        if handle_guard.is_some() {
-            // Verify it's actually running via health check
-            let store = SettingsStore::get(&app).ok().flatten().unwrap_or_default();
-            let port = store.port;
-            let health_url = format!("http://localhost:{}/health", port);
 
-            match reqwest::Client::new()
-                .get(&health_url)
-                .timeout(std::time::Duration::from_secs(2))
-                .send()
-                .await
-            {
-                Ok(resp) if resp.status().is_success() => {
-                    info!("Screenpipe server already running and healthy");
-                    return Ok(());
-                }
-                _ => {
+        // Always check if the server port is responding, even without a handle
+        // (handles the case where server was started externally or by main.rs)
+        match reqwest::Client::new()
+            .get(&health_url)
+            .timeout(std::time::Duration::from_secs(2))
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => {
+                info!("Screenpipe server already running and healthy on port {}", port);
+                return Ok(());
+            }
+            _ => {
+                if handle_guard.is_some() {
                     warn!("Server handle exists but not responding, will restart");
                 }
             }
@@ -163,6 +165,9 @@ pub async fn spawn_screenpipe(
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }
     }
+
+    // Kill any orphaned process holding our port (crash leftover, CLI run, etc.)
+    kill_process_on_port(port).await;
 
     // Check permissions before starting
     let permissions_check = do_permissions_check(false);
@@ -261,5 +266,85 @@ pub async fn spawn_screenpipe(
         }
         Ok(Err(e)) => Err(e),
         Err(_) => Err("Server startup channel dropped unexpectedly".to_string()),
+    }
+}
+
+/// Kill any process occupying a given port. Handles orphaned screenpipe processes
+/// from previous crashes, CLI runs, etc. Safe because we already verified the port
+/// is NOT serving a healthy screenpipe (that case returns early above).
+async fn kill_process_on_port(port: u16) {
+    #[cfg(unix)]
+    {
+        // lsof -ti:PORT gives PIDs of processes using that port
+        match tokio::process::Command::new("lsof")
+            .args(["-ti", &format!(":{}", port)])
+            .output()
+            .await
+        {
+            Ok(output) if output.status.success() => {
+                let pids = String::from_utf8_lossy(&output.stdout);
+                let pids: Vec<&str> = pids.trim().split('\n').filter(|s| !s.is_empty()).collect();
+                if pids.is_empty() {
+                    return;
+                }
+                warn!(
+                    "Found {} process(es) on port {}: {:?}. Killing to free port.",
+                    pids.len(), port, pids
+                );
+                for pid in &pids {
+                    let _ = tokio::process::Command::new("kill")
+                        .args(["-9", pid])
+                        .output()
+                        .await;
+                }
+                // Wait for port to be released
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                info!("Killed orphaned process(es) on port {}", port);
+            }
+            _ => {
+                // No process on port or lsof not available — fine
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        // netstat -ano | findstr :PORT
+        match tokio::process::Command::new("cmd")
+            .args(["/C", &format!("netstat -ano | findstr :{}", port)])
+            .output()
+            .await
+        {
+            Ok(output) if output.status.success() => {
+                let text = String::from_utf8_lossy(&output.stdout);
+                let mut pids = std::collections::HashSet::new();
+                for line in text.lines() {
+                    // Lines look like: TCP 0.0.0.0:3030 ... LISTENING 12345
+                    if let Some(pid) = line.split_whitespace().last() {
+                        if let Ok(pid_num) = pid.parse::<u32>() {
+                            if pid_num > 0 {
+                                pids.insert(pid_num);
+                            }
+                        }
+                    }
+                }
+                if pids.is_empty() {
+                    return;
+                }
+                warn!(
+                    "Found {} process(es) on port {}: {:?}. Killing to free port.",
+                    pids.len(), port, pids
+                );
+                for pid in &pids {
+                    let _ = tokio::process::Command::new("taskkill")
+                        .args(["/F", "/PID", &pid.to_string()])
+                        .output()
+                        .await;
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                info!("Killed orphaned process(es) on port {}", port);
+            }
+            _ => {}
+        }
     }
 }
