@@ -120,7 +120,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     return () => clearInterval(interval);
   }, [setupState]);
 
-  // Auto-advance to shortcut gate when recording starts
+  // Auto-advance to shortcut gate when recording starts OR engine has been running 15s
   useEffect(() => {
     if (setupState === "recording" && !hasAdvancedRef.current) {
       hasAdvancedRef.current = true;
@@ -130,6 +130,18 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       setTimeout(() => handleNextSlide(), delay);
     }
   }, [setupState]);
+
+  // If engine is started but subsystems are slow (model loading), advance after 15s
+  useEffect(() => {
+    if (!progress.serverStarted || hasAdvancedRef.current) return;
+    const timer = setTimeout(() => {
+      if (!hasAdvancedRef.current) {
+        hasAdvancedRef.current = true;
+        handleNextSlide();
+      }
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [progress.serverStarted]);
 
   const sendLogs = async () => {
     setIsSendingLogs(true);
