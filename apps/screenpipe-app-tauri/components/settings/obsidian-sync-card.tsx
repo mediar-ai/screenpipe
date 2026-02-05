@@ -682,15 +682,22 @@ export function ObsidianSyncCard() {
         {/* Status Bar */}
         <div className="px-4 py-2 bg-muted/50 border-t border-border">
           <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-            <span>Last: <span className="text-foreground">{formatLastSync(status.lastSyncTime)}</span></span>
+            <span>Last: <span className="text-foreground">{formatLastSync(status.lastSyncTime ?? syncHistory[0]?.timestamp ?? null)}</span></span>
             {settings.enabled && status.nextScheduledRun && (
               <span className="flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />Next: <span className="text-foreground">{formatNextRun(status.nextScheduledRun)}</span></span>
             )}
-            {syncHistory.length > 0 && syncHistory.slice(0, 5).map((entry, i) => (
-              <span key={i} className="px-1 py-0.5 rounded bg-muted text-[10px]" title={entry.error || "Success"}>
-                {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{entry.status === "success" ? " ✓" : " ✗"}
-              </span>
-            ))}
+            {syncHistory.length > 0 && syncHistory.slice(0, 5).map((entry, i) => {
+              const d = new Date(entry.timestamp);
+              const isToday = d.toDateString() === new Date().toDateString();
+              const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+              const fullStr = d.toLocaleString();
+              return (
+                <span key={i} className="px-1 py-0.5 rounded bg-muted text-[10px] cursor-default" title={`${fullStr}${entry.error ? ` — ${entry.error}` : ""}`}>
+                  {isToday ? timeStr : `${dateStr} ${timeStr}`}{entry.status === "success" ? " ✓" : " ✗"}
+                </span>
+              );
+            })}
           </div>
         </div>
       </CardContent>
