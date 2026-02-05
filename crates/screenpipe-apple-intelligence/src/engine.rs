@@ -652,4 +652,131 @@ mod tests {
             }
         }
     }
+
+    #[tokio::test]
+    async fn test_real_screenpipe_query() {
+        if check_availability() != Availability::Available {
+            println!("Skipping: Foundation Models not available");
+            return;
+        }
+
+        // Check if screenpipe is running
+        let client = reqwest::Client::new();
+        let health = client
+            .get("http://localhost:3030/health")
+            .send()
+            .await;
+        if health.is_err() || !health.unwrap().status().is_success() {
+            println!("Skipping: screenpipe server not running on localhost:3030");
+            return;
+        }
+
+        println!("=== Real Screenpipe + Foundation Models Integration ===\n");
+
+        // Fetch real OCR data
+        let ocr_resp: serde_json::Value = client
+            .get("http://localhost:3030/search?content_type=ocr&limit=30")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        let audio_resp: serde_json::Value = client
+            .get("http://localhost:3030/search?content_type=audio&limit=20")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        let ocr_items = ocr_resp["data"].as_array().unwrap();
+        let audio_items = audio_resp["data"].as_array().unwrap();
+        let ocr_total = ocr_resp["pagination"]["total"].as_i64().unwrap_or(0);
+        let audio_total = audio_resp["pagination"]["total"].as_i64().unwrap_or(0);
+
+        println!("Data fetched: {} OCR frames (of {}), {} audio chunks (of {})",
+            ocr_items.len(), ocr_total, audio_items.len(), audio_total);
+
+        // Build context from real data
+        let mut context = String::new();
+        context.push_str("=== Recent Screen Activity ===\n");
+        for item in ocr_items.iter().take(20) {
+            let c = &item["content"];
+            let app = c["app_name"].as_str().unwrap_or("?");
+            let window = c["window_name"].as_str().unwrap_or("?");
+            let text = c["text"].as_str().unwrap_or("");
+            let ts = c["timestamp"].as_str().unwrap_or("?");
+            let truncated = if text.len() > 300 { &text[..300] } else { text };
+            context.push_str(&format!("[{}] {} - {}: {}\n", &ts[..16], app, &window[..window.len().min(40)], truncated));
+        }
+
+        context.push_str("\n=== Recent Audio ===\n");
+        for item in audio_items.iter().take(10) {
+            let c = &item["content"];
+            let text = c["transcription"].as_str().unwrap_or("");
+            let speaker = c["speaker_name"].as_str().unwrap_or("unknown");
+            if !text.is_empty() {
+                context.push_str(&format!("{}: {}\n", speaker, &text[..text.len().min(200)]));
+            }
+        }
+
+        println!("Context size: {} chars (~{} tokens)\n", context.len(), context.len() / 4);
+
+        // Test 1: Daily summary
+        let wall_start = std::time::Instant::now();
+        let r1 = generate_text(
+            Some("You analyze screen activity and audio from Screenpipe. Give a concise summary of what the user has been doing. Max 5 bullet points."),
+            &format!("What have I been doing recently?\n\n{}", context),
+        ).unwrap();
+        let wall_time_1 = wall_start.elapsed();
+        println!("--- TEST 1: Daily Summary ---");
+        println!("Response:\n{}\n", r1.text);
+        println!("Foundation Models time: {:.0}ms", r1.metrics.total_time_ms);
+        println!("Wall clock time: {:?}", wall_time_1);
+        println!("Mem delta: {:.1}MB\n", r1.metrics.mem_delta_bytes as f64 / 1_048_576.0);
+
+        // Test 2: Action item extraction
+        let wall_start = std::time::Instant::now();
+        let r2 = generate_text(
+            Some("Extract concrete action items and todos from the user's screen activity and meetings. Number them. Only list items where someone needs to DO something."),
+            &format!("What action items or todos can you find?\n\n{}", context),
+        ).unwrap();
+        let wall_time_2 = wall_start.elapsed();
+        println!("--- TEST 2: Action Items ---");
+        println!("Response:\n{}\n", r2.text);
+        println!("Foundation Models time: {:.0}ms", r2.metrics.total_time_ms);
+        println!("Wall clock time: {:?}", wall_time_2);
+        println!("Mem delta: {:.1}MB\n", r2.metrics.mem_delta_bytes as f64 / 1_048_576.0);
+
+        // Test 3: Question answering
+        let wall_start = std::time::Instant::now();
+        let r3 = generate_text(
+            Some("Answer the user's question based on their screen activity data. Be specific and reference what you see in the data."),
+            &format!("What apps have I been using most and what was I doing in each?\n\n{}", context),
+        ).unwrap();
+        let wall_time_3 = wall_start.elapsed();
+        println!("--- TEST 3: App Usage Q&A ---");
+        println!("Response:\n{}\n", r3.text);
+        println!("Foundation Models time: {:.0}ms", r3.metrics.total_time_ms);
+        println!("Wall clock time: {:?}", wall_time_3);
+        println!("Mem delta: {:.1}MB\n", r3.metrics.mem_delta_bytes as f64 / 1_048_576.0);
+
+        // Summary
+        println!("=== BENCHMARK SUMMARY ===");
+        println!("Total OCR in DB: {}", ocr_total);
+        println!("Total audio in DB: {}", audio_total);
+        println!("Context fed to model: {} chars ({} tokens est.)", context.len(), context.len() / 4);
+        println!("Summary generation: {:.0}ms (wall: {:?})", r1.metrics.total_time_ms, wall_time_1);
+        println!("Action items: {:.0}ms (wall: {:?})", r2.metrics.total_time_ms, wall_time_2);
+        println!("Q&A: {:.0}ms (wall: {:?})", r3.metrics.total_time_ms, wall_time_3);
+        println!("Memory: before={:.1}MB, after={:.1}MB, delta={:.1}MB",
+            r1.metrics.mem_before_bytes as f64 / 1_048_576.0,
+            r3.metrics.mem_after_bytes as f64 / 1_048_576.0,
+            (r3.metrics.mem_after_bytes as i64 - r1.metrics.mem_before_bytes as i64) as f64 / 1_048_576.0,
+        );
+        println!("=========================");
+    }
 }
