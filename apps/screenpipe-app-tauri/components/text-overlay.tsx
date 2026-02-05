@@ -38,7 +38,35 @@ export function isUrl(text: string): boolean {
 	const domainPattern =
 		/^[a-zA-Z][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](\.[a-zA-Z][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*\.(com|org|net|io|dev|app|ai|edu|gov)(\/[^\s]*)?$/i;
 
-	return domainPattern.test(trimmed);
+	if (!domainPattern.test(trimmed)) return false;
+
+	// Extract just the hostname (before first /)
+	const hostname = trimmed.split("/")[0].toLowerCase();
+
+	// Reject OCR-garbled protocol prefixes (e.g. "httos.atthub.com" = garbled "https://github.com")
+	if (/^htto?s?[^p]/i.test(hostname) || /^htt[a-z]/i.test(hostname) && !hostname.startsWith("http")) {
+		return false;
+	}
+
+	// Reject if any hostname label has 4+ consecutive consonants
+	// (real domains rarely do: "hcnsleodian" has "hcnsl", "npmjs" is borderline but short)
+	// Only apply to labels longer than 5 chars to allow short acronyms like "npmjs"
+	const labels = hostname.split(".");
+	const vowels = new Set(["a", "e", "i", "o", "u"]);
+	for (const label of labels) {
+		if (label.length <= 5) continue;
+		let consecutive = 0;
+		for (const ch of label) {
+			if (/[a-z]/.test(ch) && !vowels.has(ch)) {
+				consecutive++;
+				if (consecutive >= 4) return false;
+			} else {
+				consecutive = 0;
+			}
+		}
+	}
+
+	return true;
 }
 
 /**

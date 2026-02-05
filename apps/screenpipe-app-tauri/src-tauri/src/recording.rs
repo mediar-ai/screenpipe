@@ -128,46 +128,62 @@ pub async fn spawn_screenpipe(
 ) -> Result<(), String> {
     info!("Starting screenpipe server");
 
-    // Check if already running — first check the port regardless of handle state
     let store = SettingsStore::get(&app).ok().flatten().unwrap_or_default();
     let port = store.port;
     let health_url = format!("http://localhost:{}/health", port);
 
+    // Stop existing server if any, and decide whether to check for orphans
+    let need_orphan_check;
     {
-        let handle_guard = state.0.lock().await;
-
-        // Always check if the server port is responding, even without a handle
-        // (handles the case where server was started externally or by main.rs)
-        match reqwest::Client::new()
-            .get(&health_url)
-            .timeout(std::time::Duration::from_secs(2))
-            .send()
-            .await
-        {
-            Ok(resp) if resp.status().is_success() => {
-                info!("Screenpipe server already running and healthy on port {}", port);
-                return Ok(());
-            }
-            _ => {
-                if handle_guard.is_some() {
+        let mut handle_guard = state.0.lock().await;
+        if handle_guard.is_some() {
+            // We own this server — check if it's healthy before restarting
+            match reqwest::Client::new()
+                .get(&health_url)
+                .timeout(std::time::Duration::from_secs(2))
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    info!("Screenpipe server already running and healthy on port {}", port);
+                    return Ok(());
+                }
+                _ => {
                     warn!("Server handle exists but not responding, will restart");
+                }
+            }
+            // Shut it down — we're restarting intentionally
+            if let Some(handle) = handle_guard.take() {
+                handle.shutdown();
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            }
+            need_orphan_check = false;
+        } else {
+            // No handle — cold start. Check if an orphaned process holds the port.
+            match reqwest::Client::new()
+                .get(&health_url)
+                .timeout(std::time::Duration::from_secs(2))
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    // Orphan is healthy — reuse it
+                    info!("Screenpipe server already running and healthy on port {} (no handle, reusing)", port);
+                    return Ok(());
+                }
+                _ => {
+                    // Port may be held by an unhealthy orphan
+                    need_orphan_check = true;
                 }
             }
         }
     }
 
-    // Stop existing server if any
-    {
-        let mut handle_guard = state.0.lock().await;
-        if let Some(handle) = handle_guard.take() {
-            handle.shutdown();
-            // Give it time to release the port
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-        }
-    }
-
     // Kill any orphaned process holding our port (crash leftover, CLI run, etc.)
-    kill_process_on_port(port).await;
+    // Only needed on cold start — during intentional restart we already shut down above.
+    if need_orphan_check {
+        kill_process_on_port(port).await;
+    }
 
     // Check permissions before starting
     let permissions_check = do_permissions_check(false);
