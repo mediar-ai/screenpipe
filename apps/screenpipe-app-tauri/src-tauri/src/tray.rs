@@ -115,8 +115,9 @@ pub fn recreate_tray(app: &AppHandle) {
                 if let Ok(menu) = create_dynamic_menu(&app, &MenuState::default(), &update_item) {
                     let _ = new_tray.set_menu(Some(menu));
                 }
-                // Setup click handlers
-                let _ = setup_tray_click_handlers(&new_tray);
+                // NOTE: do NOT re-register click handlers here.
+                // The handler from setup_tray() is keyed by tray ID and persists
+                // across tray icon recreation. Re-registering causes double-firing.
 
                 // Set autosaveName so macOS remembers user's Cmd+drag position
                 set_autosave_name();
