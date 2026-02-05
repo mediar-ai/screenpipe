@@ -77,7 +77,7 @@ export function UpgradeDialog({
           <DialogDescription className="text-sm">
             {reason === "daily_limit"
               ? `your free queries reset ${formatResetTime()}, or upgrade for unlimited access`
-              : "upgrade to access smarter models like claude sonnet and gpt-4"}
+              : "upgrade for unlimited access to claude opus, sonnet & more"}
           </DialogDescription>
         </DialogHeader>
 
