@@ -648,29 +648,9 @@ export default function Timeline() {
 		() =>
 			throttle(
 				(e: WheelEvent) => {
-					// Move these checks outside the throttle to improve performance
-					const isWithinAiPanel =
-						e.target instanceof Node &&
-						document.querySelector(".ai-panel")?.contains(e.target);
-					const isWithinAudioPanel =
-						e.target instanceof Node &&
-						document
-							.querySelector(".audio-transcript-panel")
-							?.contains(e.target);
-					const isWithinTimelineDialog =
-						e.target instanceof Node &&
-						document.querySelector('[role="dialog"]')?.contains(e.target);
-
-					if (isWithinAiPanel || isWithinAudioPanel || isWithinTimelineDialog) {
-						return;
-					}
-
 					// Pinch gesture on trackpad sends ctrlKey=true
 					// Cmd+Scroll on mouse sends metaKey=true — handle as zoom
 					if (e.ctrlKey || e.metaKey) {
-						e.preventDefault();
-						e.stopPropagation();
-
 						// Mark zooming to suppress scroll for a short debounce
 						isZoomingRef.current = true;
 						if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current);
@@ -687,12 +667,8 @@ export default function Timeline() {
 
 					// Don't scroll while a zoom gesture is still settling
 					if (isZoomingRef.current) {
-						e.preventDefault();
 						return;
 					}
-
-					e.preventDefault();
-					e.stopPropagation();
 
 					// Calculate scroll intensity based on absolute delta
 					const scrollIntensity = Math.abs(e.deltaY);
@@ -735,8 +711,10 @@ export default function Timeline() {
 		[frames, zoomLevel], // Re-create when zoom changes
 	);
 
+	// Attach scroll/zoom handler at document level so pinch-to-zoom works
+	// without clicking the timeline first (wheel events go to window under cursor)
 	useEffect(() => {
-		const preventScroll = (e: WheelEvent) => {
+		const onWheel = (e: WheelEvent) => {
 			const isWithinAiPanel = document
 				.querySelector(".ai-panel")
 				?.contains(e.target as Node);
@@ -750,34 +728,25 @@ export default function Timeline() {
 				.querySelector('[data-settings-dialog]')
 				?.contains(e.target as Node);
 
-			if (!isWithinAiPanel && !isWithinAudioPanel && !isWithinTimelineDialog && !isWithinSettingsDialog) {
-				// Always preventDefault — including for pinch (ctrlKey) to block
-				// the browser's native zoom behavior
-				e.preventDefault();
+			if (isWithinAiPanel || isWithinAudioPanel || isWithinTimelineDialog || isWithinSettingsDialog) {
+				return;
 			}
+
+			// Always preventDefault to block native browser zoom
+			e.preventDefault();
+
+			// Delegate to the throttled handler for zoom + scroll logic
+			handleScroll(e);
 		};
 
-		document.addEventListener("wheel", preventScroll, { passive: false });
-		return () => document.removeEventListener("wheel", preventScroll);
-	}, []);
+		document.addEventListener("wheel", onWheel, { passive: false });
+		return () => document.removeEventListener("wheel", onWheel);
+	}, [handleScroll]);
 
 	const handleRefresh = useCallback(() => {
 		// Full page reload - simpler and more reliable than WebSocket reconnection
 		window.location.reload();
 	}, []);
-
-	useEffect(() => {
-		const container = containerRef.current;
-		if (container) {
-			container.addEventListener("wheel", handleScroll, { passive: false });
-		}
-
-		return () => {
-			if (container) {
-				container.removeEventListener("wheel", handleScroll);
-			}
-		};
-	}, [handleScroll]);
 
 	const jumpToTime = (targetDate: Date) => {
 		// Find the closest frame to the target date
