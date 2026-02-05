@@ -96,10 +96,6 @@ let result = query_screenpipe_with_ai(3030, "What did I work on today?", 6).awai
 cargo test -p screenpipe-apple-intelligence -- --nocapture
 ```
 
-## User coverage
-
-As of Feb 2026, **50% of screenpipe macOS users** are on macOS 26, making Foundation Models available to half the user base. This will only grow.
-
 ## Benchmark results
 
 Run the benchmark test to get numbers for your machine:
