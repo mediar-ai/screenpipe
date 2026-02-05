@@ -53,42 +53,46 @@ echo "=== MCP ===" && grep '"version"' screenpipe-integrations/screenpipe-mcp/pa
 
 ### 2. Generate Changelog
 
-Get commits since last release and generate a user-friendly changelog:
+**Automated (preferred)**: Run the changelog generation script in the website repo:
 
 ```bash
-# Get last release tag
-LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
-# Get commits since last release (or last 50 if no tag)
-if [ -n "$LAST_TAG" ]; then
-  git log $LAST_TAG..HEAD --oneline --no-merges
-else
-  git log -50 --oneline --no-merges
-fi
+cd ~/Documents/website-screenpipe
+bun scripts/generate-changelog.ts --since <LAST_BUMP_COMMIT> --version v<NEW_VERSION>
 ```
 
-Then create changelog at `content/changelogs/vX.Y.Z.md` with format:
+This uses Claude Haiku to summarize commits into a structured JSON entry at
+`content/changelogs/<version>.json`, which renders on https://screenpi.pe/changelog.
 
-```markdown
-## New Features
-- Feature description (from commit context)
+Requires `ANTHROPIC_API_KEY` in environment.
 
-## Improvements
-- Improvement description
+**Manual fallback**: If the script isn't available, create the JSON manually:
 
-## Bug Fixes
-- Fix description
+```bash
+# Get commits since last release
+git log <LAST_TAG>..HEAD --oneline --no-merges
+```
 
-#### **Full Changelog:** [abc123..def456](https://github.com/mediar-ai/screenpipe/compare/abc123..def456)
+Then create `~/Documents/website-screenpipe/content/changelogs/<version>.json`:
+
+```json
+{
+  "version": "2.0.XXX",
+  "date": "YYYY-MM-DD",
+  "summary": "One sentence summary of the release",
+  "features": ["new feature descriptions"],
+  "improvements": ["improvement descriptions"],
+  "fixes": ["bug fix descriptions"],
+  "commitCount": 30
+}
 ```
 
 Guidelines:
 - Only include changes that bring clear **customer value**
 - Skip: CI changes, refactors, dependency bumps, merge commits
-- Be concise but descriptive
-- Group related changes together
+- Be concise but descriptive — max 5 items per category
+- Write for non-technical users
 
-Also copy to `screenpipe-app-tauri/public/CHANGELOG.md` for in-app display.
+After generating, commit and push the website repo to deploy.
 
 ### 3. Bump Version
 
