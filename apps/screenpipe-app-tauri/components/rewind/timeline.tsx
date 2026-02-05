@@ -63,13 +63,13 @@ const easeOutCubic = (x: number): number => {
 	return 1 - Math.pow(1 - x, 3);
 };
 
-const FIRST_OPEN_KEY = "screenpipe_timeline_first_open";
+
 
 export default function Timeline() {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [showAudioTranscript, setShowAudioTranscript] = useState(true);
 	const [showSearchModal, setShowSearchModal] = useState(false);
-	const [showFirstOpenTip, setShowFirstOpenTip] = useState(false);
+
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	// const [searchResults, setSearchResults] = useState<number[]>([]);
 	const [startAndEndDates, setStartAndEndDates] = useState<TimeRange>({
@@ -301,11 +301,7 @@ export default function Timeline() {
 		
 		posthog.capture("timeline_opened");
 
-		// Show first-open coaching tip
-		if (!localStorage.getItem(FIRST_OPEN_KEY)) {
-			setShowFirstOpenTip(true);
-			localStorage.setItem(FIRST_OPEN_KEY, "true");
-		}
+
 		
 		// Send session summary when timeline closes
 		return () => {
@@ -1090,28 +1086,7 @@ export default function Timeline() {
 					</div>
 				)}
 
-				{/* First-open coaching tip */}
-				{showFirstOpenTip && (
-					<div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[45] pointer-events-auto">
-						<div className="bg-card/95 backdrop-blur-sm border border-border rounded-lg px-5 py-3 shadow-lg flex items-center gap-4 max-w-lg">
-							<p className="font-mono text-xs text-muted-foreground">
-								<span className="text-foreground font-medium">← →</span> travel through time
-								<span className="mx-2 text-border">·</span>
-								<span className="text-foreground font-medium">⌃⌘L</span> ask AI
-								<span className="mx-2 text-border">·</span>
-								<span className="text-foreground font-medium">⌃⌘S</span> close
-							</p>
-							<button
-								onClick={() => setShowFirstOpenTip(false)}
-								className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-							>
-								<X className="w-3.5 h-3.5" />
-							</button>
-						</div>
-					</div>
-				)}
-
-					{/* Bottom Timeline - Overlay that doesn't cut off image */}
+				{/* Bottom Timeline - Overlay that doesn't cut off image */}
 				<div className="absolute bottom-0 left-0 right-0 z-40 pointer-events-auto">
 					{frames.length > 0 ? (
 						<TimelineSlider
