@@ -888,6 +888,47 @@ fn unregister_arrow_shortcuts(app_handle: &tauri::AppHandle) -> Result<(), Strin
     Ok(())
 }
 
+/// Get the version of the backed-up app (if any), so the UI can show a rollback button
+#[tauri::command]
+#[specta::specta]
+pub fn get_rollback_version() -> Option<String> {
+    crate::updates::rollback_version()
+}
+
+/// Back up the current app bundle (called from frontend before JS-driven updates)
+#[tauri::command]
+#[specta::specta]
+pub fn backup_current_app() {
+    crate::updates::backup_current_app_cmd();
+}
+
+/// Roll back to the previous version. Spawns a helper script, then the app must quit.
+#[tauri::command]
+#[specta::specta]
+pub async fn rollback_to_previous_version(
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::RecordingState;
+    info!("rollback_to_previous_version: starting rollback");
+
+    // Stop recording first
+    if let Err(e) = crate::stop_screenpipe(
+        app_handle.state::<RecordingState>(),
+        app_handle.clone(),
+    ).await {
+        error!("rollback: failed to stop recording: {}", e);
+        // Continue anyway — the rollback script will kill us
+    }
+
+    // Perform the rollback (spawns helper script)
+    crate::updates::perform_rollback()?;
+
+    // Quit the app so the helper script can replace the bundle
+    info!("rollback: quitting app for replacement");
+    app_handle.exit(0);
+    Ok(())
+}
+
 /// Suspend arrow shortcuts (called from JS when search/chat modal opens)
 #[tauri::command]
 #[specta::specta]

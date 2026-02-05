@@ -259,6 +259,29 @@ async resumeArrowShortcuts() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Get the version of the backed-up app (if any), so the UI can show a rollback button
+ */
+async getRollbackVersion() : Promise<string | null> {
+    return await TAURI_INVOKE("get_rollback_version");
+},
+/**
+ * Roll back to the previous version. Spawns a helper script, then the app must quit.
+ */
+async rollbackToPreviousVersion() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("rollback_to_previous_version") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Back up the current app bundle (called from frontend before JS-driven updates)
+ */
+async backupCurrentApp() : Promise<void> {
+    await TAURI_INVOKE("backup_current_app");
+},
 async setTrayUnhealthIcon() : Promise<void> {
     await TAURI_INVOKE("set_tray_unhealth_icon");
 },

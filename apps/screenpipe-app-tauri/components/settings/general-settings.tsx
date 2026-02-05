@@ -1,22 +1,32 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useTheme } from "@/components/theme-provider";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Rocket, Moon, Sun, Monitor, FlaskConical, Shield, ExternalLink, Layers, RefreshCw } from "lucide-react";
+import { Rocket, Moon, Sun, Monitor, FlaskConical, Shield, ExternalLink, Layers, RefreshCw, Undo2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Settings } from "@/lib/hooks/use-settings";
 import { open } from "@tauri-apps/plugin-shell";
+import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { UpdateBanner } from "@/components/update-banner";
 
 export default function GeneralSettings() {
   const { settings, updateSettings } = useSettings();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
+  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
+  const [rollbackVersion, setRollbackVersion] = useState<string | null>(null);
+  const [isRollingBack, setIsRollingBack] = useState(false);
+
+  useEffect(() => {
+    getVersion().then(setCurrentVersion).catch(() => {});
+    invoke<string | null>("get_rollback_version").then(setRollbackVersion).catch(() => {});
+  }, []);
 
   const handleSettingsChange = (newSettings: Partial<Settings>) => {
     if (settings) {
@@ -44,6 +54,27 @@ export default function GeneralSettings() {
       icon: Moon,
     },
   ];
+
+  const handleRollback = async () => {
+    if (!rollbackVersion || isRollingBack) return;
+    setIsRollingBack(true);
+    try {
+      toast({
+        title: "rolling back...",
+        description: `restoring v${rollbackVersion}. the app will restart.`,
+        duration: 5000,
+      });
+      await invoke("rollback_to_previous_version");
+    } catch (e: any) {
+      setIsRollingBack(false);
+      toast({
+        title: "rollback failed",
+        description: e?.toString() || "unknown error",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
+  };
 
   const handleDownloadBeta = async () => {
     // Open the beta download page
@@ -110,6 +141,37 @@ export default function GeneralSettings() {
                 }
                 className="ml-4"
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border bg-card">
+          <CardContent className="px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Undo2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">
+                    Version{currentVersion ? ` ${currentVersion}` : ""}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {rollbackVersion
+                      ? `previous: v${rollbackVersion}`
+                      : "no previous version saved yet"}
+                  </p>
+                </div>
+              </div>
+              {rollbackVersion && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRollback}
+                  disabled={isRollingBack}
+                  className="ml-4 h-7 text-xs"
+                >
+                  {isRollingBack ? "rolling back..." : `rollback to v${rollbackVersion}`}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -990,6 +990,10 @@ async fn main() {
                 commands::unregister_window_shortcuts,
                 commands::suspend_arrow_shortcuts,
                 commands::resume_arrow_shortcuts,
+                // Rollback commands
+                commands::get_rollback_version,
+                commands::rollback_to_previous_version,
+                commands::backup_current_app,
                 // Commands from tray.rs
                 set_tray_unhealth_icon,
                 set_tray_health_icon,
