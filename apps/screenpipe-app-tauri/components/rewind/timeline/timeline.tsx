@@ -19,6 +19,9 @@ interface TimelineSliderProps {
 	newFramesCount?: number; // Number of new frames added (for animation)
 	lastFlushTimestamp?: number; // When frames were last added (to trigger animation)
 	isSearchModalOpen?: boolean; // When true, disable wheel/focus handling to not interfere with modal
+	zoomLevel: number;
+	targetZoom: number;
+	setTargetZoom: (fn: (prev: number) => number) => void;
 }
 
 interface AppGroup {
@@ -126,6 +129,9 @@ export const TimelineSlider = ({
 	newFramesCount = 0,
 	lastFlushTimestamp = 0,
 	isSearchModalOpen = false,
+	zoomLevel,
+	targetZoom,
+	setTargetZoom,
 }: TimelineSliderProps) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const observerTargetRef = useRef<HTMLDivElement>(null);
@@ -148,86 +154,8 @@ export const TimelineSlider = ({
 	const [activePopoverGroup, setActivePopoverGroup] = useState<number | null>(null);
 	const [popoverAnchor, setPopoverAnchor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-	// Zoom state: 1 = normal, >1 = zoomed in, <1 = zoomed out
-	// Range: 0.25 (very zoomed out) to 4 (very zoomed in)
-	const [zoomLevel, setZoomLevel] = useState(1);
-	const [targetZoom, setTargetZoom] = useState(1);
 	const MIN_ZOOM = 0.25;
 	const MAX_ZOOM = 4;
-
-	// Smooth zoom animation using requestAnimationFrame
-	useEffect(() => {
-		if (Math.abs(zoomLevel - targetZoom) < 0.01) {
-			if (zoomLevel !== targetZoom) setZoomLevel(targetZoom);
-			return;
-		}
-
-		const animationId = requestAnimationFrame(() => {
-			// Ease toward target (lerp with 0.15 factor for smooth animation)
-			setZoomLevel(prev => prev + (targetZoom - prev) * 0.15);
-		});
-
-		return () => cancelAnimationFrame(animationId);
-	}, [zoomLevel, targetZoom]);
-
-	// Track if we're in a zoom gesture to prevent simultaneous scrolling
-	const isZoomingRef = useRef(false);
-	const zoomTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-	// Handle pinch-to-zoom (trackpad) and Cmd+Scroll (mouse)
-	const handleWheel = useCallback((e: WheelEvent) => {
-		// Don't handle wheel events when search modal is open
-		if (isSearchModalOpen) return;
-
-		// Pinch gesture on trackpad sends ctrlKey=true
-		// Cmd+Scroll on mouse sends metaKey=true
-		if (e.ctrlKey || e.metaKey) {
-			e.preventDefault();
-			e.stopPropagation();
-
-			// Mark that we're zooming - this prevents scroll from happening
-			isZoomingRef.current = true;
-			if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current);
-			zoomTimeoutRef.current = setTimeout(() => {
-				isZoomingRef.current = false;
-			}, 150); // Debounce - wait 150ms after last zoom event
-
-			// Calculate zoom delta (negative deltaY = zoom in)
-			const zoomDelta = -e.deltaY * 0.008;
-
-			setTargetZoom((prev) => {
-				const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev * (1 + zoomDelta)));
-				return newZoom;
-			});
-		} else if (!isZoomingRef.current) {
-			// Only allow scroll when not in a zoom gesture
-			// Regular scroll - speed scales inversely with zoom
-			// When zoomed out (0.25), scroll moves 4x faster through frames
-			// When zoomed in (4), scroll moves 0.25x slower
-			const scrollMultiplier = 1 / zoomLevel;
-			const framesToSkip = Math.round(e.deltaX * scrollMultiplier * 0.1);
-
-			if (framesToSkip !== 0 && onFrameChange) {
-				const newIndex = Math.max(0, Math.min(frames.length - 1, currentIndex - framesToSkip));
-				if (newIndex !== currentIndex) {
-					onFrameChange(newIndex);
-				}
-			}
-		}
-	}, [zoomLevel, currentIndex, frames.length, onFrameChange, isSearchModalOpen]);
-
-	// Attach wheel event listener for zoom
-	useEffect(() => {
-		const container = containerRef.current;
-		if (!container) return;
-
-		// Use passive: false to allow preventDefault for pinch gestures
-		container.addEventListener('wheel', handleWheel, { passive: false });
-
-		return () => {
-			container.removeEventListener('wheel', handleWheel);
-		};
-	}, [handleWheel]);
 
 	// Auto-focus container on mount so zoom works immediately
 	// But skip when search modal is open to not steal focus from modal input

@@ -91,6 +91,26 @@ export default function Timeline() {
 		setCurrentIndex(index);
 	});
 
+	// Zoom state — owned here so both scroll handler and TimelineSlider share it
+	const [zoomLevel, setZoomLevel] = useState(1);
+	const [targetZoom, setTargetZoom] = useState(1);
+	const MIN_ZOOM = 0.25;
+	const MAX_ZOOM = 4;
+	const isZoomingRef = useRef(false);
+	const zoomTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Smooth zoom animation
+	useEffect(() => {
+		if (Math.abs(zoomLevel - targetZoom) < 0.01) {
+			if (zoomLevel !== targetZoom) setZoomLevel(targetZoom);
+			return;
+		}
+		const id = requestAnimationFrame(() => {
+			setZoomLevel(prev => prev + (targetZoom - prev) * 0.15);
+		});
+		return () => cancelAnimationFrame(id);
+	}, [zoomLevel, targetZoom]);
+
 	// Flag to prevent frame-date sync from fighting with intentional navigation
 	const isNavigatingRef = useRef(false);
 
@@ -571,6 +591,32 @@ export default function Timeline() {
 						return;
 					}
 
+					// Pinch gesture on trackpad sends ctrlKey=true
+					// Cmd+Scroll on mouse sends metaKey=true — handle as zoom
+					if (e.ctrlKey || e.metaKey) {
+						e.preventDefault();
+						e.stopPropagation();
+
+						// Mark zooming to suppress scroll for a short debounce
+						isZoomingRef.current = true;
+						if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current);
+						zoomTimeoutRef.current = setTimeout(() => {
+							isZoomingRef.current = false;
+						}, 150);
+
+						const zoomDelta = -e.deltaY * 0.008;
+						setTargetZoom((prev) =>
+							Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev * (1 + zoomDelta))),
+						);
+						return;
+					}
+
+					// Don't scroll while a zoom gesture is still settling
+					if (isZoomingRef.current) {
+						e.preventDefault();
+						return;
+					}
+
 					e.preventDefault();
 					e.stopPropagation();
 
@@ -578,15 +624,20 @@ export default function Timeline() {
 					const scrollIntensity = Math.abs(e.deltaY);
 					const direction = -Math.sign(e.deltaY);
 
+					// Scale scroll speed by zoom: zoomed-out → faster, zoomed-in → slower
+					const zoomMultiplier = 1 / zoomLevel;
+
 					// Change this if you want limit the index change
 					const limitIndexChange = Infinity;
 
-					// Adjust index change based on scroll intensity
+					// Adjust index change based on scroll intensity and zoom
 					const indexChange =
 						direction *
 						Math.min(
 							limitIndexChange,
-							Math.ceil(Math.pow(scrollIntensity / 50, 1.5)),
+							Math.max(1, Math.ceil(
+								Math.pow(scrollIntensity / 50, 1.5) * zoomMultiplier,
+							)),
 						);
 
 					requestAnimationFrame(() => {
@@ -607,7 +658,7 @@ export default function Timeline() {
 				16,
 				{ leading: true, trailing: false },
 			),
-		[frames], // Only depend on frames length changes
+		[frames, zoomLevel], // Re-create when zoom changes
 	);
 
 	useEffect(() => {
@@ -626,6 +677,8 @@ export default function Timeline() {
 				?.contains(e.target as Node);
 
 			if (!isWithinAiPanel && !isWithinAudioPanel && !isWithinTimelineDialog && !isWithinSettingsDialog) {
+				// Always preventDefault — including for pinch (ctrlKey) to block
+				// the browser's native zoom behavior
 				e.preventDefault();
 			}
 		};
@@ -1104,6 +1157,9 @@ export default function Timeline() {
 							newFramesCount={newFramesCount}
 							lastFlushTimestamp={lastFlushTimestamp}
 							isSearchModalOpen={showSearchModal}
+							zoomLevel={zoomLevel}
+							targetZoom={targetZoom}
+							setTargetZoom={setTargetZoom}
 						/>
 					) : (
 						<div className="bg-card/80 backdrop-blur-sm p-4 border-t border-border">
