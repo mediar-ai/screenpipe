@@ -635,7 +635,15 @@ impl ShowRewindWindow {
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                             );
+                            // Activate so the chat panel appears on the current
+                            // fullscreen Space and receives keyboard input.
+                            unsafe {
+                                use tauri_nspanel::cocoa::base::id;
+                                let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+                                let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                            }
                             panel.order_front_regardless();
+                            panel.make_key_window();
                         }
                     });
 
@@ -999,10 +1007,11 @@ impl ShowRewindWindow {
                                 let sharing: u64 = if capturable { 1 } else { 0 };
                                 let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
 
-                                // Don't set MoveToActiveSpace here — it's set temporarily
-                                // in show_existing_main and removed after showing so the
-                                // panel doesn't follow Space transitions.
+                                // MoveToActiveSpace for first creation so the panel
+                                // appears on the current fullscreen Space.
+                                // show_existing_main manages this for subsequent shows.
                                 panel.set_collection_behaviour(
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
