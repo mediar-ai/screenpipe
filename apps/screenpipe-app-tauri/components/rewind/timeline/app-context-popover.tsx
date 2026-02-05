@@ -22,14 +22,6 @@ interface AppContextPopoverProps {
 	onSearch?: () => void;
 }
 
-function extractDomain(url: string): string {
-	try {
-		return new URL(url).hostname.replace("www.", "");
-	} catch {
-		return url;
-	}
-}
-
 export function AppContextPopover({
 	appName,
 	appNames,
@@ -227,7 +219,7 @@ export function AppContextPopover({
 									}}
 								>
 									<ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
-									<span className="truncate">{extractDomain(u.url)}</span>
+									<span className="truncate">{u.url.replace(/^https?:\/\/(www\.)?/, "")}</span>
 								</button>
 							))}
 						</div>
