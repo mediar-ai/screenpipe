@@ -332,7 +332,7 @@ export function ConnectionsSection() {
               <span className="text-lg">🔌</span>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground group-hover:text-foreground/80">MCP Server</p>
-                <p className="text-xs text-muted-foreground truncate">Cursor, Windsurf</p>
+                <p className="text-xs text-muted-foreground truncate">Cursor, Claude</p>
               </div>
             </button>
 
@@ -354,7 +354,7 @@ export function ConnectionsSection() {
               <span className="text-lg">🔧</span>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground group-hover:text-foreground/80">SDK</p>
-                <p className="text-xs text-muted-foreground truncate">TS & Python</p>
+                <p className="text-xs text-muted-foreground truncate">TypeScript</p>
               </div>
             </button>
 
