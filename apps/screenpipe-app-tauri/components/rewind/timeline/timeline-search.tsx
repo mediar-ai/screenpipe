@@ -391,7 +391,7 @@ async function getCachedOrGenerateSuggestions(
 	appStats: AppStats,
 ): Promise<string[]> {
 	try {
-		const cached = localStorage.getItem(CACHE_KEY);
+		const cached = localStorage?.getItem(CACHE_KEY);
 		if (cached) {
 			const parsedCache: CachedSuggestions = JSON.parse(cached);
 			const isExpired = Date.now() - parsedCache.timestamp > CACHE_DURATION_MS;
@@ -416,7 +416,7 @@ async function getCachedOrGenerateSuggestions(
 			timestamp: Date.now(),
 			appsHash: generateAppsHash(appStats),
 		};
-		localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+		try { localStorage?.setItem(CACHE_KEY, JSON.stringify(cacheData)); } catch {}
 
 		return suggestions;
 	} catch (error) {
@@ -676,7 +676,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 
 		try {
 			// Clear cache first
-			localStorage.removeItem(CACHE_KEY);
+			try { localStorage?.removeItem(CACHE_KEY); } catch {}
 
 			const newSuggestions = await generateSuggestions(
 				openai,
@@ -692,7 +692,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 				timestamp: Date.now(),
 				appsHash: generateAppsHash(appStats),
 			};
-			localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+			try { localStorage?.setItem(CACHE_KEY, JSON.stringify(cacheData)); } catch {}
 		} catch (error) {
 			console.warn("failed to regenerate suggestions:", error);
 		} finally {

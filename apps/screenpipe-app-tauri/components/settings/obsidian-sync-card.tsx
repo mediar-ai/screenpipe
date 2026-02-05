@@ -170,7 +170,8 @@ export function ObsidianSyncCard() {
 
   // Load settings from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem("obsidian-sync-settings");
+    let saved: string | null = null;
+    try { saved = localStorage?.getItem("obsidian-sync-settings"); } catch {}
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -182,7 +183,8 @@ export function ObsidianSyncCard() {
     setSettingsLoaded(true);
 
     // Load sync history
-    const savedHistory = localStorage.getItem("obsidian-sync-history");
+    let savedHistory: string | null = null;
+    try { savedHistory = localStorage?.getItem("obsidian-sync-history"); } catch {}
     if (savedHistory) {
       try {
         setSyncHistory(JSON.parse(savedHistory).slice(0, 10)); // Keep last 10
@@ -212,7 +214,7 @@ export function ObsidianSyncCard() {
   // Save settings to localStorage immediately
   useEffect(() => {
     if (settingsLoaded) {
-      localStorage.setItem("obsidian-sync-settings", JSON.stringify(settings));
+      try { localStorage?.setItem("obsidian-sync-settings", JSON.stringify(settings)); } catch {}
     }
   }, [settings, settingsLoaded]);
 
@@ -287,7 +289,7 @@ export function ObsidianSyncCard() {
       const newEntry: SyncHistoryEntry = { timestamp: new Date().toISOString(), status: "success" };
       setSyncHistory(prev => {
         const updated = [newEntry, ...prev].slice(0, 10);
-        localStorage.setItem("obsidian-sync-history", JSON.stringify(updated));
+        try { localStorage?.setItem("obsidian-sync-history", JSON.stringify(updated)); } catch {}
         return updated;
       });
       toast({
@@ -306,7 +308,7 @@ export function ObsidianSyncCard() {
       const newEntry: SyncHistoryEntry = { timestamp: new Date().toISOString(), status: "error", error: event.payload };
       setSyncHistory(prev => {
         const updated = [newEntry, ...prev].slice(0, 10);
-        localStorage.setItem("obsidian-sync-history", JSON.stringify(updated));
+        try { localStorage?.setItem("obsidian-sync-history", JSON.stringify(updated)); } catch {}
         return updated;
       });
       toast({

@@ -117,9 +117,12 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
 
   // Load saved selection and submission status on mount
   useEffect(() => {
-    const savedOption = localStorage.getItem("onboarding_usecase");
-    const savedOtherText = localStorage.getItem("onboarding_usecase_other");
-    const submitted = localStorage.getItem("onboarding_usecase_submitted");
+    let savedOption: string | null = null, savedOtherText: string | null = null, submitted: string | null = null;
+    try {
+      savedOption = localStorage?.getItem("onboarding_usecase");
+      savedOtherText = localStorage?.getItem("onboarding_usecase_other");
+      submitted = localStorage?.getItem("onboarding_usecase_submitted");
+    } catch {}
 
     if (savedOption && !selectedOption) {
       handleOptionClick(savedOption);
@@ -135,14 +138,14 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
   // Save selection when it changes
   useEffect(() => {
     if (selectedOption) {
-      localStorage.setItem("onboarding_usecase", selectedOption);
+      try { localStorage?.setItem("onboarding_usecase", selectedOption); } catch {}
     }
   }, [selectedOption]);
 
   // Save other text when it changes
   useEffect(() => {
     if (otherText) {
-      localStorage.setItem("onboarding_usecase_other", otherText);
+      try { localStorage?.setItem("onboarding_usecase_other", otherText); } catch {}
     }
   }, [otherText]);
 
@@ -156,7 +159,7 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
         selected_option: selectedOption,
         other_text: isOtherSelected ? otherText.trim() : null,
       });
-      localStorage.setItem("onboarding_usecase_submitted", "true");
+      try { localStorage?.setItem("onboarding_usecase_submitted", "true"); } catch {}
       setHasSubmitted(true);
     }
 

@@ -7,7 +7,8 @@ const UpdateNotification: React.FC<{ checkIntervalHours: number }> = ({
 }) => {
   useEffect(() => {
     const checkForUpdates = async () => {
-      const lastCheckTime = localStorage.getItem("lastUpdateCheckTime");
+      let lastCheckTime: string | null = null;
+      try { lastCheckTime = localStorage?.getItem("lastUpdateCheckTime"); } catch {}
       const currentTime = Date.now();
 
       if (
@@ -52,7 +53,7 @@ const UpdateNotification: React.FC<{ checkIntervalHours: number }> = ({
           console.error("Error checking for updates:", error);
         }
 
-        localStorage.setItem("lastUpdateCheckTime", currentTime.toString());
+        try { localStorage?.setItem("lastUpdateCheckTime", currentTime.toString()); } catch {}
       }
     };
 

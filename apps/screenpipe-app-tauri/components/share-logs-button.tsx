@@ -86,10 +86,11 @@ export const ShareLogsButton = ({
 
   useEffect(() => {
     const loadMachineId = async () => {
-      let id = localStorage.getItem("machineId");
+      let id: string | null = null;
+      try { id = localStorage?.getItem("machineId"); } catch {}
       if (!id) {
         id = crypto.randomUUID();
-        localStorage.setItem("machineId", id);
+        try { localStorage?.setItem("machineId", id); } catch {}
       }
       setMachineId(id);
     };
@@ -209,7 +210,8 @@ export const ShareLogsButton = ({
         })
       );
 
-      const consoleLog = (localStorage.getItem("console_logs") || "").slice(-50000); // Last 50KB of console logs
+      let consoleLog = "";
+      try { consoleLog = (localStorage?.getItem("console_logs") || "").slice(-50000); } catch {} // Last 50KB of console logs
 
       const signedRes = await fetch(`${BASE_URL}/api/logs`, {
         method: "POST",

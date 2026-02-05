@@ -55,11 +55,17 @@ export default function RootLayout({
         // Debounced write to localStorage
         debouncedWrite(() => {
           try {
+            // localStorage can be null in Tauri WKWebView during navigation
+            if (!localStorage) return;
             localStorage.setItem("console_logs", logs.join("\n"));
           } catch (e) {
-            // If localStorage is full, clear half the logs
-            logs.splice(0, logs.length / 2);
-            localStorage.setItem("console_logs", logs.join("\n"));
+            try {
+              // If localStorage is full, clear half the logs
+              logs.splice(0, logs.length / 2);
+              if (localStorage) localStorage.setItem("console_logs", logs.join("\n"));
+            } catch {
+              // localStorage unavailable, skip silently
+            }
           }
         });
       };

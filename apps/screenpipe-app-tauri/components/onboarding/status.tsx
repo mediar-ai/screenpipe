@@ -167,8 +167,8 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     setIsSendingLogs(true);
     try {
       const BASE_URL = "https://screenpi.pe";
-      const machineId = localStorage.getItem("machineId") || crypto.randomUUID();
-      localStorage.setItem("machineId", machineId);
+      const machineId = localStorage?.getItem("machineId") || crypto.randomUUID();
+      try { localStorage?.setItem("machineId", machineId); } catch {}
       const identifier = settings.user?.id || machineId;
       const type = settings.user?.id ? "user" : "machine";
       const logFilesResult = await commands.getLogFiles();
@@ -194,7 +194,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         body: JSON.stringify({ identifier, type }),
       });
       const { data: { signedUrl, path } } = await signedRes.json();
-      const consoleLog = (localStorage.getItem("console_logs") || "").slice(-50000);
+      const consoleLog = (localStorage?.getItem("console_logs") || "").slice(-50000);
       const combinedLogs = logContents
         .map((log) => `\n=== ${log.name} ===\n${log.content}`)
         .join("\n\n") +

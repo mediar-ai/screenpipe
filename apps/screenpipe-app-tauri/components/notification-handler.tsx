@@ -24,14 +24,18 @@ const NotificationHandler: React.FC = () => {
       }
 
       if (permission) {
-        const welcomeShown = localStorage.getItem("welcomeNotificationShown");
+        try {
+          const welcomeShown = localStorage?.getItem("welcomeNotificationShown");
 
-        if (!welcomeShown) {
-          sendNotification({
-            title: "welcome to screenpipe",
-            body: "thank you for using screenpipe! we're dedicated to help you get the most out of screenpipe.",
-          });
-          localStorage.setItem("welcomeNotificationShown", "true");
+          if (!welcomeShown) {
+            sendNotification({
+              title: "welcome to screenpipe",
+              body: "thank you for using screenpipe! we're dedicated to help you get the most out of screenpipe.",
+            });
+            localStorage?.setItem("welcomeNotificationShown", "true");
+          }
+        } catch {
+          // localStorage unavailable in some WKWebView contexts
         }
       }
 

@@ -33,10 +33,14 @@ export function ThemeProvider({
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const storedTheme = localStorage.getItem(storageKey) as ColorTheme;
-    if (storedTheme) {
-      setTheme(storedTheme);
-    } else {
+    try {
+      const storedTheme = localStorage?.getItem(storageKey) as ColorTheme;
+      if (storedTheme) {
+        setTheme(storedTheme);
+      } else {
+        setTheme("system");
+      }
+    } catch {
       setTheme("system");
     }
     setIsLoaded(true);
@@ -81,13 +85,13 @@ export function ThemeProvider({
   const value = {
     theme: theme || defaultTheme,
     setTheme: (theme: ColorTheme) => {
-      localStorage.setItem(storageKey, theme);
+      try { localStorage?.setItem(storageKey, theme); } catch {}
       setTheme(theme);
     },
     toggleTheme: () => {
       const currentTheme = theme || defaultTheme;
       const newTheme = currentTheme === "light" ? "dark" : "light";
-      localStorage.setItem(storageKey, newTheme);
+      try { localStorage?.setItem(storageKey, newTheme); } catch {}
       setTheme(newTheme);
     },
   };
