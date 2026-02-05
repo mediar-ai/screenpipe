@@ -53,6 +53,7 @@ pub struct EmbeddedServerConfig {
     pub user_id: Option<String>,
     pub use_system_default_audio: bool,
     pub video_quality: String,
+    pub adaptive_fps: bool,
 }
 
 impl EmbeddedServerConfig {
@@ -102,6 +103,7 @@ impl EmbeddedServerConfig {
             },
             use_system_default_audio: store.use_system_default_audio,
             video_quality: store.video_quality.clone(),
+            adaptive_fps: store.adaptive_fps,
         }
     }
 }
@@ -360,6 +362,28 @@ pub async fn start_embedded_server(
             info!("Using dynamic monitor detection (use_all_monitors=true)");
             
             let video_quality = config.video_quality.clone();
+
+            // Create activity feed for adaptive FPS if enabled
+            let activity_feed: screenpipe_vision::ActivityFeedOption = if config.adaptive_fps {
+                info!("Starting activity feed for adaptive FPS");
+                match screenpipe_accessibility::UiRecorder::with_defaults().start_activity_only() {
+                    Ok(feed) => {
+                        info!("Activity feed started successfully for adaptive FPS");
+                        Some(feed)
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to start activity feed: {:?}. Adaptive FPS will be disabled.",
+                            e
+                        );
+                        None
+                    }
+                }
+            } else {
+                info!("Adaptive FPS disabled");
+                None
+            };
+
             let vision_config = VisionManagerConfig {
                 output_path,
                 fps,
@@ -372,7 +396,7 @@ pub async fn start_embedded_server(
                 languages: languages_clone,
                 capture_unfocused_windows: false,
                 realtime_vision: false,
-                activity_feed: None,
+                activity_feed,
                 video_quality,
             };
 

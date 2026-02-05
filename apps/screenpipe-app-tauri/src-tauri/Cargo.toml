@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "2.0.312"
+version = "2.0.313"
 description = "24/7 memory for your desktop. 100% local."
 authors = ["you"]
 license = ""
@@ -108,8 +108,9 @@ md5 = "0.7"
 screenpipe-core = { path = "../../../crates/screenpipe-core", features = ["cloud-sync"] }
 
 # Embedded screenpipe server
-screenpipe-server = { path = "../../../crates/screenpipe-server", default-features = false, features = ["ui-events"] }
-screenpipe-vision = { path = "../../../crates/screenpipe-vision" }
+screenpipe-server = { path = "../../../crates/screenpipe-server", default-features = false, features = ["ui-events", "adaptive-fps"] }
+screenpipe-vision = { path = "../../../crates/screenpipe-vision", features = ["adaptive-fps"] }
+screenpipe-accessibility = { path = "../../../crates/screenpipe-accessibility" }
 screenpipe-audio = { path = "../../../crates/screenpipe-audio" }
 screenpipe-db = { path = "../../../crates/screenpipe-db" }
 
