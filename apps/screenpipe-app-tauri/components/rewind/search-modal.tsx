@@ -51,12 +51,41 @@ const STOP_WORDS = new Set([
 ]);
 
 function isGarbageWord(word: string): boolean {
-  if (word.length < 3 || word.length > 20) return true;
+  if (word.length < 3 || word.length > 25) return true;
+  // too many consonants in a row = OCR garbage
   if (/[bcdfghjklmnpqrstvwxyz]{5,}/i.test(word)) return true;
-  if (/\d/.test(word) && /[a-z]/i.test(word)) return true;
-  if (word === word.toUpperCase() && word.length < 5) return true;
+  // pure numbers
+  if (/^\d+$/.test(word)) return true;
+  // numbers mixed with letters (like "h3" "x11" etc)
+  if (/\d/.test(word) && /[a-z]/i.test(word) && word.length < 6) return true;
+  // repeated chars
   if (/(.)\1{3,}/.test(word)) return true;
+  // common file extensions / code tokens
+  if (/^\.(js|ts|py|rs|md|json|yaml|toml|lock|env|cfg)$/i.test(word)) return true;
   return false;
+}
+
+// words that are proper nouns (Capitalized in original text) are more interesting
+function extractInterestingWords(text: string): Map<string, { count: number; original: string }> {
+  const words = new Map<string, { count: number; original: string }>();
+  // split on whitespace/punctuation but preserve original casing
+  const tokens = text.match(/[A-Za-z][a-z]{2,24}/g) || [];
+  for (const token of tokens) {
+    const lower = token.toLowerCase();
+    if (STOP_WORDS.has(lower)) continue;
+    if (isGarbageWord(lower)) continue;
+    const existing = words.get(lower);
+    if (existing) {
+      existing.count++;
+      // prefer the Capitalized version
+      if (token[0] === token[0].toUpperCase() && token.slice(1) === token.slice(1).toLowerCase()) {
+        existing.original = token;
+      }
+    } else {
+      words.set(lower, { count: 1, original: token });
+    }
+  }
+  return words;
 }
 
 function useSuggestions(isOpen: boolean) {
@@ -89,48 +118,53 @@ function useSuggestions(isOpen: boolean) {
         const data = await resp.json();
         const items = data?.data || [];
 
-        const appCounts = new Map<string, number>();
-        const wordCounts = new Map<string, number>();
+        // collect app names to exclude them from suggestions
+        const appNames = new Set<string>();
+        const allWords = new Map<string, { count: number; original: string }>();
 
         for (const item of items) {
           const content = item?.content || {};
-          const appName = content.app_name || "";
-          if (appName && !appName.toLowerCase().includes("screenpipe")) {
-            appCounts.set(appName, (appCounts.get(appName) || 0) + 1);
-          }
+          const appName = (content.app_name || "").toLowerCase();
+          if (appName) appNames.add(appName);
 
           const text = content.text || "";
-          const words = text.split(/[\s\n\r\t,;:!?()[\]{}<>="'/\\|`~@#$%^&*+]+/);
-          for (const raw of words) {
-            const word = raw.toLowerCase().trim();
-            if (STOP_WORDS.has(word)) continue;
-            if (isGarbageWord(word)) continue;
-            wordCounts.set(word, (wordCounts.get(word) || 0) + 1);
+          const extracted = extractInterestingWords(text);
+          for (const [lower, info] of extracted) {
+            const existing = allWords.get(lower);
+            if (existing) {
+              existing.count += info.count;
+              // keep the capitalized form
+              if (info.original[0] === info.original[0].toUpperCase()) {
+                existing.original = info.original;
+              }
+            } else {
+              allWords.set(lower, { ...info });
+            }
           }
         }
 
         if (cancelled) return;
 
-        const topApps = [...appCounts.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 4)
-          .map(([name]) => name);
+        // filter: exclude app names, must appear 2+ times, not too frequent (UI chrome)
+        const maxCount = items.length * 0.6; // if it appears in >60% of frames it's UI chrome
+        const candidates = [...allWords.entries()]
+          .filter(([lower]) => !appNames.has(lower))
+          .filter(([, info]) => info.count >= 2 && info.count < maxCount)
+          // prefer proper nouns (capitalized original)
+          .sort((a, b) => {
+            const aProper = a[1].original[0] === a[1].original[0].toUpperCase() ? 1 : 0;
+            const bProper = b[1].original[0] === b[1].original[0].toUpperCase() ? 1 : 0;
+            if (bProper !== aProper) return bProper - aProper;
+            return b[1].count - a[1].count;
+          });
 
-        const appNamesLower = new Set(topApps.map((a) => a.toLowerCase()));
-        const meaningfulWords = [...wordCounts.entries()]
-          .filter(([word]) => !appNamesLower.has(word))
-          .filter(([, count]) => count >= 2)
-          .sort((a, b) => b[1] - a[1]);
-
-        // take top 15 then randomly pick 6 for variety
-        const topPool = meaningfulWords.slice(0, 15);
+        // take top 20 then randomly pick 8 for variety
+        const topPool = candidates.slice(0, 20);
         const shuffled = topPool.sort(() => Math.random() - 0.5);
-        const pickedWords = shuffled.slice(0, 6).map(([word]) => word);
-
-        const combined = [...topApps, ...pickedWords].slice(0, 8);
+        const picked = shuffled.slice(0, 8).map(([, info]) => info.original);
 
         if (!cancelled) {
-          setSuggestions(combined);
+          setSuggestions(picked);
           setIsLoading(false);
         }
       } catch {
@@ -215,13 +249,21 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
       setQuery("");
       resetSearch();
 
-      // Single rAF is enough — the NSPanel is now made key window
-      // on show, so the input can receive focus immediately.
+      // Focus after next frame. The panel is made key window on show,
+      // but the global shortcut path also calls show_main_window first.
+      // A small delay handles the case where make_key_window is still
+      // propagating through the window server.
       const rafId = requestAnimationFrame(() => {
         inputRef.current?.focus();
       });
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 80);
 
-      return () => cancelAnimationFrame(rafId);
+      return () => {
+        cancelAnimationFrame(rafId);
+        clearTimeout(timer);
+      };
     }
   }, [isOpen, resetSearch]);
 
