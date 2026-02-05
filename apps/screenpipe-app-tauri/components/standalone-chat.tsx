@@ -499,7 +499,20 @@ export function StandaloneChat() {
   };
 
   // Load a specific conversation
-  const loadConversation = (conv: ChatConversation) => {
+  const loadConversation = async (conv: ChatConversation) => {
+    // Abort any ongoing Pi processing before switching
+    if (isPi && (isLoading || isStreaming)) {
+      try {
+        await commands.piAbort();
+      } catch (e) {
+        console.warn("[Pi] Failed to abort:", e);
+      }
+      piStreamingTextRef.current = "";
+      piMessageIdRef.current = null;
+      piContentBlocksRef.current = [];
+      setIsLoading(false);
+      setIsStreaming(false);
+    }
     setMessages(conv.messages.map(m => ({
       id: m.id,
       role: m.role,
@@ -520,7 +533,23 @@ export function StandaloneChat() {
   };
 
   // Start a new conversation
-  const startNewConversation = () => {
+  const startNewConversation = async () => {
+    // Abort any ongoing Pi processing and start a fresh session
+    if (isPi && piInfo?.running) {
+      try {
+        if (isLoading || isStreaming) {
+          await commands.piAbort();
+        }
+        await commands.piNewSession();
+      } catch (e) {
+        console.warn("[Pi] Failed to reset session:", e);
+      }
+      piStreamingTextRef.current = "";
+      piMessageIdRef.current = null;
+      piContentBlocksRef.current = [];
+      setIsLoading(false);
+      setIsStreaming(false);
+    }
     setMessages([]);
     setConversationId(null);
     setInput("");
@@ -1029,8 +1058,23 @@ export function StandaloneChat() {
           piRestartCountRef.current = 0;
           if (piMessageIdRef.current) {
             const msgId = piMessageIdRef.current;
-            const content = piStreamingTextRef.current || "Done";
+            // Use streamed text if available, otherwise extract from agent_end messages
+            let content = piStreamingTextRef.current;
+            if (!content && data.messages && Array.isArray(data.messages)) {
+              // Extract text from all assistant messages in the agent_end payload
+              content = data.messages
+                .filter((m: any) => m.role === "assistant")
+                .flatMap((m: any) => (m.content || [])
+                  .filter((c: any) => c.type === "text")
+                  .map((c: any) => c.text))
+                .join("\n\n");
+            }
+            content = content || "Done";
             const contentBlocks = [...piContentBlocksRef.current];
+            // If we had no streamed text but got content from messages, add it as a text block
+            if (!piStreamingTextRef.current && content !== "Done" && contentBlocks.length === 0) {
+              contentBlocks.push({ type: "text", text: content });
+            }
             setMessages((prev) =>
               prev.map((m) => m.id === msgId ? { ...m, content, contentBlocks } : m)
             );
@@ -1644,12 +1688,22 @@ export function StandaloneChat() {
     sendMessage(input.trim());
   };
 
-  const handleStop = () => {
+  const handleStop = async () => {
+    if (isPi) {
+      try {
+        await commands.piAbort();
+      } catch (e) {
+        console.warn("[Pi] Failed to abort:", e);
+      }
+      piStreamingTextRef.current = "";
+      piMessageIdRef.current = null;
+      piContentBlocksRef.current = [];
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
-      setIsLoading(false);
-      setIsStreaming(false);
     }
+    setIsLoading(false);
+    setIsStreaming(false);
   };
 
   return (

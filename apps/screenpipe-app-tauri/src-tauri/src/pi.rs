@@ -569,6 +569,20 @@ pub async fn pi_abort(state: State<'_, PiState>) -> Result<(), String> {
     m.send_command(json!({"type": "abort"}))
 }
 
+/// Start a new Pi session (clears conversation history)
+#[tauri::command]
+#[specta::specta]
+pub async fn pi_new_session(state: State<'_, PiState>) -> Result<(), String> {
+    let mut manager = state.0.lock().await;
+    let m = manager.as_mut().ok_or("Pi not initialized")?;
+    
+    if !m.is_running() {
+        return Err("Pi is not running".to_string());
+    }
+
+    m.send_command(json!({"type": "new_session"}))
+}
+
 /// Check if pi is available
 #[tauri::command]
 #[specta::specta]
