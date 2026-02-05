@@ -18,8 +18,10 @@ static PREWARM: Once = Once::new();
 pub struct ChatCompletionRequest {
     messages: Vec<Message>,
     #[serde(default)]
+    #[allow(dead_code)]
     temperature: Option<f64>,
     #[serde(default)]
+    #[allow(dead_code)]
     max_tokens: Option<u32>,
 }
 

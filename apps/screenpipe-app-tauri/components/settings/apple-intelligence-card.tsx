@@ -43,15 +43,10 @@ interface TodoItem {
 
 const API = "http://localhost:3030";
 
-const SYSTEM_PROMPT = `You extract action items from screen recordings and audio transcripts.
-Rules:
-- Only extract clear, actionable tasks
-- Each item: short, clear sentence
-- Set urgency: high (deadline/urgent), medium (should do soon), low (nice to have)
-- Include the app name if visible
-- Respond ONLY with a JSON array, no other text
-- Example: [{"text":"Review PR #42","app":"GitHub","urgency":"high"}]
-- If none found, respond with: []`;
+const SYSTEM_PROMPT = `Extract action items as JSON. Output ONLY a JSON array, nothing else.
+Each item must have exactly these fields: "text" (string), "app" (string), "urgency" (one of: "high", "medium", "low").
+Example: [{"text":"Review PR #42","app":"GitHub","urgency":"high"}]
+If no action items, output: []`;
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -208,8 +203,17 @@ export function AppleIntelligenceCard() {
           .join("\n");
       }
 
-      const items: TodoItem[] = JSON.parse(jsonStr);
-      const valid = items.filter((t) => t.text?.trim());
+      const rawItems: any[] = JSON.parse(jsonStr);
+      // Normalize — model sometimes uses "task"/"category" instead of "text"/"app"
+      const valid: TodoItem[] = rawItems
+        .map((t: any) => ({
+          text: t.text || t.task || t.action || t.item || "",
+          app: t.app || t.category || t.source || "",
+          urgency: (["high", "medium", "low"].includes(t.urgency)
+            ? t.urgency
+            : "medium") as "high" | "medium" | "low",
+        }))
+        .filter((t) => t.text.trim());
 
       setTodos(valid);
       setLastRun(new Date());
