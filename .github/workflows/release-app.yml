@@ -695,3 +695,34 @@ jobs:
             });
             
             console.log(`Created testing discussion issue: ${issue.data.html_url}`);
+
+  generate-changelog:
+    needs: [check_commit, publish-tauri]
+    if: needs.check_commit.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+
+      - name: Get version and previous bump
+        id: params
+        run: |
+          VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+
+          # Find the previous "Bump" or "release-app" commit to diff from
+          PREV=$(git log --oneline --skip=1 --grep="release-app\|Bump app" -1 --format="%H" 2>/dev/null || echo "")
+          if [ -z "$PREV" ]; then
+            PREV="HEAD~50"
+          fi
+          echo "since=${PREV}" >> $GITHUB_OUTPUT
+          echo "Changelog: v${VERSION} since ${PREV}"
+
+      - name: Trigger changelog generation on website repo
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.WEBSITE_REPO_TOKEN }}
+          repository: screenpipe/website
+          event-type: generate-changelog
+          client-payload: '{"version": "${{ steps.params.outputs.version }}", "since": "${{ steps.params.outputs.since }}"}'
