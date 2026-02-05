@@ -74,6 +74,27 @@ pub fn restore_frontmost_app() {
     }
 }
 
+/// Clear the saved frontmost app without re-activating it.
+/// Used when the user intentionally switches Spaces — we don't want to
+/// pull them back by re-activating the previous app.
+#[cfg(target_os = "macos")]
+pub fn clear_frontmost_app() {
+    use objc::{msg_send, sel, sel_impl};
+    let ptr = {
+        let mut prev = PREVIOUS_FRONTMOST_APP.lock().unwrap();
+        let p = *prev;
+        *prev = 0;
+        p
+    };
+    if ptr != 0 {
+        use tauri_nspanel::cocoa::base::id;
+        unsafe {
+            let app: id = ptr as id;
+            let _: () = msg_send![app, release];
+        }
+    }
+}
+
 /// Tracks which overlay mode the current Main window was created for.
 /// When the mode changes, show() hides the old panel and creates a fresh one
 /// under a different label to avoid NSPanel reconfiguration crashes.
