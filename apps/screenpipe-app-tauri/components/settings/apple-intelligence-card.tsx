@@ -26,7 +26,6 @@ import {
   AlertCircle,
   Clock,
   Sparkles,
-  RefreshCw,
   X,
   Trash2,
 } from "lucide-react";
