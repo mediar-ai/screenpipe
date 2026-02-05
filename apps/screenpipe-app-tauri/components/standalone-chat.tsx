@@ -1054,6 +1054,66 @@ export function StandaloneChat() {
               prev.map((m) => m.id === msgId ? { ...m, contentBlocks } : m)
             );
           }
+        } else if (data.type === "auto_retry_end" && data.success === false) {
+          // Pi exhausted retries on a transient error (rate limit, overloaded, etc.)
+          const errorStr = data.finalError || "Request failed after retries";
+          console.error("[Pi] Auto-retry failed:", errorStr);
+
+          // Detect daily_limit_exceeded from the error
+          if (errorStr.includes("daily_limit_exceeded") || errorStr.includes("429")) {
+            try {
+              const match = errorStr.match(/"resets_at":\s*"([^"]+)"/);
+              if (match) setUpgradeResetsAt(match[1]);
+            } catch {}
+            setUpgradeReason("daily_limit");
+
+            if (piMessageIdRef.current) {
+              const msgId = piMessageIdRef.current;
+              const content = "You've used all your free queries for today.";
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content } : m)
+              );
+            }
+            // Don't clear refs yet — agent_end will follow
+          } else if (errorStr.includes("model_not_allowed")) {
+            setUpgradeReason("model_not_allowed");
+            if (piMessageIdRef.current) {
+              const msgId = piMessageIdRef.current;
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content: "This model requires an upgrade." } : m)
+              );
+            }
+          }
+        } else if (data.type === "message_update" && data.assistantMessageEvent?.type === "error") {
+          // Pi's LLM returned an error (e.g. rate limit, overloaded)
+          const reason = data.assistantMessageEvent.reason || "";
+          const errorDetail = data.assistantMessageEvent.error || "";
+          console.error("[Pi] Message error:", reason, errorDetail);
+
+          if (piMessageIdRef.current) {
+            const msgId = piMessageIdRef.current;
+            const fullError = `${reason} ${errorDetail}`.trim();
+
+            if (fullError.includes("daily_limit_exceeded") || fullError.includes("429")) {
+              try {
+                const match = fullError.match(/"resets_at":\s*"([^"]+)"/);
+                if (match) setUpgradeResetsAt(match[1]);
+              } catch {}
+              setUpgradeReason("daily_limit");
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content: "You've used all your free queries for today." } : m)
+              );
+            } else if (fullError.includes("model_not_allowed")) {
+              setUpgradeReason("model_not_allowed");
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content: "This model requires an upgrade." } : m)
+              );
+            } else {
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content: `Error: ${fullError || "Something went wrong"}` } : m)
+              );
+            }
+          }
         } else if (data.type === "agent_end") {
           piRestartCountRef.current = 0;
           if (piMessageIdRef.current) {
@@ -1069,15 +1129,20 @@ export function StandaloneChat() {
                   .map((c: any) => c.text))
                 .join("\n\n");
             }
-            content = content || "Done";
-            const contentBlocks = [...piContentBlocksRef.current];
-            // If we had no streamed text but got content from messages, add it as a text block
-            if (!piStreamingTextRef.current && content !== "Done" && contentBlocks.length === 0) {
-              contentBlocks.push({ type: "text", text: content });
-            }
-            setMessages((prev) =>
-              prev.map((m) => m.id === msgId ? { ...m, content, contentBlocks } : m)
-            );
+            // Check if content was already set by error handlers above
+            setMessages((prev) => {
+              const existing = prev.find((m) => m.id === msgId);
+              // Don't overwrite meaningful error messages with "Done"
+              if (existing && existing.content !== "Processing..." && !content) {
+                return prev;
+              }
+              content = content || "Done";
+              const contentBlocks = [...piContentBlocksRef.current];
+              if (!piStreamingTextRef.current && content !== "Done" && contentBlocks.length === 0) {
+                contentBlocks.push({ type: "text", text: content });
+              }
+              return prev.map((m) => m.id === msgId ? { ...m, content, contentBlocks } : m);
+            });
           }
           piStreamingTextRef.current = "";
           piMessageIdRef.current = null;
@@ -1085,11 +1150,29 @@ export function StandaloneChat() {
           setIsLoading(false);
           setIsStreaming(false);
         } else if (data.type === "response" && data.success === false) {
+          const errorStr = data.error || "Unknown error";
           if (piMessageIdRef.current) {
             const msgId = piMessageIdRef.current;
-            setMessages((prev) =>
-              prev.map((m) => m.id === msgId ? { ...m, content: `Error: ${data.error}` } : m)
-            );
+
+            if (errorStr.includes("daily_limit_exceeded") || errorStr.includes("429")) {
+              try {
+                const match = errorStr.match(/"resets_at":\s*"([^"]+)"/);
+                if (match) setUpgradeResetsAt(match[1]);
+              } catch {}
+              setUpgradeReason("daily_limit");
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content: "You've used all your free queries for today." } : m)
+              );
+            } else if (errorStr.includes("model_not_allowed")) {
+              setUpgradeReason("model_not_allowed");
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content: "This model requires an upgrade." } : m)
+              );
+            } else {
+              setMessages((prev) =>
+                prev.map((m) => m.id === msgId ? { ...m, content: `Error: ${errorStr}` } : m)
+              );
+            }
           }
           piStreamingTextRef.current = "";
           piMessageIdRef.current = null;
