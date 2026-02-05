@@ -1522,7 +1522,7 @@ impl SCServer {
             .freeze();
 
         // Build the main router with all routes
-        Router::new()
+        let router = Router::new()
             .merge(server.into_router())
             // UI Events API routes
             .route("/ui-events", get(ui_events_search_handler))
@@ -1537,8 +1537,19 @@ impl SCServer {
                 axum::routing::post(sync_api::sync_download),
             )
             // Vision status endpoint (not in OpenAPI spec to avoid oasgen registration issues)
-            .route("/vision/status", get(api_vision_status))
-            // NOTE: websockerts and sse is not supported by openapi so we move it down here
+            .route("/vision/status", get(api_vision_status));
+
+        // Apple Intelligence — generic OpenAI-compatible endpoint (macOS only)
+        #[cfg(feature = "apple-intelligence")]
+        let router = router
+            .route("/ai/status", get(crate::apple_intelligence_api::ai_status))
+            .route(
+                "/ai/chat/completions",
+                axum::routing::post(crate::apple_intelligence_api::chat_completions),
+            );
+
+        // NOTE: websockets and sse is not supported by openapi so we move it down here
+        router
             .route("/stream/frames", get(stream_frames_handler))
             .route("/ws/events", get(ws_events_handler))
             .route("/ws/health", get(ws_health_handler))

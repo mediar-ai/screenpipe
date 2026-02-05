@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +23,6 @@ import {
   Copy,
   Check,
   AlertCircle,
-  Clock,
   Sparkles,
   X,
   Trash2,
@@ -32,7 +31,6 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { platform } from "@tauri-apps/plugin-os";
 
-// ─── Apple logo SVG ─────────────────────────────────────────────────────────
 const AppleLogo = ({ className }: { className?: string }) => (
   <svg
     viewBox="0 0 814 1000"
@@ -52,39 +50,23 @@ interface TodoItem {
   urgency: "low" | "medium" | "high";
 }
 
-interface ExtractStats {
-  data_sources: number;
-  total_input_chars: number;
-  filtered_input_chars: number;
-  chunks_processed: number;
-  total_time_ms: number;
-}
+const API = "http://localhost:3030";
 
-interface AppleIntelligenceSettings {
-  enabled: boolean;
-  intervalMinutes: number; // 0 = manual
-  lookbackMinutes: number;
-  chunkSize: number;
-}
-
-const DEFAULT_SETTINGS: AppleIntelligenceSettings = {
-  enabled: false,
-  intervalMinutes: 0,
-  lookbackMinutes: 60,
-  chunkSize: 1200,
-};
-
-// Screenpipe server (same server that's already running)
-const SCREENPIPE_API = "http://localhost:3030";
+const SYSTEM_PROMPT = `You extract action items from screen recordings and audio transcripts.
+Rules:
+- Only extract clear, actionable tasks
+- Each item: short, clear sentence
+- Set urgency: high (deadline/urgent), medium (should do soon), low (nice to have)
+- Include the app name if visible
+- Respond ONLY with a JSON array, no other text
+- Example: [{"text":"Review PR #42","app":"GitHub","urgency":"high"}]
+- If none found, respond with: []`;
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function AppleIntelligenceCard() {
   const { toast } = useToast();
   const [os, setOs] = useState<string>("");
-  const [settings, setSettings] =
-    useState<AppleIntelligenceSettings>(DEFAULT_SETTINGS);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [aiStatus, setAiStatus] = useState<
     "unknown" | "available" | "unavailable"
@@ -93,80 +75,56 @@ export function AppleIntelligenceCard() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [todosOpen, setTodosOpen] = useState(true);
   const [lastRun, setLastRun] = useState<Date | null>(null);
-  const [lastStats, setLastStats] = useState<ExtractStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [lookbackMinutes, setLookbackMinutes] = useState(30);
 
-  // Platform check — only show on macOS
   useEffect(() => {
     setOs(platform());
   }, []);
 
-  // Load settings
+  // Load cached results
   useEffect(() => {
-    let saved: string | null = null;
     try {
-      saved = localStorage?.getItem("apple-intelligence-settings");
-    } catch {}
-    if (saved) {
-      try {
-        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
-      } catch {}
-    }
-
-    // Load cached todos
-    let savedTodos: string | null = null;
-    try {
-      savedTodos = localStorage?.getItem("apple-intelligence-todos");
-    } catch {}
-    if (savedTodos) {
-      try {
-        const parsed = JSON.parse(savedTodos);
+      const saved = localStorage?.getItem("apple-intelligence-todos");
+      if (saved) {
+        const parsed = JSON.parse(saved);
         setTodos(parsed.items || []);
         if (parsed.lastRun) setLastRun(new Date(parsed.lastRun));
-      } catch {}
-    }
-
-    setSettingsLoaded(true);
+      }
+      const lb = localStorage?.getItem("apple-intelligence-lookback");
+      if (lb) setLookbackMinutes(parseInt(lb));
+    } catch {}
   }, []);
 
-  // Save settings
+  // Persist
   useEffect(() => {
-    if (settingsLoaded) {
-      try {
-        localStorage?.setItem(
-          "apple-intelligence-settings",
-          JSON.stringify(settings)
-        );
-      } catch {}
-    }
-  }, [settings, settingsLoaded]);
+    try {
+      localStorage?.setItem(
+        "apple-intelligence-todos",
+        JSON.stringify({ items: todos, lastRun: lastRun?.toISOString() })
+      );
+    } catch {}
+  }, [todos, lastRun]);
 
-  // Save todos
   useEffect(() => {
-    if (settingsLoaded) {
-      try {
-        localStorage?.setItem(
-          "apple-intelligence-todos",
-          JSON.stringify({ items: todos, lastRun: lastRun?.toISOString() })
-        );
-      } catch {}
-    }
-  }, [todos, lastRun, settingsLoaded]);
+    try {
+      localStorage?.setItem(
+        "apple-intelligence-lookback",
+        String(lookbackMinutes)
+      );
+    } catch {}
+  }, [lookbackMinutes]);
 
-  // Check AI status via screenpipe server
+  // Check AI availability
   const checkStatus = useCallback(async () => {
     try {
-      const resp = await fetch(`${SCREENPIPE_API}/ai/status`, {
+      const resp = await fetch(`${API}/ai/status`, {
         signal: AbortSignal.timeout(3000),
       });
       if (resp.ok) {
         const data = await resp.json();
         setAiStatus(data.available ? "available" : "unavailable");
-      } else if (resp.status === 404) {
-        // Endpoint doesn't exist — server not built with apple-intelligence feature
-        setAiStatus("unavailable");
       } else {
         setAiStatus("unavailable");
       }
@@ -181,81 +139,100 @@ export function AppleIntelligenceCard() {
     return () => clearInterval(interval);
   }, [checkStatus]);
 
-  // Auto-extraction interval
-  useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    if (
-      settings.enabled &&
-      settings.intervalMinutes > 0 &&
-      aiStatus === "available"
-    ) {
-      intervalRef.current = setInterval(
-        () => runExtraction(),
-        settings.intervalMinutes * 60 * 1000
-      );
-    }
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [settings.enabled, settings.intervalMinutes, aiStatus]);
-
-  // ─── Extraction — single POST to screenpipe server ──────────────────────
+  // ─── Extract TODOs ──────────────────────────────────────────────────────
 
   const runExtraction = async () => {
     if (isExtracting || aiStatus !== "available") return;
-
     setIsExtracting(true);
     setError(null);
 
     try {
-      // Single call to screenpipe server — it queries DB directly,
-      // pre-filters, chunks, and processes with Foundation Models.
-      // No separate server, no data fetching from frontend.
-      const response = await fetch(`${SCREENPIPE_API}/ai/extract-todos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lookback_minutes: settings.lookbackMinutes,
-          chunk_size: settings.chunkSize,
-        }),
+      // 1. Fetch recent data from screenpipe
+      const now = new Date();
+      const start = new Date(now.getTime() - lookbackMinutes * 60 * 1000);
+      const params = new URLSearchParams({
+        content_type: "all",
+        start_time: start.toISOString(),
+        end_time: now.toISOString(),
+        limit: "50",
+        min_length: "20",
       });
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || `Server error: ${response.status}`);
+      const searchResp = await fetch(`${API}/search?${params}`);
+      if (!searchResp.ok) throw new Error("Failed to fetch screenpipe data");
+      const searchData = await searchResp.json();
+
+      // 2. Build context string from results
+      const parts: string[] = [];
+      for (const item of searchData.data || []) {
+        if (item.type === "OCR") {
+          const c = item.content;
+          const text = c?.text?.trim();
+          if (text) parts.push(`[${c.app_name || "?"}] ${text}`);
+        } else if (item.type === "Audio") {
+          const c = item.content;
+          const text = c?.transcription?.trim();
+          if (text) parts.push(`[Audio] ${text}`);
+        }
       }
 
-      const result = await response.json();
-
-      if (!result.available) {
-        setError("Apple Intelligence not available on this device");
-        setAiStatus("unavailable");
+      if (parts.length === 0) {
+        setError("No recent data found");
         return;
       }
 
-      setTodos(result.items || []);
-      setLastStats(result.stats);
+      // 3. Truncate to fit model context (~1500 chars for content)
+      let context = parts.join("\n");
+      if (context.length > 1500) {
+        context = context.slice(0, 1500);
+      }
+
+      // 4. Single call to generic AI endpoint
+      const aiResp = await fetch(`${API}/ai/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: context },
+          ],
+        }),
+      });
+
+      if (!aiResp.ok) {
+        const err = await aiResp.json().catch(() => ({}));
+        throw new Error(err.error || `AI error: ${aiResp.status}`);
+      }
+
+      const aiData = await aiResp.json();
+      const raw = aiData.choices?.[0]?.message?.content || "[]";
+
+      // 5. Parse JSON (strip markdown fences if present)
+      let jsonStr = raw.trim();
+      if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr
+          .split("\n")
+          .slice(1)
+          .filter((l: string) => !l.startsWith("```"))
+          .join("\n");
+      }
+
+      const items: TodoItem[] = JSON.parse(jsonStr);
+      const valid = items.filter((t) => t.text?.trim());
+
+      setTodos(valid);
       setLastRun(new Date());
 
-      if (result.items.length > 0) {
+      if (valid.length > 0) {
         toast({
-          title: `Found ${result.items.length} action item${result.items.length > 1 ? "s" : ""}`,
-          description: `Processed in ${(result.stats.total_time_ms / 1000).toFixed(1)}s`,
+          title: `Found ${valid.length} action item${valid.length > 1 ? "s" : ""}`,
         });
+      } else {
+        toast({ title: "No action items found" });
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      toast({
-        variant: "destructive",
-        title: "Extraction failed",
-        description: msg,
-      });
     } finally {
       setIsExtracting(false);
     }
@@ -281,48 +258,30 @@ export function AppleIntelligenceCard() {
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "Just now";
     if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return date.toLocaleDateString();
+    return `${Math.floor(mins / 60)}h ago`;
   };
 
-  const urgencyColor = (u: string) => {
-    switch (u) {
-      case "high":
-        return "text-red-500";
-      case "medium":
-        return "text-yellow-500";
-      default:
-        return "text-muted-foreground";
-    }
-  };
+  const urgencyIcon = (u: string) =>
+    u === "high" ? "⚡" : u === "medium" ? "●" : "○";
+  const urgencyColor = (u: string) =>
+    u === "high"
+      ? "text-red-500"
+      : u === "medium"
+        ? "text-yellow-500"
+        : "text-muted-foreground";
 
-  const urgencyIcon = (u: string) => {
-    switch (u) {
-      case "high":
-        return "⚡";
-      case "medium":
-        return "●";
-      default:
-        return "○";
-    }
-  };
-
-  // Only show on macOS
   if (os && os !== "macos") return null;
 
   return (
     <Card className="border-border bg-card overflow-hidden">
       <CardContent className="p-0">
         <div className="flex items-start p-4 gap-4">
-          {/* Apple Logo */}
           <div className="flex-shrink-0">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#147CE5] to-[#0E5FC2] flex items-center justify-center">
               <AppleLogo className="w-5 h-5 text-white" />
             </div>
           </div>
 
-          {/* Header */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-sm font-semibold text-foreground">
@@ -336,11 +295,6 @@ export function AppleIntelligenceCard() {
                   available
                 </span>
               )}
-              {settings.enabled && settings.intervalMinutes > 0 && (
-                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-foreground/10 text-foreground rounded-full">
-                  ● auto
-                </span>
-              )}
             </div>
             <p className="text-xs text-muted-foreground mb-3">
               Extract action items from your screen & audio using on-device AI.
@@ -352,16 +306,7 @@ export function AppleIntelligenceCard() {
               )}
             </p>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={() => setIsExpanded(!isExpanded)}
-                variant="outline"
-                size="sm"
-                className="gap-1.5 h-7 text-xs"
-              >
-                {isExpanded ? "Hide" : "Configure"}
-              </Button>
-
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 onClick={runExtraction}
                 disabled={isExtracting || aiStatus !== "available"}
@@ -381,113 +326,37 @@ export function AppleIntelligenceCard() {
                 )}
               </Button>
 
+              <Select
+                value={String(lookbackMinutes)}
+                onValueChange={(v) => setLookbackMinutes(parseInt(v))}
+              >
+                <SelectTrigger className="h-7 text-xs w-[90px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">15 min</SelectItem>
+                  <SelectItem value="30">30 min</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                  <SelectItem value="120">2 hours</SelectItem>
+                </SelectContent>
+              </Select>
+
               {todos.length > 0 && (
                 <Button
                   onClick={() => {
                     setTodos([]);
                     setLastRun(null);
-                    setLastStats(null);
                   }}
                   variant="ghost"
                   size="sm"
                   className="gap-1 h-7 text-xs text-muted-foreground"
                 >
                   <Trash2 className="h-3 w-3" />
-                  Clear
                 </Button>
               )}
             </div>
           </div>
         </div>
-
-        {/* Settings panel */}
-        {isExpanded && (
-          <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Lookback</Label>
-                <Select
-                  value={String(settings.lookbackMinutes)}
-                  onValueChange={(v) =>
-                    setSettings((s) => ({
-                      ...s,
-                      lookbackMinutes: parseInt(v),
-                    }))
-                  }
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="15">15 min</SelectItem>
-                    <SelectItem value="30">30 min</SelectItem>
-                    <SelectItem value="60">1 hour</SelectItem>
-                    <SelectItem value="120">2 hours</SelectItem>
-                    <SelectItem value="240">4 hours</SelectItem>
-                    <SelectItem value="480">8 hours</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Auto-run</Label>
-                <Select
-                  value={String(settings.intervalMinutes)}
-                  onValueChange={(v) =>
-                    setSettings((s) => ({
-                      ...s,
-                      intervalMinutes: parseInt(v),
-                      enabled: parseInt(v) > 0,
-                    }))
-                  }
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">Manual</SelectItem>
-                    <SelectItem value="5">5 min</SelectItem>
-                    <SelectItem value="15">15 min</SelectItem>
-                    <SelectItem value="30">30 min</SelectItem>
-                    <SelectItem value="60">1 hour</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Chunk size</Label>
-                <Select
-                  value={String(settings.chunkSize)}
-                  onValueChange={(v) =>
-                    setSettings((s) => ({
-                      ...s,
-                      chunkSize: parseInt(v),
-                    }))
-                  }
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="800">800 chars</SelectItem>
-                    <SelectItem value="1200">1200 chars</SelectItem>
-                    <SelectItem value="1600">1600 chars</SelectItem>
-                    <SelectItem value="2000">2000 chars</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {lastStats && (
-              <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 font-mono">
-                {lastStats.data_sources} sources ·{" "}
-                {lastStats.total_input_chars.toLocaleString()} chars ·{" "}
-                {lastStats.chunks_processed} chunks ·{" "}
-                {(lastStats.total_time_ms / 1000).toFixed(1)}s
-              </div>
-            )}
-          </div>
-        )}
 
         {/* TODO items */}
         {todos.length > 0 && (
@@ -519,15 +388,9 @@ export function AppleIntelligenceCard() {
                     }}
                   >
                     {copied ? (
-                      <>
-                        <Check className="h-3 w-3" />
-                        Copied
-                      </>
+                      <Check className="h-3 w-3" />
                     ) : (
-                      <>
-                        <Copy className="h-3 w-3" />
-                        Copy all
-                      </>
+                      <Copy className="h-3 w-3" />
                     )}
                   </Button>
                 </button>
@@ -541,7 +404,6 @@ export function AppleIntelligenceCard() {
                     >
                       <span
                         className={`text-xs mt-0.5 ${urgencyColor(todo.urgency)}`}
-                        title={todo.urgency}
                       >
                         {urgencyIcon(todo.urgency)}
                       </span>
@@ -558,13 +420,10 @@ export function AppleIntelligenceCard() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
                         onClick={() => {
                           navigator.clipboard.writeText(todo.text);
-                          toast({
-                            title: "Copied",
-                            description: todo.text.slice(0, 50),
-                          });
+                          toast({ title: "Copied" });
                         }}
                       >
                         <Copy className="h-2.5 w-2.5" />
@@ -577,7 +436,7 @@ export function AppleIntelligenceCard() {
           </div>
         )}
 
-        {/* Error display */}
+        {/* Error */}
         {error && (
           <div className="px-4 py-2 border-t border-border">
             <div className="flex items-center gap-2 text-xs text-red-500">
@@ -600,18 +459,10 @@ export function AppleIntelligenceCard() {
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span>
               Last:{" "}
-              <span className="text-foreground">
-                {formatLastRun(lastRun)}
-              </span>
+              <span className="text-foreground">{formatLastRun(lastRun)}</span>
             </span>
-            {settings.enabled && settings.intervalMinutes > 0 && (
-              <span className="flex items-center gap-0.5">
-                <Clock className="h-2.5 w-2.5" />
-                Every {settings.intervalMinutes}m
-              </span>
-            )}
             <span
-              className={`ml-auto ${aiStatus === "available" ? "text-green-500" : "text-muted-foreground"}`}
+              className={`ml-auto ${aiStatus === "available" ? "text-green-500" : ""}`}
             >
               {aiStatus === "available"
                 ? "● on-device"
