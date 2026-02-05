@@ -78,6 +78,18 @@ export async function validateAuth(request: Request, env: Env): Promise<AuthResu
     };
   }
 
+  // Clerk user ID without subscription = logged_in tier
+  // (won't pass JWT verification below, so catch it here)
+  const CLERK_ID_PATTERN = /^user_[a-zA-Z0-9]+$/;
+  if (CLERK_ID_PATTERN.test(token)) {
+    return {
+      isValid: true,
+      tier: 'logged_in',
+      deviceId,
+      userId: token,
+    };
+  }
+
   // Check if it's a valid Clerk token (logged in but no subscription)
   const isClerkValid = await verifyClerkToken(env, token);
   if (isClerkValid) {

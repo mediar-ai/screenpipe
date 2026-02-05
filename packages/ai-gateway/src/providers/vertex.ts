@@ -751,19 +751,18 @@ export async function proxyToVertex(
 // Model aliases - map requested models to what's available in the GCP project
 // Available: claude-haiku-4-5@20251001, claude-opus-4-5@20251101
 const MODEL_ALIASES: Record<string, string> = {
-	// Haiku 4.5 aliases
+	// Haiku 4.5 aliases (default model)
 	'claude-haiku-4-5': 'claude-haiku-4-5@20251001',
 	'claude-haiku-4': 'claude-haiku-4-5@20251001',
 	'claude-haiku': 'claude-haiku-4-5@20251001',
 	'claude-3-haiku-20240307': 'claude-haiku-4-5@20251001',
-	// Opus 4.5 aliases
+	// Opus 4.5 - only exact name (no short aliases to prevent accidental expensive calls)
 	'claude-opus-4-5': 'claude-opus-4-5@20251101',
-	'claude-opus-4': 'claude-opus-4-5@20251101',
-	'claude-opus': 'claude-opus-4-5@20251101',
-	// Sonnet -> Haiku (sonnet is outdated, use haiku as default)
+	// Sonnet -> Haiku (sonnet not available on Vertex, fallback to haiku)
 	'claude-sonnet-4-5@20250929': 'claude-haiku-4-5@20251001',
 	'claude-sonnet-4-5': 'claude-haiku-4-5@20251001',
 	'claude-sonnet-4@20250514': 'claude-haiku-4-5@20251001',
+	'claude-sonnet-4': 'claude-haiku-4-5@20251001',
 	'claude-sonnet': 'claude-haiku-4-5@20251001',
 };
 
