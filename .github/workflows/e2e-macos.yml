@@ -52,13 +52,13 @@ jobs:
         run: |
           cargo build --release -p screenpipe-server --features metal
           echo "CLI built successfully"
-          ls -la target/release/screenpipe-server
+          ls -la target/release/screenpipe
 
       - name: Start screenpipe server
         run: |
           # Start without screen/audio recording — just the server + API
           # --disable-vision and --disable-audio to skip permission-gated features
-          ./target/release/screenpipe-server \
+          ./target/release/screenpipe \
             --disable-vision \
             --disable-audio \
             --port 3030 &
