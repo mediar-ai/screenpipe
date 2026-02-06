@@ -1,22 +1,23 @@
 import {
   suite, test, summary, screenshot, assertExists, shortcut, bb,
   press, scrape, sleep, TIMEOUT_MEDIUM,
+  sel, shortcuts, IS_WINDOWS, IS_MACOS,
 } from "./lib";
 
 suite("main window UI");
 
-await test("open main window (⌃⌘S)", async () => {
-  // Activate app first to ensure shortcut is received
+await test("open main window", async () => {
   await bb("activate", "screenpipe-app");
   await sleep(500);
-  await shortcut("s", "cmd,ctrl");
+  const s = shortcuts.showApp;
+  await shortcut(s.key, s.modifiers);
   await sleep(3000);
-  await assertExists("role:AXWebArea", TIMEOUT_MEDIUM);
+  await assertExists(sel.webArea, TIMEOUT_MEDIUM);
 });
 
-await test("window has webview", () => assertExists("role:AXWebArea"));
+await test("window has webview", () => assertExists(sel.webArea));
 
-await test("search button exists", () => assertExists("title~:search"));
+await test("search button exists", () => assertExists(sel.titleContains("search")));
 
 await test("timeline has time labels", async () => {
   const result = await scrape();
@@ -32,12 +33,13 @@ await test("timeline has app labels", async () => {
   if (meaningful.length < 3) throw new Error(`only ${meaningful.length} meaningful texts`);
 });
 
-await test("notifications region exists", () => assertExists("title~:Notifications"));
+await test("notifications region exists", () => assertExists(sel.titleContains("Notifications")));
 
-await test("open search panel (⌃⌘K)", async () => {
-  await shortcut("k", "cmd,ctrl");
+await test("open search panel", async () => {
+  const s = shortcuts.search;
+  await shortcut(s.key, s.modifiers);
   await sleep(1000);
-  await assertExists("role:AXTextField", TIMEOUT_MEDIUM);
+  await assertExists(sel.textField, TIMEOUT_MEDIUM);
 });
 
 await test("close search panel (Esc)", async () => {
@@ -45,10 +47,18 @@ await test("close search panel (Esc)", async () => {
   await sleep(1000);
 });
 
-await test("screenpipe menu exists", () => assertExists("role:AXMenuBarItem AND title:screenpipe"));
-await test("edit menu exists", () => assertExists("role:AXMenuBarItem AND title:Edit"));
-await test("about menu item", () => assertExists("role:AXMenuItem AND title:About screenpipe"));
-await test("check for updates item", () => assertExists("title~:Check for Updates"));
+if (IS_MACOS) {
+  await test("screenpipe menu exists", () => assertExists("role:AXMenuBarItem AND title:screenpipe"));
+  await test("edit menu exists", () => assertExists("role:AXMenuBarItem AND title:Edit"));
+  await test("about menu item", () => assertExists("role:AXMenuItem AND title:About screenpipe"));
+  await test("check for updates item", () => assertExists("title~:Check for Updates"));
+}
+
+if (IS_WINDOWS) {
+  // Windows app has a title bar with the app name
+  await test("window title contains screenpipe", () =>
+    assertExists(sel.titleContains("screenpipe")));
+}
 
 await screenshot("02-main-window");
 

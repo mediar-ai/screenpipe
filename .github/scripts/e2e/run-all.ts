@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 /**
  * E2E test runner — runs all test suites in order
+ * Cross-platform: macOS + Windows
  * Usage:
  *   bun .github/scripts/e2e/run-all.ts [--suite <name>]
  *   bun .github/scripts/e2e/run-all.ts              # runs all
@@ -8,7 +9,10 @@
  */
 
 import { join, dirname } from "path";
-import { ARTIFACTS_DIR, HEALTH_URL } from "./lib";
+import {
+  ARTIFACTS_DIR, HEALTH_URL, IS_WINDOWS, IS_MACOS,
+  isScreenpipeRunning, getSystemInfo,
+} from "./lib";
 import { mkdirSync } from "fs";
 
 const c = {
@@ -23,7 +27,8 @@ const SUITES = [
   { name: "window", file: "test-main-window.ts" },
   { name: "settings", file: "test-settings.ts" },
   { name: "recording", file: "test-recording.ts" },
-  { name: "permissions", file: "test-permissions.ts" },
+  // permissions suite is macOS-only (accessibility/screen recording perms)
+  ...(IS_MACOS ? [{ name: "permissions", file: "test-permissions.ts" }] : []),
   { name: "onboarding", file: "test-onboarding.ts" },
   { name: "chat", file: "test-chat.ts" },
 ];
@@ -37,12 +42,8 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-// System info
-const hostname = Bun.spawnSync(["hostname"]).stdout.toString().trim();
-const osVersion = Bun.spawnSync(["sw_vers", "-productVersion"]).stdout.toString().trim();
-const chip = Bun.spawnSync(["sysctl", "-n", "machdep.cpu.brand_string"]).stdout.toString().trim();
-const memBytes = parseInt(Bun.spawnSync(["sysctl", "-n", "hw.memsize"]).stdout.toString().trim());
-const memGB = Math.round(memBytes / 1073741824);
+// System info (cross-platform)
+const sysInfo = getSystemInfo();
 
 console.log(c.bold("╔══════════════════════════════════════╗"));
 console.log(c.bold("║   screenpipe e2e test runner         ║"));
@@ -50,17 +51,17 @@ console.log(c.bold("╚═══════════════════
 console.log("");
 console.log(`artifacts: ${ARTIFACTS_DIR}`);
 console.log(`time:      ${new Date().toLocaleString()}`);
-console.log(`host:      ${hostname}`);
-console.log(`os:        ${osVersion}`);
-console.log(`chip:      ${chip}`);
-console.log(`memory:    ${memGB}GB`);
+console.log(`host:      ${sysInfo.hostname}`);
+console.log(`os:        ${sysInfo.os}`);
+console.log(`cpu:       ${sysInfo.cpu}`);
+console.log(`memory:    ${sysInfo.memGB}GB`);
+console.log(`platform:  ${IS_WINDOWS ? "windows" : IS_MACOS ? "macos" : "linux"}`);
 console.log("");
 
 mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
 // Preflight: check app is running
-const pgrep = Bun.spawnSync(["pgrep", "-f", "screenpipe"]);
-if (pgrep.exitCode !== 0) {
+if (!isScreenpipeRunning()) {
   console.log(c.red("error: screenpipe is not running"));
   console.log("start the app first, then run tests");
   process.exit(1);
@@ -80,7 +81,9 @@ try {
   }
 }
 
-const scriptDir = dirname(new URL(import.meta.url).pathname);
+const scriptDir = IS_WINDOWS
+  ? dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1")
+  : dirname(new URL(import.meta.url).pathname);
 let passed = 0;
 let failed = 0;
 const failedNames: string[] = [];

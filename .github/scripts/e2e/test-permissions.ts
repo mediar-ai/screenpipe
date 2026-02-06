@@ -1,23 +1,26 @@
 import {
   suite, test, summary, screenshot, assertHealthField,
-  shortcut, scrape, tree, sleep,
+  shortcut, scrape, tree, sleep, IS_WINDOWS, IS_MACOS,
+  shortcuts, sel,
 } from "./lib";
 
 suite("permissions");
 
-await test("no permission banner when granted", async () => {
-  await shortcut("s", "cmd,ctrl");
-  await sleep(2000);
-  const result = await scrape();
-  const texts: string[] = (result?.data?.items ?? []).map((i: any) => (i.text ?? "").toLowerCase());
-  const allText = texts.join(" ");
-  const warningKeywords = ["permission", "grant", "missing", "denied", "allow"];
-  for (const kw of warningKeywords) {
-    if (allText.includes(kw) && (allText.includes("grant") || allText.includes("missing") || allText.includes("denied"))) {
-      throw new Error(`permission warning found: "${kw}" in UI text`);
+if (IS_MACOS) {
+  await test("no permission banner when granted", async () => {
+    await shortcut("s", "cmd,ctrl");
+    await sleep(2000);
+    const result = await scrape();
+    const texts: string[] = (result?.data?.items ?? []).map((i: any) => (i.text ?? "").toLowerCase());
+    const allText = texts.join(" ");
+    const warningKeywords = ["permission", "grant", "missing", "denied", "allow"];
+    for (const kw of warningKeywords) {
+      if (allText.includes(kw) && (allText.includes("grant") || allText.includes("missing") || allText.includes("denied"))) {
+        throw new Error(`permission warning found: "${kw}" in UI text`);
+      }
     }
-  }
-});
+  });
+}
 
 await test("screen recording permission", () => assertHealthField("frame_status", "ok"));
 await test("microphone permission", () => assertHealthField("audio_status", "ok"));

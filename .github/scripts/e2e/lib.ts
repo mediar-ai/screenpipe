@@ -1,11 +1,18 @@
 /**
  * E2E test library — shared helpers for all test scripts
- * Requires: bb (bigbrother CLI) in PATH or at ~/Documents/bigbrother/target/release/bb
+ * Cross-platform: macOS + Windows
+ * Requires: bb (bigbrother CLI) in PATH or at known locations
  */
 
 import { $ } from "bun";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
+import { tmpdir, platform, hostname } from "os";
+
+// ── Platform ────────────────────────────────────────────────────────────────
+
+export const IS_WINDOWS = platform() === "win32";
+export const IS_MACOS = platform() === "darwin";
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -16,17 +23,78 @@ export const TIMEOUT_SHORT = 5_000;
 export const TIMEOUT_MEDIUM = 15_000;
 export const TIMEOUT_LONG = 60_000;
 
-export const ARTIFACTS_DIR =
-  process.env.ARTIFACTS_DIR ??
-  join("/tmp", "screenpipe-e2e", new Date().toISOString().replace(/[:.]/g, "-"));
+const defaultArtifacts = IS_WINDOWS
+  ? join(tmpdir(), "screenpipe-e2e", new Date().toISOString().replace(/[:.]/g, "-"))
+  : join("/tmp", "screenpipe-e2e", new Date().toISOString().replace(/[:.]/g, "-"));
+
+export const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR ?? defaultArtifacts;
+
+// ── Platform-specific selectors ─────────────────────────────────────────────
+
+/**
+ * Selector helpers that map to platform-appropriate accessibility roles.
+ * macOS uses AX roles (AXWebArea, AXMenuBarItem, etc.)
+ * Windows uses UIA ControlTypes (Document, MenuBar, MenuItem, etc.)
+ */
+export const sel = {
+  webArea: IS_WINDOWS ? "role:Document" : "role:AXWebArea",
+  window: IS_WINDOWS ? "role:Window" : "role:AXWindow",
+  menuBarItem: (name: string) =>
+    IS_WINDOWS
+      ? `role:MenuItem AND name~:${name}`
+      : `role:AXMenuBarItem AND title~:${name}`,
+  menuItem: (name: string) =>
+    IS_WINDOWS
+      ? `role:MenuItem AND name~:${name}`
+      : `role:AXMenuItem AND title:${name}`,
+  staticText: (name: string) =>
+    IS_WINDOWS
+      ? `role:Text AND name~:${name}`
+      : `role:AXStaticText AND name~:${name}`,
+  textField: IS_WINDOWS ? "role:Edit" : "role:AXTextField",
+  textArea: IS_WINDOWS ? "role:Edit" : "role:AXTextArea",
+  button: (name: string) =>
+    IS_WINDOWS
+      ? `role:Button AND name~:${name}`
+      : `role:AXButton AND title~:${name}`,
+  titleContains: (text: string) =>
+    IS_WINDOWS ? `name~:${text}` : `title~:${text}`,
+  titleExact: (text: string) =>
+    IS_WINDOWS ? `name:${text}` : `title:${text}`,
+};
+
+// ── Platform-specific shortcuts ─────────────────────────────────────────────
+
+export const shortcuts = {
+  /** Show/hide main window */
+  showApp: IS_WINDOWS
+    ? { key: "s", modifiers: "alt" }
+    : { key: "s", modifiers: "cmd,ctrl" },
+  /** Open search panel */
+  search: IS_WINDOWS
+    ? { key: "k", modifiers: "alt" }
+    : { key: "k", modifiers: "cmd,ctrl" },
+  /** Close window */
+  closeWindow: IS_WINDOWS
+    ? { key: "F4", modifiers: "alt" }
+    : { key: "w", modifiers: "cmd" },
+};
 
 // ── Find bb binary ─────────────────────────────────────────────────────────
 
-const BB_PATHS = [
-  "bb",
-  join(process.env.HOME ?? "", "Documents/bigbrother/target/release/bb"),
-  "/usr/local/bin/bb",
-];
+const BB_PATHS = IS_WINDOWS
+  ? [
+      "bb",
+      "bb.exe",
+      join(process.env.USERPROFILE ?? "", "Documents/bigbrother/target/release/bb.exe"),
+      join(process.env.USERPROFILE ?? "", "Documents/bigbrother/target/release/bb"),
+      "C:\\Program Files\\bb\\bb.exe",
+    ]
+  : [
+      "bb",
+      join(process.env.HOME ?? "", "Documents/bigbrother/target/release/bb"),
+      "/usr/local/bin/bb",
+    ];
 
 let BB = "";
 for (const p of BB_PATHS) {
@@ -38,7 +106,12 @@ for (const p of BB_PATHS) {
     }
   } catch {}
 }
-if (!BB) throw new Error("bb (bigbrother) not found. Build it: cd ~/Documents/bigbrother && cargo build --release");
+if (!BB) {
+  const hint = IS_WINDOWS
+    ? "Build it: cd %USERPROFILE%\\Documents\\bigbrother && cargo build --release -p bb"
+    : "Build it: cd ~/Documents/bigbrother && cargo build --release";
+  throw new Error(`bb (bigbrother) not found. ${hint}`);
+}
 
 // ── State ───────────────────────────────────────────────────────────────────
 
@@ -179,7 +252,7 @@ export async function press(key: string) {
 }
 
 /** Keyboard shortcut */
-export async function shortcut(key: string, modifiers = "cmd") {
+export async function shortcut(key: string, modifiers = IS_WINDOWS ? "alt" : "cmd") {
   await bb("shortcut", key, "--modifiers", modifiers);
 }
 
@@ -200,6 +273,43 @@ export async function tree(): Promise<any> {
 
 /** Sleep for ms */
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ── Process helpers ─────────────────────────────────────────────────────────
+
+/** Check if screenpipe process is running (cross-platform) */
+export function isScreenpipeRunning(): boolean {
+  if (IS_WINDOWS) {
+    const proc = Bun.spawnSync(["tasklist", "/FI", "IMAGENAME eq screenpipe*", "/NH"]);
+    const out = proc.stdout.toString();
+    return out.includes("screenpipe");
+  } else {
+    const proc = Bun.spawnSync(["pgrep", "-f", "screenpipe"]);
+    return proc.exitCode === 0;
+  }
+}
+
+/** Get system info (cross-platform) */
+export function getSystemInfo(): { hostname: string; os: string; cpu: string; memGB: number } {
+  const host = hostname();
+
+  if (IS_WINDOWS) {
+    const osInfo = Bun.spawnSync(["cmd", "/c", "ver"]).stdout.toString().trim();
+    const cpuInfo = Bun.spawnSync([
+      "powershell", "-NoProfile", "-Command",
+      "(Get-CimInstance Win32_Processor).Name",
+    ]).stdout.toString().trim();
+    const memInfo = Bun.spawnSync([
+      "powershell", "-NoProfile", "-Command",
+      "[math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)",
+    ]).stdout.toString().trim();
+    return { hostname: host, os: osInfo, cpu: cpuInfo, memGB: parseInt(memInfo) || 0 };
+  } else {
+    const osVersion = Bun.spawnSync(["sw_vers", "-productVersion"]).stdout.toString().trim();
+    const chip = Bun.spawnSync(["sysctl", "-n", "machdep.cpu.brand_string"]).stdout.toString().trim();
+    const memBytes = parseInt(Bun.spawnSync(["sysctl", "-n", "hw.memsize"]).stdout.toString().trim());
+    return { hostname: host, os: `macOS ${osVersion}`, cpu: chip, memGB: Math.round(memBytes / 1073741824) };
+  }
+}
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 

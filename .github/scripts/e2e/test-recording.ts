@@ -2,6 +2,7 @@ import {
   suite, test, summary, screenshot, assertExists,
   assertHealthField, assertSearchResults, fetchJson,
   waitForHealth, sleep, HEALTH_URL, TIMEOUT_MEDIUM,
+  sel,
 } from "./lib";
 
 suite("recording pipeline");
@@ -39,7 +40,7 @@ await test("monitors detected in health", async () => {
 });
 
 await test("recording state visible in tray", async () => {
-  await assertExists("title~:recording");
+  await assertExists(sel.titleContains("recording"));
 });
 
 await test("health stays healthy after 10s", async () => {

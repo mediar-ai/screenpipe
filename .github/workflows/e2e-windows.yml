@@ -1,0 +1,273 @@
+name: Windows E2E Tests
+
+on:
+  # Run after app release builds complete
+  workflow_run:
+    workflows: ["Release App"]
+    types: [completed]
+    branches: [main]
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner label (self-hosted runner name)"
+        required: false
+        default: "windows-desktop-test"
+      fallback_to_hosted:
+        description: "Fall back to GitHub-hosted runner if self-hosted unavailable"
+        type: boolean
+        default: true
+
+concurrency:
+  group: e2e-windows-${{ github.ref }}
+  cancel-in-progress: false  # don't cancel — these are slow and important
+
+jobs:
+  # ── Self-hosted runner (primary) ────────────────────────────────────────────
+  e2e-self-hosted:
+    name: Windows E2E (self-hosted)
+    runs-on: [self-hosted, "${{ inputs.runner || 'windows-desktop-test' }}"]
+    timeout-minutes: 30
+    # Only run if release build succeeded (or manual dispatch)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System info
+        shell: pwsh
+        run: |
+          echo "hostname: $env:COMPUTERNAME"
+          echo "os: $((Get-CimInstance Win32_OperatingSystem).Caption)"
+          echo "cpu: $((Get-CimInstance Win32_Processor).Name)"
+          echo "memory: $([math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB))GB"
+
+      - name: Install/update BigBrother CLI
+        shell: pwsh
+        run: |
+          $bbDir = "$env:USERPROFILE\Documents\bigbrother"
+          if (Test-Path $bbDir) {
+            cd $bbDir
+            git pull
+          } else {
+            cd "$env:USERPROFILE\Documents"
+            git clone https://github.com/louis030195/bigbrother.git
+          }
+          cd $bbDir
+          cargo build --release -p bb
+          # Add to PATH for this job
+          $bbBin = "$bbDir\target\release"
+          echo $bbBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Verify
+          & "$bbBin\bb.exe" --version
+
+      - name: Wait for screenpipe to be running
+        shell: pwsh
+        run: |
+          # On self-hosted runner, screenpipe should already be running as startup item
+          $proc = Get-Process -Name "screenpipe*" -ErrorAction SilentlyContinue
+          if (-not $proc) {
+            echo "screenpipe not running, attempting to start..."
+            $appPath = Get-ChildItem "$env:LOCALAPPDATA\screenpipe" -Filter "screenpipe*.exe" -Recurse | Select-Object -First 1
+            if ($appPath) {
+              Start-Process $appPath.FullName
+              Start-Sleep -Seconds 15
+            } else {
+              echo "warning: could not find screenpipe executable"
+            }
+          }
+          # Wait for health API
+          for ($i = 1; $i -le 30; $i++) {
+            try {
+              $response = Invoke-RestMethod -Uri "http://localhost:3030/health" -TimeoutSec 5
+              echo "health API ready"
+              break
+            } catch {
+              echo "waiting for health API... ($i/30)"
+              Start-Sleep -Seconds 2
+            }
+          }
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Run E2E tests
+        id: e2e
+        shell: pwsh
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}\e2e-artifacts
+        run: |
+          bun .github/scripts/e2e/run-all.ts 2>&1 | Tee-Object -FilePath "${{ runner.temp }}\e2e-full.log"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-windows-self-hosted-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}\e2e-artifacts\
+            ${{ runner.temp }}\e2e-full.log
+          retention-days: 14
+
+  # ── GitHub-hosted fallback ──────────────────────────────────────────────────
+  # Runs API-only tests (no bb/UI automation) when self-hosted is unavailable
+  e2e-hosted-fallback:
+    name: Windows E2E (hosted fallback)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    needs: e2e-self-hosted
+    if: >
+      always() &&
+      needs.e2e-self-hosted.result == 'skipped' ||
+      needs.e2e-self-hosted.result == 'failure' ||
+      needs.e2e-self-hosted.result == 'cancelled'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Chocolatey
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          choco install ffmpeg openssl -y
+          echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install Scream virtual audio
+        shell: powershell
+        run: |
+          Invoke-WebRequest https://github.com/duncanthrax/scream/releases/download/4.0/Scream4.0.zip -OutFile Scream4.0.zip
+          Expand-Archive -Path Scream4.0.zip -DestinationPath Scream
+          openssl req -batch -verbose -x509 -newkey rsa -keyout ScreamCertificate.pvk -out ScreamCertificate.cer -nodes -extensions v3_req
+          openssl pkcs12 -export -nodes -in ScreamCertificate.cer -inkey ScreamCertificate.pvk -out ScreamCertificate.pfx -passout pass:
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Sign and Install Scream Driver
+        shell: powershell
+        run: |
+          signtool sign /v /fd SHA256 /f ScreamCertificate.pfx Scream\Install\driver\x64\Scream.cat
+          Import-Certificate -FilePath ScreamCertificate.cer -CertStoreLocation Cert:\LocalMachine\root
+          Import-Certificate -FilePath ScreamCertificate.cer -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
+          Scream\Install\helpers\devcon-x64.exe install Scream\Install\driver\x64\Scream.inf *Scream
+        timeout-minutes: 5
+
+      - name: Start Windows Audio Service
+        shell: powershell
+        run: |
+          $service = Get-Service -Name audiosrv
+          if ($service.Status -ne 'Running') {
+            net start audiosrv
+          } else {
+            Write-Host "Audio service is already running"
+          }
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          cache: true
+          target: x86_64-pc-windows-msvc
+          rustflags: ""
+
+      - name: Install vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "10.0"
+          directory: "C:\\Program Files\\LLVM"
+
+      - name: Install pip
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Copy library for MKL
+        shell: pwsh
+        run: |
+          $mkl_dir = "apps/screenpipe-app-tauri/src-tauri/mkl"
+          New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
+          python -m pip install --upgrade pip
+          $temp_dir = "temp_omp"
+          New-Item -ItemType Directory -Force -Path $temp_dir | Out-Null
+          python -m pip install intel-openmp --target $temp_dir
+          Get-ChildItem -Path $temp_dir -Recurse -Filter "*.dll" | ForEach-Object {
+            Copy-Item $_.FullName -Destination $mkl_dir -Force
+          }
+          $dll_count = (Get-ChildItem -Path $mkl_dir -Filter "*.dll").Count
+          if ($dll_count -eq 0) { throw "No DLLs found!" }
+          Remove-Item -Path $temp_dir -Recurse -Force
+
+      - name: Copy library for vcredist
+        shell: powershell
+        run: |
+          $vcredist_dir = "apps/screenpipe-app-tauri/src-tauri/vcredist"
+          New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
+          Copy-Item C:\Windows\System32\vcruntime140.dll -Destination $vcredist_dir -Force
+
+      - name: Build screenpipe CLI
+        shell: pwsh
+        env:
+          CARGO_PROFILE_RELEASE_STRIP: symbols
+          CARGO_PROFILE_RELEASE_PANIC: abort
+        run: cargo build --release -p screenpipe-server --target x86_64-pc-windows-msvc
+
+      - name: Start screenpipe backend
+        shell: pwsh
+        run: |
+          $env:Path = "target\x86_64-pc-windows-msvc\release;$env:Path"
+          Start-Process -FilePath "target\x86_64-pc-windows-msvc\release\screenpipe.exe" -WindowStyle Hidden
+          # Wait for health
+          for ($i = 1; $i -le 30; $i++) {
+            try {
+              Invoke-RestMethod -Uri "http://localhost:3030/health" -TimeoutSec 5
+              Write-Host "health API ready"
+              break
+            } catch {
+              Write-Host "waiting for health API... ($i/30)"
+              Start-Sleep -Seconds 2
+            }
+          }
+
+      - name: Run API-only E2E tests
+        shell: pwsh
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}\e2e-artifacts
+        run: |
+          # On hosted runner without bb, only run API tests
+          bun .github/scripts/e2e/run-all.ts --suite api 2>&1 | Tee-Object -FilePath "${{ runner.temp }}\e2e-full.log"
+          bun .github/scripts/e2e/run-all.ts --suite recording 2>&1 | Tee-Object -FilePath "${{ runner.temp }}\e2e-recording.log" -Append
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-windows-hosted-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}\e2e-artifacts\
+            ${{ runner.temp }}\e2e-full.log
+            ${{ runner.temp }}\e2e-recording.log
+          retention-days: 14
