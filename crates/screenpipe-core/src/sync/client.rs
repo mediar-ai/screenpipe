@@ -268,20 +268,27 @@ impl SyncClient {
         })
     }
 
-    /// Upload encrypted data to S3 using a presigned URL.
+    /// Upload encrypted data using a Supabase signed upload URL.
+    ///
+    /// Supabase `createSignedUploadUrl` returns URLs that must be used with PUT
+    /// and require the upload token in the URL path. The URL format is:
+    /// `{supabaseUrl}/storage/v1/object/upload/sign/{bucket}/{path}?token={token}`
     pub async fn upload_to_s3(&self, upload_url: &str, data: &[u8]) -> SyncResult<()> {
         let response = self
             .http
             .put(upload_url)
             .header("Content-Type", "application/octet-stream")
+            .header("x-upsert", "true")
             .body(data.to_vec())
             .send()
             .await?;
 
         if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
             return Err(SyncError::Server(format!(
-                "S3 upload failed with status: {}",
-                response.status()
+                "S3 upload failed with status: {} body: {}",
+                status, body
             )));
         }
 

@@ -1604,7 +1604,11 @@ async fn main() {
         setup_dock_menu(app_handle_dock);
     }
 
-    app.run(|app_handle, event| match event {
+    app.run(|app_handle, event| {
+        // Wrap in catch_unwind: this closure is called from tao::send_event
+        // which crosses the Obj-C FFI boundary (nounwind). A panic here would abort().
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
             // Send app started event
@@ -1694,5 +1698,10 @@ async fn main() {
             let _ = ShowRewindWindow::Main.show(&app_handle);
         }
         _ => {}
+    }
+        })); // end catch_unwind
+        if let Err(e) = result {
+            error!("panic in run event handler: {:?}", e);
+        }
     });
 }

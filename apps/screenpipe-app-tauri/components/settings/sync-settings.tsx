@@ -610,6 +610,42 @@ export function SyncSettings() {
     return () => clearInterval(pollInterval);
   }, [step]);
 
+  const tryAutoInitSync = async (): Promise<boolean> => {
+    // 1. Check if the server-side sync service is already running (same session, navigated away and back)
+    try {
+      const serverStatus = await fetch("http://localhost:3030/sync/status");
+      if (serverStatus.ok) {
+        const serverData = await serverStatus.json();
+        if (serverData.enabled) {
+          await invoke("set_sync_enabled", { enabled: true });
+          setStep("active");
+          return true;
+        }
+      }
+    } catch {
+      // Server not reachable
+    }
+
+    // 2. Try to auto-init from saved password (app restart case)
+    try {
+      const savedPassword = localStorage.getItem("sync_password");
+      if (savedPassword) {
+        const password = atob(savedPassword);
+        await invoke<boolean>("init_sync", { password });
+        await checkSubscriptionAndLoad();
+        setStep("active");
+        return true;
+      }
+    } catch (e) {
+      console.log("auto-init sync failed, will prompt for password:", e);
+      // Password might be wrong (user changed it on another device)
+      // Clear saved password so we don't keep failing
+      localStorage.removeItem("sync_password");
+    }
+
+    return false;
+  };
+
   const checkSubscriptionAndLoad = async (): Promise<boolean> => {
     try {
       const token = settings.user?.token;
@@ -657,7 +693,11 @@ export function SyncSettings() {
             if (statusResult.enabled) {
               setStep("active");
             } else {
-              setStep("password");
+              // Try to auto-init from saved password or running server
+              const autoInited = await tryAutoInitSync();
+              if (!autoInited) {
+                setStep("password");
+              }
             }
           } catch (backendError) {
             console.error("sync backend not ready:", backendError);
@@ -757,6 +797,14 @@ export function SyncSettings() {
     try {
       setIsLoading(true);
       await invoke<boolean>("init_sync", { password });
+
+      // Remember password for auto-init on next app launch
+      // Stored in app's WebView localStorage (sandboxed, not accessible externally)
+      try {
+        localStorage.setItem("sync_password", btoa(password));
+      } catch {
+        // Non-critical if storage fails
+      }
 
       toast({
         title: "cloud sync enabled",
@@ -864,6 +912,7 @@ export function SyncSettings() {
   const handleDeleteCloudData = async () => {
     try {
       await invoke("delete_cloud_data");
+      localStorage.removeItem("sync_password");
       toast({
         title: "cloud data deleted",
         description: "all your cloud data has been permanently deleted",
@@ -880,6 +929,7 @@ export function SyncSettings() {
 
   const handleLockSync = async () => {
     await invoke("lock_sync");
+    localStorage.removeItem("sync_password");
     await checkSubscriptionAndLoad();
   };
 

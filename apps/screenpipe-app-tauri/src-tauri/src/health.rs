@@ -6,6 +6,7 @@ use std::sync::RwLock;
 use std::time::Instant;
 use tauri::{path::BaseDirectory, Manager};
 use tokio::time::{interval, Duration};
+use tracing::error;
 
 /// How long after startup to treat connection errors as "starting up" instead of "error".
 /// The recording server needs time to load whisper models, FFmpeg, etc.
@@ -151,14 +152,26 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
                         }
                     };
 
-                    let icon_path = app
+                    let icon_path = match app
                         .path()
-                        .resolve(icon_path, BaseDirectory::Resource)
-                        .expect("failed to resolve icon path");
+                        .resolve(icon_path, BaseDirectory::Resource) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            error!("failed to resolve icon path: {}", e);
+                            continue;
+                        }
+                    };
 
-                    let _ = main_tray
-                        .set_icon(Some(tauri::image::Image::from_path(&icon_path).unwrap()))
-                        .and_then(|_| main_tray.set_icon_as_template(true));
+                    match tauri::image::Image::from_path(&icon_path) {
+                        Ok(image) => {
+                            let _ = main_tray
+                                .set_icon(Some(image))
+                                .and_then(|_| main_tray.set_icon_as_template(true));
+                        }
+                        Err(e) => {
+                            error!("failed to load tray icon from {:?}: {}", icon_path, e);
+                        }
+                    }
                 }
             }
         }
