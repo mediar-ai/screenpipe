@@ -165,6 +165,14 @@ pub async fn continuous_capture(
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
+    // Track when we last actually captured (not skipped) a frame.
+    // Used to enforce a minimum capture rate: even on a completely static screen,
+    // the user's FPS setting guarantees at least one frame per interval.
+    // The force-capture deadline is 2× the base interval to allow one skip cycle
+    // before forcing (balances CPU savings with capture reliability).
+    let mut last_captured_at = Instant::now();
+    let force_capture_deadline = interval.mul_f64(2.0);
+
     // Initialize optimized frame comparer with all optimizations enabled:
     // - Hash-based early exit for identical frames (30-50% CPU reduction in static scenes)
     // - Downscaled comparison at 640x360 (60-80% faster comparisons)
@@ -230,12 +238,22 @@ pub async fn continuous_capture(
         #[cfg(not(feature = "adaptive-fps"))]
         let skip_threshold = 0.02;
 
-        let should_skip = current_diff < skip_threshold;
+        let below_threshold = current_diff < skip_threshold;
 
-        if should_skip {
+        // Force-capture if we haven't captured any frame for too long,
+        // even if the screen looks identical. This guarantees the user's
+        // FPS setting acts as a minimum capture rate.
+        // At 0.2 FPS (5s interval), deadline is 10s — so after 10s of
+        // skipped frames on a static screen, we force one through.
+        let time_since_capture = last_captured_at.elapsed();
+        let force_capture = time_since_capture >= force_capture_deadline;
+
+        if below_threshold && !force_capture {
             debug!(
-                "Skipping frame {} due to low difference: {:.3} < {:.3}",
-                frame_counter, current_diff, skip_threshold
+                "Skipping frame {} due to low difference: {:.3} < {:.3} (last capture {:.1}s ago, deadline {:.1}s)",
+                frame_counter, current_diff, skip_threshold,
+                time_since_capture.as_secs_f64(),
+                force_capture_deadline.as_secs_f64(),
             );
             frame_counter += 1;
             // Use adaptive interval if enabled, otherwise use base interval
@@ -250,6 +268,15 @@ pub async fn continuous_capture(
             continue;
         }
 
+        if force_capture && below_threshold {
+            debug!(
+                "Force-capturing frame {} despite low difference {:.3} — last capture was {:.1}s ago (deadline {:.1}s)",
+                frame_counter, current_diff,
+                time_since_capture.as_secs_f64(),
+                force_capture_deadline.as_secs_f64(),
+            );
+        }
+
         // 4b. Capture windows only for frames that passed the change threshold.
         //     This avoids expensive per-window screenshots + CGWindowList enumeration
         //     on unchanged frames (major CPU savings on multi-monitor setups).
@@ -259,8 +286,10 @@ pub async fn continuous_capture(
             capture_unfocused_windows,
         ).await;
 
-        // Track the frame with maximum difference for OCR processing
-        if current_diff > max_avg_value {
+        // Track the frame with maximum difference for OCR processing.
+        // On force-capture, always accept the frame even if diff is 0.0
+        // (identical frame that exceeded the capture deadline).
+        if current_diff > max_avg_value || (force_capture && max_average.is_none()) {
             max_average = Some(MaxAverageFrame {
                 image: image.clone(),
                 window_images: window_images,
@@ -286,6 +315,8 @@ pub async fn continuous_capture(
             {
                 error!("Error processing max average frame: {}", e);
             }
+            // Reset tracking: frame was captured and processed
+            last_captured_at = Instant::now();
             frame_counter = 0;
             max_avg_value = 0.0;
 
