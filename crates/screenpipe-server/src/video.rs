@@ -383,6 +383,29 @@ pub fn video_quality_to_crf(quality: &str) -> &'static str {
     }
 }
 
+/// Map video quality preset to x265 encoding preset.
+///
+/// The preset controls how much CPU time the encoder spends optimizing
+/// compression. Slower presets produce dramatically sharper output at the
+/// same CRF because they use better motion estimation, more reference
+/// frames, and smarter rate-distortion decisions.
+///
+/// `ultrafast` was previously hardcoded for all quality levels, which meant
+/// even CRF 14 ("max") looked blurry — the encoder simply didn't spend
+/// enough effort to use those bits well.
+///
+/// Trade-offs chosen here:
+/// - low/balanced: `ultrafast` — minimal CPU, recording must never lag
+/// - high: `fast` — noticeable quality bump, still real-time on most machines
+/// - max: `medium` — best quality, may use significant CPU on older hardware
+pub fn video_quality_to_preset(quality: &str) -> &'static str {
+    match quality {
+        "high" => "fast",
+        "max" => "medium",
+        _ => "ultrafast", // "low", "balanced", or any unknown
+    }
+}
+
 /// Map video quality preset to JPEG quality for frame extraction.
 /// Lower value = higher quality (scale 2-31).
 pub fn video_quality_to_jpeg_q(quality: &str) -> &'static str {
@@ -422,13 +445,20 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64, video_quality: &s
     ];
 
     let crf = video_quality_to_crf(video_quality);
+    let preset = video_quality_to_preset(video_quality);
+
+    info!(
+        "FFmpeg encoding: quality={}, crf={}, preset={}",
+        video_quality, crf, preset
+    );
+
     args.extend_from_slice(&[
         "-vcodec",
         "libx265",
         "-tag:v",
         "hvc1",
         "-preset",
-        "ultrafast",
+        preset,
         "-crf",
         crf,
     ]);
@@ -822,7 +852,7 @@ mod tests {
         let png_data = create_test_png(1921, 1081);
 
         // Start FFmpeg and write frame
-        let mut child = start_ffmpeg_process(output_str, 1.0)
+        let mut child = start_ffmpeg_process(output_str, 1.0, "balanced")
             .await
             .expect("Failed to start FFmpeg");
 
@@ -860,7 +890,7 @@ mod tests {
         // 5120x1440 - common ultrawide resolution (even dimensions)
         let png_data = create_test_png(5120, 1440);
 
-        let mut child = start_ffmpeg_process(output_str, 1.0)
+        let mut child = start_ffmpeg_process(output_str, 1.0, "balanced")
             .await
             .expect("Failed to start FFmpeg");
 
@@ -896,7 +926,7 @@ mod tests {
         // Odd dimensions that might occur with DPI scaling
         let png_data = create_test_png(5119, 1439);
 
-        let mut child = start_ffmpeg_process(output_str, 1.0)
+        let mut child = start_ffmpeg_process(output_str, 1.0, "balanced")
             .await
             .expect("Failed to start FFmpeg");
 
@@ -934,7 +964,7 @@ mod tests {
         // Vertical monitor (rotated 2560x1440)
         let png_data = create_test_png(1440, 2560);
 
-        let mut child = start_ffmpeg_process(output_str, 1.0)
+        let mut child = start_ffmpeg_process(output_str, 1.0, "balanced")
             .await
             .expect("Failed to start FFmpeg");
 
@@ -970,7 +1000,7 @@ mod tests {
         // Simulating 3840x1080 monitor forced to 1440 height (would be 3840x1440 after OS scaling)
         let png_data = create_test_png(3840, 1440);
 
-        let mut child = start_ffmpeg_process(output_str, 1.0)
+        let mut child = start_ffmpeg_process(output_str, 1.0, "balanced")
             .await
             .expect("Failed to start FFmpeg");
 
