@@ -277,7 +277,7 @@ export function AccountSection() {
               </div>
 
               <Button
-                className="w-full bg-foreground text-background hover:bg-foreground/90"
+                className="w-full bg-foreground text-background hover:bg-background hover:text-foreground transition-colors duration-150"
                 size="lg"
                 onClick={handleCheckout}
               >

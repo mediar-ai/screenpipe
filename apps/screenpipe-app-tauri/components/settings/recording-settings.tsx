@@ -753,7 +753,7 @@ export function RecordingSettings() {
               onClick={handleUpdate}
               disabled={isUpdating || Object.keys(validationErrors).length > 0}
               size="sm"
-              className="flex items-center gap-1.5 h-7 text-xs bg-foreground text-background hover:bg-foreground/90"
+              className="flex items-center gap-1.5 h-7 text-xs bg-foreground text-background hover:bg-background hover:text-foreground transition-colors duration-150"
             >
               {isUpdating ? (
                 <Loader2 className="h-3 w-3 animate-spin" />

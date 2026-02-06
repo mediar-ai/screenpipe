@@ -1856,7 +1856,7 @@ export function StandaloneChat() {
             e.stopPropagation();
             startNewConversation();
           }}
-          className="h-7 px-3 gap-1.5 text-xs bg-foreground text-background hover:bg-foreground/90"
+          className="h-7 px-3 gap-1.5 text-xs bg-foreground text-background hover:bg-background hover:text-foreground transition-colors duration-150"
           title="New chat"
         >
           <Plus size={14} />
@@ -1989,7 +1989,7 @@ export function StandaloneChat() {
               <Button
                 variant="default"
                 onClick={() => openUrl("https://screenpi.pe/login")}
-                className="gap-2 font-medium bg-foreground text-background hover:bg-foreground/90"
+                className="gap-2 font-medium bg-foreground text-background hover:bg-background hover:text-foreground transition-colors duration-150"
               >
                 <ExternalLink className="h-4 w-4" />
                 Login
@@ -2069,7 +2069,7 @@ export function StandaloneChat() {
                   message.content.includes("requires an upgrade")) && (
                   <button
                     onClick={() => setShowUpgradeDialog(true)}
-                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
+                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-background hover:text-foreground transition-colors duration-150"
                   >
                     <Zap className="h-4 w-4" />
                     upgrade now
@@ -2367,7 +2367,7 @@ export function StandaloneChat() {
                 "shrink-0 transition-all duration-200",
                 isStreaming
                   ? "bg-destructive hover:bg-destructive/90"
-                  : "bg-foreground hover:bg-foreground/90 text-background"
+                  : "bg-foreground text-background hover:bg-background hover:text-foreground"
               )}
             >
               {isStreaming ? (

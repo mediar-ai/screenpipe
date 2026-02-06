@@ -208,10 +208,10 @@ export function TimelineControls({
 				<button
 					type="button"
 					onClick={onSearchClick}
-					className="flex items-center h-10 gap-1.5 bg-background border border-border px-4 font-mono hover:bg-foreground hover:text-background transition-colors duration-150 cursor-pointer"
+					className="flex items-center h-10 gap-1.5 bg-background border border-border px-4 font-mono hover:bg-foreground hover:text-background transition-colors duration-150 cursor-pointer group"
 				>
-					<span className="text-xs text-muted-foreground">{searchShortcutDisplay}</span>
-					<span className="text-xs text-foreground">search</span>
+					<span className="text-xs text-muted-foreground group-hover:text-background">{searchShortcutDisplay}</span>
+					<span className="text-xs text-foreground group-hover:text-background">search</span>
 				</button>
 			</div>
 
