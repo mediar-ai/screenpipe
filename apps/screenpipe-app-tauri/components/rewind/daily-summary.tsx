@@ -31,21 +31,98 @@ interface DailySummary {
   oneLiner: string;
 }
 
-const SUMMARY_PROMPT = `Analyze this screen activity and audio data. Output ONLY valid JSON, no other text.
-{
-  "timeBreakdown": [{"app": "VS Code", "minutes": 120}],
-  "keyMoments": [{"time": "2:30 PM", "description": "Merged PR #42"}],
-  "actionItems": [{"text": "Review draft by Friday", "urgency": "high"}],
-  "peopleMentioned": [{"name": "Dan", "context": "discussed pricing"}],
-  "oneLiner": "Mostly coding with a quick meeting about pricing"
-}
-Rules:
-- timeBreakdown: top 5 apps by usage, estimate minutes from context
-- keyMoments: max 5, most important events
-- actionItems: things to do, "high"/"medium"/"low" urgency
-- peopleMentioned: real people names only, not apps
-- oneLiner: casual 1-sentence summary of the day
-- If not enough data, use fewer items. Empty arrays are fine.`;
+const SUMMARY_SYSTEM_PROMPT = `You generate daily summaries of the user's screen activity and audio. You have access to a search tool to query their data. Use it to gather information, then produce a summary.`;
+
+const SUMMARY_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    oneLiner: { type: "string", description: "casual 1-sentence summary of the day" },
+    timeBreakdown: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          app: { type: "string" },
+          minutes: { type: "number" },
+        },
+        required: ["app", "minutes"],
+      },
+      description: "top 5 apps by usage, estimate minutes from context",
+    },
+    keyMoments: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          time: { type: "string" },
+          description: { type: "string" },
+        },
+        required: ["time", "description"],
+      },
+      description: "max 5 most important events",
+    },
+    actionItems: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          urgency: { type: "string", enum: ["high", "medium", "low"] },
+        },
+        required: ["text", "urgency"],
+      },
+      description: "things the user needs to do",
+    },
+    peopleMentioned: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          context: { type: "string" },
+        },
+        required: ["name", "context"],
+      },
+      description: "real people names only, not apps",
+    },
+  },
+  required: ["oneLiner", "timeBreakdown", "keyMoments", "actionItems", "peopleMentioned"],
+};
+
+const SEARCH_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "search_screenpipe",
+    description: "Search the user's screen recordings (OCR) and audio transcriptions captured by Screenpipe. Returns text content with timestamps and app names.",
+    parameters: {
+      type: "object",
+      properties: {
+        content_type: {
+          type: "string",
+          enum: ["ocr", "audio", "all"],
+          description: "Type of content to search. Use 'ocr' for screen text, 'audio' for transcriptions, 'all' for both.",
+        },
+        start_time: {
+          type: "string",
+          description: "ISO 8601 start time for the search range",
+        },
+        end_time: {
+          type: "string",
+          description: "ISO 8601 end time for the search range",
+        },
+        limit: {
+          type: "integer",
+          description: "Maximum number of results to return (1-50)",
+        },
+        app_name: {
+          type: "string",
+          description: "Filter by application name",
+        },
+      },
+      required: ["start_time"],
+    },
+  },
+};
 
 function getStorageKey(date: string) {
   return `daily-summary-${date}`;
@@ -185,7 +262,7 @@ export function DailySummaryCard({
     return () => clearInterval(interval);
   }, [aiAvailable, isVisible, dateStr]);
 
-  // ─── Generate Summary ───────────────────────────────────────────────────
+  // ─── Generate Summary (Apple Intelligence agent loop) ─────────────────
 
   const generateSummary = useCallback(async () => {
     if (isGenerating) return;
@@ -200,93 +277,189 @@ export function DailySummaryCard({
         return;
       }
 
-      // Fetch the day's data
       const dayStart = new Date(dateStr + "T00:00:00");
       const dayEnd = new Date(dateStr + "T23:59:59");
       const now = new Date();
       const endTime = dayEnd > now ? now : dayEnd;
 
-      const params = new URLSearchParams({
-        content_type: "all",
-        start_time: dayStart.toISOString(),
-        end_time: endTime.toISOString(),
-        limit: "100",
-        min_length: "20",
-      });
-
-      const searchResp = await fetch(`${API}/search?${params}`);
-      if (!searchResp.ok) throw new Error("Failed to fetch data");
-      const searchData = await searchResp.json();
-
-      // Build context
-      const parts: string[] = [];
-      for (const item of searchData.data || []) {
-        if (item.type === "OCR") {
-          const c = item.content;
-          const text = c?.text?.trim();
-          if (text) {
-            const time = new Date(c.timestamp).toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-            });
-            parts.push(`[${time}] [${c.app_name || "?"}] ${text}`);
-          }
-        } else if (item.type === "Audio") {
-          const c = item.content;
-          const text = c?.transcription?.trim();
-          if (text) {
-            const time = new Date(c.timestamp).toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-            });
-            parts.push(`[${time}] [Audio] ${text}`);
-          }
-        }
-      }
-
-      if (parts.length === 0) {
-        setError("No activity data for this day");
-        return;
-      }
-
-      // Truncate to ~1500 chars
-      let context = parts.join("\n");
-      if (context.length > 1500) context = context.slice(0, 1500);
-
-      // Call AI
-      const aiResp = await fetch(`${API}/ai/chat/completions`, {
+      // ── Turn 1: Ask Apple Intelligence to search, providing the tool ──
+      const turn1Resp = await fetch(`${API}/ai/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [
-            { role: "system", content: SUMMARY_PROMPT },
-            { role: "user", content: context },
+            { role: "system", content: SUMMARY_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: `Generate a daily summary for ${dateStr}. Search for screen activity (OCR) and audio transcriptions between ${dayStart.toISOString()} and ${endTime.toISOString()}.`,
+            },
           ],
+          tools: [SEARCH_TOOL],
         }),
       });
 
-      if (!aiResp.ok) throw new Error(`AI error: ${aiResp.status}`);
+      if (!turn1Resp.ok) throw new Error(`AI error: ${turn1Resp.status}`);
+      const turn1Data = await turn1Resp.json();
+      const turn1Msg = turn1Data.choices?.[0]?.message;
 
-      const aiData = await aiResp.json();
-      let raw = aiData.choices?.[0]?.message?.content || "{}";
+      // ── Execute tool calls (gather data) ──
+      // Build conversation history for the final turn
+      const messages: any[] = [
+        { role: "system", content: SUMMARY_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `Generate a daily summary for ${dateStr}. Search for screen activity (OCR) and audio transcriptions between ${dayStart.toISOString()} and ${endTime.toISOString()}.`,
+        },
+      ];
 
-      // Strip markdown fences
-      raw = raw.trim();
-      if (raw.startsWith("```")) {
-        raw = raw
-          .split("\n")
-          .slice(1)
-          .filter((l: string) => !l.startsWith("```"))
-          .join("\n");
+      let hasData = false;
+
+      if (turn1Msg?.tool_calls?.length) {
+        // Model requested tool calls — execute them
+        messages.push({
+          role: "assistant",
+          content: turn1Msg.content || null,
+          tool_calls: turn1Msg.tool_calls,
+        });
+
+        for (const tc of turn1Msg.tool_calls) {
+          let args: any = {};
+          try { args = JSON.parse(tc.function.arguments); } catch {}
+
+          const searchParams = new URLSearchParams({
+            content_type: args.content_type || "all",
+            start_time: args.start_time || dayStart.toISOString(),
+            end_time: args.end_time || endTime.toISOString(),
+            limit: String(Math.min(args.limit || 50, 50)),
+            min_length: "20",
+          });
+          if (args.app_name) searchParams.set("app_name", args.app_name);
+
+          const searchResp = await fetch(`${API}/search?${searchParams}`);
+          const searchData = searchResp.ok ? await searchResp.json() : { data: [], pagination: { total: 0 } };
+          const total = searchData.pagination?.total || 0;
+
+          // Format results compactly
+          const entries = (searchData.data || []).map((item: any) => {
+            if (item.type === "OCR") {
+              const c = item.content;
+              const time = new Date(c.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+              return `[${time}] [${c.app_name || "?"}] ${(c.text || "").trim().slice(0, 120)}`;
+            } else if (item.type === "Audio") {
+              const c = item.content;
+              const time = new Date(c.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+              const speaker = c.speaker?.name ? ` (${c.speaker.name})` : "";
+              return `[${time}] [Audio${speaker}] ${(c.transcription || "").trim().slice(0, 120)}`;
+            }
+            return null;
+          }).filter(Boolean);
+
+          if (entries.length > 0) hasData = true;
+
+          // Truncate tool result to ~6000 chars to stay within context limits
+          let resultText = `Found ${total} entries (showing ${entries.length}):\n${entries.join("\n")}`;
+          if (resultText.length > 6000) resultText = resultText.slice(0, 6000);
+
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: resultText,
+          });
+        }
+      } else {
+        // Model didn't use tools — fall back to fetching data ourselves
+        const params = new URLSearchParams({
+          content_type: "all",
+          start_time: dayStart.toISOString(),
+          end_time: endTime.toISOString(),
+          limit: "50",
+          min_length: "20",
+        });
+        const searchResp = await fetch(`${API}/search?${params}`);
+        if (!searchResp.ok) throw new Error("Failed to fetch data");
+        const searchData = await searchResp.json();
+
+        const parts: string[] = [];
+        for (const item of searchData.data || []) {
+          if (item.type === "OCR") {
+            const c = item.content;
+            const text = c?.text?.trim();
+            if (text) {
+              const time = new Date(c.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+              parts.push(`[${time}] [${c.app_name || "?"}] ${text.slice(0, 120)}`);
+            }
+          } else if (item.type === "Audio") {
+            const c = item.content;
+            const text = c?.transcription?.trim();
+            if (text) {
+              const time = new Date(c.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+              parts.push(`[${time}] [Audio] ${text.slice(0, 120)}`);
+            }
+          }
+        }
+
+        if (parts.length > 0) hasData = true;
+
+        // Use the direct text response as a user message for the final turn
+        let context = parts.join("\n");
+        if (context.length > 6000) context = context.slice(0, 6000);
+
+        // Reset messages for the fallback path
+        messages.length = 0;
+        messages.push(
+          { role: "system", content: "Analyze this screen activity and audio data. Generate a daily summary." },
+          { role: "user", content: `Activity data for ${dateStr}:\n${context}` },
+        );
       }
 
-      const parsed = JSON.parse(raw);
+      if (!hasData) {
+        setError("No activity data for this day");
+        return;
+      }
+
+      // ── Final turn: Generate JSON summary with schema enforcement ──
+      const finalResp = await fetch(`${API}/ai/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "daily_summary",
+              schema: SUMMARY_JSON_SCHEMA,
+            },
+          },
+        }),
+      });
+
+      let parsed: any;
+      if (!finalResp.ok) {
+        // Fall back to text mode if json_schema isn't supported
+        const fallbackResp = await fetch(`${API}/ai/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages }),
+        });
+        if (!fallbackResp.ok) throw new Error(`AI error: ${fallbackResp.status}`);
+        const fallbackData = await fallbackResp.json();
+        let raw = fallbackData.choices?.[0]?.message?.content || "{}";
+        raw = raw.trim();
+        if (raw.startsWith("```")) {
+          raw = raw.split("\n").slice(1).filter((l: string) => !l.startsWith("```")).join("\n");
+        }
+        parsed = JSON.parse(raw);
+      } else {
+        const finalData = await finalResp.json();
+        const content = finalData.choices?.[0]?.message?.content || "{}";
+        parsed = JSON.parse(content);
+      }
 
       const newSummary: DailySummary = {
         date: dateStr,
         generatedAt: new Date().toISOString(),
-        timeBreakdown: parsed.timeBreakdown || [],
-        keyMoments: parsed.keyMoments || [],
+        timeBreakdown: (parsed.timeBreakdown || []).slice(0, 5),
+        keyMoments: (parsed.keyMoments || []).slice(0, 5),
         actionItems: (parsed.actionItems || []).map((a: any) => ({
           text: a.text || a.task || "",
           urgency: ["high", "medium", "low"].includes(a.urgency)

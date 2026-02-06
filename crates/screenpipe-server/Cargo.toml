@@ -55,6 +55,7 @@ sentry = { workspace = true }
 # Server
 axum = { version = "0.7.5", features = ["ws"] }
 tokio = { version = "1.15", features = ["full", "tracing"] }
+tokio-stream = "0.1"
 tower-http = { version = "0.5.2", features = ["cors", "trace"] }
 
 # Log
