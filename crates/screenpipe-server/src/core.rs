@@ -375,13 +375,23 @@ pub async fn record_video(
                 }
             }
         } else {
-            // Log when frame queue is empty
-            if heartbeat_counter.is_multiple_of(10) {
+            // Queue is empty — short poll sleep.
+            // We intentionally do NOT use 1/fps here. The consumer must drain
+            // the queue as fast as frames arrive. The *producer* (continuous_capture)
+            // is the one that rate-limits capture to the target FPS.
+            //
+            // Previously this slept for 1/fps (2 seconds at 0.5 FPS) on EVERY
+            // iteration, including after processing a frame. This caused the
+            // queue to back up during adaptive FPS bursts (up to 10 FPS),
+            // leading to frame drops and missing screenshots in the timeline.
+            if heartbeat_counter.is_multiple_of(200) {
                 debug!(
                     "record_video: No frames in queue for monitor {}",
                     monitor_id
                 );
             }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            continue;
         }
 
         // Check if we're seeing too many consecutive DB errors
@@ -393,9 +403,6 @@ pub async fn record_video(
             // Instead of failing, we'll continue but log the issue clearly
             consecutive_db_errors = 0; // Reset to prevent continuous error logging
         }
-
-        // Sleep for the frame interval
-        tokio::time::sleep(Duration::from_secs_f64(1.0 / fps)).await;
     }
 }
 
