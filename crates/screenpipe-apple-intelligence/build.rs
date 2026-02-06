@@ -53,7 +53,9 @@ fn main() {
     println!("cargo:rustc-link-lib=static=foundation_models_bridge");
 
     // Link required system frameworks and Swift runtime
-    println!("cargo:rustc-link-lib=framework=FoundationModels");
+    // Weak-link so the app can launch on macOS versions without FoundationModels.framework
+    // (only available on macOS 26+). The framework is loaded at runtime if present.
+    println!("cargo:rustc-link-arg=-Wl,-weak_framework,FoundationModels");
     println!("cargo:rustc-link-lib=framework=Foundation");
 
     // Swift runtime libraries

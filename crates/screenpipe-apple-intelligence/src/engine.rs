@@ -5,6 +5,30 @@ use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::ffi::{CStr, CString};
 
+/// Check if the current macOS version supports FoundationModels (macOS 26+).
+/// Returns false on non-macOS or macOS < 26, preventing any FFI calls
+/// into the weak-linked FoundationModels.framework.
+fn is_macos_26_or_later() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        if let Ok(output) = Command::new("sw_vers").arg("-productVersion").output() {
+            if let Ok(version) = String::from_utf8(output.stdout) {
+                if let Some(major) = version.trim().split('.').next() {
+                    if let Ok(major_num) = major.parse::<u32>() {
+                        return major_num >= 26;
+                    }
+                }
+            }
+        }
+        false
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
 // MARK: - Types
 
 /// Availability status of Foundation Models on this system.
@@ -82,6 +106,9 @@ unsafe fn extract_and_free(ptr: *mut std::os::raw::c_char) -> Option<String> {
 
 /// Check if Apple Foundation Models is available on this system.
 pub fn check_availability() -> Availability {
+    if !is_macos_26_or_later() {
+        return Availability::DeviceNotEligible;
+    }
     unsafe {
         let mut reason_ptr: *mut std::os::raw::c_char = std::ptr::null_mut();
         let status = ffi::fm_check_availability(&mut reason_ptr);
@@ -102,6 +129,9 @@ pub fn check_availability() -> Availability {
 /// Loads model assets into memory ahead of time to reduce latency
 /// on the first request. Blocking call, may take a few hundred ms.
 pub fn prewarm() -> Result<()> {
+    if !is_macos_26_or_later() {
+        bail!("Foundation Models requires macOS 26+");
+    }
     let status = unsafe { ffi::fm_prewarm() };
     if status != 0 {
         bail!("Foundation Models prewarm failed (model not available)");
@@ -111,6 +141,9 @@ pub fn prewarm() -> Result<()> {
 
 /// Get the list of languages supported by the on-device model.
 pub fn supported_languages() -> Result<Vec<String>> {
+    if !is_macos_26_or_later() {
+        return Ok(vec![]);
+    }
     unsafe {
         let ptr = ffi::fm_supported_languages();
         let json_str = extract_and_free(ptr).unwrap_or_else(|| "[]".to_string());
@@ -128,6 +161,9 @@ pub fn supported_languages() -> Result<Vec<String>> {
 /// # Returns
 /// A `GenerationResult` containing the response text and performance metrics.
 pub fn generate_text(instructions: Option<&str>, prompt: &str) -> Result<GenerationResult> {
+    if !is_macos_26_or_later() {
+        bail!("Foundation Models requires macOS 26+");
+    }
     let prompt_c = CString::new(prompt)?;
     let instructions_c = instructions.map(|s| CString::new(s)).transpose()?;
 
@@ -181,6 +217,9 @@ pub fn generate_json(
     prompt: &str,
     json_schema: &str,
 ) -> Result<JsonGenerationResult> {
+    if !is_macos_26_or_later() {
+        bail!("Foundation Models requires macOS 26+");
+    }
     let prompt_c = CString::new(prompt)?;
     let schema_c = CString::new(json_schema)?;
     let instructions_c = instructions.map(|s| CString::new(s)).transpose()?;
