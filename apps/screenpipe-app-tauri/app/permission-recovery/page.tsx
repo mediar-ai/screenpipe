@@ -3,12 +3,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Monitor, Mic, Keyboard, Check, AlertTriangle, RefreshCw, ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { commands, type OSPermission, type OSPermissionsCheck } from "@/lib/utils/tauri";
+import { commands, type OSPermission } from "@/lib/utils/tauri";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import posthog from "posthog-js";
 
-type PermissionState = "checking" | "fixing" | "success" | "idle";
 
 interface PermissionRowProps {
   icon: React.ReactNode;
@@ -16,12 +15,10 @@ interface PermissionRowProps {
   description: string;
   status: "granted" | "denied" | "checking";
   onFix: () => void;
-  onReset: () => void;
-  isFixing: boolean;
   isAnyFixing: boolean;
 }
 
-function PermissionRow({ icon, label, description, status, onFix, onReset, isFixing, isAnyFixing }: PermissionRowProps) {
+function PermissionRow({ icon, label, description, status, onFix, isAnyFixing }: Omit<PermissionRowProps, 'onReset' | 'isFixing'>) {
   return (
     <div className="flex items-center justify-between p-4 border border-border rounded-lg bg-card">
       <div className="flex items-center space-x-3">
@@ -40,37 +37,16 @@ function PermissionRow({ icon, label, description, status, onFix, onReset, isFix
             <span className="font-mono text-xs">ok</span>
           </div>
         ) : (
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onReset}
-              disabled={isAnyFixing}
-              className="font-mono text-xs"
-            >
-              {isFixing ? (
-                <>
-                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                  fixing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  reset & fix
-                </>
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onFix}
-              disabled={isAnyFixing}
-              className="font-mono text-xs"
-            >
-              <ExternalLink className="w-3 h-3 mr-1" />
-              manual
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onFix}
+            disabled={isAnyFixing}
+            className="font-mono text-xs"
+          >
+            <ExternalLink className="w-3 h-3 mr-1" />
+            open settings
+          </Button>
         )}
       </div>
     </div>
@@ -79,8 +55,7 @@ function PermissionRow({ icon, label, description, status, onFix, onReset, isFix
 
 export default function PermissionRecoveryPage() {
   const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(null);
-  const [fixingPermission, setFixingPermission] = useState<OSPermission | null>(null);
-  const [justFixed, setJustFixed] = useState<Set<string>>(new Set());
+
   const { isMac: isMacOS } = usePlatform();
 
   // Check permissions
@@ -112,25 +87,6 @@ export default function PermissionRecoveryPage() {
     const micOk = permissions.microphone === "granted" || permissions.microphone === "notNeeded";
     const accessibilityOk = permissions.accessibility === "granted" || permissions.accessibility === "notNeeded";
 
-    // Add to justFixed set when permission becomes granted
-    const newJustFixed = new Set(justFixed);
-    if (screenOk && fixingPermission === "screenRecording") {
-      newJustFixed.add("screenRecording");
-      setFixingPermission(null);
-    }
-    if (micOk && fixingPermission === "microphone") {
-      newJustFixed.add("microphone");
-      setFixingPermission(null);
-    }
-    if (accessibilityOk && fixingPermission === "accessibility") {
-      newJustFixed.add("accessibility");
-      setFixingPermission(null);
-    }
-
-    if (newJustFixed.size !== justFixed.size) {
-      setJustFixed(newJustFixed);
-    }
-
     // Close window and restart screenpipe if all critical permissions are granted
     if (screenOk && micOk) {
       // Wait a moment to show success state, then restart screenpipe
@@ -155,7 +111,7 @@ export default function PermissionRecoveryPage() {
         }
       }, 1500);
     }
-  }, [permissions, fixingPermission, justFixed]);
+  }, [permissions]);
 
   // Open system settings for a permission
   const openSettings = async (permission: OSPermission) => {
@@ -164,29 +120,6 @@ export default function PermissionRecoveryPage() {
       await commands.openPermissionSettings(permission);
     } catch (error) {
       console.error("Failed to open settings:", error);
-    }
-  };
-
-  // Reset and re-request a permission
-  const resetAndFix = async (permission: OSPermission) => {
-    posthog.capture("permission_recovery_reset_fix", { permission });
-    setFixingPermission(permission);
-    try {
-      await commands.requestPermission(permission);
-      // The polling will detect when it's fixed
-      // Add timeout fallback - if not fixed after 10s, clear the fixing state
-      setTimeout(() => {
-        setFixingPermission((current) => {
-          if (current === permission) {
-            console.log("Timeout: clearing fixing state for", permission);
-            return null;
-          }
-          return current;
-        });
-      }, 10000);
-    } catch (error) {
-      console.error("Failed to reset permission:", error);
-      setFixingPermission(null);
     }
   };
 
@@ -271,9 +204,7 @@ export default function PermissionRecoveryPage() {
                   description="capture what's on screen"
                   status={screenStatus}
                   onFix={() => openSettings("screenRecording")}
-                  onReset={() => resetAndFix("screenRecording")}
-                  isFixing={fixingPermission === "screenRecording"}
-                  isAnyFixing={fixingPermission !== null}
+                  isAnyFixing={false}
                 />
 
                 <PermissionRow
@@ -282,9 +213,7 @@ export default function PermissionRecoveryPage() {
                   description="transcribe speech"
                   status={micStatus}
                   onFix={() => openSettings("microphone")}
-                  onReset={() => resetAndFix("microphone")}
-                  isFixing={fixingPermission === "microphone"}
-                  isAnyFixing={fixingPermission !== null}
+                  isAnyFixing={false}
                 />
 
                 {isMacOS && (
@@ -294,18 +223,16 @@ export default function PermissionRecoveryPage() {
                     description="keyboard shortcuts"
                     status={accessibilityStatus}
                     onFix={() => openSettings("accessibility")}
-                    onReset={() => resetAndFix("accessibility")}
-                    isFixing={fixingPermission === "accessibility"}
-                    isAnyFixing={fixingPermission !== null}
+                    isAnyFixing={false}
                   />
                 )}
               </div>
 
               <div className="text-center space-y-3">
                 <p className="font-mono text-xs text-muted-foreground">
-                  tip: &quot;reset &amp; fix&quot; removes and re-requests the permission automatically.
+                  click &quot;open settings&quot; to toggle the permission on in system settings.
                   <br />
-                  if that doesn&apos;t work, use &quot;manual&quot; to toggle it in system settings.
+                  this window will close automatically once permissions are fixed.
                 </p>
 
                 <button

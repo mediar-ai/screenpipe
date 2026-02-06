@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { commands } from "@/lib/utils/tauri";
 import { usePlatform } from "@/lib/hooks/use-platform";
@@ -19,7 +19,7 @@ interface PermissionState {
  */
 export function PermissionBanner() {
   const [permissions, setPermissions] = useState<PermissionState | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+
   const { isMac } = usePlatform();
 
   const checkPermissions = useCallback(async () => {
@@ -30,10 +30,7 @@ export function PermissionBanner() {
       const micOk = perms.microphone === "granted" || perms.microphone === "notNeeded";
       const accessibilityOk = perms.accessibility === "granted" || perms.accessibility === "notNeeded";
       setPermissions({ screenOk, micOk, accessibilityOk });
-      // Auto-undismiss when permissions change (user might have fixed one but not all)
-      if (!screenOk || !micOk || !accessibilityOk) {
-        setDismissed(false);
-      }
+
     } catch {
       // ignore errors
     }
@@ -49,7 +46,6 @@ export function PermissionBanner() {
   // Also listen for permission-lost events for instant response
   useEffect(() => {
     const unlisten = listen("permission-lost", () => {
-      setDismissed(false);
       checkPermissions();
     });
     return () => { unlisten.then(fn => fn()); };
@@ -61,8 +57,7 @@ export function PermissionBanner() {
   // Don't render if all permissions are granted
   if (permissions.screenOk && permissions.micOk && permissions.accessibilityOk) return null;
 
-  // Allow temporary dismiss (5 minutes), then show again
-  if (dismissed) return null;
+
 
   const missingPerms: string[] = [];
   if (!permissions.screenOk) missingPerms.push("screen recording");
@@ -100,13 +95,7 @@ export function PermissionBanner() {
         >
           fix permissions
         </Button>
-        <button
-          onClick={() => setDismissed(true)}
-          className="p-1 rounded hover:bg-destructive-foreground/10 transition-colors"
-          title="Dismiss for now (will reappear)"
-        >
-          <X className="h-4 w-4 text-destructive-foreground/60" />
-        </button>
+
       </div>
     </div>
   );
