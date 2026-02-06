@@ -618,7 +618,6 @@ export function SyncSettings() {
         const serverData = await serverStatus.json();
         if (serverData.enabled) {
           await invoke("set_sync_enabled", { enabled: true });
-          setStep("active");
           return true;
         }
       }
@@ -632,14 +631,10 @@ export function SyncSettings() {
       if (savedPassword) {
         const password = atob(savedPassword);
         await invoke<boolean>("init_sync", { password });
-        await checkSubscriptionAndLoad();
-        setStep("active");
         return true;
       }
     } catch (e) {
       console.log("auto-init sync failed, will prompt for password:", e);
-      // Password might be wrong (user changed it on another device)
-      // Clear saved password so we don't keep failing
       localStorage.removeItem("sync_password");
     }
 
@@ -695,7 +690,18 @@ export function SyncSettings() {
             } else {
               // Try to auto-init from saved password or running server
               const autoInited = await tryAutoInitSync();
-              if (!autoInited) {
+              if (autoInited) {
+                // Re-fetch status after auto-init
+                const [newStatus, newConfig, newDevices] = await Promise.all([
+                  invoke<SyncStatus>("get_sync_status"),
+                  invoke<SyncConfig>("get_sync_config"),
+                  invoke<SyncDevice[]>("get_sync_devices"),
+                ]);
+                setStatus(newStatus);
+                setConfig(newConfig);
+                setDevices(newDevices);
+                setStep("active");
+              } else {
                 setStep("password");
               }
             }
