@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Monitor, Mic, X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { commands } from "@/lib/utils/tauri";
 import { usePlatform } from "@/lib/hooks/use-platform";
@@ -67,23 +67,23 @@ export function PermissionBanner() {
   if (!permissions.micOk) missingPerms.push("microphone");
 
   return (
-    <div className="w-full bg-destructive/10 border-b border-destructive/20 px-4 py-2.5 flex items-center justify-between gap-3 z-50">
+    <div className="w-full bg-destructive border-b-2 border-destructive px-4 py-3 flex items-center justify-between gap-3 z-50">
       <div className="flex items-center gap-3 min-w-0">
-        <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
-        <div className="flex items-center gap-2 text-sm min-w-0">
-          <span className="font-medium text-destructive">
+        <AlertTriangle className="h-5 w-5 text-destructive-foreground shrink-0" />
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-semibold text-destructive-foreground text-base">
             {missingPerms.join(" & ")} disabled
           </span>
-          <span className="text-destructive/70 hidden sm:inline">
+          <span className="text-destructive-foreground/80 hidden sm:inline text-sm">
             — recording is paused
           </span>
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
-          className="h-7 text-xs border-destructive/30 hover:bg-destructive/10"
+          className="h-8 px-4 text-sm font-medium"
           onClick={async () => {
             try {
               await commands.showWindow("PermissionRecovery");
@@ -98,10 +98,10 @@ export function PermissionBanner() {
         </Button>
         <button
           onClick={() => setDismissed(true)}
-          className="p-1 rounded hover:bg-destructive/10 transition-colors"
+          className="p-1 rounded hover:bg-destructive-foreground/10 transition-colors"
           title="Dismiss for now (will reappear)"
         >
-          <X className="h-3.5 w-3.5 text-destructive/50" />
+          <X className="h-4 w-4 text-destructive-foreground/60" />
         </button>
       </div>
     </div>
