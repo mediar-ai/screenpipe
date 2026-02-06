@@ -170,7 +170,7 @@ pub async fn sync_init(
     let is_syncing = runtime_state.is_syncing.clone();
     let last_sync = runtime_state.last_sync.clone();
     let last_error = runtime_state.last_error.clone();
-    let sync_manager_for_events = manager.clone();
+    let sync_manager_for_events = runtime_state.manager.clone();
     let sync_provider_for_events = Arc::new(ScreenpipeSyncProvider::new(
         state.db.clone(),
         machine_id.clone(),

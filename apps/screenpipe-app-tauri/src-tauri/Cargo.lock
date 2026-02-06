@@ -9007,7 +9007,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "2.0.307"
+version = "2.0.329"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -9042,6 +9042,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.12",
  "resvg",
+ "screenpipe-accessibility",
  "screenpipe-audio",
  "screenpipe-core",
  "screenpipe-db",
@@ -9088,8 +9089,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "screenpipe-apple-intelligence"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "screenpipe-audio"
-version = "0.3.101"
+version = "0.3.123"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -9137,7 +9148,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-core"
-version = "0.3.101"
+version = "0.3.123"
 dependencies = [
  "accessibility",
  "accessibility-sys",
@@ -9188,7 +9199,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-db"
-version = "0.3.101"
+version = "0.3.123"
 dependencies = [
  "anyhow",
  "chrono",
@@ -9212,7 +9223,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-events"
-version = "0.3.101"
+version = "0.3.123"
 dependencies = [
  "anyhow",
  "chrono",
@@ -9228,7 +9239,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-integrations"
-version = "0.3.101"
+version = "0.3.123"
 dependencies = [
  "anyhow",
  "image 0.25.9",
@@ -9243,7 +9254,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-server"
-version = "0.3.101"
+version = "0.3.123"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9280,6 +9291,7 @@ dependencies = [
  "reqwest 0.12.12",
  "rust-stemmers",
  "screenpipe-accessibility",
+ "screenpipe-apple-intelligence",
  "screenpipe-audio",
  "screenpipe-core",
  "screenpipe-db",
@@ -9294,6 +9306,7 @@ dependencies = [
  "tempfile",
  "tokenizers",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tower 0.5.3",
  "tower-http 0.5.2",
@@ -9307,7 +9320,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-vision"
-version = "0.3.101"
+version = "0.3.123"
 dependencies = [
  "accessibility-sys",
  "anyhow",
@@ -9327,6 +9340,7 @@ dependencies = [
  "reqwest 0.12.12",
  "rusty-tesseract",
  "sck-rs",
+ "screenpipe-accessibility",
  "screenpipe-core",
  "screenpipe-db",
  "screenpipe-integrations",
