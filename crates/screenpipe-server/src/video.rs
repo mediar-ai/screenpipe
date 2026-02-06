@@ -116,7 +116,7 @@ impl VideoCapture {
         output_path: &str,
         fps: f64,
         video_chunk_duration: Duration,
-        new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
+        new_chunk_callback: impl Fn(&str, f64) + Send + Sync + 'static,
         ocr_engine: Arc<OcrEngine>,
         monitor_id: u32,
         ignore_list: &[String],
@@ -482,7 +482,7 @@ async fn save_frames_as_video(
     frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
     output_path: &str,
     fps: f64,
-    new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
+    new_chunk_callback: Arc<dyn Fn(&str, f64) + Send + Sync>,
     monitor_id: u32,
     video_chunk_duration: Duration,
     frame_write_tracker: &Arc<FrameWriteTracker>,
@@ -560,7 +560,7 @@ async fn save_frames_as_video(
 
                     // Register in DB only after first frame is written successfully
                     // This ensures the file has valid headers and content before timeline can request it
-                    new_chunk_callback(&output_file);
+                    new_chunk_callback(&output_file, fps);
 
                     current_ffmpeg = Some(child);
                     current_stdin = Some(stdin);

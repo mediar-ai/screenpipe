@@ -2,7 +2,7 @@ import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
 import React, { FC, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useFrameOcrData } from "@/lib/hooks/use-frame-ocr-data";
 import { TextOverlay, extractUrlsFromText, isUrl, normalizeUrl } from "@/components/text-overlay";
-import { ImageOff, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ImageOff, ChevronLeft, ChevronRight } from "lucide-react";
 import posthog from "posthog-js";
 
 export interface DetectedUrl {
@@ -35,8 +35,15 @@ export const SkeletonLoader: FC = () => {
 };
 
 // Debounce delay for frame loading (ms)
-// When scrolling fast, only load the frame after user "settles" for this duration
-const FRAME_LOAD_DEBOUNCE_MS = 150;
+const FRAME_LOAD_DEBOUNCE_MS = 80;
+
+// Track which chunks have failed so we don't retry them
+const failedChunks = new Set<string>();
+
+// Cache calibrated fps per video file path so we only compute once
+const calibratedFpsCache = new Map<string, number>();
+
+
 
 export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	currentFrame,
@@ -49,115 +56,292 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 }) => {
 	const [isLoading, setIsLoading] = useState(true);
 	const [hasError, setHasError] = useState(false);
-	const [retryCount, setRetryCount] = useState(0);
 	const [naturalDimensions, setNaturalDimensions] = useState<{
 		width: number;
 		height: number;
 	} | null>(null);
-	// For object-contain, track the full rendered size and padding offset
 	const [renderedImageInfo, setRenderedImageInfo] = useState<{
 		width: number;
 		height: number;
 		offsetX: number;
 		offsetY: number;
 	} | null>(null);
-	
-	// Debounced frame ID - only updates after scroll settles
-	const [debouncedFrameId, setDebouncedFrameId] = useState<string | null>(null);
-	
-	const imageRef = useRef<HTMLImageElement>(null);
+
+	// Whether to use <video> seeking or fall back to <img> via ffmpeg
+	// Try video mode first on all platforms; onError fallback handles unsupported codecs
+	const [useVideoMode, setUseVideoMode] = useState(true);
+	// Debounced frame — only updates after scroll settles
+	const [debouncedFrame, setDebouncedFrame] = useState<{
+		filePath: string;
+		offsetIndex: number;
+		fps: number | null;
+		frameId: string;
+	} | null>(null);
+
+	const videoRef = useRef<HTMLVideoElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
-	
-	// Abort controller for canceling pending image loads
-	const abortControllerRef = useRef<AbortController | null>(null);
-	
-	// Debounce timer ref
 	const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	
-	// Performance tracking refs
 	const frameLoadStartTimeRef = useRef<number | null>(null);
 	const framesSkippedRef = useRef<number>(0);
 	const lastFrameIdRef = useRef<string | null>(null);
+	// Track currently loaded video chunk to avoid reloading same file
+	const loadedChunkRef = useRef<string | null>(null);
+	// Generation counter to discard stale events
+	const seekGenRef = useRef(0);
 
-	const frameId = currentFrame?.devices?.[0]?.frame_id;
-	
-	// Track frames skipped during fast scrolling (for analytics)
+	const device = currentFrame?.devices?.[0];
+	const frameId = device?.frame_id;
+	const filePath = device?.metadata?.file_path;
+	const offsetIndex = device?.offset_index ?? 0;
+	const fpsFromServer = device?.fps ?? null; // null = pre-migration chunk
+
+	// Track skipped frames for analytics
 	useEffect(() => {
 		if (frameId && lastFrameIdRef.current && frameId !== lastFrameIdRef.current) {
-			// If we're changing frames and there was a previous frame that didn't finish loading
-			if (frameLoadStartTimeRef.current !== null && debouncedFrameId !== frameId) {
+			if (frameLoadStartTimeRef.current !== null) {
 				framesSkippedRef.current += 1;
 			}
 		}
 		lastFrameIdRef.current = frameId;
-	}, [frameId, debouncedFrameId]);
-	
-	// Debounce frame ID changes to avoid loading frames during fast scrolling
-	// This is critical for performance - without debouncing, every scroll step
-	// triggers a new HTTP request that won't be used
+	}, [frameId]);
+
+	// Debounce frame changes
 	useEffect(() => {
-		// Clear any pending debounce
-		if (debounceTimerRef.current) {
-			clearTimeout(debounceTimerRef.current);
-		}
-		
-		// If no frame, clear immediately
-		if (!frameId) {
-			setDebouncedFrameId(null);
+		if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+		if (!frameId || !filePath) {
+			setDebouncedFrame(null);
 			return;
 		}
-		
-		// Show loading state immediately for responsive feel
 		setIsLoading(true);
-		
-		// Debounce the actual frame ID update
 		debounceTimerRef.current = setTimeout(() => {
-			setDebouncedFrameId(frameId);
+			setDebouncedFrame({ filePath, offsetIndex, fps: fpsFromServer, frameId });
 		}, FRAME_LOAD_DEBOUNCE_MS);
-		
 		return () => {
-			if (debounceTimerRef.current) {
-				clearTimeout(debounceTimerRef.current);
+			if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+		};
+	}, [frameId, filePath, offsetIndex, fpsFromServer]);
+
+	// Convert file path to asset URL
+	const getVideoUrl = useCallback(async (path: string): Promise<string | null> => {
+		try {
+			const { convertFileSrc } = await import("@tauri-apps/api/core");
+			return convertFileSrc(path);
+		} catch {
+			return null;
+		}
+	}, []);
+
+	// Resolve the effective fps for a chunk: use server value, cached calibration, or compute from video
+	const resolveEffectiveFps = useCallback((
+		path: string,
+		serverFps: number | null,
+		video: HTMLVideoElement,
+		offsetIndex: number,
+	): number | null => {
+		// 1. If server provided fps, validate it against video duration
+		if (serverFps !== null && serverFps > 0) {
+			const expectedTime = offsetIndex / serverFps;
+			if (expectedTime <= video.duration + 0.5) {
+				return serverFps; // looks valid
+			}
+			// Server fps is wrong (seek would overshoot) — fall through to calibration
+			console.warn(`fps ${serverFps} invalid for offset ${offsetIndex}: would seek to ${expectedTime.toFixed(1)}s but video is ${video.duration.toFixed(1)}s`);
+		}
+
+		// 2. Check calibration cache
+		const cached = calibratedFpsCache.get(path);
+		if (cached !== undefined) return cached;
+
+		// 3. Auto-calibrate: estimate fps from video duration
+		// At constant fps, video duration ≈ (totalFrames - 1) / fps + 1/fps = totalFrames / fps
+		// We don't know totalFrames here, but we can bound it:
+		// - If offsetIndex is the highest we'll see in this chunk, fps ≈ (offsetIndex + 1) / duration
+		// - We use a conservative estimate since offsetIndex may not be the max
+		// For now, we try common fps values and pick the one where all offsets fit
+		const duration = video.duration;
+		if (duration <= 0 || !isFinite(duration)) return null;
+
+		// Try common fps values: 0.2, 0.5, 1.0, 2.0
+		const commonFps = [0.2, 0.5, 1.0, 2.0];
+		for (const candidate of commonFps) {
+			// At this fps, max frames in this video = floor(duration * candidate)
+			// offset_index should be < maxFrames
+			const maxOffset = Math.floor(duration * candidate);
+			if (offsetIndex < maxOffset) {
+				calibratedFpsCache.set(path, candidate);
+				console.log(`auto-calibrated fps=${candidate} for ${path} (duration=${duration.toFixed(1)}s, offset=${offsetIndex})`);
+				return candidate;
+			}
+		}
+
+		// Last resort: derive directly
+		// Assume at least offsetIndex+1 frames exist, so fps ≈ (offsetIndex + 1) / duration
+		const derived = (offsetIndex + 1) / duration;
+		calibratedFpsCache.set(path, derived);
+		console.log(`derived fps=${derived.toFixed(3)} for ${path} (duration=${duration.toFixed(1)}s, offset=${offsetIndex})`);
+		return derived;
+	}, []);
+
+	// Main video seeking effect
+	useEffect(() => {
+		if (!debouncedFrame || !useVideoMode) return;
+		const { filePath: path, offsetIndex: idx, fps: serverFps, frameId: fid } = debouncedFrame;
+
+		// If this chunk previously failed, go straight to fallback
+		if (failedChunks.has(path)) {
+			setUseVideoMode(false);
+			return;
+		}
+
+		const gen = ++seekGenRef.current;
+		frameLoadStartTimeRef.current = performance.now();
+
+		const doSeek = async () => {
+			const video = videoRef.current;
+			if (!video) return;
+
+			// Load new chunk if needed
+			if (loadedChunkRef.current !== path) {
+				const url = await getVideoUrl(path);
+				if (!url || gen !== seekGenRef.current) return;
+				
+				loadedChunkRef.current = path;
+				video.src = url;
+				video.load();
+
+				// Wait for loadeddata (need duration for calibration)
+				await new Promise<void>((resolve, reject) => {
+					const onLoaded = () => {
+						video.removeEventListener("loadeddata", onLoaded);
+						video.removeEventListener("error", onError);
+						resolve();
+					};
+					const onError = () => {
+						video.removeEventListener("loadeddata", onLoaded);
+						video.removeEventListener("error", onError);
+						reject(new Error("video load failed"));
+					};
+					if (video.readyState >= 2) {
+						resolve();
+						return;
+					}
+					video.addEventListener("loadeddata", onLoaded);
+					video.addEventListener("error", onError);
+				});
+			}
+
+			if (gen !== seekGenRef.current) return;
+
+			// Resolve effective fps (auto-calibrate if needed)
+			const effectiveFps = resolveEffectiveFps(path, serverFps, video, idx);
+			if (effectiveFps === null || effectiveFps <= 0) {
+				throw new Error(`cannot determine fps for ${path}`);
+			}
+
+			// Seek to frame with bounds check
+			let targetTime = idx / effectiveFps;
+			// Clamp to video duration (safety net)
+			if (targetTime > video.duration) {
+				console.warn(`seek target ${targetTime.toFixed(1)}s > duration ${video.duration.toFixed(1)}s, clamping`);
+				targetTime = Math.max(0, video.duration - 0.01);
+			}
+
+			if (Math.abs(video.currentTime - targetTime) > 0.001) {
+				video.currentTime = targetTime;
+				await new Promise<void>((resolve) => {
+					const onSeeked = () => {
+						video.removeEventListener("seeked", onSeeked);
+						resolve();
+					};
+					video.addEventListener("seeked", onSeeked);
+				});
+			}
+
+			if (gen !== seekGenRef.current) return;
+
+			// Frame is ready
+			setIsLoading(false);
+			setHasError(false);
+			setNaturalDimensions({
+				width: video.videoWidth,
+				height: video.videoHeight,
+			});
+
+			// Analytics
+			if (frameLoadStartTimeRef.current !== null) {
+				const loadTime = performance.now() - frameLoadStartTimeRef.current;
+				posthog.capture("timeline_frame_load_time", {
+					duration_ms: Math.round(loadTime),
+					frame_id: fid,
+					success: true,
+					mode: "video_seek",
+					fps_source: serverFps !== null ? "server" : "calibrated",
+					effective_fps: effectiveFps,
+					frames_skipped: framesSkippedRef.current,
+					image_width: video.videoWidth,
+					image_height: video.videoHeight,
+				});
+				frameLoadStartTimeRef.current = null;
+				framesSkippedRef.current = 0;
 			}
 		};
-	}, [frameId]);
-	
-	// Construct image URL only for debounced frame ID
-	const imageUrl = debouncedFrameId ? `http://localhost:3030/frames/${debouncedFrameId}` : null;
 
-	// Fetch OCR text positions for text selection overlay
-	// Use debounced frame ID to avoid unnecessary fetches
+		doSeek().catch((err) => {
+			if (gen !== seekGenRef.current) return;
+			console.warn("Video seek failed, falling back to ffmpeg:", err);
+			failedChunks.add(path);
+			loadedChunkRef.current = null;
+			setUseVideoMode(false);
+		});
+	}, [debouncedFrame, useVideoMode, getVideoUrl, resolveEffectiveFps]);
+
+	// Fallback: ffmpeg <img> mode (same as old behavior)
+	const fallbackImageUrl = useMemo(() => {
+		if (useVideoMode || !debouncedFrame) return null;
+		return `http://localhost:3030/frames/${debouncedFrame.frameId}`;
+	}, [useVideoMode, debouncedFrame]);
+
+	// Handle fallback image load
+	const imgRef = useRef<HTMLImageElement>(null);
+	useEffect(() => {
+		if (!fallbackImageUrl) return;
+		frameLoadStartTimeRef.current = performance.now();
+		const controller = new AbortController();
+
+		fetch(fallbackImageUrl, { signal: controller.signal })
+			.then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
+			.catch(err => {
+				if (err.name !== "AbortError") {
+					setHasError(true);
+					setIsLoading(false);
+					onFrameLoadError?.();
+				}
+			});
+
+		return () => controller.abort();
+	}, [fallbackImageUrl]);
+
+	// OCR data
 	const { textPositions, isLoading: ocrLoading } = useFrameOcrData(
-		debouncedFrameId ? parseInt(debouncedFrameId, 10) : null
+		debouncedFrame ? parseInt(debouncedFrame.frameId, 10) : null
 	);
 
-	// Track which frame the OCR data is for — only show URLs when OCR matches displayed frame
 	const ocrFrameIdRef = useRef<string | null>(null);
 	useEffect(() => {
-		if (!ocrLoading && debouncedFrameId) {
-			ocrFrameIdRef.current = debouncedFrameId;
-		}
-	}, [ocrLoading, debouncedFrameId]);
+		if (!ocrLoading && debouncedFrame) ocrFrameIdRef.current = debouncedFrame.frameId;
+	}, [ocrLoading, debouncedFrame]);
 
-	// Extract all unique URLs from OCR text for the clickable URL bar
 	const detectedUrls = useMemo(() => {
-		// Don't show URLs while OCR is still loading (prevents stale data from previous frame)
 		if (ocrLoading) return [];
-
-		const urls = new Map<string, string>(); // normalizedUrl -> displayUrl
+		const urls = new Map<string, string>();
 		for (const pos of textPositions) {
 			const b = pos.bounds;
-			// Skip off-screen OCR blocks (multi-monitor artifacts)
 			if (b.left < 0 || b.top < 0 || b.left > 1 || b.top > 1) continue;
-
-			// Check whole block
 			if (isUrl(pos.text)) {
 				const norm = normalizeUrl(pos.text);
-				// Skip very short URLs (OCR noise like "a.io")
 				if (norm.length >= 12 && !urls.has(norm)) urls.set(norm, pos.text);
 				continue;
 			}
-			// Extract embedded URLs (only https:// and www. prefixed)
 			for (const ext of extractUrlsFromText(pos.text)) {
 				if (ext.normalizedUrl.length >= 12 && !urls.has(ext.normalizedUrl)) {
 					urls.set(ext.normalizedUrl, ext.url);
@@ -169,141 +353,40 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 			.slice(0, 3);
 	}, [textPositions, ocrLoading]);
 
-	// Notify parent of detected URLs
-	useEffect(() => {
-		onUrlsDetected?.(detectedUrls);
-	}, [detectedUrls, onUrlsDetected]);
+	useEffect(() => { onUrlsDetected?.(detectedUrls); }, [detectedUrls, onUrlsDetected]);
 
-	// Abort previous image load and start new one when debounced frame changes
-	useEffect(() => {
-		// Abort any pending request when frame changes
-		if (abortControllerRef.current) {
-			abortControllerRef.current.abort();
-		}
-		
-		if (!debouncedFrameId || !imageUrl) {
-			return;
-		}
-		
-		// Start timing the frame load
-		frameLoadStartTimeRef.current = performance.now();
-		
-		// Create new abort controller for this request
-		abortControllerRef.current = new AbortController();
-		
-		// Reset state for new frame
-		setHasError(false);
-		setRetryCount(0);
-		setNaturalDimensions(null);
-		
-		// Preload the image using fetch with abort signal
-		// This allows us to cancel the request if user scrolls away
-		const controller = abortControllerRef.current;
-		
-		fetch(imageUrl, { signal: controller.signal })
-			.then(response => {
-				if (!response.ok) {
-					throw new Error(`HTTP ${response.status}`);
-				}
-				return response.blob();
-			})
-			.then(blob => {
-				// Request completed successfully - image will be in browser cache
-				// The <img> tag will load it instantly from cache
-				if (!controller.signal.aborted) {
-					// Image is now cached, the img onLoad will handle the rest
-				}
-			})
-			.catch(err => {
-				if (err.name === 'AbortError') {
-					// Request was aborted (user scrolled away) - this is expected
-					console.log('Frame request aborted (user scrolled):', debouncedFrameId);
-				} else {
-					// Actual error
-					console.error('Frame fetch error:', err);
-					if (!controller.signal.aborted) {
-						setIsLoading(false);
-						setHasError(true);
-						onFrameLoadError?.();
-						
-						// Track frame load failure
-						if (frameLoadStartTimeRef.current !== null) {
-							const loadTime = performance.now() - frameLoadStartTimeRef.current;
-							posthog.capture("timeline_frame_load_time", {
-								duration_ms: Math.round(loadTime),
-								frame_id: debouncedFrameId,
-								success: false,
-								error: err.message,
-								frames_skipped: framesSkippedRef.current,
-							});
-							frameLoadStartTimeRef.current = null;
-							framesSkippedRef.current = 0;
-						}
-					}
-				}
-			});
-		
-		return () => {
-			// Cleanup: abort if component unmounts or frame changes
-			controller.abort();
-		};
-	}, [debouncedFrameId, imageUrl]);
-
-	// Update rendered image info on resize
-	// For object-contain: image fits within container, centered with letterboxing
+	// Update rendered dimensions on resize
 	useEffect(() => {
 		const updateDimensions = () => {
 			if (containerRef.current && naturalDimensions) {
 				const containerRect = containerRef.current.getBoundingClientRect();
 				const containerAspect = containerRect.width / containerRect.height;
 				const imageAspect = naturalDimensions.width / naturalDimensions.height;
-
-				let renderedWidth: number;
-				let renderedHeight: number;
-
+				let renderedWidth: number, renderedHeight: number;
 				if (containerAspect > imageAspect) {
-					// Container is wider - height fits, width letterboxes
 					renderedHeight = containerRect.height;
 					renderedWidth = containerRect.height * imageAspect;
 				} else {
-					// Container is taller - width fits, height letterboxes
 					renderedWidth = containerRect.width;
 					renderedHeight = containerRect.width / imageAspect;
 				}
-
-				// Calculate padding offset (image is centered with object-contain)
-				const offsetX = (containerRect.width - renderedWidth) / 2;
-				const offsetY = (containerRect.height - renderedHeight) / 2;
-
 				setRenderedImageInfo({
 					width: renderedWidth,
 					height: renderedHeight,
-					offsetX,
-					offsetY,
+					offsetX: (containerRect.width - renderedWidth) / 2,
+					offsetY: (containerRect.height - renderedHeight) / 2,
 				});
 			}
 		};
-
 		updateDimensions();
 		window.addEventListener("resize", updateDimensions);
 		return () => window.removeEventListener("resize", updateDimensions);
 	}, [naturalDimensions]);
 
-	const handleRetry = () => {
-		if (retryCount < 3) {
-			setRetryCount(prev => prev + 1);
-			setIsLoading(true);
-			setHasError(false);
-		}
-	};
-
-	// Auto-skip to next frame when error occurs - instant, no delay
+	// Auto-skip on error
 	useEffect(() => {
 		if (hasError && !isLoading && onFrameUnavailable) {
-			// Minimal delay just to batch multiple errors
-			const timer = setTimeout(() => {
-				onFrameUnavailable();
-			}, 50);
+			const timer = setTimeout(() => onFrameUnavailable(), 50);
 			return () => clearTimeout(timer);
 		}
 	}, [hasError, isLoading, onFrameUnavailable]);
@@ -319,7 +402,6 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 									<ImageOff className="w-8 h-8 text-muted-foreground" />
 								</div>
 							</div>
-
 							<div className="text-center space-y-3">
 								<h3 className="text-xl font-mono font-semibold text-foreground uppercase tracking-wide">
 									No Frame Selected
@@ -328,24 +410,15 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 									Select a point on the timeline to view a recorded frame.
 								</p>
 							</div>
-
 							{onNavigate && (
 								<div className="mt-8 flex gap-2">
-									<button
-										onClick={() => onNavigate("prev")}
-										disabled={!canNavigatePrev}
-										className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors"
-									>
-										<ChevronLeft className="w-4 h-4" />
-										Previous
+									<button onClick={() => onNavigate("prev")} disabled={!canNavigatePrev}
+										className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors">
+										<ChevronLeft className="w-4 h-4" /> Previous
 									</button>
-									<button
-										onClick={() => onNavigate("next")}
-										disabled={!canNavigateNext}
-										className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors"
-									>
-										Next
-										<ChevronRight className="w-4 h-4" />
+									<button onClick={() => onNavigate("next")} disabled={!canNavigateNext}
+										className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-background hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed border border-border text-foreground text-sm font-mono uppercase transition-colors">
+										Next <ChevronRight className="w-4 h-4" />
 									</button>
 								</div>
 							)}
@@ -359,73 +432,81 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	return (
 		<div ref={containerRef} className="absolute inset-0 w-full h-full">
 			{isLoading && <SkeletonLoader />}
-			{imageUrl && (
-				<img
-					src={imageUrl}
-					ref={imageRef}
+
+			{/* Video mode: <video> element with seeking */}
+			{useVideoMode && (
+				<video
+					ref={videoRef}
+					muted
+					playsInline
+					preload="auto"
 					className="absolute inset-0 w-full h-full object-contain bg-black"
 					style={{
 						zIndex: 1,
-						display: hasError ? 'none' : 'block',
 						opacity: isLoading ? 0 : 1,
-						transition: 'opacity 0.15s ease-in-out',
+						transition: "opacity 0.1s ease-in-out",
+					}}
+					onError={() => {
+						const err = videoRef.current?.error;
+						console.warn("Video error:", err?.code, err?.message);
+						if (debouncedFrame?.filePath) {
+							failedChunks.add(debouncedFrame.filePath);
+						}
+						loadedChunkRef.current = null;
+						setUseVideoMode(false);
+					}}
+				/>
+			)}
+
+			{/* Fallback mode: <img> via ffmpeg extraction */}
+			{!useVideoMode && fallbackImageUrl && (
+				<img
+					ref={imgRef}
+					src={fallbackImageUrl}
+					className="absolute inset-0 w-full h-full object-contain bg-black"
+					style={{
+						zIndex: 1,
+						display: hasError ? "none" : "block",
+						opacity: isLoading ? 0 : 1,
+						transition: "opacity 0.15s ease-in-out",
 					}}
 					alt="Current frame"
 					draggable={false}
 					onLoad={(e) => {
 						const img = e.target as HTMLImageElement;
-						console.log('Image loaded successfully for frame:', debouncedFrameId);
 						setIsLoading(false);
 						setHasError(false);
-						setNaturalDimensions({
-							width: img.naturalWidth,
-							height: img.naturalHeight,
-						});
-						
-						// Track successful frame load time
+						setNaturalDimensions({ width: img.naturalWidth, height: img.naturalHeight });
 						if (frameLoadStartTimeRef.current !== null) {
 							const loadTime = performance.now() - frameLoadStartTimeRef.current;
 							posthog.capture("timeline_frame_load_time", {
 								duration_ms: Math.round(loadTime),
-								frame_id: debouncedFrameId,
+								frame_id: debouncedFrame?.frameId,
 								success: true,
+								mode: "ffmpeg_fallback",
 								frames_skipped: framesSkippedRef.current,
-								image_width: img.naturalWidth,
-								image_height: img.naturalHeight,
 							});
 							frameLoadStartTimeRef.current = null;
 							framesSkippedRef.current = 0;
 						}
 					}}
 					onError={() => {
-						console.log('Image failed to load for frame:', debouncedFrameId);
 						setIsLoading(false);
 						setHasError(true);
 					}}
 				/>
 			)}
-			{/* In-frame clickable URL overlay — links in middle/bottom of frame are clickable
-			     (top area blocked by z-40 controls, but pills bar handles those) */}
+
+			{/* OCR text overlay */}
 			{!isLoading && !hasError && !ocrLoading && naturalDimensions && renderedImageInfo && textPositions.length > 0 && (
-				<div
-					className="absolute overflow-hidden"
-					style={{
-						zIndex: 2,
-						top: 0,
-						left: 0,
-						right: 0,
-						bottom: 0,
-					}}
-				>
-					<div
-						style={{
-							position: 'absolute',
-							left: renderedImageInfo.offsetX,
-							top: renderedImageInfo.offsetY,
-							width: renderedImageInfo.width,
-							height: renderedImageInfo.height,
-						}}
-					>
+				<div className="absolute overflow-hidden" style={{ zIndex: 2, top: 0, left: 0, right: 0, bottom: 0 }}>
+					<div style={{
+						position: "absolute",
+						left: renderedImageInfo.offsetX,
+						top: renderedImageInfo.offsetY,
+						width: renderedImageInfo.width,
+						height: renderedImageInfo.height,
+					}}>
 						<TextOverlay
 							textPositions={textPositions}
 							originalWidth={naturalDimensions.width}
@@ -437,11 +518,9 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					</div>
 				</div>
 			)}
-			{/* When frame is unavailable, just show skeleton - skip happens silently */}
+
 			{hasError && !isLoading && (
-				<div className="absolute inset-0 z-10">
-					<SkeletonLoader />
-				</div>
+				<div className="absolute inset-0 z-10"><SkeletonLoader /></div>
 			)}
 		</div>
 	);

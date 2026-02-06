@@ -1894,6 +1894,9 @@ pub struct DeviceFrameResponse {
     pub device_id: String,
     // pub frame: String, // base64 encoded image
     pub frame_id: i64,
+    pub offset_index: i64,
+    /// None for pre-migration chunks — frontend auto-calibrates from video duration
+    pub fps: Option<f64>,
     pub metadata: DeviceMetadata,
     pub audio: Vec<AudioData>,
 }
@@ -1922,16 +1925,20 @@ pub struct AudioData {
 
 impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
     fn from(frame: TimeSeriesFrame) -> Self {
+        let offset_index = frame.offset_index;
+        let fps = frame.fps;
         StreamTimeSeriesResponse {
             timestamp: frame.timestamp,
             devices: frame
                 .frame_data
                 .into_iter()
-                .map(|device_frame| {
+                .map(move |device_frame| {
                     DeviceFrameResponse {
                         device_id: device_frame.device_id,
                         // frame: BASE64_STANDARD.encode(&device_frame.image_data),
                         frame_id: device_frame.frame_id,
+                        offset_index,
+                        fps,
                         metadata: DeviceMetadata {
                             file_path: device_frame.metadata.file_path,
                             app_name: device_frame.metadata.app_name,
@@ -3661,6 +3668,8 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
     TimeSeriesFrame {
         timestamp: chunk.timestamp,
         frame_data: device_frames,
+        offset_index: chunk.offset_index,
+        fps: chunk.fps,
         error: None,
     }
 }
@@ -4297,6 +4306,7 @@ mod tests {
             frame_id: 12345,
             timestamp: chrono::Utc::now(),
             offset_index: 0,
+            fps: Some(0.5),
             ocr_entries,
             audio_entries,
         }

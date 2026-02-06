@@ -22,6 +22,8 @@ type FrameChannel = mpsc::Sender<TimeSeriesFrame>;
 pub struct TimeSeriesFrame {
     pub timestamp: DateTime<Utc>,
     pub frame_data: Vec<DeviceFrame>,
+    pub offset_index: i64,
+    pub fps: Option<f64>,
     pub error: Option<String>,
 }
 
@@ -496,6 +498,8 @@ impl FrameCache {
             let mut timeseries_frame = TimeSeriesFrame {
                 timestamp: chunk.timestamp,
                 frame_data: Vec::new(),
+                offset_index: chunk.offset_index,
+                fps: chunk.fps,
                 error: None,
             };
 
@@ -802,6 +806,8 @@ async fn extract_frame(
             .send(TimeSeriesFrame {
                 error: None,
                 timestamp: chunk.timestamp,
+                offset_index: chunk.offset_index,
+                fps: chunk.fps,
                 frame_data: vec![DeviceFrame {
                     frame_id: frame.frame_id,
                     device_id: device_data.device_name.clone(),

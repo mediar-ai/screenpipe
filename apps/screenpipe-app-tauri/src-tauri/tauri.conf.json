@@ -112,7 +112,8 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$APPDATA/**"
+          "$APPDATA/**",
+          "$HOME/.screenpipe/**"
         ]
       },
       "csp": null
