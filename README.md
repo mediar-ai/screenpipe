@@ -103,4 +103,5 @@ now ask claude:
     <a href="https://docs.screenpi.pe">docs</a> ·
     <a href="https://discord.gg/dU9EBuw7Uq">discord</a> ·
     <a href="https://twitter.com/screen_pipe">x</a>
+    <a href="https://www.youtube.com/@screen_pipe">youtube</a>
 </p>
