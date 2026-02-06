@@ -79,12 +79,17 @@ jobs:
             sleep 2
           done
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Run E2E tests
         id: e2e
         env:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
         run: |
-          bash .github/scripts/e2e/run-all.sh 2>&1 | tee "${{ runner.temp }}/e2e-full.log"
+          bun .github/scripts/e2e/run-all.ts 2>&1 | tee "${{ runner.temp }}/e2e-full.log"
 
       - name: Upload artifacts
         if: always()
