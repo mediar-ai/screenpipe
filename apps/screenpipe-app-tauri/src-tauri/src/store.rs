@@ -522,7 +522,7 @@ impl Default for SettingsStore {
 
 impl SettingsStore {
     pub fn get(app: &AppHandle) -> Result<Option<Self>, String> {
-        let store = get_store(app, None).unwrap();
+        let store = get_store(app, None).map_err(|e| format!("Failed to get store: {}", e))?;
 
         match store.is_empty() {
             true => Ok(None),
