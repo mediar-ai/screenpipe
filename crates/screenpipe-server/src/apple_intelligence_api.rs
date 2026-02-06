@@ -11,7 +11,7 @@ use axum::{
     },
     Json,
 };
-use screenpipe_apple_intelligence::{check_availability, generate_json, generate_text, prewarm, Availability};
+use screenpipe_apple_intelligence::{check_availability, generate_text, prewarm, Availability};
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::sync::Once;
@@ -407,18 +407,46 @@ pub async fn chat_completions(
 
     // Generate response — either JSON-constrained or plain text
     let (response_text, is_json) = if let Some(schema_str) = json_schema {
+        // Apple's GenerationSchema cannot be decoded from standard JSON Schema format,
+        // so we inject the schema into the instructions and use text generation instead.
+        // The model is told to output ONLY valid JSON matching the schema.
+        let json_instructions = format!(
+            "{}\n\nYou MUST respond with ONLY a valid JSON object matching this schema, no other text:\n{}",
+            instructions.as_deref().unwrap_or(""),
+            schema_str
+        );
+
         let result = tokio::task::spawn_blocking(move || {
-            generate_json(instructions.as_deref(), &prompt, &schema_str)
+            generate_text(Some(&json_instructions), &prompt)
         })
         .await
         .map_err(|e| mk_err(&e.to_string()))?
         .map_err(|e| mk_err(&e.to_string()))?;
 
         info!(
-            "apple intelligence json response: {:.0}ms",
+            "apple intelligence json response: {} chars, {:.0}ms",
+            result.text.len(),
             result.metrics.total_time_ms
         );
-        (result.json.to_string(), true)
+
+        // Try to extract valid JSON from the response
+        let text = result.text.trim().to_string();
+        let json_text = if text.starts_with('{') {
+            text
+        } else if let Some(m) = text.find('{') {
+            // Model prepended text like "Here is the JSON:"
+            text[m..].to_string()
+        } else {
+            text
+        };
+        // Trim trailing non-JSON text after the closing brace
+        let json_text = if let Some(end) = json_text.rfind('}') {
+            json_text[..=end].to_string()
+        } else {
+            json_text
+        };
+
+        (json_text, true)
     } else {
         let result = tokio::task::spawn_blocking(move || {
             generate_text(instructions.as_deref(), &prompt)
