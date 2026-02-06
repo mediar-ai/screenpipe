@@ -54,7 +54,7 @@ function PermissionRow({ icon, label, description, status, onFix, isAnyFixing }:
 }
 
 export default function PermissionRecoveryPage() {
-  const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(null);
+  const [permissions, setPermissions] = useState<Record<string, string> | null>(null);
 
   const { isMac: isMacOS } = usePlatform();
 
