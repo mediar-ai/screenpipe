@@ -650,7 +650,23 @@ const AISection = ({
             </PopoverTrigger>
             <PopoverContent className="w-full p-0">
               <Command>
-                <CommandInput placeholder="Select or type model name" />
+                <CommandInput 
+                  placeholder="Select or type model name" 
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const input = (e.target as HTMLInputElement).value;
+                      if (input && models.every(m => m.id !== input)) {
+                        updateSettingsPreset({ model: input });
+                      }
+                    }
+                  }}
+                  onValueChange={(value) => {
+                    // Allow typing a custom model name
+                    if (value && models.every(m => m.id !== value)) {
+                      updateSettingsPreset({ model: value });
+                    }
+                  }}
+                />
                 <CommandList>
                   <CommandEmpty>
                     Press enter to use &quot;{settingsPreset?.model}&quot;

@@ -486,33 +486,31 @@ export function AIProviderConfig({
             </div>
             <div className="space-y-1">
               <Label htmlFor="model" className="text-sm">model</Label>
-              <Select
-                value={formData.model}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, model: value })
-                }
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue
-                    placeholder={
-                      isLoadingModels ? "loading models..." : "select model"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {openaiModels.length > 0 ? (
-                    openaiModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.id}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-models" disabled>
-                      {isLoadingModels ? "loading..." : "no models found"}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Input
+                  id="model"
+                  type="text"
+                  list="ollama-models"
+                  placeholder={isLoadingModels ? "loading models..." : "type or select model (e.g. llama3.2:latest)"}
+                  value={formData.model || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, model: e.target.value })
+                  }
+                  className="h-9"
+                />
+                {openaiModels.length > 0 && (
+                  <datalist id="ollama-models">
+                    {openaiModels.map((model) => (
+                      <option key={model.id} value={model.id} />
+                    ))}
+                  </datalist>
+                )}
+              </div>
+              {!isLoadingModels && openaiModels.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  ollama not detected — type model name manually (e.g. llama3.2:latest)
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -562,33 +560,26 @@ export function AIProviderConfig({
             </div>
             <div className="space-y-1">
               <Label htmlFor="model" className="text-sm">model</Label>
-              <Select
-                value={formData.model}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, model: value })
-                }
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue
-                    placeholder={
-                      isLoadingModels ? "loading models..." : "select model"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {openaiModels.length > 0 ? (
-                    openaiModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.id}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-models" disabled>
-                      {isLoadingModels ? "loading..." : "no models found"}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Input
+                  id="model"
+                  type="text"
+                  list="custom-models"
+                  placeholder={isLoadingModels ? "loading models..." : "type or select model"}
+                  value={formData.model || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, model: e.target.value })
+                  }
+                  className="h-9"
+                />
+                {openaiModels.length > 0 && (
+                  <datalist id="custom-models">
+                    {openaiModels.map((model) => (
+                      <option key={model.id} value={model.id} />
+                    ))}
+                  </datalist>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -667,7 +658,7 @@ export function AIProviderConfig({
           className="w-full h-9"
           disabled={
             isLoading ||
-            Boolean(!formData.id?.length && !formData.model?.length)
+            Boolean(!formData.id?.length || !formData.model?.length)
           }
         >
           {isLoading ? (
