@@ -10,6 +10,7 @@ import { listen } from "@tauri-apps/api/event";
 interface PermissionState {
   screenOk: boolean;
   micOk: boolean;
+  accessibilityOk: boolean;
 }
 
 /**
@@ -27,9 +28,10 @@ export function PermissionBanner() {
       const perms = await commands.doPermissionsCheck(false);
       const screenOk = perms.screenRecording === "granted" || perms.screenRecording === "notNeeded";
       const micOk = perms.microphone === "granted" || perms.microphone === "notNeeded";
-      setPermissions({ screenOk, micOk });
-      // Auto-undismiss when permissions change (user might have fixed one but not both)
-      if (!screenOk || !micOk) {
+      const accessibilityOk = perms.accessibility === "granted" || perms.accessibility === "notNeeded";
+      setPermissions({ screenOk, micOk, accessibilityOk });
+      // Auto-undismiss when permissions change (user might have fixed one but not all)
+      if (!screenOk || !micOk || !accessibilityOk) {
         setDismissed(false);
       }
     } catch {
@@ -57,7 +59,7 @@ export function PermissionBanner() {
   if (!isMac || !permissions) return null;
 
   // Don't render if all permissions are granted
-  if (permissions.screenOk && permissions.micOk) return null;
+  if (permissions.screenOk && permissions.micOk && permissions.accessibilityOk) return null;
 
   // Allow temporary dismiss (5 minutes), then show again
   if (dismissed) return null;
@@ -65,6 +67,7 @@ export function PermissionBanner() {
   const missingPerms: string[] = [];
   if (!permissions.screenOk) missingPerms.push("screen recording");
   if (!permissions.micOk) missingPerms.push("microphone");
+  if (!permissions.accessibilityOk) missingPerms.push("accessibility");
 
   return (
     <div className="w-full bg-destructive border-b-2 border-destructive px-4 py-3 flex items-center justify-between gap-3 z-50">
@@ -91,6 +94,7 @@ export function PermissionBanner() {
               // fallback: try requesting directly
               if (!permissions.screenOk) await commands.requestPermission("screenRecording");
               else if (!permissions.micOk) await commands.requestPermission("microphone");
+              else if (!permissions.accessibilityOk) await commands.requestPermission("accessibility");
             }
           }}
         >
