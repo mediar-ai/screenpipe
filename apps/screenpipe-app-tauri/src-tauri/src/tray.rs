@@ -115,9 +115,11 @@ pub fn recreate_tray(app: &AppHandle) {
         };
 
         // Remove the old tray icon (must be on main thread for NSStatusBar)
+        debug!("recreate_tray: removing old tray icon");
         let _old = app.remove_tray_by_id("screenpipe_main");
         // Drop the old tray icon explicitly on main thread
         drop(_old);
+        debug!("recreate_tray: old tray removed, building new one");
 
         // Create a new tray icon — macOS assigns it the rightmost position
         let icon = match app.path().resolve("assets/screenpipe-logo-tray-white.png", tauri::path::BaseDirectory::Resource) {
@@ -135,8 +137,10 @@ pub fn recreate_tray(app: &AppHandle) {
             error!("failed to load tray icon for recreation");
         }
 
+        debug!("recreate_tray: calling builder.build()");
         match builder.build(&app) {
             Ok(new_tray) => {
+                debug!("recreate_tray: build succeeded, setting menu");
                 // Setup menu
                 if let Ok(menu) = create_dynamic_menu(&app, &MenuState::default(), &update_item) {
                     let _ = new_tray.set_menu(Some(menu));
@@ -152,7 +156,16 @@ pub fn recreate_tray(app: &AppHandle) {
             }
         }
         })) {
-            error!("panic caught in recreate_tray: {:?}", e);
+            // The panic hook already sent the panic message + backtrace to Sentry
+            // (as a Fatal-level capture_message). Log here for local diagnostics.
+            let panic_msg = if let Some(s) = e.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = e.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                format!("{:?}", e)
+            };
+            error!("panic caught in recreate_tray (ObjC exception?): {}", panic_msg);
         }
     });
 }
@@ -441,9 +454,11 @@ async fn update_menu_if_needed(
         let _ = app.run_on_main_thread(move || {
             if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 if let Some(tray) = app_for_thread.tray_by_id("screenpipe_main") {
+                    debug!("tray_menu_update: setting menu");
                     if let Ok(menu) = create_dynamic_menu(&app_for_thread, &new_state, &update_item) {
                         let _ = tray.set_menu(Some(menu));
                     }
+                    debug!("tray_menu_update: setting tooltip");
                     // Update tooltip to show permission status
                     let tooltip = if has_perm_issue {
                         "screenpipe — ⚠️ permissions needed"
@@ -453,7 +468,14 @@ async fn update_menu_if_needed(
                     let _ = tray.set_tooltip(Some(tooltip));
                 }
             })) {
-                error!("panic caught in tray menu update: {:?}", e);
+                let panic_msg = if let Some(s) = e.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = e.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    format!("{:?}", e)
+                };
+                error!("panic caught in tray menu update (ObjC exception?): {}", panic_msg);
             }
         });
     }
