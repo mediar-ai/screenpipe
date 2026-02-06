@@ -153,15 +153,15 @@ pub async fn record_video(
     let new_chunk_callback = {
         let db_clone = Arc::clone(&db);
         let device_name_clone = Arc::clone(&device_name);
-        move |file_path: &str| {
+        move |file_path: &str, chunk_fps: f64| {
             let file_path = file_path.to_string();
             let db = Arc::clone(&db_clone);
             let device_name = Arc::clone(&device_name_clone);
 
             // Just spawn the task directly
             tokio::spawn(async move {
-                debug!("Inserting new video chunk: {}", file_path);
-                if let Err(e) = db.insert_video_chunk(&file_path, &device_name).await {
+                debug!("Inserting new video chunk: {} (fps={})", file_path, chunk_fps);
+                if let Err(e) = db.insert_video_chunk_with_fps(&file_path, &device_name, chunk_fps).await {
                     error!("Failed to insert new video chunk: {}", e);
                 } else {
                     debug!("Successfully inserted video chunk: {}", file_path);

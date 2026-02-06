@@ -443,10 +443,20 @@ impl DatabaseManager {
         file_path: &str,
         device_name: &str,
     ) -> Result<i64, sqlx::Error> {
+        self.insert_video_chunk_with_fps(file_path, device_name, 0.5).await
+    }
+
+    pub async fn insert_video_chunk_with_fps(
+        &self,
+        file_path: &str,
+        device_name: &str,
+        fps: f64,
+    ) -> Result<i64, sqlx::Error> {
         let mut tx = self.begin_immediate_with_retry().await?;
-        let id = sqlx::query("INSERT INTO video_chunks (file_path, device_name) VALUES (?1, ?2)")
+        let id = sqlx::query("INSERT INTO video_chunks (file_path, device_name, fps) VALUES (?1, ?2, ?3)")
             .bind(file_path)
             .bind(device_name)
+            .bind(fps)
             .execute(&mut **tx.conn())
             .await?
             .last_insert_rowid();
@@ -2054,6 +2064,7 @@ impl DatabaseManager {
             COALESCE(f.window_name, ot.window_name) as window_name,
             vc.device_name as screen_device,
             vc.file_path as video_path,
+            vc.fps as chunk_fps,
             f.browser_url
         FROM frames f
         JOIN video_chunks vc ON f.video_chunk_id = vc.id
@@ -2106,10 +2117,12 @@ impl DatabaseManager {
             let offset_index: i64 = row.get("offset_index");
             let key = (timestamp, offset_index);
 
+            let chunk_fps: f64 = row.try_get("chunk_fps").unwrap_or(0.5);
             let frame_data = frames_map.entry(key).or_insert_with(|| FrameData {
                 frame_id: row.get("id"),
                 timestamp,
                 offset_index,
+                fps: chunk_fps,
                 ocr_entries: Vec::new(),
                 audio_entries: Vec::new(),
             });

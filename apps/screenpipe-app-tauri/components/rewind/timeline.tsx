@@ -29,6 +29,8 @@ export interface DeviceFrameResponse {
 	device_id: string;
 	frame_id: string;
 	frame: string; // base64 encoded image
+	offset_index: number;
+	fps: number;
 	metadata: DeviceMetadata;
 	audio: AudioData[];
 }

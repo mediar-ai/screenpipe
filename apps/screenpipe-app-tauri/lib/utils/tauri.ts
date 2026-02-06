@@ -655,7 +655,13 @@ export type PiCheckResult = { available: boolean; path: string | null }
 export type PiImageContent = { type: string; source: PiImageSource }
 export type PiImageSource = { type: string; mediaType: string; data: string }
 export type PiInfo = { running: boolean; projectDir: string | null; pid: number | null; sessionId: string | null }
-export type SettingsStore = { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; userId: string; 
+export type SettingsStore = 
+/**
+ * Catch-all for fields added by the frontend (e.g. chatHistory, deviceId)
+ * that the Rust struct doesn't know about. Without this, `save()` would
+ * serialize only known fields and silently wipe frontend-only data.
+ */
+({ [key in string]: null | boolean | number | string | JsonValue[] | { [key in string]: JsonValue } }) & { aiPresets: AIPreset[]; deepgramApiKey: string; isLoading: boolean; userId: string; 
 /**
  * Persistent analytics ID used for PostHog tracking (both frontend and backend)
  */
