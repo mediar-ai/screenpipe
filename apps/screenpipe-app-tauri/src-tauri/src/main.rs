@@ -1514,15 +1514,18 @@ async fn main() {
                 }
             }
 
-            // On notched MacBooks, new NSStatusItems go to the LEFT of existing ones,
-            // which can land behind the notch if many menu bar apps are running.
-            // The old recreate_tray trick didn't help (new items still go leftmost).
-            // Instead, we log the tray icon position so we can diagnose visibility.
+            // On notched MacBooks, the tray icon can land behind the notch.
+            // Recreate after a long delay so all other menu bar apps have registered
+            // their icons first — our new icon then gets the rightmost position
+            // (closest to system icons = most visible).
             #[cfg(target_os = "macos")]
             {
                 let app_tray = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                    tray::log_tray_position(&app_tray);
+                    tray::recreate_tray(&app_tray);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     tray::log_tray_position(&app_tray);
                 });
             }

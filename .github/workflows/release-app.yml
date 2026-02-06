@@ -142,15 +142,11 @@ jobs:
         id: detect-xcode
         shell: bash
         run: |
-          XCODE_MAJOR=$(xcodebuild -version 2>/dev/null | head -1 | grep -o '[0-9]*' | head -1 || echo "0")
-          echo "Xcode major version: $XCODE_MAJOR"
-          if [ "$XCODE_MAJOR" -ge 26 ]; then
-            echo "has_apple_intelligence=true" >> $GITHUB_OUTPUT
-            echo "✅ Xcode $XCODE_MAJOR detected — Apple Intelligence feature will be enabled"
-          else
-            echo "has_apple_intelligence=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ Xcode $XCODE_MAJOR — Apple Intelligence feature skipped (needs Xcode 26+)"
-          fi
+          # TEMPORARILY DISABLED: Apple Intelligence crashes on macOS < 26 despite weak-linking
+          # The FoundationModels.framework causes issues even with runtime guards.
+          # Re-enable when we have a proper solution for older macOS versions.
+          echo "has_apple_intelligence=false" >> $GITHUB_OUTPUT
+          echo "⚠️ Apple Intelligence feature temporarily disabled in CI/CD to prevent crashes on older macOS"
 
       - name: Enable Git long paths on Windows
         if: matrix.os_type == 'windows'
