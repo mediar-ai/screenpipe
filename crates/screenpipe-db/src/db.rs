@@ -2117,7 +2117,7 @@ impl DatabaseManager {
             let offset_index: i64 = row.get("offset_index");
             let key = (timestamp, offset_index);
 
-            let chunk_fps: Option<f64> = row.try_get("chunk_fps").unwrap_or(None);
+            let chunk_fps: f64 = row.try_get("chunk_fps").unwrap_or(0.5);
             let frame_data = frames_map.entry(key).or_insert_with(|| FrameData {
                 frame_id: row.get("id"),
                 timestamp,

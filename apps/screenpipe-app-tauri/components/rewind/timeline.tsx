@@ -30,8 +30,7 @@ export interface DeviceFrameResponse {
 	frame_id: string;
 	frame: string; // base64 encoded image
 	offset_index: number;
-	/** null for pre-migration chunks — frontend auto-calibrates from video duration */
-	fps: number | null;
+	fps: number;
 	metadata: DeviceMetadata;
 	audio: AudioData[];
 }

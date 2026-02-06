@@ -74,7 +74,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	const [debouncedFrame, setDebouncedFrame] = useState<{
 		filePath: string;
 		offsetIndex: number;
-		fps: number | null;
+		fps: number;
 		frameId: string;
 	} | null>(null);
 
@@ -93,7 +93,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	const frameId = device?.frame_id;
 	const filePath = device?.metadata?.file_path;
 	const offsetIndex = device?.offset_index ?? 0;
-	const fpsFromServer = device?.fps ?? null; // null = pre-migration chunk
+	const fpsFromServer = device?.fps ?? 0.5;
 
 	// Track skipped frames for analytics
 	useEffect(() => {
@@ -131,15 +131,21 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		}
 	}, []);
 
-	// Resolve the effective fps for a chunk: use server value, cached calibration, or compute from video
+	// Resolve the effective fps for a chunk: validate server value, or auto-calibrate from video duration.
+	// Pre-migration chunks default to 0.5 which may be wrong (e.g., CLI uses 1.0).
+	// The sanity check catches this and recalibrates.
 	const resolveEffectiveFps = useCallback((
 		path: string,
-		serverFps: number | null,
+		serverFps: number,
 		video: HTMLVideoElement,
 		offsetIndex: number,
 	): number | null => {
-		// 1. If server provided fps, validate it against video duration
-		if (serverFps !== null && serverFps > 0) {
+		// 1. Check calibration cache first (from a previous correction)
+		const cached = calibratedFpsCache.get(path);
+		if (cached !== undefined) return cached;
+
+		// 2. Validate server fps against video duration
+		if (serverFps > 0) {
 			const expectedTime = offsetIndex / serverFps;
 			if (expectedTime <= video.duration + 0.5) {
 				return serverFps; // looks valid
@@ -148,24 +154,13 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 			console.warn(`fps ${serverFps} invalid for offset ${offsetIndex}: would seek to ${expectedTime.toFixed(1)}s but video is ${video.duration.toFixed(1)}s`);
 		}
 
-		// 2. Check calibration cache
-		const cached = calibratedFpsCache.get(path);
-		if (cached !== undefined) return cached;
-
-		// 3. Auto-calibrate: estimate fps from video duration
-		// At constant fps, video duration ≈ (totalFrames - 1) / fps + 1/fps = totalFrames / fps
-		// We don't know totalFrames here, but we can bound it:
-		// - If offsetIndex is the highest we'll see in this chunk, fps ≈ (offsetIndex + 1) / duration
-		// - We use a conservative estimate since offsetIndex may not be the max
-		// For now, we try common fps values and pick the one where all offsets fit
+		// 3. Auto-calibrate from video duration
 		const duration = video.duration;
 		if (duration <= 0 || !isFinite(duration)) return null;
 
 		// Try common fps values: 0.2, 0.5, 1.0, 2.0
 		const commonFps = [0.2, 0.5, 1.0, 2.0];
 		for (const candidate of commonFps) {
-			// At this fps, max frames in this video = floor(duration * candidate)
-			// offset_index should be < maxFrames
 			const maxOffset = Math.floor(duration * candidate);
 			if (offsetIndex < maxOffset) {
 				calibratedFpsCache.set(path, candidate);
@@ -175,7 +170,6 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		}
 
 		// Last resort: derive directly
-		// Assume at least offsetIndex+1 frames exist, so fps ≈ (offsetIndex + 1) / duration
 		const derived = (offsetIndex + 1) / duration;
 		calibratedFpsCache.set(path, derived);
 		console.log(`derived fps=${derived.toFixed(3)} for ${path} (duration=${duration.toFixed(1)}s, offset=${offsetIndex})`);
@@ -275,7 +269,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					frame_id: fid,
 					success: true,
 					mode: "video_seek",
-					fps_source: serverFps !== null ? "server" : "calibrated",
+					fps_source: calibratedFpsCache.has(path) ? "calibrated" : "server",
 					effective_fps: effectiveFps,
 					frames_skipped: framesSkippedRef.current,
 					image_width: video.videoWidth,
