@@ -82,6 +82,10 @@ harness = false
 name = "frame_comparison_bench"
 harness = false
 
+[[bench]]
+name = "multi_monitor_bench"
+harness = false
+
 [[example]]
 name = "screenpipe-vision-websocket"
 path = "examples/websocket.rs"
