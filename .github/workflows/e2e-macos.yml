@@ -1,18 +1,15 @@
 name: macOS E2E Tests
 
 on:
-  # PR trigger for iteration
   pull_request:
     branches: [main]
     paths:
       - '.github/scripts/e2e/**'
       - '.github/workflows/e2e-macos.yml'
-  # Run after app release builds complete
   workflow_run:
     workflows: ["Release App"]
     types: [completed]
     branches: [main]
-  # Manual trigger
   workflow_dispatch:
 
 concurrency:
@@ -20,16 +17,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Tier 1: GitHub hosted runner (no screen recording, no mic) ────────────
-  # Tests: app builds & launches, API works, UI accessibility tree, tray, settings
+  # ── Tier 1: GitHub hosted runner ──────────────────────────────────────────
+  # Build CLI from source, start server, test API + health
+  # No screen recording or mic — tests what we can without permissions
   e2e-hosted:
     name: macOS E2E (hosted)
-    runs-on: macos-latest
-    timeout-minutes: 30
+    runs-on: macos-14  # M1, Sonoma
+    timeout-minutes: 45
     if: >
       github.event_name == 'pull_request' ||
       github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
       - uses: actions/checkout@v4
@@ -37,118 +35,63 @@ jobs:
       - name: System info
         run: |
           echo "hostname: $(hostname)"
-          echo "os: $(sw_vers -productVersion)"
-          echo "chip: $(sysctl -n machdep.cpu.brand_string)"
-          echo "memory: $(sysctl -n hw.memsize | awk '{printf "%.0fGB", $1/1073741824}')"
-          echo "display: $(system_profiler SPDisplaysDataType 2>/dev/null | head -20)"
+          echo "os:       $(sw_vers -productVersion)"
+          echo "chip:     $(sysctl -n machdep.cpu.brand_string)"
+          echo "memory:   $(sysctl -n hw.memsize | awk '{printf "%.0fGB", $1/1073741824}')"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: /tmp/bigbrother
 
-      - name: Install BigBrother CLI
-        run: |
-          cd /tmp
-          if [ ! -d bigbrother ]; then
-            git clone https://github.com/louis030195/bigbrother.git
-          else
-            cd bigbrother && git pull && cd ..
-          fi
-          cd bigbrother
-          cargo build --release -p bb
-          sudo cp target/release/bb /usr/local/bin/bb
-          bb --version
+      - name: Install system deps
+        run: brew install ffmpeg pkg-config
 
-      - name: Grant accessibility permission
+      - name: Build CLI
         run: |
-          # On hosted runners, we can use tccutil for some permissions
-          # Accessibility is needed for bb to read the app's AX tree
-          sudo tccutil reset Accessibility 2>/dev/null || true
-          # The app will need to be added after launch
+          cargo build --release -p screenpipe-server --features metal
+          echo "CLI built successfully"
+          ls -la target/release/screenpipe-server
+
+      - name: Start screenpipe server
+        run: |
+          # Start without screen/audio recording — just the server + API
+          # --disable-vision and --disable-audio to skip permission-gated features
+          ./target/release/screenpipe-server \
+            --disable-vision \
+            --disable-audio \
+            --port 3030 &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+          echo "server started (PID: $SERVER_PID)"
+
+          # Wait for health API
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
+              echo "✓ health API responding"
+              curl -sf http://localhost:3030/health | python3 -m json.tool
+              break
+            fi
+            echo "waiting for health API... ($i/30)"
+            sleep 2
+          done
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Download latest release
-        run: |
-          # Download the latest .dmg from GitHub releases
-          ASSET_URL=$(curl -sf https://api.github.com/repos/screenpipe/screenpipe/releases/latest \
-            | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          for asset in data.get('assets', []):
-              name = asset['name']
-              # Match aarch64 (M-series) or universal macOS .dmg
-              if name.endswith('.dmg') and ('aarch64' in name or 'universal' in name):
-                  print(asset['browser_download_url'])
-                  break
-          else:
-              # Fall back to any macOS dmg
-              for asset in data.get('assets', []):
-                  if name.endswith('.dmg') and 'darwin' in name.lower():
-                      print(asset['browser_download_url'])
-                      break
-          ")
-          echo "Downloading: $ASSET_URL"
-          curl -L -o /tmp/screenpipe.dmg "$ASSET_URL"
-
-      - name: Install screenpipe
-        run: |
-          hdiutil attach /tmp/screenpipe.dmg -nobrowse -quiet
-          cp -R /Volumes/screenpipe*/screenpipe.app /Applications/
-          hdiutil detach /Volumes/screenpipe* -quiet || true
-          echo "installed screenpipe to /Applications"
-          ls -la /Applications/screenpipe.app/
-
-      - name: Launch screenpipe
-        run: |
-          # Launch the app
-          open -a screenpipe
-          echo "waiting for app to start..."
-          sleep 15
-
-          # Check if process is running
-          if pgrep -f "screenpipe" > /dev/null 2>&1; then
-            echo "✓ screenpipe process running"
-          else
-            echo "✗ screenpipe process NOT running"
-            # Check crash logs
-            ls -la ~/Library/Logs/DiagnosticReports/screenpipe* 2>/dev/null || echo "no crash logs"
-          fi
-
-          # Wait for health API (may fail without screen recording — that's ok)
-          for i in $(seq 1 15); do
-            if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
-              echo "✓ health API responding"
-              curl -sf http://localhost:3030/health | python3 -m json.tool
-              break
-            fi
-            echo "waiting for health API... ($i/15)"
-            sleep 2
-          done
-
-      - name: Run E2E tests (hosted tier)
-        id: e2e
+      - name: Run API tests
         env:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
-          E2E_TIER: hosted
         run: |
-          # On hosted runners, skip recording/permissions suites (no screen recording permission)
-          # Run: launch, api, window, settings, onboarding, chat
-          bun .github/scripts/e2e/run-all.ts --suite launch 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
-          bun .github/scripts/e2e/run-all.ts --suite api 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
+          mkdir -p "$ARTIFACTS_DIR"
+          bun .github/scripts/e2e/run-all.ts --suite api 2>&1 | tee "${{ runner.temp }}/e2e-full.log"
 
-          # These need accessibility — may fail on hosted runner
-          bun .github/scripts/e2e/run-all.ts --suite window 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
-          bun .github/scripts/e2e/run-all.ts --suite settings 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
-
-          echo "done"
+      - name: Stop server
+        if: always()
+        run: kill $SERVER_PID 2>/dev/null || true
 
       - name: Upload artifacts
         if: always()
@@ -160,14 +103,12 @@ jobs:
             ${{ runner.temp }}/e2e-full.log
           retention-days: 14
 
-  # ── Tier 2: Self-hosted runner (full permissions, real display) ───────────
-  # Tests: everything including screen recording, audio, permissions
-  # Requires: Mac Mini with dummy HDMI plug, pre-granted permissions
+  # ── Tier 2: Self-hosted runner (Mac Mini + HDMI dummy plug) ───────────────
+  # Full test suite: screen recording, audio, UI via accessibility
   e2e-self-hosted:
     name: macOS E2E (self-hosted)
     runs-on: [self-hosted, macos-test]
     timeout-minutes: 30
-    # Only run on release or manual dispatch (not PRs — save the machine)
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
@@ -178,10 +119,10 @@ jobs:
       - name: System info
         run: |
           echo "hostname: $(hostname)"
-          echo "os: $(sw_vers -productVersion)"
-          echo "chip: $(sysctl -n machdep.cpu.brand_string)"
-          echo "memory: $(sysctl -n hw.memsize | awk '{printf "%.0fGB", $1/1073741824}')"
-          system_profiler SPDisplaysDataType 2>/dev/null | grep -A5 "Resolution" || echo "no display info"
+          echo "os:       $(sw_vers -productVersion)"
+          echo "chip:     $(sysctl -n machdep.cpu.brand_string)"
+          echo "memory:   $(sysctl -n hw.memsize | awk '{printf "%.0fGB", $1/1073741824}')"
+          system_profiler SPDisplaysDataType 2>/dev/null | grep -A5 "Resolution" || true
 
       - name: Install/update BigBrother CLI
         run: |
@@ -201,11 +142,10 @@ jobs:
       - name: Ensure screenpipe is running
         run: |
           if ! pgrep -f "screenpipe" > /dev/null 2>&1; then
-            echo "screenpipe not running, starting..."
+            echo "starting screenpipe..."
             open -a screenpipe
             sleep 15
           fi
-          # Wait for health
           for i in $(seq 1 30); do
             if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
               echo "✓ health API ready"
@@ -224,7 +164,6 @@ jobs:
       - name: Run full E2E tests
         env:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
-          E2E_TIER: self-hosted
         run: |
           bun .github/scripts/e2e/run-all.ts 2>&1 | tee "${{ runner.temp }}/e2e-full.log"
 
