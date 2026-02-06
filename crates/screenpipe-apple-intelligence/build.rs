@@ -24,6 +24,95 @@ fn main() {
         .trim()
         .to_string();
 
+    // Check if the SDK supports macOS 26+ (FoundationModels.framework)
+    // by looking at the SDK version. SDKs < 26 don't have FoundationModels.
+    let sdk_settings_path = format!("{}/SDKSettings.json", sdk_path);
+    let has_macos26_sdk = if let Ok(contents) = std::fs::read_to_string(&sdk_settings_path) {
+        // Look for "Version" : "26.x" or higher
+        contents.contains("\"26.") || contents.contains("\"27.") || contents.contains("\"28.")
+    } else {
+        // Fallback: check if FoundationModels.framework exists in the SDK
+        std::path::Path::new(&format!(
+            "{}/System/Library/Frameworks/FoundationModels.framework",
+            sdk_path
+        ))
+        .exists()
+    };
+
+    if !has_macos26_sdk {
+        println!("cargo:warning=macOS SDK does not include FoundationModels.framework (need macOS 26+ SDK), building stub");
+        // Create a minimal stub library so linking doesn't fail.
+        // All functions return error codes indicating unavailability.
+        let stub_src = out_dir.join("stub.c");
+        std::fs::write(
+            &stub_src,
+            r#"// Stub: FoundationModels not available on this SDK
+#include <stdlib.h>
+#include <string.h>
+
+static char* make_string(const char* s) {
+    char* p = malloc(strlen(s) + 1);
+    if (p) strcpy(p, s);
+    return p;
+}
+
+int fm_check_availability(char** out_reason) {
+    if (out_reason) *out_reason = make_string("FoundationModels SDK not available at build time");
+    return 4; // unknown/unavailable
+}
+
+void fm_free_string(char* ptr) { if (ptr) free(ptr); }
+
+int fm_generate_text(const char* inst, const char* prompt, char** out_text, char** out_error,
+                     double* time_ms, unsigned long long* mem_before, unsigned long long* mem_after) {
+    if (out_error) *out_error = make_string("Apple Intelligence not available (built without macOS 26 SDK)");
+    if (out_text) *out_text = 0;
+    if (time_ms) *time_ms = 0;
+    if (mem_before) *mem_before = 0;
+    if (mem_after) *mem_after = 0;
+    return -1;
+}
+
+int fm_generate_json(const char* inst, const char* prompt, const char* schema,
+                     char** out_text, char** out_error,
+                     double* time_ms, unsigned long long* mem_before, unsigned long long* mem_after) {
+    if (out_error) *out_error = make_string("Apple Intelligence not available (built without macOS 26 SDK)");
+    if (out_text) *out_text = 0;
+    if (time_ms) *time_ms = 0;
+    if (mem_before) *mem_before = 0;
+    if (mem_after) *mem_after = 0;
+    return -1;
+}
+
+int fm_prewarm(void) { return -1; }
+
+char* fm_supported_languages(void) { return make_string("[]"); }
+"#,
+        )
+        .expect("failed to write stub");
+
+        let status = Command::new("cc")
+            .args(["-c", "-o"])
+            .arg(out_dir.join("stub.o").to_str().unwrap())
+            .arg(stub_src.to_str().unwrap())
+            .status()
+            .expect("failed to compile stub");
+        assert!(status.success(), "stub compilation failed");
+
+        let status = Command::new("ar")
+            .args(["rcs"])
+            .arg(&lib_path)
+            .arg(out_dir.join("stub.o").to_str().unwrap())
+            .status()
+            .expect("failed to create stub archive");
+        assert!(status.success(), "stub archive failed");
+
+        println!("cargo:rustc-link-search=native={}", out_dir.display());
+        println!("cargo:rustc-link-lib=static=foundation_models_bridge");
+        println!("cargo:rerun-if-changed=swift/bridge.swift");
+        return;
+    }
+
     // Compile Swift to static library
     let status = Command::new("swiftc")
         .args([

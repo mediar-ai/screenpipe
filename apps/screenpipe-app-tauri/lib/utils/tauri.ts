@@ -28,6 +28,19 @@ async checkMicrophonePermission() : Promise<OSPermissionStatus> {
 async checkAccessibilityPermissionCmd() : Promise<OSPermissionStatus> {
     return await TAURI_INVOKE("check_accessibility_permission_cmd");
 },
+/**
+ * Reset a permission using tccutil and re-request it
+ * This removes the app from the TCC database and triggers a fresh permission request
+ */
+async resetAndRequestPermission(permission: OSPermission) : Promise<Result<null, string>> {
+    try {
+    await TAURI_INVOKE("reset_and_request_permission", { permission });
+    return { status: "ok", data: null };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getEnv(name: string) : Promise<string> {
     return await TAURI_INVOKE("get_env", { name });
 },
