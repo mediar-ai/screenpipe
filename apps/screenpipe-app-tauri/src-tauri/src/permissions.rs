@@ -53,18 +53,31 @@ pub async fn request_permission(permission: OSPermission) {
                 }
             }
             OSPermission::Microphone => {
-                // Only request if not already granted
                 use nokhwa_bindings_macos::AVAuthorizationStatus;
                 use objc::*;
                 let cls = objc::class!(AVCaptureDevice);
                 let status: AVAuthorizationStatus =
                     unsafe { msg_send![cls, authorizationStatusForMediaType:AVMediaType::Audio.into_ns_str()] };
-                if status != AVAuthorizationStatus::Authorized {
-                    request_av_permission(AVMediaType::Audio);
+                match status {
+                    AVAuthorizationStatus::Authorized => {
+                        // Already granted, nothing to do
+                    }
+                    AVAuthorizationStatus::NotDetermined => {
+                        // First time — show the system prompt
+                        request_av_permission(AVMediaType::Audio);
+                    }
+                    _ => {
+                        // Denied or restricted — system won't show prompt again,
+                        // open System Settings directly so user can toggle it on
+                        info!("microphone permission denied/restricted, opening system settings");
+                        open_permission_settings(OSPermission::Microphone);
+                    }
                 }
             }
             OSPermission::Accessibility => {
                 // Request accessibility permission (shows system prompt)
+                // AXIsProcessTrustedWithOptions with kAXTrustedCheckOptionPrompt
+                // handles both NotDetermined and Denied cases on macOS
                 request_accessibility_permission();
             }
         }
