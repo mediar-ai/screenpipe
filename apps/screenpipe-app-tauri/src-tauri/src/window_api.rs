@@ -692,11 +692,9 @@ impl ShowRewindWindow {
 
                     #[cfg(target_os = "macos")]
                     let window = {
-                        // Accessory mode is required for new windows to appear
-                        // on fullscreen Spaces. We do NOT reset to Regular
-                        // (that causes Space jumping). The tray icon handles
-                        // all user interactions; dock icon is cosmetic.
-                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                        // NOTE: Do NOT switch to Accessory mode here — it hides dock icon
+                        // and tray on notched MacBooks. NSPanel with proper collection
+                        // behaviors handles fullscreen Space visibility instead.
                         let builder = self.window_builder_with_label(app, "/", main_label_for_mode("window"))
                             .title("screenpipe")
                             .inner_size(1200.0, 800.0)
@@ -1167,9 +1165,8 @@ impl ShowRewindWindow {
             ShowRewindWindow::Chat => {
                 #[cfg(target_os = "macos")]
                 let window = {
-                    // Accessory mode required for new windows on fullscreen Spaces.
-                    // No reset to Regular (causes Space jumping).
-                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    // NOTE: Do NOT switch to Accessory mode here — it hides dock icon
+                    // and tray on notched MacBooks. NSPanel handles fullscreen visibility.
                     let builder = self.window_builder(app, "/chat")
                         .inner_size(500.0, 650.0)
                         .min_inner_size(400.0, 500.0)
