@@ -223,6 +223,12 @@ pub struct SettingsStore {
     /// Values: "low", "balanced", "high", "max". Default: "balanced".
     #[serde(rename = "videoQuality", default = "default_video_quality")]
     pub video_quality: String,
+
+    /// Catch-all for fields added by the frontend (e.g. chatHistory, deviceId)
+    /// that the Rust struct doesn't know about. Without this, `save()` would
+    /// serialize only known fields and silently wipe frontend-only data.
+    #[serde(flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 fn default_video_quality() -> String {
@@ -516,6 +522,7 @@ impl Default for SettingsStore {
             overlay_mode: "fullscreen".to_string(),
             show_overlay_in_screen_recording: false,
             video_quality: "balanced".to_string(),
+            extra: std::collections::HashMap::new(),
         }
     }
 }

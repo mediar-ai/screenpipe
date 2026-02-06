@@ -372,7 +372,7 @@ function MessageContent({ message }: { message: Message }) {
 }
 
 export function StandaloneChat() {
-  const { settings, updateSettings, isSettingsLoaded } = useSettings();
+  const { settings, updateSettings, isSettingsLoaded, reloadStore } = useSettings();
   const { isMac } = usePlatform();
   const { items: appItems } = useSqlAutocomplete("app");
 
@@ -541,13 +541,24 @@ export function StandaloneChat() {
     setConversationId(conv.id);
     setShowHistory(false);
 
-    if (settings.chatHistory) {
-      updateSettings({
-        chatHistory: {
-          ...settings.chatHistory,
-          activeConversationId: conv.id,
-        }
-      });
+    // Update activeConversationId directly in the store (read fresh to avoid
+    // overwriting conversations with stale React state)
+    try {
+      const { getStore } = await import("@/lib/hooks/use-settings");
+      const store = await getStore();
+      const freshSettings = await store.get<any>("settings");
+      if (freshSettings?.chatHistory) {
+        await store.set("settings", {
+          ...freshSettings,
+          chatHistory: {
+            ...freshSettings.chatHistory,
+            activeConversationId: conv.id,
+          }
+        });
+        await store.save();
+      }
+    } catch (e) {
+      console.warn("Failed to update active conversation:", e);
     }
   };
 
@@ -1858,8 +1869,12 @@ export function StandaloneChat() {
         <Button
           variant={showHistory ? "secondary" : "ghost"}
           size="sm"
-          onClick={(e) => {
+          onClick={async (e) => {
             e.stopPropagation();
+            if (!showHistory) {
+              // Refresh settings from store to ensure we have latest conversations
+              await reloadStore();
+            }
             setShowHistory(!showHistory);
           }}
           className="h-7 px-2 gap-1 text-xs"
