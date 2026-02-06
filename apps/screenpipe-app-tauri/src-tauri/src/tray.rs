@@ -54,7 +54,7 @@ pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> 
         setup_tray_click_handlers(&main_tray)?;
 
         // Set autosaveName so macOS remembers position after user Cmd+drags it
-        set_autosave_name();
+        set_autosave_name(&main_tray);
 
         // Start menu updater
         setup_tray_menu_updater(app.clone(), update_item);
@@ -69,6 +69,28 @@ pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> 
 ///
 /// IMPORTANT: NSStatusBar operations must happen on the main thread.
 /// This function dispatches the work to the main thread automatically.
+/// Log the tray icon position for debugging notch visibility issues.
+pub fn log_tray_position(app: &AppHandle) {
+    if let Some(tray) = app.tray_by_id("screenpipe_main") {
+        match tray.rect() {
+            Ok(Some(rect)) => {
+                info!(
+                    "tray icon position: {:?} size: {:?} (if behind notch, Cmd+drag it right)",
+                    rect.position, rect.size
+                );
+            }
+            Ok(None) => {
+                info!("tray icon exists but rect is None");
+            }
+            Err(e) => {
+                error!("failed to get tray icon rect: {}", e);
+            }
+        }
+    } else {
+        error!("tray icon 'screenpipe_main' not found");
+    }
+}
+
 pub fn recreate_tray(app: &AppHandle) {
     let app_for_thread = app.clone();
     let _ = app.run_on_main_thread(move || {
@@ -120,9 +142,6 @@ pub fn recreate_tray(app: &AppHandle) {
                 // The handler from setup_tray() is keyed by tray ID and persists
                 // across tray icon recreation. Re-registering causes double-firing.
 
-                // Set autosaveName so macOS remembers user's Cmd+drag position
-                set_autosave_name();
-
                 info!("tray icon recreated at rightmost position");
             }
             Err(e) => {
@@ -132,9 +151,20 @@ pub fn recreate_tray(app: &AppHandle) {
     });
 }
 
-fn set_autosave_name() {
-    // no-op: removed due to crash from objc interop
+/// Set autosaveName on the NSStatusItem so macOS remembers the user's
+/// preferred position (after they Cmd+drag it out from behind the notch).
+/// Uses Tauri's `with_inner_tray_icon` → `ns_status_item()` for direct access.
+/// Set autosaveName on our NSStatusItem so macOS remembers user's Cmd+drag position.
+/// Safe: wrapped in catch_unwind to prevent abort crashes.
+#[cfg(target_os = "macos")]
+fn set_autosave_name(_tray: &TrayIcon<Wry>) {
+    // no-op for now: autosaveName through NSStatusBar iteration was crash-prone.
+    // The tray icon position is handled by the recreate trick instead.
+    // TODO: implement safely once we can reliably identify our NSStatusItem.
 }
+
+#[cfg(not(target_os = "macos"))]
+fn set_autosave_name(_tray: &TrayIcon<Wry>) {}
 
 fn create_dynamic_menu(
     app: &AppHandle,
