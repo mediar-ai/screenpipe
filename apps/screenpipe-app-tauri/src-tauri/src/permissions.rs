@@ -47,9 +47,14 @@ pub async fn request_permission(permission: OSPermission) {
         match permission {
             OSPermission::ScreenRecording => {
                 use core_graphics_helmer_fork::access::ScreenCaptureAccess;
-                // Only request if not already granted
                 if !ScreenCaptureAccess.preflight() {
+                    // Try request() first — on macOS this opens System Settings for
+                    // screen recording (there's no modal prompt for screen capture).
+                    // If the app is already in the TCC list as denied, request() may
+                    // silently no-op, so we also open settings directly as fallback.
                     ScreenCaptureAccess.request();
+                    // Also open System Settings directly to ensure the user sees it
+                    open_permission_settings(OSPermission::ScreenRecording);
                 }
             }
             OSPermission::Microphone => {
@@ -369,9 +374,9 @@ pub async fn start_permission_monitor(app: tauri::AppHandle) {
     }
 
     // Extra delay after onboarding to let permissions settle
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
-    let mut check_interval = interval(Duration::from_secs(30));
+    let mut check_interval = interval(Duration::from_secs(10));
     let mut last_screen_ok = true;
     let mut last_mic_ok = true;
     let mut last_accessibility_ok = true;
@@ -381,7 +386,7 @@ pub async fn start_permission_monitor(app: tauri::AppHandle) {
     let mut screen_fail_count = 0u32;
     let mut mic_fail_count = 0u32;
     let mut accessibility_fail_count = 0u32;
-    const REQUIRED_CONSECUTIVE_FAILURES: u32 = 3; // Require 3 consecutive failures (~90 seconds)
+    const REQUIRED_CONSECUTIVE_FAILURES: u32 = 2; // Require 2 consecutive failures (~20 seconds)
 
     info!("permission monitor started");
 

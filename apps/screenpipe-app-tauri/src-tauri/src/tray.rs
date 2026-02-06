@@ -36,6 +36,7 @@ struct MenuState {
     shortcuts: HashMap<String, String>,
     recording_status: Option<RecordingStatus>,
     onboarding_completed: bool,
+    has_permission_issue: bool,
 }
 
 pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> Result<()> {
@@ -362,10 +363,24 @@ async fn update_menu_if_needed(
         .map(|o| o.is_completed)
         .unwrap_or(false);
 
+    // Check permission status for tray tooltip
+    let has_permission_issue = if onboarding_completed {
+        #[cfg(target_os = "macos")]
+        {
+            let perms = crate::permissions::do_permissions_check(false);
+            !perms.screen_recording.permitted() || !perms.microphone.permitted()
+        }
+        #[cfg(not(target_os = "macos"))]
+        { false }
+    } else {
+        false
+    };
+
     let new_state = MenuState {
         shortcuts: get_current_shortcuts(app)?,
         recording_status: Some(get_recording_status()),
         onboarding_completed,
+        has_permission_issue,
     };
 
     // Compare with last state
@@ -386,11 +401,19 @@ async fn update_menu_if_needed(
         // thread and crashes.
         let app_for_thread = app.clone();
         let update_item = update_item.clone();
+        let has_perm_issue = new_state.has_permission_issue;
         let _ = app.run_on_main_thread(move || {
             if let Some(tray) = app_for_thread.tray_by_id("screenpipe_main") {
                 if let Ok(menu) = create_dynamic_menu(&app_for_thread, &new_state, &update_item) {
                     let _ = tray.set_menu(Some(menu));
                 }
+                // Update tooltip to show permission status
+                let tooltip = if has_perm_issue {
+                    "screenpipe — ⚠️ permissions needed"
+                } else {
+                    "screenpipe"
+                };
+                let _ = tray.set_tooltip(Some(tooltip));
             }
         });
     }

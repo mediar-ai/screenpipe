@@ -1394,6 +1394,23 @@ async fn main() {
             let use_dev_mode = store.dev_mode;
             info!("use_dev_mode: {}", use_dev_mode);
 
+            // Startup permission gate: check permissions immediately after onboarding
+            // and show recovery window if any critical permission is missing.
+            // This catches revoked permissions before the server even tries to start.
+            #[cfg(target_os = "macos")]
+            if onboarding_store.is_completed {
+                let startup_perms = permissions::do_permissions_check(false);
+                let screen_ok = startup_perms.screen_recording.permitted();
+                let mic_ok = startup_perms.microphone.permitted();
+                if !screen_ok || !mic_ok {
+                    warn!(
+                        "Startup permission check failed — screen: {:?}, mic: {:?}. Showing recovery window.",
+                        startup_perms.screen_recording, startup_perms.microphone
+                    );
+                    let _ = ShowRewindWindow::PermissionRecovery.show(&app.handle());
+                }
+            }
+
             // Start embedded server in non-dev mode
             // Use a dedicated thread with its own tokio runtime to avoid competing with Tauri's UI runtime
             if !use_dev_mode {

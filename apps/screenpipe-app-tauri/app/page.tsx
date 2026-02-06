@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { RefreshCw, AlertTriangle, WifiOff } from "lucide-react";
 import { PermissionButtons } from "@/components/status/permission-buttons";
+import { PermissionBanner } from "@/components/status/permission-banner";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import SplashScreen from "@/components/splash-screen";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
@@ -169,6 +170,7 @@ export default function Home() {
       <div className="h-8 bg-gradient-to-b from-black/15 to-transparent w-full fixed top-0 left-0 z-[1000] pointer-events-none" />
       
       <NotificationHandler />
+      <PermissionBanner />
       {/* Only render content after settings are loaded */}
       {isSettingsLoaded ? (
         <>
