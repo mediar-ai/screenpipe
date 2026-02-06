@@ -170,6 +170,11 @@ pub async fn sync_init(
     let is_syncing = runtime_state.is_syncing.clone();
     let last_sync = runtime_state.last_sync.clone();
     let last_error = runtime_state.last_error.clone();
+    let sync_manager_for_events = manager.clone();
+    let sync_provider_for_events = Arc::new(ScreenpipeSyncProvider::new(
+        state.db.clone(),
+        machine_id.clone(),
+    ));
 
     tokio::spawn(async move {
         use screenpipe_core::sync::SyncEvent;
@@ -184,9 +189,42 @@ pub async fn sync_init(
                         "sync cycle completed: {} blobs uploaded ({} bytes) in {:.2}s",
                         report.blobs_uploaded, report.bytes_uploaded, report.duration_secs
                     );
-                    *is_syncing.write().await = false;
                     *last_sync.write().await = Some(chrono::Utc::now().to_rfc3339());
                     *last_error.write().await = None;
+
+                    // Auto-download from other devices after upload
+                    let end = chrono::Utc::now();
+                    let start = end - chrono::Duration::hours(24);
+                    match sync_manager_for_events.download_by_time_range(
+                        Some(start.to_rfc3339()),
+                        Some(end.to_rfc3339()),
+                        None,
+                        Some(100),
+                    ).await {
+                        Ok(blobs) if !blobs.is_empty() => {
+                            info!("downloaded {} blobs from other devices", blobs.len());
+                            let mut imported = 0;
+                            for blob in blobs {
+                                let chunk: Result<crate::sync_provider::SyncChunk, _> = serde_json::from_slice(&blob.data);
+                                match chunk {
+                                    Ok(chunk) => {
+                                        match sync_provider_for_events.import_chunk(&chunk).await {
+                                            Ok(result) => {
+                                                imported += result.imported_frames + result.imported_ocr + result.imported_transcriptions + result.imported_accessibility + result.imported_ui_events;
+                                            }
+                                            Err(e) => error!("failed to import chunk: {}", e),
+                                        }
+                                    }
+                                    Err(e) => error!("failed to deserialize chunk: {}", e),
+                                }
+                            }
+                            info!("imported {} records from other devices", imported);
+                        }
+                        Ok(_) => debug!("no new blobs from other devices"),
+                        Err(e) => debug!("download from other devices failed: {}", e),
+                    }
+
+                    *is_syncing.write().await = false;
                 }
                 SyncEvent::Failed(err) => {
                     error!("sync cycle failed: {}", err);
