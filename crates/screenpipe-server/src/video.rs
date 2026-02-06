@@ -3,14 +3,13 @@ use crossbeam::queue::ArrayQueue;
 use dashmap::DashMap;
 use image::ImageFormat::{self};
 use screenpipe_core::{find_ffmpeg_path, Language};
-use screenpipe_vision::monitor::get_monitor_by_id;
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
 };
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncBufReadExt;
@@ -104,13 +103,11 @@ pub struct VideoCapture {
     /// Tracks which frames were written to video and at what offset.
     /// Used by DB insertion to ensure correct offset mapping.
     pub frame_write_tracker: Arc<FrameWriteTracker>,
-    // Add handles to tasks so we can monitor their status
+    // Task handles — aborted on Drop for clean shutdown
     capture_thread_handle: tokio::task::JoinHandle<()>,
     queue_thread_handle: tokio::task::JoinHandle<()>,
     video_thread_handle: tokio::task::JoinHandle<()>,
-    monitor_check_handle: tokio::task::JoinHandle<()>, // New handle for monitor check
-    monitor_available: Arc<AtomicBool>,                // Flag to track monitor availability
-    monitor_id: u32,                                   // Store monitor ID for availability checks
+    monitor_id: u32,
 }
 
 impl VideoCapture {
@@ -142,8 +139,6 @@ impl VideoCapture {
         let frame_write_tracker = Arc::new(FrameWriteTracker::new());
         let new_chunk_callback = Arc::new(new_chunk_callback);
         let new_chunk_callback_clone = Arc::clone(&new_chunk_callback);
-        let monitor_available = Arc::new(AtomicBool::new(true));
-        let monitor_available_clone = monitor_available.clone();
 
         info!(
             "Starting VideoCapture for monitor {}, max queue size: {}, fps: {}",
@@ -155,9 +150,7 @@ impl VideoCapture {
         let (result_sender, mut result_receiver) = channel(512);
         let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list, ignored_urls));
 
-        // Add parameters for monitoring restart
         let capture_ocr_engine = ocr_engine.clone();
-        let capture_monitor_available = monitor_available.clone();
         let capture_window_filters = window_filters.clone();
         let capture_languages = languages.clone();
         let capture_result_sender = result_sender.clone();
@@ -165,26 +158,13 @@ impl VideoCapture {
         let capture_unfocused = capture_unfocused_windows;
         let capture_activity_feed = activity_feed;
 
-        // Store task handles for health monitoring
         let capture_thread = tokio::spawn(async move {
             info!(
-                "Starting continuous_capture task for monitor {}",
+                "Starting continuous_capture for monitor {}",
                 monitor_id
             );
 
             loop {
-                // Check if monitor is available before starting capture
-                if !capture_monitor_available.load(Ordering::SeqCst) {
-                    warn!(
-                        "Monitor {} is not available, waiting before starting capture",
-                        monitor_id
-                    );
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                    continue;
-                }
-
-                info!("Starting continuous_capture for monitor {}", monitor_id);
-
                 match continuous_capture(
                     capture_result_sender.clone(),
                     capture_interval,
@@ -197,19 +177,21 @@ impl VideoCapture {
                 )
                 .await
                 {
-                    Ok(_) => warn!(
-                        "continuous_capture task for monitor {} completed unexpectedly",
-                        monitor_id
-                    ),
-                    Err(e) => error!(
-                        "continuous_capture task for monitor {} failed with error: {}",
-                        monitor_id, e
-                    ),
+                    Ok(_) => {
+                        info!(
+                            "continuous_capture for monitor {} completed",
+                            monitor_id
+                        );
+                        break;
+                    }
+                    Err(e) => {
+                        error!(
+                            "continuous_capture for monitor {} failed: {}, restarting in 5s",
+                            monitor_id, e
+                        );
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
                 }
-
-                // If we get here, either the task completed or failed
-                // Wait before attempting restart
-                tokio::time::sleep(Duration::from_secs(5)).await;
             }
         });
 
@@ -348,34 +330,6 @@ impl VideoCapture {
             );
         });
 
-        // Add monitor availability check task
-        let monitor_check_handle = tokio::spawn(async move {
-            info!(
-                "Starting monitor availability check for monitor {}",
-                monitor_id
-            );
-            let mut check_interval = tokio::time::interval(Duration::from_secs(10));
-
-            loop {
-                check_interval.tick().await;
-
-                // Check if monitor is available
-                let monitor_exists = (get_monitor_by_id(monitor_id).await).is_some();
-
-                // Update availability flag
-                let current_availability = monitor_available_clone.load(Ordering::SeqCst);
-                if monitor_exists != current_availability {
-                    monitor_available_clone.store(monitor_exists, Ordering::SeqCst);
-
-                    if monitor_exists {
-                        info!("Monitor {} is now available", monitor_id);
-                    } else {
-                        warn!("Monitor {} is no longer available", monitor_id);
-                    }
-                }
-            }
-        });
-
         VideoCapture {
             video_frame_queue,
             ocr_frame_queue,
@@ -383,42 +337,26 @@ impl VideoCapture {
             capture_thread_handle: capture_thread,
             queue_thread_handle: queue_thread,
             video_thread_handle: video_thread,
-            monitor_check_handle,
-            monitor_available,
             monitor_id,
         }
     }
 
-    // Modify check_health to include monitor check task
     pub fn check_health(&self) -> bool {
         let capture_ok = !self.capture_thread_handle.is_finished();
         let queue_ok = !self.queue_thread_handle.is_finished();
         let video_ok = !self.video_thread_handle.is_finished();
-        let monitor_check_ok = !self.monitor_check_handle.is_finished();
-        let monitor_available = self.monitor_available.load(Ordering::SeqCst);
 
         if !capture_ok {
-            error!("continuous_capture task has terminated unexpectedly");
+            error!("monitor {}: capture task terminated", self.monitor_id);
         }
         if !queue_ok {
-            error!("queue processing task has terminated unexpectedly");
+            error!("monitor {}: queue task terminated", self.monitor_id);
         }
         if !video_ok {
-            error!("save_frames_as_video task has terminated unexpectedly");
-        }
-        if !monitor_check_ok {
-            error!("monitor check task has terminated unexpectedly");
-        }
-        if !monitor_available {
-            warn!("monitor {} is currently unavailable", self.monitor_id);
+            error!("monitor {}: video task terminated", self.monitor_id);
         }
 
-        capture_ok && queue_ok && video_ok && monitor_check_ok
-    }
-
-    // Add method to check if monitor is available
-    pub fn is_monitor_available(&self) -> bool {
-        self.monitor_available.load(Ordering::SeqCst)
+        capture_ok && queue_ok && video_ok
     }
 }
 
@@ -431,7 +369,6 @@ impl Drop for VideoCapture {
         self.capture_thread_handle.abort();
         self.queue_thread_handle.abort();
         self.video_thread_handle.abort();
-        self.monitor_check_handle.abort();
     }
 }
 

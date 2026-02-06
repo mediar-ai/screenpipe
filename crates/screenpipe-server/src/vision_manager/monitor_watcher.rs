@@ -19,7 +19,7 @@ pub async fn start_monitor_watcher(vision_manager: Arc<VisionManager>) -> anyhow
     // Stop existing watcher if any
     stop_monitor_watcher().await?;
 
-    info!("Starting monitor watcher (polling every 2 seconds)");
+    info!("Starting monitor watcher (polling every 5 seconds)");
 
     let handle = tokio::spawn(async move {
         // Track monitors that were disconnected (for reconnection detection)
@@ -47,7 +47,7 @@ pub async fn start_monitor_watcher(vision_manager: Arc<VisionManager>) -> anyhow
         loop {
             // Only poll when running
             if vision_manager.status().await != VisionManagerStatus::Running {
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                tokio::time::sleep(Duration::from_secs(5)).await;
                 continue;
             }
 
@@ -118,8 +118,8 @@ pub async fn start_monitor_watcher(vision_manager: Arc<VisionManager>) -> anyhow
                 }
             }
 
-            // Poll every 2 seconds
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            // Poll every 5 seconds — monitor connect/disconnect is not latency-sensitive
+            tokio::time::sleep(Duration::from_secs(5)).await;
         }
     });
 

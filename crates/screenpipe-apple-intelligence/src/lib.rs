@@ -15,8 +15,5 @@ mod engine;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub use engine::*;
 
-#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-compile_error!(
-    "screenpipe-apple-intelligence requires macOS on Apple Silicon (aarch64). \
-     Foundation Models framework is only available on macOS 26+ with Apple Silicon."
-);
+// On non-macOS/non-aarch64 this crate is a no-op.
+// The feature gate in screenpipe-server ensures this code is never actually used.
