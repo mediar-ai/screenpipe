@@ -1,9 +1,7 @@
 use anyhow::Result;
 use regex::Regex;
 use screenpipe_db::DatabaseManager;
-use screenpipe_vision::frame_comparison::{
-    calculate_image_hash, FrameComparer, FrameComparisonConfig,
-};
+use screenpipe_vision::frame_comparison::{FrameComparer, FrameComparisonConfig};
 use screenpipe_vision::utils::OcrEngine;
 
 #[cfg(target_os = "macos")]
@@ -149,8 +147,7 @@ pub async fn handle_index_command(
 
         for (idx, frame) in frames.iter().enumerate() {
             // Compare with previous frame to skip similar ones using optimized comparer
-            let frame_hash = calculate_image_hash(frame);
-            let current_diff = frame_comparer.compare(frame, frame_hash);
+            let current_diff = frame_comparer.compare(frame);
 
             // Skip if frames are too similar (threshold from core.rs)
             if current_diff < 0.006 && idx > 0 {

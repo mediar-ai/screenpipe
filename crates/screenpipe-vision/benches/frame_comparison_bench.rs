@@ -117,14 +117,10 @@ fn bench_frame_comparison(c: &mut Criterion) {
             |b, (img1, img2_same, img2_diff)| {
                 b.iter(|| {
                     let mut comparer = FrameComparer::new(FrameComparisonConfig::default());
-                    let hash1 = calculate_image_hash(img1);
-                    let hash2 = calculate_image_hash(img2_same);
-                    let hash3 = calculate_image_hash(img2_diff);
-
                     // Simulate: first frame, identical frame, different frame
-                    comparer.compare(black_box(img1), hash1);
-                    comparer.compare(black_box(img2_same), hash2); // Should hash-hit
-                    comparer.compare(black_box(img2_diff), hash3); // Should compare
+                    comparer.compare(black_box(img1));
+                    comparer.compare(black_box(img2_same)); // Should hash-hit
+                    comparer.compare(black_box(img2_diff)); // Should compare
                 });
             },
         );

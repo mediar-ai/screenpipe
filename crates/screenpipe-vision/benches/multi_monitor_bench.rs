@@ -14,10 +14,9 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use image::imageops::FilterType;
 use image::{DynamicImage, Rgb, RgbImage};
 use screenpipe_vision::frame_comparison::{
-    calculate_image_hash, compare_histogram, FrameComparer, FrameComparisonConfig,
+    compare_histogram, FrameComparer, FrameComparisonConfig,
 };
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::time::Instant;
 
 // ============================================================
 // Realistic monitor configurations
@@ -338,9 +337,7 @@ fn bench_multi_monitor_pipeline(c: &mut Criterion) {
                     for frame_idx in 0..5 {
                         for (mon_idx, frames) in all_frames.iter().enumerate() {
                             let (ref img, _) = frames[frame_idx];
-                            // Full-res hash (current behavior)
-                            let hash = calculate_image_hash(img);
-                            let _diff = comparers[mon_idx].compare(black_box(img), hash);
+                            let _diff = comparers[mon_idx].compare(black_box(img));
                             total_ops += 1;
                         }
                     }
@@ -349,40 +346,26 @@ fn bench_multi_monitor_pipeline(c: &mut Criterion) {
             },
         );
 
-        // Proposed: downscaled hash + proportional downscale
+        // Old approach: full-res hash + fixed 640x360 downscale + separate hash & downscale
         group.bench_with_input(
-            BenchmarkId::new("proposed_downscale_hash", setup_name),
-            &(frames_per_monitor.clone(), monitor_indices.to_vec()),
-            |b, (all_frames, mon_idxs)| {
+            BenchmarkId::new("old_fullres_hash_fixed_downscale", setup_name),
+            &frames_per_monitor,
+            |b, all_frames| {
                 b.iter(|| {
                     let mut comparers: Vec<FrameComparer> = (0..all_frames.len())
-                        .map(|i| {
-                            let mon = &MONITORS[mon_idxs[i]];
-                            let pw = (mon.width / 4).max(1);
-                            let ph = (mon.height / 4).max(1);
-                            FrameComparer::new(FrameComparisonConfig {
-                                hash_early_exit: true,
-                                downscale_comparison: true,
-                                comparison_width: pw,
-                                comparison_height: ph,
-                                single_metric: true,
-                            })
-                        })
+                        .map(|_| FrameComparer::new(FrameComparisonConfig {
+                            downscale_factor: 0, // Legacy: use fixed 640x360
+                            comparison_width: 640,
+                            comparison_height: 360,
+                            ..Default::default()
+                        }))
                         .collect();
 
                     let mut total_ops = 0u64;
                     for frame_idx in 0..5 {
                         for (mon_idx, frames) in all_frames.iter().enumerate() {
                             let (ref img, _) = frames[frame_idx];
-                            let mon = &MONITORS[mon_idxs[mon_idx]];
-                            // Downscale then hash (proposed)
-                            let pw = (mon.width / 4).max(1);
-                            let ph = (mon.height / 4).max(1);
-                            let small = img.resize_exact(pw, ph, FilterType::Nearest);
-                            let mut hasher = DefaultHasher::new();
-                            small.as_bytes().hash(&mut hasher);
-                            let hash = hasher.finish();
-                            let _diff = comparers[mon_idx].compare(black_box(img), hash);
+                            let _diff = comparers[mon_idx].compare(black_box(img));
                             total_ops += 1;
                         }
                     }

@@ -72,12 +72,44 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
     result.score
 }
 
+/// Capture only the monitor screenshot (no window capture, no hash).
+/// Window capture is deferred until after frame comparison to avoid
+/// expensive work on frames that will be skipped.
+pub async fn capture_monitor_image(
+    monitor: &SafeMonitor,
+) -> Result<(DynamicImage, Duration), anyhow::Error> {
+    let capture_start = Instant::now();
+    let image = monitor.capture_image().await.map_err(|e| {
+        debug!("failed to capture monitor image: {}", e);
+        anyhow::anyhow!("monitor capture failed")
+    })?;
+    let capture_duration = capture_start.elapsed();
+    Ok((image, capture_duration))
+}
+
+/// Capture all visible windows on a monitor (called only when frame changed).
+pub async fn capture_windows(
+    monitor: &SafeMonitor,
+    window_filters: &WindowFilters,
+    capture_unfocused_windows: bool,
+) -> Vec<CapturedWindow> {
+    match capture_all_visible_windows(monitor, window_filters, capture_unfocused_windows).await {
+        Ok(images) => images,
+        Err(e) => {
+            warn!(
+                "Failed to capture window images: {}. Continuing with empty result.",
+                e
+            );
+            Vec::new()
+        }
+    }
+}
+
 pub async fn capture_screenshot(
     monitor: &SafeMonitor,
     window_filters: &WindowFilters,
     capture_unfocused_windows: bool,
 ) -> Result<(DynamicImage, Vec<CapturedWindow>, u64, Duration), anyhow::Error> {
-    // info!("Starting screenshot capture for monitor: {:?}", monitor);
     let capture_start = Instant::now();
     let image = monitor.capture_image().await.map_err(|e| {
         debug!("failed to capture monitor image: {}", e);

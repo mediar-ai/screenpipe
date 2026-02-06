@@ -9,8 +9,7 @@ use crate::microsoft::perform_ocr_windows;
 use crate::monitor::get_monitor_by_id;
 use crate::ocr_cache::{WindowCacheKey, WindowOcrCache};
 use crate::tesseract::perform_ocr_tesseract;
-use crate::utils::capture_screenshot;
-use crate::utils::OcrEngine;
+use crate::utils::{capture_monitor_image, capture_windows, OcrEngine};
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
@@ -202,10 +201,12 @@ pub async fn continuous_capture(
     let _ = activity_feed;
 
     loop {
-        // 3. Capture screenshot and wall-clock time atomically
+        // 3. Capture monitor screenshot and wall-clock time atomically.
+        //    Window capture is deferred until after frame comparison to skip
+        //    expensive per-window work on unchanged frames.
         let captured_at = Utc::now();
-        let capture_result =
-            match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
+        let (image, _capture_duration) =
+            match capture_monitor_image(&monitor).await {
                 Ok(result) => result,
                 Err(e) => {
                     debug!("error capturing screenshot: {}", e);
@@ -215,11 +216,10 @@ pub async fn continuous_capture(
                 }
             };
 
-        // 4. Process captured image
-        let (image, window_images, image_hash, _capture_duration) = capture_result;
-
-        // Use optimized frame comparison (hash early exit + downscaled + single metric)
-        let current_diff = frame_comparer.compare(&image, image_hash);
+        // 4. Optimized frame comparison: downscales once (proportional to preserve
+        //    ultrawide aspect ratios), hashes the thumbnail, then compares histograms.
+        //    No full-resolution hash or redundant downscale needed.
+        let current_diff = frame_comparer.compare(&image);
 
         // Get skip threshold from adaptive FPS or use default
         #[cfg(feature = "adaptive-fps")]
@@ -250,12 +250,21 @@ pub async fn continuous_capture(
             continue;
         }
 
+        // 4b. Capture windows only for frames that passed the change threshold.
+        //     This avoids expensive per-window screenshots + CGWindowList enumeration
+        //     on unchanged frames (major CPU savings on multi-monitor setups).
+        let window_images = capture_windows(
+            &monitor,
+            &window_filters,
+            capture_unfocused_windows,
+        ).await;
+
         // Track the frame with maximum difference for OCR processing
         if current_diff > max_avg_value {
             max_average = Some(MaxAverageFrame {
                 image: image.clone(),
-                window_images: window_images.clone(),
-                image_hash,
+                window_images: window_images,
+                image_hash: 0, // Hash is now internal to FrameComparer
                 frame_number: frame_counter,
                 timestamp: Instant::now(),
                 captured_at,
