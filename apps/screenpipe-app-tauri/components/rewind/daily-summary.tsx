@@ -445,8 +445,14 @@ export function DailySummaryCard({
         const fallbackData = await fallbackResp.json();
         let raw = fallbackData.choices?.[0]?.message?.content || "{}";
         raw = raw.trim();
+        // Strip markdown fences
         if (raw.startsWith("```")) {
           raw = raw.split("\n").slice(1).filter((l: string) => !l.startsWith("```")).join("\n");
+        }
+        // Extract JSON object if model prepended text like "Here is the summary:"
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          raw = jsonMatch[0];
         }
         parsed = JSON.parse(raw);
       } else {
