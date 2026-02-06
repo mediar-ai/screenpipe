@@ -431,15 +431,24 @@ export function StandaloneChat() {
   // Always start with a fresh conversation — history is accessible via the History button
   // (No auto-load of last active conversation)
 
-  // Save conversation to settings
+  // Save conversation to settings.
+  // IMPORTANT: reads fresh from the store (not React state) to avoid
+  // race conditions where the main window overwrites chatHistory with
+  // stale data. See: multi-window store concurrency issue.
   const saveConversation = async (msgs: Message[]) => {
-    if (!settings.chatHistory?.historyEnabled) return;
     if (msgs.length === 0) return;
 
-    const history = settings.chatHistory || { conversations: [], activeConversationId: null, historyEnabled: true };
+    // Read fresh settings from store to get latest conversations
+    const { getStore } = await import("@/lib/hooks/use-settings");
+    const store = await getStore();
+    const freshSettings = await store.get<any>("settings");
+    const history = freshSettings?.chatHistory || { conversations: [], activeConversationId: null, historyEnabled: true };
+
+    if (!history.historyEnabled) return;
+
     const convId = conversationId || crypto.randomUUID();
 
-    const existingIndex = history.conversations.findIndex(c => c.id === convId);
+    const existingIndex = history.conversations.findIndex((c: any) => c.id === convId);
     const firstUserMsg = msgs.find(m => m.role === "user");
     const title = firstUserMsg?.content.slice(0, 50) || "New Chat";
 
@@ -463,13 +472,17 @@ export function StandaloneChat() {
       newConversations = [conversation, ...newConversations].slice(0, 50);
     }
 
-    await updateSettings({
+    // Write only chatHistory — read-modify-write with fresh data
+    const currentFull = freshSettings || {};
+    await store.set("settings", {
+      ...currentFull,
       chatHistory: {
         ...history,
         conversations: newConversations,
         activeConversationId: convId,
       }
     });
+    await store.save();
 
     if (!conversationId) {
       setConversationId(convId);
@@ -478,19 +491,25 @@ export function StandaloneChat() {
 
   // Delete a conversation
   const deleteConversation = async (convId: string) => {
-    const history = settings.chatHistory;
+    // Read fresh from store (same pattern as saveConversation)
+    const { getStore } = await import("@/lib/hooks/use-settings");
+    const store = await getStore();
+    const freshSettings = await store.get<any>("settings");
+    const history = freshSettings?.chatHistory;
     if (!history) return;
 
-    const newConversations = history.conversations.filter(c => c.id !== convId);
+    const newConversations = history.conversations.filter((c: any) => c.id !== convId);
     const newActiveId = history.activeConversationId === convId ? null : history.activeConversationId;
 
-    await updateSettings({
+    await store.set("settings", {
+      ...freshSettings,
       chatHistory: {
         ...history,
         conversations: newConversations,
         activeConversationId: newActiveId,
       }
     });
+    await store.save();
 
     if (conversationId === convId) {
       setMessages([]);
