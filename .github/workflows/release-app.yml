@@ -752,7 +752,7 @@ jobs:
 
   generate-changelog:
     needs: [check_commit, publish-tauri]
-    if: needs.check_commit.outputs.should_release == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
