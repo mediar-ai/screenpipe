@@ -1409,6 +1409,46 @@ async fn main() {
                 let _ = ShowRewindWindow::Main.show(&app.handle());
             }
 
+            // Pre-create chat panel (hidden) so the shortcut can show an
+            // existing panel on fullscreen Spaces. New windows created in
+            // Regular activation policy can't appear on fullscreen Spaces,
+            // but existing panels with MoveToActiveSpace + level 1001 can.
+            if onboarding_store.is_completed {
+                let app_handle_chat = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    // Wait for main window to finish setup
+                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                    if app_handle_chat.get_webview_window("chat").is_none() {
+                        info!("Pre-creating chat panel for fullscreen Space support");
+                        match ShowRewindWindow::Chat.show(&app_handle_chat) {
+                            Ok(window) => {
+                                // Hide it immediately — shortcut will show it later
+                                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                                #[cfg(target_os = "macos")]
+                                {
+                                    use crate::window_api::run_on_main_thread_safe;
+                                    use tauri_nspanel::ManagerExt as _;
+                                    let app_clone = app_handle_chat.clone();
+                                    run_on_main_thread_safe(&app_handle_chat, move || {
+                                        if let Ok(panel) = app_clone.get_webview_panel("chat") {
+                                            panel.order_out(None);
+                                        }
+                                    });
+                                }
+                                #[cfg(not(target_os = "macos"))]
+                                {
+                                    let _ = window.hide();
+                                }
+                                info!("Chat panel pre-created and hidden");
+                            }
+                            Err(e) => {
+                                warn!("Failed to pre-create chat panel: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+
             // Show shortcut reminder overlay on app startup if enabled AND onboarding is completed
             // Don't show reminder during first-time onboarding to reduce overwhelm
             if store.show_shortcut_overlay && onboarding_store.is_completed {

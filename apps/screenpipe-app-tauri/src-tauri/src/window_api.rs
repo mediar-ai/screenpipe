@@ -14,7 +14,7 @@ use tauri_nspanel::WebviewWindowExt;
 /// the process (Rust panics inside `run_on_main_thread` cross the Obj-C FFI
 /// boundary in `tao::send_event`, which is `nounwind` → calls `abort()`).
 #[cfg(target_os = "macos")]
-fn run_on_main_thread_safe<F: FnOnce() + Send + 'static>(app: &AppHandle, f: F) {
+pub fn run_on_main_thread_safe<F: FnOnce() + Send + 'static>(app: &AppHandle, f: F) {
     let _ = app.run_on_main_thread(move || {
         if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
             error!("panic caught in run_on_main_thread: {:?}", e);
