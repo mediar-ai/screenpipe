@@ -93,7 +93,10 @@ pub fn log_tray_position(app: &AppHandle) {
 
 pub fn recreate_tray(app: &AppHandle) {
     let app_for_thread = app.clone();
+    // Wrap in catch_unwind: ObjC exceptions during tray operations can panic
+    // across the FFI boundary (nounwind → abort). catch_unwind prevents this.
     let _ = app.run_on_main_thread(move || {
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let app = app_for_thread;
         let update_item = match UPDATE_MENU_ITEM.lock() {
             Ok(guard) => guard.clone(),
@@ -147,6 +150,9 @@ pub fn recreate_tray(app: &AppHandle) {
             Err(e) => {
                 error!("failed to recreate tray icon: {}", e);
             }
+        }
+        })) {
+            error!("panic caught in recreate_tray: {:?}", e);
         }
     });
 }
@@ -433,17 +439,21 @@ async fn update_menu_if_needed(
         let update_item = update_item.clone();
         let has_perm_issue = new_state.has_permission_issue;
         let _ = app.run_on_main_thread(move || {
-            if let Some(tray) = app_for_thread.tray_by_id("screenpipe_main") {
-                if let Ok(menu) = create_dynamic_menu(&app_for_thread, &new_state, &update_item) {
-                    let _ = tray.set_menu(Some(menu));
+            if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if let Some(tray) = app_for_thread.tray_by_id("screenpipe_main") {
+                    if let Ok(menu) = create_dynamic_menu(&app_for_thread, &new_state, &update_item) {
+                        let _ = tray.set_menu(Some(menu));
+                    }
+                    // Update tooltip to show permission status
+                    let tooltip = if has_perm_issue {
+                        "screenpipe — ⚠️ permissions needed"
+                    } else {
+                        "screenpipe"
+                    };
+                    let _ = tray.set_tooltip(Some(tooltip));
                 }
-                // Update tooltip to show permission status
-                let tooltip = if has_perm_issue {
-                    "screenpipe — ⚠️ permissions needed"
-                } else {
-                    "screenpipe"
-                };
-                let _ = tray.set_tooltip(Some(tooltip));
+            })) {
+                error!("panic caught in tray menu update: {:?}", e);
             }
         });
     }

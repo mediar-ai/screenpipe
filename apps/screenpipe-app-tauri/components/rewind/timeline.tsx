@@ -599,6 +599,9 @@ export default function Timeline() {
 		getStartDateAndSet();
 	}, []);
 
+	const dateRetryCountRef = useRef(0);
+	const MAX_DATE_RETRIES = 7; // Don't walk back more than 7 days
+
 	useEffect(() => {
 		// Wait for websocket to be ready before fetching
 		if (!websocket || websocket.readyState !== WebSocket.OPEN) {
@@ -613,9 +616,19 @@ export default function Timeline() {
 			// (e.g., user clicking day arrows). During navigation, handleDateChange
 			// already handles finding dates with frames.
 			if (!checkFramesForDate && !isNavigatingRef.current) {
+				// Prevent infinite loop: stop walking back after MAX_DATE_RETRIES days
+				if (dateRetryCountRef.current >= MAX_DATE_RETRIES) {
+					console.warn("no frames found after checking", MAX_DATE_RETRIES, "days back, stopping");
+					dateRetryCountRef.current = 0;
+					return;
+				}
+				dateRetryCountRef.current += 1;
 				setCurrentDate(subDays(currentDateEffect, 1));
 				return; // Don't fetch frames for a date we're leaving
 			}
+
+			// Found frames — reset retry counter
+			dateRetryCountRef.current = 0;
 
 			const startTime = new Date(currentDateEffect);
 			startTime.setHours(0, 0, 0, 0);

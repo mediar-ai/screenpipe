@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use stream::AudioStream;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 lazy_static! {
     // Global fallback timestamp for backward compatibility
@@ -76,7 +76,10 @@ pub async fn record_and_transcribe(
                 if is_normal_shutdown(&is_running) {
                     return Err(e);
                 }
-                warn!("record_and_transcribe error, restarting: {}", e);
+                // Use info! instead of warn! — Sentry captures warn+ and this fires
+                // on every successful auto-recovery (e.g., audio hijack → reconnect),
+                // creating thousands of noise events. The error is expected & handled.
+                info!("record_and_transcribe error, restarting: {}", e);
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         }

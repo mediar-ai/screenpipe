@@ -1589,34 +1589,39 @@ export function StandaloneChat() {
         { signal: abortControllerRef.current.signal }
       );
 
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta;
+      try {
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta;
 
-        if (delta?.content) {
-          accumulatedText += delta.content;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? { ...m, content: accumulatedText }
-                : m
-            )
-          );
-        }
+          if (delta?.content) {
+            accumulatedText += delta.content;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMessageId
+                  ? { ...m, content: accumulatedText }
+                  : m
+              )
+            );
+          }
 
-        if (delta?.tool_calls) {
-          for (const toolCall of delta.tool_calls) {
-            const index = toolCall.index;
-            if (!toolCalls[index]) {
-              toolCalls[index] = {
-                id: toolCall.id || "",
-                function: { name: "", arguments: "" },
-              };
+          if (delta?.tool_calls) {
+            for (const toolCall of delta.tool_calls) {
+              const index = toolCall.index;
+              if (!toolCalls[index]) {
+                toolCalls[index] = {
+                  id: toolCall.id || "",
+                  function: { name: "", arguments: "" },
+                };
+              }
+              if (toolCall.id) toolCalls[index].id = toolCall.id;
+              if (toolCall.function?.name) toolCalls[index].function.name = toolCall.function.name;
+              if (toolCall.function?.arguments) toolCalls[index].function.arguments += toolCall.function.arguments;
             }
-            if (toolCall.id) toolCalls[index].id = toolCall.id;
-            if (toolCall.function?.name) toolCalls[index].function.name = toolCall.function.name;
-            if (toolCall.function?.arguments) toolCalls[index].function.arguments += toolCall.function.arguments;
           }
         }
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        throw e;
       }
 
       if (toolCalls.length > 0) {
@@ -1684,18 +1689,23 @@ export function StandaloneChat() {
           { signal: abortControllerRef.current?.signal }
         );
 
-        for await (const chunk of continueStream) {
-          const content = chunk.choices[0]?.delta?.content;
-          if (content) {
-            accumulatedText += content;
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessageId
-                  ? { ...m, content: accumulatedText }
-                  : m
-              )
-            );
+        try {
+          for await (const chunk of continueStream) {
+            const content = chunk.choices[0]?.delta?.content;
+            if (content) {
+              accumulatedText += content;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessageId
+                    ? { ...m, content: accumulatedText }
+                    : m
+                )
+              );
+            }
           }
+        } catch (e: any) {
+          if (e?.name === "AbortError") return;
+          throw e;
         }
       }
 
