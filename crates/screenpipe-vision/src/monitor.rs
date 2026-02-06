@@ -41,6 +41,16 @@ pub struct SafeMonitor {
     monitor_data: Arc<MonitorData>,
     #[cfg(target_os = "macos")]
     use_sck: bool,
+    /// Cached native monitor handle to avoid re-enumerating all monitors on every frame.
+    /// SckMonitor/XcapMonitor are lightweight Clone data structs (just display_id + dimensions).
+    /// The capture methods use the display_id internally, so caching is safe.
+    /// On capture failure, call `refresh()` to re-enumerate (monitor may have changed).
+    #[cfg(target_os = "macos")]
+    cached_sck: Option<SckMonitor>,
+    #[cfg(target_os = "macos")]
+    cached_xcap: Option<XcapMonitor>,
+    #[cfg(not(target_os = "macos"))]
+    cached_xcap: Option<XcapMonitor>,
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +120,8 @@ impl SafeMonitor {
             monitor_id,
             monitor_data,
             use_sck: true,
+            cached_sck: Some(monitor),
+            cached_xcap: None,
         }
     }
 
@@ -130,6 +142,8 @@ impl SafeMonitor {
             monitor_id,
             monitor_data,
             use_sck: false,
+            cached_sck: None,
+            cached_xcap: Some(monitor),
         }
     }
 
@@ -149,22 +163,38 @@ impl SafeMonitor {
         Self {
             monitor_id,
             monitor_data,
+            cached_xcap: Some(monitor),
         }
     }
 
+    /// Capture a screenshot using the cached monitor handle.
+    ///
+    /// Uses `tokio::task::spawn_blocking` instead of `std::thread::spawn` to reuse
+    /// the tokio blocking thread pool (bounded concurrency, no thread creation overhead).
+    ///
+    /// Uses the cached native monitor handle directly — no `Monitor::all()` re-enumeration.
+    /// If the cache is empty (shouldn't happen in normal flow), falls back to enumeration.
     #[cfg(target_os = "macos")]
     pub async fn capture_image(&self) -> Result<DynamicImage> {
         let monitor_id = self.monitor_id;
         let use_sck = self.use_sck;
+        let cached_sck = self.cached_sck.clone();
+        let cached_xcap = self.cached_xcap.clone();
 
-        let image = std::thread::spawn(move || -> Result<DynamicImage> {
+        let image = tokio::task::spawn_blocking(move || -> Result<DynamicImage> {
             if use_sck {
-                // Use sck-rs (ScreenCaptureKit)
-                let monitor = SckMonitor::all()
-                    .map_err(Error::from)?
-                    .into_iter()
-                    .find(|m| m.id() == monitor_id)
-                    .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?;
+                // Use cached sck-rs handle, fall back to enumeration if not cached
+                let monitor = match cached_sck {
+                    Some(m) => m,
+                    None => {
+                        tracing::debug!("sck-rs cache miss for monitor {}, re-enumerating", monitor_id);
+                        SckMonitor::all()
+                            .map_err(Error::from)?
+                            .into_iter()
+                            .find(|m| m.id() == monitor_id)
+                            .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?
+                    }
+                };
 
                 if monitor.width().unwrap_or(0) == 0 || monitor.height().unwrap_or(0) == 0 {
                     return Err(anyhow::anyhow!("Invalid monitor dimensions"));
@@ -175,12 +205,18 @@ impl SafeMonitor {
                     .map_err(|e| anyhow::anyhow!("{}", e))
                     .map(DynamicImage::ImageRgba8)
             } else {
-                // Use xcap (fallback for older macOS)
-                let monitor = XcapMonitor::all()
-                    .map_err(Error::from)?
-                    .into_iter()
-                    .find(|m| m.id().unwrap_or(0) == monitor_id)
-                    .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?;
+                // Use cached xcap handle, fall back to enumeration if not cached
+                let monitor = match cached_xcap {
+                    Some(m) => m,
+                    None => {
+                        tracing::debug!("xcap cache miss for monitor {}, re-enumerating", monitor_id);
+                        XcapMonitor::all()
+                            .map_err(Error::from)?
+                            .into_iter()
+                            .find(|m| m.id().unwrap_or(0) == monitor_id)
+                            .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?
+                    }
+                };
 
                 if monitor.width().unwrap_or(0) == 0 || monitor.height().unwrap_or(0) == 0 {
                     return Err(anyhow::anyhow!("Invalid monitor dimensions"));
@@ -192,8 +228,8 @@ impl SafeMonitor {
                     .map(DynamicImage::ImageRgba8)
             }
         })
-        .join()
-        .unwrap()?;
+        .await
+        .map_err(|e| anyhow::anyhow!("capture task panicked: {}", e))??;
 
         Ok(image)
     }
@@ -201,13 +237,20 @@ impl SafeMonitor {
     #[cfg(not(target_os = "macos"))]
     pub async fn capture_image(&self) -> Result<DynamicImage> {
         let monitor_id = self.monitor_id;
+        let cached_xcap = self.cached_xcap.clone();
 
-        let image = std::thread::spawn(move || -> Result<DynamicImage> {
-            let monitor = XcapMonitor::all()
-                .map_err(Error::from)?
-                .into_iter()
-                .find(|m| m.id().unwrap_or(0) == monitor_id)
-                .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?;
+        let image = tokio::task::spawn_blocking(move || -> Result<DynamicImage> {
+            let monitor = match cached_xcap {
+                Some(m) => m,
+                None => {
+                    tracing::debug!("xcap cache miss for monitor {}, re-enumerating", monitor_id);
+                    XcapMonitor::all()
+                        .map_err(Error::from)?
+                        .into_iter()
+                        .find(|m| m.id().unwrap_or(0) == monitor_id)
+                        .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?
+                }
+            };
 
             if monitor.width().unwrap_or(0) == 0 || monitor.height().unwrap_or(0) == 0 {
                 return Err(anyhow::anyhow!("Invalid monitor dimensions"));
@@ -218,10 +261,94 @@ impl SafeMonitor {
                 .map_err(Error::from)
                 .map(DynamicImage::ImageRgba8)
         })
-        .join()
-        .unwrap()?;
+        .await
+        .map_err(|e| anyhow::anyhow!("capture task panicked: {}", e))??;
 
         Ok(image)
+    }
+
+    /// Refresh the cached monitor handle by re-enumerating all monitors.
+    /// Call this after a capture failure — the monitor may have been reconnected
+    /// with different properties (resolution change, etc.).
+    #[cfg(target_os = "macos")]
+    pub async fn refresh(&mut self) -> Result<()> {
+        let monitor_id = self.monitor_id;
+        let use_sck = self.use_sck;
+
+        let refreshed = tokio::task::spawn_blocking(move || -> Result<(Option<SckMonitor>, Option<XcapMonitor>, MonitorData)> {
+            if use_sck {
+                let monitor = SckMonitor::all()
+                    .map_err(Error::from)?
+                    .into_iter()
+                    .find(|m| m.id() == monitor_id)
+                    .ok_or_else(|| anyhow::anyhow!("Monitor {} not found during refresh", monitor_id))?;
+
+                let data = MonitorData {
+                    width: monitor.width().unwrap_or(0),
+                    height: monitor.height().unwrap_or(0),
+                    x: monitor.x(),
+                    y: monitor.y(),
+                    name: monitor.name().to_string(),
+                    is_primary: monitor.is_primary(),
+                };
+                Ok((Some(monitor), None, data))
+            } else {
+                let monitor = XcapMonitor::all()
+                    .map_err(Error::from)?
+                    .into_iter()
+                    .find(|m| m.id().unwrap_or(0) == monitor_id)
+                    .ok_or_else(|| anyhow::anyhow!("Monitor {} not found during refresh", monitor_id))?;
+
+                let data = MonitorData {
+                    width: monitor.width().unwrap_or(0),
+                    height: monitor.height().unwrap_or(0),
+                    x: monitor.x().unwrap_or(0),
+                    y: monitor.y().unwrap_or(0),
+                    name: monitor.name().unwrap_or_default().to_string(),
+                    is_primary: monitor.is_primary().unwrap_or(false),
+                };
+                Ok((None, Some(monitor), data))
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("refresh task panicked: {}", e))??;
+
+        self.cached_sck = refreshed.0;
+        self.cached_xcap = refreshed.1;
+        self.monitor_data = Arc::new(refreshed.2);
+        tracing::debug!("Refreshed monitor {} cache", self.monitor_id);
+        Ok(())
+    }
+
+    /// Refresh the cached monitor handle by re-enumerating all monitors.
+    #[cfg(not(target_os = "macos"))]
+    pub async fn refresh(&mut self) -> Result<()> {
+        let monitor_id = self.monitor_id;
+
+        let refreshed = tokio::task::spawn_blocking(move || -> Result<(XcapMonitor, MonitorData)> {
+            let monitor = XcapMonitor::all()
+                .map_err(Error::from)?
+                .into_iter()
+                .find(|m| m.id().unwrap_or(0) == monitor_id)
+                .ok_or_else(|| anyhow::anyhow!("Monitor {} not found during refresh", monitor_id))?;
+
+            let data = MonitorData {
+                width: monitor.width().unwrap_or(0),
+                height: monitor.height().unwrap_or(0),
+                x: monitor.x().unwrap_or(0),
+                y: monitor.y().unwrap_or(0),
+                name: monitor.name().unwrap_or_default().to_string(),
+                is_primary: monitor.is_primary().unwrap_or(false),
+            };
+            Ok((monitor, data))
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("refresh task panicked: {}", e))??;
+
+        self.cached_xcap = Some(refreshed.0);
+        self.monitor_data = Arc::new(refreshed.1);
+        tracing::debug!("Refreshed monitor {} cache", self.monitor_id);
+        Ok(())
     }
 
     pub fn id(&self) -> u32 {
