@@ -43,9 +43,7 @@ const failedChunks = new Set<string>();
 // Cache calibrated fps per video file path so we only compute once
 const calibratedFpsCache = new Map<string, number>();
 
-// Only macOS WebKit can decode HEVC natively — Windows/Linux webviews cannot
-const isMacOS = typeof navigator !== "undefined" && /Macintosh|Mac OS X/.test(navigator.userAgent);
-const canUseVideoSeek = isMacOS;
+
 
 export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	currentFrame,
@@ -70,8 +68,8 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	} | null>(null);
 
 	// Whether to use <video> seeking or fall back to <img> via ffmpeg
-	// Only macOS WebKit supports HEVC; Windows (WebView2) and Linux (WebKitGTK) do not
-	const [useVideoMode, setUseVideoMode] = useState(canUseVideoSeek);
+	// Try video mode first on all platforms; onError fallback handles unsupported codecs
+	const [useVideoMode, setUseVideoMode] = useState(true);
 	// Debounced frame — only updates after scroll settles
 	const [debouncedFrame, setDebouncedFrame] = useState<{
 		filePath: string;
