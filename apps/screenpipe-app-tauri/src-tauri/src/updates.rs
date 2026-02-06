@@ -631,6 +631,15 @@ pub fn start_update_check(
 ) -> Result<Arc<UpdatesManager>, Box<dyn std::error::Error>> {
     let updates_manager = Arc::new(UpdatesManager::new(app, interval_minutes)?);
 
+    // Back up current app on every launch so rollback is always available.
+    // Previously backup only ran right before download_and_install, which
+    // meant fresh installs (not via in-app update) had no rollback target.
+    if !is_source_build(app) && !cfg!(debug_assertions) {
+        std::thread::spawn(|| {
+            backup_current_app();
+        });
+    }
+
     // Check for updates at boot
     tokio::spawn({
         let updates_manager = updates_manager.clone();
