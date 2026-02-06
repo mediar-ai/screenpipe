@@ -38,7 +38,7 @@ for (const p of BB_PATHS) {
     }
   } catch {}
 }
-if (!BB) throw new Error("bb (bigbrother) not found. Build it: cd ~/Documents/bigbrother && cargo build --release");
+if (!BB) console.warn("⚠ bb (bigbrother) not found — accessibility tests will be skipped");
 
 // ── State ───────────────────────────────────────────────────────────────────
 
@@ -126,6 +126,7 @@ export function summary(): boolean {
 
 /** Run bb CLI and return parsed JSON output */
 export async function bb(...args: string[]): Promise<any> {
+  if (!BB) throw new Error("bb not available — install bigbrother CLI");
   const proc = Bun.spawnSync([BB, ...args]);
   const stdout = proc.stdout.toString().trim();
   if (proc.exitCode !== 0) {
