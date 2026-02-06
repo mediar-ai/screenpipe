@@ -1222,6 +1222,9 @@ async fn main() {
                 let app_submenu = SubmenuBuilder::new(app, "screenpipe")
                     .item(&PredefinedMenuItem::about(app, Some("About screenpipe"), None)?)
                     .separator()
+                    .item(&MenuItemBuilder::with_id("check_for_updates", "Check for Updates...")
+                        .build(app)?)
+                    .separator()
                     .item(&MenuItemBuilder::with_id("settings", "Settings...")
                         .accelerator("CmdOrCtrl+,")
                         .build(app)?)
@@ -1246,8 +1249,20 @@ async fn main() {
 
                 app.set_menu(menu)?;
                 app.on_menu_event(|app_handle, event| {
-                    if event.id().as_ref() == "settings" {
-                        let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
+                    match event.id().as_ref() {
+                        "settings" => {
+                            let _ = ShowRewindWindow::Settings { page: None }.show(app_handle);
+                        }
+                        "check_for_updates" => {
+                            let app = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let state = app.state::<crate::updates::UpdatesManager>();
+                                if let Err(e) = state.check_for_updates(true).await {
+                                    tracing::error!("menu: check for updates failed: {}", e);
+                                }
+                            });
+                        }
+                        _ => {}
                     }
                 });
 

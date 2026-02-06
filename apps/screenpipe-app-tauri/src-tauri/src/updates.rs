@@ -554,6 +554,19 @@ impl UpdatesManager {
             return Result::Ok(true);
         }
 
+        // No update available
+        if show_dialog {
+            self.app
+                .dialog()
+                .message(format!(
+                    "you're running the latest version (v{})",
+                    self.app.package_info().version
+                ))
+                .title("screenpipe is up to date")
+                .buttons(MessageDialogButtons::Ok)
+                .show(|_| {});
+        }
+
         Result::Ok(false)
     }
 
