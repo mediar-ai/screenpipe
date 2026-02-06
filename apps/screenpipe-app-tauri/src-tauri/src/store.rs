@@ -438,7 +438,7 @@ impl Default for SettingsStore {
             analytics_id: uuid::Uuid::new_v4().to_string(),
          
             dev_mode: false,
-            audio_transcription_engine: "whisper-large-v3-turbo".to_string(),
+            audio_transcription_engine: "whisper-large-v3-turbo-quantized".to_string(),
             #[cfg(target_os = "macos")]
             ocr_engine: "apple-native".to_string(),
             #[cfg(target_os = "windows")]
