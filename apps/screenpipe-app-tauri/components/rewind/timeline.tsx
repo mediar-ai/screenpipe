@@ -195,8 +195,9 @@ export default function Timeline() {
 					};
 
 					// Check cursor position periodically
+					let alreadyHidden = false;
 					checkInterval = setInterval(async () => {
-						if (!initialScreenBounds) return;
+						if (!initialScreenBounds || alreadyHidden) return;
 
 						try {
 							const cursor = await cursorPosition();
@@ -208,6 +209,7 @@ export default function Timeline() {
 
 							if (isOutside) {
 								console.log("Cursor left screen, hiding timeline");
+								alreadyHidden = true;
 								commands.closeWindow("Main");
 							}
 						} catch (e) {
