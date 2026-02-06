@@ -1,0 +1,97 @@
+name: macOS E2E Tests
+
+on:
+  # Run after app release builds complete
+  workflow_run:
+    workflows: ["Release App"]
+    types: [completed]
+    branches: [main]
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner label (self-hosted runner name)"
+        required: false
+        default: "macos-m1-test"
+
+concurrency:
+  group: e2e-macos-${{ github.ref }}
+  cancel-in-progress: false  # don't cancel — these are slow and important
+
+jobs:
+  e2e-test:
+    name: macOS E2E (${{ matrix.runner }})
+    runs-on: [self-hosted, "${{ matrix.runner }}"]
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-m1-test
+          # - macos-m4-test  # uncomment when second runner is added
+    # Only run if the release build succeeded (or manual dispatch)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System info
+        run: |
+          echo "hostname: $(hostname)"
+          echo "os: $(sw_vers -productVersion)"
+          echo "chip: $(sysctl -n machdep.cpu.brand_string)"
+          echo "memory: $(sysctl -n hw.memsize | awk '{printf "%.0fGB", $1/1073741824}')"
+
+      - name: Install/update BigBrother CLI
+        run: |
+          if [ -d "$HOME/Documents/bigbrother" ]; then
+            cd "$HOME/Documents/bigbrother"
+            git pull
+          else
+            cd "$HOME/Documents"
+            git clone https://github.com/louis030195/bigbrother.git
+          fi
+          cd "$HOME/Documents/bigbrother"
+          cargo build --release -p bb
+          sudo cp target/release/bb /usr/local/bin/bb
+
+      - name: Check permissions
+        run: bb permissions 2>&1 || true
+
+      - name: Wait for screenpipe to be running
+        run: |
+          # On self-hosted runner, screenpipe should already be running as login item
+          # If not, start it
+          if ! pgrep -f "screenpipe" > /dev/null 2>&1; then
+            echo "screenpipe not running, starting..."
+            open -a screenpipe
+            sleep 15
+          fi
+          # Wait for health API
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
+              echo "health API ready"
+              break
+            fi
+            echo "waiting for health API... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run E2E tests
+        id: e2e
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
+        run: |
+          bash .github/scripts/e2e/run-all.sh 2>&1 | tee "${{ runner.temp }}/e2e-full.log"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ matrix.runner }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/e2e-artifacts/
+            ${{ runner.temp }}/e2e-full.log
+          retention-days: 14
