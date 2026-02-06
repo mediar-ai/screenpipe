@@ -7,7 +7,7 @@
  * This test simulates the server-side logic to identify the root cause.
  */
 
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach } from "vitest";
 
 // Simulate the server-side data structures
 interface FrameChunk {

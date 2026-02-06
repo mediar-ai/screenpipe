@@ -11,7 +11,7 @@
  * - Old frames from stopped monitor appear with recent timestamps
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 
 interface FrameChunk {
   frame_id: number;

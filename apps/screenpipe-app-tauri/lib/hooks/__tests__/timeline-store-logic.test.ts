@@ -4,7 +4,7 @@
  * These tests verify the frame handling logic that would be called when new frames arrive.
  */
 
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach } from "vitest";
 
 // Define the types we need for testing
 interface DeviceResponse {

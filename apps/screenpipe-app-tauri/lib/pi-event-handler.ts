@@ -188,7 +188,7 @@ export function formatPiMessage(state: PiMessageState): string {
   return content;
 }
 
-function formatToolArgs(
+export function formatToolArgs(
   toolName: string,
   args: Record<string, unknown>
 ): string {

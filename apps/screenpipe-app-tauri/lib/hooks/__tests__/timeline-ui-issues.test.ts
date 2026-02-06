@@ -7,7 +7,7 @@
  * 3. Handling of orphaned frames (frames referencing missing video files)
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // ============================================================================
 // ISSUE 1: Stuck "Processing" Modal Tests

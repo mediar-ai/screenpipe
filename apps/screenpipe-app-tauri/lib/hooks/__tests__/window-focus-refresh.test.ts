@@ -10,7 +10,7 @@
  * and triggers a fresh fetch.
  */
 
-import { describe, it, expect, beforeEach, mock, spyOn } from "bun:test";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // Mock the store's internal state
 interface MockTimelineState {
@@ -41,7 +41,7 @@ describe("Window Focus Refresh - sentRequests clearing", () => {
       currentDate: new Date("2024-01-15T18:30:00Z"), // 6:30 PM
       websocket: {
         readyState: 1, // WebSocket.OPEN
-        send: mock(() => {}),
+        send: vi.fn(),
       },
       isLoading: false,
     };
@@ -220,7 +220,7 @@ describe("Window Focus Refresh - WebSocket integration", () => {
    * TEST 6: onWindowFocus should work even if WebSocket is still connected
    */
   it("should re-fetch even with existing WebSocket connection", () => {
-    const mockSend = mock(() => {});
+    const mockSend = vi.fn();
     const state: MockTimelineState = {
       frames: [{ timestamp: "2024-01-15T18:30:00Z", devices: [] }],
       sentRequests: new Set<string>(),

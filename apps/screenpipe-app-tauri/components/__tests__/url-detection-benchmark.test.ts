@@ -15,7 +15,7 @@
  * Run: bun test components/__tests__/url-detection-benchmark.test.ts
  */
 
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 import { isUrl, extractUrlsFromText, normalizeUrl } from "../text-overlay";
 import benchmarkData from "./url-detection-benchmark-data.json";
 
