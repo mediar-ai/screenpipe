@@ -40,8 +40,12 @@ const FRAME_LOAD_DEBOUNCE_MS = 80;
 // Track which chunks have failed so we don't retry them
 const failedChunks = new Set<string>();
 
-// Check if we can use <video> for HEVC (macOS WebKit yes, Linux likely no)
-let videoSeekSupported: boolean | null = null;
+// Cache calibrated fps per video file path so we only compute once
+const calibratedFpsCache = new Map<string, number>();
+
+// Only macOS WebKit can decode HEVC natively — Windows/Linux webviews cannot
+const isMacOS = typeof navigator !== "undefined" && /Macintosh|Mac OS X/.test(navigator.userAgent);
+const canUseVideoSeek = isMacOS;
 
 export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	currentFrame,
@@ -66,12 +70,13 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	} | null>(null);
 
 	// Whether to use <video> seeking or fall back to <img> via ffmpeg
-	const [useVideoMode, setUseVideoMode] = useState(true);
+	// Only macOS WebKit supports HEVC; Windows (WebView2) and Linux (WebKitGTK) do not
+	const [useVideoMode, setUseVideoMode] = useState(canUseVideoSeek);
 	// Debounced frame — only updates after scroll settles
 	const [debouncedFrame, setDebouncedFrame] = useState<{
 		filePath: string;
 		offsetIndex: number;
-		fps: number;
+		fps: number | null;
 		frameId: string;
 	} | null>(null);
 
@@ -90,7 +95,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	const frameId = device?.frame_id;
 	const filePath = device?.metadata?.file_path;
 	const offsetIndex = device?.offset_index ?? 0;
-	const fps = device?.fps ?? 0.5;
+	const fpsFromServer = device?.fps ?? null; // null = pre-migration chunk
 
 	// Track skipped frames for analytics
 	useEffect(() => {
@@ -111,12 +116,12 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		}
 		setIsLoading(true);
 		debounceTimerRef.current = setTimeout(() => {
-			setDebouncedFrame({ filePath, offsetIndex, fps, frameId });
+			setDebouncedFrame({ filePath, offsetIndex, fps: fpsFromServer, frameId });
 		}, FRAME_LOAD_DEBOUNCE_MS);
 		return () => {
 			if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 		};
-	}, [frameId, filePath, offsetIndex, fps]);
+	}, [frameId, filePath, offsetIndex, fpsFromServer]);
 
 	// Convert file path to asset URL
 	const getVideoUrl = useCallback(async (path: string): Promise<string | null> => {
@@ -128,10 +133,61 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		}
 	}, []);
 
+	// Resolve the effective fps for a chunk: use server value, cached calibration, or compute from video
+	const resolveEffectiveFps = useCallback((
+		path: string,
+		serverFps: number | null,
+		video: HTMLVideoElement,
+		offsetIndex: number,
+	): number | null => {
+		// 1. If server provided fps, validate it against video duration
+		if (serverFps !== null && serverFps > 0) {
+			const expectedTime = offsetIndex / serverFps;
+			if (expectedTime <= video.duration + 0.5) {
+				return serverFps; // looks valid
+			}
+			// Server fps is wrong (seek would overshoot) — fall through to calibration
+			console.warn(`fps ${serverFps} invalid for offset ${offsetIndex}: would seek to ${expectedTime.toFixed(1)}s but video is ${video.duration.toFixed(1)}s`);
+		}
+
+		// 2. Check calibration cache
+		const cached = calibratedFpsCache.get(path);
+		if (cached !== undefined) return cached;
+
+		// 3. Auto-calibrate: estimate fps from video duration
+		// At constant fps, video duration ≈ (totalFrames - 1) / fps + 1/fps = totalFrames / fps
+		// We don't know totalFrames here, but we can bound it:
+		// - If offsetIndex is the highest we'll see in this chunk, fps ≈ (offsetIndex + 1) / duration
+		// - We use a conservative estimate since offsetIndex may not be the max
+		// For now, we try common fps values and pick the one where all offsets fit
+		const duration = video.duration;
+		if (duration <= 0 || !isFinite(duration)) return null;
+
+		// Try common fps values: 0.2, 0.5, 1.0, 2.0
+		const commonFps = [0.2, 0.5, 1.0, 2.0];
+		for (const candidate of commonFps) {
+			// At this fps, max frames in this video = floor(duration * candidate)
+			// offset_index should be < maxFrames
+			const maxOffset = Math.floor(duration * candidate);
+			if (offsetIndex < maxOffset) {
+				calibratedFpsCache.set(path, candidate);
+				console.log(`auto-calibrated fps=${candidate} for ${path} (duration=${duration.toFixed(1)}s, offset=${offsetIndex})`);
+				return candidate;
+			}
+		}
+
+		// Last resort: derive directly
+		// Assume at least offsetIndex+1 frames exist, so fps ≈ (offsetIndex + 1) / duration
+		const derived = (offsetIndex + 1) / duration;
+		calibratedFpsCache.set(path, derived);
+		console.log(`derived fps=${derived.toFixed(3)} for ${path} (duration=${duration.toFixed(1)}s, offset=${offsetIndex})`);
+		return derived;
+	}, []);
+
 	// Main video seeking effect
 	useEffect(() => {
 		if (!debouncedFrame || !useVideoMode) return;
-		const { filePath: path, offsetIndex: idx, fps: videoFps, frameId: fid } = debouncedFrame;
+		const { filePath: path, offsetIndex: idx, fps: serverFps, frameId: fid } = debouncedFrame;
 
 		// If this chunk previously failed, go straight to fallback
 		if (failedChunks.has(path)) {
@@ -155,7 +211,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 				video.src = url;
 				video.load();
 
-				// Wait for loadeddata
+				// Wait for loadeddata (need duration for calibration)
 				await new Promise<void>((resolve, reject) => {
 					const onLoaded = () => {
 						video.removeEventListener("loadeddata", onLoaded);
@@ -167,7 +223,6 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 						video.removeEventListener("error", onError);
 						reject(new Error("video load failed"));
 					};
-					// If already loaded (same src), resolve immediately
 					if (video.readyState >= 2) {
 						resolve();
 						return;
@@ -179,8 +234,20 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 
 			if (gen !== seekGenRef.current) return;
 
-			// Seek to frame
-			const targetTime = idx / videoFps;
+			// Resolve effective fps (auto-calibrate if needed)
+			const effectiveFps = resolveEffectiveFps(path, serverFps, video, idx);
+			if (effectiveFps === null || effectiveFps <= 0) {
+				throw new Error(`cannot determine fps for ${path}`);
+			}
+
+			// Seek to frame with bounds check
+			let targetTime = idx / effectiveFps;
+			// Clamp to video duration (safety net)
+			if (targetTime > video.duration) {
+				console.warn(`seek target ${targetTime.toFixed(1)}s > duration ${video.duration.toFixed(1)}s, clamping`);
+				targetTime = Math.max(0, video.duration - 0.01);
+			}
+
 			if (Math.abs(video.currentTime - targetTime) > 0.001) {
 				video.currentTime = targetTime;
 				await new Promise<void>((resolve) => {
@@ -210,6 +277,8 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 					frame_id: fid,
 					success: true,
 					mode: "video_seek",
+					fps_source: serverFps !== null ? "server" : "calibrated",
+					effective_fps: effectiveFps,
 					frames_skipped: framesSkippedRef.current,
 					image_width: video.videoWidth,
 					image_height: video.videoHeight,
@@ -226,7 +295,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 			loadedChunkRef.current = null;
 			setUseVideoMode(false);
 		});
-	}, [debouncedFrame, useVideoMode, getVideoUrl]);
+	}, [debouncedFrame, useVideoMode, getVideoUrl, resolveEffectiveFps]);
 
 	// Fallback: ffmpeg <img> mode (same as old behavior)
 	const fallbackImageUrl = useMemo(() => {

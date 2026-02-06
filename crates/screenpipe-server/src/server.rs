@@ -1895,7 +1895,8 @@ pub struct DeviceFrameResponse {
     // pub frame: String, // base64 encoded image
     pub frame_id: i64,
     pub offset_index: i64,
-    pub fps: f64,
+    /// None for pre-migration chunks — frontend auto-calibrates from video duration
+    pub fps: Option<f64>,
     pub metadata: DeviceMetadata,
     pub audio: Vec<AudioData>,
 }
@@ -4305,7 +4306,7 @@ mod tests {
             frame_id: 12345,
             timestamp: chrono::Utc::now(),
             offset_index: 0,
-            fps: 0.5,
+            fps: Some(0.5),
             ocr_entries,
             audio_entries,
         }

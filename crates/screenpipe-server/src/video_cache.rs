@@ -23,7 +23,7 @@ pub struct TimeSeriesFrame {
     pub timestamp: DateTime<Utc>,
     pub frame_data: Vec<DeviceFrame>,
     pub offset_index: i64,
-    pub fps: f64,
+    pub fps: Option<f64>,
     pub error: Option<String>,
 }
 
