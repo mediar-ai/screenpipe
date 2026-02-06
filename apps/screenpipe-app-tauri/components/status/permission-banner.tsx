@@ -83,10 +83,14 @@ export function PermissionBanner() {
           size="sm"
           className="h-8 px-4 text-sm font-medium"
           onClick={async () => {
+            // Open System Settings directly for the first missing permission.
+            // macOS can't programmatically grant permissions — user must toggle in Settings.
             try {
-              await commands.showWindow("PermissionRecovery");
+              if (!permissions.screenOk) await commands.openPermissionSettings("screenRecording");
+              else if (!permissions.micOk) await commands.openPermissionSettings("microphone");
+              else if (!permissions.accessibilityOk) await commands.openPermissionSettings("accessibility");
             } catch {
-              // fallback: try requesting directly
+              // fallback
               if (!permissions.screenOk) await commands.requestPermission("screenRecording");
               else if (!permissions.micOk) await commands.requestPermission("microphone");
               else if (!permissions.accessibilityOk) await commands.requestPermission("accessibility");
