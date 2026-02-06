@@ -413,7 +413,7 @@ export const ShareLogsButton = ({
               size="sm"
               onClick={sendLogs}
               disabled={isSending || !feedbackText.trim()}
-              className="gap-1.5 h-8 text-xs w-full bg-foreground text-background hover:bg-foreground/90"
+              className="gap-1.5 h-8 text-xs w-full bg-foreground text-background hover:bg-background hover:text-foreground transition-colors duration-150"
             >
               {isSending ? (
                 <>
