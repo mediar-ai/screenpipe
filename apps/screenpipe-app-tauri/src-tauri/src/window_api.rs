@@ -108,6 +108,7 @@ pub fn main_label_for_mode(mode: &str) -> &'static str {
 /// Reset activation policy to Regular so dock icon and tray are visible.
 #[cfg(target_os = "macos")]
 pub fn reset_to_regular_and_refresh_tray(app: &AppHandle) {
+    info!("Resetting activation policy to Regular (dock+tray visible)");
     let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
 }
 
