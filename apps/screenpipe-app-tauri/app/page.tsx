@@ -2,7 +2,7 @@
 
 import { getStore, useSettings } from "@/lib/hooks/use-settings";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import NotificationHandler from "@/components/notification-handler";
 import { useToast } from "@/components/ui/use-toast";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
@@ -25,6 +25,7 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 import SplashScreen from "@/components/splash-screen";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { hasCachedData } from "@/lib/hooks/use-timeline-cache";
+import { invoke } from "@tauri-apps/api/core";
 
 export default function Home() {
   const { settings, updateSettings, loadUser, reloadStore, isSettingsLoaded, loadingError } = useSettings();
@@ -114,6 +115,42 @@ export default function Home() {
       checkScreenPermissionRestart();
     }
   }, [onboardingData.isCompleted]);
+
+  // Auto-init cloud sync from saved password on app startup
+  useEffect(() => {
+    if (!isSettingsLoaded || !settings.user?.token) return;
+    
+    const autoInitSync = async () => {
+      try {
+        // Check if sync is already running
+        const resp = await fetch("http://localhost:3030/sync/status");
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.enabled) return; // Already running
+        }
+      } catch {
+        // Server not ready yet, retry after delay
+        return;
+      }
+
+      // Try saved password
+      const savedPassword = localStorage.getItem("sync_password");
+      if (!savedPassword) return;
+
+      try {
+        const password = atob(savedPassword);
+        await invoke("init_sync", { password });
+        console.log("cloud sync auto-initialized from saved password");
+      } catch (e) {
+        console.log("cloud sync auto-init failed:", e);
+        // Don't clear password - might be a transient error (server not ready)
+      }
+    };
+
+    // Delay to let the server start first
+    const timer = setTimeout(autoInitSync, 5000);
+    return () => clearTimeout(timer);
+  }, [isSettingsLoaded, settings.user?.token]);
 
   const handleRestartServer = async () => {
     setIsRestarting(true);
