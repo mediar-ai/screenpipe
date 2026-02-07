@@ -977,6 +977,7 @@ async fn main() {
                 // Commands from permissions.rs
                 permissions::open_permission_settings,
                 permissions::request_permission,
+                permissions::reset_and_request_permission,
                 permissions::do_permissions_check,
                 permissions::check_microphone_permission,
                 permissions::check_accessibility_permission_cmd,
