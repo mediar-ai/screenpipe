@@ -144,9 +144,19 @@ jobs:
       - name: Install system deps
         run: |
           brew install ffmpeg pkg-config cmake wget 2>/dev/null || true
+
           # Ensure Xcode (not just CLT) is selected — needed for cidre framework
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-          xcodebuild -version
+          if [ -d "/Applications/Xcode.app" ]; then
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+            xcodebuild -version
+          else
+            echo "ERROR: Xcode.app not found in /Applications!"
+            echo "Install Xcode from the App Store, then run:"
+            echo "  sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
+            echo "  sudo xcodebuild -license accept"
+            echo "  sudo xcodebuild -runFirstLaunch"
+            exit 1
+          fi
 
       - name: Install/update BigBrother CLI
         run: |
