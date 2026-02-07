@@ -11,6 +11,7 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    branches: [main]
 
 concurrency:
   group: e2e-macos-${{ github.ref }}
@@ -109,9 +110,12 @@ jobs:
     name: macOS E2E (self-hosted)
     runs-on: [self-hosted, macos-test]
     timeout-minutes: 30
+    # SECURITY: Only run on main branch — self-hosted runner has credentials.
+    # Never run on PRs (fork code could be malicious).
     if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
 
     steps:
       - uses: actions/checkout@v4
