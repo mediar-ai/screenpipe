@@ -159,10 +159,19 @@ impl AudioManagerBuilder {
         let options = &mut self.options;
 
         if options.enabled_devices.is_empty() {
-            options.enabled_devices = HashSet::from_iter(vec![
-                default_input_device()?.to_string(),
-                default_output_device().await?.to_string(),
-            ]);
+            // Gracefully collect available devices — don't crash if input or output is missing
+            // (e.g., Mac Mini with no microphone, headless server with no audio hardware)
+            let mut devices = Vec::new();
+            if let Ok(input) = default_input_device() {
+                devices.push(input.to_string());
+            }
+            if let Ok(output) = default_output_device().await {
+                devices.push(output.to_string());
+            }
+            if devices.is_empty() {
+                tracing::warn!("No audio devices found — audio manager will start but won't record");
+            }
+            options.enabled_devices = HashSet::from_iter(devices);
         }
 
         AudioManager::new(options.clone(), db).await
