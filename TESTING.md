@@ -204,6 +204,18 @@ commits: `8f334c0a`, `fda40d2c`
 - [ ] **prod config used** — CI copies `tauri.prod.conf.json` to `tauri.conf.json` before building. identifier is `screenpi.pe` not `screenpi.pe.dev`.
 - [ ] **draft then publish** — `workflow_dispatch` creates draft. manual publish or `release-app-publish` commit publishes.
 
+### 16. MCP / Claude integration
+
+commits: `8c8c445c`
+
+- [ ] **Claude connect button works** — Settings → Connections → "Connect Claude" downloads `.mcpb` file and opens it in Claude Desktop. was broken because GitHub releases API pagination didn't reach `mcp-v*` releases buried behind 30+ app releases (`8c8c445c`).
+- [ ] **MCP release discovery with many app releases** — `getLatestMcpRelease()` paginates up to 5 pages (250 releases) to find `mcp-v*` tagged releases. verify it works even when >30 app releases exist since last MCP release.
+- [ ] **Claude Desktop not installed** — clicking connect shows a useful error, not a silent failure.
+- [ ] **MCP version display** — Settings shows the available MCP version and whether it's already installed.
+- [ ] **macOS Claude install flow** — downloads `.mcpb`, opens Claude Desktop, waits 1.5s, then opens the `.mcpb` file to trigger Claude's install modal.
+- [ ] **Windows Claude install flow** — same flow using `cmd /c start` instead of `open -a`.
+- [ ] **download error logging** — if download fails, console shows actual error message (not `{}`).
+
 ## how to run
 
 ### before every release
