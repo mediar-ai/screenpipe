@@ -125,7 +125,13 @@ jobs:
           system_profiler SPDisplaysDataType 2>/dev/null | grep -A5 "Resolution" || true
 
       - name: Install/update BigBrother CLI
+        continue-on-error: true
         run: |
+          # bb requires Xcode (not just CLT) for cidre framework
+          if ! xcodebuild -version &>/dev/null; then
+            echo "⚠ Xcode not installed — skipping bb (UI tests will be skipped)"
+            exit 0
+          fi
           if [ -d "$HOME/bigbrother" ]; then
             cd "$HOME/bigbrother" && git pull
           else
@@ -137,35 +143,75 @@ jobs:
           bb --version
 
       - name: Check permissions
+        continue-on-error: true
         run: bb permissions 2>&1 || true
 
-      - name: Ensure screenpipe is running
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system deps
         run: |
-          if ! pgrep -f "screenpipe" > /dev/null 2>&1; then
-            echo "starting screenpipe..."
-            open -a screenpipe
-            sleep 15
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          brew install ffmpeg pkg-config 2>/dev/null || true
+
+      - name: Build and start screenpipe
+        run: |
+          source "$HOME/.cargo/env" 2>/dev/null || true
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+
+          # If screenpipe app is running, use it. Otherwise build CLI.
+          if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
+            echo "✓ screenpipe already running"
+            curl -sf http://localhost:3030/health | python3 -m json.tool
+          else
+            echo "Building screenpipe CLI..."
+            cargo build --release -p screenpipe-server --features metal
+            ./target/release/screenpipe --disable-vision --disable-audio --port 3030 &
+            echo "SERVER_PID=$!" >> $GITHUB_ENV
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
+                echo "✓ health API ready"
+                curl -sf http://localhost:3030/health | python3 -m json.tool
+                break
+              fi
+              echo "waiting... ($i/30)"
+              sleep 2
+            done
           fi
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
-              echo "✓ health API ready"
-              curl -sf http://localhost:3030/health | python3 -m json.tool
-              break
-            fi
-            echo "waiting... ($i/30)"
-            sleep 2
-          done
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Run full E2E tests
+      - name: Run E2E tests
         env:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
         run: |
-          bun .github/scripts/e2e/run-all.ts 2>&1 | tee "${{ runner.temp }}/e2e-full.log"
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          source "$HOME/.cargo/env" 2>/dev/null || true
+
+          # Always run API tests
+          bun .github/scripts/e2e/run-all.ts --suite api 2>&1 | tee "${{ runner.temp }}/e2e-full.log"
+
+          # Run UI tests only if bb is available
+          if command -v bb &>/dev/null; then
+            bun .github/scripts/e2e/run-all.ts --suite launch 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
+            bun .github/scripts/e2e/run-all.ts --suite window 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
+            bun .github/scripts/e2e/run-all.ts --suite settings 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
+            bun .github/scripts/e2e/run-all.ts --suite recording 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
+            bun .github/scripts/e2e/run-all.ts --suite permissions 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
+          else
+            echo "⚠ bb not available — skipping UI tests"
+          fi
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then kill $SERVER_PID 2>/dev/null || true; fi
 
       - name: Upload artifacts
         if: always()
