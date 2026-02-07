@@ -120,6 +120,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup PATH
+        run: |
+          # Persist PATH for all subsequent steps
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          echo "/usr/local/bin" >> $GITHUB_PATH
+
       - name: System info
         run: |
           echo "hostname: $(hostname)"
@@ -139,7 +146,7 @@ jobs:
           cargo build --release -p bb
           # Symlink so TCC permission (granted to target/release/bb) is preserved
           sudo ln -sf "$HOME/bigbrother/target/release/bb" /usr/local/bin/bb
-          bb --version
+          /usr/local/bin/bb --version
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -149,29 +156,25 @@ jobs:
 
       - name: Install system deps
         run: |
-          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           brew install ffmpeg pkg-config cmake 2>/dev/null || true
 
       - name: Install frontend deps
         run: |
-          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           cd apps/screenpipe-app-tauri
           bun install
 
       - name: Build Tauri app
         run: |
-          source "$HOME/.cargo/env" 2>/dev/null || true
-          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           cd apps/screenpipe-app-tauri
 
-          # Build the app bundle (debug for speed, or release if cached)
-          bunx tauri build 2>&1 | tail -30
+          # Build the app bundle
+          bunx tauri build 2>&1 | tail -50
 
-          # Find the built .app
-          APP_PATH=$(find src-tauri/target/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
+          # Find the built .app (use absolute path)
+          APP_PATH=$(find "$(pwd)/src-tauri/target/release/bundle/macos" -name "*.app" -maxdepth 1 | head -1)
           if [ -z "$APP_PATH" ]; then
             echo "ERROR: no .app bundle found"
-            ls -la src-tauri/target/release/bundle/macos/ 2>/dev/null || true
+            find src-tauri/target -name "*.app" 2>/dev/null || true
             exit 1
           fi
           echo "✓ Built: $APP_PATH"
@@ -313,7 +316,6 @@ jobs:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
           SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
         run: |
-          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           mkdir -p "$ARTIFACTS_DIR"
           bun .github/scripts/e2e/run-all.ts --suite api 2>&1 | tee "${{ runner.temp }}/e2e-full.log"
 
@@ -323,7 +325,6 @@ jobs:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
           SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
         run: |
-          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           bun .github/scripts/e2e/run-all.ts --suite launch 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
 
       - name: Run window tests
@@ -333,7 +334,6 @@ jobs:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
           SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
         run: |
-          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           bun .github/scripts/e2e/run-all.ts --suite window 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
 
       - name: Run settings tests
@@ -343,7 +343,6 @@ jobs:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
           SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
         run: |
-          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           bun .github/scripts/e2e/run-all.ts --suite settings 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
 
       - name: Run recording tests
@@ -353,7 +352,6 @@ jobs:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
           SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
         run: |
-          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           bun .github/scripts/e2e/run-all.ts --suite recording 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
 
       - name: Run permissions tests
@@ -363,7 +361,6 @@ jobs:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
           SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
         run: |
-          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           bun .github/scripts/e2e/run-all.ts --suite permissions 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
 
       - name: Cleanup
