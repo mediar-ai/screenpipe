@@ -124,7 +124,12 @@ impl DatabaseManager {
             .pragma("journal_mode", "WAL")
             .pragma("cache_size", "-64000")   // 64 MB page cache
             .pragma("mmap_size", "268435456") // 256 MB memory-mapped I/O
-            .pragma("temp_store", "MEMORY");
+            .pragma("temp_store", "MEMORY")
+            // Checkpoint after 4000 pages (~16MB) instead of default 1000 (~4MB).
+            // Reduces checkpoint stalls during write bursts — checkpoint happens
+            // during idle periods instead. WAL grows to ~16MB max (+12MB).
+            // Crash recovery: ~200ms replay at most.
+            .pragma("wal_autocheckpoint", "4000");
 
         let pool = SqlitePoolOptions::new()
             // SQLite only allows a single writer; keep the pool modest to reduce write contention.

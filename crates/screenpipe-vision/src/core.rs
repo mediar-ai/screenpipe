@@ -187,14 +187,17 @@ pub async fn continuous_capture(
         "continuous_capture: Starting using monitor: {:?}",
         monitor_id
     );
-    // 1. Get monitor
-    let monitor = match get_monitor_by_id(monitor_id).await {
+    // 1. Get monitor (mutable so we can refresh() the cached handle on failure)
+    let mut monitor = match get_monitor_by_id(monitor_id).await {
         Some(m) => m,
         None => {
             error!("Monitor not found");
             return Err(ContinuousCaptureError::MonitorNotFound);
         }
     };
+    let mut consecutive_capture_failures: u32 = 0;
+    const MAX_CAPTURE_RETRIES: u32 = 3;
+    const MAX_CONSECUTIVE_FAILURES: u32 = 30;
 
     // Suppress unused variable warning when feature is disabled
     #[cfg(not(feature = "adaptive-fps"))]
@@ -205,16 +208,70 @@ pub async fn continuous_capture(
         //    Window capture is deferred until after frame comparison to skip
         //    expensive per-window work on unchanged frames.
         let captured_at = Utc::now();
-        let (image, _capture_duration) =
-            match capture_monitor_image(&monitor).await {
-                Ok(result) => result,
-                Err(e) => {
-                    debug!("error capturing screenshot: {}", e);
-                    return Err(ContinuousCaptureError::ErrorCapturingScreenshot(
-                        e.to_string(),
-                    ));
+        let (image, _capture_duration) = {
+            let mut last_err = None;
+            let mut captured = None;
+
+            for attempt in 0..=MAX_CAPTURE_RETRIES {
+                match capture_monitor_image(&monitor).await {
+                    Ok(result) => {
+                        if attempt > 0 {
+                            debug!(
+                                "capture succeeded after {} retries for monitor {}",
+                                attempt, monitor_id
+                            );
+                        }
+                        consecutive_capture_failures = 0;
+                        captured = Some(result);
+                        break;
+                    }
+                    Err(e) => {
+                        last_err = Some(e);
+                        if attempt < MAX_CAPTURE_RETRIES {
+                            // Refresh the cached monitor handle — resolution may have
+                            // changed, or the display may have been reconnected.
+                            debug!(
+                                "capture failed for monitor {} (attempt {}/{}), refreshing handle",
+                                monitor_id,
+                                attempt + 1,
+                                MAX_CAPTURE_RETRIES
+                            );
+                            if let Err(refresh_err) = monitor.refresh().await {
+                                debug!("monitor refresh failed: {}", refresh_err);
+                            }
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
+                    }
                 }
-            };
+            }
+
+            match captured {
+                Some(result) => result,
+                None => {
+                    consecutive_capture_failures += 1;
+                    let err = last_err.unwrap();
+                    if consecutive_capture_failures >= MAX_CONSECUTIVE_FAILURES {
+                        error!(
+                            "monitor {} failed {} consecutive captures, bailing: {}",
+                            monitor_id, consecutive_capture_failures, err
+                        );
+                        return Err(ContinuousCaptureError::ErrorCapturingScreenshot(
+                            err.to_string(),
+                        ));
+                    }
+                    debug!(
+                        "all {} capture retries failed for monitor {} ({}/{}): {}",
+                        MAX_CAPTURE_RETRIES,
+                        monitor_id,
+                        consecutive_capture_failures,
+                        MAX_CONSECUTIVE_FAILURES,
+                        err
+                    );
+                    tokio::time::sleep(interval).await;
+                    continue;
+                }
+            }
+        };
 
         // 4. Optimized frame comparison: downscales once (proportional to preserve
         //    ultrawide aspect ratios), hashes the thumbnail, then compares histograms.
