@@ -373,8 +373,11 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 			}
 		};
 		updateDimensions();
-		window.addEventListener("resize", updateDimensions);
-		return () => window.removeEventListener("resize", updateDimensions);
+		const el = containerRef.current;
+		if (!el) return;
+		const observer = new ResizeObserver(updateDimensions);
+		observer.observe(el);
+		return () => observer.disconnect();
 	}, [naturalDimensions]);
 
 	// Auto-skip on error
