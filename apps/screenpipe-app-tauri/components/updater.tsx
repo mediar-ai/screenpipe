@@ -5,9 +5,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { platform, arch } from "@tauri-apps/plugin-os";
 import type { UpdateChannel } from "@/lib/hooks/use-settings";
 
+// Primary: proxy through screenpi.pe (we control it, can add auth later)
+// Fallback: direct CN (safety net if proxy is down)
 const UPDATE_ENDPOINTS = {
-  stable: "https://cdn.crabnebula.app/update/mediar/screenpipe",
-  beta: "https://cdn.crabnebula.app/update/mediar/screenpipe-beta",
+  stable: [
+    "https://screenpi.pe/api/app-update/stable",
+    "https://cdn.crabnebula.app/update/mediar/screenpipe",
+  ],
+  beta: [
+    "https://screenpi.pe/api/app-update/beta",
+    "https://cdn.crabnebula.app/update/mediar/screenpipe-beta",
+  ],
 } as const;
 
 export async function checkForAppUpdates({
@@ -20,14 +28,16 @@ export async function checkForAppUpdates({
   const os = platform();
   const cpuArch = arch();
 
-  // Build the endpoint URL for the selected channel
-  const baseEndpoint = UPDATE_ENDPOINTS[channel];
+  // Build endpoint URLs for the selected channel (proxy primary, CN fallback)
+  const baseEndpoints = UPDATE_ENDPOINTS[channel];
   const target = os === "macos" ? "darwin" : os;
-  const endpoint = `${baseEndpoint}/${target}-${cpuArch}/{{current_version}}`;
+  const endpoints = baseEndpoints.map(
+    (base) => `${base}/${target}-${cpuArch}/{{current_version}}`
+  );
 
   // @ts-ignore - endpoints option may not be in type definitions but is supported
   const update = await check({
-    endpoints: [endpoint],
+    endpoints,
   } as any);
 
   if (update?.available) {

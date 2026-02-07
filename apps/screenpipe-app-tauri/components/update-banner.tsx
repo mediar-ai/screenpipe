@@ -73,8 +73,10 @@ export function UpdateBanner({ className, compact = false }: UpdateBannerProps) 
         let update = pendingUpdate;
         if (!update) {
           const cpuArch = arch();
-          const endpoint = `https://cdn.crabnebula.app/update/mediar/screenpipe/windows-${cpuArch}/{{current_version}}`;
-          update = await check({ endpoints: [endpoint] } as any);
+          update = await check({ endpoints: [
+            `https://screenpi.pe/api/app-update/stable/windows-${cpuArch}/{{current_version}}`,
+            `https://cdn.crabnebula.app/update/mediar/screenpipe/windows-${cpuArch}/{{current_version}}`,
+          ] } as any);
         }
 
         if (update?.available) {
