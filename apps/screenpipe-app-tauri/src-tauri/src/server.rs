@@ -313,8 +313,40 @@ async fn handle_auth(
 async fn get_app_icon_handler(
     State(_): State<ServerState>,
     Query(app_name): Query<AppIconQuery>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> impl IntoResponse {
+    use once_cell::sync::Lazy;
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+
+    // Cache of app names we already know have no icon, to avoid repeated expensive lookups
+    static NOT_FOUND_CACHE: Lazy<Mutex<HashSet<String>>> =
+        Lazy::new(|| Mutex::new(HashSet::new()));
+
+    // 1x1 transparent PNG placeholder
+    static PLACEHOLDER_PNG: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+        0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
+        0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78,
+        0x9C, 0x62, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0xE5, 0x27, 0xDE, 0xFC, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+
     info!("received app icon request: {:?}", app_name);
+
+    // Check not-found cache first to skip expensive lookups
+    let cache_key = format!("{}:{}", app_name.name, app_name.path.as_deref().unwrap_or(""));
+    if let Ok(cache) = NOT_FOUND_CACHE.lock() {
+        if cache.contains(&cache_key) {
+            let headers = [
+                (CONTENT_TYPE, HeaderValue::from_static("image/png")),
+                (
+                    http::header::CACHE_CONTROL,
+                    HeaderValue::from_static("public, max-age=604800"),
+                ),
+            ];
+            return (StatusCode::OK, headers, Bytes::from_static(PLACEHOLDER_PNG));
+        }
+    }
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
@@ -327,25 +359,35 @@ async fn get_app_icon_handler(
                         HeaderValue::from_static("public, max-age=604800"),
                     ),
                 ];
-                Ok((headers, Bytes::from(icon.data)))
+                (StatusCode::OK, headers, Bytes::from(icon.data))
             }
-            Ok(None) => Err((StatusCode::NOT_FOUND, "Icon not found".to_string())),
-            Err(e) => {
-                error!("failed to get app icon: {}", e);
-                Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("failed to get app icon: {}", e),
-                ))
+            Ok(None) | Err(_) => {
+                // Cache the miss to avoid repeated expensive lookups
+                if let Ok(mut cache) = NOT_FOUND_CACHE.lock() {
+                    cache.insert(cache_key);
+                }
+                let headers = [
+                    (CONTENT_TYPE, HeaderValue::from_static("image/png")),
+                    (
+                        http::header::CACHE_CONTROL,
+                        HeaderValue::from_static("public, max-age=604800"),
+                    ),
+                ];
+                (StatusCode::OK, headers, Bytes::from_static(PLACEHOLDER_PNG))
             }
         }
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        Err((
-            StatusCode::NOT_IMPLEMENTED,
-            "app icon retrieval not supported on this platform".to_string(),
-        ))
+        let headers = [
+            (CONTENT_TYPE, HeaderValue::from_static("image/png")),
+            (
+                http::header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=604800"),
+            ),
+        ];
+        (StatusCode::OK, headers, Bytes::from_static(PLACEHOLDER_PNG))
     }
 }
 

@@ -73,9 +73,11 @@ pub async fn run_record_and_transcribe(
                 }
                 Err(_timeout) => {
                     // No audio data received for AUDIO_RECEIVE_TIMEOUT_SECS seconds
-                    // This likely means another app took over the audio device
-                    warn!(
-                        "no audio received from {} for {}s - stream may be hijacked by another app, triggering reconnect",
+                    // This can happen when another app hijacks the device, or simply
+                    // when no audio is playing through an output device (speakers).
+                    // Log at debug level to avoid spamming logs in the common idle case.
+                    debug!(
+                        "no audio received from {} for {}s - stream may be idle or hijacked, triggering reconnect",
                         device_name, AUDIO_RECEIVE_TIMEOUT_SECS
                     );
                     // Mark stream as disconnected so device monitor can restart it

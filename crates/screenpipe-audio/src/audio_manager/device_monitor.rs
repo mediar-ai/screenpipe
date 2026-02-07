@@ -2,7 +2,7 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::{
     core::device::{default_input_device, default_output_device, parse_audio_device, DeviceType},
@@ -124,7 +124,7 @@ pub async fn start_device_monitor(
                 // This handles cases where audio stream was hijacked by another app
                 let stale_devices = audio_manager.check_stale_recording_handles().await;
                 for device_name in stale_devices {
-                    warn!(
+                    debug!(
                         "detected stale recording handle for {}, cleaning up for restart",
                         device_name
                     );

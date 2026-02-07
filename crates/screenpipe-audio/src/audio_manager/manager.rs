@@ -10,7 +10,7 @@ use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, info};
 use whisper_rs::WhisperContext;
 
 use screenpipe_db::DatabaseManager;
@@ -293,7 +293,7 @@ impl AudioManager {
                 return Err(e);
             }
 
-            warn!(
+            debug!(
                 "recording handle for device {} quit unexpectedly",
                 device_clone
             );
@@ -431,7 +431,7 @@ impl AudioManager {
         // Stop the device in device manager (clears streams and states)
         let _ = self.device_manager.stop_device(&device).await;
 
-        info!("cleaned up stale device {} for restart", device_name);
+        debug!("cleaned up stale device {} for restart", device_name);
 
         Ok(())
     }

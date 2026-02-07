@@ -460,7 +460,11 @@ export function ObsidianSyncCard() {
       const { readTextFile } = await import("@tauri-apps/plugin-fs");
       
       const home = await homeDir();
-      const obsidianConfigPath = `${home}Library/Application Support/obsidian/obsidian.json`;
+      const { platform } = await import("@tauri-apps/plugin-os");
+      const os = platform();
+      const obsidianConfigPath = os === "windows"
+        ? `${home}AppData\\Roaming\\obsidian\\obsidian.json`
+        : `${home}Library/Application Support/obsidian/obsidian.json`;
       
       let vaultName: string | null = null;
       
@@ -486,7 +490,9 @@ export function ObsidianSyncCard() {
         ? `obsidian://open?vault=${encodeURIComponent(vaultName)}`
         : "obsidian://";
 
-      const command = Command.create("open", [deepLink]);
+      const command = os === "windows"
+        ? Command.create("cmd", ["/c", "start", "", deepLink])
+        : Command.create("open", [deepLink]);
       await command.execute();
       
       if (!vaultName) {
