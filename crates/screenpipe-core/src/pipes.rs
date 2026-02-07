@@ -304,16 +304,20 @@ async fn spawn_watchdog(parent_pid: u32, child_pid: u32) -> Result<tokio::proces
         {
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_secs(1)).await;
-                let output = Command::new("powershell")
+                let mut ps_cmd = Command::new("powershell");
+                ps_cmd
                     .arg("-NoProfile")
                     .arg("-NonInteractive")
                     .arg("-Command")
                     .arg(format!(
                         "Get-Process -Id {} -ErrorAction SilentlyContinue",
                         id
-                    ))
-                    .output()
-                    .await;
+                    ));
+                {
+                    use std::os::windows::process::CommandExt;
+                    ps_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+                }
+                let output = ps_cmd.output().await;
 
                 match output {
                     Ok(output) => {
@@ -525,13 +529,18 @@ pub async fn run_pipe(
             // Install dependencies using bun
             info!("[{}] installing dependencies for next.js pipe", pipe);
 
-            let install_output = Command::new(&bun_path)
+            let mut install_cmd = Command::new(&bun_path);
+            install_cmd
                 .arg("install")
                 .current_dir(&pipe_dir)
                 .env("NPM_CONFIG_REGISTRY", "https://registry.npmjs.org")
-                .env("BUN_CONFIG_REGISTRY", "https://registry.npmjs.org")
-                .output()
-                .await?;
+                .env("BUN_CONFIG_REGISTRY", "https://registry.npmjs.org");
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                install_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            }
+            let install_output = install_cmd.output().await?;
 
             if !install_output.status.success() {
                 let err_msg = String::from_utf8_lossy(&install_output.stderr);
@@ -614,6 +623,12 @@ pub async fn run_pipe(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
         let mut child = command.spawn()?;
 
         debug!("[{}] streaming logs for next.js pipe", pipe);
@@ -649,14 +664,19 @@ pub async fn run_pipe(
         main_module.to_str().unwrap().to_string(),
     ));
 
-    let mut child = Command::new(&bun_path)
-        .arg("run")
+    let mut cmd = Command::new(&bun_path);
+    cmd.arg("run")
         .arg("--bun")
         .arg(&main_module)
         .envs(env_vars)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?;
+        .stderr(std::process::Stdio::piped());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let mut child = cmd.spawn()?;
 
     // Stream logs
     stream_logs(pipe, &mut child).await?;
@@ -781,12 +801,18 @@ async fn retry_install(bun_path: &Path, dest_dir: &Path, max_retries: u32) -> Re
     let mut last_error = None;
 
     while attempt < max_retries {
-        let mut install_child = Command::new(bun_path)
+        let mut install_cmd = Command::new(bun_path);
+        install_cmd
             .arg("i")
             .current_dir(dest_dir)
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
+            .stderr(std::process::Stdio::piped());
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            install_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        let mut install_child = install_cmd.spawn()?;
 
         // Stream logs for npm install
         if let Ok(()) = stream_logs("bun install", &mut install_child).await {
@@ -1574,13 +1600,18 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
         "[{}] running next.js build",
         pipe_dir.file_name().unwrap_or_default().to_string_lossy()
     );
-    let build_output = Command::new(bun_path)
+    let mut build_cmd = Command::new(bun_path);
+    build_cmd
         .arg("run")
         .arg("--bun")
         .arg("build")
-        .current_dir(pipe_dir)
-        .output()
-        .await?;
+        .current_dir(pipe_dir);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        build_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let build_output = build_cmd.output().await?;
 
     if build_output.status.success() {
         let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;

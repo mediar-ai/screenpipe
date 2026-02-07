@@ -2010,9 +2010,15 @@ async fn download_mcp_directory(
 
 // Helper function to check if a command is available
 fn is_command_available(command: &str) -> bool {
-    std::process::Command::new(command)
-        .arg("--version")
-        .output()
+    let mut cmd = std::process::Command::new(command);
+    cmd.arg("--version");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd.output()
         .map(|output| output.status.success())
         .unwrap_or(false)
 }

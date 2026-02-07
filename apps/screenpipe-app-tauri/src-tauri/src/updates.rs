@@ -278,13 +278,20 @@ Start-Process "{install_dir}\{exe_name}"
         let script_path = std::env::temp_dir().join("screenpipe-rollback.ps1");
         std::fs::write(&script_path, &script).map_err(|e| format!("failed to write rollback script: {}", e))?;
 
-        std::process::Command::new("powershell")
+        let mut rollback_cmd = std::process::Command::new("powershell");
+        rollback_cmd
             .args(["-ExecutionPolicy", "Bypass", "-File"])
             .arg(&script_path)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
+            .stderr(std::process::Stdio::null());
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            rollback_cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        rollback_cmd.spawn()
             .map_err(|e| format!("failed to spawn rollback script: {}", e))?;
 
         info!("rollback: script spawned, app will quit now");

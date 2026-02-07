@@ -332,10 +332,14 @@ async fn kill_process_on_port(port: u16) {
     {
         let my_pid_num: u32 = std::process::id();
         // netstat -ano | findstr :PORT
-        match tokio::process::Command::new("cmd")
-            .args(["/C", &format!("netstat -ano | findstr :{}", port)])
-            .output()
-            .await
+        let mut netstat_cmd = tokio::process::Command::new("cmd");
+        netstat_cmd.args(["/C", &format!("netstat -ano | findstr :{}", port)]);
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            netstat_cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        match netstat_cmd.output().await
         {
             Ok(output) if output.status.success() => {
                 let text = String::from_utf8_lossy(&output.stdout);
@@ -359,10 +363,14 @@ async fn kill_process_on_port(port: u16) {
                     pids.len(), port, pids, my_pid_num
                 );
                 for pid in &pids {
-                    let _ = tokio::process::Command::new("taskkill")
-                        .args(["/F", "/PID", &pid.to_string()])
-                        .output()
-                        .await;
+                    let mut kill_cmd = tokio::process::Command::new("taskkill");
+                    kill_cmd.args(["/F", "/PID", &pid.to_string()]);
+                    {
+                        use std::os::windows::process::CommandExt;
+                        const CREATE_NO_WINDOW: u32 = 0x08000000;
+                        kill_cmd.creation_flags(CREATE_NO_WINDOW);
+                    }
+                    let _ = kill_cmd.output().await;
                 }
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                 info!("Killed orphaned process(es) on port {}", port);

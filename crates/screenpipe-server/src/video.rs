@@ -785,8 +785,8 @@ mod tests {
 
     /// Get video dimensions using ffprobe
     async fn get_video_dimensions(video_path: &str) -> Result<(u32, u32), anyhow::Error> {
-        let output = Command::new("ffprobe")
-            .args([
+        let mut cmd = Command::new("ffprobe");
+        cmd.args([
                 "-v",
                 "error",
                 "-select_streams",
@@ -796,9 +796,14 @@ mod tests {
                 "-of",
                 "csv=s=x:p=0",
                 video_path,
-            ])
-            .output()
-            .await?;
+            ]);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let output = cmd.output().await?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let parts: Vec<&str> = stdout.trim().split('x').collect();
