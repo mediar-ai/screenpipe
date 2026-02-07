@@ -142,6 +142,32 @@ fn get_pi_config_dir() -> Result<PathBuf, String> {
     Ok(home_dir.join(".pi").join("agent"))
 }
 
+/// Parse the output of `where pi` on Windows, preferring .cmd files
+/// This is extracted for testability
+#[cfg(windows)]
+fn parse_where_output(stdout: &str) -> Option<String> {
+    // On Windows, prefer .cmd files over shell scripts
+    // `where pi` may return multiple results, shell script first then .cmd
+    
+    // First try to find a .cmd file
+    for line in stdout.lines() {
+        let path = line.trim();
+        if path.ends_with(".cmd") {
+            return Some(path.to_string());
+        }
+    }
+    
+    // Fallback to first result if no .cmd found
+    if let Some(path) = stdout.lines().next() {
+        let path = path.trim().to_string();
+        if !path.is_empty() {
+            return Some(path);
+        }
+    }
+    
+    None
+}
+
 /// Find pi executable
 fn find_pi_executable() -> Option<String> {
     let home = dirs::home_dir()
@@ -184,13 +210,8 @@ fn find_pi_executable() -> Option<String> {
             .output()
         {
             if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout)
-                    .lines()
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_string();
-                if !path.is_empty() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Some(path) = parse_where_output(&stdout) {
                     return Some(path);
                 }
             }
@@ -738,4 +759,83 @@ pub fn kill(pid: u32) -> Result<(), String> {
             .output();
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    use super::parse_where_output;
+
+    /// Test that parse_where_output prefers .cmd files over shell scripts
+    #[test]
+    #[cfg(windows)]
+    fn test_parse_where_output_prefers_cmd() {
+        // Simulates typical `where pi` output on Windows with npm global install
+        let output = "C:\\Users\\louis\\AppData\\Roaming\\npm\\pi\r\nC:\\Users\\louis\\AppData\\Roaming\\npm\\pi.cmd\r\n";
+        
+        let result = parse_where_output(output);
+        assert_eq!(result, Some("C:\\Users\\louis\\AppData\\Roaming\\npm\\pi.cmd".to_string()));
+    }
+
+    /// Test that parse_where_output works when only .cmd is present
+    #[test]
+    #[cfg(windows)]
+    fn test_parse_where_output_cmd_only() {
+        let output = "C:\\Users\\louis\\AppData\\Roaming\\npm\\pi.cmd\r\n";
+        
+        let result = parse_where_output(output);
+        assert_eq!(result, Some("C:\\Users\\louis\\AppData\\Roaming\\npm\\pi.cmd".to_string()));
+    }
+
+    /// Test that parse_where_output falls back to first result if no .cmd
+    #[test]
+    #[cfg(windows)]
+    fn test_parse_where_output_no_cmd_fallback() {
+        // Edge case: only shell script available (e.g., WSL or custom install)
+        let output = "C:\\Users\\louis\\AppData\\Roaming\\npm\\pi\r\n";
+        
+        let result = parse_where_output(output);
+        assert_eq!(result, Some("C:\\Users\\louis\\AppData\\Roaming\\npm\\pi".to_string()));
+    }
+
+    /// Test that parse_where_output handles empty output
+    #[test]
+    #[cfg(windows)]
+    fn test_parse_where_output_empty() {
+        let output = "";
+        
+        let result = parse_where_output(output);
+        assert_eq!(result, None);
+    }
+
+    /// Test that parse_where_output handles whitespace-only output
+    #[test]
+    #[cfg(windows)]
+    fn test_parse_where_output_whitespace() {
+        let output = "   \r\n  \r\n";
+        
+        let result = parse_where_output(output);
+        assert_eq!(result, None);
+    }
+
+    /// Test with multiple paths including .cmd in different positions
+    #[test]
+    #[cfg(windows)]
+    fn test_parse_where_output_cmd_not_first() {
+        // .cmd file is last in the list
+        let output = "C:\\Some\\Path\\pi\r\nC:\\Another\\Path\\pi\r\nC:\\Users\\npm\\pi.cmd\r\n";
+        
+        let result = parse_where_output(output);
+        assert_eq!(result, Some("C:\\Users\\npm\\pi.cmd".to_string()));
+    }
+
+    /// Test with Unix-style line endings (shouldn't happen on Windows but be safe)
+    #[test]
+    #[cfg(windows)]
+    fn test_parse_where_output_unix_line_endings() {
+        let output = "C:\\Users\\npm\\pi\nC:\\Users\\npm\\pi.cmd\n";
+        
+        let result = parse_where_output(output);
+        assert_eq!(result, Some("C:\\Users\\npm\\pi.cmd".to_string()));
+    }
 }
