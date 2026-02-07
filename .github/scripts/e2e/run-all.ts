@@ -30,6 +30,10 @@ const SUITES = [
   { name: "permissions", file: "test-permissions.ts" },
   { name: "onboarding", file: "test-onboarding.ts" },
   { name: "chat", file: "test-chat.ts" },
+  { name: "tray", file: "test-tray.ts" },
+  { name: "windows", file: "test-windows.ts" },
+  // lifecycle runs LAST — it kills and restarts the app
+  { name: "lifecycle", file: "test-lifecycle.ts" },
 ];
 
 // Parse args
