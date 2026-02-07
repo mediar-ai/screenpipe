@@ -58,14 +58,26 @@ pub fn compare_images_histogram(
     image2: &DynamicImage,
 ) -> anyhow::Result<f64> {
     let image_one = image1.to_luma8();
-    let image_two = image2.to_luma8();
+    let image_two = if image1.width() != image2.width() || image1.height() != image2.height() {
+        image2
+            .resize_exact(image1.width(), image1.height(), image::imageops::FilterType::Nearest)
+            .to_luma8()
+    } else {
+        image2.to_luma8()
+    };
     image_compare::gray_similarity_histogram(Metric::Hellinger, &image_one, &image_two)
         .map_err(|e| anyhow::anyhow!("Failed to compare images: {}", e))
 }
 
 pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 {
     let image_one = image1.to_luma8();
-    let image_two = image2.to_luma8();
+    let image_two = if image1.width() != image2.width() || image1.height() != image2.height() {
+        image2
+            .resize_exact(image1.width(), image1.height(), image::imageops::FilterType::Nearest)
+            .to_luma8()
+    } else {
+        image2.to_luma8()
+    };
     let result: Similarity =
         image_compare::gray_similarity_structure(&Algorithm::MSSIMSimple, &image_one, &image_two)
             .expect("Images had different dimensions");

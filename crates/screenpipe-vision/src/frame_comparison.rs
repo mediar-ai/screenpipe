@@ -303,18 +303,40 @@ pub struct FrameComparisonStats {
 
 /// Compare two images using histogram comparison.
 /// Returns a difference score between 0.0 (identical) and 1.0 (completely different).
+/// Handles dimension mismatches by resizing the second image to match the first.
 pub fn compare_histogram(image1: &DynamicImage, image2: &DynamicImage) -> anyhow::Result<f64> {
     let image_one = image1.to_luma8();
-    let image_two = image2.to_luma8();
+    let image_two = if image1.width() != image2.width() || image1.height() != image2.height() {
+        debug!(
+            "dimension mismatch in compare_histogram: {}x{} vs {}x{}, resizing",
+            image1.width(), image1.height(), image2.width(), image2.height()
+        );
+        image2
+            .resize_exact(image1.width(), image1.height(), FilterType::Nearest)
+            .to_luma8()
+    } else {
+        image2.to_luma8()
+    };
     image_compare::gray_similarity_histogram(Metric::Hellinger, &image_one, &image_two)
         .map_err(|e| anyhow::anyhow!("Failed to compare images: {}", e))
 }
 
 /// Compare two images using SSIM.
 /// Returns a difference score between 0.0 (identical) and 1.0 (completely different).
+/// Handles dimension mismatches by resizing the second image to match the first.
 pub fn compare_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 {
     let image_one = image1.to_luma8();
-    let image_two = image2.to_luma8();
+    let image_two = if image1.width() != image2.width() || image1.height() != image2.height() {
+        debug!(
+            "dimension mismatch in compare_ssim: {}x{} vs {}x{}, resizing",
+            image1.width(), image1.height(), image2.width(), image2.height()
+        );
+        image2
+            .resize_exact(image1.width(), image1.height(), FilterType::Nearest)
+            .to_luma8()
+    } else {
+        image2.to_luma8()
+    };
     let result = image_compare::gray_similarity_structure(
         &image_compare::Algorithm::MSSIMSimple,
         &image_one,
