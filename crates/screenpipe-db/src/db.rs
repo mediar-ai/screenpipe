@@ -152,8 +152,51 @@ impl DatabaseManager {
         migrator.set_ignore_missing(true);
         match migrator.run(pool).await {
             Ok(_) => Ok(()),
-            Err(e) => Err(e.into()),
+            Err(e) => {
+                let err_str = e.to_string();
+                // Handle checksum mismatch from modified migrations.
+                // This can happen when a migration file was changed after being applied
+                // (e.g., the fps migration was modified between v0.3.130 and v0.3.131).
+                // Fix: update the stored checksum to match the current file, then retry.
+                if err_str.contains("was previously applied but has been modified") {
+                    tracing::warn!(
+                        "Migration checksum mismatch detected: {}. Updating checksums and retrying...",
+                        err_str
+                    );
+                    Self::fix_migration_checksums(pool, &migrator).await?;
+                    // Retry after fixing checksums
+                    migrator.run(pool).await.map_err(|e| e.into())
+                } else {
+                    Err(e.into())
+                }
+            }
         }
+    }
+
+    /// Fix checksum mismatches by updating stored checksums to match current migration files.
+    /// This is needed when a migration file was modified after being applied to the DB
+    /// (which happened with the fps migration between v0.3.130 and v0.3.131).
+    async fn fix_migration_checksums(
+        pool: &SqlitePool,
+        migrator: &sqlx::migrate::Migrator,
+    ) -> Result<(), sqlx::Error> {
+        for migration in migrator.iter() {
+            if migration.migration_type.is_down_migration() {
+                continue;
+            }
+            // Update the checksum for any previously-applied migration to match the current file
+            let version = migration.version;
+            let checksum_bytes: &[u8] = &migration.checksum;
+            sqlx::query(
+                "UPDATE _sqlx_migrations SET checksum = ? WHERE version = ?"
+            )
+            .bind(checksum_bytes)
+            .bind(version)
+            .execute(pool)
+            .await?;
+        }
+        tracing::info!("Migration checksums updated successfully");
+        Ok(())
     }
 
     /// Acquire a connection with `BEGIN IMMEDIATE` and retry on SQLITE_BUSY variants.
