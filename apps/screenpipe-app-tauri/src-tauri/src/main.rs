@@ -1327,6 +1327,9 @@ async fn main() {
             // Autostart setup
             let autostart_manager = app.autolaunch();
 
+            // Install Pi coding agent in background (fire-and-forget, never crashes)
+            crate::pi::ensure_pi_installed_background();
+
             info!("Local data directory: {}", base_dir.display());
 
             // PostHog analytics setup

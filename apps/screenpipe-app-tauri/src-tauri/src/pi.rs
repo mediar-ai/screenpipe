@@ -631,28 +631,8 @@ pub async fn pi_check() -> Result<PiCheckResult, String> {
 pub async fn pi_install(app: AppHandle) -> Result<(), String> {
     info!("Installing pi via bun...");
 
-    let home = dirs::home_dir()
-        .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_default();
-
-    #[cfg(unix)]
-    let bun_paths = vec![
-        format!("{}/.bun/bin/bun", home),
-        "/opt/homebrew/bin/bun".to_string(),
-        "/usr/local/bin/bun".to_string(),
-    ];
-
-    #[cfg(windows)]
-    let bun_paths = vec![
-        format!("{}\\.bun\\bin\\bun.exe", home),
-        format!("{}\\AppData\\Local\\bun\\bin\\bun.exe", home),
-    ];
-
-    let bun = bun_paths
-        .iter()
-        .find(|p| std::path::Path::new(p).exists())
-        .ok_or("Could not find bun. Install from https://bun.sh")?
-        .clone();
+    let bun = find_bun_executable()
+        .ok_or("Could not find bun. Install from https://bun.sh")?;
 
     let app_handle = app.clone();
     std::thread::spawn(move || {
@@ -776,6 +756,89 @@ pub fn kill(pid: u32) -> Result<(), String> {
             .output();
     }
     Ok(())
+}
+
+/// Find bun executable (shared by pi_install and ensure_pi_installed_background)
+fn find_bun_executable() -> Option<String> {
+    let home = dirs::home_dir()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    #[cfg(unix)]
+    let paths = vec![
+        format!("{}/.bun/bin/bun", home),
+        "/opt/homebrew/bin/bun".to_string(),
+        "/usr/local/bin/bun".to_string(),
+    ];
+
+    #[cfg(windows)]
+    let paths = vec![
+        format!("{}\\.bun\\bin\\bun.exe", home),
+        format!("{}\\AppData\\Local\\bun\\bin\\bun.exe", home),
+    ];
+
+    paths.into_iter().find(|p| std::path::Path::new(p).exists())
+}
+
+/// Background Pi installation — call once from app setup.
+/// Runs on a dedicated thread, never panics, never blocks the caller.
+pub fn ensure_pi_installed_background() {
+    match std::thread::Builder::new()
+        .name("pi-install".to_string())
+        .spawn(move || {
+            // Catch any unexpected panic so it can never crash the app
+            let result = std::panic::catch_unwind(|| {
+                // Already installed? Nothing to do.
+                if find_pi_executable().is_some() {
+                    debug!("Pi already installed, skipping background install");
+                    return;
+                }
+
+                let bun = match find_bun_executable() {
+                    Some(b) => b,
+                    None => {
+                        info!("Bun not found, skipping Pi background install");
+                        return;
+                    }
+                };
+
+                info!("Pi not found — installing via bun in background");
+
+                let mut cmd = std::process::Command::new(&bun);
+                cmd.args(["add", "-g", PI_PACKAGE]);
+
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    const CREATE_NO_WINDOW: u32 = 0x08000000;
+                    cmd.creation_flags(CREATE_NO_WINDOW);
+                }
+
+                match cmd.output() {
+                    Ok(output) if output.status.success() => {
+                        info!("Pi installed successfully in background");
+                    }
+                    Ok(output) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        warn!("Pi background install failed (non-fatal): {}", stderr);
+                    }
+                    Err(e) => {
+                        warn!("Pi background install error (non-fatal): {}", e);
+                    }
+                }
+            });
+
+            if let Err(e) = result {
+                // Panic was caught — log and move on
+                error!("Pi background install panicked (non-fatal): {:?}", e);
+            }
+        })
+    {
+        Ok(_) => { /* thread running */ }
+        Err(e) => {
+            error!("Failed to spawn pi-install thread (non-fatal): {}", e);
+        }
+    }
 }
 
 #[cfg(test)]

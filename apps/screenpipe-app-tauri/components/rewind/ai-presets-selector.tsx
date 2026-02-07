@@ -54,7 +54,6 @@ import {
 import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
 import { AIPreset, commands } from "@/lib/utils/tauri";
-import { listen } from "@tauri-apps/api/event";
 
 // Helper to detect UUID-like strings and format preset names nicely
 const formatPresetName = (name: string): string => {
@@ -134,7 +133,7 @@ export function AIProviderConfig({
   const [showApiKey, setShowApiKey] = useState(false);
   const [piAvailable, setPiAvailable] = useState(false);
 
-  // Check Pi availability
+  // Check Pi availability (installed at app startup by Rust background thread)
   useEffect(() => {
     const checkPi = async () => {
       try {
@@ -147,16 +146,9 @@ export function AIProviderConfig({
       }
     };
     checkPi();
-
-    const unlisten = listen<boolean>("pi_installed", (event) => {
-      if (event.payload) {
-        setPiAvailable(true);
-      }
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
+    // Re-check periodically in case background install finishes
+    const interval = setInterval(checkPi, 5000);
+    return () => clearInterval(interval);
   }, []);
   const [formData, setFormData] = useState<AIPreset>({
     provider: defaultPreset?.provider || "openai",

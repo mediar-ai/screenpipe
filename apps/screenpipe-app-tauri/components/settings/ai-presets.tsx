@@ -56,7 +56,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { AIPreset, commands } from "@/lib/utils/tauri";
-import { listen } from "@tauri-apps/api/event";
 import {
   validatePresetName,
   validateUrl,
@@ -816,34 +815,19 @@ export const AIPresets = () => {
   );
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [piAvailable, setPiAvailable] = useState(false);
-  const [piInstalling, setPiInstalling] = useState(false);
 
-  // Check Pi availability and install if needed (background)
+  // Check Pi availability (installed at app startup by Rust background thread)
   useEffect(() => {
-    const checkAndInstallPi = async () => {
+    const checkPi = async () => {
       const result = await commands.piCheck();
       if (result.status === "ok" && result.data.available) {
         setPiAvailable(true);
-      } else {
-        // Try to install in background
-        setPiInstalling(true);
-        await commands.piInstall();
       }
     };
-
-    checkAndInstallPi();
-
-    // Listen for install completion
-    const unlisten = listen<boolean>("pi_installed", (event) => {
-      setPiInstalling(false);
-      if (event.payload) {
-        setPiAvailable(true);
-      }
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
+    checkPi();
+    // Re-check periodically in case background install finishes
+    const interval = setInterval(checkPi, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
