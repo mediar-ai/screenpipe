@@ -113,7 +113,7 @@ jobs:
     # SECURITY: Only run on main branch — self-hosted runner has credentials.
     # Never run on PRs (fork code could be malicious).
     if: >
-      github.ref == 'refs/heads/main' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/e2e-macos-ci') &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
 
