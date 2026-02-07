@@ -37,7 +37,7 @@ pub use server::PaginatedResponse;
 pub use server::SCServer;
 pub use server::{api_list_monitors, MonitorInfo};
 pub use sleep_monitor::start_sleep_monitor;
-pub use video::{FrameWriteInfo, FrameWriteTracker, VideoCapture, video_quality_to_crf, video_quality_to_jpeg_q};
+pub use video::{FrameWriteInfo, FrameWriteTracker, VideoCapture, video_quality_to_crf, video_quality_to_jpeg_q, video_quality_to_preset};
 pub mod embedding;
 pub use cloud_search::{CloudSearchClient, CloudSearchMetadata, CloudStatus};
 pub use ui_recorder::{start_ui_recording, UiRecorderConfig, UiRecorderHandle};

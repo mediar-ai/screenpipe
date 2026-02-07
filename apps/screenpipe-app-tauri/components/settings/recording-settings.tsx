@@ -838,21 +838,21 @@ export function RecordingSettings() {
               <Film className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
                 <h3 className="text-sm font-medium text-foreground">Video quality</h3>
-                <p className="text-xs text-muted-foreground">Higher quality = larger files</p>
+                <p className="text-xs text-muted-foreground">Higher quality = larger files & more CPU</p>
               </div>
             </div>
             <Select
               value={settings.videoQuality || "balanced"}
               onValueChange={(value) => handleSettingsChange({ videoQuality: value }, true)}
             >
-              <SelectTrigger className="w-[130px] h-7 text-xs">
+              <SelectTrigger className="w-[160px] h-7 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="low">Low (smallest)</SelectItem>
                 <SelectItem value="balanced">Balanced</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="max">Max</SelectItem>
+                <SelectItem value="high">High (sharp text)</SelectItem>
+                <SelectItem value="max">Max (best, more CPU)</SelectItem>
               </SelectContent>
             </Select>
           </div>
