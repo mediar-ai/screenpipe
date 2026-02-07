@@ -745,16 +745,13 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Get CrabNebula release URL from environment
-            const releaseUrl = "https://web.crabnebula.cloud/mediar/screenpipe/releases";
-            
             // Create release discussion issue
             const message = `
             ## 🧪 testing needed for v${{ env.VERSION }}
             
             this release needs community testing. a testing bounty issue will be created shortly.
             
-            - download the release: [crabnebula cloud](${ releaseUrl })
+            - download the release: [screenpi.pe](https://screenpi.pe)
             - testing guidelines: [testing.md](https://github.com/screenpipe/screenpipe/blob/main/TESTING.md)
             
             each tester who provides quality feedback will receive a $20 bounty through algora.

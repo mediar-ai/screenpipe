@@ -116,7 +116,7 @@ gh run view <RUN_ID> --json status,conclusion,jobs --jq '{status: .status, concl
 ```
 
 ### 7. Test the Draft Release
-- Download from CrabNebula Cloud: https://web.crabnebula.cloud/mediar/screenpipe/releases
+- Download from https://screenpi.pe (requires purchase token)
 - Test on macOS and Windows
 - Verify updater artifacts exist (.tar.gz, .sig files)
 
