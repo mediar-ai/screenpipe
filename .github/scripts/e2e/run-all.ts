@@ -27,8 +27,7 @@ const SUITES = [
   { name: "window", file: "test-main-window.ts" },
   { name: "settings", file: "test-settings.ts" },
   { name: "recording", file: "test-recording.ts" },
-  // permissions suite is macOS-only (accessibility/screen recording perms)
-  ...(IS_MACOS ? [{ name: "permissions", file: "test-permissions.ts" }] : []),
+  { name: "permissions", file: "test-permissions.ts" },
   { name: "onboarding", file: "test-onboarding.ts" },
   { name: "chat", file: "test-chat.ts" },
 ];

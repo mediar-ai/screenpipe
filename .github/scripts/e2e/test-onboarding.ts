@@ -6,8 +6,8 @@ import {
 
 suite("onboarding flow");
 
-await test("trigger onboarding", async () => {
-  if (IS_MACOS) {
+if (IS_MACOS) {
+  await test("trigger onboarding", async () => {
     await click("role:AXMenuBarItem AND title:screenpipe");
     await sleep(500);
     try {
@@ -16,40 +16,38 @@ await test("trigger onboarding", async () => {
       await press("Escape");
       await sleep(500);
     }
-  } else {
-    // On Windows, try to trigger onboarding via tray or menu
-    await bb("activate", "screenpipe-app");
-    await sleep(500);
-    const s = shortcuts.showApp;
-    await shortcut(s.key, s.modifiers);
-    await sleep(2000);
-    // Try to find onboarding trigger in the UI
-    try {
-      await click(sel.titleContains("onboarding"));
-    } catch {
-      // May not be available if already completed — that's ok
+    await sleep(3000);
+    await assertExists(sel.webArea, TIMEOUT_MEDIUM);
+  });
+
+  await test("onboarding has skip/content", async () => {
+    const result = await scrape();
+    const texts: string[] = (result?.data?.items ?? []).map((i: any) => (i.text ?? "").toLowerCase());
+    const allText = texts.join(" ");
+    const keywords = ["skip", "next", "continue", "get started", "welcome", "screenpipe", "setup"];
+    if (!keywords.some((kw) => allText.includes(kw))) {
+      throw new Error(`no onboarding keywords found in: ${allText.slice(0, 200)}`);
     }
-  }
-  await sleep(3000);
-  await assertExists(sel.webArea, TIMEOUT_MEDIUM);
-});
+  });
 
-await test("onboarding has skip/content", async () => {
-  const result = await scrape();
-  const texts: string[] = (result?.data?.items ?? []).map((i: any) => (i.text ?? "").toLowerCase());
-  const allText = texts.join(" ");
-  const keywords = ["skip", "next", "continue", "get started", "welcome", "screenpipe", "setup"];
-  if (!keywords.some((kw) => allText.includes(kw))) {
-    throw new Error(`no onboarding keywords found in: ${allText.slice(0, 200)}`);
-  }
-});
+  await test("onboarding screenshot", () => screenshot("onboarding-step1"));
 
-await test("onboarding screenshot", () => screenshot("onboarding-step1"));
+  await test("close onboarding", async () => {
+    await press("Escape");
+    await sleep(1000);
+  });
+}
 
-await test("close onboarding", async () => {
-  await press("Escape");
-  await sleep(1000);
-});
+if (IS_WINDOWS) {
+  // On Windows, onboarding UI tests are limited due to WebView2 UIA constraints.
+  // We verify the app is responsive.
+  await test("screenpipe responsive", async () => {
+    const result = await bb("find", "name~:screenpi");
+    if ((result?.data ?? []).length === 0) throw new Error("screenpipe not found");
+  });
+
+  await test("screenshot", () => screenshot("onboarding-windows"));
+}
 
 const ok = summary();
 process.exit(ok ? 0 : 1);
