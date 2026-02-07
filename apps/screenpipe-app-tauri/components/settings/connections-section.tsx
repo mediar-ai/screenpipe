@@ -31,35 +31,40 @@ interface McpVersionInfo {
 }
 
 async function getLatestMcpRelease(): Promise<{ url: string; version: string }> {
-  const response = await tauriFetch(GITHUB_RELEASES_API, {
-    method: "GET",
-    headers: {
-      "Accept": "application/vnd.github.v3+json",
-    },
-  });
+  // paginate through releases to find the latest mcp-v* release
+  // (mcp releases can be buried behind many app releases)
+  const maxPages = 5;
+  for (let page = 1; page <= maxPages; page++) {
+    const response = await tauriFetch(
+      `${GITHUB_RELEASES_API}?per_page=50&page=${page}`,
+      {
+        method: "GET",
+        headers: {
+          "Accept": "application/vnd.github.v3+json",
+        },
+      }
+    );
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch releases");
+    if (!response.ok) {
+      throw new Error("Failed to fetch releases");
+    }
+
+    const releases: GitHubRelease[] = await response.json();
+    if (releases.length === 0) break;
+
+    const mcpRelease = releases.find(r => r.tag_name.startsWith("mcp-v"));
+    if (mcpRelease) {
+      const mcpbAsset = mcpRelease.assets.find(a => a.name.endsWith(".mcpb"));
+      if (!mcpbAsset) {
+        throw new Error("No .mcpb file found in release");
+      }
+
+      const version = mcpRelease.tag_name.replace("mcp-v", "");
+      return { url: mcpbAsset.browser_download_url, version };
+    }
   }
 
-  const releases: GitHubRelease[] = await response.json();
-
-  // Find the latest mcp release (tag starts with "mcp-v")
-  const mcpRelease = releases.find(r => r.tag_name.startsWith("mcp-v"));
-  if (!mcpRelease) {
-    throw new Error("No MCP release found");
-  }
-
-  // Find the .mcpb asset
-  const mcpbAsset = mcpRelease.assets.find(a => a.name.endsWith(".mcpb"));
-  if (!mcpbAsset) {
-    throw new Error("No .mcpb file found in release");
-  }
-
-  // Extract version from tag (mcp-v0.5.0 -> 0.5.0)
-  const version = mcpRelease.tag_name.replace("mcp-v", "");
-
-  return { url: mcpbAsset.browser_download_url, version };
+  throw new Error("No MCP release found");
 }
 
 async function getInstalledMcpVersion(): Promise<string | null> {
@@ -166,7 +171,7 @@ export function ConnectionsSection() {
 
       setDownloadState("downloaded");
     } catch (error) {
-      console.error("Failed to download mcpb:", error);
+      console.error("Failed to download mcpb:", error instanceof Error ? error.message : String(error));
       await message("Failed to download extension. Please try again.", {
         title: "Download Error",
         kind: "error",
