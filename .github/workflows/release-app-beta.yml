@@ -27,6 +27,7 @@ jobs:
       should_publish: ${{ steps.check.outputs.should_publish }}
       should_test: ${{ steps.check.outputs.should_test }}
       macos26_runner: ${{ steps.check-runner.outputs.macos26_runner }}
+      windows_runner: ${{ steps.check-runner.outputs.windows_runner }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,6 +75,17 @@ jobs:
             echo "ℹ️ Self-hosted macOS 26 runner offline — falling back to macos-latest"
           fi
 
+          # Check if Windows self-hosted runner is online
+          WIN_RUNNER_STATUS=$(gh api repos/${{ github.repository }}/actions/runners \
+            --jq '.runners[] | select(.labels[].name == "windows-desktop-test") | .status' 2>/dev/null || echo "offline")
+          if [ "$WIN_RUNNER_STATUS" = "online" ]; then
+            echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
+            echo "✅ Self-hosted Windows runner is online"
+          else
+            echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
+            echo "ℹ️ Self-hosted Windows runner offline — falling back to windows-2019"
+          fi
+
   draft:
     needs: [check_commit]
     if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
@@ -119,7 +131,7 @@ jobs:
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin --features official-build"
             os_type: "macos"
-          - platform: "windows-2019"
+          - platform: ${{ needs.check_commit.outputs.windows_runner || 'windows-2019' }}
             args: "--target x86_64-pc-windows-msvc --features mkl"
             pre-build-args: ""
             tauri-args: "--target x86_64-pc-windows-msvc --features official-build"
@@ -131,7 +143,7 @@ jobs:
           #   tauri-args: ""
           #   os_type: "linux"
 
-    runs-on: ${{ matrix.platform == 'macos-26' && fromJSON('["self-hosted", "macos-26"]') || matrix.platform }}
+    runs-on: ${{ matrix.platform == 'macos-26' && fromJSON('["self-hosted", "macos-26"]') || matrix.platform == 'windows-desktop-test' && fromJSON('["self-hosted", "windows-desktop-test"]') || matrix.platform }}
     timeout-minutes: 120
     steps:
       - name: Detect Xcode version and set Apple Intelligence feature
