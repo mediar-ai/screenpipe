@@ -163,7 +163,7 @@ jobs:
           cd apps/screenpipe-app-tauri
           bun install
 
-      - name: Build Tauri app
+      - name: Build and install Tauri app
         env:
           SCREENPIPE_APP_DEV: "true"
         run: |
@@ -180,20 +180,20 @@ jobs:
             exit 1
           fi
           echo "✓ Built: $APP_PATH"
-          echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
 
-      - name: Install app
-        run: |
           # Kill any existing screenpipe
           pkill -f "screenpipe" 2>/dev/null || true
           sleep 2
 
-          # Copy to /Applications
-          APP_NAME=$(basename "$APP_PATH")
-          sudo rm -rf "/Applications/$APP_NAME"
-          sudo cp -R "$APP_PATH" "/Applications/$APP_NAME"
-          echo "✓ Installed: /Applications/$APP_NAME"
-          echo "INSTALLED_APP=/Applications/$APP_NAME" >> $GITHUB_ENV
+          # Install to /Applications
+          APP_BASENAME=$(basename "$APP_PATH")
+          echo "Installing $APP_BASENAME to /Applications/"
+          sudo rm -rf "/Applications/$APP_BASENAME"
+          sudo cp -R "$APP_PATH" "/Applications/$APP_BASENAME"
+          echo "✓ Installed: /Applications/$APP_BASENAME"
+
+          echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
+          echo "INSTALLED_APP=/Applications/$APP_BASENAME" >> $GITHUB_ENV
 
       - name: Grant app permissions
         continue-on-error: true
