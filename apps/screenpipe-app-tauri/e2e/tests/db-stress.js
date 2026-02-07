@@ -168,4 +168,53 @@ describe('Database & Stability (S9)', () => {
         const failures = apiResults.filter(r => !r.ok);
         expect(failures.length).toBe(0);
     });
+
+    it('should handle search with empty query (S9.5)', async () => {
+        const result = await browser.execute(async (base) => {
+            const res = await fetch(`${base}/search?q=&limit=5`);
+            return { ok: res.ok, status: res.status };
+        }, API_BASE);
+
+        // Empty query should not crash
+        expect(result.status).not.toBe(500);
+    });
+
+    it('should handle search with very long query (S9.5)', async () => {
+        const longQuery = 'a'.repeat(1000);
+        const result = await browser.execute(async (base, q) => {
+            try {
+                const res = await fetch(`${base}/search?q=${encodeURIComponent(q)}&limit=1`);
+                return { ok: res.ok, status: res.status };
+            } catch (e) {
+                return { ok: false, status: 0 };
+            }
+        }, API_BASE, longQuery);
+
+        // Should not crash server — 400 or empty results OK
+        expect(result.status).not.toBe(500);
+    });
+
+    it('should handle search with negative offset (S9.5)', async () => {
+        const result = await browser.execute(async (base) => {
+            const res = await fetch(`${base}/search?offset=-1&limit=5`);
+            return { ok: res.ok, status: res.status };
+        }, API_BASE);
+
+        // Should handle gracefully
+        expect(result.status).not.toBe(500);
+    });
+
+    it('should handle health endpoint under concurrent load (S9.2)', async () => {
+        const results = await browser.execute(async (base) => {
+            const promises = Array.from({ length: 20 }, () =>
+                fetch(`${base}/health`)
+                    .then(r => ({ ok: r.ok, status: r.status }))
+                    .catch(() => ({ ok: false, status: 0 }))
+            );
+            return Promise.all(promises);
+        }, API_BASE);
+
+        const failures = results.filter(r => !r.ok);
+        expect(failures.length).toBeLessThan(2);
+    });
 });

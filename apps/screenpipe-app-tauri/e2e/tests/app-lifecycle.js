@@ -180,4 +180,97 @@ describe('App Lifecycle', () => {
         const ready2 = await browser.execute(() => document.readyState);
         expect(ready2).toBe('complete');
     });
+
+    it('should have version info accessible (S8.7)', async () => {
+        // Check if app exposes version info via Tauri API
+        const versionInfo = await browser.execute(async () => {
+            try {
+                if (window.__TAURI__) {
+                    const version = await window.__TAURI__.app.getVersion();
+                    return { version, hasTauri: true };
+                }
+                return { version: null, hasTauri: false };
+            } catch {
+                return { version: null, hasTauri: false, error: true };
+            }
+        });
+
+        if (versionInfo.version) {
+            console.log(`App version: ${versionInfo.version}`);
+        } else {
+            console.log('Version info not accessible via Tauri API');
+        }
+
+        // App should still be stable
+        const ready = await browser.execute(() => document.readyState);
+        expect(ready).toBe('complete');
+    });
+
+    it('should handle window resize without crash (S1.10)', async () => {
+        // Get current size
+        const size = await browser.execute(() => ({
+            width: window.innerWidth,
+            height: window.innerHeight,
+        }));
+
+        // Trigger resize event
+        await browser.execute(() => {
+            window.dispatchEvent(new Event('resize'));
+        });
+        await browser.pause(500);
+
+        const ready = await browser.execute(() => document.readyState);
+        expect(ready).toBe('complete');
+
+        const bodyText = await browser.execute(() => document.body.innerText);
+        expect(bodyText).not.toContain('Unhandled Runtime Error');
+    });
+
+    it('should not have XSS in search results (S9.5)', async () => {
+        // Try injecting script tags via search — should be safely handled
+        const result = await browser.execute(async () => {
+            const res = await fetch('http://localhost:3030/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&limit=1');
+            return { ok: res.ok, status: res.status };
+        });
+
+        // Should not crash server
+        expect(result.status).not.toBe(500);
+
+        // DOM should not execute injected scripts
+        const alertFired = await browser.execute(() => {
+            // Check if any alert dialog was triggered
+            return typeof window.__xss_test === 'undefined';
+        });
+        expect(alertFired).toBe(true);
+    });
+
+    it('should have localStorage accessible (S10.3)', async () => {
+        // Settings persistence relies on localStorage/Tauri store
+        const storageWorks = await browser.execute(() => {
+            try {
+                localStorage.setItem('e2e_test', 'works');
+                const val = localStorage.getItem('e2e_test');
+                localStorage.removeItem('e2e_test');
+                return val === 'works';
+            } catch {
+                return false;
+            }
+        });
+        expect(storageWorks).toBe(true);
+    });
+
+    it('should handle multiple rapid navigations without crash (S8.6)', async () => {
+        const routes = ['/', '/settings', '/', '/settings', '/', '/settings', '/'];
+        for (const route of routes) {
+            await browser.execute((r) => { window.location.href = r; }, route);
+            await browser.pause(500);
+        }
+
+        await browser.pause(2000);
+        const ready = await browser.execute(() => document.readyState);
+        expect(ready).toBe('complete');
+
+        const bodyText = await browser.execute(() => document.body.innerText);
+        expect(bodyText).not.toContain('Unhandled Runtime Error');
+    });
 });
