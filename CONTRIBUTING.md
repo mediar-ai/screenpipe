@@ -164,8 +164,9 @@ before you begin:
 
 1. **install dependencies**:
    ```bash
-   sudo apt-get install -y g++ ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev
+   sudo apt-get install -y g++ ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev libpipewire-0.3-dev
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source ~/.bashrc
    ```
 
 2. **install bun cli**:
@@ -187,6 +188,7 @@ before you begin:
 
 5. **build the desktop app**:
    ```bash
+   sudo apt-get install -y libayatana-appindicator3-1 libayatana-appindicator3-dev librsvg2-dev libwebkit2gtk-4.1-dev
    cd apps/screenpipe-app-tauri
    bun install
    bun tauri build
