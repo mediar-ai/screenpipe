@@ -177,9 +177,10 @@ jobs:
         shell: powershell
         run: |
           Write-Host "Enabling git core.longpaths..."
-          git config --system core.longpaths true
+          # Use --global instead of --system to avoid permission issues on self-hosted runners
+          git config --global core.longpaths true
           # Verify the setting
-          $longpaths = git config --system --get core.longpaths
+          $longpaths = git config --global --get core.longpaths
           Write-Host "core.longpaths is set to: $longpaths"
           if ($longpaths -ne "true") {
             throw "Failed to enable git long paths"
