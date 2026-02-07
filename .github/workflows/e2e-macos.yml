@@ -144,6 +144,9 @@ jobs:
       - name: Install system deps
         run: |
           brew install ffmpeg pkg-config cmake wget 2>/dev/null || true
+          # Ensure Xcode (not just CLT) is selected — needed for cidre framework
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
 
       - name: Install/update BigBrother CLI
         run: |
