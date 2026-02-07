@@ -709,6 +709,72 @@ jobs:
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./apps/screenpipe-app-tauri/src-tauri
 
+      - name: Upload to Cloudflare R2 (macOS)
+        if: matrix.os_type == 'macos'
+        continue-on-error: true
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          TARGET="${{ matrix.target }}"
+          BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
+          R2_PREFIX="s3://screenpipe-releases/releases/${VERSION}/${TARGET}"
+
+          echo "uploading ${TARGET} bundles for v${VERSION} to R2..."
+
+          # Upload DMG
+          for f in ${BUNDLE_DIR}/dmg/*.dmg; do
+            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename $f)" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename $f)"
+          done
+
+          # Upload updater artifacts (.tar.gz + .sig)
+          for f in ${BUNDLE_DIR}/macos/*.tar.gz ${BUNDLE_DIR}/macos/*.sig; do
+            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename $f)" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename $f)"
+          done
+
+          echo "R2 upload complete for ${TARGET}"
+
+      - name: Upload to Cloudflare R2 (Windows)
+        if: matrix.os_type == 'windows'
+        continue-on-error: true
+        shell: powershell
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          # Install AWS CLI if not present
+          if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing AWS CLI..."
+            Invoke-WebRequest -Uri "https://awscli.amazonaws.com/AWSCLIV2.msi" -OutFile "$env:TEMP\awscli.msi"
+            Start-Process msiexec.exe -Wait -ArgumentList "/i $env:TEMP\awscli.msi /quiet"
+            $env:PATH += ";C:\Program Files\Amazon\AWSCLIV2"
+          }
+          $version = (Select-String -Path apps/screenpipe-app-tauri/src-tauri/Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          $bundleDir = "apps/screenpipe-app-tauri/src-tauri/target/release/bundle"
+          $r2Endpoint = "https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          $r2Prefix = "s3://screenpipe-releases/releases/$version/x86_64-pc-windows-msvc"
+
+          Write-Host "uploading Windows bundles for v$version to R2..."
+
+          # Upload NSIS installer (.exe)
+          Get-ChildItem "$bundleDir/nsis/*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
+            aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
+            Write-Host "  ✅ $($_.Name)"
+          }
+
+          # Upload updater artifacts (.nsis.zip + .sig)
+          Get-ChildItem "$bundleDir/nsis/*.nsis.zip","$bundleDir/nsis/*.sig" -ErrorAction SilentlyContinue | ForEach-Object {
+            aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
+            Write-Host "  ✅ $($_.Name)"
+          }
+
+          Write-Host "R2 upload complete for Windows"
+
   publish-release:
     needs: [check_commit, publish-tauri]
     # Only auto-publish when commit message contains "release-app-publish"
@@ -738,7 +804,41 @@ jobs:
         with:
           command: release publish ${{ secrets.CN_APP_SLUG_BETA }} ${{ env.VERSION }}
           api-key: ${{ secrets.CN_API_KEY }}
-          
+
+      - name: Write R2 latest.json manifest
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          VERSION="${{ env.VERSION }}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # List what was actually uploaded for each platform
+          PLATFORMS=""
+          for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc; do
+            FILES=$(aws s3 ls "s3://screenpipe-releases/releases/${VERSION}/${target}/" --endpoint-url "$R2_ENDPOINT" 2>/dev/null | awk '{print $4}' | tr '\n' ',' | sed 's/,$//')
+            if [ -n "$FILES" ]; then
+              PLATFORMS="${PLATFORMS}\"${target}\": { \"files\": [$(echo $FILES | sed 's/\([^,]*\)/"\1"/g')] },"
+            fi
+          done
+          PLATFORMS=$(echo "$PLATFORMS" | sed 's/,$//')
+
+          cat > /tmp/latest.json << MANIFEST
+          {
+            "version": "${VERSION}",
+            "pub_date": "${PUB_DATE}",
+            "platforms": { ${PLATFORMS} }
+          }
+          MANIFEST
+
+          # Pretty-print and upload
+          python3 -m json.tool /tmp/latest.json > /tmp/latest-pretty.json 2>/dev/null && mv /tmp/latest-pretty.json /tmp/latest.json
+          aws s3 cp /tmp/latest.json "s3://screenpipe-releases/latest.json" --endpoint-url "$R2_ENDPOINT" --content-type "application/json"
+          echo "✅ R2 latest.json updated for v${VERSION}"
+
       - name: Create testing notification
         if: needs.check_commit.outputs.should_test == 'true'
         uses: actions/github-script@v6
