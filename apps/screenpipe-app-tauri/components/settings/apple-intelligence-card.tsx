@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { platform } from "@tauri-apps/plugin-os";
+import posthog from "posthog-js";
 
 const API = "http://localhost:3030";
 
@@ -34,7 +35,10 @@ export function AppleIntelligenceCard() {
     try {
       localStorage?.setItem("apple-intelligence-enabled", String(val));
     } catch {}
+    posthog.capture(val ? "apple_intelligence_enabled" : "apple_intelligence_disabled");
   };
+
+  const statusCapturedRef = React.useRef(false);
 
   // Check AI availability
   const checkStatus = useCallback(async () => {
@@ -44,14 +48,22 @@ export function AppleIntelligenceCard() {
       });
       if (resp.ok) {
         const data = await resp.json();
-        setAiStatus(data.available ? "available" : "unavailable");
+        const available = data.available ? "available" : "unavailable";
+        setAiStatus(available as any);
+        if (!statusCapturedRef.current) {
+          statusCapturedRef.current = true;
+          posthog.capture("apple_intelligence_status", {
+            available: data.available,
+            enabled,
+          });
+        }
       } else {
         setAiStatus("unavailable");
       }
     } catch {
       setAiStatus("unavailable");
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     checkStatus();
