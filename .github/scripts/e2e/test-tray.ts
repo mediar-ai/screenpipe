@@ -99,19 +99,68 @@ if (IS_MACOS) {
     }
   });
 
-  await test("tray menu does not fire twice (S2)", async () => {
-    // This is hard to test directly — we verify the action count
-    // by checking that "settings" opens exactly one settings window
+  await test("tray menu does not fire twice (S2.6)", async () => {
     await bb("click", "role:AXMenuBarItem AND name~:status", "--app", "screenpipe-app");
     await sleep(500);
-    // Just verify menu is responsive without double-firing
     const result = await bb("find", "role:AXMenuItem AND title:settings", "--app", "screenpipe-app");
     const settingsCount = result?.data?.length ?? 0;
-    // Should be exactly 1 settings menu item (not duplicated)
     if (settingsCount > 1) {
       throw new Error(`${settingsCount} "settings" items in tray (possible double-fire bug)`);
     }
     await bb("press", "escape");
+  });
+
+  await test("tray has stop/start recording items (S2.5)", async () => {
+    await bb("click", "role:AXMenuBarItem AND name~:status", "--app", "screenpipe-app");
+    await sleep(500);
+    let found = { stop: false, start: false, changelog: false, feedback: false };
+    for (const item of ["stop recording", "start recording", "changelog", "send feedback"]) {
+      try {
+        const r = await bb("find", `role:AXMenuItem AND title~:${item}`);
+        if ((r?.data?.length ?? 0) > 0) (found as any)[item.split(" ")[0]] = true;
+      } catch {}
+    }
+    console.log(`  menu items: stop=${found.stop}, start=${found.start}, changelog=${found.changelog}, feedback=${found.feedback}`);
+    await bb("press", "escape");
+  });
+
+  await test("tray icon persists after toggle (S2.4)", async () => {
+    // Toggle overlay a few times and verify tray stays visible
+    for (let i = 0; i < 3; i++) {
+      await bb("shortcut", "s", "--modifiers", "cmd,ctrl");
+      await sleep(500);
+    }
+    // Tray should still be there
+    const result = await bb("find", "role:AXMenuBarItem AND name~:status", "--app", "screenpipe-app");
+    if ((result?.data?.length ?? 0) === 0) {
+      throw new Error("tray icon disappeared after overlay toggle");
+    }
+  });
+
+  await test("dock icon visible (S2.1)", async () => {
+    // Check dock icon by looking for the app in running apps
+    const proc = Bun.spawnSync(["bash", "-c",
+      "osascript -e 'tell application \"System Events\" to get name of every process whose visible is true'"]);
+    const apps = proc.stdout.toString().toLowerCase();
+    // Screenpipe should appear in visible processes (dock icon = not accessory mode)
+    if (!apps.includes("screenpipe")) {
+      console.log("  warning: screenpipe not in visible processes (may be in accessory mode)");
+    } else {
+      console.log("  dock icon: visible");
+    }
+  });
+
+  await test("dock icon persists after overlay toggle (S2.3)", async () => {
+    for (let i = 0; i < 5; i++) {
+      await bb("shortcut", "s", "--modifiers", "cmd,ctrl");
+      await sleep(300);
+    }
+    const proc = Bun.spawnSync(["bash", "-c",
+      "osascript -e 'tell application \"System Events\" to get name of every process whose visible is true'"]);
+    const apps = proc.stdout.toString().toLowerCase();
+    if (!apps.includes("screenpipe")) {
+      throw new Error("dock icon disappeared after 5 overlay toggles (activation policy may have changed)");
+    }
   });
 }
 

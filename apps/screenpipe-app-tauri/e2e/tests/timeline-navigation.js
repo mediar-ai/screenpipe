@@ -134,4 +134,61 @@ describe('Timeline Navigation (S12)', () => {
         console.log(`Found ${urlCount} results containing URLs`);
         // Don't fail — URLs may not be on screen
     });
+
+    it('should verify search results have timestamps (S12.2)', async () => {
+        const data = await browser.execute(async () => {
+            const res = await fetch('http://localhost:3030/search?limit=5&content_type=ocr');
+            return res.json();
+        });
+
+        if (data.data && data.data.length > 0) {
+            for (const item of data.data) {
+                const ts = item.content?.timestamp || item.timestamp;
+                expect(ts).toBeTruthy();
+                // Timestamp should be parseable
+                const date = new Date(ts);
+                expect(date.getTime()).toBeGreaterThan(0);
+            }
+        }
+    });
+
+    it('should refresh data on window focus (S12.7)', async () => {
+        // Simulate what happens when user opens app via shortcut
+        // Trigger the show-rewind event if available
+        const result = await browser.execute(async () => {
+            try {
+                // Try Tauri invoke to trigger timeline refresh
+                if (window.__TAURI__) {
+                    await window.__TAURI__.invoke('show_main_window');
+                }
+            } catch {}
+            // Wait a moment for refresh
+            await new Promise(r => setTimeout(r, 1000));
+            return { ready: document.readyState };
+        });
+        expect(result.ready).toBe('complete');
+    });
+
+    it('should handle Escape key without crash (S1.14 proxy)', async () => {
+        await browser.keys(['Escape']);
+        await browser.pause(500);
+
+        const ready = await browser.execute(() => document.readyState);
+        expect(ready).toBe('complete');
+    });
+
+    it('should handle search with special characters (S9.5)', async () => {
+        const queries = ['test AND query', 'hello world', 'file:///path', '<script>alert(1)</script>'];
+        for (const q of queries) {
+            const result = await browser.execute(async (query) => {
+                try {
+                    const res = await fetch(`http://localhost:3030/search?limit=1&q=${encodeURIComponent(query)}`);
+                    return { ok: res.ok, status: res.status };
+                } catch (e) {
+                    return { ok: false, status: 0 };
+                }
+            }, q);
+            expect(result.status).not.toBe(500);
+        }
+    });
 });

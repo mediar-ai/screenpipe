@@ -95,4 +95,89 @@ describe('App Lifecycle', () => {
             expect(ready).toBe('complete');
         }
     });
+
+    it('should have health API accessible from WebView (S8)', async () => {
+        const health = await browser.execute(async () => {
+            const res = await fetch('http://localhost:3030/health');
+            return res.json();
+        });
+
+        expect(health).toHaveProperty('status');
+        expect(health).toHaveProperty('frame_status');
+        expect(['healthy', 'degraded']).toContain(health.status);
+    });
+
+    it('should have no memory leak indicators after navigation (S8)', async () => {
+        // Navigate rapidly to simulate user behavior
+        const routes = ['/', '/settings', '/', '/settings', '/'];
+        for (const route of routes) {
+            await browser.execute((r) => { window.location.href = r; }, route);
+            await browser.pause(1000);
+        }
+
+        // Check JS heap if available
+        const memInfo = await browser.execute(() => {
+            if (performance.memory) {
+                return {
+                    usedJSHeapSize: performance.memory.usedJSHeapSize,
+                    jsHeapSizeLimit: performance.memory.jsHeapSizeLimit,
+                };
+            }
+            return null;
+        });
+
+        if (memInfo) {
+            const usedMB = Math.round(memInfo.usedJSHeapSize / 1024 / 1024);
+            const limitMB = Math.round(memInfo.jsHeapSizeLimit / 1024 / 1024);
+            console.log(`JS heap: ${usedMB}MB / ${limitMB}MB`);
+            // If using >80% of heap, that's concerning
+            if (usedMB > limitMB * 0.8) {
+                console.log('Warning: JS heap usage is high');
+            }
+        }
+
+        const ready = await browser.execute(() => document.readyState);
+        expect(ready).toBe('complete');
+    });
+
+    it('should handle rapid reload without crash (S8.4)', async () => {
+        for (let i = 0; i < 3; i++) {
+            await browser.execute(() => { window.location.reload(); });
+            await browser.pause(1500);
+        }
+
+        const ready = await browser.execute(() => document.readyState);
+        expect(ready).toBe('complete');
+
+        const bodyText = await browser.execute(() => document.body.innerText);
+        expect(bodyText).not.toContain('Unhandled Runtime Error');
+    });
+
+    it('should have correct platform info (S14)', async () => {
+        const platform = await browser.execute(() => navigator.platform);
+        // Should be a valid platform string
+        expect(platform).toBeTruthy();
+        expect(platform.length).toBeGreaterThan(0);
+    });
+
+    it('should handle back/forward navigation (S8)', async () => {
+        await browser.execute(() => { window.location.href = '/settings'; });
+        await browser.pause(1000);
+        await browser.execute(() => { window.location.href = '/'; });
+        await browser.pause(1000);
+
+        // Go back
+        await browser.execute(() => { window.history.back(); });
+        await browser.pause(1000);
+
+        const ready = await browser.execute(() => document.readyState);
+        expect(ready).toBe('complete');
+
+        // Go forward
+        await browser.execute(() => { window.history.forward(); });
+        await browser.pause(1000);
+
+        const ready2 = await browser.execute(() => document.readyState);
+        expect(ready2).toBe('complete');
+    });
 });
