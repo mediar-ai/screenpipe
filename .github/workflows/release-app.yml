@@ -16,6 +16,10 @@ on:
         description: "Whether this release needs community testing"
         type: boolean
         default: false
+      force_github_runners:
+        description: "Force GitHub-hosted runners (skip self-hosted even if online)"
+        type: boolean
+        default: false
   push:
     branches: [main]
 
@@ -67,23 +71,35 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RUNNER_CHECK_TOKEN }}
         run: |
-          # Check if any self-hosted runner with macos-26 label is online
-          RUNNER_STATUS=$(gh api repos/${{ github.repository }}/actions/runners \
-            --jq '.runners[] | select(.labels[].name == "macos-26") | .status' 2>/dev/null || echo "offline")
-          if [ "$RUNNER_STATUS" = "online" ]; then
-            echo "macos26_runner=macos-26" >> $GITHUB_OUTPUT
-            echo "✅ Self-hosted macOS 26 runner is online"
-          else
+          # Force GitHub-hosted runners if requested
+          if [ "${{ github.event.inputs.force_github_runners }}" = "true" ]; then
             echo "macos26_runner=macos-latest" >> $GITHUB_OUTPUT
-            echo "ℹ️ Self-hosted macOS 26 runner offline — falling back to macos-latest"
-          fi
+            echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
+            echo "⚠️ Forcing GitHub-hosted runners (manual override)"
+          else
+            # Check if self-hosted macOS 26 runner is online AND idle
+            # "online" alone isn't enough — runner could be stuck on login screen, frozen, etc.
+            RUNNER_INFO=$(gh api repos/${{ github.repository }}/actions/runners \
+              --jq '.runners[] | select(.labels[].name == "macos-26") | {status: .status, busy: .busy}' 2>/dev/null || echo '{"status":"offline","busy":false}')
+            RUNNER_STATUS=$(echo "$RUNNER_INFO" | jq -r '.status // "offline"')
+            RUNNER_BUSY=$(echo "$RUNNER_INFO" | jq -r '.busy // "false"')
 
-          # Check if Windows self-hosted runner is online and healthy
-          # Temporarily forcing GH-hosted runner due to symlink permission issues on self-hosted
-          # (EPERM on bun symlink creation — needs Developer Mode enabled on the runner)
-          # TODO: re-enable self-hosted once runner is configured with Developer Mode
-          echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
-          echo "ℹ️ Using GitHub-hosted Windows runner (self-hosted has symlink permission issues)"
+            if [ "$RUNNER_STATUS" = "online" ] && [ "$RUNNER_BUSY" = "false" ]; then
+              echo "macos26_runner=macos-26" >> $GITHUB_OUTPUT
+              echo "✅ Self-hosted macOS 26 runner is online and idle"
+            elif [ "$RUNNER_STATUS" = "online" ] && [ "$RUNNER_BUSY" = "true" ]; then
+              echo "macos26_runner=macos-26" >> $GITHUB_OUTPUT
+              echo "⏳ Self-hosted macOS 26 runner is online but busy — job will queue"
+            else
+              echo "macos26_runner=macos-latest" >> $GITHUB_OUTPUT
+              echo "ℹ️ Self-hosted macOS 26 runner offline — falling back to macos-latest"
+            fi
+
+            # Windows: temporarily forcing GH-hosted runner due to symlink permission issues
+            # TODO: re-enable self-hosted once runner has Developer Mode enabled
+            echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
+            echo "ℹ️ Using GitHub-hosted Windows runner (self-hosted has symlink permission issues)"
+          fi
 
   draft:
     needs: [check_commit]
