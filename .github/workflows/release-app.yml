@@ -78,16 +78,12 @@ jobs:
             echo "ℹ️ Self-hosted macOS 26 runner offline — falling back to macos-latest"
           fi
 
-          # Check if Windows self-hosted runner is online
-          WIN_RUNNER_STATUS=$(gh api repos/${{ github.repository }}/actions/runners \
-            --jq '.runners[] | select(.labels[].name == "windows-desktop-test") | .status' 2>/dev/null || echo "offline")
-          if [ "$WIN_RUNNER_STATUS" = "online" ]; then
-            echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
-            echo "✅ Self-hosted Windows runner is online"
-          else
-            echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
-            echo "ℹ️ Self-hosted Windows runner offline — falling back to windows-2019"
-          fi
+          # Check if Windows self-hosted runner is online and healthy
+          # Temporarily forcing GH-hosted runner due to symlink permission issues on self-hosted
+          # (EPERM on bun symlink creation — needs Developer Mode enabled on the runner)
+          # TODO: re-enable self-hosted once runner is configured with Developer Mode
+          echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
+          echo "ℹ️ Using GitHub-hosted Windows runner (self-hosted has symlink permission issues)"
 
   draft:
     needs: [check_commit]
