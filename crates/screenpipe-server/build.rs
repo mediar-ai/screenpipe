@@ -8,4 +8,12 @@ fn main() {
     {
         link_onnx();
     }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Weak-link FoundationModels so the CLI launches on macOS < 26.
+        // See apps/screenpipe-app-tauri/src-tauri/build.rs for detailed explanation.
+        println!("cargo:rustc-link-arg=-Wl,-weak_framework,FoundationModels");
+        println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
+    }
 }

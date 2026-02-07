@@ -142,11 +142,23 @@ jobs:
         id: detect-xcode
         shell: bash
         run: |
-          # TEMPORARILY DISABLED: Apple Intelligence crashes on macOS < 26 despite weak-linking
-          # The FoundationModels.framework causes issues even with runtime guards.
-          # Re-enable when we have a proper solution for older macOS versions.
-          echo "has_apple_intelligence=false" >> $GITHUB_OUTPUT
-          echo "⚠️ Apple Intelligence feature temporarily disabled in CI/CD to prevent crashes on older macOS"
+          # Re-enabled: weak-linking fix in binary crate build.rs ensures
+          # FoundationModels.framework is LC_LOAD_WEAK_DYLIB (not LC_LOAD_DYLIB).
+          # DYLD skips the framework on macOS < 26 instead of crashing.
+          # Runtime guard (is_macos_26_or_later) prevents any FFI calls.
+          # Tested: binary built on macOS 26 SDK runs on macOS 15.5 without crash.
+          SDK_PATH=$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || echo "")
+          SDK_SETTINGS="${SDK_PATH}/SDKSettings.json"
+          if [ -f "$SDK_SETTINGS" ] && grep -q '"26\.' "$SDK_SETTINGS"; then
+            echo "has_apple_intelligence=true" >> $GITHUB_OUTPUT
+            echo "🧠 macOS 26+ SDK detected — Apple Intelligence enabled"
+          elif [ -d "${SDK_PATH}/System/Library/Frameworks/FoundationModels.framework" ]; then
+            echo "has_apple_intelligence=true" >> $GITHUB_OUTPUT
+            echo "🧠 FoundationModels.framework found — Apple Intelligence enabled"
+          else
+            echo "has_apple_intelligence=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ macOS SDK < 26 — Apple Intelligence not available (stub will be used)"
+          fi
 
       - name: Enable Git long paths on Windows
         if: matrix.os_type == 'windows'
