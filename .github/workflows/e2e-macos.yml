@@ -292,6 +292,27 @@ jobs:
         env:
           RUNNER_PASSWORD: ${{ secrets.RUNNER_PASSWORD }}
 
+      - name: Pre-seed app config
+        run: |
+          # Skip onboarding and set defaults so the app starts the server immediately
+          mkdir -p ~/.screenpipe
+          if [ ! -f ~/.screenpipe/store.bin ]; then
+            cat > ~/.screenpipe/store.bin << 'STORE'
+          {
+            "onboarding": {
+              "completedAt": "2026-01-01T00:00:00+00:00",
+              "currentStep": null,
+              "isCompleted": true
+            },
+            "settings": {}
+          }
+          STORE
+            echo "✓ Pre-seeded store.bin with onboarding completed"
+          else
+            echo "✓ store.bin already exists"
+            python3 -c "import json; d=json.load(open('$HOME/.screenpipe/store.bin')); print('onboarding:', d.get('onboarding',{}).get('isCompleted','?'))"
+          fi
+
       - name: Launch app and wait for health
         run: |
           # Launch the installed app
