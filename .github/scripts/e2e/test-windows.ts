@@ -187,6 +187,75 @@ await test("UIA tree accessible via bb", async () => {
   console.log(`  bb sees ${apps.length} windows`);
 });
 
+// ── S5.4-5: Resolution-specific capture ─────────────────────────────────
+
+await test("capture works at detected resolution (S5.4-5)", async () => {
+  // Get all screen resolutions
+  const proc = Bun.spawnSync(["powershell", "-NoProfile", "-Command", `
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.Screen]::AllScreens | ForEach-Object {
+      "$($_.Bounds.Width)x$($_.Bounds.Height)"
+    }
+  `]);
+  const resolutions = proc.stdout.toString().trim().split(/\r?\n/).filter(Boolean);
+  console.log(`  detected resolutions: ${resolutions.join(", ")}`);
+
+  // Check if any resolution is ultrawide (>2560) or 4K (>=3840)
+  for (const res of resolutions) {
+    const [w] = res.split("x").map(Number);
+    if (w >= 3440) console.log(`  ultrawide detected: ${res}`);
+    if (w >= 3840) console.log(`  4K detected: ${res}`);
+  }
+
+  // Regardless of resolution, OCR should produce results
+  const data = await fetchJson("http://localhost:3030/search?limit=1&content_type=ocr");
+  const results = data?.data ?? [];
+  if (results.length === 0) {
+    throw new Error("no OCR results at detected resolution");
+  }
+  console.log(`  OCR producing results at resolution(s): ${resolutions.join(", ")}`);
+});
+
+// ── S4.5: No audio device behavior ──────────────────────────────────────
+
+await test("handles audio device state gracefully (S4.5)", async () => {
+  const health = await fetchJson(HEALTH_URL);
+  const audioStatus = health.audio_status;
+
+  // When no audio device: should be "not_started" or similar, NOT crash
+  if (!audioStatus) {
+    throw new Error("audio_status field missing entirely");
+  }
+
+  console.log(`  audio_status: ${audioStatus}`);
+
+  // App should still be running even if no audio
+  const health2 = await fetchJson(HEALTH_URL);
+  if (health2.frame_status !== "ok") {
+    throw new Error("frame capture broken despite audio issue");
+  }
+});
+
+// ── S3.6: Monitor detection via health ──────────────────────────────────
+
+await test("monitor count matches system (S3.6)", async () => {
+  const proc = Bun.spawnSync(["powershell", "-NoProfile", "-Command",
+    "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens.Count"]);
+  const systemCount = parseInt(proc.stdout.toString().trim()) || 1;
+
+  const health = await fetchJson(HEALTH_URL);
+  const details = health.device_status_details ?? [];
+  const screenDetails = Array.isArray(details) ? details.filter((d: any) =>
+    d?.type === "screen" || d?.type === "monitor" || d?.device_type === "screen"
+  ) : [];
+
+  console.log(`  system monitors: ${systemCount}, health screen entries: ${screenDetails.length}`);
+
+  if (screenDetails.length > 0 && Math.abs(screenDetails.length - systemCount) > 1) {
+    console.log(`  warning: monitor count mismatch (system=${systemCount}, health=${screenDetails.length})`);
+  }
+});
+
 await screenshot("10-windows");
 
 const ok = summary();

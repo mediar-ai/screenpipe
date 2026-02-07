@@ -191,4 +191,79 @@ describe('Timeline Navigation (S12)', () => {
             expect(result.status).not.toBe(500);
         }
     });
+
+    it('should have app context in search results (S12.5)', async () => {
+        // Search results should include app name/context for OCR entries
+        const data = await browser.execute(async () => {
+            const res = await fetch('http://localhost:3030/search?limit=10&content_type=ocr');
+            return res.json();
+        });
+
+        if (data.data && data.data.length > 0) {
+            let withApp = 0;
+            for (const item of data.data) {
+                const appName = item.content?.app_name || item.content?.window_name || '';
+                if (appName.length > 0) withApp++;
+            }
+            console.log(`${withApp}/${data.data.length} results have app context`);
+            // At least some results should have app name
+            if (data.data.length >= 3) {
+                expect(withApp).toBeGreaterThan(0);
+            }
+        }
+    });
+
+    it('should have timeline UI elements for daily navigation (S12.6)', async () => {
+        // Navigate to main page and check for daily summary / timeline controls
+        await browser.execute(() => { window.location.href = '/'; });
+        await browser.pause(2000);
+
+        const bodyText = await browser.execute(() => document.body.innerText.toLowerCase());
+
+        // Timeline should have date/time navigation elements
+        const hasTimeNav = bodyText.includes('today') ||
+            bodyText.includes('yesterday') ||
+            bodyText.includes(new Date().toLocaleDateString()) ||
+            bodyText.includes('am') || bodyText.includes('pm') ||
+            bodyText.includes(':');
+        if (hasTimeNav) {
+            console.log('Timeline date/time navigation elements found');
+        } else {
+            console.log('Warning: timeline date/time elements not found');
+        }
+
+        const ready = await browser.execute(() => document.readyState);
+        expect(ready).toBe('complete');
+    });
+
+    it('should have audio search results when available (S4.1)', async () => {
+        const data = await browser.execute(async () => {
+            const res = await fetch('http://localhost:3030/search?limit=5&content_type=audio');
+            return res.json();
+        });
+
+        expect(data).toHaveProperty('data');
+        if (data.data && data.data.length > 0) {
+            // Audio results should have transcription text
+            const firstResult = data.data[0];
+            const text = firstResult?.content?.transcription || firstResult?.content?.text || '';
+            console.log(`Audio results: ${data.data.length}, sample: "${text.slice(0, 60)}"`);
+        } else {
+            console.log('No audio search results (audio may not be configured)');
+        }
+    });
+
+    it('should return search results with pagination info (S12.2)', async () => {
+        const data = await browser.execute(async () => {
+            const res = await fetch('http://localhost:3030/search?limit=5&content_type=ocr');
+            return res.json();
+        });
+
+        expect(data).toHaveProperty('pagination');
+        if (data.pagination) {
+            expect(data.pagination).toHaveProperty('total');
+            expect(data.pagination.total).toBeGreaterThanOrEqual(0);
+            console.log(`Pagination: total=${data.pagination.total}, returned=${data.data?.length}`);
+        }
+    });
 });

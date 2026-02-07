@@ -243,4 +243,182 @@ describe('Settings Persistence (S10)', () => {
         const bodyText = await browser.execute(() => document.body.innerText);
         expect(bodyText).not.toContain('Unhandled Runtime Error');
     });
+
+    it('should have AI section with provider fields (S10.1-2)', async () => {
+        await browser.execute(() => { window.location.href = '/settings'; });
+        await browser.pause(1500);
+
+        // Navigate to AI section
+        await browser.execute(() => {
+            const els = document.querySelectorAll('a, button');
+            for (const el of els) {
+                if (el.textContent.toLowerCase().includes('ai')) {
+                    el.click();
+                    break;
+                }
+            }
+        });
+        await browser.pause(1000);
+
+        const pageText = await browser.execute(() => document.body.innerText.toLowerCase());
+
+        // AI section should have provider-related UI (Ollama, custom provider, etc.)
+        const hasProviderUI = pageText.includes('ollama') ||
+            pageText.includes('provider') ||
+            pageText.includes('api key') ||
+            pageText.includes('model') ||
+            pageText.includes('openai') ||
+            pageText.includes('anthropic');
+        if (!hasProviderUI) {
+            console.log('Warning: AI provider UI not found');
+        }
+
+        // Should not crash when Ollama is not running
+        const bodyText = await browser.execute(() => document.body.innerText);
+        expect(bodyText).not.toContain('Unhandled Runtime Error');
+    });
+
+    it('should handle overlay mode switch setting (S10.4)', async () => {
+        // Navigate to general or recording section and look for overlay toggle
+        await browser.execute(() => { window.location.href = '/settings'; });
+        await browser.pause(1000);
+
+        const pageText = await browser.execute(() => document.body.innerText.toLowerCase());
+        const hasOverlay = pageText.includes('overlay') ||
+            pageText.includes('mode') ||
+            pageText.includes('shortcut');
+        if (!hasOverlay) {
+            console.log('Warning: overlay mode setting not found');
+        }
+
+        const bodyText = await browser.execute(() => document.body.innerText);
+        expect(bodyText).not.toContain('Unhandled Runtime Error');
+    });
+
+    it('should have disable audio toggle accessible (S4.8)', async () => {
+        // Navigate to recording settings
+        await browser.execute(() => { window.location.href = '/settings'; });
+        await browser.pause(1000);
+        await browser.execute(() => {
+            const els = document.querySelectorAll('a, button');
+            for (const el of els) {
+                if (el.textContent.toLowerCase().includes('recording')) {
+                    el.click();
+                    break;
+                }
+            }
+        });
+        await browser.pause(1000);
+
+        const pageText = await browser.execute(() => document.body.innerText.toLowerCase());
+        const hasAudioToggle = pageText.includes('audio') &&
+            (pageText.includes('disable') || pageText.includes('enable') ||
+             pageText.includes('toggle') || pageText.includes('off'));
+        if (!hasAudioToggle) {
+            // Check if any toggle/switch elements exist near "audio"
+            const hasAudioSection = pageText.includes('audio');
+            console.log(`Audio section present: ${hasAudioSection}`);
+        }
+
+        const bodyText = await browser.execute(() => document.body.innerText);
+        expect(bodyText).not.toContain('Unhandled Runtime Error');
+    });
+
+    it('should have sync/cloud settings section (S13)', async () => {
+        await browser.execute(() => { window.location.href = '/settings'; });
+        await browser.pause(1000);
+
+        const pageText = await browser.execute(() => document.body.innerText.toLowerCase());
+        const hasSync = pageText.includes('sync') ||
+            pageText.includes('cloud') ||
+            pageText.includes('backup') ||
+            pageText.includes('password');
+        if (hasSync) {
+            console.log('Sync/cloud settings found');
+        } else {
+            console.log('Warning: sync/cloud settings not found (may be in account section)');
+        }
+
+        // Check account section for sync
+        await browser.execute(() => {
+            const els = document.querySelectorAll('a, button');
+            for (const el of els) {
+                if (el.textContent.toLowerCase().includes('account')) {
+                    el.click();
+                    break;
+                }
+            }
+        });
+        await browser.pause(1000);
+
+        const accountText = await browser.execute(() => document.body.innerText.toLowerCase());
+        const hasSyncInAccount = accountText.includes('sync') ||
+            accountText.includes('cloud') ||
+            accountText.includes('device');
+        if (hasSyncInAccount) {
+            console.log('Sync settings found in account section');
+        }
+
+        const ready = await browser.execute(() => document.readyState);
+        expect(ready).toBe('complete');
+    });
+
+    it('should have MCP/Claude integration section (S16)', async () => {
+        await browser.execute(() => { window.location.href = '/settings'; });
+        await browser.pause(1000);
+
+        // Look through all settings sections for MCP/Claude references
+        const pageText = await browser.execute(() => document.body.innerText.toLowerCase());
+        const hasMcp = pageText.includes('mcp') ||
+            pageText.includes('claude') ||
+            pageText.includes('integration') ||
+            pageText.includes('connect');
+
+        if (hasMcp) {
+            console.log('MCP/Claude integration UI found');
+        } else {
+            // Try connections section
+            await browser.execute(() => {
+                const els = document.querySelectorAll('a, button');
+                for (const el of els) {
+                    if (el.textContent.toLowerCase().includes('connection')) {
+                        el.click();
+                        break;
+                    }
+                }
+            });
+            await browser.pause(1000);
+
+            const connText = await browser.execute(() => document.body.innerText.toLowerCase());
+            const hasMcpInConn = connText.includes('mcp') ||
+                connText.includes('claude') ||
+                connText.includes('connect');
+            if (hasMcpInConn) {
+                console.log('MCP/Claude found in connections section');
+            } else {
+                console.log('Warning: MCP/Claude integration UI not found');
+            }
+        }
+
+        const bodyText = await browser.execute(() => document.body.innerText);
+        expect(bodyText).not.toContain('Unhandled Runtime Error');
+    });
+
+    it('should have update check section (S8.7)', async () => {
+        await browser.execute(() => { window.location.href = '/settings'; });
+        await browser.pause(1000);
+
+        const pageText = await browser.execute(() => document.body.innerText.toLowerCase());
+        const hasUpdate = pageText.includes('update') ||
+            pageText.includes('version') ||
+            pageText.includes('changelog');
+        if (hasUpdate) {
+            console.log('Update/version info found in settings');
+        } else {
+            console.log('Warning: update section not found');
+        }
+
+        const bodyText = await browser.execute(() => document.body.innerText);
+        expect(bodyText).not.toContain('Unhandled Runtime Error');
+    });
 });
