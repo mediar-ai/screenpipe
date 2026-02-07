@@ -317,28 +317,28 @@ jobs:
           print(f"✓ store.bin ready: onboarding={store['onboarding']['isCompleted']}, devMode={store['settings']['devMode']}")
           PYEOF
 
+      - name: Build CLI server
+        run: |
+          # Build the standalone CLI binary for running the server
+          # (The Tauri build only produces the app binary, not the CLI)
+          cargo build --release -p screenpipe-server --features metal
+          ls -lh target/release/screenpipe
+          echo "✓ CLI binary built"
+
       - name: Launch app and start server
         run: |
-          # The Tauri app does its own permission check and may refuse to start
-          # the embedded server if screen recording is "Denied" (common with ad-hoc
-          # signed dev builds where TCC entries get invalidated on each rebuild).
-          #
-          # Strategy: Launch the app (for UI testing) AND start the CLI server
-          # separately (for API testing). This decouples UI from server health.
+          # Kill any leftover screenpipe processes from previous runs
+          pkill -f "screenpipe" 2>/dev/null || true
+          sleep 2
 
-          # 1. Start CLI server in background (reliable, no permission issues)
-          ./apps/screenpipe-app-tauri/src-tauri/target/release/bundle/macos/screenpipe\ -\ Development.app/Contents/MacOS/screenpipe-app &
-          # Actually use the pre-built CLI binary
-          if [ -f "target/release/screenpipe" ]; then
-            echo "Using cached CLI binary"
-          else
-            echo "Building CLI for server..."
-            cargo build --release -p screenpipe-server --features metal
-          fi
+          # 1. Start CLI server on port 3030 (reliable, no TCC permission needed)
+          #    --disable-vision and --disable-audio avoid permission issues
           ./target/release/screenpipe --disable-vision --disable-audio --port 3030 &
-          echo "SERVER_PID=$!" >> $GITHUB_ENV
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+          echo "Started CLI server (PID $SERVER_PID)"
 
-          # 2. Launch the Tauri app (for UI tests)
+          # 2. Launch the Tauri app for UI tests
           open "$INSTALLED_APP" || true
           echo "Launched $INSTALLED_APP"
 
@@ -355,7 +355,9 @@ jobs:
 
           if ! curl -sf http://localhost:3030/health > /dev/null 2>&1; then
             echo "ERROR: health API never responded"
-            tail -50 ~/.screenpipe/screenpipe-app.*.log 2>/dev/null || true
+            # Check if server process is still alive
+            ps -p $SERVER_PID || echo "Server process died!"
+            tail -50 ~/.screenpipe/screenpipe*.log 2>/dev/null || true
             exit 1
           fi
 
