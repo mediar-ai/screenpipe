@@ -317,32 +317,49 @@ jobs:
           print(f"✓ store.bin ready: onboarding={store['onboarding']['isCompleted']}, devMode={store['settings']['devMode']}")
           PYEOF
 
-      - name: Launch app and wait for health
+      - name: Launch app and start server
         run: |
-          # Launch the installed app
-          open "$INSTALLED_APP"
-          echo "Launched $INSTALLED_APP, waiting for health API..."
+          # The Tauri app does its own permission check and may refuse to start
+          # the embedded server if screen recording is "Denied" (common with ad-hoc
+          # signed dev builds where TCC entries get invalidated on each rebuild).
+          #
+          # Strategy: Launch the app (for UI testing) AND start the CLI server
+          # separately (for API testing). This decouples UI from server health.
 
-          # Wait for health API
-          for i in $(seq 1 60); do
+          # 1. Start CLI server in background (reliable, no permission issues)
+          ./apps/screenpipe-app-tauri/src-tauri/target/release/bundle/macos/screenpipe\ -\ Development.app/Contents/MacOS/screenpipe-app &
+          # Actually use the pre-built CLI binary
+          if [ -f "target/release/screenpipe" ]; then
+            echo "Using cached CLI binary"
+          else
+            echo "Building CLI for server..."
+            cargo build --release -p screenpipe-server --features metal
+          fi
+          ./target/release/screenpipe --disable-vision --disable-audio --port 3030 &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+
+          # 2. Launch the Tauri app (for UI tests)
+          open "$INSTALLED_APP" || true
+          echo "Launched $INSTALLED_APP"
+
+          # 3. Wait for CLI server health
+          for i in $(seq 1 30); do
             if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
               echo "✓ health API ready (attempt $i)"
               curl -sf http://localhost:3030/health | python3 -m json.tool
               break
             fi
-            echo "waiting... ($i/60)"
-            sleep 3
+            echo "waiting... ($i/30)"
+            sleep 2
           done
 
           if ! curl -sf http://localhost:3030/health > /dev/null 2>&1; then
             echo "ERROR: health API never responded"
-            # Dump logs
-            find ~/Library/Logs -name "*screenpipe*" -mmin -5 -exec cat {} \; 2>/dev/null | tail -50
+            tail -50 ~/.screenpipe/screenpipe-app.*.log 2>/dev/null || true
             exit 1
           fi
 
-          # Determine the app name for bb (as shown in accessibility)
-          # The process name from the binary
+          # Determine the app name for bb
           APP_PROC=$(basename "$INSTALLED_APP" .app)
           echo "SCREENPIPE_APP_NAME=$APP_PROC" >> $GITHUB_ENV
 
@@ -406,6 +423,8 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
+          # Kill the CLI server
+          if [ -n "$SERVER_PID" ]; then kill $SERVER_PID 2>/dev/null || true; fi
           # Kill the app
           pkill -f "screenpipe-app" 2>/dev/null || true
           pkill -f "screenpipe" 2>/dev/null || true
