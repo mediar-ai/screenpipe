@@ -134,9 +134,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Self-hosted macOS 26 runner for Apple Silicon (has Xcode 26 for Apple Intelligence)
-          # Dynamically falls back to macos-latest if self-hosted runner is offline
-          - platform: ${{ needs.check_commit.outputs.macos26_runner || 'macos-latest' }}
+          # Self-hosted macOS 26 runner disabled — Mac Mini is on macOS 15.7, no Apple Intelligence SDK
+          # TODO: re-enable when Mac Mini is upgraded to macOS 26
+          # - platform: ${{ needs.check_commit.outputs.macos26_runner || 'macos-latest' }}
+          #   args: "--target aarch64-apple-darwin --features metal"
+          #   target: aarch64-apple-darwin
+          #   tauri-args: "--target aarch64-apple-darwin --features official-build"
+          #   os_type: "macos"
+          - platform: "macos-latest"
             args: "--target aarch64-apple-darwin --features metal"
             target: aarch64-apple-darwin
             tauri-args: "--target aarch64-apple-darwin --features official-build"
