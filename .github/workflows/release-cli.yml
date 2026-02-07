@@ -430,24 +430,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v${{ env.VERSION }} --title ${{ env.VERSION }} --generate-notes || true
+          # Update the rolling "latest-cli" release instead of creating one per version
+          # This avoids flooding the releases page
+          gh release delete cli-latest --yes 2>/dev/null || true
+          gh release create cli-latest --title "CLI v${{ env.VERSION }}" --notes "Latest CLI build: v${{ env.VERSION }}" --prerelease || true
           for file in artifacts/screenpipe-macos-*/screenpipe-*.tar.gz; do
             if [ -f "$file" ]; then
-              gh release upload v${{ env.VERSION }} "$file" --clobber
+              gh release upload cli-latest "$file" --clobber
             else
               echo "Warning: $file not found"
             fi
           done
           for file in artifacts/screenpipe-windows/screenpipe-*.zip; do
             if [ -f "$file" ]; then
-              gh release upload v${{ env.VERSION }} "$file" --clobber
+              gh release upload cli-latest "$file" --clobber
             else
               echo "Warning: $file not found"
             fi
           done
           for file in artifacts/screenpipe-linux-*/screenpipe-*.tar.gz; do
             if [ -f "$file" ]; then
-              gh release upload v${{ env.VERSION }} "$file" --clobber
+              gh release upload cli-latest "$file" --clobber
             else
               echo "Warning: $file not found"
             fi
