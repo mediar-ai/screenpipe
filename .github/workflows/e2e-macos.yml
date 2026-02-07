@@ -177,8 +177,6 @@ jobs:
           bun install
 
       - name: Build and install Tauri app
-        env:
-          SCREENPIPE_APP_DEV: "true"
         run: |
           cd apps/screenpipe-app-tauri
 
@@ -294,24 +292,30 @@ jobs:
 
       - name: Pre-seed app config
         run: |
-          # Skip onboarding and set defaults so the app starts the server immediately
+          # Ensure onboarding is done and dev_mode is off so embedded server starts
           mkdir -p ~/.screenpipe
-          if [ ! -f ~/.screenpipe/store.bin ]; then
-            cat > ~/.screenpipe/store.bin << 'STORE'
-          {
-            "onboarding": {
-              "completedAt": "2026-01-01T00:00:00+00:00",
-              "currentStep": null,
-              "isCompleted": true
-            },
-            "settings": {}
-          }
-          STORE
-            echo "✓ Pre-seeded store.bin with onboarding completed"
-          else
-            echo "✓ store.bin already exists"
-            python3 -c "import json; d=json.load(open('$HOME/.screenpipe/store.bin')); print('onboarding:', d.get('onboarding',{}).get('isCompleted','?'))"
-          fi
+          python3 << 'PYEOF'
+          import json, os
+          store_path = os.path.expanduser("~/.screenpipe/store.bin")
+          try:
+              with open(store_path) as f:
+                  store = json.load(f)
+          except:
+              store = {}
+
+          # Ensure onboarding is completed
+          store.setdefault("onboarding", {})
+          store["onboarding"]["isCompleted"] = True
+          store["onboarding"]["completedAt"] = store["onboarding"].get("completedAt", "2026-01-01T00:00:00+00:00")
+
+          # Ensure dev_mode is off (so embedded server starts)
+          store.setdefault("settings", {})
+          store["settings"]["devMode"] = False
+
+          with open(store_path, "w") as f:
+              json.dump(store, f, indent=2)
+          print(f"✓ store.bin ready: onboarding={store['onboarding']['isCompleted']}, devMode={store['settings']['devMode']}")
+          PYEOF
 
       - name: Launch app and wait for health
         run: |
