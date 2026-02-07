@@ -36,10 +36,6 @@ use reqwest_middleware::ClientBuilder;
 use std::collections::HashSet;
 use std::str::FromStr;
 
-// Add at top of file with other imports
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
 #[derive(Clone, Debug, Copy)]
 pub enum PipeState {
     Port(u16),
@@ -314,7 +310,6 @@ async fn spawn_watchdog(parent_pid: u32, child_pid: u32) -> Result<tokio::proces
                         id
                     ));
                 {
-                    use std::os::windows::process::CommandExt;
                     ps_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
                 }
                 let output = ps_cmd.output().await;
@@ -537,7 +532,6 @@ pub async fn run_pipe(
                 .env("BUN_CONFIG_REGISTRY", "https://registry.npmjs.org");
             #[cfg(target_os = "windows")]
             {
-                use std::os::windows::process::CommandExt;
                 install_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
             }
             let install_output = install_cmd.output().await?;
@@ -625,7 +619,6 @@ pub async fn run_pipe(
 
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
             command.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
@@ -673,7 +666,6 @@ pub async fn run_pipe(
         .stderr(std::process::Stdio::piped());
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
     let mut child = cmd.spawn()?;
@@ -809,7 +801,6 @@ async fn retry_install(bun_path: &Path, dest_dir: &Path, max_retries: u32) -> Re
             .stderr(std::process::Stdio::piped());
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
             install_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
         let mut install_child = install_cmd.spawn()?;
@@ -1608,7 +1599,6 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
         .current_dir(pipe_dir);
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
         build_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
     let build_output = build_cmd.output().await?;
