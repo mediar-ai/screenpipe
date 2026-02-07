@@ -33,7 +33,7 @@
     <a href="https://screenpi.pe" target="_blank">
         <img src="https://img.shields.io/badge/download-desktop%20app-black?style=for-the-badge" alt="download">
     </a>
-    <a href="https://github.com/screenpipe/screenpipe/raw/main/crates/screenpipe-integrations/screenpipe-mcp/screenpipe-mcp.mcpb" target="_blank">
+    <a href="https://github.com/screenpipe/screenpipe/releases/download/mcp-v0.8.0/screenpipe-mcp.mcpb" target="_blank">
         <img src="https://img.shields.io/badge/install-Claude%20Extension-D97706?style=for-the-badge&logo=anthropic&logoColor=white" alt="install claude extension">
     </a>
 </p>
