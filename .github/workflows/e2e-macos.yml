@@ -143,7 +143,7 @@ jobs:
 
       - name: Install system deps
         run: |
-          brew install ffmpeg pkg-config cmake 2>/dev/null || true
+          brew install ffmpeg pkg-config cmake wget 2>/dev/null || true
 
       - name: Install/update BigBrother CLI
         run: |
@@ -164,6 +164,8 @@ jobs:
           bun install
 
       - name: Build Tauri app
+        env:
+          SCREENPIPE_APP_DEV: "true"
         run: |
           cd apps/screenpipe-app-tauri
 
