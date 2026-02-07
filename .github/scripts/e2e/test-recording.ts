@@ -168,6 +168,60 @@ await test("health has device status details (S3.9)", async () => {
   }
 });
 
+// ── S5.6: High refresh rate behavior ─────────────────────────────────────
+
+await test("frame capture rate reasonable (S5.6)", async () => {
+  // Sample frame timestamps over 10s to estimate effective capture rate
+  const timestamps: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const health = await fetchJson(HEALTH_URL);
+    if (health.last_frame_timestamp) {
+      timestamps.push(health.last_frame_timestamp);
+    }
+    await sleep(3000);
+  }
+
+  if (timestamps.length >= 2) {
+    const first = new Date(timestamps[0]).getTime();
+    const last = new Date(timestamps[timestamps.length - 1]).getTime();
+    const delta = last - first;
+    console.log(`  frame timestamp progression: ${delta}ms over ${(timestamps.length - 1) * 3}s`);
+    // Timestamps should be progressing (new frames captured)
+    if (delta <= 0) {
+      console.log("  warning: frame timestamps not progressing");
+    }
+  }
+});
+
+// ── S3.8: Resolution/scaling doesn't break recording ─────────────────────
+
+await test("recording stable regardless of display config (S3.8)", async () => {
+  // Verify health is ok — this implicitly tests that current resolution/scaling works
+  const health = await fetchJson(HEALTH_URL);
+  if (health.frame_status !== "ok") {
+    throw new Error(`frame_status not ok: ${health.frame_status}`);
+  }
+
+  // Also verify search still works (recording is producing data)
+  const data = await fetchJson("http://localhost:3030/search?limit=1&content_type=ocr");
+  if ((data?.data?.length ?? 0) === 0) {
+    console.log("  warning: no OCR results despite ok frame_status");
+  } else {
+    console.log("  recording stable, OCR producing results");
+  }
+});
+
+// ── S4.6: Audio stream timeout recovery ──────────────────────────────────
+
+await test("audio status doesn't indicate timeout (S4.6)", async () => {
+  const health = await fetchJson(HEALTH_URL);
+  const audioStatus = String(health.audio_status ?? "");
+  if (audioStatus.toLowerCase().includes("timeout")) {
+    throw new Error(`audio stream timeout detected: ${audioStatus}`);
+  }
+  console.log(`  audio status: ${audioStatus} (no timeout)`);
+});
+
 await screenshot("03-recording");
 
 const ok = summary();

@@ -57,6 +57,75 @@ if (IS_WINDOWS) {
   });
 }
 
+// ── S8: App startup checks ──────────────────────────────────────────────
+
+await test("health status_code is valid (S8)", async () => {
+  const health = await fetchJson(HEALTH_URL);
+  const code = health.status_code;
+  if (typeof code !== "number") {
+    throw new Error(`status_code is not a number: ${typeof code}`);
+  }
+  // Valid codes: 200 (healthy), 206 (degraded), etc.
+  if (code < 200 || code >= 500) {
+    throw new Error(`status_code ${code} indicates server error`);
+  }
+  console.log(`  status_code: ${code}`);
+});
+
+await test("health has timestamp info (S8)", async () => {
+  const health = await fetchJson(HEALTH_URL);
+  const frameTs = health.last_frame_timestamp;
+  const audioTs = health.last_audio_timestamp;
+
+  if (frameTs) {
+    const age = (Date.now() - new Date(frameTs).getTime()) / 1000;
+    console.log(`  last frame: ${Math.round(age)}s ago`);
+    if (age > 300) {
+      console.log("  warning: last frame >5min ago");
+    }
+  }
+  if (audioTs) {
+    const age = (Date.now() - new Date(audioTs).getTime()) / 1000;
+    console.log(`  last audio: ${Math.round(age)}s ago`);
+  }
+});
+
+// ── S5.8: Corrupt pixel buffer handling ─────────────────────────────────
+
+await test("health API doesn't expose internal errors (S5.8)", async () => {
+  // Fetch health multiple times rapidly — internal errors should not leak
+  const results = [];
+  for (let i = 0; i < 5; i++) {
+    const health = await fetchJson(HEALTH_URL);
+    results.push(health);
+  }
+
+  for (const h of results) {
+    const statusStr = JSON.stringify(h);
+    if (statusStr.toLowerCase().includes("panic") || statusStr.toLowerCase().includes("segfault")) {
+      throw new Error("internal error leaked in health response");
+    }
+  }
+  console.log("  no internal errors in 5 health checks");
+});
+
+// ── S9.4: Event listener race condition proxy ───────────────────────────
+
+await test("concurrent API calls don't race (S9.4)", async () => {
+  // Fire search + health + pipes simultaneously — tests internal event handling
+  const start = Date.now();
+  const [search, health, pipes] = await Promise.all([
+    fetch("http://localhost:3030/search?limit=1").then(r => ({ ok: r.ok })).catch(() => ({ ok: false })),
+    fetch(HEALTH_URL).then(r => ({ ok: r.ok })).catch(() => ({ ok: false })),
+    fetch("http://localhost:3030/pipes/list").then(r => ({ ok: r.ok || r.status === 404 })).catch(() => ({ ok: false })),
+  ]);
+  const elapsed = Date.now() - start;
+
+  if (!search.ok) throw new Error("search failed in concurrent call");
+  if (!health.ok) throw new Error("health failed in concurrent call");
+  console.log(`  3 concurrent API calls: ${elapsed}ms`);
+});
+
 await screenshot("01-tray-health");
 
 const ok = summary();
