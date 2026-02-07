@@ -155,7 +155,7 @@ jobs:
       - name: Install system deps
         run: |
           eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
-          brew install ffmpeg pkg-config 2>/dev/null || true
+          brew install ffmpeg pkg-config cmake 2>/dev/null || true
 
       - name: Build and start screenpipe
         run: |
