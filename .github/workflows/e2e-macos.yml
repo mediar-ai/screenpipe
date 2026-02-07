@@ -135,6 +135,16 @@ jobs:
           echo "memory:   $(sysctl -n hw.memsize | awk '{printf "%.0fGB", $1/1073741824}')"
           system_profiler SPDisplaysDataType 2>/dev/null | grep -A5 "Resolution" || true
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system deps
+        run: |
+          brew install ffmpeg pkg-config cmake 2>/dev/null || true
+
       - name: Install/update BigBrother CLI
         run: |
           if [ -d "$HOME/bigbrother" ]; then
@@ -147,16 +157,6 @@ jobs:
           # Symlink so TCC permission (granted to target/release/bb) is preserved
           sudo ln -sf "$HOME/bigbrother/target/release/bb" /usr/local/bin/bb
           /usr/local/bin/bb --version
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install system deps
-        run: |
-          brew install ffmpeg pkg-config cmake 2>/dev/null || true
 
       - name: Install frontend deps
         run: |
