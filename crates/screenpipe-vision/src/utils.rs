@@ -58,17 +58,35 @@ pub fn compare_images_histogram(
     image2: &DynamicImage,
 ) -> anyhow::Result<f64> {
     let image_one = image1.to_luma8();
-    let image_two = image2.to_luma8();
+    let mut image_two = image2.to_luma8();
+    // Resize to match if dimensions differ (e.g. monitor resolution change)
+    if image_one.dimensions() != image_two.dimensions() {
+        image_two = image::imageops::resize(
+            &image_two,
+            image_one.width(),
+            image_one.height(),
+            image::imageops::FilterType::Nearest,
+        );
+    }
     image_compare::gray_similarity_histogram(Metric::Hellinger, &image_one, &image_two)
         .map_err(|e| anyhow::anyhow!("Failed to compare images: {}", e))
 }
 
 pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 {
     let image_one = image1.to_luma8();
-    let image_two = image2.to_luma8();
+    let mut image_two = image2.to_luma8();
+    // Resize to match if dimensions differ (e.g. monitor resolution change)
+    if image_one.dimensions() != image_two.dimensions() {
+        image_two = image::imageops::resize(
+            &image_two,
+            image_one.width(),
+            image_one.height(),
+            image::imageops::FilterType::Nearest,
+        );
+    }
     let result: Similarity =
         image_compare::gray_similarity_structure(&Algorithm::MSSIMSimple, &image_one, &image_two)
-            .expect("Images had different dimensions");
+            .expect("images should have matching dimensions after resize");
     result.score
 }
 

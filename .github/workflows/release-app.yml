@@ -771,7 +771,7 @@ jobs:
             $env:PATH += ";C:\Program Files\Amazon\AWSCLIV2"
           }
           $version = (Select-String -Path apps/screenpipe-app-tauri/src-tauri/Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
-          $bundleDir = "apps/screenpipe-app-tauri/src-tauri/target/release/bundle"
+          $bundleDir = "apps/screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
           $r2Endpoint = "https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
           $r2Prefix = "s3://screenpipe-releases/releases/$version/x86_64-pc-windows-msvc"
 
