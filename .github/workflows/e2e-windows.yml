@@ -1,12 +1,12 @@
 name: Windows E2E Tests
 
 on:
-  # Run after app release builds complete
+  # Run after app release builds complete (main branch only)
   workflow_run:
     workflows: ["Release App"]
     types: [completed]
     branches: [main]
-  # Manual trigger
+  # Manual trigger — only from main branch to prevent arbitrary code execution
   workflow_dispatch:
     inputs:
       runner:
@@ -24,13 +24,15 @@ concurrency:
 
 jobs:
   # ── Self-hosted: bb + API tests on real desktop ──────────────────────────────
+  # SECURITY: only runs on main branch to prevent code execution from PRs/forks
   e2e-self-hosted:
     name: Windows E2E (self-hosted)
     runs-on: [self-hosted, "${{ inputs.runner || 'windows-desktop-test' }}"]
     timeout-minutes: 30
     if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success')
 
     steps:
       - uses: actions/checkout@v4
