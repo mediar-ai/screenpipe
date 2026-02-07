@@ -174,11 +174,21 @@ fn find_pi_executable() -> Option<String> {
         .map(|h| h.to_string_lossy().to_string())
         .unwrap_or_default();
 
+    #[cfg(unix)]
     let paths = vec![
         format!("{}/.bun/bin/pi", home),
         format!("{}/.npm-global/bin/pi", home),
         "/opt/homebrew/bin/pi".to_string(),
         "/usr/local/bin/pi".to_string(),
+    ];
+
+    #[cfg(windows)]
+    let paths = vec![
+        format!("{}\\.bun\\bin\\pi.exe", home),
+        format!("{}\\AppData\\Roaming\\npm\\pi.cmd", home),
+        format!("{}\\AppData\\Roaming\\npm\\pi", home),
+        format!("{}\\AppData\\Local\\bun\\bin\\pi.exe", home),
+        format!("{}\\.npm-global\\pi.cmd", home),
     ];
 
     for path in paths {
@@ -625,10 +635,17 @@ pub async fn pi_install(app: AppHandle) -> Result<(), String> {
         .map(|h| h.to_string_lossy().to_string())
         .unwrap_or_default();
 
+    #[cfg(unix)]
     let bun_paths = vec![
         format!("{}/.bun/bin/bun", home),
         "/opt/homebrew/bin/bun".to_string(),
         "/usr/local/bin/bun".to_string(),
+    ];
+
+    #[cfg(windows)]
+    let bun_paths = vec![
+        format!("{}\\.bun\\bin\\bun.exe", home),
+        format!("{}\\AppData\\Local\\bun\\bin\\bun.exe", home),
     ];
 
     let bun = bun_paths

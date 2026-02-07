@@ -965,9 +965,36 @@ export function StandaloneChat() {
     }
   }, [isPi, piProjectDir]);
 
+  // Auto-install Pi if not available
+  const [piInstalling, setPiInstalling] = useState(false);
+  useEffect(() => {
+    if (!isPi) return;
+    const checkAndInstall = async () => {
+      const result = await commands.piCheck();
+      if (result.status === "ok" && result.data.available) return;
+      console.log("[Pi] Not found, installing in background...");
+      setPiInstalling(true);
+      await commands.piInstall();
+    };
+    checkAndInstall();
+
+    const unlisten = listen<boolean>("pi_installed", (event) => {
+      setPiInstalling(false);
+      if (event.payload) {
+        console.log("[Pi] Installed successfully, will auto-start");
+        piRestartCountRef.current = 0; // reset so auto-start kicks in
+      } else {
+        console.error("[Pi] Installation failed");
+        toast({ title: "Failed to install Pi", description: "Install manually: bun add -g @mariozechner/pi-coding-agent", variant: "destructive" });
+      }
+    });
+
+    return () => { unlisten.then((fn_) => fn_()); };
+  }, [isPi]);
+
   // Start Pi when needed
   useEffect(() => {
-    const shouldStart = isPi && !needsLogin && piProjectDir && !piStarting && !piInfo?.running;
+    const shouldStart = isPi && !needsLogin && piProjectDir && !piStarting && !piInfo?.running && !piInstalling;
 
     if (!shouldStart) return;
     if (piStartInFlightRef.current) return;
@@ -1005,7 +1032,7 @@ export function StandaloneChat() {
       }
     };
     startPi();
-  }, [isPi, needsLogin, piProjectDir, piStarting, piInfo?.running, settings.user?.token]);
+  }, [isPi, needsLogin, piProjectDir, piStarting, piInfo?.running, piInstalling, settings.user?.token]);
 
   // Listen for Pi events
   useEffect(() => {
