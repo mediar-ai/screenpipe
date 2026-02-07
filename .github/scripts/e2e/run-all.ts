@@ -58,12 +58,14 @@ console.log("");
 
 mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
-// Preflight: check app is running
+// Preflight: check app is running (skip for API-only suite)
 const pgrep = Bun.spawnSync(["pgrep", "-f", "screenpipe"]);
 if (pgrep.exitCode !== 0) {
-  console.log(c.red("error: screenpipe is not running"));
-  console.log("start the app first, then run tests");
-  process.exit(1);
+  console.log(c.red("warning: screenpipe process not found via pgrep"));
+  if (filter !== "api") {
+    console.log(c.red("error: screenpipe must be running for non-API tests"));
+    process.exit(1);
+  }
 }
 
 // Preflight: check health

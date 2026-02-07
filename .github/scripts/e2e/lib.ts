@@ -9,7 +9,7 @@ import { join } from "path";
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-export const APP_NAME = "screenpipe-app";
+export const APP_NAME = process.env.SCREENPIPE_APP_NAME ?? "screenpipe";
 export const HEALTH_URL = "http://localhost:3030/health";
 export const SEARCH_URL = "http://localhost:3030/search";
 export const TIMEOUT_SHORT = 5_000;

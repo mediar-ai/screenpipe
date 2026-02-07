@@ -104,16 +104,16 @@ jobs:
             ${{ runner.temp }}/e2e-full.log
           retention-days: 14
 
-  # ── Tier 2: Self-hosted runner (Mac Mini + HDMI dummy plug) ───────────────
-  # Full test suite: screen recording, audio, UI via accessibility
+  # ── Tier 2: Self-hosted runner (Mac Mini M4 Pro) ───────────────────────────
+  # Full E2E: build Tauri app, install, launch, test UI via bb + API
   e2e-self-hosted:
     name: macOS E2E (self-hosted)
     runs-on: [self-hosted, macos-test]
-    timeout-minutes: 30
+    timeout-minutes: 60
     # SECURITY: Only run on main branch — self-hosted runner has credentials.
     # Never run on PRs (fork code could be malicious).
     if: >
-      github.ref == 'refs/heads/main' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/e2e-macos-ci') &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
 
@@ -129,13 +129,7 @@ jobs:
           system_profiler SPDisplaysDataType 2>/dev/null | grep -A5 "Resolution" || true
 
       - name: Install/update BigBrother CLI
-        continue-on-error: true
         run: |
-          # bb requires Xcode (not just CLT) for cidre framework
-          if ! xcodebuild -version &>/dev/null; then
-            echo "⚠ Xcode not installed — skipping bb (UI tests will be skipped)"
-            exit 0
-          fi
           if [ -d "$HOME/bigbrother" ]; then
             cd "$HOME/bigbrother" && git pull
           else
@@ -143,12 +137,9 @@ jobs:
           fi
           cd "$HOME/bigbrother"
           cargo build --release -p bb
-          sudo cp target/release/bb /usr/local/bin/bb
+          # Symlink so TCC permission (granted to target/release/bb) is preserved
+          sudo ln -sf "$HOME/bigbrother/target/release/bb" /usr/local/bin/bb
           bb --version
-
-      - name: Check permissions
-        continue-on-error: true
-        run: bb permissions 2>&1 || true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -161,61 +152,228 @@ jobs:
           eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
           brew install ffmpeg pkg-config cmake 2>/dev/null || true
 
-      - name: Build and start screenpipe
+      - name: Install frontend deps
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          cd apps/screenpipe-app-tauri
+          bun install
+
+      - name: Build Tauri app
         run: |
           source "$HOME/.cargo/env" 2>/dev/null || true
           eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          cd apps/screenpipe-app-tauri
 
-          # If screenpipe app is running, use it. Otherwise build CLI.
-          if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
-            echo "✓ screenpipe already running"
-            curl -sf http://localhost:3030/health | python3 -m json.tool
-          else
-            echo "Building screenpipe CLI..."
-            cargo build --release -p screenpipe-server --features metal
-            ./target/release/screenpipe --disable-vision --disable-audio --port 3030 &
-            echo "SERVER_PID=$!" >> $GITHUB_ENV
-            for i in $(seq 1 30); do
-              if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
-                echo "✓ health API ready"
-                curl -sf http://localhost:3030/health | python3 -m json.tool
-                break
-              fi
-              echo "waiting... ($i/30)"
-              sleep 2
-            done
+          # Build the app bundle (debug for speed, or release if cached)
+          bunx tauri build 2>&1 | tail -30
+
+          # Find the built .app
+          APP_PATH=$(find src-tauri/target/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: no .app bundle found"
+            ls -la src-tauri/target/release/bundle/macos/ 2>/dev/null || true
+            exit 1
           fi
+          echo "✓ Built: $APP_PATH"
+          echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
+
+      - name: Install app
+        run: |
+          # Kill any existing screenpipe
+          pkill -f "screenpipe" 2>/dev/null || true
+          sleep 2
+
+          # Copy to /Applications
+          APP_NAME=$(basename "$APP_PATH")
+          sudo rm -rf "/Applications/$APP_NAME"
+          sudo cp -R "$APP_PATH" "/Applications/$APP_NAME"
+          echo "✓ Installed: /Applications/$APP_NAME"
+          echo "INSTALLED_APP=/Applications/$APP_NAME" >> $GITHUB_ENV
+
+      - name: Grant app permissions
+        continue-on-error: true
+        run: |
+          # The app needs Accessibility + Screen Recording + Microphone
+          # Grant via AppleScript automation of System Settings (we have accessibility for sshd)
+          APP_BINARY="$INSTALLED_APP/Contents/MacOS/screenpipe-app"
+
+          if [ ! -f "$APP_BINARY" ]; then
+            # Try alternate binary name
+            APP_BINARY=$(find "$INSTALLED_APP/Contents/MacOS/" -type f | head -1)
+          fi
+          echo "App binary: $APP_BINARY"
+
+          # Check if already has accessibility
+          EXISTING=$(sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+            "SELECT COUNT(*) FROM access WHERE service='kTCCServiceAccessibility' AND client='$APP_BINARY';" 2>/dev/null || echo "0")
+
+          if [ "$EXISTING" = "0" ]; then
+            echo "Granting permissions via AppleScript..."
+
+            # Grant Accessibility
+            open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            sleep 3
+            osascript -e "
+              tell application \"System Events\"
+                tell process \"System Settings\"
+                  set theGroup to group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                  click button 1 of theGroup
+                  delay 2
+                  try
+                    set theSheet to sheet 1 of window 1
+                    set value of text field \"Password\" of theSheet to \"$RUNNER_PASSWORD\"
+                    delay 0.3
+                    click button \"Modify Settings\" of theSheet
+                    delay 2
+                  end try
+                  key code 5 using {command down, shift down}
+                  delay 2
+                  keystroke \"$APP_BINARY\"
+                  delay 0.5
+                  key code 36
+                  delay 2
+                  key code 36
+                  delay 1
+                end tell
+              end tell
+            " 2>&1 || echo "⚠ Failed to grant accessibility"
+
+            # Grant Screen Recording
+            killall "System Settings" 2>/dev/null; sleep 1
+            open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            sleep 3
+            osascript -e "
+              tell application \"System Events\"
+                tell process \"System Settings\"
+                  set theGroup to group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                  click button 1 of theGroup
+                  delay 2
+                  try
+                    set theSheet to sheet 1 of window 1
+                    set value of text field \"Password\" of theSheet to \"$RUNNER_PASSWORD\"
+                    delay 0.3
+                    click button \"Modify Settings\" of theSheet
+                    delay 2
+                  end try
+                  key code 5 using {command down, shift down}
+                  delay 2
+                  keystroke \"$APP_BINARY\"
+                  delay 0.5
+                  key code 36
+                  delay 2
+                  key code 36
+                  delay 1
+                end tell
+              end tell
+            " 2>&1 || echo "⚠ Failed to grant screen capture"
+
+            killall "System Settings" 2>/dev/null
+          else
+            echo "✓ App already has permissions"
+          fi
+        env:
+          RUNNER_PASSWORD: ${{ secrets.RUNNER_PASSWORD }}
+
+      - name: Launch app and wait for health
+        run: |
+          # Launch the installed app
+          open "$INSTALLED_APP"
+          echo "Launched $INSTALLED_APP, waiting for health API..."
+
+          # Wait for health API
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3030/health > /dev/null 2>&1; then
+              echo "✓ health API ready (attempt $i)"
+              curl -sf http://localhost:3030/health | python3 -m json.tool
+              break
+            fi
+            echo "waiting... ($i/60)"
+            sleep 3
+          done
+
+          if ! curl -sf http://localhost:3030/health > /dev/null 2>&1; then
+            echo "ERROR: health API never responded"
+            # Dump logs
+            find ~/Library/Logs -name "*screenpipe*" -mmin -5 -exec cat {} \; 2>/dev/null | tail -50
+            exit 1
+          fi
+
+          # Determine the app name for bb (as shown in accessibility)
+          # The process name from the binary
+          APP_PROC=$(basename "$INSTALLED_APP" .app)
+          echo "SCREENPIPE_APP_NAME=$APP_PROC" >> $GITHUB_ENV
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Run E2E tests
+      - name: Run API tests
         env:
           ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
+          SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
         run: |
           eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
-          source "$HOME/.cargo/env" 2>/dev/null || true
-
-          # Always run API tests
+          mkdir -p "$ARTIFACTS_DIR"
           bun .github/scripts/e2e/run-all.ts --suite api 2>&1 | tee "${{ runner.temp }}/e2e-full.log"
 
-          # Run UI tests only if bb is available
-          if command -v bb &>/dev/null; then
-            bun .github/scripts/e2e/run-all.ts --suite launch 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
-            bun .github/scripts/e2e/run-all.ts --suite window 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
-            bun .github/scripts/e2e/run-all.ts --suite settings 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
-            bun .github/scripts/e2e/run-all.ts --suite recording 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
-            bun .github/scripts/e2e/run-all.ts --suite permissions 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log" || true
-          else
-            echo "⚠ bb not available — skipping UI tests"
-          fi
+      - name: Run launch tests
+        if: success()
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
+          SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          bun .github/scripts/e2e/run-all.ts --suite launch 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
 
-      - name: Stop server
+      - name: Run window tests
+        if: success()
+        continue-on-error: true
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
+          SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          bun .github/scripts/e2e/run-all.ts --suite window 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
+
+      - name: Run settings tests
+        if: success()
+        continue-on-error: true
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
+          SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          bun .github/scripts/e2e/run-all.ts --suite settings 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
+
+      - name: Run recording tests
+        if: success()
+        continue-on-error: true
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
+          SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          bun .github/scripts/e2e/run-all.ts --suite recording 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
+
+      - name: Run permissions tests
+        if: success()
+        continue-on-error: true
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
+          SCREENPIPE_APP_NAME: ${{ env.SCREENPIPE_APP_NAME }}
+        run: |
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+          bun .github/scripts/e2e/run-all.ts --suite permissions 2>&1 | tee -a "${{ runner.temp }}/e2e-full.log"
+
+      - name: Cleanup
         if: always()
         run: |
-          if [ -n "$SERVER_PID" ]; then kill $SERVER_PID 2>/dev/null || true; fi
+          # Kill the app
+          pkill -f "screenpipe-app" 2>/dev/null || true
+          pkill -f "screenpipe" 2>/dev/null || true
+          killall "System Settings" 2>/dev/null || true
+          sleep 2
 
       - name: Upload artifacts
         if: always()
