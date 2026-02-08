@@ -187,7 +187,7 @@ export function AppleIntelligenceCard() {
     setIsScanning(true);
     setLastScanResult(null);
     try {
-      const result = await invoke<{
+      const scanPromise = invoke<{
         remindersCreated: number;
         items: { title: string }[];
         contextChars: number;
@@ -195,6 +195,12 @@ export function AppleIntelligenceCard() {
       }>("reminders_scan", {
         customPrompt: customPrompt || null,
       });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("scan timed out after 60s")), 60000)
+      );
+
+      const result = await Promise.race([scanPromise, timeoutPromise]);
 
       if (result.error) {
         setLastScanResult(result.error);
