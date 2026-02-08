@@ -47,6 +47,17 @@ export default function RootLayout({
       }
     } catch {}
 
+    // Auto-reload on IndexedDB disconnect (APP-2E, 21 users)
+    // WKWebView's IndexedDB server can crash; the page becomes unusable.
+    const handleUnhandledRejection = (e: PromiseRejectionEvent) => {
+      const msg = String(e.reason?.message || e.reason || "");
+      if (msg.includes("Connection to Indexed Database server lost")) {
+        console.warn("IndexedDB server lost — reloading page");
+        window.location.reload();
+      }
+    };
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
     const logs: string[] = [];
     const MAX_LOGS = 1000;
     const originalConsole = { ...console };
@@ -87,6 +98,10 @@ export default function RootLayout({
         });
       };
     });
+
+    return () => {
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
   }, []);
 
   return (

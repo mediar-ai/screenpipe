@@ -6,7 +6,7 @@ use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
 };
-use std::borrow::Cow;
+
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -782,8 +782,11 @@ pub async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
         Ok(output) => {
             debug!("FFmpeg process exited with status: {}", output.status);
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if !output.status.success() && stderr != Cow::Borrowed("") {
-                error!("FFmpeg stderr: {}", stderr);
+            if !output.status.success() && !stderr.is_empty() {
+                error!("FFmpeg failed (exit {}): {}", output.status, stderr);
+            } else if !stderr.is_empty() {
+                // FFmpeg writes metadata/codec info to stderr by design — not an error
+                debug!("FFmpeg stderr (info): {}", stderr);
             }
         }
         Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
