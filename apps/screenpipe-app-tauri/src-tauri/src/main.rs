@@ -128,7 +128,7 @@ fn setup_dock_menu(app_handle: AppHandle) {
                 if let Some(ref app) = DOCK_APP_HANDLE {
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
-                        let state = app.state::<crate::updates::UpdatesManager>();
+                        let state = app.state::<std::sync::Arc<crate::updates::UpdatesManager>>();
                         if let Err(e) = state.check_for_updates(true).await {
                             tracing::error!("dock menu: check for updates failed: {}", e);
                         }
@@ -1351,7 +1351,7 @@ async fn main() {
                         "check_for_updates" => {
                             let app = app_handle.clone();
                             tauri::async_runtime::spawn(async move {
-                                let state = app.state::<crate::updates::UpdatesManager>();
+                                let state = app.state::<std::sync::Arc<crate::updates::UpdatesManager>>();
                                 if let Err(e) = state.check_for_updates(true).await {
                                     tracing::error!("menu: check for updates failed: {}", e);
                                 }
@@ -1681,6 +1681,7 @@ async fn main() {
 
             // Initialize update check
             let update_manager = start_update_check(&app_handle, 5)?;
+            app_handle.manage(update_manager.clone()); // Register for state::<Arc<UpdatesManager>>()
 
             // Setup tray
             if let Some(_) = app_handle.tray_by_id("screenpipe_main") {
