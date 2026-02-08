@@ -769,14 +769,16 @@ jobs:
             Write-Host "=== Rebuilding with beta config ==="
             # Swap to beta config (we're in src-tauri/)
             Copy-Item "tauri.beta.conf.json" "tauri.conf.json" -Force
-            # Clean old bundle artifacts
-            $bundlePath = "target/x86_64-pc-windows-msvc/release/bundle"
-            if (Test-Path $bundlePath) { Remove-Item -Recurse -Force $bundlePath }
+            # Clean ALL bundle artifacts so only beta artifacts exist for upload
+            Get-ChildItem -Path "target" -Recurse -Directory -Filter "bundle" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            Get-ChildItem -Path "target" -Recurse -Include "*.nsis*","*.exe","*.sig","*.msi" | Where-Object { $_.DirectoryName -match "bundle|release$" } | Remove-Item -Force -ErrorAction SilentlyContinue
             # Rebuild (Rust cached, just repackages) - run from project root
             Push-Location ..
             bunx tauri build --target x86_64-pc-windows-msvc --features official-build
             Pop-Location
             Write-Host "=== Beta rebuild complete ==="
+            Write-Host "Beta artifacts:"
+            Get-ChildItem -Path "target" -Recurse -Include "*.exe","*.nsis*" | Where-Object { $_.DirectoryName -match "bundle" } | ForEach-Object { Write-Host $_.FullName }
 
             Write-Host "Uploading to beta channel..."
             try {
@@ -816,11 +818,16 @@ jobs:
           echo "=== Rebuilding with beta config ==="
           # Swap to beta config (Rust is already compiled, this just repackages)
           cp apps/screenpipe-app-tauri/src-tauri/tauri.beta.conf.json apps/screenpipe-app-tauri/src-tauri/tauri.conf.json
-          # Clean old bundle artifacts so beta gets its own
-          rm -rf apps/screenpipe-app-tauri/src-tauri/target/*/release/bundle
+          # Clean ALL bundle artifacts so only beta artifacts exist for upload
+          find apps/screenpipe-app-tauri/src-tauri/target -type d -name "bundle" -exec rm -rf {} + 2>/dev/null || true
+          # Also remove any .dmg, .app.tar.gz, .sig files from previous build
+          find apps/screenpipe-app-tauri/src-tauri/target -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.sig" -o -name "*.nsis*" | xargs rm -f 2>/dev/null || true
           cd apps/screenpipe-app-tauri
           bunx tauri build ${{ steps.tauri-args.outputs.args || matrix.tauri-args }}
           echo "=== Beta rebuild complete ==="
+          # Verify only beta artifacts exist
+          echo "Beta artifacts:"
+          find src-tauri/target -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.exe" 2>/dev/null
 
       - name: Upload Assets to CrabNebula Beta (Non-Windows)
         if: matrix.os_type != 'windows' && (needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch')
