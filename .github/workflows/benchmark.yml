@@ -1,10 +1,9 @@
 name: Rust Benchmark
 
 on:
-  push:
-    branches: [main]
   schedule:
-    - cron: '0 0 * * 0'  # Weekly on Sunday
+    - cron: '0 8 * * *'  # Daily at midnight PST (8 AM UTC)
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
