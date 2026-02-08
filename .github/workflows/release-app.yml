@@ -115,16 +115,10 @@ jobs:
               echo "ℹ️ All self-hosted macOS runners offline — using GH-hosted macos-latest"
             fi
 
-            # Windows: self-hosted (windows-desktop-test) → GH-hosted (windows-2019)
-            WINRUNNER=$(check_runner "windows-desktop-test")
-
-            if [ "$WINRUNNER" = "online" ]; then
-              echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
-              echo "✅ Windows self-hosted runner is online"
-            else
-              echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
-              echo "ℹ️ Windows self-hosted offline — using GH-hosted windows-2019"
-            fi
+            # Windows: GH-hosted for now — self-hosted needs 7zip/LLVM pre-installed
+            # TODO: re-enable windows-desktop-test once deps are pre-installed
+            echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
+            echo "ℹ️ Using GH-hosted Windows runner (self-hosted missing build deps)"
           fi
 
   draft:
