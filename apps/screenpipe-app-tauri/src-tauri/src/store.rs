@@ -651,3 +651,30 @@ impl ObsidianSettingsStore {
         store.save().map_err(|e| e.to_string())
     }
 }
+
+// ─── Reminders Settings ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemindersSettingsStore {
+    pub enabled: bool,
+}
+
+impl RemindersSettingsStore {
+    pub fn get(app: &AppHandle) -> Result<Option<Self>, String> {
+        let store = get_store(app, None).map_err(|e| e.to_string())?;
+        if store.is_empty() {
+            return Ok(None);
+        }
+        let settings = serde_json::from_value(store.get("reminders").unwrap_or(Value::Null));
+        match settings {
+            Ok(settings) => Ok(settings),
+            Err(_) => Ok(None),
+        }
+    }
+
+    pub fn save(&self, app: &AppHandle) -> Result<(), String> {
+        let store = get_store(app, None).map_err(|e| e.to_string())?;
+        store.set("reminders", json!(self));
+        store.save().map_err(|e| e.to_string())
+    }
+}

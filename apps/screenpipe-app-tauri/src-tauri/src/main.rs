@@ -57,6 +57,7 @@ mod windows_overlay;
 mod space_monitor;
 mod sync;
 mod obsidian_sync;
+mod reminders;
 mod pi;
 mod embedded_server;
 
@@ -1097,6 +1098,14 @@ async fn main() {
                 obsidian_sync::obsidian_start_scheduler,
                 obsidian_sync::obsidian_stop_scheduler,
                 obsidian_sync::obsidian_cancel_sync,
+                // Reminders commands
+                reminders::reminders_status,
+                reminders::reminders_authorize,
+                reminders::reminders_list,
+                reminders::reminders_create,
+                reminders::reminders_scan,
+                reminders::reminders_start_scheduler,
+                reminders::reminders_stop_scheduler,
             ])
             .typ::<SettingsStore>()
             .typ::<OnboardingStore>()
@@ -1104,7 +1113,10 @@ async fn main() {
             .typ::<sync::SyncDeviceInfo>()
             .typ::<sync::SyncConfig>()
             .typ::<obsidian_sync::ObsidianSyncSettings>()
-            .typ::<obsidian_sync::ObsidianSyncStatus>();
+            .typ::<obsidian_sync::ObsidianSyncStatus>()
+            .typ::<reminders::RemindersStatus>()
+            .typ::<reminders::ReminderItem>()
+            .typ::<reminders::ScanResult>();
 
         if let Err(e) = builder
             .export(
@@ -1119,6 +1131,7 @@ async fn main() {
     let recording_state = RecordingState(Arc::new(tokio::sync::Mutex::new(None)));
     let pi_state = pi::PiState(Arc::new(tokio::sync::Mutex::new(None)));
     let obsidian_sync_state = obsidian_sync::ObsidianSyncState::new();
+    let reminders_state = reminders::RemindersState::new();
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -1171,6 +1184,7 @@ async fn main() {
         let app = app.manage(recording_state)
         .manage(pi_state)
         .manage(obsidian_sync_state)
+        .manage(reminders_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
             stop_screenpipe,
@@ -1249,7 +1263,15 @@ async fn main() {
             obsidian_sync::obsidian_run_sync,
             obsidian_sync::obsidian_start_scheduler,
             obsidian_sync::obsidian_stop_scheduler,
-            obsidian_sync::obsidian_cancel_sync
+            obsidian_sync::obsidian_cancel_sync,
+            // Reminders commands
+            reminders::reminders_status,
+            reminders::reminders_authorize,
+            reminders::reminders_list,
+            reminders::reminders_create,
+            reminders::reminders_scan,
+            reminders::reminders_start_scheduler,
+            reminders::reminders_stop_scheduler
         ])
         .setup(move |app| {
             //deep link register_all
@@ -1734,6 +1756,17 @@ async fn main() {
                 // Small delay to ensure everything is ready
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 obsidian_sync::auto_start_scheduler(app_handle_clone, &obsidian_state_clone).await;
+            });
+
+            // Auto-start reminders scheduler if it was enabled
+            let app_handle_clone = app_handle.clone();
+            let reminders_state = app_handle.state::<reminders::RemindersState>();
+            let reminders_state_clone = reminders::RemindersState {
+                scheduler_handle: reminders_state.scheduler_handle.clone(),
+            };
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_secs(8)).await;
+                reminders::auto_start_scheduler(app_handle_clone, &reminders_state_clone).await;
             });
 
             Ok(())

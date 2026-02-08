@@ -17,3 +17,11 @@ tempfile = "3.2"
 anyhow = "1.0"
 mime_guess = "2.0.5"
 screenpipe-core = { path = "../screenpipe-core" }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+eventkit-rs = { version = "0.1", features = ["reminders"] }
+objc2 = "0.6"
+objc2-event-kit = "0.3"
+objc2-foundation = "0.3"
+chrono = "0.4"
