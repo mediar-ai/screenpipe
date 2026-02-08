@@ -973,8 +973,31 @@ async fn main() {
             "unknown panic payload".to_string()
         };
         let location = info.location().map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())).unwrap_or_default();
+
+        // Force-capture a backtrace before abort() kills us
+        let backtrace = std::backtrace::Backtrace::force_capture();
+
+        let crash_msg = format!(
+            "PANIC on thread '{}' at {}: {}\n\nBacktrace:\n{}",
+            thread_name, location, payload, backtrace
+        );
+
         // Log to stderr (survives even if tracing isn't initialized yet)
-        eprintln!("PANIC on thread '{}' at {}: {}", thread_name, location, payload);
+        eprintln!("{}", crash_msg);
+
+        // Write to a crash log file — this survives abort() since we fsync
+        // Critical for diagnosing panics inside tao's extern "C" callbacks
+        // (send_event, did_finish_launching) where panic_cannot_unwind → abort()
+        if let Some(log_dir) = dirs::home_dir().map(|d| d.join(".screenpipe")) {
+            let crash_path = log_dir.join("last-panic.log");
+            if let Ok(mut f) = std::fs::File::create(&crash_path) {
+                use std::io::Write;
+                let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+                let _ = writeln!(f, "[{}] {}", timestamp, crash_msg);
+                let _ = f.sync_all(); // fsync before abort() kills us
+            }
+        }
+
         // Also report to Sentry if initialized
         sentry::capture_message(
             &format!("panic on thread '{}' at {}: {}", thread_name, location, payload),

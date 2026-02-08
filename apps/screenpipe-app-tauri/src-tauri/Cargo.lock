@@ -9078,6 +9078,7 @@ dependencies = [
  "nokhwa-bindings-macos",
  "notify",
  "objc",
+ "objc2 0.6.3",
  "once_cell",
  "raw-window-handle",
  "regex",

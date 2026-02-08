@@ -130,6 +130,11 @@ cocoa = "0.26.0"
 objc = "0.2.7"
 block = "0.1"
 base64 = "0.22.1"
+# Fix macOS 26 Tahoe crash: ObjC method signatures changed from signed to unsigned
+# integers, causing objc2 strict validation to panic inside tao's extern "C" callbacks
+# (send_event, did_finish_launching) → panic_cannot_unwind → SIGABRT
+# See: https://github.com/tauri-apps/tao/issues/1171
+objc2 = { version = "0.6", features = ["relax-sign-encoding"] }
 # bunch of hack for permissions
 core-graphics-helmer-fork = "0.24.0"
 nokhwa-bindings-macos = { git = "https://github.com/CapSoftware/nokhwa", rev = "0d3d1f30a78b" }
