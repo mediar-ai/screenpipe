@@ -231,6 +231,12 @@ pub async fn obsidian_save_settings(
     app: AppHandle,
     settings: ObsidianSyncSettings,
 ) -> Result<(), String> {
+    // Preserve existing next_scheduled_run when saving settings from UI
+    let existing_next_run = ObsidianSettingsStore::get(&app)
+        .ok()
+        .flatten()
+        .and_then(|s| s.next_scheduled_run);
+
     let store_settings = ObsidianSettingsStore {
         enabled: settings.enabled,
         vault_path: settings.vault_path,
@@ -238,10 +244,10 @@ pub async fn obsidian_save_settings(
         sync_interval_minutes: settings.sync_interval_minutes,
         custom_prompt: settings.custom_prompt,
         sync_hours: settings.sync_hours,
-        next_scheduled_run: None,
+        next_scheduled_run: existing_next_run,
     };
     store_settings.save(&app)?;
-    info!("Obsidian settings saved to store");
+    info!("Obsidian settings saved to store (preserved next_scheduled_run)");
     Ok(())
 }
 
@@ -454,7 +460,7 @@ pub async fn obsidian_start_scheduler(
     );
 
     let handle = tokio::spawn(async move {
-        info!("Obsidian scheduler task started, interval: {}min", interval_mins);
+        info!("Obsidian scheduler task started (manual), interval: {}min", interval_mins);
         
         let interval_duration = tokio::time::Duration::from_secs(interval_mins as u64 * 60);
         
@@ -476,10 +482,9 @@ pub async fn obsidian_start_scheduler(
                 }
             }
 
-            info!("Running scheduled obsidian sync");
+            info!("Running scheduled obsidian sync (manual)");
 
-            // Run sync and update next_scheduled_run
-            let result = run_scheduled_sync_with_reschedule(
+            let (result, retry_secs) = run_scheduled_sync_with_reschedule(
                 &app_handle, 
                 &settings_clone, 
                 &status_arc, 
@@ -488,18 +493,22 @@ pub async fn obsidian_start_scheduler(
                 interval_mins,
             ).await;
 
-            match result {
-                Ok(_) => {
-                    info!("Scheduled obsidian sync completed successfully");
-                }
-                Err(e) => {
-                    warn!("Scheduled obsidian sync failed: {}", e);
-                }
+            match &result {
+                Ok(_) => info!("Scheduled obsidian sync completed successfully"),
+                Err(e) => warn!("Scheduled obsidian sync failed: {}", e),
             }
 
-            // Wait for next interval
-            info!("Obsidian scheduler: waiting {}min for next sync...", interval_mins);
-            tokio::time::sleep(interval_duration).await;
+            let wait = match retry_secs {
+                Some(secs) => {
+                    info!("Obsidian scheduler: retrying in {}s...", secs);
+                    tokio::time::Duration::from_secs(secs)
+                }
+                None => {
+                    info!("Obsidian scheduler: waiting {}min for next sync...", interval_mins);
+                    interval_duration
+                }
+            };
+            tokio::time::sleep(wait).await;
         }
     });
 
@@ -667,10 +676,9 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &ObsidianSyncState) {
                 }
             }
 
-            info!("Running scheduled obsidian sync");
+            info!("Running scheduled obsidian sync (auto-start)");
 
-            // Run sync and update next_scheduled_run
-            let result = run_scheduled_sync_with_reschedule(
+            let (result, retry_secs) = run_scheduled_sync_with_reschedule(
                 &app_handle, 
                 &settings_clone, 
                 &status_arc, 
@@ -679,18 +687,22 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &ObsidianSyncState) {
                 interval_mins,
             ).await;
 
-            match result {
-                Ok(_) => {
-                    info!("Scheduled obsidian sync completed successfully");
-                }
-                Err(e) => {
-                    warn!("Scheduled obsidian sync failed: {}", e);
-                }
+            match &result {
+                Ok(_) => info!("Scheduled obsidian sync completed successfully"),
+                Err(e) => warn!("Scheduled obsidian sync failed: {}", e),
             }
 
-            // Wait for next interval
-            info!("Obsidian scheduler: waiting {}min for next sync...", interval_mins);
-            tokio::time::sleep(interval_duration).await;
+            let wait = match retry_secs {
+                Some(secs) => {
+                    info!("Obsidian scheduler: retrying in {}s...", secs);
+                    tokio::time::Duration::from_secs(secs)
+                }
+                None => {
+                    info!("Obsidian scheduler: waiting {}min for next sync...", interval_mins);
+                    interval_duration
+                }
+            };
+            tokio::time::sleep(wait).await;
         }
     });
 
@@ -782,7 +794,8 @@ async fn run_scheduled_sync(
     result
 }
 
-/// Internal function to run a scheduled sync and update next_scheduled_run
+/// Internal function to run a scheduled sync and update next_scheduled_run.
+/// Returns (result, retry_secs) — retry_secs is Some if should retry sooner than normal interval.
 async fn run_scheduled_sync_with_reschedule(
     app: &AppHandle,
     settings: &ObsidianSyncSettings,
@@ -790,27 +803,41 @@ async fn run_scheduled_sync_with_reschedule(
     current_pid: &Arc<Mutex<Option<u32>>>,
     user_token: Option<&str>,
     interval_mins: u32,
-) -> Result<(), String> {
+) -> (Result<(), String>, Option<u64>) {
     // Run the actual sync
     let result = run_scheduled_sync(app, settings, status, current_pid, user_token).await;
-    
-    // Update next_scheduled_run in persistent store (regardless of success/failure)
-    let next_run = chrono::Utc::now() + chrono::Duration::minutes(interval_mins as i64);
-    let store_settings = ObsidianSettingsStore {
-        enabled: settings.enabled,
-        vault_path: settings.vault_path.clone(),
-        notes_path: settings.notes_path.clone(),
-        sync_interval_minutes: settings.sync_interval_minutes,
-        custom_prompt: settings.custom_prompt.clone(),
-        sync_hours: settings.sync_hours,
-        next_scheduled_run: Some(next_run.to_rfc3339()),
+
+    let (next_run, retry_secs) = match &result {
+        Ok(_) => {
+            // Success — schedule next run at normal interval
+            let next = chrono::Utc::now() + chrono::Duration::minutes(interval_mins as i64);
+            (next, None)
+        }
+        Err(e) if e.contains("429") || e.contains("rate limit") => {
+            // Rate limited — retry in 60 seconds, not the full interval
+            let retry = 60u64;
+            let next = chrono::Utc::now() + chrono::Duration::seconds(retry as i64);
+            warn!("Obsidian sync rate limited, retrying in {}s", retry);
+            (next, Some(retry))
+        }
+        Err(_) => {
+            // Other failure — retry in 5 minutes, not the full interval
+            let retry = 300u64;
+            let next = chrono::Utc::now() + chrono::Duration::seconds(retry as i64);
+            (next, Some(retry))
+        }
     };
-    
-    if let Err(e) = store_settings.save(app) {
-        warn!("Failed to save next_scheduled_run: {}", e);
-    } else {
-        info!("Updated next_scheduled_run to {}", next_run);
+
+    // Save next_scheduled_run to persistent store
+    // Preserve other fields from current store
+    if let Ok(Some(mut store_settings)) = ObsidianSettingsStore::get(app) {
+        store_settings.next_scheduled_run = Some(next_run.to_rfc3339());
+        if let Err(e) = store_settings.save(app) {
+            warn!("Failed to save next_scheduled_run: {}", e);
+        } else {
+            info!("Updated next_scheduled_run to {}", next_run);
+        }
     }
-    
-    result
+
+    (result, retry_secs)
 }
