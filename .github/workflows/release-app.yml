@@ -43,12 +43,13 @@ jobs:
       - id: check
         run: |
           COMMIT_MSG=$(git log -1 --pretty=%B)
-          if echo "$COMMIT_MSG" | grep -q "release-app"; then
+          # Match only when commit message STARTS with these keywords (not mentioned in prose)
+          if echo "$COMMIT_MSG" | head -1 | grep -qE "^(Bump app|release-app)"; then
             echo "should_release=true" >> $GITHUB_OUTPUT
           else
             echo "should_release=false" >> $GITHUB_OUTPUT
           fi
-          if echo "$COMMIT_MSG" | grep -q "release-app-publish"; then
+          if echo "$COMMIT_MSG" | head -1 | grep -q "^release-app-publish"; then
             echo "should_publish=true" >> $GITHUB_OUTPUT
           else
             echo "should_publish=false" >> $GITHUB_OUTPUT
@@ -57,7 +58,7 @@ jobs:
           # Beta: upload on most main commits and workflow_dispatch
           # This lets us test updates via beta channel before publishing stable
           AUTHOR=$(git log -1 --pretty=%an)
-          if echo "$COMMIT_MSG" | grep -qE "^(Bump app|release-app|fix|feat|refactor|perf|ci)"; then
+          if echo "$COMMIT_MSG" | head -1 | grep -qE "^(Bump app|release-app|fix|feat|refactor|perf|ci)"; then
             echo "should_beta=true" >> $GITHUB_OUTPUT
           elif [ "$AUTHOR" = "Louis Beaumont" ] || [ "$AUTHOR" = "louis030195" ]; then
             echo "should_beta=true" >> $GITHUB_OUTPUT
@@ -66,12 +67,12 @@ jobs:
           fi
 
           # Check for explicit testing or skip flags first
-          if echo "$COMMIT_MSG" | grep -q "release-app"; then
+          if echo "$COMMIT_MSG" | head -1 | grep -q "^release-app"; then
             echo "should_test=true" >> $GITHUB_OUTPUT
-          elif echo "$COMMIT_MSG" | grep -q "release-app-skip-test"; then
+          elif echo "$COMMIT_MSG" | head -1 | grep -q "^release-app-skip-test"; then
             echo "should_test=false" >> $GITHUB_OUTPUT
           # For regular release-app (not publish), default to testing=true
-          elif echo "$COMMIT_MSG" | grep -q "release-app" && ! echo "$COMMIT_MSG" | grep -q "release-app-publish"; then
+          elif echo "$COMMIT_MSG" | head -1 | grep -q "^release-app" && ! echo "$COMMIT_MSG" | head -1 | grep -q "^release-app-publish"; then
             echo "should_test=true" >> $GITHUB_OUTPUT
           # For manual workflow runs, use the input parameter
           else
