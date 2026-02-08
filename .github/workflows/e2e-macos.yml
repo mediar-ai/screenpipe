@@ -10,6 +10,9 @@ on:
     workflows: ["Release App"]
     types: [completed]
     branches: [main]
+  schedule:
+    # Run nightly at 6am UTC (10pm PST) to catch regressions
+    - cron: '0 6 * * *'
   workflow_dispatch:
     branches: [main]
 
