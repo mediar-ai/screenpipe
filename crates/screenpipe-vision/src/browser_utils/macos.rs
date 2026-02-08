@@ -25,7 +25,11 @@ impl MacOSUrlDetector {
         Self
     }
 
-    unsafe fn find_url_field(&self, element: AXUIElementRef) -> Option<AXUIElementRef> {
+    /// Recursively search the AX tree for a text field containing a URL.
+    /// Returns the URL string directly instead of a borrowed AXUIElementRef,
+    /// avoiding dangling-pointer risks when child elements are freed.
+    unsafe fn find_url_in_tree(&self, element: AXUIElementRef) -> Option<String> {
+        // Check if this element is a text field with a URL value
         let mut role: CFTypeRef = std::ptr::null_mut();
         let status = AXUIElementCopyAttributeValue(
             element,
@@ -33,9 +37,11 @@ impl MacOSUrlDetector {
             &mut role,
         );
 
-        if status == accessibility_sys::kAXErrorSuccess {
-            let _cf_role = CFString::wrap_under_get_rule(role as _);
-            let role_str = _cf_role.to_string();
+        if status == accessibility_sys::kAXErrorSuccess && !role.is_null() {
+            // AXUIElementCopyAttributeValue returns +1 retained — use create_rule
+            let cf_role = CFString::wrap_under_create_rule(role as _);
+            let role_str = cf_role.to_string();
+            // cf_role drops here and releases the CF object
 
             if role_str == kAXTextFieldRole {
                 let mut value: CFTypeRef = std::ptr::null_mut();
@@ -45,23 +51,29 @@ impl MacOSUrlDetector {
                     &mut value,
                 );
 
-                if status == accessibility_sys::kAXErrorSuccess {
-                    let _value_str = CFString::wrap_under_get_rule(value as _);
-                    let url_str = _value_str.to_string();
+                if status == accessibility_sys::kAXErrorSuccess && !value.is_null() {
+                    // +1 retained — use create_rule so it's released on drop
+                    let cf_value = CFString::wrap_under_create_rule(value as _);
+                    let url_str = cf_value.to_string();
+                    // cf_value drops here and releases
+
                     let url_to_parse =
                         if !url_str.starts_with("http://") && !url_str.starts_with("https://") {
                             format!("https://{}", url_str)
                         } else {
-                            url_str
+                            url_str.clone()
                         };
 
                     if Url::parse(&url_to_parse).is_ok() {
-                        return Some(element);
+                        return Some(url_str);
                     }
                 }
+                // If CopyAttributeValue failed, value is still null — nothing to release
             }
         }
+        // If CopyAttributeValue failed for role, role is still null — nothing to release
 
+        // Recurse into children
         let mut children: CFTypeRef = std::ptr::null_mut();
         let status = AXUIElementCopyAttributeValue(
             element,
@@ -69,14 +81,16 @@ impl MacOSUrlDetector {
             &mut children,
         );
 
-        if status == accessibility_sys::kAXErrorSuccess {
-            let _children_array =
-                CFArray::<*const std::ffi::c_void>::wrap_under_get_rule(children as _);
-            for child in _children_array.iter() {
-                if let Some(found) = self.find_url_field(*child as AXUIElementRef) {
-                    return Some(found);
+        if status == accessibility_sys::kAXErrorSuccess && !children.is_null() {
+            // +1 retained — use create_rule so the array is released on drop
+            let children_array =
+                CFArray::<*const std::ffi::c_void>::wrap_under_create_rule(children as _);
+            for child in children_array.iter() {
+                if let Some(url) = self.find_url_in_tree(*child as AXUIElementRef) {
+                    return Some(url);
                 }
             }
+            // children_array drops here, releasing the CF array
         }
 
         None
@@ -106,40 +120,22 @@ impl MacOSUrlDetector {
                 &mut focused_window,
             );
 
-            if status != accessibility_sys::kAXErrorSuccess {
+            if status != accessibility_sys::kAXErrorSuccess || focused_window.is_null() {
                 CFRelease(app_element as CFTypeRef);
                 return Ok(None);
             }
 
             let window_ref = focused_window as AXUIElementRef;
-            let address_bar = match self.find_url_field(window_ref) {
-                Some(bar) => bar,
-                None => {
-                    CFRelease(focused_window as CFTypeRef);
-                    CFRelease(app_element as CFTypeRef);
-                    return Ok(None);
-                }
-            };
+            // find_url_in_tree returns the URL string directly —
+            // no dangling AXUIElementRef concerns
+            let result = self.find_url_in_tree(window_ref);
 
-            let mut url_value: CFTypeRef = std::ptr::null_mut();
-            let status = AXUIElementCopyAttributeValue(
-                address_bar,
-                CFString::from_static_string(kAXValueAttribute).as_concrete_TypeRef(),
-                &mut url_value,
-            );
-
-            let result = if status == accessibility_sys::kAXErrorSuccess {
-                let url_str = CFString::wrap_under_get_rule(url_value as _);
-                Ok(Some(url_str.to_string()))
-            } else {
-                Ok(None)
-            };
-
-            CFRelease(url_value as CFTypeRef);
-            CFRelease(focused_window as CFTypeRef);
+            // Release focused_window (+1 from CopyAttributeValue)
+            CFRelease(focused_window);
+            // Release app_element (+1 from AXUIElementCreateApplication)
             CFRelease(app_element as CFTypeRef);
 
-            result
+            Ok(result)
         }
     }
 }
