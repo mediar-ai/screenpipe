@@ -116,6 +116,7 @@ tracing-subscriber = "0.3.16"
 default = ["pulseaudio"]
 metal = ["whisper-rs/metal"]
 cuda = ["whisper-rs/cuda"]
+vulkan = ["whisper-rs/vulkan"]
 pulseaudio = ["dep:libpulse-binding", "dep:libpulse-simple-binding"]
 
 [[example]]

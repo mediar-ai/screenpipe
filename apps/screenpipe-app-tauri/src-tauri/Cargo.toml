@@ -170,6 +170,7 @@ lazy_static = "1.5.0"
 cudart = []
 metal = ["screenpipe-audio/metal"]
 pulseaudio = ["screenpipe-audio/pulseaudio"]
+vulkan = ["screenpipe-audio/vulkan"]
 mkl = []
 llm = []
 cargo-clippy = []
