@@ -16,14 +16,15 @@ env:
 jobs:
   apple_ocr_benchmark:
     name: Run Apple OCR benchmark
-    runs-on: macos-latest
+    runs-on: [self-hosted, macos-test]
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
         run: |
-          brew install ffmpeg
+          brew install ffmpeg || true  # may already be installed on self-hosted
 
       - name: Run OCR benchmarks
         env:
@@ -61,7 +62,8 @@ jobs:
 
   windows_ocr_benchmark:
     name: Run Windows OCR benchmark
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows-desktop-test]
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
