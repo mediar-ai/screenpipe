@@ -37,6 +37,8 @@ pub struct SyncRuntimeState {
     pub last_sync: Arc<RwLock<Option<String>>>,
     /// Last sync error
     pub last_error: Arc<RwLock<Option<String>>>,
+    /// Cursor for downloads — only fetch blobs newer than this
+    pub last_download_at: Arc<RwLock<Option<String>>>,
 }
 
 /// Thread-safe container for optional runtime sync state
@@ -164,70 +166,33 @@ pub async fn sync_init(
         is_syncing: Arc::new(RwLock::new(false)),
         last_sync: Arc::new(RwLock::new(None)),
         last_error: Arc::new(RwLock::new(None)),
+        last_download_at: Arc::new(RwLock::new(None)),
     };
 
-    // Spawn event handler
+    // Spawn event handler (upload events only)
     let is_syncing = runtime_state.is_syncing.clone();
     let last_sync = runtime_state.last_sync.clone();
     let last_error = runtime_state.last_error.clone();
-    let sync_manager_for_events = runtime_state.manager.clone();
-    let sync_provider_for_events = Arc::new(ScreenpipeSyncProvider::new(
-        state.db.clone(),
-        machine_id.clone(),
-    ));
 
     tokio::spawn(async move {
         use screenpipe_core::sync::SyncEvent;
         while let Some(event) = event_rx.recv().await {
             match event {
                 SyncEvent::Started => {
-                    info!("sync cycle started");
+                    info!("sync upload cycle started");
                     *is_syncing.write().await = true;
                 }
                 SyncEvent::Completed(report) => {
                     info!(
-                        "sync cycle completed: {} blobs uploaded ({} bytes) in {:.2}s",
+                        "sync upload cycle completed: {} blobs uploaded ({} bytes) in {:.2}s",
                         report.blobs_uploaded, report.bytes_uploaded, report.duration_secs
                     );
                     *last_sync.write().await = Some(chrono::Utc::now().to_rfc3339());
                     *last_error.write().await = None;
-
-                    // Auto-download from other devices after upload
-                    let end = chrono::Utc::now();
-                    let start = end - chrono::Duration::hours(24);
-                    match sync_manager_for_events.download_by_time_range(
-                        Some(start.to_rfc3339()),
-                        Some(end.to_rfc3339()),
-                        None,
-                        Some(100),
-                    ).await {
-                        Ok(blobs) if !blobs.is_empty() => {
-                            info!("downloaded {} blobs from other devices", blobs.len());
-                            let mut imported = 0;
-                            for blob in blobs {
-                                let chunk: Result<crate::sync_provider::SyncChunk, _> = serde_json::from_slice(&blob.data);
-                                match chunk {
-                                    Ok(chunk) => {
-                                        match sync_provider_for_events.import_chunk(&chunk).await {
-                                            Ok(result) => {
-                                                imported += result.imported_frames + result.imported_ocr + result.imported_transcriptions + result.imported_accessibility + result.imported_ui_events;
-                                            }
-                                            Err(e) => error!("failed to import chunk: {}", e),
-                                        }
-                                    }
-                                    Err(e) => error!("failed to deserialize chunk: {}", e),
-                                }
-                            }
-                            info!("imported {} records from other devices", imported);
-                        }
-                        Ok(_) => info!("no new blobs from other devices"),
-                        Err(e) => warn!("download from other devices failed: {}", e),
-                    }
-
                     *is_syncing.write().await = false;
                 }
                 SyncEvent::Failed(err) => {
-                    error!("sync cycle failed: {}", err);
+                    error!("sync upload cycle failed: {}", err);
                     *is_syncing.write().await = false;
                     *last_error.write().await = Some(err);
                 }
@@ -249,6 +214,111 @@ pub async fn sync_init(
         }
     });
 
+    // Spawn independent download loop — runs on its own interval, not gated on upload
+    let download_manager = runtime_state.manager.clone();
+    let download_provider = Arc::new(ScreenpipeSyncProvider::new(
+        state.db.clone(),
+        machine_id.clone(),
+    ));
+    let download_cursor = runtime_state.last_download_at.clone();
+    let download_machine_id = machine_id.clone();
+
+    tokio::spawn(async move {
+        use crate::sync_provider::SCHEMA_VERSION;
+
+        // Wait a bit before first download to let upload complete first
+        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+
+        let interval = tokio::time::Duration::from_secs(
+            request.sync_interval_secs.unwrap_or(300),
+        );
+
+        loop {
+            let end = chrono::Utc::now();
+            // Use cursor if available, otherwise fall back to 24h window
+            let start = {
+                let cursor = download_cursor.read().await;
+                cursor
+                    .as_ref()
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|| (end - chrono::Duration::hours(24)).to_rfc3339())
+            };
+
+            info!(
+                "sync download: fetching blobs from {} (machine: {})",
+                start, download_machine_id
+            );
+
+            match download_manager
+                .download_by_time_range(Some(start), Some(end.to_rfc3339()), None, Some(100))
+                .await
+            {
+                Ok(blobs) if !blobs.is_empty() => {
+                    info!("sync download: got {} blobs from cloud", blobs.len());
+                    let mut imported = 0;
+                    let mut skipped_own = 0;
+                    let mut skipped_schema = 0;
+
+                    for blob in &blobs {
+                        let chunk: Result<crate::sync_provider::SyncChunk, _> =
+                            serde_json::from_slice(&blob.data);
+                        match chunk {
+                            Ok(chunk) => {
+                                // Skip own machine's blobs
+                                if chunk.machine_id == download_machine_id {
+                                    skipped_own += 1;
+                                    continue;
+                                }
+
+                                // Schema version guard (#4)
+                                if chunk.schema_version > SCHEMA_VERSION {
+                                    warn!(
+                                        "sync download: skipping chunk with schema_version {} (local: {}), update your app",
+                                        chunk.schema_version, SCHEMA_VERSION
+                                    );
+                                    skipped_schema += 1;
+                                    continue;
+                                }
+
+                                match download_provider.import_chunk(&chunk).await {
+                                    Ok(result) => {
+                                        let count = result.imported_frames
+                                            + result.imported_ocr
+                                            + result.imported_transcriptions
+                                            + result.imported_accessibility
+                                            + result.imported_ui_events;
+                                        imported += count;
+                                    }
+                                    Err(e) => error!("sync download: import failed: {}", e),
+                                }
+                            }
+                            Err(e) => error!("sync download: deserialize failed: {}", e),
+                        }
+                    }
+
+                    info!(
+                        "sync download: imported {} records, skipped {} own + {} schema",
+                        imported, skipped_own, skipped_schema
+                    );
+
+                    // Advance cursor
+                    *download_cursor.write().await = Some(end.to_rfc3339());
+                }
+                Ok(_) => {
+                    info!("sync download: no new blobs from other devices");
+                    // Still advance cursor so we don't re-check the same window
+                    *download_cursor.write().await = Some(end.to_rfc3339());
+                }
+                Err(e) => {
+                    warn!("sync download: failed: {}", e);
+                    // Don't advance cursor on failure — retry same window next time
+                }
+            }
+
+            tokio::time::sleep(interval).await;
+        }
+    });
+
     // Store in app state
     *state.sync_state.write().await = Some(runtime_state);
 
@@ -267,6 +337,7 @@ pub struct SyncStatusResponse {
     pub last_sync: Option<String>,
     pub last_error: Option<String>,
     pub machine_id: Option<String>,
+    pub last_download_at: Option<String>,
 }
 
 /// Get current sync status.
@@ -280,6 +351,7 @@ pub async fn sync_status(
             let is_syncing = *runtime.is_syncing.read().await;
             let last_sync = runtime.last_sync.read().await.clone();
             let last_error = runtime.last_error.read().await.clone();
+            let last_download_at = runtime.last_download_at.read().await.clone();
 
             Ok(Json(SyncStatusResponse {
                 enabled: true,
@@ -287,6 +359,7 @@ pub async fn sync_status(
                 last_sync,
                 last_error,
                 machine_id: Some(runtime.machine_id.clone()),
+                last_download_at,
             }))
         }
         None => Ok(Json(SyncStatusResponse {
@@ -295,6 +368,7 @@ pub async fn sync_status(
             last_sync: None,
             last_error: None,
             machine_id: None,
+            last_download_at: None,
         })),
     }
 }
@@ -410,13 +484,23 @@ pub async fn sync_download(
 
     for blob in blobs {
         // Deserialize the chunk
-        let chunk: SyncChunk = serde_json::from_slice(&blob.data).map_err(|e| {
-            error!("failed to deserialize chunk: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("failed to deserialize chunk: {}", e)})),
-            )
-        })?;
+        let chunk: SyncChunk = match serde_json::from_slice(&blob.data) {
+            Ok(c) => c,
+            Err(e) => {
+                error!("failed to deserialize chunk: {}", e);
+                continue;
+            }
+        };
+
+        // Schema version guard
+        if chunk.schema_version > crate::sync_provider::SCHEMA_VERSION {
+            warn!(
+                "sync download: skipping chunk with schema_version {} (local: {})",
+                chunk.schema_version,
+                crate::sync_provider::SCHEMA_VERSION
+            );
+            continue;
+        }
 
         // Import it
         match provider.import_chunk(&chunk).await {
@@ -480,6 +564,7 @@ mod tests {
             last_sync: Some("2024-01-28T14:00:00Z".to_string()),
             last_error: None,
             machine_id: Some("test-machine".to_string()),
+            last_download_at: None,
         };
 
         let json = serde_json::to_string(&response).unwrap();

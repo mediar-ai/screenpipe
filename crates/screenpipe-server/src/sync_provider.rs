@@ -105,7 +105,7 @@ pub struct UiEventSyncRecord {
 }
 
 /// Current schema version for sync chunks
-const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Data provider implementation for screenpipe database.
 pub struct ScreenpipeSyncProvider {
