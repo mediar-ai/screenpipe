@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
+#[allow(unused_imports)] // used on macOS
 use tracing::{info, warn, error};
 
 #[derive(Serialize, Deserialize, Type, Clone)]
@@ -12,6 +13,7 @@ pub enum OSPermission {
 
 #[tauri::command(async)]
 #[specta::specta]
+#[allow(unused_variables)] // permission used on macOS
 pub fn open_permission_settings(permission: OSPermission) {
     #[cfg(target_os = "macos")]
     {
@@ -40,6 +42,7 @@ pub fn open_permission_settings(permission: OSPermission) {
 
 #[tauri::command]
 #[specta::specta]
+#[allow(unused_variables)] // permission used on macOS
 pub async fn request_permission(permission: OSPermission) {
     #[cfg(target_os = "macos")]
     {
@@ -308,6 +311,7 @@ pub fn get_missing_permissions() -> Vec<OSPermission> {
 
 #[tauri::command(async)]
 #[specta::specta]
+#[allow(unused_variables)] // initial_check used on macOS
 pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
     #[cfg(target_os = "macos")]
     {

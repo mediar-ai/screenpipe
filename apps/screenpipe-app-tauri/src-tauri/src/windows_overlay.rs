@@ -9,10 +9,9 @@ use tauri::WebviewWindow;
 use tracing::{error, info};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongW, SetWindowLongW, SetWindowPos, GetSystemMetrics,
-    GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW,
-    WS_EX_LAYERED, WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW, WS_EX_NOACTIVATE,
-    SM_CXSCREEN, SM_CYSCREEN,
+    GetWindowLongW, SetWindowLongW, SetWindowPos,
+    GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW, SWP_NOMOVE, SWP_NOSIZE,
+    WS_EX_LAYERED, WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW,
 };
 
 /// Extended window styles for overlay behavior
@@ -79,23 +78,21 @@ pub fn setup_overlay(window: &WebviewWindow, click_through: bool) -> Result<(), 
             }
         }
 
-        // Get full screen dimensions (including taskbar area)
-        let screen_width = GetSystemMetrics(SM_CXSCREEN);
-        let screen_height = GetSystemMetrics(SM_CYSCREEN);
-
-        // Set as topmost window covering the entire screen including taskbar
+        // Set as topmost window, keeping Tauri's position and size.
+        // Tauri already positioned the window on the correct monitor with
+        // proper logical coordinates — don't override with GetSystemMetrics
+        // which only returns primary monitor physical pixels and breaks
+        // multi-monitor and DPI-scaled setups.
         let pos_result = SetWindowPos(
             hwnd,
             HWND_TOPMOST,
-            0, 0, screen_width, screen_height,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            0, 0, 0, 0,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE,
         );
 
         if let Err(e) = pos_result {
             return Err(format!("SetWindowPos failed: {}", e));
         }
-
-        info!("Window positioned at 0,0 with size {}x{}", screen_width, screen_height);
 
         info!(
             "Overlay setup complete - click_through: {}, style: 0x{:X}",
@@ -173,14 +170,12 @@ pub fn bring_to_front(window: &WebviewWindow) -> Result<(), String> {
     let hwnd = get_hwnd(window).ok_or("Failed to get HWND")?;
 
     unsafe {
-        let screen_width = GetSystemMetrics(SM_CXSCREEN);
-        let screen_height = GetSystemMetrics(SM_CYSCREEN);
-
+        // Keep existing position and size — just re-assert TOPMOST
         let result = SetWindowPos(
             hwnd,
             HWND_TOPMOST,
-            0, 0, screen_width, screen_height,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            0, 0, 0, 0,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE,
         );
 
         if let Err(e) = result {

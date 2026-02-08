@@ -70,6 +70,7 @@ pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> 
 /// IMPORTANT: NSStatusBar operations must happen on the main thread.
 /// This function dispatches the work to the main thread automatically.
 /// Log the tray icon position for debugging notch visibility issues.
+#[allow(dead_code)] // called only on macOS
 pub fn log_tray_position(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id("screenpipe_main") {
         match tray.rect() {
@@ -91,6 +92,7 @@ pub fn log_tray_position(app: &AppHandle) {
     }
 }
 
+#[allow(dead_code)] // called only on macOS
 pub fn recreate_tray(app: &AppHandle) {
     let app_for_thread = app.clone();
     // Wrap in catch_unwind: ObjC exceptions during tray operations can panic

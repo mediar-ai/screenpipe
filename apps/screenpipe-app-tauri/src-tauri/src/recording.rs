@@ -287,6 +287,7 @@ pub async fn spawn_screenpipe(
 /// from previous crashes, CLI runs, etc. Safe because we already verified the port
 /// is NOT serving a healthy screenpipe (that case returns early above).
 async fn kill_process_on_port(port: u16) {
+    #[allow(unused_variables)] // used only on unix
     let my_pid = std::process::id().to_string();
 
     #[cfg(unix)]
@@ -335,6 +336,7 @@ async fn kill_process_on_port(port: u16) {
         let mut netstat_cmd = tokio::process::Command::new("cmd");
         netstat_cmd.args(["/C", &format!("netstat -ano | findstr :{}", port)]);
         {
+            #[allow(unused_imports)]
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             netstat_cmd.creation_flags(CREATE_NO_WINDOW);
@@ -366,6 +368,7 @@ async fn kill_process_on_port(port: u16) {
                     let mut kill_cmd = tokio::process::Command::new("taskkill");
                     kill_cmd.args(["/F", "/PID", &pid.to_string()]);
                     {
+                        #[allow(unused_imports)]
                         use std::os::windows::process::CommandExt;
                         const CREATE_NO_WINDOW: u32 = 0x08000000;
                         kill_cmd.creation_flags(CREATE_NO_WINDOW);

@@ -583,6 +583,7 @@ pub async fn show_shortcut_reminder(
     // Setting Accessory would hide the dock icon which is a worse tradeoff.
 
     info!("Creating new shortcut-reminder window");
+    #[allow(unused_mut)]
     let mut builder = WebviewWindowBuilder::new(
         &app_handle,
         label,

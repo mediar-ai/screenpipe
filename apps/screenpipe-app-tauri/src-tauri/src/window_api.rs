@@ -124,6 +124,7 @@ pub struct OpenLocalPathPayload {
     always_on_top: Option<bool>,
     transparent: Option<bool>,
     decorations: Option<bool>,
+    #[allow(dead_code)] // read only on macOS
     hidden_title: Option<bool>,
     is_focused: Option<bool>,
     visible_on_all_workspaces: Option<bool>,
@@ -150,6 +151,7 @@ pub async fn show_specific_window(
     }
     // NOTE: Accessory mode removed — it hides dock icon and tray on notched MacBooks
     let url = format!("http://localhost:{}{}", payload.port, payload.path);
+    #[allow(unused_mut)]
     let mut builder = tauri::WebviewWindowBuilder::new(
         &state.app_handle,
         &payload.title,
@@ -411,6 +413,7 @@ impl ShowRewindWindow {
     }
 
     /// Show an existing Main window (already created for the current mode).
+    #[allow(unused_variables)] // label, capturable used only on macOS
     fn show_existing_main(&self, app: &AppHandle, window: &WebviewWindow, overlay_mode: &str, label: &str) -> tauri::Result<WebviewWindow> {
         let capturable = SettingsStore::get(app)
             .unwrap_or_default()
@@ -679,6 +682,7 @@ impl ShowRewindWindow {
                     .unwrap_or_default()
                     .unwrap_or_default();
                 let overlay_mode = settings.overlay_mode;
+                #[allow(unused_variables)] // used only on macOS
                 let show_in_recording = settings.show_overlay_in_screen_recording;
                 // Record what mode we're creating so we can detect changes later
                 *MAIN_CREATED_MODE.lock().unwrap() = overlay_mode.clone();
@@ -1095,15 +1099,20 @@ impl ShowRewindWindow {
                             }
                         }
                         tauri::WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size: _,.. } => {
-                            // Handle display resolution/scale changes
-                            let Some(monitor) = window_clone.app_handle().primary_monitor().ok().flatten() else {
-                                error!("failed to get primary monitor for scale factor change");
+                            // Handle display resolution/scale changes — use the window's current monitor
+                            let Some(monitor) = window_clone.current_monitor().ok().flatten()
+                                .or_else(|| window_clone.app_handle().primary_monitor().ok().flatten()) else {
+                                error!("failed to get monitor for scale factor change");
                                 return;
                             };
                             let scale_factor = monitor.scale_factor();
                             let size = monitor.size().to_logical::<f64>(scale_factor);
-                            info!("Display scale factor changed, updating window size {:?}", size.clone());
-                            let _ = window_clone.set_size(tauri::Size::Logical(size.clone())); 
+                            let position = monitor.position();
+                            info!("Display scale factor changed, updating window size {:?} position {:?}", size, position);
+                            let _ = window_clone.set_size(tauri::Size::Logical(size));
+                            let _ = window_clone.set_position(tauri::Position::Physical(
+                                tauri::PhysicalPosition::new(position.x, position.y),
+                            ));
                         }
                         _ => {}
                     }

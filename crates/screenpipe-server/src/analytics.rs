@@ -3,8 +3,12 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use std::env;
 use std::sync::atomic::{AtomicBool, Ordering};
+use tracing::{debug, error, trace};
+
+#[cfg(target_os = "macos")]
 use sysinfo::{System, SystemExt};
-use tracing::{debug, error, trace, warn};
+#[cfg(target_os = "macos")]
+use tracing::warn;
 
 const POSTHOG_API_KEY: &str = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce";
 const POSTHOG_HOST: &str = "https://eu.i.posthog.com";
