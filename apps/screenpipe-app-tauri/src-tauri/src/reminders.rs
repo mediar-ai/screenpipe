@@ -566,7 +566,12 @@ async fn fetch_recent_context() -> Result<String, String> {
                         last_app = app.to_string();
 
                         let text = content["text"].as_str().unwrap_or("");
-                        let truncated = if text.len() > 50 { &text[..50] } else { text };
+                        let truncated = if text.len() > 50 {
+                            // find a valid char boundary at or before byte 50
+                            let mut end = 50;
+                            while !text.is_char_boundary(end) { end -= 1; }
+                            &text[..end]
+                        } else { text };
                         parts.push(format!("[screen] {} — {} | {}", app, window, truncated));
                     }
                 }
