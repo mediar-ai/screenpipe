@@ -232,6 +232,7 @@ struct ShortcutConfig {
     start_audio: String,
     stop_audio: String,
     show_chat: String,
+    search: String,
     disabled: Vec<String>,
 }
 
@@ -252,6 +253,8 @@ impl ShortcutConfig {
                 .stop_audio_shortcut,
             show_chat: store
                 .show_chat_shortcut,
+            search: store
+                .search_shortcut,
             disabled: store
                 .disabled_shortcuts,
         })
@@ -312,6 +315,7 @@ async fn update_global_shortcuts(
         start_audio: start_audio_shortcut,
         stop_audio: stop_audio_shortcut,
         show_chat: store_config.show_chat,
+        search: store_config.search,
         disabled: store_config.disabled,
     };
     apply_shortcuts(&app, &config).await
@@ -464,9 +468,47 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     )
     .await?;
 
-    // NOTE: Escape, Ctrl+Cmd+K shortcuts are now registered dynamically
-    // via register_window_shortcuts/unregister_window_shortcuts commands
-    // This prevents them from blocking other apps when the overlay is closed
+    // Register search shortcut (global - opens overlay with search focused)
+    register_shortcut(
+        app,
+        &config.search,
+        config.is_disabled("search"),
+        |app| {
+            info!("search shortcut triggered");
+            // Always show the overlay, then emit search event to focus the search input
+            #[cfg(target_os = "macos")]
+            {
+                use crate::window_api::main_label_for_mode;
+                use crate::store::SettingsStore;
+                let mode = SettingsStore::get(app)
+                    .unwrap_or_default()
+                    .unwrap_or_default()
+                    .overlay_mode;
+                let label = main_label_for_mode(&mode);
+
+                if let Some(window) = app.get_webview_window(label) {
+                    if !window.is_visible().unwrap_or(false) {
+                        show_main_window(app, false);
+                    }
+                } else {
+                    show_main_window(app, false);
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    if !window.is_visible().unwrap_or(false) {
+                        show_main_window(app, false);
+                    }
+                } else {
+                    show_main_window(app, false);
+                }
+            }
+            // Emit event so the frontend opens the search modal
+            let _ = app.emit("open-search", ());
+        },
+    )
+    .await?;
 
     Ok(())
 }
