@@ -406,7 +406,20 @@ impl UpdatesManager {
             error!("Failed to update all pipes: {}", err);
         }
 
-        if let Some(update) = self.app.updater()?.check().await? {
+        info!("checking for updates via Tauri updater...");
+        let check_result = self.app.updater()?.check().await;
+        match &check_result {
+            Ok(Some(ref u)) => {
+                info!("update found: v{}", u.version);
+            }
+            Ok(None) => {
+                info!("updater returned None — no update available (current app thinks it's up to date)");
+            }
+            Err(ref e) => {
+                error!("updater check() error: {}", e);
+            }
+        }
+        if let Some(update) = check_result? {
             *self.update_available.lock().await = true;
 
             #[cfg(target_os = "windows")]
