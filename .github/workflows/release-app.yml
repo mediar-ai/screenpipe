@@ -34,7 +34,7 @@ jobs:
       should_publish: ${{ steps.check.outputs.should_publish }}
       should_test: ${{ steps.check.outputs.should_test }}
       should_beta: ${{ steps.check.outputs.should_beta }}
-      macos26_runner: ${{ steps.check-runner.outputs.macos26_runner }}
+      macos_arm_runner: ${{ steps.check-runner.outputs.macos_arm_runner }}
       windows_runner: ${{ steps.check-runner.outputs.windows_runner }}
     steps:
       - uses: actions/checkout@v4
@@ -79,39 +79,55 @@ jobs:
             echo "should_test=${{ github.event.inputs.needs_testing }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Check self-hosted macOS 26 runner availability
+      - name: Check self-hosted runner availability
         id: check-runner
         env:
           GH_TOKEN: ${{ secrets.RUNNER_CHECK_TOKEN }}
         run: |
+          check_runner() {
+            local label="$1"
+            local info
+            info=$(gh api repos/${{ github.repository }}/actions/runners \
+              --jq ".runners[] | select(.labels[].name == \"$label\") | {status: .status, busy: .busy}" 2>/dev/null || echo '{"status":"offline","busy":false}')
+            local status=$(echo "$info" | jq -r '.status // "offline"')
+            if [ "$status" = "online" ]; then
+              echo "online"
+            else
+              echo "offline"
+            fi
+          }
+
           # Force GitHub-hosted runners if requested
           if [ "${{ github.event.inputs.force_github_runners }}" = "true" ]; then
-            echo "macos26_runner=macos-latest" >> $GITHUB_OUTPUT
+            echo "macos_arm_runner=macos-latest" >> $GITHUB_OUTPUT
             echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
             echo "⚠️ Forcing GitHub-hosted runners (manual override)"
           else
-            # Check if self-hosted macOS 26 runner is online AND idle
-            # "online" alone isn't enough — runner could be stuck on login screen, frozen, etc.
-            RUNNER_INFO=$(gh api repos/${{ github.repository }}/actions/runners \
-              --jq '.runners[] | select(.labels[].name == "macos-26") | {status: .status, busy: .busy}' 2>/dev/null || echo '{"status":"offline","busy":false}')
-            RUNNER_STATUS=$(echo "$RUNNER_INFO" | jq -r '.status // "offline"')
-            RUNNER_BUSY=$(echo "$RUNNER_INFO" | jq -r '.busy // "false"')
+            # macOS aarch64: MacBook (macos-26) → Mac Mini (macos-test) → GH-hosted (macos-latest)
+            MACBOOK=$(check_runner "macos-26")
+            MACMINI=$(check_runner "macos-test")
 
-            if [ "$RUNNER_STATUS" = "online" ] && [ "$RUNNER_BUSY" = "false" ]; then
-              echo "macos26_runner=macos-26" >> $GITHUB_OUTPUT
-              echo "✅ Self-hosted macOS 26 runner is online and idle"
-            elif [ "$RUNNER_STATUS" = "online" ] && [ "$RUNNER_BUSY" = "true" ]; then
-              echo "macos26_runner=macos-26" >> $GITHUB_OUTPUT
-              echo "⏳ Self-hosted macOS 26 runner is online but busy — job will queue"
+            if [ "$MACBOOK" = "online" ]; then
+              echo "macos_arm_runner=macos-26" >> $GITHUB_OUTPUT
+              echo "✅ MacBook (macos-26) is online — using as primary"
+            elif [ "$MACMINI" = "online" ]; then
+              echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
+              echo "⚠️ MacBook offline — falling back to Mac Mini (macos-test)"
             else
-              echo "macos26_runner=macos-latest" >> $GITHUB_OUTPUT
-              echo "ℹ️ Self-hosted macOS 26 runner offline — falling back to macos-latest"
+              echo "macos_arm_runner=macos-latest" >> $GITHUB_OUTPUT
+              echo "ℹ️ All self-hosted macOS runners offline — using GH-hosted macos-latest"
             fi
 
-            # Windows: temporarily forcing GH-hosted runner due to symlink permission issues
-            # TODO: re-enable self-hosted once runner has Developer Mode enabled
-            echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
-            echo "ℹ️ Using GitHub-hosted Windows runner (self-hosted has symlink permission issues)"
+            # Windows: self-hosted (windows-desktop-test) → GH-hosted (windows-2019)
+            WINRUNNER=$(check_runner "windows-desktop-test")
+
+            if [ "$WINRUNNER" = "online" ]; then
+              echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
+              echo "✅ Windows self-hosted runner is online"
+            else
+              echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
+              echo "ℹ️ Windows self-hosted offline — using GH-hosted windows-2019"
+            fi
           fi
 
   draft:
@@ -158,7 +174,7 @@ jobs:
         include:
           # Self-hosted macOS 26 runner (MacBook Pro) for Apple Silicon + Apple Intelligence
           # Falls back to macos-latest (GH-hosted) if runner is offline
-          - platform: ${{ needs.check_commit.outputs.macos26_runner || 'macos-latest' }}
+          - platform: ${{ needs.check_commit.outputs.macos_arm_runner || 'macos-latest' }}
             args: "--target aarch64-apple-darwin --features metal"
             target: aarch64-apple-darwin
             tauri-args: "--target aarch64-apple-darwin --features official-build"
@@ -180,7 +196,7 @@ jobs:
           #   tauri-args: ""
           #   os_type: "linux"
 
-    runs-on: ${{ matrix.platform == 'macos-26' && fromJSON('["self-hosted", "macos-26"]') || matrix.platform == 'windows-desktop-test' && fromJSON('["self-hosted", "windows-desktop-test"]') || matrix.platform }}
+    runs-on: ${{ matrix.platform == 'macos-26' && fromJSON('["self-hosted", "macos-26"]') || matrix.platform == 'macos-test' && fromJSON('["self-hosted", "macos-test"]') || matrix.platform == 'windows-desktop-test' && fromJSON('["self-hosted", "windows-desktop-test"]') || matrix.platform }}
     timeout-minutes: 120
     steps:
       - name: Detect Xcode version and set Apple Intelligence feature
