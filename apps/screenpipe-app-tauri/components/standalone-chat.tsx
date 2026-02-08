@@ -272,7 +272,7 @@ function MarkdownBlock({ text, isUser }: { text: string; isUser: boolean }) {
               e.preventDefault();
               try {
                 const url = new URL(href);
-                const timestamp = url.searchParams.get("timestamp");
+                const timestamp = url.searchParams.get("timestamp") || url.searchParams.get("start_time");
                 if (timestamp) {
                   const date = new Date(timestamp);
                   if (!isNaN(date.getTime())) {

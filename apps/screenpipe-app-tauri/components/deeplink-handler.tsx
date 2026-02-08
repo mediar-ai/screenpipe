@@ -67,17 +67,18 @@ export function DeeplinkHandler() {
             openStatusDialog();
           }
 
-          // Handle timeline deep links: screenpipe://timeline?timestamp=ISO8601
+          // Handle timeline deep links:
+          //   screenpipe://timeline?timestamp=ISO8601
+          //   screenpipe://timeline?start_time=ISO8601&end_time=ISO8601
           if (parsedUrl.pathname === "timeline" || parsedUrl.host === "timeline") {
-            const timestamp = parsedUrl.searchParams.get("timestamp");
+            const timestamp =
+              parsedUrl.searchParams.get("timestamp") ||
+              parsedUrl.searchParams.get("start_time");
             if (timestamp) {
               try {
-                // Validate timestamp format
                 const date = new Date(timestamp);
                 if (!isNaN(date.getTime())) {
-                  // Show the main window first
                   await commands.showWindow("Main");
-                  // Emit the navigate event to timeline
                   await emit("navigate-to-timestamp", timestamp);
                   toast({
                     title: "navigating to timestamp",
@@ -93,6 +94,23 @@ export function DeeplinkHandler() {
                   description: "could not parse the timeline link",
                   variant: "destructive",
                 });
+              }
+            }
+          }
+
+          // Handle frame deep links: screenpipe://frame/12345
+          if (parsedUrl.pathname?.startsWith("/frame/") || parsedUrl.host === "frame") {
+            const frameId = (parsedUrl.pathname || parsedUrl.host === "frame" ? `/${url.split("frame/")[1]}` : "").replace(/^\//, "");
+            if (frameId) {
+              try {
+                await commands.showWindow("Main");
+                await emit("navigate-to-frame", frameId);
+                toast({
+                  title: "navigating to frame",
+                  description: `jumping to frame ${frameId}`,
+                });
+              } catch (error) {
+                console.error("Failed to navigate to frame:", error);
               }
             }
           }
