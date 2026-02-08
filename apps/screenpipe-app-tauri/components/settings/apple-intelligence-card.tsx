@@ -363,19 +363,14 @@ export function AppleIntelligenceCard() {
                     size="sm"
                     onClick={triggerScan}
                     disabled={isScanning}
-                    className="text-xs min-w-[100px]"
+                    className="text-xs min-w-[110px] inline-flex items-center justify-center gap-1.5"
                   >
                     {isScanning ? (
-                      <>
-                        <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                        Scanning…
-                      </>
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
                     ) : (
-                      <>
-                        <CheckCircle2 className="h-3 w-3 mr-1.5" />
-                        Scan now
-                      </>
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
                     )}
+                    <span>{isScanning ? "scanning…" : "scan now"}</span>
                   </Button>
 
                   <Button
