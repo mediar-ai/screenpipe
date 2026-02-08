@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Bell,
   CheckCircle2,
+  ExternalLink,
   Loader2,
   XCircle,
 } from "lucide-react";
@@ -343,6 +344,21 @@ export function AppleIntelligenceCard() {
                         Scan now
                       </>
                     )}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const { open } = await import(
+                        "@tauri-apps/plugin-shell"
+                      );
+                      await open("x-apple-reminderkit://");
+                    }}
+                    className="text-xs"
+                  >
+                    <ExternalLink className="h-3 w-3 mr-1.5" />
+                    Open Reminders
                   </Button>
 
                   {lastScanResult && (
