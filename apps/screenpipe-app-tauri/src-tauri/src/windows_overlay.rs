@@ -10,8 +10,10 @@ use tracing::{error, info};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowLongW, SetWindowLongW, SetWindowPos,
-    GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW, SWP_NOMOVE, SWP_NOSIZE,
+    GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_FRAMECHANGED,
     WS_EX_LAYERED, WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW,
+    WS_THICKFRAME, WS_CAPTION,
 };
 
 /// Extended window styles for overlay behavior
@@ -67,7 +69,7 @@ pub fn setup_overlay(window: &WebviewWindow, click_through: bool) -> Result<(), 
             new_style |= CLICK_THROUGH_STYLE;
         }
 
-        // Apply the new style
+        // Apply the new extended style
         let result = SetWindowLongW(hwnd, GWL_EXSTYLE, new_style);
         if result == 0 {
             // SetWindowLongW returns 0 on failure, but also returns 0 if previous value was 0
@@ -78,16 +80,27 @@ pub fn setup_overlay(window: &WebviewWindow, click_through: bool) -> Result<(), 
             }
         }
 
+        // Strip WS_THICKFRAME (resize handles) and WS_CAPTION (title bar / drag)
+        // from the regular window style. Tauri/WRY may set these even with
+        // decorations(false), allowing the user to resize or drag the overlay.
+        let style = GetWindowLongW(hwnd, GWL_STYLE);
+        let clean_style = style & !(WS_THICKFRAME.0 as i32) & !(WS_CAPTION.0 as i32);
+        if clean_style != style {
+            SetWindowLongW(hwnd, GWL_STYLE, clean_style);
+            info!("Stripped resize/caption styles: 0x{:X} -> 0x{:X}", style, clean_style);
+        }
+
         // Set as topmost window, keeping Tauri's position and size.
         // Tauri already positioned the window on the correct monitor with
         // proper logical coordinates — don't override with GetSystemMetrics
         // which only returns primary monitor physical pixels and breaks
         // multi-monitor and DPI-scaled setups.
+        // SWP_FRAMECHANGED forces Windows to reapply the style changes
         let pos_result = SetWindowPos(
             hwnd,
             HWND_TOPMOST,
             0, 0, 0, 0,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED,
         );
 
         if let Err(e) = pos_result {
@@ -95,8 +108,8 @@ pub fn setup_overlay(window: &WebviewWindow, click_through: bool) -> Result<(), 
         }
 
         info!(
-            "Overlay setup complete - click_through: {}, style: 0x{:X}",
-            click_through, new_style
+            "Overlay setup complete - click_through: {}, ex_style: 0x{:X}, style: 0x{:X}",
+            click_through, new_style, clean_style
         );
     }
 
