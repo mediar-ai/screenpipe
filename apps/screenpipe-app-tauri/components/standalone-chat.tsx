@@ -25,6 +25,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { commands } from "@/lib/utils/tauri";
+import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
 import {
   parseMentions,
@@ -267,15 +268,25 @@ function MarkdownBlock({ text, isUser }: { text: string; isUser: boolean }) {
             return <VideoComponent filePath={href} className="my-2" />;
           }
 
-          if (href?.startsWith("screenpipe://timeline")) {
+          if (href?.startsWith("screenpipe://timeline") || href?.startsWith("screenpipe://frame")) {
             const handleTimelineClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
               e.preventDefault();
               try {
+                if (href.startsWith("screenpipe://frame")) {
+                  const frameId = href.split("frame/")[1]?.replace(/^\//, "");
+                  if (frameId) {
+                    useTimelineStore.getState().setPendingNavigation({ timestamp: "", frameId });
+                    await commands.showWindow("Main");
+                    await emit("navigate-to-frame", frameId);
+                  }
+                  return;
+                }
                 const url = new URL(href);
                 const timestamp = url.searchParams.get("timestamp") || url.searchParams.get("start_time");
                 if (timestamp) {
                   const date = new Date(timestamp);
                   if (!isNaN(date.getTime())) {
+                    useTimelineStore.getState().setPendingNavigation({ timestamp });
                     await commands.showWindow("Main");
                     await emit("navigate-to-timestamp", timestamp);
                   }

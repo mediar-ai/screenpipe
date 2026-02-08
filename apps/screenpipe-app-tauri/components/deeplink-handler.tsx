@@ -12,12 +12,14 @@ import { commands } from "@/lib/utils/tauri";
 import { listen, emit } from "@tauri-apps/api/event";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { openSettingsWindow } from "@/lib/utils/window";
+import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 
 export function DeeplinkHandler() {
   const { toast } = useToast();
   const { setShowChangelogDialog } = useChangelogDialog();
   const { open: openStatusDialog } = useStatusDialog();
   const { loadUser, reloadStore } = useSettings();
+  const setPendingNavigation = useTimelineStore((s) => s.setPendingNavigation);
 
   useEffect(() => {
     const setupDeepLink = async () => {
@@ -78,6 +80,8 @@ export function DeeplinkHandler() {
               try {
                 const date = new Date(timestamp);
                 if (!isNaN(date.getTime())) {
+                  // Write to store (persists across mounts) AND emit event (instant if timeline is mounted)
+                  setPendingNavigation({ timestamp });
                   await commands.showWindow("Main");
                   await emit("navigate-to-timestamp", timestamp);
                   toast({
@@ -100,9 +104,11 @@ export function DeeplinkHandler() {
 
           // Handle frame deep links: screenpipe://frame/12345
           if (parsedUrl.pathname?.startsWith("/frame/") || parsedUrl.host === "frame") {
-            const frameId = (parsedUrl.pathname || parsedUrl.host === "frame" ? `/${url.split("frame/")[1]}` : "").replace(/^\//, "");
+            const frameId = url.split("frame/")[1]?.replace(/^\//, "");
             if (frameId) {
               try {
+                // Store frame navigation — timeline will resolve frame → timestamp
+                setPendingNavigation({ timestamp: "", frameId });
                 await commands.showWindow("Main");
                 await emit("navigate-to-frame", frameId);
                 toast({

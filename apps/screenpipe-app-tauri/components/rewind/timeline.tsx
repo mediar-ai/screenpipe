@@ -131,7 +131,7 @@ export default function Timeline() {
 		setShowAudioTranscript(true);
 	}, [currentIndex]);
 
-	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus, newFramesCount, lastFlushTimestamp, clearNewFramesCount, clearSentRequestForDate, clearFramesForNavigation } =
+	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched, loadingProgress, onWindowFocus, newFramesCount, lastFlushTimestamp, clearNewFramesCount, clearSentRequestForDate, clearFramesForNavigation, pendingNavigation, setPendingNavigation } =
 		useTimelineStore();
 
 	const { frames, isLoading, error, message, fetchNextDayData, websocket } =
@@ -231,32 +231,90 @@ export default function Timeline() {
 		};
 	}, []);
 
-	// Listen for navigate-to-timestamp events from search window
+	// Helper to navigate to a timestamp
+	const navigateToTimestamp = useCallback(async (targetTimestamp: string) => {
+		console.log("Navigating to timestamp:", targetTimestamp);
+		const targetDate = new Date(targetTimestamp);
+		if (isNaN(targetDate.getTime())) return;
+
+		setSeekingTimestamp(targetTimestamp);
+		pendingNavigationRef.current = targetDate;
+
+		if (!isSameDay(targetDate, currentDate)) {
+			await handleDateChange(targetDate);
+		}
+	}, [currentDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+	// Listen for navigate-to-timestamp events from search window / deep links
 	useEffect(() => {
 		const unlisten = listen<string>("navigate-to-timestamp", async (event) => {
-			const targetTimestamp = event.payload;
-			console.log("Navigating to timestamp:", targetTimestamp);
-
-			const targetDate = new Date(targetTimestamp);
-
-			// Show seeking overlay
-			setSeekingTimestamp(targetTimestamp);
-
-			// Store the pending navigation target - will be processed by the frames effect
-			pendingNavigationRef.current = targetDate;
-
-			// Navigate to the correct date if needed (this triggers frame fetch)
-			if (!isSameDay(targetDate, currentDate)) {
-				await handleDateChange(targetDate);
-			}
-			// Note: We don't call jumpToTime here even if on same date.
-			// The frames effect below handles all cases to avoid stale closure issues.
+			await navigateToTimestamp(event.payload);
 		});
 
 		return () => {
 			unlisten.then((fn) => fn());
 		};
-	}, [currentDate]);
+	}, [navigateToTimestamp]);
+
+	// Listen for navigate-to-frame events (deep link: screenpipe://frame/12345)
+	useEffect(() => {
+		const unlisten = listen<string>("navigate-to-frame", async (event) => {
+			const frameId = event.payload;
+			console.log("Navigating to frame:", frameId);
+			try {
+				const resp = await fetch(`http://localhost:3030/frames/${frameId}/ocr`);
+				if (resp.ok) {
+					const data = await resp.json();
+					if (data.timestamp) {
+						setPendingNavigation(null);
+						await navigateToTimestamp(data.timestamp);
+						return;
+					}
+				}
+				// Fallback: try to get frame metadata
+				const metaResp = await fetch(`http://localhost:3030/frames/${frameId}`);
+				if (metaResp.ok) {
+					// Frame endpoint returns image, but we got a 200 — frame exists
+					// Use search to find timestamp by frame_id
+					const searchResp = await fetch(`http://localhost:3030/search?frame_id=${frameId}&limit=1`);
+					if (searchResp.ok) {
+						const searchData = await searchResp.json();
+						if (searchData.data?.[0]?.content?.timestamp) {
+							setPendingNavigation(null);
+							await navigateToTimestamp(searchData.data[0].content.timestamp);
+							return;
+						}
+					}
+				}
+				console.warn("Could not resolve frame", frameId, "to timestamp");
+			} catch (error) {
+				console.error("Failed to navigate to frame:", error);
+			}
+		});
+
+		return () => {
+			unlisten.then((fn) => fn());
+		};
+	}, [navigateToTimestamp, setPendingNavigation]);
+
+	// Consume pending navigation from zustand store on mount (survives page navigation)
+	useEffect(() => {
+		if (!pendingNavigation) return;
+
+		const consume = async () => {
+			if (pendingNavigation.frameId) {
+				// Frame navigation — emit event so the listener above resolves it
+				await emit("navigate-to-frame", pendingNavigation.frameId);
+			} else if (pendingNavigation.timestamp) {
+				setPendingNavigation(null);
+				await navigateToTimestamp(pendingNavigation.timestamp);
+			}
+		};
+
+		// Small delay to ensure frames are loading
+		const timer = setTimeout(consume, 500);
+		return () => clearTimeout(timer);
+	}, [pendingNavigation, navigateToTimestamp, setPendingNavigation]);
 
 	// Process pending navigation when frames load after date change
 	useEffect(() => {
@@ -291,10 +349,24 @@ export default function Timeline() {
 				// Clear pending navigation and UI state
 				pendingNavigationRef.current = null;
 				setSeekingTimestamp(null);
+				setPendingNavigation(null);
 				isNavigatingRef.current = false;
 			}
 		}
-	}, [frames, currentDate]);
+	}, [frames, currentDate, setPendingNavigation]);
+
+	// Timeout: clear seeking overlay if navigation doesn't resolve within 15s
+	useEffect(() => {
+		if (!seekingTimestamp) return;
+		const timer = setTimeout(() => {
+			console.warn("Navigation timeout — clearing seeking state");
+			setSeekingTimestamp(null);
+			pendingNavigationRef.current = null;
+			setPendingNavigation(null);
+			isNavigatingRef.current = false;
+		}, 15000);
+		return () => clearTimeout(timer);
+	}, [seekingTimestamp, setPendingNavigation]);
 
 	// Progressive loading: show UI immediately once we have any frames
 	const hasInitialFrames = frames.length > 0;

@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { emit } from "@tauri-apps/api/event";
 
 import { cn } from "@/lib/utils";
+import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { CodeBlock } from "@/components/ui/codeblock";
 import { MemoizedReactMarkdown } from "@/components/markdown";
 import {
@@ -27,6 +28,7 @@ export interface ChatMessageProps {
 
 export function ChatMessage({ message, ...props }: ChatMessageProps) {
 	const { settings } = useSettings();
+	const setPendingNavigation = useTimelineStore((s) => s.setPendingNavigation);
 	const [isThinking, setIsThinking] = useState(false);
 	const [thinkingContent, setThinkingContent] = useState<string[]>([]);
 	const [thinkingTime, setThinkingTime] = useState(0);
@@ -168,15 +170,25 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 							}
 							
 							// Handle screenpipe:// timeline deep links in-app
-							if (href?.startsWith("screenpipe://timeline")) {
+							if (href?.startsWith("screenpipe://timeline") || href?.startsWith("screenpipe://frame")) {
 								const handleTimelineClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
 									e.preventDefault();
 									try {
+										if (href.startsWith("screenpipe://frame")) {
+											const frameId = href.split("frame/")[1]?.replace(/^\//, "");
+											if (frameId) {
+												setPendingNavigation({ timestamp: "", frameId });
+												await commands.showWindow("Main");
+												await emit("navigate-to-frame", frameId);
+											}
+											return;
+										}
 										const url = new URL(href);
 										const timestamp = url.searchParams.get("timestamp") || url.searchParams.get("start_time");
 										if (timestamp) {
 											const date = new Date(timestamp);
 											if (!isNaN(date.getTime())) {
+												setPendingNavigation({ timestamp });
 												await commands.showWindow("Main");
 												await emit("navigate-to-timestamp", timestamp);
 												toast({

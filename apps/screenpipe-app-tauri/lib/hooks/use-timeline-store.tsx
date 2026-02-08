@@ -50,7 +50,11 @@ interface TimelineState {
 	isConnected: boolean; // WebSocket connection status
 	hasCachedData: boolean; // Whether we loaded from cache
 
+	// Deep link navigation — persists across component mounts
+	pendingNavigation: { timestamp: string; frameId?: string } | null;
+
 	// Actions
+	setPendingNavigation: (nav: { timestamp: string; frameId?: string } | null) => void;
 	setFrames: (frames: StreamTimeSeriesResponse[]) => void;
 	setIsLoading: (isLoading: boolean) => void;
 	setError: (error: string | null) => void;
@@ -82,7 +86,9 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 	lastFlushTimestamp: 0,
 	isConnected: false,
 	hasCachedData: false,
+	pendingNavigation: null,
 
+	setPendingNavigation: (nav) => set({ pendingNavigation: nav }),
 	setFrames: (frames) => set({ frames }),
 	setIsLoading: (isLoading) => set({ isLoading }),
 	setError: (error) => set({ error }),
