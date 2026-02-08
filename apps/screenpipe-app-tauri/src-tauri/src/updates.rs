@@ -430,18 +430,9 @@ impl UpdatesManager {
             });
             let _ = self.app.emit("update-downloading", download_info);
 
-            #[cfg(target_os = "windows")]
-            {
-                self.update_menu_item.set_enabled(true)?;
-                self.update_menu_item.set_text("update now")?;
-            }
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                self.update_menu_item.set_enabled(false)?;
-                self.update_menu_item
-                    .set_text("downloading latest version of screenpipe")?;
-            }
+            self.update_menu_item.set_enabled(false)?;
+            self.update_menu_item
+                .set_text("downloading latest version of screenpipe")?;
 
             if let Some(tray) = self.app.tray_by_id("screenpipe_main") {
                 let theme = dark_light::detect().unwrap_or(Mode::Dark);
@@ -462,8 +453,17 @@ impl UpdatesManager {
                 }
             }
 
-            #[cfg(not(target_os = "windows"))]
+            // Download and install on all platforms
             {
+                #[cfg(target_os = "windows")]
+                {
+                    // Windows: stop screenpipe before replacing the binary
+                    if let Err(err) =
+                        stop_screenpipe(self.app.state::<RecordingState>(), self.app.clone()).await
+                    {
+                        error!("Failed to stop recording before update: {}", err);
+                    }
+                }
                 // Back up current app bundle before replacing it
                 backup_current_app();
                 let app_handle = self.app.clone();
@@ -538,19 +538,16 @@ impl UpdatesManager {
 
             // Auto-update: if enabled and update is downloaded, restart automatically
             // This ensures users get updates even if tray icon is hidden (e.g., behind notch)
-            #[cfg(not(target_os = "windows"))]
-            {
-                if auto_update && *self.update_installed.lock().await {
-                    info!("auto-update enabled, restarting to apply update v{}", update.version);
-                    // Give user time to read the notification
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                    if let Err(err) =
-                        stop_screenpipe(self.app.state::<RecordingState>(), self.app.clone()).await
-                    {
-                        error!("Failed to stop recording before auto-update: {}", err);
-                    }
-                    self.app.restart();
+            if auto_update && *self.update_installed.lock().await {
+                info!("auto-update enabled, restarting to apply update v{}", update.version);
+                // Give user time to read the notification
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                if let Err(err) =
+                    stop_screenpipe(self.app.state::<RecordingState>(), self.app.clone()).await
+                {
+                    error!("Failed to stop recording before auto-update: {}", err);
                 }
+                self.app.restart();
             }
 
             if show_dialog {
