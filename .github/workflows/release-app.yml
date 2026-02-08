@@ -125,6 +125,13 @@ jobs:
           command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
 
+      - name: create beta draft release
+        uses: crabnebula-dev/cloud-release@v0.2.6
+        continue-on-error: true
+        with:
+          command: release draft ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+
   publish-tauri:
     needs: [check_commit, draft]
     if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
@@ -715,6 +722,15 @@ jobs:
             exit 1
           }
 
+          # Also upload to beta channel
+          Write-Host "Uploading to beta channel..."
+          try {
+            & $cliFullPath release upload ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri -vv
+            Write-Host "Beta upload successful!"
+          } catch {
+            Write-Host "Beta upload failed (non-fatal): $_"
+          }
+
       - name: Upload Assets to CrabNebula Cloud (Non-Windows)
         if: matrix.os_type != 'windows'
         uses: crabnebula-dev/cloud-release@v0.2.6
@@ -722,6 +738,17 @@ jobs:
           CN_VERBOSE: "2"
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: ./apps/screenpipe-app-tauri/src-tauri
+
+      - name: Upload Assets to CrabNebula Beta (Non-Windows)
+        if: matrix.os_type != 'windows'
+        uses: crabnebula-dev/cloud-release@v0.2.6
+        continue-on-error: true
+        env:
+          CN_VERBOSE: "2"
+        with:
+          command: release upload ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri -vv
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./apps/screenpipe-app-tauri/src-tauri
 
