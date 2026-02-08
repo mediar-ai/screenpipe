@@ -113,6 +113,7 @@ screenpipe-vision = { path = "../../../crates/screenpipe-vision", features = ["a
 screenpipe-accessibility = { path = "../../../crates/screenpipe-accessibility" }
 screenpipe-audio = { path = "../../../crates/screenpipe-audio" }
 screenpipe-db = { path = "../../../crates/screenpipe-db" }
+screenpipe-integrations = { path = "../../../crates/screenpipe-integrations" }
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-cli = "2.4.1"

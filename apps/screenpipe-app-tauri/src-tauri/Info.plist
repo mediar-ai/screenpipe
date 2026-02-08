@@ -10,5 +10,7 @@
     <string>This app requires screen capture access to record the screen.</string>
     <key>NSSystemExtensionUsageDescription</key>
     <string>This app requires system extension access to capture audio output.</string>
+    <key>NSRemindersUsageDescription</key>
+    <string>screenpipe saves action items it detects from your screen and audio activity to Apple Reminders.</string>
 </dict>
 </plist>
