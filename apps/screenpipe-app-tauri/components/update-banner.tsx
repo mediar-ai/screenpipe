@@ -17,14 +17,25 @@ interface UpdateInfo {
   body: string;
 }
 
+interface DownloadProgress {
+  version: string;
+  downloaded: number;
+  total: number | null;
+  percent: number;
+}
+
 interface UpdateBannerState {
   isVisible: boolean;
   updateInfo: UpdateInfo | null;
   isInstalling: boolean;
+  isDownloading: boolean;
+  downloadProgress: DownloadProgress | null;
   pendingUpdate: Update | null;
   setIsVisible: (visible: boolean) => void;
   setUpdateInfo: (info: UpdateInfo | null) => void;
   setIsInstalling: (installing: boolean) => void;
+  setIsDownloading: (downloading: boolean) => void;
+  setDownloadProgress: (progress: DownloadProgress | null) => void;
   setPendingUpdate: (update: Update | null) => void;
 }
 
@@ -32,10 +43,14 @@ export const useUpdateBanner = create<UpdateBannerState>((set) => ({
   isVisible: false,
   updateInfo: null,
   isInstalling: false,
+  isDownloading: false,
+  downloadProgress: null,
   pendingUpdate: null,
   setIsVisible: (visible) => set({ isVisible: visible }),
   setUpdateInfo: (info) => set({ updateInfo: info }),
   setIsInstalling: (installing) => set({ isInstalling: installing }),
+  setIsDownloading: (downloading) => set({ isDownloading: downloading }),
+  setDownloadProgress: (progress) => set({ downloadProgress: progress }),
   setPendingUpdate: (update) => set({ pendingUpdate: update }),
 }));
 
@@ -45,7 +60,7 @@ interface UpdateBannerProps {
 }
 
 export function UpdateBanner({ className, compact = false }: UpdateBannerProps) {
-  const { isVisible, updateInfo, isInstalling, setIsVisible, setIsInstalling, pendingUpdate } = useUpdateBanner();
+  const { isVisible, updateInfo, isInstalling, isDownloading, downloadProgress, setIsVisible, setIsInstalling, pendingUpdate } = useUpdateBanner();
   const { toast } = useToast();
 
   const handleUpdate = async () => {
@@ -116,6 +131,34 @@ export function UpdateBanner({ className, compact = false }: UpdateBannerProps) 
     }
   };
 
+  // Show downloading state even before updateInfo is set
+  if (isDownloading && !updateInfo) {
+    const pct = downloadProgress?.percent ?? 0;
+    if (compact) {
+      return (
+        <div className={cn("flex items-center gap-2 text-xs text-muted-foreground", className)}>
+          <Sparkles className="h-3 w-3 text-primary animate-pulse" />
+          <span>downloading update... {pct}%</span>
+        </div>
+      );
+    }
+    return (
+      <div className={cn("flex items-center gap-3 px-3 py-2 bg-muted/50 border-b text-sm", className)}>
+        <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+        <div className="flex items-center gap-2 flex-1">
+          <span>downloading update{downloadProgress?.version ? ` v${downloadProgress.version}` : ""}...</span>
+          <div className="flex-1 max-w-[200px] h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-300"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground">{pct}%</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!isVisible || !updateInfo) return null;
 
   if (compact) {
@@ -125,16 +168,24 @@ export function UpdateBanner({ className, compact = false }: UpdateBannerProps) 
         className
       )}>
         <Sparkles className="h-3 w-3 text-primary" />
-        <span>v{updateInfo.version} available</span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-5 px-2 text-xs"
-          onClick={handleUpdate}
-          disabled={isInstalling}
-        >
-          {isInstalling ? "downloading..." : "update"}
-        </Button>
+        {isDownloading ? (
+          <>
+            <span>downloading v{updateInfo.version}... {downloadProgress?.percent ?? 0}%</span>
+          </>
+        ) : (
+          <>
+            <span>v{updateInfo.version} ready</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 px-2 text-xs"
+              onClick={handleUpdate}
+              disabled={isInstalling}
+            >
+              {isInstalling ? "restarting..." : "restart to update"}
+            </Button>
+          </>
+        )}
       </div>
     );
   }
@@ -144,46 +195,77 @@ export function UpdateBanner({ className, compact = false }: UpdateBannerProps) 
       "flex items-center justify-between gap-3 px-3 py-2 bg-muted/50 border-b text-sm",
       className
     )}>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-1">
         <Sparkles className="h-4 w-4 text-primary" />
-        <span>
-          screenpipe <span className="font-medium">v{updateInfo.version}</span> is available
-        </span>
+        {isDownloading ? (
+          <div className="flex items-center gap-2 flex-1">
+            <span>downloading <span className="font-medium">v{updateInfo.version}</span></span>
+            <div className="flex-1 max-w-[200px] h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${downloadProgress?.percent ?? 0}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">{downloadProgress?.percent ?? 0}%</span>
+          </div>
+        ) : (
+          <span>
+            screenpipe <span className="font-medium">v{updateInfo.version}</span> is ready
+          </span>
+        )}
       </div>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="default"
-          size="sm"
-          className="h-7 px-3 text-xs"
-          onClick={handleUpdate}
-          disabled={isInstalling}
-        >
-          {isInstalling ? "installing..." : "update now"}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0"
-          onClick={() => setIsVisible(false)}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
+      {!isDownloading && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            className="h-7 px-3 text-xs"
+            onClick={handleUpdate}
+            disabled={isInstalling}
+          >
+            {isInstalling ? "restarting..." : "restart to update"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setIsVisible(false)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
 // Hook to listen for update events from Rust
 export function useUpdateListener() {
-  const { setIsVisible, setUpdateInfo } = useUpdateBanner();
+  const { setIsVisible, setUpdateInfo, setIsDownloading, setDownloadProgress } = useUpdateBanner();
 
   useEffect(() => {
     let unlistenAvailable: (() => void) | undefined;
     let unlistenClick: (() => void) | undefined;
+    let unlistenDownloading: (() => void) | undefined;
+    let unlistenProgress: (() => void) | undefined;
 
     const setupListeners = async () => {
-      // Listen for update available event
+      // Listen for download starting (shows banner immediately)
+      unlistenDownloading = await listen<{ version: string; body: string }>("update-downloading", (event) => {
+        setIsDownloading(true);
+        setDownloadProgress({ version: event.payload.version, downloaded: 0, total: null, percent: 0 });
+        setIsVisible(true);
+      });
+
+      // Listen for download progress
+      unlistenProgress = await listen<DownloadProgress>("update-download-progress", (event) => {
+        setDownloadProgress(event.payload);
+      });
+
+      // Listen for update ready (download complete)
       unlistenAvailable = await listen<UpdateInfo>("update-available", (event) => {
+        setIsDownloading(false);
+        setDownloadProgress(null);
         setUpdateInfo(event.payload);
         setIsVisible(true);
       });
@@ -199,6 +281,8 @@ export function useUpdateListener() {
     return () => {
       unlistenAvailable?.();
       unlistenClick?.();
+      unlistenDownloading?.();
+      unlistenProgress?.();
     };
-  }, [setIsVisible, setUpdateInfo]);
+  }, [setIsVisible, setUpdateInfo, setIsDownloading, setDownloadProgress]);
 }

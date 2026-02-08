@@ -422,6 +422,14 @@ impl UpdatesManager {
         if let Some(update) = check_result? {
             *self.update_available.lock().await = true;
 
+            // Emit "update-downloading" immediately so user sees feedback
+            let download_info = serde_json::json!({
+                "version": update.version,
+                "body": update.body.clone().unwrap_or_default(),
+                "stage": "downloading",
+            });
+            let _ = self.app.emit("update-downloading", download_info);
+
             #[cfg(target_os = "windows")]
             {
                 self.update_menu_item.set_enabled(true)?;
@@ -458,10 +466,38 @@ impl UpdatesManager {
             {
                 // Back up current app bundle before replacing it
                 backup_current_app();
-                update.download_and_install(|_, _| {}, || {}).await?;
+                let app_handle = self.app.clone();
+                let update_version = update.version.clone();
+                let menu_item = self.update_menu_item.clone();
+                let mut downloaded: u64 = 0;
+                let mut last_pct: u8 = 0;
+                update.download_and_install(
+                    move |chunk_len, content_len| {
+                        downloaded += chunk_len as u64;
+                        let pct = content_len
+                            .map(|total| ((downloaded as f64 / total as f64) * 100.0) as u8)
+                            .unwrap_or(0);
+                        // Only emit every 5% to avoid flooding
+                        if pct >= last_pct + 5 || pct == 100 {
+                            last_pct = pct;
+                            let progress = serde_json::json!({
+                                "version": update_version,
+                                "downloaded": downloaded,
+                                "total": content_len,
+                                "percent": pct,
+                            });
+                            let _ = app_handle.emit("update-download-progress", progress);
+                            info!("update download: {}%", pct);
+                        }
+                        let _ = menu_item.set_text(
+                            &format!("downloading update... {}%", pct)
+                        );
+                    },
+                    || {},
+                ).await?;
                 *self.update_installed.lock().await = true;
                 self.update_menu_item.set_enabled(true)?;
-                self.update_menu_item.set_text("update now")?;
+                self.update_menu_item.set_text("restart to update")?;
             }
 
             // Emit event to frontend for in-app banner (visible if window is open)
@@ -550,11 +586,28 @@ impl UpdatesManager {
 
                         // Back up current app before replacing it
                         backup_current_app();
-                        update.download_and_install(|_, _| {}, || {}).await?;
+                        let menu_item_win = self.update_menu_item.clone();
+                        let mut dl: u64 = 0;
+                        let mut lp: u8 = 0;
+                        update.download_and_install(
+                            move |chunk_len, content_len| {
+                                dl += chunk_len as u64;
+                                let pct = content_len
+                                    .map(|t| ((dl as f64 / t as f64) * 100.0) as u8)
+                                    .unwrap_or(0);
+                                if pct >= lp + 5 || pct == 100 {
+                                    lp = pct;
+                                    let _ = menu_item_win.set_text(
+                                        &format!("downloading update... {}%", pct)
+                                    );
+                                }
+                            },
+                            || {},
+                        ).await?;
                         *self.update_installed.lock().await = true;
 
                         self.update_menu_item.set_enabled(true)?;
-                        self.update_menu_item.set_text("update now")?;
+                        self.update_menu_item.set_text("restart to update")?;
                     }
                     // Proceed with the update
 
