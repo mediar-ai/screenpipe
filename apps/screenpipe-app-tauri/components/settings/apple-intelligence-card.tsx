@@ -361,9 +361,8 @@ export function AppleIntelligenceCard() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={triggerScan}
-                    disabled={isScanning}
-                    className="text-xs min-w-[110px] inline-flex items-center justify-center gap-1.5"
+                    onClick={() => !isScanning && triggerScan()}
+                    className="text-xs min-w-[110px] gap-1.5"
                   >
                     {isScanning ? (
                       <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
