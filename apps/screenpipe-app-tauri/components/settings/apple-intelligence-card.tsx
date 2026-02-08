@@ -172,18 +172,18 @@ export function AppleIntelligenceCard() {
       }>("reminders_scan");
 
       if (result.error) {
-        setLastScanResult(`⚠ ${result.error}`);
+        setLastScanResult(result.error);
       } else if (result.remindersCreated > 0) {
         const names = result.items
           .map((i) => i.title)
           .slice(0, 3)
           .join(", ");
         setLastScanResult(
-          `✅ ${result.remindersCreated} created: ${names}`
+          `${result.remindersCreated} created — ${names}`
         );
         setReminderCount((c) => c + result.remindersCreated);
       } else {
-        setLastScanResult("No action items found");
+        setLastScanResult("no action items found");
       }
       posthog.capture("reminders_scan_manual", {
         reminders_created: result.remindersCreated,
@@ -191,7 +191,7 @@ export function AppleIntelligenceCard() {
         had_error: !!result.error,
       });
     } catch (e) {
-      setLastScanResult("⚠ Scan failed — try again");
+      setLastScanResult("scan failed — try again");
       posthog.capture("reminders_scan_error", { error: String(e) });
     }
     setIsScanning(false);
@@ -273,10 +273,10 @@ export function AppleIntelligenceCard() {
               )}
             </div>
 
-            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-              Scans your screen &amp; audio every 30 minutes and automatically
-              creates Apple Reminders for action items it detects. Reminders
-              appear in a &quot;Screenpipe&quot; list in the Reminders app.
+            <p className="text-xs text-muted-foreground mb-3 leading-relaxed break-words">
+              Scans your screen &amp; audio every 30 minutes, extracts action
+              items with AI, and saves them to a &quot;Screenpipe&quot; list in
+              Apple Reminders.
             </p>
 
             {!remindersAuthorized ? (
@@ -324,24 +324,29 @@ export function AppleIntelligenceCard() {
                   </Label>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2 flex-wrap">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={triggerScan}
                     disabled={isScanning}
-                    className="text-xs"
+                    className="text-xs min-w-[100px]"
                   >
                     {isScanning ? (
-                      <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                        Scanning…
+                      </>
                     ) : (
-                      <CheckCircle2 className="h-3 w-3 mr-1.5" />
+                      <>
+                        <CheckCircle2 className="h-3 w-3 mr-1.5" />
+                        Scan now
+                      </>
                     )}
-                    {isScanning ? "Scanning..." : "Scan now"}
                   </Button>
 
                   {lastScanResult && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground pt-1.5 break-words min-w-0">
                       {lastScanResult}
                     </span>
                   )}
@@ -359,9 +364,7 @@ export function AppleIntelligenceCard() {
                 ? "Summaries + reminders active · scanning every 30 min"
                 : "Summaries appear in your timeline · you can also generate manually"}
             </span>
-            <span
-              className={`ml-auto ${aiStatus === "available" ? "text-green-500" : ""}`}
-            >
+            <span className="ml-auto">
               {aiStatus === "available"
                 ? "● on-device"
                 : aiStatus === "unavailable"
