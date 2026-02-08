@@ -150,6 +150,17 @@ Create/append to the daily log file using this markdown table format:
 | 10:30-11:00 | Call with team about roadmap | Zoom, Notion | #meeting #planning |
 ```
 
+## Embedding Media & Deep Links
+
+In the markdown output you can reference screenpipe data directly:
+
+- **Timeline links**: `[10:30 AM](screenpipe://timeline?timestamp=2025-02-01T10:30:00Z)` — opens screenpipe timeline at that moment
+- **Frame links**: `[screenshot](screenpipe://frame/12345)` — opens a specific captured frame (use frame_id from search results)
+- **Video files**: embed with `![video](/path/to/file.mp4)` using the exact file_path from search results
+- **Audio files**: embed with `![audio](/path/to/file.mp4)` using the audio_file_path from search results
+
+These work when opening the note in Obsidian on the same machine running screenpipe.
+
 ## Best Practices
 
 - Link people names with [[Name]] (Obsidian wiki-links)
@@ -158,6 +169,7 @@ Create/append to the daily log file using this markdown table format:
 - Group related activities together
 - Include apps used for context
 - Add semantic tags for easy filtering
+- Include timeline deep links for key moments so user can click to review
 - Skip idle periods or duplicates
 - If no meaningful activity in a chunk, skip it or note "idle"
 

@@ -680,7 +680,7 @@ export function ObsidianSyncCard() {
             {/* Custom Prompt */}
             <div className="space-y-1.5">
               <Label htmlFor="custom-prompt" className="text-xs font-medium">Custom instructions</Label>
-              <Textarea id="custom-prompt" value={settings.customPrompt} onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))} placeholder="Optional: how to structure notes, what to focus on..." rows={2} className="text-xs" />
+              <Textarea id="custom-prompt" value={settings.customPrompt} onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))} placeholder="e.g. include timeline deep links for key moments · embed video clips for meetings · focus on coding and meetings · use [[Project Name]] wiki-links" rows={2} className="text-xs" />
             </div>
           </div>
         )}

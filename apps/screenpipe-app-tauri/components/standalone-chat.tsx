@@ -128,13 +128,11 @@ graph TD
 \`\`\`
 Use flowcharts (graph TD/LR), sequence diagrams, pie charts, etc. as appropriate.
 
-TIMELINE DEEP LINKS:
-When referencing specific moments from search results, create clickable links so users can jump to that point in their timeline.
-Format: [readable time](screenpipe://timeline?timestamp=ISO8601_TIMESTAMP)
-Examples:
-- [10:30 AM](screenpipe://timeline?timestamp=2024-01-15T18:30:00Z)
-- [yesterday at 3pm](screenpipe://timeline?timestamp=2024-01-14T15:00:00Z)
-Always use the exact timestamp from search results. Users can click these to navigate directly to that moment.
+DEEP LINKS & MEDIA:
+- Timeline: [10:30 AM](screenpipe://timeline?timestamp=2024-01-15T18:30:00Z) — clickable jump to that moment
+- Frame: [screenshot](screenpipe://frame/FRAME_ID) — link to a specific captured frame (use frame_id from search results)
+- Video: show .mp4 paths in inline code: \`/path/to/video.mp4\`
+Always use exact timestamps/IDs from search results.
 
 Current time: ${now.toISOString()}
 User's timezone: ${timezone} (UTC${offsetStr})
