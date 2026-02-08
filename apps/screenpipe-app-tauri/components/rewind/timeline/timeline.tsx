@@ -4,6 +4,7 @@ import { isAfter, subDays, format } from "date-fns";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { ZoomIn, ZoomOut, Mic } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import posthog from "posthog-js";
 import { cn } from "@/lib/utils";
 import { AppContextPopover } from "./app-context-popover";
@@ -142,6 +143,7 @@ export const TimelineSlider = ({
 	});
 	const lineWidth = useTransform(scrollXProgress, [0, 1], ["0%", "100%"]);
 	const [hoveredTimestamp, setHoveredTimestamp] = useState<string | null>(null);
+	const [hoveredRect, setHoveredRect] = useState<{ x: number; y: number } | null>(null);
 	const [isDragging, setIsDragging] = useState(false);
 	const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
 	const [hasDragMoved, setHasDragMoved] = useState(false); // Track if mouse moved during drag
@@ -628,11 +630,16 @@ export const TimelineSlider = ({
 												transition: { duration: 0.1 }
 											}}
 											onMouseDown={() => handleDragStart(frameIndex)}
-											onMouseEnter={() => {
+											onMouseEnter={(e) => {
+												const rect = e.currentTarget.getBoundingClientRect();
+												setHoveredRect({ x: rect.left + rect.width / 2, y: rect.top });
 												setHoveredTimestamp(frame.timestamp);
 												handleDragOver(frameIndex);
 											}}
-											onMouseLeave={() => setHoveredTimestamp(null)}
+											onMouseLeave={() => {
+												setHoveredTimestamp(null);
+												setHoveredRect(null);
+											}}
 										>
 											{/* Audio indicator - visible line at top of bar */}
 											{hasAudio && (
@@ -649,9 +656,16 @@ export const TimelineSlider = ({
 												</div>
 											)}
 
-											{/* Tooltip on hover */}
-											{shouldShowTooltip && (
-												<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-2 w-max bg-popover border border-border rounded-lg px-3 py-2 text-xs shadow-2xl">
+											{/* Tooltip on hover — rendered via portal to escape overflow clipping */}
+											{shouldShowTooltip && hoveredRect && createPortal(
+												<div
+													className="fixed z-[9999] w-max bg-popover border border-border rounded-lg px-3 py-2 text-xs shadow-2xl pointer-events-none"
+													style={{
+														left: `clamp(80px, ${hoveredRect.x}px, calc(100vw - 80px))`,
+														top: `${hoveredRect.y}px`,
+														transform: "translate(-50%, -100%) translateY(-8px)",
+													}}
+												>
 													<div className="flex items-center gap-2 mb-1">
 														<img
 															src={`http://localhost:11435/app-icon?name=${encodeURIComponent(group.appName)}`}
@@ -671,7 +685,8 @@ export const TimelineSlider = ({
 															<span>audio recorded</span>
 														</p>
 													)}
-												</div>
+												</div>,
+												document.body
 											)}
 										</motion.div>
 									);
