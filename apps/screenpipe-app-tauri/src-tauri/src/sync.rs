@@ -1,13 +1,14 @@
 //! Tauri commands for cloud sync operations.
 
-use crate::store::SettingsStore;
+use crate::store::{CloudSyncSettingsStore, SettingsStore};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Utc;
 use screenpipe_core::sync::{SyncClientConfig, SyncManager};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Sync state managed by Tauri.
@@ -343,6 +344,15 @@ pub async fn init_sync(
         if is_new_user { "new" } else { "existing" }
     );
 
+    // Save password to persistent store for auto-init on restart
+    let cloud_settings = CloudSyncSettingsStore {
+        enabled: true,
+        encrypted_password: BASE64.encode(password.as_bytes()),
+    };
+    if let Err(e) = cloud_settings.save(&app) {
+        warn!("failed to save cloud sync settings: {}", e);
+    }
+
     // Now initialize the server's sync service
     let client = reqwest::Client::new();
     let init_request = serde_json::json!({
@@ -366,13 +376,12 @@ pub async fn init_sync(
             debug!("server sync service already initialized");
         }
         Ok(response) => {
+            let status = response.status();
             let error_text = response.text().await.unwrap_or_else(|_| "unknown error".to_string());
-            // Log but don't fail - local manager is still useful
-            debug!("failed to initialize server sync: {}", error_text);
+            warn!("failed to initialize server sync ({}): {}", status, error_text);
         }
         Err(e) => {
-            // Log but don't fail - server might not be running yet
-            debug!("failed to connect to server for sync init: {}", e);
+            warn!("failed to connect to server for sync init: {}", e);
         }
     }
 
@@ -382,13 +391,20 @@ pub async fn init_sync(
 /// Lock sync (clear keys from memory and stop server sync service).
 #[tauri::command]
 #[specta::specta]
-pub async fn lock_sync(state: State<'_, SyncState>) -> Result<(), String> {
+pub async fn lock_sync(app: AppHandle, state: State<'_, SyncState>) -> Result<(), String> {
     // Lock local manager
     let manager_guard = state.manager.read().await;
     if let Some(manager) = manager_guard.as_ref() {
         manager.lock().await;
     }
     *state.enabled.write().await = false;
+
+    // Clear saved password
+    let cloud_settings = CloudSyncSettingsStore {
+        enabled: false,
+        encrypted_password: String::new(),
+    };
+    let _ = cloud_settings.save(&app);
 
     // Lock server sync service
     let client = reqwest::Client::new();
@@ -401,12 +417,121 @@ pub async fn lock_sync(state: State<'_, SyncState>) -> Result<(), String> {
             info!("server sync service locked");
         }
         Ok(_) | Err(_) => {
-            // Server might not be running or sync not initialized - that's fine
-            debug!("could not lock server sync (may not be running)");
+            warn!("could not lock server sync (may not be running)");
         }
     }
 
     Ok(())
+}
+
+/// Auto-start cloud sync on app launch if previously enabled.
+/// Called from main.rs during startup.
+pub async fn auto_start_sync(app: &AppHandle, state: &SyncState) {
+    let settings = match CloudSyncSettingsStore::get(app) {
+        Ok(Some(s)) if s.enabled && !s.encrypted_password.is_empty() => s,
+        _ => return,
+    };
+
+    let password = match BASE64.decode(&settings.encrypted_password) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(p) => p,
+            Err(_) => {
+                warn!("cloud sync: saved password is not valid UTF-8");
+                return;
+            }
+        },
+        Err(_) => {
+            warn!("cloud sync: saved password is not valid base64");
+            return;
+        }
+    };
+
+    // Get auth token from settings
+    let fresh_settings = match SettingsStore::get(app) {
+        Ok(Some(s)) => s,
+        _ => {
+            warn!("cloud sync: no settings found, skipping auto-start");
+            return;
+        }
+    };
+
+    let token = match fresh_settings.user.token {
+        Some(t) if !t.is_empty() => t,
+        _ => {
+            info!("cloud sync: no auth token, skipping auto-start");
+            return;
+        }
+    };
+
+    let device_name = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "Unknown".to_string());
+    let device_os = std::env::consts::OS.to_string();
+
+    let config = SyncClientConfig::new(
+        token.clone(),
+        state.machine_id.clone(),
+        device_name,
+        device_os,
+    );
+
+    let manager = match SyncManager::new(config) {
+        Ok(m) => m,
+        Err(e) => {
+            error!("cloud sync auto-start: failed to create manager: {}", e);
+            return;
+        }
+    };
+
+    match manager.initialize(&password).await {
+        Ok(is_new) => {
+            info!(
+                "cloud sync auto-started for {} user",
+                if is_new { "new" } else { "existing" }
+            );
+        }
+        Err(e) => {
+            error!("cloud sync auto-start: failed to initialize: {}", e);
+            return;
+        }
+    }
+
+    *state.manager.write().await = Some(Arc::new(manager));
+    *state.enabled.write().await = true;
+
+    // Initialize the server's sync service
+    let client = reqwest::Client::new();
+    let init_request = serde_json::json!({
+        "token": token,
+        "password": password,
+        "machine_id": state.machine_id.clone(),
+        "sync_interval_secs": 300
+    });
+
+    match client
+        .post("http://localhost:3030/sync/init")
+        .json(&init_request)
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => {
+            info!("cloud sync auto-start: server sync service initialized");
+        }
+        Ok(response) if response.status().as_u16() == 409 => {
+            info!("cloud sync auto-start: server sync already running");
+        }
+        Ok(response) => {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            warn!(
+                "cloud sync auto-start: server init failed ({}): {}",
+                status, body
+            );
+        }
+        Err(e) => {
+            warn!("cloud sync auto-start: server not reachable: {}", e);
+        }
+    }
 }
 
 /// Delete all cloud data.

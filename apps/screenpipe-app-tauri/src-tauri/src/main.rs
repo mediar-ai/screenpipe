@@ -1796,6 +1796,23 @@ async fn main() {
                 reminders::auto_start_scheduler(app_handle_clone, &reminders_state_clone).await;
             });
 
+            // Auto-start cloud sync if it was enabled
+            let app_handle_clone = app_handle.clone();
+            let sync_state = app_handle.state::<sync::SyncState>();
+            let sync_state_clone = sync::SyncState {
+                enabled: sync_state.enabled.clone(),
+                is_syncing: sync_state.is_syncing.clone(),
+                last_sync: sync_state.last_sync.clone(),
+                last_error: sync_state.last_error.clone(),
+                manager: sync_state.manager.clone(),
+                machine_id: sync_state.machine_id.clone(),
+            };
+            tauri::async_runtime::spawn(async move {
+                // Wait for server to be ready
+                tokio::time::sleep(tokio::time::Duration::from_secs(12)).await;
+                sync::auto_start_sync(&app_handle_clone, &sync_state_clone).await;
+            });
+
             Ok(())
         })
         .build(tauri::generate_context!())
