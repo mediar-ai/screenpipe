@@ -143,6 +143,7 @@ llm = []
 experimental = []
 debug-console = ["console-subscriber"]
 adaptive-fps = ["screenpipe-vision/adaptive-fps"]
+pulseaudio = ["screenpipe-audio/pulseaudio"]
 ui-events = ["screenpipe-accessibility"]
 apple-intelligence = ["dep:screenpipe-apple-intelligence"]
 
