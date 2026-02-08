@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::server::AppState;
 use crate::sync_provider::ScreenpipeSyncProvider;
@@ -220,8 +220,8 @@ pub async fn sync_init(
                             }
                             info!("imported {} records from other devices", imported);
                         }
-                        Ok(_) => debug!("no new blobs from other devices"),
-                        Err(e) => debug!("download from other devices failed: {}", e),
+                        Ok(_) => info!("no new blobs from other devices"),
+                        Err(e) => warn!("download from other devices failed: {}", e),
                     }
 
                     *is_syncing.write().await = false;
