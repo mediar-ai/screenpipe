@@ -55,12 +55,9 @@ jobs:
             echo "should_publish=false" >> $GITHUB_OUTPUT
           fi
           
-          # Beta: upload on most main commits and workflow_dispatch
-          # This lets us test updates via beta channel before publishing stable
-          AUTHOR=$(git log -1 --pretty=%an)
-          if echo "$COMMIT_MSG" | head -1 | grep -qE "^(Bump app|release-app|fix|feat|refactor|perf|ci)"; then
-            echo "should_beta=true" >> $GITHUB_OUTPUT
-          elif [ "$AUTHOR" = "Louis Beaumont" ] || [ "$AUTHOR" = "louis030195" ]; then
+          # Beta: only build on explicit release triggers (same as stable)
+          # Beta is rebuilt from same compilation with different config — adds ~2-5 min, not a full rebuild
+          if echo "$COMMIT_MSG" | head -1 | grep -qE "^(Bump app|release-app)"; then
             echo "should_beta=true" >> $GITHUB_OUTPUT
           else
             echo "should_beta=false" >> $GITHUB_OUTPUT
