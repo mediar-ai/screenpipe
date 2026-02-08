@@ -7,10 +7,15 @@
 //! Future work: Trigger component reinitialization on wake events.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "macos")]
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::debug;
+#[cfg(target_os = "macos")]
+use tracing::{error, info, warn};
 
+#[cfg(target_os = "macos")]
 use crate::analytics::capture_event_nonblocking;
+#[cfg(target_os = "macos")]
 use serde_json::json;
 
 /// Tracks whether the system is currently in a "post-wake" state
@@ -115,6 +120,7 @@ pub fn start_sleep_monitor() {
 }
 
 /// Called when system is about to sleep
+#[cfg(target_os = "macos")]
 fn on_will_sleep() {
     capture_event_nonblocking(
         "system_will_sleep",
@@ -125,6 +131,7 @@ fn on_will_sleep() {
 }
 
 /// Called when system wakes from sleep
+#[cfg(target_os = "macos")]
 fn on_did_wake(handle: &tokio::runtime::Handle) {
     // Mark that we recently woke
     RECENTLY_WOKE.store(true, Ordering::SeqCst);
@@ -164,6 +171,7 @@ fn on_did_wake(handle: &tokio::runtime::Handle) {
 
 /// Check if audio and vision recording are healthy
 /// Returns (audio_healthy, vision_healthy)
+#[cfg(target_os = "macos")]
 async fn check_recording_health() -> (bool, bool) {
     // Try to hit the local health endpoint
     let client = reqwest::Client::new();

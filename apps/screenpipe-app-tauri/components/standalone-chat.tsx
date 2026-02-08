@@ -965,7 +965,7 @@ export function StandaloneChat() {
     }
   }, [isPi, piProjectDir]);
 
-  // Start Pi when needed
+  // Start Pi when needed (Pi is installed at app startup by Rust background thread)
   useEffect(() => {
     const shouldStart = isPi && !needsLogin && piProjectDir && !piStarting && !piInfo?.running;
 

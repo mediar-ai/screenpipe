@@ -747,7 +747,6 @@ async fn extract_frame(
 
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
@@ -867,7 +866,6 @@ async fn is_video_file_complete(ffmpeg_path: &PathBuf, file_path: &str) -> Resul
 
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
@@ -1034,7 +1032,6 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
 
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }

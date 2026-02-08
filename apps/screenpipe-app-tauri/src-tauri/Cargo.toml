@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "2.0.356"
+version = "2.0.358"
 description = "24/7 memory for your desktop. 100% local."
 authors = ["you"]
 license = ""
@@ -198,6 +198,9 @@ incremental = true
 # Faster dev builds
 [profile.dev]
 opt-level = 0
+
+[profile.dev.build-override]
+debug-assertions = false
 
 [profile.dev.package."*"]
 opt-level = 2

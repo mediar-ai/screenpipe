@@ -479,7 +479,6 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64, video_quality: &s
 
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         command.creation_flags(CREATE_NO_WINDOW);
     }

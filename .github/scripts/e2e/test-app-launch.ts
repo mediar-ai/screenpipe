@@ -1,6 +1,6 @@
 import {
   suite, test, summary, screenshot, assertHealthField,
-  assertExists, bb, fetchJson, HEALTH_URL,
+  assertExists, bb, fetchJson, HEALTH_URL, waitForHealth, sleep,
   sel, IS_WINDOWS, IS_MACOS, isScreenpipeRunning,
 } from "./lib";
 
@@ -11,8 +11,7 @@ await test("app process running", async () => {
 });
 
 await test("health API responds", async () => {
-  const res = await fetch("http://localhost:3030/health");
-  if (!res.ok) throw new Error(`health returned ${res.status}`);
+  await waitForHealth(30);
 });
 
 await test("health frame_status ok", () => assertHealthField("frame_status", "ok"));
@@ -27,6 +26,11 @@ await test("health status acceptable", async () => {
   if (status === "degraded" && health.frame_status !== "ok") {
     throw new Error(`degraded but frame_status is "${health.frame_status}" (expected ok)`);
   }
+});
+
+await test("health has audio_status", async () => {
+  const health = await fetchJson(HEALTH_URL);
+  if (health.audio_status === undefined) throw new Error("no audio_status");
 });
 
 if (IS_MACOS) {
@@ -126,7 +130,7 @@ await test("concurrent API calls don't race (S9.4)", async () => {
   console.log(`  3 concurrent API calls: ${elapsed}ms`);
 });
 
-await screenshot("01-tray-health");
+await screenshot("01-app-launch");
 
 const ok = summary();
 process.exit(ok ? 0 : 1);

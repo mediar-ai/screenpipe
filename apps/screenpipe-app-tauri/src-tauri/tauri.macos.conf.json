@@ -11,7 +11,6 @@
         },
         "externalBin": [
             "bun",
-            "ui_monitor",
             "ffmpeg",
             "ffprobe"
         ]

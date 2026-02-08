@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Monitor, Mic, Keyboard, Check, AlertTriangle, RefreshCw, ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { commands, type OSPermission } from "@/lib/utils/tauri";
+import { commands, type OSPermission, type OSPermissionsCheck } from "@/lib/utils/tauri";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import posthog from "posthog-js";
