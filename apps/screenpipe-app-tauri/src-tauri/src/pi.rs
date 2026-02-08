@@ -929,22 +929,4 @@ mod tests {
         assert_eq!(result, Some("C:\\Users\\npm\\pi.cmd".to_string()));
     }
 
-    /// Test that find_bun_executable checks the exe directory (bundled bun)
-    #[test]
-    fn test_find_bun_checks_exe_dir() {
-        use super::find_bun_executable;
-        // On the installed app, bun.exe lives next to screenpipe-app.exe
-        // in AppData/Local/screenpipe/. This test verifies the function
-        // at least runs without panicking and checks the exe dir first.
-        let result = find_bun_executable();
-        // We can't guarantee bun exists in CI, but we verify no panic
-        // and that if it IS found, the path is valid
-        if let Some(ref path) = result {
-            assert!(
-                std::path::Path::new(path).exists(),
-                "find_bun_executable returned non-existent path: {}",
-                path
-            );
-        }
-    }
 }

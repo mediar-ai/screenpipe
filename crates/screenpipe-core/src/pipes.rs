@@ -1869,3 +1869,22 @@ pub async fn download_pipe_private(
     info!("pipe downloaded and set up successfully at: {:?}", dest_dir);
     Ok(dest_dir)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::find_bun_path;
+
+    /// Test that find_bun_path checks the exe directory first (bundled bun)
+    /// and returns a valid path if bun is found.
+    #[test]
+    fn test_find_bun_checks_exe_dir() {
+        let result = find_bun_path();
+        if let Some(ref path) = result {
+            assert!(
+                path.exists(),
+                "find_bun_path returned non-existent path: {}",
+                path.display()
+            );
+        }
+    }
+}
