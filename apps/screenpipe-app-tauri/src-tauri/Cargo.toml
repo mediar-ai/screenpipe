@@ -199,8 +199,5 @@ incremental = true
 [profile.dev]
 opt-level = 0
 
-[profile.dev.build-override]
-debug-assertions = false
-
 [profile.dev.package."*"]
 opt-level = 2

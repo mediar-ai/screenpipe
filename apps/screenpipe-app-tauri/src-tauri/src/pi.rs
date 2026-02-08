@@ -8,11 +8,15 @@ use specta::Type;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::Emitter;
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
+
+/// Signals that the background Pi install has finished (success or failure).
+static PI_INSTALL_DONE: AtomicBool = AtomicBool::new(false);
 
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
 const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
@@ -399,9 +403,23 @@ pub async fn pi_start(
         }
     }
 
-    // Find pi executable
-    let pi_path = find_pi_executable()
-        .ok_or_else(|| format!("Pi not found. Install with: bun add -g {}", PI_PACKAGE))?;
+    // Find pi executable — if not found, wait for background install (up to 60s)
+    let pi_path = match find_pi_executable() {
+        Some(p) => p,
+        None => {
+            if !PI_INSTALL_DONE.load(Ordering::SeqCst) {
+                info!("Pi not found yet, waiting for background install to finish...");
+                for _ in 0..60 {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    if PI_INSTALL_DONE.load(Ordering::SeqCst) {
+                        break;
+                    }
+                }
+            }
+            find_pi_executable()
+                .ok_or_else(|| format!("Pi not found. Install with: bun add -g {}", PI_PACKAGE))?
+        }
+    };
 
     info!("Starting pi from {} in dir: {}", pi_path, project_dir);
 
@@ -692,8 +710,22 @@ pub async fn run(
 ) -> Result<String, String> {
     ensure_pi_config(user_token)?;
 
-    let pi_path = find_pi_executable()
-        .ok_or_else(|| format!("Pi not found. Install with: bun add -g {}", PI_PACKAGE))?;
+    let pi_path = match find_pi_executable() {
+        Some(p) => p,
+        None => {
+            if !PI_INSTALL_DONE.load(Ordering::SeqCst) {
+                info!("Pi not found yet, waiting for background install to finish...");
+                for _ in 0..60 {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    if PI_INSTALL_DONE.load(Ordering::SeqCst) {
+                        break;
+                    }
+                }
+            }
+            find_pi_executable()
+                .ok_or_else(|| format!("Pi not found. Install with: bun add -g {}", PI_PACKAGE))?
+        }
+    };
 
     let mut cmd = tokio::process::Command::new(&pi_path);
     cmd.current_dir(working_dir);
@@ -792,18 +824,19 @@ fn find_bun_executable() -> Option<String> {
 
 /// Background Pi installation — call once from app setup.
 /// Runs on a dedicated thread, never panics, never blocks the caller.
+/// Sets `PI_INSTALL_DONE` when finished so `pi_start` can wait for it.
 pub fn ensure_pi_installed_background() {
+    // If Pi is already installed, mark done immediately
+    if find_pi_executable().is_some() {
+        debug!("Pi already installed, skipping background install");
+        PI_INSTALL_DONE.store(true, Ordering::SeqCst);
+        return;
+    }
+
     match std::thread::Builder::new()
         .name("pi-install".to_string())
         .spawn(move || {
-            // Catch any unexpected panic so it can never crash the app
             let result = std::panic::catch_unwind(|| {
-                // Already installed? Nothing to do.
-                if find_pi_executable().is_some() {
-                    debug!("Pi already installed, skipping background install");
-                    return;
-                }
-
                 let bun = match find_bun_executable() {
                     Some(b) => b,
                     None => {
@@ -839,14 +872,17 @@ pub fn ensure_pi_installed_background() {
             });
 
             if let Err(e) = result {
-                // Panic was caught — log and move on
                 error!("Pi background install panicked (non-fatal): {:?}", e);
             }
+
+            // Always mark done, even on failure, so pi_start stops waiting
+            PI_INSTALL_DONE.store(true, Ordering::SeqCst);
         })
     {
         Ok(_) => { /* thread running */ }
         Err(e) => {
             error!("Failed to spawn pi-install thread (non-fatal): {}", e);
+            PI_INSTALL_DONE.store(true, Ordering::SeqCst);
         }
     }
 }
