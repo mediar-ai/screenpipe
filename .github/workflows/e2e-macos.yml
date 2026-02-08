@@ -368,6 +368,13 @@ jobs:
           APP_PROC=$(basename "$INSTALLED_APP" .app)
           echo "SCREENPIPE_APP_NAME=$APP_PROC" >> $GITHUB_ENV
 
+      - name: Start screen recording
+        run: |
+          # Record the entire test run for visual debugging on failure
+          screencapture -v "${{ runner.temp }}/e2e-screen-recording.mp4" &
+          echo "RECORDING_PID=$!" >> $GITHUB_ENV
+          echo "✓ Screen recording started (PID $!)"
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -428,6 +435,11 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
+          # Stop screen recording (send SIGINT so it finalizes the mp4)
+          if [ -n "$RECORDING_PID" ]; then
+            kill -INT $RECORDING_PID 2>/dev/null || true
+            sleep 3  # Give it time to finalize
+          fi
           # Kill the CLI server
           if [ -n "$SERVER_PID" ]; then kill $SERVER_PID 2>/dev/null || true; fi
           # Kill the app
@@ -444,4 +456,5 @@ jobs:
           path: |
             ${{ runner.temp }}/e2e-artifacts/
             ${{ runner.temp }}/e2e-full.log
+            ${{ runner.temp }}/e2e-screen-recording.mp4
           retention-days: 14
