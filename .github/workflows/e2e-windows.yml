@@ -1,0 +1,100 @@
+name: Windows E2E Tests
+
+on:
+  push:
+    branches: [main]
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner label (self-hosted runner name)"
+        required: false
+        default: "windows-desktop-test"
+
+concurrency:
+  group: e2e-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-windows:
+    name: Windows E2E
+    runs-on: [self-hosted, "${{ inputs.runner || 'windows-desktop-test' }}"]
+    timeout-minutes: 30
+    # Only run on main to prevent arbitrary code execution on self-hosted runner
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System info
+        shell: pwsh
+        run: |
+          echo "hostname: $env:COMPUTERNAME"
+          echo "os: $((Get-CimInstance Win32_OperatingSystem).Caption)"
+          echo "cpu: $((Get-CimInstance Win32_Processor).Name)"
+          echo "memory: $([math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB))GB"
+
+      - name: Install/update BigBrother CLI
+        shell: pwsh
+        run: |
+          $bbDir = "$env:USERPROFILE\Documents\bigbrother"
+          if (Test-Path $bbDir) {
+            cd $bbDir
+            git pull
+          } else {
+            cd "$env:USERPROFILE\Documents"
+            git clone https://github.com/louis030195/bigbrother.git
+          }
+          cd $bbDir
+          cargo build --release -p bb
+          $bbBin = "$bbDir\target\release"
+          echo $bbBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & "$bbBin\bb.exe" --version
+
+      - name: Wait for screenpipe to be running
+        shell: pwsh
+        run: |
+          $proc = Get-Process -Name "screenpipe*" -ErrorAction SilentlyContinue
+          if (-not $proc) {
+            echo "screenpipe not running, attempting to start..."
+            $appPath = Get-ChildItem "$env:LOCALAPPDATA\screenpipe" -Filter "screenpipe*.exe" -Recurse | Select-Object -First 1
+            if ($appPath) {
+              Start-Process $appPath.FullName
+              Start-Sleep -Seconds 15
+            } else {
+              echo "warning: could not find screenpipe executable"
+            }
+          }
+          for ($i = 1; $i -le 30; $i++) {
+            try {
+              $response = Invoke-RestMethod -Uri "http://localhost:3030/health" -TimeoutSec 5
+              echo "health API ready"
+              break
+            } catch {
+              echo "waiting for health API... ($i/30)"
+              Start-Sleep -Seconds 2
+            }
+          }
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Run E2E tests
+        id: e2e
+        shell: pwsh
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}\e2e-artifacts
+        run: |
+          bun .github/scripts/e2e/run-all.ts 2>&1 | Tee-Object -FilePath "${{ runner.temp }}\e2e-full.log"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-windows-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}\e2e-artifacts\
+            ${{ runner.temp }}\e2e-full.log
+          retention-days: 14
