@@ -12,8 +12,8 @@
     "createUpdaterArtifacts": true,
     "active": true,
     "category": "DeveloperTool",
-    "shortDescription": "24/7 memory for your desktop (Beta)",
-    "longDescription": "24/7 memory for your desktop. 100% local. You own your data. Beta version for testing experimental features.",
+    "shortDescription": "24/7 memory for your desktop",
+    "longDescription": "24/7 memory for your desktop. 100% local. You own your data.",
     "copyright": "",
     "targets": [
       "app",
@@ -24,17 +24,16 @@
     ],
     "externalBin": [],
     "icon": [
-      "icons/beta/32x32.png",
-      "icons/beta/128x128.png",
-      "icons/beta/128x128@2x.png",
-      "icons/beta/256x256.png",
-      "icons/beta/512x512.png",
-      "icons/beta/1024x1024.png",
-      "icons/beta/icon.icns",
-      "icons/beta/icon.ico",
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/256x256.png",
+      "icons/512x512.png",
+      "icons/1024x1024.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
       "icons/screenpipe-logo-tray-failed.png",
-      "icons/screenpipe-logo-tray-black.png",
-      "icons/screenpipe-logo-tray-beta.png"
+      "icons/screenpipe-logo-tray-black.png"
     ],
     "resources": [
       "assets/*"
@@ -48,6 +47,7 @@
       "active": true,
       "dialog": false,
       "endpoints": [
+        "https://screenpi.pe/api/app-update/beta/{{target}}-{{arch}}/{{current_version}}",
         "https://cdn.crabnebula.app/update/mediar/screenpipe-beta/{{target}}-{{arch}}/{{current_version}}"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyQjQ2RkQzMUNBOUFDMTcKUldRWHJLa2MwMiswSWl3RlBGUW5zYUE0Zm0vNFFRRTltNUZZTUVxR2FxUDNtSWdUSHgyL3JNcmcK"
@@ -108,7 +108,7 @@
     "withGlobalTauri": true,
     "trayIcon": {
       "id": "screenpipe_main",
-      "iconPath": "assets/screenpipe-logo-tray-beta-white.png",
+      "iconPath": "assets/screenpipe-logo-tray-white.png",
       "iconAsTemplate": true,
       "menuOnLeftClick": true
     },
@@ -116,7 +116,8 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$APPDATA/**"
+          "$APPDATA/**",
+          "$HOME/.screenpipe/**"
         ]
       },
       "csp": null

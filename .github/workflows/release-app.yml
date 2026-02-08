@@ -745,8 +745,21 @@ jobs:
             Write-Host "Skipping stable upload (beta-only build)"
           }
 
-          # Upload to beta channel
+          # Rebuild with beta config and upload to beta channel
+          # Current dir: apps/screenpipe-app-tauri/src-tauri
           if ($env:SHOULD_BETA -eq "true" -or $env:IS_DISPATCH -eq "true") {
+            Write-Host "=== Rebuilding with beta config ==="
+            # Swap to beta config (we're in src-tauri/)
+            Copy-Item "tauri.beta.conf.json" "tauri.conf.json" -Force
+            # Clean old bundle artifacts
+            $bundlePath = "target/x86_64-pc-windows-msvc/release/bundle"
+            if (Test-Path $bundlePath) { Remove-Item -Recurse -Force $bundlePath }
+            # Rebuild (Rust cached, just repackages) - run from project root
+            Push-Location ..
+            bunx tauri build --target x86_64-pc-windows-msvc --features official-build
+            Pop-Location
+            Write-Host "=== Beta rebuild complete ==="
+
             Write-Host "Uploading to beta channel..."
             try {
               & $cliFullPath release upload ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri -vv
@@ -765,6 +778,31 @@ jobs:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./apps/screenpipe-app-tauri/src-tauri
+
+      - name: Rebuild with beta config (Non-Windows)
+        if: matrix.os_type != 'windows' && (needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch')
+        continue-on-error: true
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CI: true
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
+        run: |
+          echo "=== Rebuilding with beta config ==="
+          # Swap to beta config (Rust is already compiled, this just repackages)
+          cp apps/screenpipe-app-tauri/src-tauri/tauri.beta.conf.json apps/screenpipe-app-tauri/src-tauri/tauri.conf.json
+          # Clean old bundle artifacts so beta gets its own
+          rm -rf apps/screenpipe-app-tauri/src-tauri/target/*/release/bundle
+          cd apps/screenpipe-app-tauri
+          bunx tauri build ${{ steps.tauri-args.outputs.args || matrix.tauri-args }}
+          echo "=== Beta rebuild complete ==="
 
       - name: Upload Assets to CrabNebula Beta (Non-Windows)
         if: matrix.os_type != 'windows' && (needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch')
