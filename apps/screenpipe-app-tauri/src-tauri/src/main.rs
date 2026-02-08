@@ -1106,6 +1106,8 @@ async fn main() {
                 reminders::reminders_scan,
                 reminders::reminders_start_scheduler,
                 reminders::reminders_stop_scheduler,
+                reminders::reminders_get_custom_prompt,
+                reminders::reminders_set_custom_prompt,
             ])
             .typ::<SettingsStore>()
             .typ::<OnboardingStore>()
@@ -1271,7 +1273,9 @@ async fn main() {
             reminders::reminders_create,
             reminders::reminders_scan,
             reminders::reminders_start_scheduler,
-            reminders::reminders_stop_scheduler
+            reminders::reminders_stop_scheduler,
+            reminders::reminders_get_custom_prompt,
+            reminders::reminders_set_custom_prompt
         ])
         .setup(move |app| {
             //deep link register_all

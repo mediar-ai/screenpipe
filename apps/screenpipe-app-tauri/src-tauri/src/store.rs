@@ -657,6 +657,8 @@ impl ObsidianSettingsStore {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemindersSettingsStore {
     pub enabled: bool,
+    #[serde(default)]
+    pub custom_prompt: String,
 }
 
 impl RemindersSettingsStore {

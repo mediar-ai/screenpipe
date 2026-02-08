@@ -11,6 +11,18 @@ async openPermissionSettings(permission: OSPermission) : Promise<void> {
 async requestPermission(permission: OSPermission) : Promise<void> {
     await TAURI_INVOKE("request_permission", { permission });
 },
+/**
+ * Reset a permission using tccutil and re-request it
+ * This removes the app from the TCC database and triggers a fresh permission request
+ */
+async resetAndRequestPermission(permission: OSPermission) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reset_and_request_permission", { permission }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async doPermissionsCheck(initialCheck: boolean) : Promise<OSPermissionsCheck> {
     return await TAURI_INVOKE("do_permissions_check", { initialCheck });
 },
@@ -27,19 +39,6 @@ async checkMicrophonePermission() : Promise<OSPermissionStatus> {
  */
 async checkAccessibilityPermissionCmd() : Promise<OSPermissionStatus> {
     return await TAURI_INVOKE("check_accessibility_permission_cmd");
-},
-/**
- * Reset a permission using tccutil and re-request it
- * This removes the app from the TCC database and triggers a fresh permission request
- */
-async resetAndRequestPermission(permission: OSPermission) : Promise<Result<null, string>> {
-    try {
-    await TAURI_INVOKE("reset_and_request_permission", { permission });
-    return { status: "ok", data: null };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
 },
 async getEnv(name: string) : Promise<string> {
     return await TAURI_INVOKE("get_env", { name });
@@ -591,6 +590,108 @@ async obsidianCancelSync() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Check Reminders authorization + scheduler status (no popup).
+ */
+async remindersStatus() : Promise<Result<RemindersStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reminders_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Request Reminders permission (shows one-time macOS popup).
+ * Returns "granted", "denied", or an error message.
+ */
+async remindersAuthorize() : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reminders_authorize") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * List existing reminders in the "Screenpipe" list.
+ */
+async remindersList() : Promise<Result<ReminderItem[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reminders_list") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Create a single reminder.
+ */
+async remindersCreate(title: string, notes: string | null, due: string | null) : Promise<Result<ReminderItem, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reminders_create", { title, notes, due }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Scan recent activity and create reminders from action items.
+ * Optional custom_prompt appended to the AI instructions.
+ */
+async remindersScan(customPrompt: string | null) : Promise<Result<ScanResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reminders_scan", { customPrompt }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Start the background scheduler (30-min interval). Persists across page navigation.
+ * Saves enabled=true to persistent store so it auto-starts on app relaunch.
+ */
+async remindersStartScheduler() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reminders_start_scheduler") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stop the background scheduler. Saves enabled=false to persistent store.
+ */
+async remindersStopScheduler() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reminders_stop_scheduler") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Get the saved custom prompt.
+ */
+async remindersGetCustomPrompt() : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reminders_get_custom_prompt") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Save a custom prompt.
+ */
+async remindersSetCustomPrompt(prompt: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reminders_set_custom_prompt", { prompt }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -668,6 +769,9 @@ export type PiCheckResult = { available: boolean; path: string | null }
 export type PiImageContent = { type: string; source: PiImageSource }
 export type PiImageSource = { type: string; mediaType: string; data: string }
 export type PiInfo = { running: boolean; projectDir: string | null; pid: number | null; sessionId: string | null }
+export type ReminderItem = { identifier: string; title: string; notes: string | null; completed: boolean }
+export type RemindersStatus = { available: boolean; authorized: boolean; authorizationStatus: string; schedulerRunning: boolean; reminderCount: number }
+export type ScanResult = { remindersCreated: bigint; items: ReminderItem[]; contextChars: bigint; error: string | null }
 export type SettingsStore = 
 /**
  * Catch-all for fields added by the frontend (e.g. chatHistory, deviceId)

@@ -216,18 +216,41 @@ pub async fn reminders_create(
 }
 
 /// Scan recent activity and create reminders from action items.
+/// Optional custom_prompt appended to the AI instructions.
 #[tauri::command]
 #[specta::specta]
-pub async fn reminders_scan() -> Result<ScanResult, String> {
+pub async fn reminders_scan(custom_prompt: Option<String>) -> Result<ScanResult, String> {
     #[cfg(target_os = "macos")]
     {
-        do_scan().await
+        do_scan(custom_prompt.as_deref()).await
     }
 
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = custom_prompt;
         Err("only available on macOS".into())
     }
+}
+
+/// Get the saved custom prompt.
+#[tauri::command]
+#[specta::specta]
+pub async fn reminders_get_custom_prompt(app: AppHandle) -> Result<String, String> {
+    Ok(RemindersSettingsStore::get(&app)?
+        .map(|s| s.custom_prompt)
+        .unwrap_or_default())
+}
+
+/// Save a custom prompt.
+#[tauri::command]
+#[specta::specta]
+pub async fn reminders_set_custom_prompt(app: AppHandle, prompt: String) -> Result<(), String> {
+    let mut settings = RemindersSettingsStore::get(&app)?.unwrap_or(RemindersSettingsStore {
+        enabled: false,
+        custom_prompt: String::new(),
+    });
+    settings.custom_prompt = prompt;
+    settings.save(&app)
 }
 
 /// Start the background scheduler (30-min interval). Persists across page navigation.
@@ -241,8 +264,19 @@ pub async fn reminders_start_scheduler(
     // Stop existing if any
     reminders_stop_scheduler(state.clone()).await?;
 
-    // Save to persistent store
-    RemindersSettingsStore { enabled: true }.save(&app)?;
+    // Preserve custom_prompt, set enabled
+    let mut settings = RemindersSettingsStore::get(&app)?.unwrap_or(RemindersSettingsStore {
+        enabled: false,
+        custom_prompt: String::new(),
+    });
+    settings.enabled = true;
+    settings.save(&app)?;
+
+    let custom_prompt = if settings.custom_prompt.is_empty() {
+        None
+    } else {
+        Some(settings.custom_prompt.clone())
+    };
 
     let handle_arc = state.scheduler_handle.clone();
 
@@ -256,7 +290,7 @@ pub async fn reminders_start_scheduler(
         loop {
             info!("reminders scheduler: running scan");
             #[cfg(target_os = "macos")]
-            match do_scan().await {
+            match do_scan(custom_prompt.as_deref()).await {
                 Ok(result) => {
                     if result.reminders_created > 0 {
                         info!(
@@ -318,6 +352,12 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &RemindersState) {
                 }
             }
 
+            let custom_prompt = if settings.custom_prompt.is_empty() {
+                None
+            } else {
+                Some(settings.custom_prompt.clone())
+            };
+
             let handle_arc = state.scheduler_handle.clone();
             let handle = tokio::spawn(async move {
                 info!("reminders scheduler: auto-started (30-min interval)");
@@ -327,7 +367,7 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &RemindersState) {
                 loop {
                     info!("reminders scheduler: running scan");
                     #[cfg(target_os = "macos")]
-                    match do_scan().await {
+                    match do_scan(custom_prompt.as_deref()).await {
                         Ok(result) => {
                             if result.reminders_created > 0 {
                                 info!(
@@ -360,7 +400,7 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &RemindersState) {
 // ─── Scan implementation ────────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
-async fn do_scan() -> Result<ScanResult, String> {
+async fn do_scan(custom_prompt: Option<&str>) -> Result<ScanResult, String> {
     use screenpipe_integrations::reminders::ScreenpipeReminders;
 
     // 1. Check authorization
@@ -400,7 +440,7 @@ async fn do_scan() -> Result<ScanResult, String> {
     info!("reminders scan: {} chars of context", context_chars);
 
     // 4. Call Apple Intelligence
-    let ai_response = call_ai_for_reminders(&context).await?;
+    let ai_response = call_ai_for_reminders(&context, custom_prompt).await?;
 
     // 5. Parse action items
     let action_items = parse_action_items(&ai_response);
@@ -595,7 +635,10 @@ Respond with ONLY this JSON format, no other text:
 
 /// Call Apple Intelligence (via local /ai/chat/completions) to extract action items.
 #[cfg(target_os = "macos")]
-async fn call_ai_for_reminders(context: &str) -> Result<String, String> {
+async fn call_ai_for_reminders(
+    context: &str,
+    custom_prompt: Option<&str>,
+) -> Result<String, String> {
     // Truncate to fit context window (~10K chars max)
     let context = if context.len() > 6000 {
         &context[..6000]
@@ -603,16 +646,25 @@ async fn call_ai_for_reminders(context: &str) -> Result<String, String> {
         context
     };
 
+    // Build system prompt with optional custom instructions
+    let system_prompt = match custom_prompt {
+        Some(cp) if !cp.trim().is_empty() => {
+            format!("{}\n\nAdditional user instructions:\n{}", REMINDERS_PROMPT, cp.trim())
+        }
+        _ => REMINDERS_PROMPT.to_string(),
+    };
+
     let client = reqwest::Client::new();
 
     let do_request = |ctx: String| {
         let client = client.clone();
+        let prompt = system_prompt.clone();
         async move {
             let resp = client
                 .post(format!("{}/ai/chat/completions", API))
                 .json(&serde_json::json!({
                     "messages": [
-                        {"role": "system", "content": REMINDERS_PROMPT},
+                        {"role": "system", "content": prompt},
                         {"role": "user", "content": ctx}
                     ]
                 }))

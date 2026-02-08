@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertCircle,
   Bell,
@@ -36,6 +37,9 @@ export function AppleIntelligenceCard() {
   const [isScanning, setIsScanning] = useState(false);
   const [lastScanResult, setLastScanResult] = useState<string | null>(null);
   const [reminderCount, setReminderCount] = useState(0);
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [promptDirty, setPromptDirty] = useState(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setOs(platform());
@@ -110,6 +114,11 @@ export function AppleIntelligenceCard() {
       if (status.authorizationStatus === "Denied") {
         setAuthDenied(true);
       }
+      if (status.authorized) {
+        invoke<string>("reminders_get_custom_prompt")
+          .then((p) => setCustomPrompt(p))
+          .catch(() => {});
+      }
     } catch {}
   }, []);
 
@@ -118,6 +127,19 @@ export function AppleIntelligenceCard() {
       checkRemindersStatus();
     }
   }, [aiStatus, checkRemindersStatus]);
+
+  // Auto-save custom prompt (debounced 1s)
+  const onCustomPromptChange = (value: string) => {
+    setCustomPrompt(value);
+    setPromptDirty(true);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      await invoke("reminders_set_custom_prompt", { prompt: value }).catch(
+        () => {}
+      );
+      setPromptDirty(false);
+    }, 1000);
+  };
 
   // Authorize reminders
   const authorizeReminders = async () => {
@@ -170,7 +192,9 @@ export function AppleIntelligenceCard() {
         items: { title: string }[];
         contextChars: number;
         error: string | null;
-      }>("reminders_scan");
+      }>("reminders_scan", {
+        customPrompt: customPrompt || null,
+      });
 
       if (result.error) {
         setLastScanResult(result.error);
@@ -324,6 +348,14 @@ export function AppleIntelligenceCard() {
                       : "Auto-scan disabled"}
                   </Label>
                 </div>
+
+                <Textarea
+                  value={customPrompt}
+                  onChange={(e) => onCustomPromptChange(e.target.value)}
+                  placeholder="e.g. focus on coding tasks and bugs · ignore social media · always set due date to tomorrow"
+                  className="text-xs min-h-[36px] h-9 resize-none font-mono"
+                  rows={1}
+                />
 
                 <div className="flex items-start gap-2 flex-wrap">
                   <Button
