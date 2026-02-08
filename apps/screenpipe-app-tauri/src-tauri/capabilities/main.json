@@ -27,9 +27,16 @@
     "core:menu:default",
     "core:tray:default",
     "shell:default",
-    "shell:allow-open",
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        { "url": "^https?://.*" },
+        { "url": "^mailto:.*" },
+        { "url": "^tel:.*" },
+        { "url": "^x-apple-reminderkit://.*" }
+      ]
+    },
     "store:default",
-    "shell:allow-open",
     "fs:allow-watch",
     "fs:allow-open",
     "fs:default",
