@@ -36,6 +36,10 @@ const ShortcutRow = ({
   useEffect(() => {
     if (!isRecording) return;
 
+    // Suspend all global shortcuts so they don't fire while recording
+    // (e.g., pressing Ctrl+Cmd+K to assign it shouldn't open the overlay)
+    invoke("suspend_global_shortcuts").catch(() => {});
+
     const handleKeyDown = (event: KeyboardEvent) => {
       event.preventDefault();
 
@@ -72,6 +76,8 @@ const ShortcutRow = ({
 
     return () => {
       setIsRecording(false);
+      // Re-register all global shortcuts after recording
+      invoke("resume_global_shortcuts").catch(() => {});
       hotkeys.unbind("*");
       hotkeys.filter = (event) => {
         const target = (event.target || event.srcElement) as any;
@@ -117,6 +123,33 @@ const ShortcutRow = ({
 
   const handleEnableShortcut = async (keys: string) => {
     try {
+      // Check for conflicts with other shortcuts
+      const normalizedKeys = keys.toLowerCase();
+      const allShortcuts: Record<string, string> = {
+        showScreenpipeShortcut: settings.showScreenpipeShortcut,
+        startRecordingShortcut: settings.startRecordingShortcut,
+        stopRecordingShortcut: settings.stopRecordingShortcut,
+        startAudioShortcut: settings.startAudioShortcut,
+        stopAudioShortcut: settings.stopAudioShortcut,
+        showChatShortcut: settings.showChatShortcut,
+        searchShortcut: settings.searchShortcut,
+      };
+      const conflict = Object.entries(allShortcuts).find(
+        ([key, value]) =>
+          key !== shortcut &&
+          value &&
+          value.toLowerCase() === normalizedKeys &&
+          !settings.disabledShortcuts.includes(key as Shortcut)
+      );
+      if (conflict) {
+        toast({
+          title: "shortcut conflict",
+          description: `this shortcut is already used by "${conflict[0].replace(/([A-Z])/g, " $1").trim().toLowerCase()}". choose a different combination.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       toast({
         title: "shortcut enabled",
         description: `${shortcut.replace(/_/g, " ")} enabled`,

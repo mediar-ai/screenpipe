@@ -92,10 +92,10 @@ export function parseKeyboardShortcut(shortcut: string): string {
 
     return Array.from(uniqueKeys)
       .map((key) => {
-        if (key === "super") {
+        if (key === "super" || key === "meta" || key === "command" || key === "cmd") {
           return os === "macos" ? "⌘" : "⊞";
         }
-        if (key === "ctrl") return "⌃";
+        if (key === "ctrl" || key === "control") return "⌃";
         if (key === "alt") return os === "macos" ? "⌥" : "Alt";
         if (key === "shift") return "⇧";
         return key.charAt(0).toUpperCase() + key.slice(1);
