@@ -94,7 +94,7 @@ async fn test_first_frames_loading() -> Result<()> {
         // Try to extract the frame
         match tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            extract_frame_from_video(file_path, *offset_index),
+            extract_frame_from_video(file_path, *offset_index, "2"),
         )
         .await
         {
@@ -251,7 +251,7 @@ async fn test_concurrent_frame_loading() -> Result<()> {
             tokio::spawn(async move {
                 let result = tokio::time::timeout(
                     std::time::Duration::from_secs(10),
-                    extract_frame_from_video(&file_path, offset_index),
+                    extract_frame_from_video(&file_path, offset_index, "2"),
                 )
                 .await;
                 (frame_id, result)

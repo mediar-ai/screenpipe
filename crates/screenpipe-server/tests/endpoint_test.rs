@@ -46,6 +46,7 @@ mod tests {
             false,
             audio_manager,
             false, // use_pii_removal
+            "balanced".to_string(),
         );
 
         let router = app.create_router(true).await;
