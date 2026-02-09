@@ -34,6 +34,21 @@ jobs:
           echo "cpu: $((Get-CimInstance Win32_Processor).Name)"
           echo "memory: $([math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB))GB"
 
+      - name: Setup Rust
+        shell: powershell
+        run: |
+          if (Get-Command rustup -ErrorAction SilentlyContinue) {
+            rustup update stable --no-self-update
+          } else {
+            Invoke-WebRequest -Uri https://win.rustup.rs -OutFile rustup-init.exe
+            .\rustup-init.exe -y --default-toolchain stable
+            Remove-Item rustup-init.exe
+            $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+            echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+          rustc --version
+          cargo --version
+
       - name: Install/update BigBrother CLI
         shell: powershell
         run: |

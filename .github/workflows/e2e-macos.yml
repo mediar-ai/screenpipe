@@ -19,9 +19,8 @@ jobs:
     runs-on: macos-14  # M1, Sonoma
     timeout-minutes: 45
     if: >
-      github.event_name == 'pull_request' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
 
     steps:
       - uses: actions/checkout@v4
@@ -107,8 +106,8 @@ jobs:
     # Never run on PRs (fork code could be malicious).
     if: >
       github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
+      (github.event_name == 'schedule' ||
+       github.event_name == 'workflow_dispatch')
 
     steps:
       - uses: actions/checkout@v4
