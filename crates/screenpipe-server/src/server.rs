@@ -581,7 +581,13 @@ pub(crate) async fn search(
             })
             .collect();
 
-        let frames = try_join_all(frame_futures).await.unwrap(); // TODO: handle error
+        let frames = match try_join_all(frame_futures).await {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::warn!("failed to extract some frames: {}", e);
+                vec![]
+            }
+        };
 
         for (item, frame) in content_items.iter_mut().zip(frames.into_iter()) {
             if let ContentItem::OCR(ref mut ocr_content) = item {
