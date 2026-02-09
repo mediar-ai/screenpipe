@@ -88,7 +88,7 @@ jobs:
             info=$(gh api repos/${{ github.repository }}/actions/runners \
               --jq ".runners[] | select(.labels[].name == \"$label\") | {status: .status, busy: .busy}" 2>/dev/null || echo '{"status":"offline","busy":true}')
             local status=$(echo "$info" | jq -r '.status // "offline"')
-            local busy=$(echo "$info" | jq -r '.busy // true')
+            local busy=$(echo "$info" | jq -r 'if .busy then "true" else "false" end')
             if [ "$status" = "online" ] && [ "$busy" = "false" ]; then
               echo "available"
             elif [ "$status" = "online" ]; then
