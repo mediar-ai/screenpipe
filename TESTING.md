@@ -30,6 +30,13 @@ commits that broke this area: `0752ea59`, `d89c5f14`, `4a64fd1a`, `fa591d6e`, `8
 - [ ] **search panel focus** — open search, keyboard focus is in search input immediately (`2315a39c`, `1f2681e3`).
 - [ ] **ghost clicks after hide** — hide overlay via `order_out`. clicking where overlay was should NOT trigger overlay buttons (`32e1a962`).
 - [ ] **pinch-to-zoom works** — pinch gesture on trackpad zooms timeline without needing to click first (`d99444a7`, `523a629e`).
+- [ ] **shortcut reminder on all Spaces** — switch between 3+ Spaces (including fullscreen apps). reminder pill stays visible on every Space simultaneously.
+- [ ] **shortcut reminder on fullscreen app** — fullscreen Chrome/Safari, reminder shows at top center. not just leftmost Space.
+- [ ] **shortcut reminder doesn't steal focus** — showing reminder never takes keyboard focus from active app.
+- [ ] **chat on non-primary Space** — switch to Space 3 (normal desktop), press chat shortcut. chat appears on Space 3, not Space 1. no Space transition animation.
+- [ ] **chat re-show on fullscreen Space** — show chat on fullscreen Space, hide it, show again. must reappear on same fullscreen Space.
+- [ ] **space monitor only hides main overlay** — swipe Spaces. main overlay hides. chat window and shortcut reminder are unaffected.
+- [ ] **space monitor doesn't race with show** — show overlay via shortcut. the `activateIgnoringOtherApps` call must not trigger space monitor's hide callback.
 
 ### 2. dock icon & tray icon (macOS)
 
@@ -241,7 +248,8 @@ run section 7 and 10.
 - macOS only shows permission prompts once (NotDetermined → Denied is permanent). must use System Settings to re-grant.
 - debug builds use ~3-5x more CPU than release builds for vision pipeline.
 - first frame after app launch always triggers OCR (intentional — no previous frame to compare against).
-- chat panel can't appear on fullscreen spaces when created for the first time (needs Accessory mode or pre-creation at startup).
+- chat panel can't appear on fullscreen spaces when created for the first time (needs Accessory mode or pre-creation at startup). workaround: pre-create panel hidden at launch.
+- shortcut reminder should use `CanJoinAllSpaces` (visible on all Spaces simultaneously). chat and main overlay should use `MoveToActiveSpace` (moved to current Space on show, then flag removed to pin).
 
 ## log locations
 
