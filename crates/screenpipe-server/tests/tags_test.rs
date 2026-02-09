@@ -10,7 +10,7 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tower::ServiceExt;
 
 use screenpipe_db::DatabaseManager;
-use screenpipe_server::{ContentItem, PaginatedResponse, PipeManager, SCServer};
+use screenpipe_server::{ContentItem, PaginatedResponse, SCServer};
 
 // Add this function to initialize the logger
 fn init() {
@@ -32,11 +32,9 @@ async fn setup_test_app() -> (Router, Arc<DatabaseManager>) {
         db.clone(),
         SocketAddr::from(([127, 0, 0, 1], 23948)),
         PathBuf::from(""),
-        Arc::new(PipeManager::new(PathBuf::from(""))),
         false,
         false,
         audio_manager,
-        true,
         false, // use_pii_removal
     );
 

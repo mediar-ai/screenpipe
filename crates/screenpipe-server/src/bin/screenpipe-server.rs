@@ -23,25 +23,23 @@ use screenpipe_server::{
     analytics,
     cli::{
         get_or_create_machine_id, AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine,
-        Command, McpCommand, MigrationSubCommand, OutputFormat, PipeCommand, SyncCommand,
+        Command, McpCommand, MigrationSubCommand, OutputFormat, SyncCommand,
         VisionCommand,
     },
     handle_index_command,
-    pipe_manager::PipeInfo,
     start_continuous_recording, start_sleep_monitor, start_ui_recording,
     sync_provider::ScreenpipeSyncProvider,
     vision_manager::{
         start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
     },
-    watch_pid, PipeManager, ResourceMonitor, SCServer,
+    watch_pid, ResourceMonitor, SCServer,
 };
 use screenpipe_vision::monitor::list_monitors;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::path::Path;
 use std::{
     env, fs,
-    io::Write,
     net::SocketAddr,
     net::{IpAddr, Ipv4Addr},
     ops::Deref,
@@ -316,7 +314,7 @@ async fn main() -> anyhow::Result<()> {
                 map.insert("enable_llm".into(), json!(cli.enable_llm));
                 map.insert("enable_frame_cache".into(), json!(cli.enable_frame_cache));
                 map.insert("capture_unfocused_windows".into(), json!(cli.capture_unfocused_windows));
-                map.insert("enable_pipe_manager".into(), json!(cli.enable_pipe_manager));
+
                 map.insert("enable_ui_events".into(), json!(cli.enable_ui_events));
                 map.insert("enable_sync".into(), json!(cli.enable_sync));
                 map.insert("sync_interval_secs".into(), json!(cli.sync_interval_secs));
@@ -339,27 +337,8 @@ async fn main() -> anyhow::Result<()> {
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
-    // Only set up logging if we're not running a pipe command with JSON output
+    // Only set up logging if we're not running a command with JSON output
     let should_log = match &cli.command {
-        Some(Command::Pipe { subcommand }) => {
-            matches!(
-                subcommand,
-                PipeCommand::List {
-                    output: OutputFormat::Text,
-                    ..
-                } | PipeCommand::Install {
-                    output: OutputFormat::Text,
-                    ..
-                } | PipeCommand::Info {
-                    output: OutputFormat::Text,
-                    ..
-                } | PipeCommand::Enable { .. }
-                    | PipeCommand::Disable { .. }
-                    | PipeCommand::Update { .. }
-                    | PipeCommand::Purge { .. }
-                    | PipeCommand::Delete { .. }
-            )
-        }
         Some(Command::Add {
             output: OutputFormat::Text,
             ..
@@ -376,12 +355,6 @@ async fn main() -> anyhow::Result<()> {
         Some(setup_logging(&local_data_dir, &cli)?)
     } else {
         None
-    };
-
-    let pipe_manager = if cli.enable_pipe_manager {
-        Arc::new(PipeManager::new(local_data_dir_clone.clone()))
-    } else {
-        Arc::new(PipeManager::new(PathBuf::from("")))
     };
 
     if let Some(ref command) = cli.command {
@@ -447,10 +420,6 @@ async fn main() -> anyhow::Result<()> {
             },
             Command::Completions { shell } => {
                 cli.handle_completions(*shell)?;
-                return Ok(());
-            }
-            Command::Pipe { subcommand } => {
-                handle_pipe_command(subcommand, &pipe_manager, cli.enable_pipe_manager).await?;
                 return Ok(());
             }
             Command::Migrate {
@@ -827,7 +796,6 @@ async fn main() -> anyhow::Result<()> {
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
     let vision_handle = Handle::current();
-    let pipes_handle = Handle::current();
 
     let db_clone = Arc::clone(&db);
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
@@ -1038,11 +1006,9 @@ async fn main() -> anyhow::Result<()> {
         db_server,
         SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), cli.port),
         local_data_dir_clone_2,
-        pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
         audio_manager.clone(),
-        cli.enable_pipe_manager,
         cli.use_pii_removal,
         video_quality_for_server,
     );
@@ -1282,32 +1248,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Pipes section
-    println!("├────────────────────────┼────────────────────────────────────┤");
-    println!("│ pipes                  │                                    │");
-    let pipes = pipe_manager.list_pipes().await;
-    if pipes.is_empty() {
-        println!("│ {:<22} │ {:<34} │", "", "no pipes available");
-    } else {
-        let total_pipes = pipes.len();
-        for (_, pipe) in pipes.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
-            let pipe_str = format!(
-                "({}) {}",
-                if pipe.enabled { "enabled" } else { "disabled" },
-                pipe.id,
-            );
-            let formatted_pipe = format_cell(&pipe_str, VALUE_WIDTH);
-            println!("│ {:<22} │ {:<34} │", "", formatted_pipe);
-        }
-        if total_pipes > MAX_ITEMS_TO_DISPLAY {
-            println!(
-                "│ {:<22} │ {:<34} │",
-                "",
-                format!("... and {} more", total_pipes - MAX_ITEMS_TO_DISPLAY)
-            );
-        }
-    }
-
     println!("└────────────────────────┴────────────────────────────────────┘");
 
     // Add warning for cloud arguments and telemetry
@@ -1359,25 +1299,6 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // Start pipes
-    info!("starting pipes");
-    let pipes = pipe_manager.list_pipes().await;
-    for pipe in pipes {
-        debug!("pipe: {:?}", pipe.id);
-        if !pipe.enabled {
-            debug!("pipe {} is disabled, skipping", pipe.id);
-            continue;
-        }
-        match pipe_manager.start_pipe_task(pipe.id.clone()).await {
-            Ok(future) => {
-                pipes_handle.spawn(future);
-            }
-            Err(e) => {
-                error!("failed to start pipe {}: {}", pipe.id, e);
-            }
-        }
-    }
-
     // Start UI event recording
     let ui_recorder_handle = {
         if ui_recorder_config.enabled {
@@ -1407,31 +1328,6 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("Watched pid ({}) has stopped, initiating shutdown", pid);
-
-                // Get list of enabled pipes
-                let pipes = pipe_manager.list_pipes().await;
-                let enabled_pipes: Vec<_> = pipes.into_iter().filter(|p| p.enabled).collect();
-                // Stop all enabled pipes in parallel
-                let stop_futures = enabled_pipes.iter().map(|pipe| {
-                    let pipe_manager = pipe_manager.clone();
-                    let pipe_id = pipe.id.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = pipe_manager.stop_pipe(&pipe_id).await {
-                            error!("failed to stop pipe {}: {}", pipe_id, e);
-                        }
-                    })
-                });
-                // Wait for all pipes to stop with timeout
-                let timeout = tokio::time::sleep(Duration::from_secs(10));
-                tokio::pin!(timeout);
-                tokio::select! {
-                    _ = futures::future::join_all(stop_futures) => {
-                        info!("all pipes stopped successfully");
-                    }
-                    _ = &mut timeout => {
-                        warn!("timeout waiting for pipes to stop");
-                    }
-                }
                 let _ = shutdown_tx_clone.send(());
             }
         });
@@ -1476,256 +1372,6 @@ async fn main() -> anyhow::Result<()> {
 
     info!("shutdown complete");
 
-    Ok(())
-}
-
-async fn handle_pipe_command(
-    command: &PipeCommand,
-    pipe_manager: &Arc<PipeManager>,
-    enable_pipe_manager: bool,
-) -> anyhow::Result<()> {
-    if !enable_pipe_manager {
-        println!("note: pipe functionality is disabled");
-        return Ok(());
-    }
-
-    let client = reqwest::Client::new();
-    let server_url = "http://localhost";
-
-    match command {
-        PipeCommand::List { output, port } => {
-            let server_url = format!("{}:{}", server_url, port);
-            let pipes = match client
-                .get(format!("{}/pipes/list", server_url))
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    // The server returns { data: [...] }, so we need to extract the data field
-                    let response: Value = response.json().await?;
-                    response
-                        .get("data")
-                        .and_then(|d| d.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| serde_json::from_value::<PipeInfo>(v.clone()).ok())
-                                .collect()
-                        })
-                        .ok_or_else(|| anyhow::anyhow!("invalid response format"))?
-                }
-                _ => {
-                    println!("note: server not running, showing pipe configurations");
-                    pipe_manager.list_pipes().await
-                }
-            };
-
-            match output {
-                OutputFormat::Json => println!(
-                    "{}",
-                    serde_json::to_string_pretty(&json!({
-                        "data": pipes,
-                        "success": true
-                    }))?
-                ),
-                OutputFormat::Text => {
-                    println!("available pipes:");
-                    for pipe in pipes {
-                        let id = pipe.id;
-                        let enabled = pipe.enabled;
-                        println!("  id: {}, enabled: {}", id, enabled);
-                    }
-                }
-            }
-        }
-
-        #[allow(deprecated)]
-        PipeCommand::Download { url, output, port }
-        | PipeCommand::Install { url, output, port } => {
-            match client
-                .post(format!("{}:{}/pipes/download", server_url, port))
-                .json(&json!({ "url": url }))
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    let data: Value = response.json().await?;
-                    match output {
-                        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&data)?),
-                        OutputFormat::Text => println!(
-                            "pipe downloaded successfully. id: {}",
-                            data["pipe_id"].as_str().unwrap_or("unknown")
-                        ),
-                    }
-                }
-                _ => match pipe_manager.download_pipe(url).await {
-                    Ok(pipe_id) => match output {
-                        OutputFormat::Json => println!(
-                            "{}",
-                            serde_json::to_string_pretty(&json!({
-                                "data": {
-                                    "pipe_id": pipe_id,
-                                    "message": "pipe downloaded successfully"
-                                },
-                                "success": true
-                            }))?
-                        ),
-                        OutputFormat::Text => {
-                            println!("pipe downloaded successfully. id: {}", pipe_id)
-                        }
-                    },
-                    Err(e) => {
-                        let error_msg = format!("failed to download pipe: {}", e);
-                        match output {
-                            OutputFormat::Json => println!(
-                                "{}",
-                                serde_json::to_string_pretty(&json!({
-                                    "error": error_msg,
-                                    "success": false
-                                }))?
-                            ),
-                            OutputFormat::Text => eprintln!("{}", error_msg),
-                        }
-                    }
-                },
-            }
-        }
-
-        PipeCommand::Info { id, output, port } => {
-            let info = match client
-                .get(format!("{}:{}/pipes/info/{}", server_url, port, id))
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => response.json().await?,
-                _ => {
-                    println!("note: server not running, showing pipe configuration");
-                    pipe_manager
-                        .get_pipe_info(id)
-                        .await
-                        .ok_or_else(|| anyhow::anyhow!("pipe not found"))?
-                }
-            };
-
-            match output {
-                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&info)?),
-                OutputFormat::Text => println!("pipe info: {:?}", info),
-            }
-        }
-        PipeCommand::Enable { id, port } => {
-            match client
-                .post(format!("{}:{}/pipes/enable", server_url, port))
-                .json(&json!({ "pipe_id": id }))
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    println!("pipe {} enabled in running server", id);
-                }
-                _ => {
-                    pipe_manager
-                        .update_config(id, json!({"enabled": true}))
-                        .await?;
-                    println!("note: server not running, updated config only. pipe will start on next server launch");
-                }
-            }
-        }
-
-        PipeCommand::Disable { id, port } => {
-            match client
-                .post(format!("{}:{}/pipes/disable", server_url, port))
-                .json(&json!({ "pipe_id": id }))
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    println!("pipe {} disabled in running server", id);
-                }
-                _ => {
-                    pipe_manager
-                        .update_config(id, json!({"enabled": false}))
-                        .await?;
-                    println!("note: server not running, updated config only");
-                }
-            }
-        }
-
-        PipeCommand::Update { id, config, port } => {
-            let config: Value =
-                serde_json::from_str(config).map_err(|e| anyhow::anyhow!("invalid json: {}", e))?;
-
-            match client
-                .post(format!("{}:{}/pipes/update", server_url, port))
-                .json(&json!({
-                    "pipe_id": id,
-                    "config": config
-                }))
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    println!("pipe {} config updated in running server", id);
-                }
-                _ => {
-                    pipe_manager.update_config(id, config).await?;
-                    println!("note: server not running, updated config only");
-                }
-            }
-        }
-
-        PipeCommand::Delete { id, yes, port } => {
-            if !yes {
-                print!("are you sure you want to delete pipe '{}'? [y/N] ", id);
-                std::io::stdout().flush()?;
-                let mut input = String::new();
-                std::io::stdin().read_line(&mut input)?;
-                if !input.trim().eq_ignore_ascii_case("y") {
-                    println!("pipe deletion cancelled");
-                    return Ok(());
-                }
-            }
-
-            match client
-                .delete(format!("{}:{}/pipes/delete/{}", server_url, port, id))
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    println!("pipe '{}' deleted from running server", id);
-                }
-                _ => match pipe_manager.delete_pipe(id).await {
-                    Ok(_) => println!("pipe '{}' deleted from local files", id),
-                    Err(e) => println!("failed to delete pipe: {}", e),
-                },
-            }
-        }
-
-        PipeCommand::Purge { yes, port } => {
-            if !yes {
-                print!("are you sure you want to purge all pipes? this action cannot be undone. (y/N): ");
-                std::io::stdout().flush()?;
-                let mut input = String::new();
-                std::io::stdin().read_line(&mut input)?;
-                if !input.trim().eq_ignore_ascii_case("y") {
-                    println!("pipe purge cancelled");
-                    return Ok(());
-                }
-            }
-
-            match client
-                .post(format!("{}:{}/pipes/purge", server_url, port))
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    println!("all pipes purged from running server");
-                }
-                _ => match pipe_manager.purge_pipes().await {
-                    Ok(_) => println!("all pipes purged from local files"),
-                    Err(e) => println!("failed to purge pipes: {}", e),
-                },
-            }
-        }
-    }
     Ok(())
 }
 

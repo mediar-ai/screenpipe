@@ -23,8 +23,7 @@ pub use mistral::*;
 pub mod llama;
 #[cfg(feature = "llm")]
 pub use llama::*;
-pub mod pipes;
-pub use pipes::*;
+
 mod language;
 #[cfg(feature = "security")]
 pub mod pii_removal;

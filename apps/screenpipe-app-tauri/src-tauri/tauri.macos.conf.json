@@ -10,7 +10,6 @@
             }
         },
         "externalBin": [
-            "bun",
             "ffmpeg",
             "ffprobe"
         ]

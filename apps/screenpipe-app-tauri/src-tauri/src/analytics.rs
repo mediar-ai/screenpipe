@@ -138,10 +138,7 @@ impl AnalyticsManager {
                     error!("failed to send periodic posthog event: {}", e);
                 }
 
-                // Track enabled pipes
-                if let Err(e) = self.track_enabled_pipes().await {
-                    warn!("failed to track enabled pipes: {}, is screenpipe up?", e);
-                }
+
             }
         }
     }
@@ -182,25 +179,6 @@ impl AnalyticsManager {
         }))
     }
 
-    async fn track_enabled_pipes(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let pipes_url = format!("{}/pipes/list", self.local_api_base_url);
-        let response: PipeListResponse = self.client.get(&pipes_url).send().await?.json().await?;
-
-        let enabled_pipes: Vec<String> = response
-            .data
-            .into_iter()
-            .filter(|pipe| pipe.enabled)
-            .map(|pipe| pipe.id)
-            .collect();
-
-        let properties = json!({
-            "enabled_pipes": enabled_pipes,
-            "enabled_pipe_count": enabled_pipes.len(),
-        });
-
-        self.send_event("enabled_pipes_hourly", Some(properties))
-            .await
-    }
 }
 
 pub fn start_analytics(
@@ -248,15 +226,4 @@ pub fn start_analytics(
     Ok(analytics_manager)
 }
 
-#[derive(Deserialize)]
-struct PipeInfo {
-    id: String,
-    enabled: bool,
-}
 
-#[derive(Deserialize)]
-struct PipeListResponse {
-    data: Vec<PipeInfo>,
-    #[allow(dead_code)]
-    success: bool,
-}

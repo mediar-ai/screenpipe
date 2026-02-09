@@ -8,7 +8,6 @@ mod tests {
     use chrono::{Duration, Utc};
     use screenpipe_audio::audio_manager::AudioManagerBuilder;
     use screenpipe_db::{ContentType, DatabaseManager, SearchResult};
-    use screenpipe_server::PipeManager;
     use screenpipe_server::SCServer;
     use screenpipe_server::{ContentItem, PaginatedResponse};
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
@@ -43,11 +42,9 @@ mod tests {
             db.clone(),
             SocketAddr::from(([127, 0, 0, 1], 23948)),
             PathBuf::from(""),
-            Arc::new(PipeManager::new(PathBuf::from(""))),
             false,
             false,
             audio_manager,
-            true,
             false, // use_pii_removal
         );
 
