@@ -296,7 +296,7 @@ function MarkdownBlock({ text, isUser }: { text: string; isUser: boolean }) {
 
             return (
               <a
-                href={href}
+                href="#"
                 onClick={handleTimelineClick}
                 className="underline underline-offset-2 text-blue-500 hover:text-blue-400 cursor-pointer inline"
                 {...props}
