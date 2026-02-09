@@ -1770,6 +1770,10 @@ async fn main() {
             // The app stays in Regular mode permanently so dock+tray are always visible.
 
             // Initialize global shortcuts
+            // TODO(linux): When a shortcut is already registered (e.g. by the DE or another
+            // instance), apply_shortcuts early-returns and skips the rest. Fix this to:
+            // 1. Collect per-shortcut failures instead of aborting on the first one
+            // 2. Emit a user-visible notification listing the conflicting shortcuts
             let app_handle_clone = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = initialize_global_shortcuts(&app_handle_clone).await {
