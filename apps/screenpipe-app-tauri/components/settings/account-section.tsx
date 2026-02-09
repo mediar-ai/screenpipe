@@ -225,8 +225,83 @@ export function AccountSection() {
             </div>
           </div>
         </Card>
+      ) : !settings.user?.token ? (
+        /* Not logged in: login-first layout */
+        <>
+          <Card className="p-8 flex flex-col items-center text-center">
+            <UserCog className="h-10 w-10 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-1">sign in to screenpipe</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              free account — no credit card required
+            </p>
+            <Button
+              className="w-full max-w-xs bg-foreground text-background hover:bg-background hover:text-foreground transition-colors duration-150"
+              size="lg"
+              onClick={() => openUrl("https://screenpi.pe/login")}
+            >
+              log in
+              <ExternalLinkIcon className="w-4 h-4 ml-2" />
+            </Button>
+          </Card>
+
+          {/* Pro upsell — collapsed, secondary */}
+          <details className="group">
+            <summary className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <Sparkles className="h-4 w-4" />
+              optional: upgrade to screenpipe pro
+              <span className="text-xs ml-auto group-open:hidden">show details</span>
+            </summary>
+            <Card className="mt-3 p-5">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Sparkles className="h-5 w-5" />
+                    <h3 className="text-lg font-semibold">screenpipe pro</h3>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold">{isAnnual ? "$19" : "$29"}</span>
+                    <span className="text-muted-foreground text-sm">/month</span>
+                    {isAnnual && (
+                      <span className="text-xs border border-foreground/20 text-foreground px-2 py-0.5 rounded-full font-medium">
+                        save 34%
+                      </span>
+                    )}
+                  </div>
+                  {isAnnual && (
+                    <p className="text-xs text-muted-foreground mt-0.5">$228/year, billed annually</p>
+                  )}
+                </div>
+                <PricingToggle isAnnual={isAnnual} onToggle={setIsAnnual} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm mb-4">
+                <div className="flex items-center gap-2 text-foreground">
+                  <Shield className="h-3.5 w-3.5 shrink-0" />
+                  encrypted cloud sync — 50GB, 3 devices
+                </div>
+                <div className="flex items-center gap-2 text-foreground">
+                  <Zap className="h-3.5 w-3.5 shrink-0" />
+                  cloud transcription — higher quality, saves 2-3GB RAM
+                </div>
+                <div className="flex items-center gap-2 text-foreground">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  priority support
+                </div>
+              </div>
+
+              <Button
+                className="w-full bg-foreground text-background hover:bg-background hover:text-foreground transition-colors duration-150"
+                size="lg"
+                onClick={handleCheckout}
+              >
+                login & upgrade to pro
+                <ExternalLinkIcon className="w-4 h-4 ml-2" />
+              </Button>
+            </Card>
+          </details>
+        </>
       ) : (
-        /* Non-subscriber: pricing-first layout */
+        /* Logged in, free tier: show upsell */
         <>
           {/* Pro plan card with animated border */}
           <div className="group relative rounded-lg p-[1px] overflow-hidden">
@@ -281,7 +356,7 @@ export function AccountSection() {
                 size="lg"
                 onClick={handleCheckout}
               >
-                {settings.user?.token ? "upgrade to pro" : "login & upgrade to pro"}
+                upgrade to pro
                 <ExternalLinkIcon className="w-4 h-4 ml-2" />
               </Button>
             </Card>
