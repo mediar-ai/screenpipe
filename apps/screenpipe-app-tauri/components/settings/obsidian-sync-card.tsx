@@ -576,10 +576,18 @@ export function ObsidianSyncCard() {
             </p>
 
             {!isLoggedIn && (
-              <p className="text-xs text-muted-foreground mb-2">
-                <AlertCircle className="h-3 w-3 inline mr-1" />
-                Login required
-              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs gap-1.5 h-7 mb-2"
+                onClick={async () => {
+                  const { open } = await import("@tauri-apps/plugin-shell");
+                  await open("https://screenpi.pe/login");
+                }}
+              >
+                <AlertCircle className="h-3 w-3" />
+                login to use
+              </Button>
             )}
 
             <div className="flex flex-wrap gap-2">
