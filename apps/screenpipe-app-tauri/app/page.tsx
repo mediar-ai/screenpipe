@@ -7,7 +7,7 @@ import NotificationHandler from "@/components/notification-handler";
 import { useToast } from "@/components/ui/use-toast";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { ChangelogDialog } from "@/components/changelog-dialog";
-import { BreakingChangesInstructionsDialog } from "@/components/breaking-changes-instructions-dialog";
+
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 
 import { commands } from "@/lib/utils/tauri";
@@ -212,7 +212,7 @@ export default function Home() {
       {isSettingsLoaded ? (
         <>
           <ChangelogDialog />
-          <BreakingChangesInstructionsDialog />
+
           <LoginDialog />
           <ModelDownloadTracker />
           <UpdateBanner />

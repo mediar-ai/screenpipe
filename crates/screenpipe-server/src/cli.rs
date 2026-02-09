@@ -317,10 +317,6 @@ pub struct Cli {
     #[arg(long, default_value = "balanced")]
     pub video_quality: String,
 
-    /// Enable pipe functionality (default: false)
-    #[arg(long, default_value_t = false)]
-    pub enable_pipe_manager: bool,
-
     /// Enable UI event capture (keyboard, mouse, clipboard).
     /// Requires accessibility and input monitoring permissions on macOS.
     /// Currently supported on macOS only.
@@ -404,11 +400,6 @@ pub enum Command {
     Vision {
         #[command(subcommand)]
         subcommand: VisionCommand,
-    },
-    /// Pipe management commands
-    Pipe {
-        #[command(subcommand)]
-        subcommand: PipeCommand,
     },
     /// Cloud sync management commands
     Sync {
@@ -510,99 +501,6 @@ pub enum VisionCommand {
         /// Output format
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
         output: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum PipeCommand {
-    /// List all pipes
-    List {
-        /// Output format
-        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
-        output: OutputFormat,
-        /// Server port
-        #[arg(short = 'p', long, default_value_t = 3030)]
-        port: u16,
-    },
-    /// Download a new pipe (deprecated: use 'install' instead)
-    #[deprecated(since = "0.2.26", note = "please use `install` instead")]
-    Download {
-        /// URL of the pipe to download
-        url: String,
-        /// Output format
-        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
-        output: OutputFormat,
-        /// Server port
-        #[arg(short = 'p', long, default_value_t = 3030)]
-        port: u16,
-    },
-    /// Install a new pipe
-    Install {
-        /// URL of the pipe to install
-        url: String,
-        /// Output format
-        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
-        output: OutputFormat,
-        /// Server port
-        #[arg(short = 'p', long, default_value_t = 3030)]
-        port: u16,
-    },
-    /// Get info for a specific pipe
-    Info {
-        /// ID of the pipe
-        id: String,
-        /// Output format
-        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
-        output: OutputFormat,
-        /// Server port
-        #[arg(short = 'p', long, default_value_t = 3030)]
-        port: u16,
-    },
-    /// Enable a pipe
-    Enable {
-        /// ID of the pipe to enable
-        id: String,
-        /// Server port
-        #[arg(short = 'p', long, default_value_t = 3030)]
-        port: u16,
-    },
-    /// Disable a pipe
-    Disable {
-        /// ID of the pipe to disable
-        id: String,
-        /// Server port
-        #[arg(short = 'p', long, default_value_t = 3030)]
-        port: u16,
-    },
-    /// Update pipe configuration
-    Update {
-        /// ID of the pipe to update
-        id: String,
-        /// New configuration as a JSON string
-        config: String,
-        /// Server port
-        #[arg(short = 'p', long, default_value_t = 3030)]
-        port: u16,
-    },
-    /// Purge all pipes
-    Purge {
-        /// Automatically confirm purge without prompting
-        #[arg(short = 'y', long)]
-        yes: bool,
-        /// Server port
-        #[arg(short = 'p', long, default_value_t = 3030)]
-        port: u16,
-    },
-    /// Delete a pipe
-    Delete {
-        /// ID of the pipe to delete
-        id: String,
-        /// Automatically confirm deletion without prompting
-        #[arg(short = 'y', long)]
-        yes: bool,
-        /// Server port
-        #[arg(short = 'p', long, default_value_t = 3030)]
-        port: u16,
     },
 }
 

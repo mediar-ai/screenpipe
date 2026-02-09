@@ -433,7 +433,6 @@ jobs:
             # FFmpeg downloads
             apps/screenpipe-app-tauri/src-tauri/ffmpeg-*
             # Platform specific bins
-            apps/screenpipe-app-tauri/src-tauri/bun-*
           key: ${{ matrix.platform }}-${{ matrix.target }}-pre-build-${{ hashFiles('**/Cargo.lock', '**/bun.lockb') }}
           restore-keys: |
             ${{ matrix.platform }}-${{ matrix.target }}-pre-build-

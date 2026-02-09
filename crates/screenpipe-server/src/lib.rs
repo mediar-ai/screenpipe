@@ -11,7 +11,7 @@ pub mod cli;
 pub mod cloud_search;
 pub mod core;
 pub mod filtering;
-pub mod pipe_manager;
+
 mod resource_monitor;
 mod server;
 pub mod sleep_monitor;
@@ -29,7 +29,7 @@ pub use auto_destruct::watch_pid;
 pub use axum::Json as JsonResponse;
 pub use cli::Cli;
 pub use core::{record_video, start_continuous_recording};
-pub use pipe_manager::PipeManager;
+
 pub use resource_monitor::{ResourceMonitor, RestartSignal};
 pub use screenpipe_core::Language;
 pub use server::health_check;

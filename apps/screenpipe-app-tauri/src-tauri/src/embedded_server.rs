@@ -13,7 +13,7 @@ use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
 use screenpipe_server::{
-    PipeManager, ResourceMonitor, SCServer, start_continuous_recording, start_sleep_monitor,
+    ResourceMonitor, SCServer, start_continuous_recording, start_sleep_monitor,
     start_ui_recording, UiRecorderConfig,
     vision_manager::{VisionManager, VisionManagerConfig, start_monitor_watcher, stop_monitor_watcher},
 };
@@ -542,19 +542,14 @@ pub async fn start_embedded_server(
     // Tracks system sleep/wake events and checks if recording degrades after wake
     start_sleep_monitor();
 
-    // Create pipe manager (disabled)
-    let pipe_manager = Arc::new(PipeManager::new(local_data_dir.clone()));
-
     // Create and start HTTP server
     let server = SCServer::new(
         db.clone(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.port),
         local_data_dir,
-        pipe_manager,
         config.disable_vision,
         config.disable_audio,
         audio_manager.clone(),
-        false, // disable pipes
         config.use_pii_removal,
         config.video_quality.clone(),
     );
