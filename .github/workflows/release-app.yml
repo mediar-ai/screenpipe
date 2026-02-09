@@ -81,21 +81,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RUNNER_CHECK_TOKEN }}
         run: |
-          # Check if runner is online AND not busy (available = can start immediately)
           check_runner() {
             local label="$1"
-            local info
-            info=$(gh api repos/${{ github.repository }}/actions/runners \
-              --jq ".runners[] | select(.labels[].name == \"$label\") | {status: .status, busy: .busy}" 2>/dev/null || echo '{"status":"offline","busy":true}')
-            local status=$(echo "$info" | jq -r '.status // "offline"')
-            local busy=$(echo "$info" | jq -r '.busy // true')
-            if [ "$status" = "online" ] && [ "$busy" = "false" ]; then
-              echo "available"
-            elif [ "$status" = "online" ]; then
-              echo "busy"
-            else
-              echo "offline"
-            fi
+            local status
+            status=$(gh api repos/${{ github.repository }}/actions/runners \
+              --jq ".runners[] | select(.labels[].name == \"$label\") | .status" 2>/dev/null || echo "offline")
+            echo "${status:-offline}"
           }
 
           # Force GitHub-hosted runners if requested
@@ -104,30 +95,31 @@ jobs:
             echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
             echo "⚠️ Forcing GitHub-hosted runners (manual override)"
           else
-            # macOS aarch64: prefer available self-hosted, fallback to GH-hosted if busy/offline
+            # macOS aarch64: ALWAYS prefer self-hosted (has Xcode 26 for Apple Intelligence)
+            # Accept queue wait — Apple Intelligence requires macOS 26 SDK
             MACBOOK=$(check_runner "macos-26")
             MACMINI=$(check_runner "macos-test")
 
-            if [ "$MACBOOK" = "available" ]; then
+            if [ "$MACBOOK" = "online" ]; then
               echo "macos_arm_runner=macos-26" >> $GITHUB_OUTPUT
-              echo "✅ MacBook (macos-26) is available"
-            elif [ "$MACMINI" = "available" ]; then
+              echo "✅ MacBook (macos-26) is online (may queue if busy — needed for Apple Intelligence)"
+            elif [ "$MACMINI" = "online" ]; then
               echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
-              echo "⚠️ MacBook busy/offline — using Mac Mini (macos-test)"
+              echo "⚠️ MacBook offline — using Mac Mini (macos-test)"
             else
               echo "macos_arm_runner=macos-latest" >> $GITHUB_OUTPUT
-              echo "ℹ️ All self-hosted runners busy/offline — using GH-hosted macos-latest"
+              echo "⚠️ All self-hosted offline — using GH-hosted (NO Apple Intelligence)"
             fi
 
-            # Windows: prefer self-hosted if available, fallback to GH-hosted
+            # Windows: prefer self-hosted if online, fallback to GH-hosted
             WINRUNNER=$(check_runner "windows-desktop-test")
 
-            if [ "$WINRUNNER" = "available" ]; then
+            if [ "$WINRUNNER" = "online" ]; then
               echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
-              echo "✅ Windows self-hosted runner is available"
+              echo "✅ Windows self-hosted runner is online"
             else
               echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
-              echo "ℹ️ Windows self-hosted busy/offline — using GH-hosted windows-2019"
+              echo "ℹ️ Windows self-hosted offline — using GH-hosted windows-2019"
             fi
           fi
 
