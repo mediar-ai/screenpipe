@@ -794,6 +794,8 @@ jobs:
           SHOULD_RELEASE: ${{ needs.check_commit.outputs.should_release }}
           SHOULD_BETA: ${{ needs.check_commit.outputs.should_beta }}
           IS_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         run: |
           # create temp directory for cli
           $cliDir = Join-Path $Env:GITHUB_WORKSPACE "cn-cli-temp"
@@ -856,7 +858,7 @@ jobs:
             Get-ChildItem -Path "target" -Recurse -Include "*.nsis*","*.exe","*.sig","*.msi" | Where-Object { $_.DirectoryName -match "bundle|release$" } | Remove-Item -Force -ErrorAction SilentlyContinue
             # Rebuild (Rust cached, just repackages) - run from project root
             Push-Location ..
-            bunx tauri build --target x86_64-pc-windows-msvc --features official-build
+            bunx tauri build --target x86_64-pc-windows-msvc --features mkl
             Pop-Location
             Write-Host "=== Beta rebuild complete ==="
             Write-Host "Beta artifacts:"
