@@ -644,14 +644,16 @@ pub async fn show_shortcut_reminder(
                     // Exclude from screen capture (NSWindowSharingNone = 0)
                     let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };
 
+                    // CanJoinAllSpaces: visible on ALL Spaces simultaneously
+                    // (not MoveToActiveSpace which only follows the active Space)
                     panel.set_collection_behaviour(
-                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                     );
                     // Order front regardless to show above fullscreen
                     panel.order_front_regardless();
-                    info!("Panel configured for fullscreen support");
+                    info!("Panel configured for all-Spaces fullscreen support");
                 } else {
                     error!("Failed to get panel in main thread");
                 }

@@ -444,6 +444,7 @@ impl ShowRewindWindow {
                         }
                         panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
+                        crate::space_monitor::suppress_space_monitor(500);
                         unsafe {
                             use tauri_nspanel::cocoa::base::id;
                             let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
@@ -527,6 +528,7 @@ impl ShowRewindWindow {
                         panel.order_front_regardless();
                         // Activate app so WKWebView receives keyboard input,
                         // then make panel key window.
+                        crate::space_monitor::suppress_space_monitor(500);
                         unsafe {
                             let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
                             let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
@@ -642,6 +644,7 @@ impl ShowRewindWindow {
                             );
                             // Activate so the chat panel appears on the current
                             // fullscreen Space and receives keyboard input.
+                            crate::space_monitor::suppress_space_monitor(500);
                             unsafe {
                                 use tauri_nspanel::cocoa::base::id;
                                 let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
@@ -649,6 +652,12 @@ impl ShowRewindWindow {
                             }
                             panel.order_front_regardless();
                             panel.make_key_window();
+                            // Remove MoveToActiveSpace now that the panel is shown.
+                            // Keeps it pinned to THIS Space so it won't follow
+                            // three-finger swipes (same pattern as main overlay).
+                            panel.set_collection_behaviour(
+                                NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                            );
                         }
                     });
 
@@ -762,6 +771,7 @@ impl ShowRewindWindow {
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
                                     // Activate + show on correct Space (same as overlay/chat)
+                                    crate::space_monitor::suppress_space_monitor(500);
                                     unsafe {
                                         use tauri_nspanel::cocoa::base::id;
                                         let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
@@ -1237,6 +1247,7 @@ impl ShowRewindWindow {
                                 // Activate THEN show — same pattern as the fullscreen
                                 // overlay's show_existing_main. This places the panel
                                 // on the current fullscreen Space without Accessory mode.
+                                crate::space_monitor::suppress_space_monitor(500);
                                 unsafe {
                                     use tauri_nspanel::cocoa::base::id;
                                     let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
@@ -1244,6 +1255,13 @@ impl ShowRewindWindow {
                                 }
                                 panel.order_front_regardless();
                                 panel.make_key_window();
+
+                                // Remove MoveToActiveSpace now that the panel is shown.
+                                // Keeps it pinned to THIS Space so it won't follow
+                                // three-finger swipes (same pattern as main overlay).
+                                panel.set_collection_behaviour(
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                                );
                             }
                         });
                     }
