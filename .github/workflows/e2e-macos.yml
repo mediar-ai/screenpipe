@@ -5,8 +5,6 @@ on:
     # Run every 4 hours to catch regressions (not on every release — hogs self-hosted runner)
     - cron: '0 */4 * * *'
   workflow_dispatch:
-  workflow_dispatch:
-    branches: [main]
 
 concurrency:
   group: e2e-macos-${{ github.ref }}

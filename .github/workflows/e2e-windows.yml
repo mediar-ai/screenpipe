@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: System info
-        shell: pwsh
+        shell: powershell
         run: |
           echo "hostname: $env:COMPUTERNAME"
           echo "os: $((Get-CimInstance Win32_OperatingSystem).Caption)"
@@ -35,7 +35,7 @@ jobs:
           echo "memory: $([math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB))GB"
 
       - name: Install/update BigBrother CLI
-        shell: pwsh
+        shell: powershell
         run: |
           $bbDir = "$env:USERPROFILE\Documents\bigbrother"
           if (Test-Path $bbDir) {
@@ -52,7 +52,7 @@ jobs:
           & "$bbBin\bb.exe" --version
 
       - name: Wait for screenpipe to be running
-        shell: pwsh
+        shell: powershell
         run: |
           $proc = Get-Process -Name "screenpipe*" -ErrorAction SilentlyContinue
           if (-not $proc) {
@@ -83,7 +83,7 @@ jobs:
 
       - name: Run E2E tests
         id: e2e
-        shell: pwsh
+        shell: powershell
         env:
           ARTIFACTS_DIR: ${{ runner.temp }}\e2e-artifacts
         run: |
