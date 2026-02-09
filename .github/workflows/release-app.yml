@@ -81,12 +81,45 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RUNNER_CHECK_TOKEN }}
         run: |
+          # Check runner: returns "available" (online+idle), "busy" (online+busy), or "offline"
           check_runner() {
             local label="$1"
-            local status
-            status=$(gh api repos/${{ github.repository }}/actions/runners \
-              --jq ".runners[] | select(.labels[].name == \"$label\") | .status" 2>/dev/null || echo "offline")
-            echo "${status:-offline}"
+            local info
+            info=$(gh api repos/${{ github.repository }}/actions/runners \
+              --jq ".runners[] | select(.labels[].name == \"$label\") | {status: .status, busy: .busy}" 2>/dev/null || echo '{"status":"offline","busy":true}')
+            local status=$(echo "$info" | jq -r '.status // "offline"')
+            local busy=$(echo "$info" | jq -r '.busy // true')
+            if [ "$status" = "online" ] && [ "$busy" = "false" ]; then
+              echo "available"
+            elif [ "$status" = "online" ]; then
+              echo "busy"
+            else
+              echo "offline"
+            fi
+          }
+
+          # Wait up to TIMEOUT seconds for a runner to become available
+          # Returns "available" or "timeout"
+          wait_for_runner() {
+            local label="$1"
+            local timeout="$2"
+            local elapsed=0
+            local interval=30
+            echo "⏳ Waiting up to ${timeout}s for $label to become available..."
+            while [ $elapsed -lt $timeout ]; do
+              local state=$(check_runner "$label")
+              if [ "$state" = "available" ]; then
+                echo "available"
+                return
+              elif [ "$state" = "offline" ]; then
+                echo "offline"
+                return
+              fi
+              echo "  $label is busy, waiting... (${elapsed}s/${timeout}s)" >&2
+              sleep $interval
+              elapsed=$((elapsed + interval))
+            done
+            echo "timeout"
           }
 
           # Force GitHub-hosted runners if requested
@@ -95,31 +128,79 @@ jobs:
             echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
             echo "⚠️ Forcing GitHub-hosted runners (manual override)"
           else
-            # macOS aarch64: ALWAYS prefer self-hosted (has Xcode 26 for Apple Intelligence)
-            # Accept queue wait — Apple Intelligence requires macOS 26 SDK
+            # macOS aarch64 fallback chain (needs Xcode 26 for Apple Intelligence):
+            # 1. MacBook (macos-26) — wait up to 10 min
+            # 2. Mac Mini (macos-test) — wait up to 5 min
+            # 3. GH-hosted (macos-latest) — no Apple Intelligence but always available
             MACBOOK=$(check_runner "macos-26")
-            MACMINI=$(check_runner "macos-test")
 
-            if [ "$MACBOOK" = "online" ]; then
+            if [ "$MACBOOK" = "available" ]; then
               echo "macos_arm_runner=macos-26" >> $GITHUB_OUTPUT
-              echo "✅ MacBook (macos-26) is online (may queue if busy — needed for Apple Intelligence)"
-            elif [ "$MACMINI" = "online" ]; then
-              echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
-              echo "⚠️ MacBook offline — using Mac Mini (macos-test)"
+              echo "✅ MacBook (macos-26) is available"
+            elif [ "$MACBOOK" = "busy" ]; then
+              RESULT=$(wait_for_runner "macos-26" 600)
+              if [ "$RESULT" = "available" ]; then
+                echo "macos_arm_runner=macos-26" >> $GITHUB_OUTPUT
+                echo "✅ MacBook (macos-26) became available"
+              else
+                echo "⚠️ MacBook timed out after 10 min, trying Mac Mini..."
+                MACMINI=$(check_runner "macos-test")
+                if [ "$MACMINI" = "available" ]; then
+                  echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
+                  echo "✅ Mac Mini (macos-test) is available"
+                elif [ "$MACMINI" = "busy" ]; then
+                  RESULT2=$(wait_for_runner "macos-test" 300)
+                  if [ "$RESULT2" = "available" ]; then
+                    echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
+                    echo "✅ Mac Mini (macos-test) became available"
+                  else
+                    echo "macos_arm_runner=macos-latest" >> $GITHUB_OUTPUT
+                    echo "⚠️ All self-hosted timed out — using GH-hosted (NO Apple Intelligence)"
+                  fi
+                else
+                  echo "macos_arm_runner=macos-latest" >> $GITHUB_OUTPUT
+                  echo "⚠️ Mac Mini offline — using GH-hosted (NO Apple Intelligence)"
+                fi
+              fi
             else
-              echo "macos_arm_runner=macos-latest" >> $GITHUB_OUTPUT
-              echo "⚠️ All self-hosted offline — using GH-hosted (NO Apple Intelligence)"
+              # MacBook offline, try Mac Mini directly
+              MACMINI=$(check_runner "macos-test")
+              if [ "$MACMINI" = "available" ]; then
+                echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
+                echo "✅ Mac Mini (macos-test) is available"
+              elif [ "$MACMINI" = "busy" ]; then
+                RESULT2=$(wait_for_runner "macos-test" 300)
+                if [ "$RESULT2" = "available" ]; then
+                  echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
+                  echo "✅ Mac Mini (macos-test) became available"
+                else
+                  echo "macos_arm_runner=macos-latest" >> $GITHUB_OUTPUT
+                  echo "⚠️ Mac Mini timed out — using GH-hosted (NO Apple Intelligence)"
+                fi
+              else
+                echo "macos_arm_runner=macos-latest" >> $GITHUB_OUTPUT
+                echo "⚠️ All self-hosted offline — using GH-hosted (NO Apple Intelligence)"
+              fi
             fi
 
-            # Windows: prefer self-hosted if online, fallback to GH-hosted
+            # Windows: try self-hosted, wait up to 5 min, fallback to GH-hosted
             WINRUNNER=$(check_runner "windows-desktop-test")
 
-            if [ "$WINRUNNER" = "online" ]; then
+            if [ "$WINRUNNER" = "available" ]; then
               echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
-              echo "✅ Windows self-hosted runner is online"
+              echo "✅ Windows self-hosted is available"
+            elif [ "$WINRUNNER" = "busy" ]; then
+              RESULT=$(wait_for_runner "windows-desktop-test" 300)
+              if [ "$RESULT" = "available" ]; then
+                echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
+                echo "✅ Windows self-hosted became available"
+              else
+                echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
+                echo "ℹ️ Windows self-hosted timed out — using GH-hosted"
+              fi
             else
               echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
-              echo "ℹ️ Windows self-hosted offline — using GH-hosted windows-2019"
+              echo "ℹ️ Windows self-hosted offline — using GH-hosted"
             fi
           fi
 
