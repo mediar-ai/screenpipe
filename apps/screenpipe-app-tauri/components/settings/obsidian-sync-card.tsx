@@ -139,12 +139,21 @@ interface SyncHistoryEntry {
   error?: string;
 }
 
+const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone; // e.g. "America/New_York"
+
+const DEFAULT_CUSTOM_PROMPT = `use timezone: ${userTimezone}
+embed video clips for meetings using absolute file paths
+include timeline deep links for key moments
+use [[Name]] wiki-links for people and projects
+one file per day, daily note obsidian style
+be concise, capture reminders, todos, goals`;
+
 const DEFAULT_SETTINGS: ObsidianSyncSettings = {
   enabled: false,
   vaultPath: "",
   notesPath: "screenpipe/logs", // Default subfolder
   syncIntervalMinutes: 0, // 0 = manual only
-  customPrompt: "",
+  customPrompt: DEFAULT_CUSTOM_PROMPT,
   lastSyncTime: null,
   syncHours: 2,
 };
@@ -175,6 +184,10 @@ export function ObsidianSyncCard() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // Preserve pre-filled custom prompt for existing users who never set one
+        if (!parsed.customPrompt) {
+          parsed.customPrompt = DEFAULT_CUSTOM_PROMPT;
+        }
         setSettings({ ...DEFAULT_SETTINGS, ...parsed });
       } catch (e) {
         console.error("Failed to parse obsidian settings:", e);
@@ -688,7 +701,7 @@ export function ObsidianSyncCard() {
             {/* Custom Prompt */}
             <div className="space-y-1.5">
               <Label htmlFor="custom-prompt" className="text-xs font-medium">Custom instructions</Label>
-              <Textarea id="custom-prompt" value={settings.customPrompt} onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))} placeholder="e.g. include timeline deep links for key moments · embed video clips for meetings · focus on coding and meetings · use [[Project Name]] wiki-links" rows={2} className="text-xs" />
+              <Textarea id="custom-prompt" value={settings.customPrompt} onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))} rows={4} className="text-xs" />
             </div>
           </div>
         )}
