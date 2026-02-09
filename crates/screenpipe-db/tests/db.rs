@@ -857,6 +857,13 @@ mod tests {
         let db = setup_test_db().await;
 
         // insert n audio chunks for each speaker
+        // Transcription text must be very different per insert to avoid cross-device dedup
+        // (85% similarity threshold within 45s window)
+        let transcriptions: Vec<Vec<&str>> = vec![
+            vec!["the quick brown fox jumps over the lazy dog"],
+            vec!["quantum computing revolutionizes cryptography today", "blockchain networks secure digital transactions worldwide"],
+            vec!["artificial intelligence transforms healthcare diagnostics rapidly", "machine learning models predict weather patterns accurately", "neural networks process natural language understanding efficiently"],
+        ];
         for n in 0..3 {
             let speaker = db.insert_speaker(&vec![n as f32; 512]).await.unwrap();
             for i in 0..=n {
@@ -866,7 +873,7 @@ mod tests {
                     .unwrap();
                 db.insert_audio_transcription(
                     audio_chunk_id,
-                    "test transcription",
+                    transcriptions[n][i],
                     0,
                     "",
                     &AudioDevice {
@@ -924,16 +931,22 @@ mod tests {
         let db = setup_test_db().await;
 
         // insert n audio chunks for each speaker
+        // Transcription text must be very different per insert to avoid cross-device dedup
+        let transcriptions_ids: Vec<Vec<&str>> = vec![
+            vec!["penguins waddle across frozen antarctic landscapes gracefully"],
+            vec!["volcanic eruptions reshape island geography dramatically overnight", "tectonic plates shift beneath ocean floors continuously"],
+            vec!["photosynthesis converts sunlight into chemical energy storage", "mitochondria generate cellular power through oxidative processes", "ribosomes assemble protein chains from messenger templates"],
+        ];
         for n in 0..3 {
             let speaker = db.insert_speaker(&vec![n as f32; 512]).await.unwrap();
             for i in 0..=n {
                 let audio_chunk_id = db
-                    .insert_audio_chunk(&format!("audio{}{}", n, i))
+                    .insert_audio_chunk(&format!("audio_ids_{}{}", n, i))
                     .await
                     .unwrap();
                 db.insert_audio_transcription(
                     audio_chunk_id,
-                    "test transcription",
+                    transcriptions_ids[n][i],
                     0,
                     "",
                     &AudioDevice {
@@ -1085,7 +1098,7 @@ mod tests {
         let audio_chunk_id = db.insert_audio_chunk("test_audio1.mp4").await.unwrap();
         db.insert_audio_transcription(
             audio_chunk_id,
-            "test transcription",
+            "similar speakers test transcription one",
             0,
             "",
             &AudioDevice {
@@ -1105,7 +1118,7 @@ mod tests {
         let audio_chunk_id2 = db.insert_audio_chunk("test_audio2.mp4").await.unwrap();
         db.insert_audio_transcription(
             audio_chunk_id2,
-            "test transcription",
+            "similar speakers test transcription two",
             0,
             "",
             &AudioDevice {
