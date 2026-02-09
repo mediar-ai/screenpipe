@@ -2,11 +2,35 @@ use image::DynamicImage;
 use rusty_tesseract::{Args, DataOutput, Image};
 use screenpipe_core::{Language, TESSERACT_LANGUAGES};
 use std::collections::HashMap;
+use tracing::warn;
+
+/// Ensure TESSDATA_PREFIX is set so tesseract can find language data files.
+fn ensure_tessdata_prefix() {
+    if std::env::var("TESSDATA_PREFIX").is_ok() {
+        return;
+    }
+    // Common distro paths for tessdata
+    let candidates = [
+        "/usr/share/tesseract-ocr/5/tessdata",
+        "/usr/share/tesseract-ocr/4/tessdata",
+        "/usr/share/tesseract/tessdata",
+        "/usr/share/tessdata",
+        "/usr/local/share/tessdata",
+    ];
+    for path in &candidates {
+        if std::path::Path::new(path).join("eng.traineddata").exists() {
+            std::env::set_var("TESSDATA_PREFIX", path);
+            return;
+        }
+    }
+}
 
 pub fn perform_ocr_tesseract(
     image: &DynamicImage,
     languages: Vec<Language>,
 ) -> (String, String, Option<f64>) {
+    ensure_tessdata_prefix();
+
     let language_string = match languages.is_empty() {
         true => "eng".to_string(),
         _ => TESSERACT_LANGUAGES
@@ -29,11 +53,22 @@ pub fn perform_ocr_tesseract(
         oem: Some(1), //1: Neural nets LSTM engine only,    3: Default, based on what is available. (Default)
     };
 
-    let ocr_image = Image::from_dynamic_image(image).unwrap();
+    let ocr_image = match Image::from_dynamic_image(image) {
+        Ok(img) => img,
+        Err(e) => {
+            warn!("tesseract: failed to convert image: {}", e);
+            return (String::new(), "[]".to_string(), None);
+        }
+    };
 
     // Extract data output
-    let data_output = rusty_tesseract::image_to_data(&ocr_image, &args).unwrap();
-    // let tsv_output = data_output_to_tsv(&data_output);
+    let data_output = match rusty_tesseract::image_to_data(&ocr_image, &args) {
+        Ok(data) => data,
+        Err(e) => {
+            warn!("tesseract: OCR failed: {}", e);
+            return (String::new(), "[]".to_string(), None);
+        }
+    };
 
     // Extract text from data output
     let text = data_output_to_text(&data_output);
