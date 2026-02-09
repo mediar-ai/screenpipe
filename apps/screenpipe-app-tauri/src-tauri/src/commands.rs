@@ -571,6 +571,15 @@ pub async fn show_shortcut_reminder(
             let app_clone = app_handle.clone();
             let _ = app_handle.run_on_main_thread(move || {
                 if let Ok(panel) = app_clone.get_webview_panel("shortcut-reminder") {
+                    use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                    // Re-set level and behaviors on every show — order_out
+                    // may have cleared the Space association.
+                    panel.set_level(1001);
+                    panel.set_collection_behaviour(
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
+                        NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                    );
                     panel.order_front_regardless();
                 }
             });

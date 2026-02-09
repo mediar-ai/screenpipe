@@ -642,15 +642,18 @@ impl ShowRewindWindow {
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                             );
-                            // Activate so the chat panel appears on the current
-                            // fullscreen Space and receives keyboard input.
+                            // order_front FIRST, then activate — same order as
+                            // show_existing_main. Activating first on a fullscreen
+                            // Space causes macOS to switch Spaces before the panel
+                            // appears; ordering front first places the panel on the
+                            // current Space, then activation happens in-place.
+                            panel.order_front_regardless();
                             crate::space_monitor::suppress_space_monitor(500);
                             unsafe {
                                 use tauri_nspanel::cocoa::base::id;
                                 let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
                                 let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
                             }
-                            panel.order_front_regardless();
                             panel.make_key_window();
                             // Remove MoveToActiveSpace now that the panel is shown.
                             // Keeps it pinned to THIS Space so it won't follow
@@ -1215,7 +1218,12 @@ impl ShowRewindWindow {
                         .hidden_title(true);
                     let window = builder.build()?;
 
-                    // Convert to panel for fullscreen support
+                    // Convert to panel for fullscreen support.
+                    // Only configure level + behaviors here — do NOT activate
+                    // or show. The show_existing path handles that when the
+                    // user presses the shortcut. This matches the main overlay
+                    // creation pattern and avoids focus-stealing on startup
+                    // when the panel is pre-created hidden.
                     if let Ok(_panel) = window.to_panel() {
                         info!("Successfully converted chat window to panel");
 
@@ -1239,27 +1247,11 @@ impl ShowRewindWindow {
                                 let sharing: u64 = if capturable { 1 } else { 0 };
                                 let _: () = unsafe { msg_send![&*panel, setSharingType: sharing] };
 
+                                // MoveToActiveSpace so show_existing can pull
+                                // it to any Space (including fullscreen).
                                 panel.set_collection_behaviour(
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
-                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
-                                );
-
-                                // Activate THEN show — same pattern as the fullscreen
-                                // overlay's show_existing_main. This places the panel
-                                // on the current fullscreen Space without Accessory mode.
-                                crate::space_monitor::suppress_space_monitor(500);
-                                unsafe {
-                                    use tauri_nspanel::cocoa::base::id;
-                                    let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
-                                    let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
-                                }
-                                panel.order_front_regardless();
-                                panel.make_key_window();
-
-                                // Remove MoveToActiveSpace now that the panel is shown.
-                                // Keeps it pinned to THIS Space so it won't follow
-                                // three-finger swipes (same pattern as main overlay).
-                                panel.set_collection_behaviour(
+                                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
                                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                 );
                             }

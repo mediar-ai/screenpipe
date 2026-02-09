@@ -11,7 +11,7 @@ these break CONSTANTLY. any change to `window_api.rs`, `main.rs` shortcuts, acti
 commits that broke this area: `0752ea59`, `d89c5f14`, `4a64fd1a`, `fa591d6e`, `8706ae73`, `6d44af13`, `b6ff1bf7`, `09a18070`
 
 - [ ] **overlay shortcut on fullscreen space** — press shortcut while a fullscreen app (e.g., Chrome fullscreen) is active. overlay MUST appear on top.
-- [ ] **chat shortcut on fullscreen space** — press chat shortcut while on a fullscreen space. chat panel MUST appear on top. ⚠️ CURRENTLY BROKEN (Accessory mode removed in `0752ea59`)
+- [ ] **chat shortcut on fullscreen space** — press chat shortcut while on a fullscreen space. chat panel MUST appear on top. Fixed: panel pre-created at startup, show uses order_front→activate order.
 - [ ] **chat shortcut on normal desktop** — chat appears, receives keyboard focus, can type immediately.
 - [ ] **overlay toggle on/off** — press shortcut twice. first shows, second hides. no "ghost" window left behind.
 - [ ] **chat toggle on/off** — press chat shortcut twice. first shows, second closes.
@@ -248,7 +248,7 @@ run section 7 and 10.
 - macOS only shows permission prompts once (NotDetermined → Denied is permanent). must use System Settings to re-grant.
 - debug builds use ~3-5x more CPU than release builds for vision pipeline.
 - first frame after app launch always triggers OCR (intentional — no previous frame to compare against).
-- chat panel can't appear on fullscreen spaces when created for the first time (needs Accessory mode or pre-creation at startup). workaround: pre-create panel hidden at launch.
+- chat panel is pre-created hidden at startup so it exists before user presses the shortcut. Creation no longer activates/shows — only the show_existing path does (matching main overlay pattern).
 - shortcut reminder should use `CanJoinAllSpaces` (visible on all Spaces simultaneously). chat and main overlay should use `MoveToActiveSpace` (moved to current Space on show, then flag removed to pin).
 
 ## log locations
