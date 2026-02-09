@@ -164,7 +164,6 @@
       ]
     },
     "cli:default",
-    "shell:default",
     "shell:allow-spawn",
     "dialog:default",
     "updater:default",
@@ -353,7 +352,6 @@
         }
       ]
     },
-    "opener:default",
     "opener:default",
     {
       "identifier": "shell:allow-execute",

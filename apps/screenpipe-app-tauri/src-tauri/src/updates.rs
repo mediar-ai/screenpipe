@@ -701,12 +701,19 @@ pub fn start_update_check(
 ) -> Result<Arc<UpdatesManager>, Box<dyn std::error::Error>> {
     let updates_manager = Arc::new(UpdatesManager::new(app, interval_minutes)?);
 
-    // Back up current app on every launch so rollback is always available.
-    // Previously backup only ran right before download_and_install, which
-    // meant fresh installs (not via in-app update) had no rollback target.
+    // Back up current app on launch ONLY if no backup exists yet.
+    // The pre-update backup (before download_and_install) is the real rollback target.
+    // Previously this ran unconditionally, overwriting the previous version backup
+    // with the current version — making rollback useless.
     if !is_source_build(app) && !cfg!(debug_assertions) {
         std::thread::spawn(|| {
-            backup_current_app();
+            if rollback_version().is_none() {
+                info!("rollback: no backup exists, backing up current version");
+                backup_current_app();
+            } else {
+                info!("rollback: backup already exists (v{}), skipping launch backup",
+                    rollback_version().unwrap_or_default());
+            }
         });
     }
 
