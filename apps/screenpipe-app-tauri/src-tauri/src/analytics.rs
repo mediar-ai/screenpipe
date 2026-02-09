@@ -58,6 +58,9 @@ impl AnalyticsManager {
 
         let app_version = env!("CARGO_PKG_VERSION");
 
+        let os_name = system.name().unwrap_or_default();
+        let os_version = system.os_version().unwrap_or_default();
+
         let mut payload = json!({
             "api_key": self.posthog_api_key,
             "event": event,
@@ -65,13 +68,20 @@ impl AnalyticsManager {
                 "distinct_id": self.distinct_id,
                 "$lib": "rust-reqwest",
                 "$email": self.email,
-                "os_name": system.name().unwrap_or_default(),
-                "os_version": system.os_version().unwrap_or_default(),
+                "os_name": os_name,
+                "os_version": os_version,
                 "kernel_version": system.kernel_version().unwrap_or_default(),
                 "host_name": system.host_name().unwrap_or_default(),
                 "cpu_count": system.cpus().len(),
                 "total_memory": system.total_memory(),
                 "app_version": app_version,
+                // PostHog standard fields for version tracking
+                "release": format!("screenpipe-app@{}", app_version),
+                "$set": {
+                    "app_version": app_version,
+                    "os_name": os_name,
+                    "os_version": os_version,
+                },
             },
         });
 
