@@ -91,8 +91,14 @@ pub async fn start_device_monitor(
                         // Start the new default input device
                         if let Ok(new_device) = parse_audio_device(&new_default_input) {
                             match audio_manager.start_device(&new_device).await {
-                                Ok(()) => info!("switched to new system default input: {}", new_default_input),
-                                Err(e) => error!("failed to start new default input {}: {}", new_default_input, e),
+                                Ok(()) => info!(
+                                    "switched to new system default input: {}",
+                                    new_default_input
+                                ),
+                                Err(e) => error!(
+                                    "failed to start new default input {}: {}",
+                                    new_default_input, e
+                                ),
                             }
                         }
                     }
@@ -113,8 +119,14 @@ pub async fn start_device_monitor(
                         // Start the new default output device
                         if let Ok(new_device) = parse_audio_device(&new_default_output) {
                             match audio_manager.start_device(&new_device).await {
-                                Ok(()) => info!("switched to new system default output: {}", new_default_output),
-                                Err(e) => error!("failed to start new default output {}: {}", new_default_output, e),
+                                Ok(()) => info!(
+                                    "switched to new system default output: {}",
+                                    new_default_output
+                                ),
+                                Err(e) => error!(
+                                    "failed to start new default output {}: {}",
+                                    new_default_output, e
+                                ),
                             }
                         }
                     }

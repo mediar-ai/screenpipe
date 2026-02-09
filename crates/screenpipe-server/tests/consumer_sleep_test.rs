@@ -9,7 +9,6 @@
 ///
 /// This test simulates the producer/consumer pattern with an ArrayQueue and verifies
 /// that all frames are consumed without drops under burst conditions.
-
 use crossbeam::queue::ArrayQueue;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -132,7 +131,8 @@ async fn test_old_consumer_cannot_keep_up_with_burst() {
     assert!(
         total_lost > 0 || total_dropped > 0,
         "Old consumer SHOULD lose frames: lost={}, dropped={}",
-        total_lost, total_dropped
+        total_lost,
+        total_dropped
     );
     assert!(
         total_processed < total_produced / 2,

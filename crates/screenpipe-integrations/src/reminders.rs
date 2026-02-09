@@ -6,11 +6,11 @@
 //!
 //! All operations are synchronous and safe to call from a tokio blocking task.
 
+use chrono::Datelike;
 use eventkit::{
-    AuthorizationStatus, CalendarInfo, EventKitError, RemindersManager, ReminderItem,
+    AuthorizationStatus, CalendarInfo, EventKitError, ReminderItem, RemindersManager,
     Result as EKResult,
 };
-use chrono::Datelike;
 use objc2::rc::Retained;
 use objc2::Message;
 use objc2_event_kit::{EKCalendar, EKEntityType, EKEventStore, EKReminder, EKSource, EKSourceType};
@@ -176,10 +176,7 @@ impl ScreenpipeReminders {
 
     // ── Private helpers ────────────────────────────────────────────────
 
-    fn find_calendar_by_title(
-        &self,
-        title: &str,
-    ) -> EKResult<Retained<EKCalendar>> {
+    fn find_calendar_by_title(&self, title: &str) -> EKResult<Retained<EKCalendar>> {
         let calendars = unsafe { self.store.calendarsForEntityType(EKEntityType::Reminder) };
         for cal in calendars.iter() {
             let cal_title = unsafe { cal.title() };
@@ -341,7 +338,12 @@ mod tests {
 
         // Create
         let item = r
-            .create_reminder("Test lifecycle", Some("notes here"), Some(list), Some("tomorrow"))
+            .create_reminder(
+                "Test lifecycle",
+                Some("notes here"),
+                Some(list),
+                Some("tomorrow"),
+            )
             .expect("create failed");
         println!("Created: {} ({})", item.title, item.identifier);
         assert_eq!(item.title, "Test lifecycle");
@@ -356,7 +358,9 @@ mod tests {
         assert_eq!(got.title, "Test lifecycle");
 
         // Complete
-        let completed = r.complete_reminder(&item.identifier).expect("complete failed");
+        let completed = r
+            .complete_reminder(&item.identifier)
+            .expect("complete failed");
         assert!(completed.completed);
 
         // Delete

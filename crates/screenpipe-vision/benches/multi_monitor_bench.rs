@@ -29,11 +29,31 @@ struct MonitorConfig {
 }
 
 const MONITORS: &[MonitorConfig] = &[
-    MonitorConfig { name: "1080p", width: 1920, height: 1080 },
-    MonitorConfig { name: "1440p", width: 2560, height: 1440 },
-    MonitorConfig { name: "4K", width: 3840, height: 2160 },
-    MonitorConfig { name: "ultrawide_49", width: 5120, height: 1440 },
-    MonitorConfig { name: "superwide_38", width: 3840, height: 1440 },
+    MonitorConfig {
+        name: "1080p",
+        width: 1920,
+        height: 1080,
+    },
+    MonitorConfig {
+        name: "1440p",
+        width: 2560,
+        height: 1440,
+    },
+    MonitorConfig {
+        name: "4K",
+        width: 3840,
+        height: 2160,
+    },
+    MonitorConfig {
+        name: "ultrawide_49",
+        width: 5120,
+        height: 1440,
+    },
+    MonitorConfig {
+        name: "superwide_38",
+        width: 3840,
+        height: 1440,
+    },
 ];
 
 // Realistic multi-monitor setups
@@ -124,17 +144,13 @@ fn bench_hash_full_vs_downscaled(c: &mut Criterion) {
         group.throughput(Throughput::Bytes(bytes));
 
         // Current: hash full resolution
-        group.bench_with_input(
-            BenchmarkId::new("full_res", mon.name),
-            &image,
-            |b, img| {
-                b.iter(|| {
-                    let mut hasher = DefaultHasher::new();
-                    black_box(img).as_bytes().hash(&mut hasher);
-                    hasher.finish()
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("full_res", mon.name), &image, |b, img| {
+            b.iter(|| {
+                let mut hasher = DefaultHasher::new();
+                black_box(img).as_bytes().hash(&mut hasher);
+                hasher.finish()
+            });
+        });
 
         // Proposed: hash after downscale (factor /4)
         let quarter_w = (mon.width / 4).max(1);
@@ -245,9 +261,18 @@ fn bench_detection_accuracy(c: &mut Criterion) {
     let changes: Vec<(&str, DynamicImage)> = vec![
         ("identical", create_code_screen(mon.width, mon.height, 0)),
         ("tiny_change", create_code_screen(mon.width, mon.height, 1)),
-        ("small_change", create_code_screen(mon.width, mon.height, 10)),
-        ("large_change", create_code_screen(mon.width, mon.height, 128)),
-        ("different_content", create_chart_screen(mon.width, mon.height, 0)),
+        (
+            "small_change",
+            create_code_screen(mon.width, mon.height, 10),
+        ),
+        (
+            "large_change",
+            create_code_screen(mon.width, mon.height, 128),
+        ),
+        (
+            "different_content",
+            create_chart_screen(mon.width, mon.height, 0),
+        ),
     ];
 
     for (change_name, changed) in &changes {
@@ -314,11 +339,26 @@ fn bench_multi_monitor_pipeline(c: &mut Criterion) {
             .map(|&idx| {
                 let mon = &MONITORS[idx];
                 vec![
-                    (create_code_screen(mon.width, mon.height, 0), create_code_screen(mon.width, mon.height, 0)),
-                    (create_code_screen(mon.width, mon.height, 0), create_code_screen(mon.width, mon.height, 0)),
-                    (create_code_screen(mon.width, mon.height, 0), create_code_screen(mon.width, mon.height, 0)),
-                    (create_code_screen(mon.width, mon.height, 10), create_code_screen(mon.width, mon.height, 10)),
-                    (create_code_screen(mon.width, mon.height, 10), create_code_screen(mon.width, mon.height, 10)),
+                    (
+                        create_code_screen(mon.width, mon.height, 0),
+                        create_code_screen(mon.width, mon.height, 0),
+                    ),
+                    (
+                        create_code_screen(mon.width, mon.height, 0),
+                        create_code_screen(mon.width, mon.height, 0),
+                    ),
+                    (
+                        create_code_screen(mon.width, mon.height, 0),
+                        create_code_screen(mon.width, mon.height, 0),
+                    ),
+                    (
+                        create_code_screen(mon.width, mon.height, 10),
+                        create_code_screen(mon.width, mon.height, 10),
+                    ),
+                    (
+                        create_code_screen(mon.width, mon.height, 10),
+                        create_code_screen(mon.width, mon.height, 10),
+                    ),
                 ]
             })
             .collect();
@@ -353,12 +393,14 @@ fn bench_multi_monitor_pipeline(c: &mut Criterion) {
             |b, all_frames| {
                 b.iter(|| {
                     let mut comparers: Vec<FrameComparer> = (0..all_frames.len())
-                        .map(|_| FrameComparer::new(FrameComparisonConfig {
-                            downscale_factor: 0, // Legacy: use fixed 640x360
-                            comparison_width: 640,
-                            comparison_height: 360,
-                            ..Default::default()
-                        }))
+                        .map(|_| {
+                            FrameComparer::new(FrameComparisonConfig {
+                                downscale_factor: 0, // Legacy: use fixed 640x360
+                                comparison_width: 640,
+                                comparison_height: 360,
+                                ..Default::default()
+                            })
+                        })
                         .collect();
 
                     let mut total_ops = 0u64;

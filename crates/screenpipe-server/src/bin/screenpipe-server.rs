@@ -23,11 +23,9 @@ use screenpipe_server::{
     analytics,
     cli::{
         get_or_create_machine_id, AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine,
-        Command, McpCommand, MigrationSubCommand, OutputFormat, SyncCommand,
-        VisionCommand,
+        Command, McpCommand, MigrationSubCommand, OutputFormat, SyncCommand, VisionCommand,
     },
-    handle_index_command,
-    start_continuous_recording, start_sleep_monitor, start_ui_recording,
+    handle_index_command, start_continuous_recording, start_sleep_monitor, start_ui_recording,
     sync_provider::ScreenpipeSyncProvider,
     vision_manager::{
         start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
@@ -292,41 +290,81 @@ async fn main() -> anyhow::Result<()> {
                 id: Some(analytics::get_distinct_id().to_string()),
                 ..Default::default()
             }));
-            scope.set_context("cli_settings", sentry::protocol::Context::Other({
-                let mut map = std::collections::BTreeMap::new();
-                map.insert("fps".into(), json!(cli.fps));
-                map.insert("adaptive_fps".into(), json!(cli.adaptive_fps));
-                map.insert("audio_chunk_duration".into(), json!(cli.audio_chunk_duration));
-                map.insert("port".into(), json!(cli.port));
-                map.insert("disable_audio".into(), json!(cli.disable_audio));
-                map.insert("audio_transcription_engine".into(), json!(format!("{:?}", cli.audio_transcription_engine)));
-                map.insert("enable_realtime_audio_transcription".into(), json!(cli.enable_realtime_audio_transcription));
-                map.insert("enable_realtime_vision".into(), json!(cli.enable_realtime_vision));
-                map.insert("ocr_engine".into(), json!(format!("{:?}", cli.ocr_engine)));
-                map.insert("monitor_ids".into(), json!(cli.monitor_id));
-                map.insert("use_all_monitors".into(), json!(cli.use_all_monitors));
-                map.insert("languages".into(), json!(cli.language.iter().map(|l| format!("{:?}", l)).collect::<Vec<_>>()));
-                map.insert("use_pii_removal".into(), json!(cli.use_pii_removal));
-                map.insert("disable_vision".into(), json!(cli.disable_vision));
-                map.insert("vad_engine".into(), json!(format!("{:?}", cli.vad_engine)));
-                map.insert("vad_sensitivity".into(), json!(format!("{:?}", cli.vad_sensitivity)));
-                map.insert("video_chunk_duration".into(), json!(cli.video_chunk_duration));
-                map.insert("enable_llm".into(), json!(cli.enable_llm));
-                map.insert("enable_frame_cache".into(), json!(cli.enable_frame_cache));
-                map.insert("capture_unfocused_windows".into(), json!(cli.capture_unfocused_windows));
+            scope.set_context(
+                "cli_settings",
+                sentry::protocol::Context::Other({
+                    let mut map = std::collections::BTreeMap::new();
+                    map.insert("fps".into(), json!(cli.fps));
+                    map.insert("adaptive_fps".into(), json!(cli.adaptive_fps));
+                    map.insert(
+                        "audio_chunk_duration".into(),
+                        json!(cli.audio_chunk_duration),
+                    );
+                    map.insert("port".into(), json!(cli.port));
+                    map.insert("disable_audio".into(), json!(cli.disable_audio));
+                    map.insert(
+                        "audio_transcription_engine".into(),
+                        json!(format!("{:?}", cli.audio_transcription_engine)),
+                    );
+                    map.insert(
+                        "enable_realtime_audio_transcription".into(),
+                        json!(cli.enable_realtime_audio_transcription),
+                    );
+                    map.insert(
+                        "enable_realtime_vision".into(),
+                        json!(cli.enable_realtime_vision),
+                    );
+                    map.insert("ocr_engine".into(), json!(format!("{:?}", cli.ocr_engine)));
+                    map.insert("monitor_ids".into(), json!(cli.monitor_id));
+                    map.insert("use_all_monitors".into(), json!(cli.use_all_monitors));
+                    map.insert(
+                        "languages".into(),
+                        json!(cli
+                            .language
+                            .iter()
+                            .map(|l| format!("{:?}", l))
+                            .collect::<Vec<_>>()),
+                    );
+                    map.insert("use_pii_removal".into(), json!(cli.use_pii_removal));
+                    map.insert("disable_vision".into(), json!(cli.disable_vision));
+                    map.insert("vad_engine".into(), json!(format!("{:?}", cli.vad_engine)));
+                    map.insert(
+                        "vad_sensitivity".into(),
+                        json!(format!("{:?}", cli.vad_sensitivity)),
+                    );
+                    map.insert(
+                        "video_chunk_duration".into(),
+                        json!(cli.video_chunk_duration),
+                    );
+                    map.insert("enable_llm".into(), json!(cli.enable_llm));
+                    map.insert("enable_frame_cache".into(), json!(cli.enable_frame_cache));
+                    map.insert(
+                        "capture_unfocused_windows".into(),
+                        json!(cli.capture_unfocused_windows),
+                    );
 
-                map.insert("enable_ui_events".into(), json!(cli.enable_ui_events));
-                map.insert("enable_sync".into(), json!(cli.enable_sync));
-                map.insert("sync_interval_secs".into(), json!(cli.sync_interval_secs));
-                map.insert("debug".into(), json!(cli.debug));
-                // Only send counts for privacy-sensitive lists (not actual values)
-                map.insert("audio_device_count".into(), json!(cli.audio_device.len()));
-                map.insert("realtime_audio_device_count".into(), json!(cli.realtime_audio_device.len()));
-                map.insert("ignored_windows_count".into(), json!(cli.ignored_windows.len()));
-                map.insert("included_windows_count".into(), json!(cli.included_windows.len()));
-                map.insert("ignored_urls_count".into(), json!(cli.ignored_urls.len()));
-                map
-            }));
+                    map.insert("enable_ui_events".into(), json!(cli.enable_ui_events));
+                    map.insert("enable_sync".into(), json!(cli.enable_sync));
+                    map.insert("sync_interval_secs".into(), json!(cli.sync_interval_secs));
+                    map.insert("debug".into(), json!(cli.debug));
+                    // Only send counts for privacy-sensitive lists (not actual values)
+                    map.insert("audio_device_count".into(), json!(cli.audio_device.len()));
+                    map.insert(
+                        "realtime_audio_device_count".into(),
+                        json!(cli.realtime_audio_device.len()),
+                    );
+                    map.insert(
+                        "ignored_windows_count".into(),
+                        json!(cli.ignored_windows.len()),
+                    );
+                    map.insert(
+                        "included_windows_count".into(),
+                        json!(cli.included_windows.len()),
+                    );
+                    map.insert("ignored_urls_count".into(), json!(cli.ignored_urls.len()));
+                    map
+                }),
+            );
         });
 
         Some(guard)

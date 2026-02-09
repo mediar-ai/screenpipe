@@ -8,13 +8,14 @@
 use axum::{
     extract::Json,
     http::StatusCode,
-    response::{sse::{Event, Sse}, IntoResponse},
+    response::{
+        sse::{Event, Sse},
+        IntoResponse,
+    },
     routing::{get, post},
     Router,
 };
-use screenpipe_apple_intelligence::{
-    check_availability, generate_text, prewarm, Availability,
-};
+use screenpipe_apple_intelligence::{check_availability, generate_text, prewarm, Availability};
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use tokio_stream::StreamExt as _;
@@ -26,18 +27,79 @@ const MODEL_NAME: &str = "Apple Intelligence (on-device)";
 // Keeps only sentences likely to contain action items before sending to model.
 // This reduces volume 10-50x, critical for a ~3B model with ~2000 token context.
 const ACTION_KEYWORDS: &[&str] = &[
-    "todo", "to-do", "to do", "need to", "should", "must", "have to", "gotta",
-    "follow up", "follow-up", "followup", "deadline", "reminder", "remember",
-    "don't forget", "dont forget", "buy", "call", "email", "schedule",
-    "fix", "update", "review", "send", "submit", "complete", "finish",
-    "prepare", "book", "remind", "set up", "setup", "arrange", "organize",
-    "plan", "assign", "check", "respond", "reply", "confirm", "cancel",
-    "reschedule", "meeting", "appointment", "task", "action item",
-    "important", "urgent", "asap", "priority", "due", "by tomorrow",
-    "by friday", "by monday", "next week", "eod", "end of day",
-    "action", "blocked", "blocker", "waiting on", "pending",
-    "implement", "deploy", "ship", "release", "merge", "pr",
-    "bug", "issue", "ticket", "jira", "linear",
+    "todo",
+    "to-do",
+    "to do",
+    "need to",
+    "should",
+    "must",
+    "have to",
+    "gotta",
+    "follow up",
+    "follow-up",
+    "followup",
+    "deadline",
+    "reminder",
+    "remember",
+    "don't forget",
+    "dont forget",
+    "buy",
+    "call",
+    "email",
+    "schedule",
+    "fix",
+    "update",
+    "review",
+    "send",
+    "submit",
+    "complete",
+    "finish",
+    "prepare",
+    "book",
+    "remind",
+    "set up",
+    "setup",
+    "arrange",
+    "organize",
+    "plan",
+    "assign",
+    "check",
+    "respond",
+    "reply",
+    "confirm",
+    "cancel",
+    "reschedule",
+    "meeting",
+    "appointment",
+    "task",
+    "action item",
+    "important",
+    "urgent",
+    "asap",
+    "priority",
+    "due",
+    "by tomorrow",
+    "by friday",
+    "by monday",
+    "next week",
+    "eod",
+    "end of day",
+    "action",
+    "blocked",
+    "blocker",
+    "waiting on",
+    "pending",
+    "implement",
+    "deploy",
+    "ship",
+    "release",
+    "merge",
+    "pr",
+    "bug",
+    "issue",
+    "ticket",
+    "jira",
+    "linear",
 ];
 
 const TODO_INSTRUCTIONS: &str = "\
@@ -533,22 +595,21 @@ async fn chat_completions(
         prompt_len, has_tools, req.stream
     );
 
-    let result = tokio::task::spawn_blocking(move || {
-        generate_text(instructions.as_deref(), &prompt)
-    })
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": {"message": e.to_string()}})),
-        )
-    })?
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": {"message": e.to_string()}})),
-        )
-    })?;
+    let result =
+        tokio::task::spawn_blocking(move || generate_text(instructions.as_deref(), &prompt))
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": {"message": e.to_string()}})),
+                )
+            })?
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": {"message": e.to_string()}})),
+                )
+            })?;
 
     eprintln!(
         "[fm-server] response: {} chars, {:.0}ms",
@@ -726,10 +787,7 @@ async fn extract_todos(
     let chunks = chunk_text(&all_filtered_text, chunk_size);
     let num_chunks = chunks.len();
 
-    eprintln!(
-        "[fm-server] extract: processing {} chunks",
-        num_chunks
-    );
+    eprintln!("[fm-server] extract: processing {} chunks", num_chunks);
 
     // Step 3: Process each chunk with generate_json (schema-constrained)
     let mut all_items: Vec<TodoItem> = Vec::new();
@@ -740,7 +798,10 @@ async fn extract_todos(
         let result = tokio::task::spawn_blocking(move || {
             generate_text(
                 Some(TODO_INSTRUCTIONS),
-                &format!("Extract action items from this screen/audio activity:\n\n{}", chunk_clone),
+                &format!(
+                    "Extract action items from this screen/audio activity:\n\n{}",
+                    chunk_clone
+                ),
             )
         })
         .await
@@ -775,9 +836,8 @@ async fn extract_todos(
                 };
 
                 // Try parsing as array directly, or as object with "items" key
-                let items_result: Option<Vec<TodoItem>> = serde_json::from_str(&json_text)
-                    .ok()
-                    .or_else(|| {
+                let items_result: Option<Vec<TodoItem>> =
+                    serde_json::from_str(&json_text).ok().or_else(|| {
                         // Try as {"items": [...]}
                         serde_json::from_str::<serde_json::Value>(&json_text)
                             .ok()
@@ -872,7 +932,10 @@ async fn main() {
         .route("/health", get(health));
 
     let port = std::env::var("FM_PORT").unwrap_or_else(|_| "5273".to_string());
-    eprintln!("\n🧠 Apple Intelligence API at http://localhost:{}/v1", port);
+    eprintln!(
+        "\n🧠 Apple Intelligence API at http://localhost:{}/v1",
+        port
+    );
     eprintln!("   Model: {}", MODEL_NAME);
     eprintln!("   Endpoints:");
     eprintln!("     POST /v1/chat/completions  (OpenAI-compatible)");

@@ -694,7 +694,11 @@ impl VideoMetadataOverride {
     }
 }
 
-pub async fn extract_frame_from_video(file_path: &str, offset_index: i64, jpeg_quality: &str) -> Result<String> {
+pub async fn extract_frame_from_video(
+    file_path: &str,
+    offset_index: i64,
+    jpeg_quality: &str,
+) -> Result<String> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
     // Check if file exists first

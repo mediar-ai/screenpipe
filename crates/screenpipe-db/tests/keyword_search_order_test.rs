@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use chrono::{Duration, Utc};
     use screenpipe_db::{DatabaseManager, OcrEngine, Order};
+    use std::sync::Arc;
 
     async fn setup_test_db() -> DatabaseManager {
         let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
@@ -49,14 +49,9 @@ mod tests {
             .await
             .unwrap();
 
-        db.insert_ocr_text(
-            frame_id,
-            ocr_text,
-            "[]",
-            Arc::new(OcrEngine::AppleNative),
-        )
-        .await
-        .unwrap();
+        db.insert_ocr_text(frame_id, ocr_text, "[]", Arc::new(OcrEngine::AppleNative))
+            .await
+            .unwrap();
 
         frame_id
     }
@@ -68,46 +63,18 @@ mod tests {
         // All frames have "hello" in OCR text so FTS finds them.
         // They differ in timestamp — we verify results come back newest-first.
         // Frame A: 60 min ago, "hello" also in window_name (high relevance)
-        let _frame_a = insert_frame_with_ocr(
-            &db,
-            "Arc",
-            "hello world page",
-            "hello from the browser",
-            60,
-        )
-        .await;
+        let _frame_a =
+            insert_frame_with_ocr(&db, "Arc", "hello world page", "hello from the browser", 60)
+                .await;
 
         // Frame B: 10 min ago, "hello" only in OCR (low relevance)
-        let _frame_b = insert_frame_with_ocr(
-            &db,
-            "WezTerm",
-            "terminal",
-            "echo hello",
-            10,
-        )
-        .await;
+        let _frame_b = insert_frame_with_ocr(&db, "WezTerm", "terminal", "echo hello", 10).await;
 
         // Frame C: 30 min ago
-        let _frame_c = insert_frame_with_ocr(
-            &db,
-            "Cursor",
-            "editor",
-            "println hello",
-            30,
-        )
-        .await;
+        let _frame_c = insert_frame_with_ocr(&db, "Cursor", "editor", "println hello", 30).await;
 
         let results = db
-            .search_with_text_positions(
-                "hello",
-                10,
-                0,
-                None,
-                None,
-                true,
-                Order::Descending,
-                None,
-            )
+            .search_with_text_positions("hello", 10, 0, None, None, true, Order::Descending, None)
             .await
             .unwrap();
 
@@ -143,39 +110,22 @@ mod tests {
     async fn test_keyword_search_sorted_by_timestamp_ascending() {
         let db = setup_test_db().await;
 
-        let _frame_old = insert_frame_with_ocr(
-            &db,
-            "Arc",
-            "browser",
-            "old content with hello",
-            120,
-        )
-        .await;
+        let _frame_old =
+            insert_frame_with_ocr(&db, "Arc", "browser", "old content with hello", 120).await;
 
-        let _frame_new = insert_frame_with_ocr(
-            &db,
-            "WezTerm",
-            "terminal",
-            "new content hello world",
-            5,
-        )
-        .await;
+        let _frame_new =
+            insert_frame_with_ocr(&db, "WezTerm", "terminal", "new content hello world", 5).await;
 
         let results = db
-            .search_with_text_positions(
-                "hello",
-                10,
-                0,
-                None,
-                None,
-                true,
-                Order::Ascending,
-                None,
-            )
+            .search_with_text_positions("hello", 10, 0, None, None, true, Order::Ascending, None)
             .await
             .unwrap();
 
-        assert!(results.len() >= 2, "Expected at least 2 results, got {}", results.len());
+        assert!(
+            results.len() >= 2,
+            "Expected at least 2 results, got {}",
+            results.len()
+        );
 
         // Ascending: oldest first
         for i in 0..results.len() - 1 {
@@ -197,14 +147,8 @@ mod tests {
         // Two frames at the same time, different relevance.
         // Both have "hello" in OCR text so FTS finds both.
         // Frame 1: "hello" only in OCR (relevance 1)
-        let _frame_low = insert_frame_with_ocr(
-            &db,
-            "Terminal",
-            "bash",
-            "hello world from terminal",
-            10,
-        )
-        .await;
+        let _frame_low =
+            insert_frame_with_ocr(&db, "Terminal", "bash", "hello world from terminal", 10).await;
 
         // Frame 2: "hello" in window_name too (relevance 3)
         let _frame_high = insert_frame_with_ocr(
@@ -217,27 +161,19 @@ mod tests {
         .await;
 
         let results = db
-            .search_with_text_positions(
-                "hello",
-                10,
-                0,
-                None,
-                None,
-                true,
-                Order::Descending,
-                None,
-            )
+            .search_with_text_positions("hello", 10, 0, None, None, true, Order::Descending, None)
             .await
             .unwrap();
 
-        assert!(results.len() >= 2, "Expected at least 2 results, got {}", results.len());
+        assert!(
+            results.len() >= 2,
+            "Expected at least 2 results, got {}",
+            results.len()
+        );
 
         // Both have ~same timestamp, so within the same second,
         // the one with "hello" in window_name (higher relevance) should come first
-        let first_has_hello_in_window = results[0]
-            .window_name
-            .to_lowercase()
-            .contains("hello");
+        let first_has_hello_in_window = results[0].window_name.to_lowercase().contains("hello");
         assert!(
             first_has_hello_in_window,
             "Within same timestamp, higher relevance result should come first. Got: {} - {}",

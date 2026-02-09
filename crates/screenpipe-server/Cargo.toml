@@ -21,7 +21,7 @@ screenpipe-core = { path = "../screenpipe-core", features = ["security", "cloud-
 screenpipe-db = { path = "../screenpipe-db" }
 screenpipe-accessibility = { path = "../screenpipe-accessibility", features = ["db"], optional = true }
 screenpipe-apple-intelligence = { path = "../screenpipe-apple-intelligence", optional = true }
-killport = { version = "1.1.0" }
+
 
 # Image processing
 image = { workspace = true }

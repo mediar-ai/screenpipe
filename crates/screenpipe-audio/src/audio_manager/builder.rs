@@ -169,7 +169,9 @@ impl AudioManagerBuilder {
                 devices.push(output.to_string());
             }
             if devices.is_empty() {
-                tracing::warn!("No audio devices found — audio manager will start but won't record");
+                tracing::warn!(
+                    "No audio devices found — audio manager will start but won't record"
+                );
             }
             options.enabled_devices = HashSet::from_iter(devices);
         }

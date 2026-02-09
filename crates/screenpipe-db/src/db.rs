@@ -125,7 +125,7 @@ impl DatabaseManager {
             // connections wait before returning SQLITE_BUSY ("database is locked").
             .busy_timeout(Duration::from_secs(10))
             .pragma("journal_mode", "WAL")
-            .pragma("cache_size", "-64000")   // 64 MB page cache
+            .pragma("cache_size", "-64000") // 64 MB page cache
             .pragma("mmap_size", "268435456") // 256 MB memory-mapped I/O
             .pragma("temp_store", "MEMORY")
             // Checkpoint after 4000 pages (~16MB) instead of default 1000 (~4MB).
@@ -190,13 +190,11 @@ impl DatabaseManager {
             // Update the checksum for any previously-applied migration to match the current file
             let version = migration.version;
             let checksum_bytes: &[u8] = &migration.checksum;
-            sqlx::query(
-                "UPDATE _sqlx_migrations SET checksum = ? WHERE version = ?"
-            )
-            .bind(checksum_bytes)
-            .bind(version)
-            .execute(pool)
-            .await?;
+            sqlx::query("UPDATE _sqlx_migrations SET checksum = ? WHERE version = ?")
+                .bind(checksum_bytes)
+                .bind(version)
+                .execute(pool)
+                .await?;
         }
         tracing::info!("Migration checksums updated successfully");
         Ok(())
@@ -209,14 +207,17 @@ impl DatabaseManager {
     /// when a deferred reader tries to upgrade to writer after another commit.
     ///
     /// Returns an `ImmediateTx` that automatically rolls back on drop if not committed.
-    pub async fn begin_immediate_with_retry(
-        &self,
-    ) -> Result<ImmediateTx, sqlx::Error> {
+    pub async fn begin_immediate_with_retry(&self) -> Result<ImmediateTx, sqlx::Error> {
         let max_retries = 5;
         for attempt in 1..=max_retries {
             let mut conn = self.pool.acquire().await?;
             match sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await {
-                Ok(_) => return Ok(ImmediateTx { conn: Some(conn), committed: false }),
+                Ok(_) => {
+                    return Ok(ImmediateTx {
+                        conn: Some(conn),
+                        committed: false,
+                    })
+                }
                 Err(e) if attempt < max_retries && Self::is_busy_error(&e) => {
                     warn!(
                         "BEGIN IMMEDIATE busy (attempt {}/{}), retrying...",
@@ -494,7 +495,8 @@ impl DatabaseManager {
         file_path: &str,
         device_name: &str,
     ) -> Result<i64, sqlx::Error> {
-        self.insert_video_chunk_with_fps(file_path, device_name, 0.5).await
+        self.insert_video_chunk_with_fps(file_path, device_name, 0.5)
+            .await
     }
 
     pub async fn insert_video_chunk_with_fps(
@@ -504,13 +506,15 @@ impl DatabaseManager {
         fps: f64,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.begin_immediate_with_retry().await?;
-        let id = sqlx::query("INSERT INTO video_chunks (file_path, device_name, fps) VALUES (?1, ?2, ?3)")
-            .bind(file_path)
-            .bind(device_name)
-            .bind(fps)
-            .execute(&mut **tx.conn())
-            .await?
-            .last_insert_rowid();
+        let id = sqlx::query(
+            "INSERT INTO video_chunks (file_path, device_name, fps) VALUES (?1, ?2, ?3)",
+        )
+        .bind(file_path)
+        .bind(device_name)
+        .bind(fps)
+        .execute(&mut **tx.conn())
+        .await?
+        .last_insert_rowid();
         tx.commit().await?;
         Ok(id)
     }
@@ -3364,13 +3368,11 @@ LIMIT ? OFFSET ?
                 let mut tx = self.begin_immediate_with_retry().await?;
 
                 for (emb_id, old_speaker_id) in &similar_rows {
-                    sqlx::query(
-                        "UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?",
-                    )
-                    .bind(target_speaker_id)
-                    .bind(emb_id)
-                    .execute(&mut **tx.conn())
-                    .await?;
+                    sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?")
+                        .bind(target_speaker_id)
+                        .bind(emb_id)
+                        .execute(&mut **tx.conn())
+                        .await?;
                     embeddings_moved += 1;
 
                     sqlx::query(

@@ -98,7 +98,11 @@ pub async fn handle_new_transcript(
         info!(
             "device {} received transcription ({} chars)",
             transcription.input.device,
-            transcription.transcription.as_ref().map(|t| t.len()).unwrap_or(0)
+            transcription
+                .transcription
+                .as_ref()
+                .map(|t| t.len())
+                .unwrap_or(0)
         );
 
         // Insert the new transcript after fetching

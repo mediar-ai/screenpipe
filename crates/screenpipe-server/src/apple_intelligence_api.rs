@@ -416,12 +416,11 @@ pub async fn chat_completions(
             schema_str
         );
 
-        let result = tokio::task::spawn_blocking(move || {
-            generate_text(Some(&json_instructions), &prompt)
-        })
-        .await
-        .map_err(|e| mk_err(&e.to_string()))?
-        .map_err(|e| mk_err(&e.to_string()))?;
+        let result =
+            tokio::task::spawn_blocking(move || generate_text(Some(&json_instructions), &prompt))
+                .await
+                .map_err(|e| mk_err(&e.to_string()))?
+                .map_err(|e| mk_err(&e.to_string()))?;
 
         info!(
             "apple intelligence json response: {} chars, {:.0}ms",
@@ -448,12 +447,11 @@ pub async fn chat_completions(
 
         (json_text, true)
     } else {
-        let result = tokio::task::spawn_blocking(move || {
-            generate_text(instructions.as_deref(), &prompt)
-        })
-        .await
-        .map_err(|e| mk_err(&e.to_string()))?
-        .map_err(|e| mk_err(&e.to_string()))?;
+        let result =
+            tokio::task::spawn_blocking(move || generate_text(instructions.as_deref(), &prompt))
+                .await
+                .map_err(|e| mk_err(&e.to_string()))?
+                .map_err(|e| mk_err(&e.to_string()))?;
 
         info!(
             "apple intelligence text response: {} chars, {:.0}ms",

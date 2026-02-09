@@ -8,10 +8,8 @@
 /// tokio blocking thread pool instead of creating a new OS thread per frame.
 ///
 /// These tests verify the structural properties. Actual capture requires a real display.
-
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-
 
 /// Simulate the OLD behavior: enumerate all monitors and find by ID every frame.
 /// Returns the number of enumerations performed.

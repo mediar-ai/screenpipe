@@ -26,9 +26,14 @@ impl WindowsUrlDetector {
     }
 
     fn get_active_url_from_window(pid: i32) -> Result<Option<String>> {
-        let automation = UIAutomation::new()
-            .map_err(|e| anyhow!("Failed to create UIAutomation (COM thread mode conflict?): {}", e))?;
-        let root_ele = automation.get_root_element()
+        let automation = UIAutomation::new().map_err(|e| {
+            anyhow!(
+                "Failed to create UIAutomation (COM thread mode conflict?): {}",
+                e
+            )
+        })?;
+        let root_ele = automation
+            .get_root_element()
             .map_err(|e| anyhow!("Failed to get root element: {}", e))?;
         let condition = automation
             .create_property_condition(ProcessId, Variant::from(pid as i32), None)

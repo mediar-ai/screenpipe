@@ -97,7 +97,10 @@ pub fn perform_ocr_apple(
 
         // Guard against zero-dimension images that would cause CoreVideo errors
         if width == 0 || height == 0 {
-            error!("Cannot perform OCR on zero-dimension image ({}x{})", width, height);
+            error!(
+                "Cannot perform OCR on zero-dimension image ({}x{})",
+                width, height
+            );
             return default_ocr_result;
         }
 
@@ -123,7 +126,10 @@ pub fn perform_ocr_apple(
         } {
             Ok(buf) => buf,
             Err(e) => {
-                error!("Failed to create pixel buffer for OCR ({}x{}): {:?}", width, height, e);
+                error!(
+                    "Failed to create pixel buffer for OCR ({}x{}): {:?}",
+                    width, height, e
+                );
                 return default_ocr_result;
             }
         };
@@ -155,8 +161,9 @@ pub fn perform_ocr_apple(
                     };
                     let text = observation_result.string();
                     let confidence = observation_result.confidence() as f64;
-                    let Ok(bbox_result) = observation_result
-                        .bounding_box_for_range(ns::Range::new(0, text.len())) else {
+                    let Ok(bbox_result) =
+                        observation_result.bounding_box_for_range(ns::Range::new(0, text.len()))
+                    else {
                         // Skip bounding box if it fails, still capture the text
                         overall_confidence += confidence;
                         ocr_text.push_str(text.to_string().as_str());

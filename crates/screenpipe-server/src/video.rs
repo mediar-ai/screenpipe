@@ -159,10 +159,7 @@ impl VideoCapture {
         let capture_activity_feed = activity_feed;
 
         let capture_thread = tokio::spawn(async move {
-            info!(
-                "Starting continuous_capture for monitor {}",
-                monitor_id
-            );
+            info!("Starting continuous_capture for monitor {}", monitor_id);
 
             loop {
                 match continuous_capture(
@@ -178,10 +175,7 @@ impl VideoCapture {
                 .await
                 {
                     Ok(_) => {
-                        info!(
-                            "continuous_capture for monitor {} completed",
-                            monitor_id
-                        );
+                        info!("continuous_capture for monitor {} completed", monitor_id);
                         break;
                     }
                     Err(e) => {
@@ -417,7 +411,11 @@ pub fn video_quality_to_jpeg_q(quality: &str) -> &'static str {
     }
 }
 
-pub async fn start_ffmpeg_process(output_file: &str, fps: f64, video_quality: &str) -> Result<Child, anyhow::Error> {
+pub async fn start_ffmpeg_process(
+    output_file: &str,
+    fps: f64,
+    video_quality: &str,
+) -> Result<Child, anyhow::Error> {
     // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
         warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
@@ -453,14 +451,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64, video_quality: &s
     );
 
     args.extend_from_slice(&[
-        "-vcodec",
-        "libx265",
-        "-tag:v",
-        "hvc1",
-        "-preset",
-        preset,
-        "-crf",
-        crf,
+        "-vcodec", "libx265", "-tag:v", "hvc1", "-preset", preset, "-crf", crf,
     ]);
 
     // Use fragmented MP4 to allow reading frames while file is still being written
@@ -819,16 +810,16 @@ mod tests {
     async fn get_video_dimensions(video_path: &str) -> Result<(u32, u32), anyhow::Error> {
         let mut cmd = Command::new("ffprobe");
         cmd.args([
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=width,height",
-                "-of",
-                "csv=s=x:p=0",
-                video_path,
-            ]);
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=s=x:p=0",
+            video_path,
+        ]);
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;

@@ -55,7 +55,9 @@ use tracing::{debug, error, info, warn};
 
 use crate::sync_api::{self, SyncState};
 
-use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors, list_monitors_detailed, MonitorListError};
+use screenpipe_vision::monitor::{
+    get_monitor_by_id, list_monitors, list_monitors_detailed, MonitorListError,
+};
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -725,15 +727,12 @@ pub async fn api_list_monitors(
     }
 }
 
-pub async fn api_vision_status(
-) -> JsonResponse<serde_json::Value> {
+pub async fn api_vision_status() -> JsonResponse<serde_json::Value> {
     match list_monitors_detailed().await {
-        Ok(monitors) if monitors.is_empty() => {
-            JsonResponse(json!({
-                "status": "no_monitors",
-                "message": "No monitors found"
-            }))
-        }
+        Ok(monitors) if monitors.is_empty() => JsonResponse(json!({
+            "status": "no_monitors",
+            "message": "No monitors found"
+        })),
         Ok(monitors) => {
             let monitor_ids: Vec<u32> = monitors.iter().map(|m| m.id()).collect();
             JsonResponse(json!({
@@ -742,24 +741,18 @@ pub async fn api_vision_status(
                 "monitor_ids": monitor_ids
             }))
         }
-        Err(MonitorListError::PermissionDenied) => {
-            JsonResponse(json!({
-                "status": "permission_denied",
-                "message": "Screen recording permission not granted. Grant access in System Settings > Privacy & Security > Screen Recording"
-            }))
-        }
-        Err(MonitorListError::NoMonitorsFound) => {
-            JsonResponse(json!({
-                "status": "no_monitors",
-                "message": "No monitors found"
-            }))
-        }
-        Err(MonitorListError::Other(e)) => {
-            JsonResponse(json!({
-                "status": "error",
-                "message": e
-            }))
-        }
+        Err(MonitorListError::PermissionDenied) => JsonResponse(json!({
+            "status": "permission_denied",
+            "message": "Screen recording permission not granted. Grant access in System Settings > Privacy & Security > Screen Recording"
+        })),
+        Err(MonitorListError::NoMonitorsFound) => JsonResponse(json!({
+            "status": "no_monitors",
+            "message": "No monitors found"
+        })),
+        Err(MonitorListError::Other(e)) => JsonResponse(json!({
+            "status": "error",
+            "message": e
+        })),
     }
 }
 
@@ -1186,7 +1179,6 @@ impl SCServer {
             .post("/audio/start", start_audio)
             .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
-
             .get("/search/keyword", keyword_search_handler)
             .post("/v1/embeddings", create_embeddings)
             .post("/audio/device/start", start_audio_device)
@@ -1229,13 +1221,15 @@ impl SCServer {
             .route("/ws/health", get(ws_health_handler))
             .route("/frames/export", get(handle_video_export_ws))
             .with_state(app_state.clone())
-            .layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
-                let counter = app_state.api_request_count.clone();
-                async move {
-                    counter.fetch_add(1, Ordering::Relaxed);
-                    next.run(req).await
-                }
-            }))
+            .layer(axum::middleware::from_fn(
+                move |req: axum::extract::Request, next: axum::middleware::Next| {
+                    let counter = app_state.api_request_count.clone();
+                    async move {
+                        counter.fetch_add(1, Ordering::Relaxed);
+                        next.run(req).await
+                    }
+                },
+            ))
             .layer(cors)
             .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()))
     }
@@ -2857,11 +2851,16 @@ pub async fn get_frame_data(
                     }
                     Err(e) => {
                         let err_str = e.to_string();
-                        
+
                         // Check for corrupted/missing video errors - return 410 Gone
                         // This tells frontend the frame is permanently unavailable
-                        if err_str.contains("VIDEO_CORRUPTED") || err_str.contains("VIDEO_NOT_FOUND") {
-                            debug!("Frame {} unavailable (corrupted/missing video): {}", frame_id, e);
+                        if err_str.contains("VIDEO_CORRUPTED")
+                            || err_str.contains("VIDEO_NOT_FOUND")
+                        {
+                            debug!(
+                                "Frame {} unavailable (corrupted/missing video): {}",
+                                frame_id, e
+                            );
                             return Err((
                                 StatusCode::GONE, // 410 = permanently unavailable
                                 JsonResponse(json!({
@@ -2873,7 +2872,7 @@ pub async fn get_frame_data(
                                 })),
                             ));
                         }
-                        
+
                         error!("Failed to extract frame {}: {}", frame_id, e);
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,

@@ -300,9 +300,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
                     Ok(n) => n,
                     Err(_) => continue,
                 };
-                if !devices.iter().any(|d| d.name == name)
-                    && should_include_output_device(&name)
-                {
+                if !devices.iter().any(|d| d.name == name) && should_include_output_device(&name) {
                     // TODO: not sure if it can be input, usually aggregate or multi output
                     devices.push(AudioDevice::new(name, DeviceType::Output));
                 }

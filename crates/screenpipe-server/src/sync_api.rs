@@ -229,9 +229,7 @@ pub async fn sync_init(
         // Wait a bit before first download to let upload complete first
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
 
-        let interval = tokio::time::Duration::from_secs(
-            request.sync_interval_secs.unwrap_or(300),
-        );
+        let interval = tokio::time::Duration::from_secs(request.sync_interval_secs.unwrap_or(300));
 
         loop {
             let end = chrono::Utc::now();

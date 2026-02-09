@@ -160,8 +160,14 @@ pub async fn record_video(
 
             // Just spawn the task directly
             tokio::spawn(async move {
-                debug!("Inserting new video chunk: {} (fps={})", file_path, chunk_fps);
-                if let Err(e) = db.insert_video_chunk_with_fps(&file_path, &device_name, chunk_fps).await {
+                debug!(
+                    "Inserting new video chunk: {} (fps={})",
+                    file_path, chunk_fps
+                );
+                if let Err(e) = db
+                    .insert_video_chunk_with_fps(&file_path, &device_name, chunk_fps)
+                    .await
+                {
                     error!("Failed to insert new video chunk: {}", e);
                 } else {
                     debug!("Successfully inserted video chunk: {}", file_path);

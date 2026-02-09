@@ -328,20 +328,13 @@ pub async fn query_screenpipe_with_ai(
                     .get("window_name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                let text = content
-                    .get("text")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let text = content.get("text").and_then(|v| v.as_str()).unwrap_or("");
                 let ts = content
                     .get("timestamp")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
 
-                let text_truncated = if text.len() > 500 {
-                    &text[..500]
-                } else {
-                    text
-                };
+                let text_truncated = if text.len() > 500 { &text[..500] } else { text };
                 context.push_str(&format!(
                     "[{}] {} - {}: {}\n",
                     ts, app, window, text_truncated
@@ -387,10 +380,8 @@ pub async fn query_screenpipe_with_ai(
     let instructions_owned = instructions.to_string();
     let prompt_owned = full_prompt;
 
-    tokio::task::spawn_blocking(move || {
-        generate_text(Some(&instructions_owned), &prompt_owned)
-    })
-    .await?
+    tokio::task::spawn_blocking(move || generate_text(Some(&instructions_owned), &prompt_owned))
+        .await?
 }
 
 #[cfg(test)]
@@ -448,8 +439,7 @@ mod tests {
             return;
         }
 
-        let result =
-            generate_text(None, "What is 2 + 2? Reply with just the number.").unwrap();
+        let result = generate_text(None, "What is 2 + 2? Reply with just the number.").unwrap();
 
         println!("Response: {}", result.text);
         println!("Total time: {:.0}ms", result.metrics.total_time_ms);
@@ -631,8 +621,7 @@ mod tests {
         // 5. Back-to-back latency (model should be warm)
         let mut times = Vec::new();
         for i in 0..3 {
-            let r = generate_text(None, &format!("Count to {}. Just the numbers.", i + 3))
-                .unwrap();
+            let r = generate_text(None, &format!("Count to {}. Just the numbers.", i + 3)).unwrap();
             times.push(r.metrics.total_time_ms);
         }
         println!("\nBack-to-back latency (3 requests):");
@@ -701,10 +690,7 @@ mod tests {
 
         // Check if screenpipe is running
         let client = reqwest::Client::new();
-        let health = client
-            .get("http://localhost:3030/health")
-            .send()
-            .await;
+        let health = client.get("http://localhost:3030/health").send().await;
         if health.is_err() || !health.unwrap().status().is_success() {
             println!("Skipping: screenpipe server not running on localhost:3030");
             return;
@@ -736,8 +722,13 @@ mod tests {
         let ocr_total = ocr_resp["pagination"]["total"].as_i64().unwrap_or(0);
         let audio_total = audio_resp["pagination"]["total"].as_i64().unwrap_or(0);
 
-        println!("Data fetched: {} OCR frames (of {}), {} audio chunks (of {})",
-            ocr_items.len(), ocr_total, audio_items.len(), audio_total);
+        println!(
+            "Data fetched: {} OCR frames (of {}), {} audio chunks (of {})",
+            ocr_items.len(),
+            ocr_total,
+            audio_items.len(),
+            audio_total
+        );
 
         // Build context from real data
         let mut context = String::new();
@@ -749,7 +740,13 @@ mod tests {
             let text = c["text"].as_str().unwrap_or("");
             let ts = c["timestamp"].as_str().unwrap_or("?");
             let truncated = if text.len() > 300 { &text[..300] } else { text };
-            context.push_str(&format!("[{}] {} - {}: {}\n", &ts[..16], app, &window[..window.len().min(40)], truncated));
+            context.push_str(&format!(
+                "[{}] {} - {}: {}\n",
+                &ts[..16],
+                app,
+                &window[..window.len().min(40)],
+                truncated
+            ));
         }
 
         context.push_str("\n=== Recent Audio ===\n");
@@ -762,7 +759,11 @@ mod tests {
             }
         }
 
-        println!("Context size: {} chars (~{} tokens)\n", context.len(), context.len() / 4);
+        println!(
+            "Context size: {} chars (~{} tokens)\n",
+            context.len(),
+            context.len() / 4
+        );
 
         // Test 1: Daily summary
         let wall_start = std::time::Instant::now();
@@ -775,7 +776,10 @@ mod tests {
         println!("Response:\n{}\n", r1.text);
         println!("Foundation Models time: {:.0}ms", r1.metrics.total_time_ms);
         println!("Wall clock time: {:?}", wall_time_1);
-        println!("Mem delta: {:.1}MB\n", r1.metrics.mem_delta_bytes as f64 / 1_048_576.0);
+        println!(
+            "Mem delta: {:.1}MB\n",
+            r1.metrics.mem_delta_bytes as f64 / 1_048_576.0
+        );
 
         // Test 2: Action item extraction
         let wall_start = std::time::Instant::now();
@@ -788,7 +792,10 @@ mod tests {
         println!("Response:\n{}\n", r2.text);
         println!("Foundation Models time: {:.0}ms", r2.metrics.total_time_ms);
         println!("Wall clock time: {:?}", wall_time_2);
-        println!("Mem delta: {:.1}MB\n", r2.metrics.mem_delta_bytes as f64 / 1_048_576.0);
+        println!(
+            "Mem delta: {:.1}MB\n",
+            r2.metrics.mem_delta_bytes as f64 / 1_048_576.0
+        );
 
         // Test 3: Question answering
         let wall_start = std::time::Instant::now();
@@ -801,20 +808,38 @@ mod tests {
         println!("Response:\n{}\n", r3.text);
         println!("Foundation Models time: {:.0}ms", r3.metrics.total_time_ms);
         println!("Wall clock time: {:?}", wall_time_3);
-        println!("Mem delta: {:.1}MB\n", r3.metrics.mem_delta_bytes as f64 / 1_048_576.0);
+        println!(
+            "Mem delta: {:.1}MB\n",
+            r3.metrics.mem_delta_bytes as f64 / 1_048_576.0
+        );
 
         // Summary
         println!("=== BENCHMARK SUMMARY ===");
         println!("Total OCR in DB: {}", ocr_total);
         println!("Total audio in DB: {}", audio_total);
-        println!("Context fed to model: {} chars ({} tokens est.)", context.len(), context.len() / 4);
-        println!("Summary generation: {:.0}ms (wall: {:?})", r1.metrics.total_time_ms, wall_time_1);
-        println!("Action items: {:.0}ms (wall: {:?})", r2.metrics.total_time_ms, wall_time_2);
-        println!("Q&A: {:.0}ms (wall: {:?})", r3.metrics.total_time_ms, wall_time_3);
-        println!("Memory: before={:.1}MB, after={:.1}MB, delta={:.1}MB",
+        println!(
+            "Context fed to model: {} chars ({} tokens est.)",
+            context.len(),
+            context.len() / 4
+        );
+        println!(
+            "Summary generation: {:.0}ms (wall: {:?})",
+            r1.metrics.total_time_ms, wall_time_1
+        );
+        println!(
+            "Action items: {:.0}ms (wall: {:?})",
+            r2.metrics.total_time_ms, wall_time_2
+        );
+        println!(
+            "Q&A: {:.0}ms (wall: {:?})",
+            r3.metrics.total_time_ms, wall_time_3
+        );
+        println!(
+            "Memory: before={:.1}MB, after={:.1}MB, delta={:.1}MB",
             r1.metrics.mem_before_bytes as f64 / 1_048_576.0,
             r3.metrics.mem_after_bytes as f64 / 1_048_576.0,
-            (r3.metrics.mem_after_bytes as i64 - r1.metrics.mem_before_bytes as i64) as f64 / 1_048_576.0,
+            (r3.metrics.mem_after_bytes as i64 - r1.metrics.mem_before_bytes as i64) as f64
+                / 1_048_576.0,
         );
         println!("=========================");
     }

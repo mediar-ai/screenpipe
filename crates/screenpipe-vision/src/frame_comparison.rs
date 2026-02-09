@@ -192,7 +192,10 @@ impl FrameComparer {
         };
 
         // First frame - no previous to compare
-        if self.previous_hash.is_none() && self.previous_image_downscaled.is_none() && self.previous_image_full.is_none() {
+        if self.previous_hash.is_none()
+            && self.previous_image_downscaled.is_none()
+            && self.previous_image_full.is_none()
+        {
             self.update_previous_internal(current_image, current_downscaled, current_hash);
             return 1.0;
         }
@@ -264,7 +267,8 @@ impl FrameComparer {
         self.previous_hash = hash;
 
         if self.config.downscale_comparison {
-            self.previous_image_downscaled = downscaled.or_else(|| Some(self.downscale(full_image)));
+            self.previous_image_downscaled =
+                downscaled.or_else(|| Some(self.downscale(full_image)));
             self.previous_image_full = None;
         } else {
             self.previous_image_full = Some(full_image.clone());
@@ -375,7 +379,11 @@ mod tests {
             if is_text_line {
                 let char_width = 10;
                 let is_char = ((x + seed as u32) / char_width) % 3 != 0;
-                if is_char { Rgb([30, 30, 30]) } else { Rgb([255, 255, 255]) }
+                if is_char {
+                    Rgb([30, 30, 30])
+                } else {
+                    Rgb([255, 255, 255])
+                }
             } else {
                 Rgb([255, 255, 255])
             }
@@ -496,7 +504,11 @@ mod tests {
 
         comparer.compare(&image1);
         let diff = comparer.compare(&image2);
-        assert!(diff > 0.01, "Ultrawide content change should be detected: {}", diff);
+        assert!(
+            diff > 0.01,
+            "Ultrawide content change should be detected: {}",
+            diff
+        );
     }
 
     #[test]
@@ -526,23 +538,25 @@ mod tests {
         let frame1 = create_text_pattern_image(1920, 1080, 0);
         let frame2 = create_text_pattern_image(1920, 1080, 0); // identical
         let frame3 = create_text_pattern_image(1920, 1080, 0); // identical
-        let frame4 = create_gradient_image(1920, 1080);         // different
+        let frame4 = create_gradient_image(1920, 1080); // different
         let frame5 = create_solid_image(1920, 1080, 128, 128, 128); // different
         let frame6 = create_solid_image(1920, 1080, 128, 128, 128); // identical
-        let frame7 = create_solid_image(1920, 1080, 0, 0, 0);       // different
+        let frame7 = create_solid_image(1920, 1080, 0, 0, 0); // different
 
-        let results: Vec<f64> = [&frame1, &frame2, &frame3, &frame4, &frame5, &frame6, &frame7]
-            .iter()
-            .map(|f| comparer.compare(f))
-            .collect();
+        let results: Vec<f64> = [
+            &frame1, &frame2, &frame3, &frame4, &frame5, &frame6, &frame7,
+        ]
+        .iter()
+        .map(|f| comparer.compare(f))
+        .collect();
 
-        assert_eq!(results[0], 1.0);   // first frame
-        assert_eq!(results[1], 0.0);   // hash hit
-        assert_eq!(results[2], 0.0);   // hash hit
-        assert!(results[3] > 0.0);     // different
-        assert!(results[4] > 0.0);     // different
-        assert_eq!(results[5], 0.0);   // hash hit
-        assert!(results[6] > 0.3);     // big change
+        assert_eq!(results[0], 1.0); // first frame
+        assert_eq!(results[1], 0.0); // hash hit
+        assert_eq!(results[2], 0.0); // hash hit
+        assert!(results[3] > 0.0); // different
+        assert!(results[4] > 0.0); // different
+        assert_eq!(results[5], 0.0); // hash hit
+        assert!(results[6] > 0.3); // big change
 
         assert!(comparer.stats().hash_hits >= 3);
     }

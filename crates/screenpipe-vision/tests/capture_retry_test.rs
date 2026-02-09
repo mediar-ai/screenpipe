@@ -9,7 +9,6 @@
 ///
 /// We replicate the exact control flow here with a mock capture function
 /// to verify every branch.
-
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -148,7 +147,10 @@ fn test_success_on_last_retry() {
             attempts_used: MAX_CAPTURE_RETRIES + 1
         }
     );
-    assert_eq!(consecutive, 0, "consecutive must reset even on last-retry success");
+    assert_eq!(
+        consecutive, 0,
+        "consecutive must reset even on last-retry success"
+    );
     assert_eq!(
         refresh_count.load(Ordering::SeqCst),
         MAX_CAPTURE_RETRIES,
@@ -403,7 +405,9 @@ fn test_intermittent_failure_never_bails() {
             CycleOutcome::Success { .. } => {
                 assert_eq!(consecutive, 0);
             }
-            CycleOutcome::RetryExhausted { consecutive_failures } => {
+            CycleOutcome::RetryExhausted {
+                consecutive_failures,
+            } => {
                 assert!(
                     consecutive_failures < MAX_CONSECUTIVE_FAILURES,
                     "consecutive failures should stay low with intermittent success"

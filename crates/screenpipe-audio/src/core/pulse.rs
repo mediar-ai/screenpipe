@@ -27,7 +27,8 @@ fn with_pulse_context<F, T>(f: F) -> Result<T>
 where
     F: FnOnce(&pulse::context::introspect::Introspector, &mut Mainloop) -> Result<T>,
 {
-    let mut mainloop = Mainloop::new().ok_or_else(|| anyhow!("failed to create PulseAudio mainloop"))?;
+    let mut mainloop =
+        Mainloop::new().ok_or_else(|| anyhow!("failed to create PulseAudio mainloop"))?;
 
     let mut context = pulse::context::Context::new(&mainloop, "screenpipe")
         .ok_or_else(|| anyhow!("failed to create PulseAudio context"))?;
@@ -39,7 +40,8 @@ where
     // Wait for the context to be ready
     loop {
         match mainloop.iterate(true) {
-            pulse::mainloop::standard::IterateResult::Quit(_) | pulse::mainloop::standard::IterateResult::Err(_) => {
+            pulse::mainloop::standard::IterateResult::Quit(_)
+            | pulse::mainloop::standard::IterateResult::Err(_) => {
                 return Err(anyhow!("PulseAudio mainloop error while connecting"));
             }
             pulse::mainloop::standard::IterateResult::Success(_) => {}
@@ -96,7 +98,8 @@ pub fn list_pulse_devices() -> Result<Vec<AudioDevice>> {
             // Iterate until the operation completes
             while !done.load(Ordering::Relaxed) {
                 match mainloop.iterate(true) {
-                    pulse::mainloop::standard::IterateResult::Quit(_) | pulse::mainloop::standard::IterateResult::Err(_) => break,
+                    pulse::mainloop::standard::IterateResult::Quit(_)
+                    | pulse::mainloop::standard::IterateResult::Err(_) => break,
                     pulse::mainloop::standard::IterateResult::Success(_) => {}
                 }
                 match op.get_state() {
@@ -115,25 +118,24 @@ pub fn list_pulse_devices() -> Result<Vec<AudioDevice>> {
             let done = Arc::new(AtomicBool::new(false));
             let done_clone = done.clone();
 
-            let op = introspector.get_sink_info_list(move |result| {
-                match result {
-                    pulse::callbacks::ListResult::Item(info) => {
-                        if let Some(name) = &info.name {
-                            devs_clone
-                                .lock()
-                                .unwrap()
-                                .push(AudioDevice::new(name.to_string(), DeviceType::Output));
-                        }
+            let op = introspector.get_sink_info_list(move |result| match result {
+                pulse::callbacks::ListResult::Item(info) => {
+                    if let Some(name) = &info.name {
+                        devs_clone
+                            .lock()
+                            .unwrap()
+                            .push(AudioDevice::new(name.to_string(), DeviceType::Output));
                     }
-                    pulse::callbacks::ListResult::End | pulse::callbacks::ListResult::Error => {
-                        done_clone.store(true, Ordering::Relaxed);
-                    }
+                }
+                pulse::callbacks::ListResult::End | pulse::callbacks::ListResult::Error => {
+                    done_clone.store(true, Ordering::Relaxed);
                 }
             });
 
             while !done.load(Ordering::Relaxed) {
                 match mainloop.iterate(true) {
-                    pulse::mainloop::standard::IterateResult::Quit(_) | pulse::mainloop::standard::IterateResult::Err(_) => break,
+                    pulse::mainloop::standard::IterateResult::Quit(_)
+                    | pulse::mainloop::standard::IterateResult::Err(_) => break,
                     pulse::mainloop::standard::IterateResult::Success(_) => {}
                 }
                 match op.get_state() {
@@ -167,7 +169,8 @@ pub fn default_pulse_source() -> Result<AudioDevice> {
 
         while !done.load(Ordering::Relaxed) {
             match mainloop.iterate(true) {
-                pulse::mainloop::standard::IterateResult::Quit(_) | pulse::mainloop::standard::IterateResult::Err(_) => break,
+                pulse::mainloop::standard::IterateResult::Quit(_)
+                | pulse::mainloop::standard::IterateResult::Err(_) => break,
                 pulse::mainloop::standard::IterateResult::Success(_) => {}
             }
             match op.get_state() {
@@ -203,7 +206,8 @@ pub fn default_pulse_sink() -> Result<AudioDevice> {
 
         while !done.load(Ordering::Relaxed) {
             match mainloop.iterate(true) {
-                pulse::mainloop::standard::IterateResult::Quit(_) | pulse::mainloop::standard::IterateResult::Err(_) => break,
+                pulse::mainloop::standard::IterateResult::Quit(_)
+                | pulse::mainloop::standard::IterateResult::Err(_) => break,
                 pulse::mainloop::standard::IterateResult::Success(_) => {}
             }
             match op.get_state() {
@@ -237,22 +241,26 @@ pub fn get_pulse_device_config(device: &AudioDevice) -> Result<AudioStreamConfig
 
         match device.device_type {
             DeviceType::Input => {
-                let op = introspector.get_source_info_by_name(&device_name, move |result| {
-                    match result {
-                        pulse::callbacks::ListResult::Item(info) => {
-                            let rate = info.sample_spec.rate;
-                            let channels = info.sample_spec.channels as u16;
-                            *config_clone.lock().unwrap() = Some((rate, channels));
-                        }
-                        pulse::callbacks::ListResult::End | pulse::callbacks::ListResult::Error => {
-                            done_clone.store(true, Ordering::Relaxed);
-                        }
-                    }
-                });
+                let op =
+                    introspector.get_source_info_by_name(
+                        &device_name,
+                        move |result| match result {
+                            pulse::callbacks::ListResult::Item(info) => {
+                                let rate = info.sample_spec.rate;
+                                let channels = info.sample_spec.channels as u16;
+                                *config_clone.lock().unwrap() = Some((rate, channels));
+                            }
+                            pulse::callbacks::ListResult::End
+                            | pulse::callbacks::ListResult::Error => {
+                                done_clone.store(true, Ordering::Relaxed);
+                            }
+                        },
+                    );
 
                 while !done.load(Ordering::Relaxed) {
                     match mainloop.iterate(true) {
-                        pulse::mainloop::standard::IterateResult::Quit(_) | pulse::mainloop::standard::IterateResult::Err(_) => break,
+                        pulse::mainloop::standard::IterateResult::Quit(_)
+                        | pulse::mainloop::standard::IterateResult::Err(_) => break,
                         pulse::mainloop::standard::IterateResult::Success(_) => {}
                     }
                     match op.get_state() {
@@ -262,8 +270,8 @@ pub fn get_pulse_device_config(device: &AudioDevice) -> Result<AudioStreamConfig
                 }
             }
             DeviceType::Output => {
-                let op = introspector.get_sink_info_by_name(&device_name, move |result| {
-                    match result {
+                let op =
+                    introspector.get_sink_info_by_name(&device_name, move |result| match result {
                         pulse::callbacks::ListResult::Item(info) => {
                             let rate = info.sample_spec.rate;
                             let channels = info.sample_spec.channels as u16;
@@ -272,12 +280,12 @@ pub fn get_pulse_device_config(device: &AudioDevice) -> Result<AudioStreamConfig
                         pulse::callbacks::ListResult::End | pulse::callbacks::ListResult::Error => {
                             done_clone.store(true, Ordering::Relaxed);
                         }
-                    }
-                });
+                    });
 
                 while !done.load(Ordering::Relaxed) {
                     match mainloop.iterate(true) {
-                        pulse::mainloop::standard::IterateResult::Quit(_) | pulse::mainloop::standard::IterateResult::Err(_) => break,
+                        pulse::mainloop::standard::IterateResult::Quit(_)
+                        | pulse::mainloop::standard::IterateResult::Err(_) => break,
                         pulse::mainloop::standard::IterateResult::Success(_) => {}
                     }
                     match op.get_state() {
@@ -288,10 +296,12 @@ pub fn get_pulse_device_config(device: &AudioDevice) -> Result<AudioStreamConfig
             }
         }
 
-        let (rate, channels) = config
-            .lock()
-            .unwrap()
-            .ok_or_else(|| anyhow!("failed to get PulseAudio config for device: {}", device.name))?;
+        let (rate, channels) = config.lock().unwrap().ok_or_else(|| {
+            anyhow!(
+                "failed to get PulseAudio config for device: {}",
+                device.name
+            )
+        })?;
 
         Ok(AudioStreamConfig::new(rate, channels))
     })
@@ -326,16 +336,22 @@ fn create_pulse_record_stream(
     }
 
     let simple = Simple::new(
-        None,                                    // default server
-        "screenpipe",                            // app name
-        pulse::stream::Direction::Record,        // direction
-        Some(&source_name),                      // source device
-        "audio-capture",                         // stream description
-        &spec,                                   // sample format
-        None,                                    // default channel map
-        None,                                    // default buffering
+        None,                             // default server
+        "screenpipe",                     // app name
+        pulse::stream::Direction::Record, // direction
+        Some(&source_name),               // source device
+        "audio-capture",                  // stream description
+        &spec,                            // sample format
+        None,                             // default channel map
+        None,                             // default buffering
     )
-    .map_err(|e| anyhow!("failed to create PulseAudio recording stream for '{}': {:?}", source_name, e))?;
+    .map_err(|e| {
+        anyhow!(
+            "failed to create PulseAudio recording stream for '{}': {:?}",
+            source_name,
+            e
+        )
+    })?;
 
     info!(
         "PulseAudio recording stream created: source='{}', rate={}, channels={}",
@@ -369,7 +385,10 @@ pub fn spawn_pulse_capture_thread(
         let simple = match create_pulse_record_stream(&device, sample_rate, channels as u8) {
             Ok(s) => s,
             Err(e) => {
-                error!("failed to create PulseAudio stream for {}: {}", device_name, e);
+                error!(
+                    "failed to create PulseAudio stream for {}: {}",
+                    device_name, e
+                );
                 is_disconnected.store(true, Ordering::Relaxed);
                 return;
             }

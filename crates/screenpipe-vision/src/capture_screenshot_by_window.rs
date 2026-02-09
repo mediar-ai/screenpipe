@@ -514,10 +514,7 @@ fn get_cg_window_list() -> (Vec<CGWindowInfo>, HashSet<u32>) {
                 };
 
                 // Track layers per PID for overlay detection
-                pid_layers
-                    .entry(w_pid as u32)
-                    .or_default()
-                    .push(layer);
+                pid_layers.entry(w_pid as u32).or_default().push(layer);
 
                 // Extract bounds
                 let bounds_key = CFString::new("kCGWindowBounds");
@@ -529,8 +526,7 @@ fn get_cg_window_list() -> (Vec<CGWindowInfo>, HashSet<u32>) {
                 ) != 0
                     && !bounds_val.is_null()
                 {
-                    let bounds_dict =
-                        bounds_val as core_foundation::dictionary::CFDictionaryRef;
+                    let bounds_dict = bounds_val as core_foundation::dictionary::CFDictionaryRef;
                     let x = get_cf_number_from_dict(bounds_dict, "X").unwrap_or(0.0);
                     let y = get_cf_number_from_dict(bounds_dict, "Y").unwrap_or(0.0);
                     let w = get_cf_number_from_dict(bounds_dict, "Width").unwrap_or(0.0);
@@ -1294,11 +1290,7 @@ mod tests {
 
     #[test]
     fn test_is_valid_rejects_ignored_by_app_name() {
-        let filters = WindowFilters::new(
-            &["wispr flow".to_string()],
-            &[],
-            &[],
-        );
+        let filters = WindowFilters::new(&["wispr flow".to_string()], &[], &[]);
         // "Wispr Flow" app should be rejected by ignore list (case-insensitive contains)
         assert!(!filters.is_valid("Wispr Flow", "Status"));
         assert!(!filters.is_valid("Wispr Flow", "Hub"));
@@ -1308,11 +1300,7 @@ mod tests {
 
     #[test]
     fn test_is_valid_rejects_ignored_by_window_title() {
-        let filters = WindowFilters::new(
-            &["status".to_string()],
-            &[],
-            &[],
-        );
+        let filters = WindowFilters::new(&["status".to_string()], &[], &[]);
         // Window title matching ignore list should be rejected
         assert!(!filters.is_valid("Wispr Flow", "Status"));
         assert!(!filters.is_valid("Any App", "Status Bar"));
@@ -1323,11 +1311,7 @@ mod tests {
     #[test]
     fn test_is_valid_overlay_apps_in_ignore_list() {
         // Typical user config: ignoring overlay apps by name
-        let filters = WindowFilters::new(
-            &["wispr".to_string(), "bartender".to_string()],
-            &[],
-            &[],
-        );
+        let filters = WindowFilters::new(&["wispr".to_string(), "bartender".to_string()], &[], &[]);
         assert!(!filters.is_valid("Wispr Flow", "Status"));
         assert!(!filters.is_valid("Bartender 4", "Menu"));
         assert!(filters.is_valid("Arc", "Gmail"));
@@ -1335,11 +1319,7 @@ mod tests {
 
     #[test]
     fn test_is_valid_include_list_only_allows_matching() {
-        let filters = WindowFilters::new(
-            &[],
-            &["arc".to_string(), "wezterm".to_string()],
-            &[],
-        );
+        let filters = WindowFilters::new(&[], &["arc".to_string(), "wezterm".to_string()], &[]);
         // Only included apps should pass
         assert!(filters.is_valid("Arc", "GitHub"));
         assert!(filters.is_valid("WezTerm", "Terminal"));
@@ -1370,38 +1350,88 @@ mod tests {
 
     #[test]
     fn test_rect_overlaps_basic() {
-        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
-        let b = Rect { x: 50, y: 50, width: 100, height: 100 };
+        let a = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
+        let b = Rect {
+            x: 50,
+            y: 50,
+            width: 100,
+            height: 100,
+        };
         assert!(a.overlaps(&b));
         assert!(b.overlaps(&a));
     }
 
     #[test]
     fn test_rect_no_overlap_right() {
-        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
-        let b = Rect { x: 100, y: 0, width: 100, height: 100 };
+        let a = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
+        let b = Rect {
+            x: 100,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
         // Touching edges — no overlap (right edge of a == left edge of b)
         assert!(!a.overlaps(&b));
     }
 
     #[test]
     fn test_rect_no_overlap_below() {
-        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
-        let b = Rect { x: 0, y: 100, width: 100, height: 100 };
+        let a = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
+        let b = Rect {
+            x: 0,
+            y: 100,
+            width: 100,
+            height: 100,
+        };
         assert!(!a.overlaps(&b));
     }
 
     #[test]
     fn test_rect_no_overlap_far_away() {
-        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
-        let b = Rect { x: 500, y: 500, width: 100, height: 100 };
+        let a = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
+        let b = Rect {
+            x: 500,
+            y: 500,
+            width: 100,
+            height: 100,
+        };
         assert!(!a.overlaps(&b));
     }
 
     #[test]
     fn test_rect_contained() {
-        let outer = Rect { x: 0, y: 0, width: 1920, height: 1080 };
-        let inner = Rect { x: 100, y: 100, width: 400, height: 300 };
+        let outer = Rect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let inner = Rect {
+            x: 100,
+            y: 100,
+            width: 400,
+            height: 300,
+        };
         assert!(outer.overlaps(&inner));
         assert!(inner.overlaps(&outer));
     }
@@ -1409,47 +1439,112 @@ mod tests {
     #[test]
     fn test_rect_negative_coordinates() {
         // macOS: secondary monitor can be at negative x (left of primary)
-        let monitor = Rect { x: -1920, y: 0, width: 1920, height: 1080 };
-        let window = Rect { x: -1000, y: 200, width: 800, height: 600 };
+        let monitor = Rect {
+            x: -1920,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let window = Rect {
+            x: -1000,
+            y: 200,
+            width: 800,
+            height: 600,
+        };
         assert!(monitor.overlaps(&window));
     }
 
     #[test]
     fn test_rect_window_spans_two_monitors() {
-        let monitor1 = Rect { x: 0, y: 0, width: 1920, height: 1080 };
-        let monitor2 = Rect { x: 1920, y: 0, width: 1920, height: 1080 };
+        let monitor1 = Rect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let monitor2 = Rect {
+            x: 1920,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
         // Window straddles the boundary
-        let window = Rect { x: 1800, y: 100, width: 400, height: 600 };
+        let window = Rect {
+            x: 1800,
+            y: 100,
+            width: 400,
+            height: 600,
+        };
         assert!(monitor1.overlaps(&window));
         assert!(monitor2.overlaps(&window));
     }
 
     #[test]
     fn test_rect_intersection_area() {
-        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
-        let b = Rect { x: 50, y: 50, width: 100, height: 100 };
+        let a = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
+        let b = Rect {
+            x: 50,
+            y: 50,
+            width: 100,
+            height: 100,
+        };
         // Intersection: (50,50) to (100,100) = 50*50 = 2500
         assert_eq!(a.intersection_area(&b), 2500);
     }
 
     #[test]
     fn test_rect_intersection_area_no_overlap() {
-        let a = Rect { x: 0, y: 0, width: 100, height: 100 };
-        let b = Rect { x: 200, y: 200, width: 100, height: 100 };
+        let a = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
+        let b = Rect {
+            x: 200,
+            y: 200,
+            width: 100,
+            height: 100,
+        };
         assert_eq!(a.intersection_area(&b), 0);
     }
 
     #[test]
     fn test_rect_intersection_area_contained() {
-        let outer = Rect { x: 0, y: 0, width: 1920, height: 1080 };
-        let inner = Rect { x: 100, y: 100, width: 400, height: 300 };
+        let outer = Rect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let inner = Rect {
+            x: 100,
+            y: 100,
+            width: 400,
+            height: 300,
+        };
         assert_eq!(outer.intersection_area(&inner), 400 * 300);
     }
 
     #[test]
     fn test_rect_zero_dimension() {
-        let a = Rect { x: 0, y: 0, width: 0, height: 100 };
-        let b = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let a = Rect {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 100,
+        };
+        let b = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
         assert!(!a.overlaps(&b));
         assert_eq!(a.intersection_area(&b), 0);
     }
@@ -1462,26 +1557,55 @@ mod tests {
     mod topmost_tests {
         use super::*;
 
-        fn make_window(pid: i32, layer: i32, x: i32, y: i32, w: u32, h: u32, owner: &str, title: &str) -> CGWindowInfo {
+        fn make_window(
+            pid: i32,
+            layer: i32,
+            x: i32,
+            y: i32,
+            w: u32,
+            h: u32,
+            owner: &str,
+            title: &str,
+        ) -> CGWindowInfo {
             CGWindowInfo {
                 pid,
                 layer,
-                bounds: Rect { x, y, width: w, height: h },
+                bounds: Rect {
+                    x,
+                    y,
+                    width: w,
+                    height: h,
+                },
                 owner_name: owner.to_string(),
                 window_name: title.to_string(),
             }
         }
 
         fn monitor_1080p() -> Rect {
-            Rect { x: 0, y: 0, width: 1920, height: 1080 }
+            Rect {
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            }
         }
 
         #[test]
         fn test_topmost_simple_single_window() {
-            let windows = vec![
-                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
-            ];
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            let windows = vec![make_window(
+                100,
+                0,
+                0,
+                0,
+                1920,
+                1080,
+                "WezTerm",
+                "π - brain",
+            )];
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
 
         #[test]
@@ -1491,7 +1615,10 @@ mod tests {
                 make_window(200, 25, 0, 0, 300, 40, "Wispr Flow", "Status"),
                 make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
             ];
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
 
         #[test]
@@ -1500,7 +1627,10 @@ mod tests {
                 make_window(1, 0, 0, 0, 1920, 25, "SystemUIServer", "Menu Bar"),
                 make_window(100, 0, 0, 25, 1920, 1055, "WezTerm", "π - brain"),
             ];
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
 
         #[test]
@@ -1509,16 +1639,31 @@ mod tests {
                 make_window(999, 0, 0, 0, 1920, 1080, "screenpipe", "Main"),
                 make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
             ];
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
 
         #[test]
         fn test_topmost_skips_screenpipe_dev() {
             let windows = vec![
-                make_window(999, 0, 0, 0, 1920, 1080, "screenpipe - Development", "Overlay"),
+                make_window(
+                    999,
+                    0,
+                    0,
+                    0,
+                    1920,
+                    1080,
+                    "screenpipe - Development",
+                    "Overlay",
+                ),
                 make_window(100, 0, 0, 0, 1920, 1080, "Arc", "GitHub"),
             ];
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
 
         #[test]
@@ -1528,14 +1673,27 @@ mod tests {
                 make_window(300, 0, 100, 0, 50, 50, "SomeApp", "StatusIcon"),
                 make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
             ];
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
 
         #[test]
         fn test_topmost_multi_monitor_different_windows() {
             // Monitor 1: primary at (0,0), Monitor 2: right at (1920,0)
-            let monitor1 = Rect { x: 0, y: 0, width: 1920, height: 1080 };
-            let monitor2 = Rect { x: 1920, y: 0, width: 1920, height: 1080 };
+            let monitor1 = Rect {
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            };
+            let monitor2 = Rect {
+                x: 1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            };
 
             let windows = vec![
                 // Arc is on monitor 2
@@ -1557,7 +1715,10 @@ mod tests {
                 make_window(200, 0, 0, 0, 1920, 1080, "Arc", "PostHog"),
             ];
             // WezTerm should be detected, NOT Arc
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
 
         #[test]
@@ -1568,7 +1729,10 @@ mod tests {
                 make_window(300, 0, 200, 200, 800, 600, "Finder", "Downloads"),
             ];
             // WezTerm should be detected, NOT Finder
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
 
         #[test]
@@ -1579,16 +1743,31 @@ mod tests {
                 make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
             ];
             // Both are WezTerm (same PID), first match wins
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
 
         #[test]
         fn test_topmost_no_windows_on_monitor() {
             // All windows are on a different monitor
-            let monitor_left = Rect { x: -1920, y: 0, width: 1920, height: 1080 };
-            let windows = vec![
-                make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
-            ];
+            let monitor_left = Rect {
+                x: -1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            };
+            let windows = vec![make_window(
+                100,
+                0,
+                0,
+                0,
+                1920,
+                1080,
+                "WezTerm",
+                "π - brain",
+            )];
             assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_left), None);
         }
 
@@ -1604,28 +1783,47 @@ mod tests {
                 make_window(300, 3, 0, 0, 1920, 25, "SystemUIServer", "Menu Bar"),
             ];
             // All are overlay-level, no normal window
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), None);
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                None
+            );
         }
 
         #[test]
         fn test_topmost_monitor_with_negative_coords() {
             // Secondary monitor to the left of primary
-            let monitor_left = Rect { x: -1920, y: 0, width: 1920, height: 1080 };
+            let monitor_left = Rect {
+                x: -1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            };
             let windows = vec![
                 make_window(100, 0, -1920, 0, 1920, 1080, "Firefox", "Google"),
                 make_window(200, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
             ];
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_left), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_left),
+                Some(100)
+            );
         }
 
         #[test]
         fn test_topmost_window_partially_on_monitor() {
             // Window straddles two monitors — should match on both
-            let monitor1 = Rect { x: 0, y: 0, width: 1920, height: 1080 };
-            let monitor2 = Rect { x: 1920, y: 0, width: 1920, height: 1080 };
-            let windows = vec![
-                make_window(100, 0, 1800, 100, 400, 600, "Arc", "Tab"),
-            ];
+            let monitor1 = Rect {
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            };
+            let monitor2 = Rect {
+                x: 1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            };
+            let windows = vec![make_window(100, 0, 1800, 100, 400, 600, "Arc", "Tab")];
             assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor1), Some(100));
             assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor2), Some(100));
         }
@@ -1637,7 +1835,10 @@ mod tests {
                 make_window(300, 0, 0, 0, 1920, 1080, "Finder", "Desktop"),
                 make_window(100, 0, 0, 0, 1920, 1080, "WezTerm", "π - brain"),
             ];
-            assert_eq!(find_topmost_pid_on_monitor(&windows, &monitor_1080p()), Some(100));
+            assert_eq!(
+                find_topmost_pid_on_monitor(&windows, &monitor_1080p()),
+                Some(100)
+            );
         }
     }
 }

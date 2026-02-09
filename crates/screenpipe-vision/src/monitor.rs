@@ -190,7 +190,10 @@ impl SafeMonitor {
                 let monitor = match cached_sck {
                     Some(m) => m,
                     None => {
-                        tracing::debug!("sck-rs cache miss for monitor {}, re-enumerating", monitor_id);
+                        tracing::debug!(
+                            "sck-rs cache miss for monitor {}, re-enumerating",
+                            monitor_id
+                        );
                         SckMonitor::all()
                             .map_err(Error::from)?
                             .into_iter()
@@ -212,7 +215,10 @@ impl SafeMonitor {
                 let monitor = match cached_xcap {
                     Some(m) => m,
                     None => {
-                        tracing::debug!("xcap cache miss for monitor {}, re-enumerating", monitor_id);
+                        tracing::debug!(
+                            "xcap cache miss for monitor {}, re-enumerating",
+                            monitor_id
+                        );
                         XcapMonitor::all()
                             .map_err(Error::from)?
                             .into_iter()
@@ -273,41 +279,47 @@ impl SafeMonitor {
         let monitor_id = self.monitor_id;
         let use_sck = self.use_sck;
 
-        let refreshed = tokio::task::spawn_blocking(move || -> Result<(Option<SckMonitor>, Option<XcapMonitor>, MonitorData)> {
-            if use_sck {
-                let monitor = SckMonitor::all()
-                    .map_err(Error::from)?
-                    .into_iter()
-                    .find(|m| m.id() == monitor_id)
-                    .ok_or_else(|| anyhow::anyhow!("Monitor {} not found during refresh", monitor_id))?;
+        let refreshed = tokio::task::spawn_blocking(
+            move || -> Result<(Option<SckMonitor>, Option<XcapMonitor>, MonitorData)> {
+                if use_sck {
+                    let monitor = SckMonitor::all()
+                        .map_err(Error::from)?
+                        .into_iter()
+                        .find(|m| m.id() == monitor_id)
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("Monitor {} not found during refresh", monitor_id)
+                        })?;
 
-                let data = MonitorData {
-                    width: monitor.width().unwrap_or(0),
-                    height: monitor.height().unwrap_or(0),
-                    x: monitor.x(),
-                    y: monitor.y(),
-                    name: monitor.name().to_string(),
-                    is_primary: monitor.is_primary(),
-                };
-                Ok((Some(monitor), None, data))
-            } else {
-                let monitor = XcapMonitor::all()
-                    .map_err(Error::from)?
-                    .into_iter()
-                    .find(|m| m.id().unwrap_or(0) == monitor_id)
-                    .ok_or_else(|| anyhow::anyhow!("Monitor {} not found during refresh", monitor_id))?;
+                    let data = MonitorData {
+                        width: monitor.width().unwrap_or(0),
+                        height: monitor.height().unwrap_or(0),
+                        x: monitor.x(),
+                        y: monitor.y(),
+                        name: monitor.name().to_string(),
+                        is_primary: monitor.is_primary(),
+                    };
+                    Ok((Some(monitor), None, data))
+                } else {
+                    let monitor = XcapMonitor::all()
+                        .map_err(Error::from)?
+                        .into_iter()
+                        .find(|m| m.id().unwrap_or(0) == monitor_id)
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("Monitor {} not found during refresh", monitor_id)
+                        })?;
 
-                let data = MonitorData {
-                    width: monitor.width().unwrap_or(0),
-                    height: monitor.height().unwrap_or(0),
-                    x: monitor.x().unwrap_or(0),
-                    y: monitor.y().unwrap_or(0),
-                    name: monitor.name().unwrap_or_default().to_string(),
-                    is_primary: monitor.is_primary().unwrap_or(false),
-                };
-                Ok((None, Some(monitor), data))
-            }
-        })
+                    let data = MonitorData {
+                        width: monitor.width().unwrap_or(0),
+                        height: monitor.height().unwrap_or(0),
+                        x: monitor.x().unwrap_or(0),
+                        y: monitor.y().unwrap_or(0),
+                        name: monitor.name().unwrap_or_default().to_string(),
+                        is_primary: monitor.is_primary().unwrap_or(false),
+                    };
+                    Ok((None, Some(monitor), data))
+                }
+            },
+        )
         .await
         .map_err(|e| anyhow::anyhow!("refresh task panicked: {}", e))??;
 
@@ -329,7 +341,9 @@ impl SafeMonitor {
                 .map_err(Error::from)?
                 .into_iter()
                 .find(|m| m.id().unwrap_or(0) == monitor_id)
-                .ok_or_else(|| anyhow::anyhow!("Monitor {} not found during refresh", monitor_id))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Monitor {} not found during refresh", monitor_id)
+                })?;
 
             Ok(MonitorData {
                 width: monitor.width().unwrap_or(0),
@@ -430,12 +444,10 @@ pub async fn list_monitors_detailed() -> std::result::Result<Vec<SafeMonitor>, M
 /// List monitors with detailed error information (permission denied vs no monitors)
 #[cfg(not(target_os = "macos"))]
 pub async fn list_monitors_detailed() -> std::result::Result<Vec<SafeMonitor>, MonitorListError> {
-    tokio::task::spawn_blocking(|| {
-        match XcapMonitor::all() {
-            Ok(monitors) if monitors.is_empty() => Err(MonitorListError::NoMonitorsFound),
-            Ok(monitors) => Ok(monitors.into_iter().map(SafeMonitor::new).collect()),
-            Err(e) => Err(MonitorListError::Other(e.to_string())),
-        }
+    tokio::task::spawn_blocking(|| match XcapMonitor::all() {
+        Ok(monitors) if monitors.is_empty() => Err(MonitorListError::NoMonitorsFound),
+        Ok(monitors) => Ok(monitors.into_iter().map(SafeMonitor::new).collect()),
+        Err(e) => Err(MonitorListError::Other(e.to_string())),
     })
     .await
     .unwrap_or(Err(MonitorListError::Other("Task panicked".to_string())))
@@ -457,9 +469,17 @@ pub async fn list_monitors() -> Vec<SafeMonitor> {
 pub async fn get_default_monitor() -> Option<SafeMonitor> {
     tokio::task::spawn_blocking(|| {
         if use_sck_rs() {
-            SckMonitor::all().ok()?.into_iter().next().map(SafeMonitor::from_sck)
+            SckMonitor::all()
+                .ok()?
+                .into_iter()
+                .next()
+                .map(SafeMonitor::from_sck)
         } else {
-            XcapMonitor::all().ok()?.into_iter().next().map(SafeMonitor::from_xcap)
+            XcapMonitor::all()
+                .ok()?
+                .into_iter()
+                .next()
+                .map(SafeMonitor::from_xcap)
         }
     })
     .await
@@ -469,7 +489,11 @@ pub async fn get_default_monitor() -> Option<SafeMonitor> {
 #[cfg(not(target_os = "macos"))]
 pub async fn get_default_monitor() -> Option<SafeMonitor> {
     tokio::task::spawn_blocking(|| {
-        XcapMonitor::all().ok()?.into_iter().next().map(SafeMonitor::new)
+        XcapMonitor::all()
+            .ok()?
+            .into_iter()
+            .next()
+            .map(SafeMonitor::new)
     })
     .await
     .ok()?

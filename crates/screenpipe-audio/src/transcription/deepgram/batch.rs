@@ -34,7 +34,10 @@ pub async fn transcribe_with_deepgram(
         custom_api_key
     };
 
-    debug!("deepgram api key: {}...", &api_key_to_use[..api_key_to_use.len().min(8)]);
+    debug!(
+        "deepgram api key: {}...",
+        &api_key_to_use[..api_key_to_use.len().min(8)]
+    );
 
     let response =
         get_deepgram_response(api_key_to_use, is_custom_endpoint, wav_data, query_params).await;
