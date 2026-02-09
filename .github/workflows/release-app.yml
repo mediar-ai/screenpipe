@@ -872,6 +872,14 @@ jobs:
             }
           }
 
+      - name: Clean stale beta artifacts before stable upload
+        if: matrix.os_type != 'windows'
+        shell: bash
+        run: |
+          # Remove any leftover beta artifacts from previous builds (self-hosted runners persist)
+          find apps/screenpipe-app-tauri/src-tauri/target -name "*beta*" -type f -delete 2>/dev/null || true
+          echo "Cleaned stale beta artifacts"
+
       - name: Upload Assets to CrabNebula Cloud (Non-Windows)
         if: matrix.os_type != 'windows' && (needs.check_commit.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
         uses: crabnebula-dev/cloud-release@v0.2.6
