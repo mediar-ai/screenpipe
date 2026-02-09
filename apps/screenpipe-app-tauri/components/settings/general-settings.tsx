@@ -155,13 +155,13 @@ export default function GeneralSettings() {
                     Version{currentVersion ? ` ${currentVersion}` : ""}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {rollbackVersion
+                    {rollbackVersion && rollbackVersion !== currentVersion
                       ? `previous: v${rollbackVersion}`
                       : "no previous version saved yet"}
                   </p>
                 </div>
               </div>
-              {rollbackVersion && (
+              {rollbackVersion && rollbackVersion !== currentVersion && (
                 <Button
                   variant="outline"
                   size="sm"
