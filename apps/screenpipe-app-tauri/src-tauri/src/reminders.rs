@@ -646,7 +646,11 @@ async fn call_ai_for_reminders(
 ) -> Result<String, String> {
     // Truncate to fit context window (~10K chars max)
     let context = if context.len() > 6000 {
-        &context[..6000]
+        let mut end = 6000;
+        while !context.is_char_boundary(end) {
+            end -= 1;
+        }
+        &context[..end]
     } else {
         context
     };
@@ -759,7 +763,11 @@ pub(crate) fn parse_action_items(response: &str) -> Vec<ActionItemParsed> {
             warn!(
                 "reminders: failed to parse AI response: {} | raw: {}",
                 e,
-                &response[..response.len().min(200)]
+                {
+                    let mut end = response.len().min(200);
+                    while !response.is_char_boundary(end) { end -= 1; }
+                    &response[..end]
+                }
             );
             Vec::new()
         }

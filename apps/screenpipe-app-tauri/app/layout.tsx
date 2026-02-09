@@ -47,13 +47,20 @@ export default function RootLayout({
       }
     } catch {}
 
-    // Auto-reload on IndexedDB disconnect (APP-2E, 21 users)
+    // Auto-reload on IndexedDB disconnect (APP-2E, 27 users on v2.0.379)
     // WKWebView's IndexedDB server can crash; the page becomes unusable.
+    // PostHog JS SDK uses IndexedDB for session replay — this is a known WebKit bug.
+    let idbReloadPending = false;
     const handleUnhandledRejection = (e: PromiseRejectionEvent) => {
       const msg = String(e.reason?.message || e.reason || "");
       if (msg.includes("Connection to Indexed Database server lost")) {
-        console.warn("IndexedDB server lost — reloading page");
-        window.location.reload();
+        // Prevent the error from reaching Sentry — we handle it via reload
+        e.preventDefault();
+        if (idbReloadPending) return; // debounce: only one reload
+        idbReloadPending = true;
+        console.warn("IndexedDB server lost — reloading page in 1s");
+        // Short delay to let any in-flight operations settle
+        setTimeout(() => window.location.reload(), 1000);
       }
     };
     window.addEventListener("unhandledrejection", handleUnhandledRejection);

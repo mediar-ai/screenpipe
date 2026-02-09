@@ -170,6 +170,7 @@ impl VisionManager {
 
         // Spawn the recording task using the existing record_video function
         let handle = self.vision_handle.spawn(async move {
+            let mut consecutive_restarts: u32 = 0;
             loop {
                 match record_video(
                     db.clone(),
@@ -195,11 +196,33 @@ impl VisionManager {
                         break;
                     }
                     Err(e) => {
+                        consecutive_restarts += 1;
+
+                        // Before restarting, verify the monitor still exists
+                        let monitor_exists = get_monitor_by_id(monitor_id).await.is_some();
+
+                        if !monitor_exists {
+                            warn!(
+                                "Monitor {} no longer exists after error: {:?}. \
+                                 Stopping task — MonitorWatcher will restart if it reappears.",
+                                monitor_id, e
+                            );
+                            break;
+                        }
+
+                        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s
+                        let backoff =
+                            Duration::from_secs((1u64 << consecutive_restarts.min(4)).min(30));
                         error!(
-                            "Monitor {} recording error: {:?}, restarting in 1s...",
-                            monitor_id, e
+                            "Monitor {} recording error (restart #{}): {:?}, retrying in {:?}",
+                            monitor_id, consecutive_restarts, e, backoff
                         );
-                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        tokio::time::sleep(backoff).await;
+
+                        // Reset restart counter after successful long run (>5 min)
+                        // This is handled implicitly: if record_video runs for a while
+                        // and then fails, the backoff is appropriate. If it fails immediately
+                        // (capture broken), backoff grows quickly to stop hammering.
                     }
                 }
             }

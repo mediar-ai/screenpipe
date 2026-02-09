@@ -943,6 +943,16 @@ async fn main() {
                     if let Some(ref mut msg) = event.message {
                         *msg = strip_user_paths(msg);
                     }
+                    // Filter out IndexedDB disconnect errors (APP-2E)
+                    // WKWebView's IndexedDB server crashes are handled via auto-reload
+                    // in layout.tsx — no need to report to Sentry
+                    for val in event.exception.values.iter() {
+                        if let Some(ref v) = val.value {
+                            if v.contains("Indexed Database server lost") {
+                                return None;
+                            }
+                        }
+                    }
                     for val in event.exception.values.iter_mut() {
                         if let Some(ref mut v) = val.value {
                             *v = strip_user_paths(v);
