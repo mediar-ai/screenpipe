@@ -470,31 +470,36 @@ jobs:
         if: matrix.os_type == 'windows' && steps.cache-llvm.outputs.cache-hit != 'true'
         shell: powershell
         run: |
-          # Create LLVM directory with proper permissions
           $llvmPath = "C:\Program Files\LLVM"
-          if (!(Test-Path $llvmPath)) {
-            New-Item -ItemType Directory -Force -Path $llvmPath | Out-Null
-            $acl = Get-Acl $llvmPath
-            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule("Users","FullControl","Allow")
-            $acl.SetAccessRule($rule)
-            Set-Acl $llvmPath $acl
-          }
+          # Skip if already installed (self-hosted runners)
+          if (Test-Path "$llvmPath\bin\clang.exe") {
+            Write-Host "LLVM already installed, skipping download"
+          } else {
+            # Create LLVM directory with proper permissions
+            if (!(Test-Path $llvmPath)) {
+              New-Item -ItemType Directory -Force -Path $llvmPath | Out-Null
+              $acl = Get-Acl $llvmPath
+              $rule = New-Object System.Security.AccessControl.FileSystemAccessRule("Users","FullControl","Allow")
+              $acl.SetAccessRule($rule)
+              Set-Acl $llvmPath $acl
+            }
 
-          # Download and install LLVM
-          $installerUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/LLVM-10.0.0-win64.exe"
-          $installerPath = Join-Path $env:TEMP "LLVM-10.0.0-win64.exe"
+            # Download and install LLVM
+            $installerUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/LLVM-10.0.0-win64.exe"
+            $installerPath = Join-Path $env:TEMP "LLVM-10.0.0-win64.exe"
 
-          Write-Host "Downloading LLVM installer..."
-          Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+            Write-Host "Downloading LLVM installer..."
+            Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
 
-          Write-Host "Installing LLVM..."
-          Start-Process -FilePath $installerPath -ArgumentList "/S","/D=$llvmPath" -Wait -NoNewWindow
+            Write-Host "Installing LLVM..."
+            Start-Process -FilePath $installerPath -ArgumentList "/S","/D=$llvmPath" -Wait -NoNewWindow
 
-          Remove-Item $installerPath -Force
+            Remove-Item $installerPath -Force
 
-          # Verify installation
-          if (!(Test-Path "$llvmPath\bin\clang.exe")) {
-            throw "LLVM installation failed - clang.exe not found"
+            # Verify installation
+            if (!(Test-Path "$llvmPath\bin\clang.exe")) {
+              throw "LLVM installation failed - clang.exe not found"
+            }
           }
           Write-Host "LLVM installation completed successfully"
 
@@ -509,20 +514,20 @@ jobs:
             Remove-Item Alias:wget -Force
           }
 
-          # Create wget directory
           $wgetDir = "C:\wget"
-          New-Item -ItemType Directory -Force -Path $wgetDir
+          # Skip download if already installed (self-hosted runners)
+          if (Test-Path "$wgetDir\wget.exe") {
+            Write-Host "wget already installed, skipping download"
+          } else {
+            New-Item -ItemType Directory -Force -Path $wgetDir
 
-          # Download wget executable
-          $wgetUrl = "https://eternallybored.org/misc/wget/releases/wget-1.21.4-win64.zip"
-          $wgetZip = "$wgetDir\wget.zip"
+            $wgetUrl = "https://eternallybored.org/misc/wget/releases/wget-1.21.4-win64.zip"
+            $wgetZip = "$wgetDir\wget.zip"
 
-          # Use Invoke-WebRequest to download
-          Invoke-WebRequest -Uri $wgetUrl -OutFile $wgetZip
-
-          # Extract wget
-          Expand-Archive -Path $wgetZip -DestinationPath $wgetDir -Force
-          Remove-Item $wgetZip
+            Invoke-WebRequest -Uri $wgetUrl -OutFile $wgetZip
+            Expand-Archive -Path $wgetZip -DestinationPath $wgetDir -Force
+            Remove-Item $wgetZip
+          }
 
           # Add to PATH for current session only
           $env:Path = "$wgetDir;$env:Path"
