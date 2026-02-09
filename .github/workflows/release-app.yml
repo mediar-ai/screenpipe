@@ -104,7 +104,7 @@ jobs:
             local label="$1"
             local timeout="$2"
             local elapsed=0
-            local interval=30
+            local interval=10
             echo "⏳ Waiting up to ${timeout}s for $label to become available..." >&2
             while [ $elapsed -lt $timeout ]; do
               local state=$(check_runner "$label")
@@ -129,8 +129,8 @@ jobs:
             echo "⚠️ Forcing GitHub-hosted runners (manual override)"
           else
             # macOS aarch64 fallback chain (needs Xcode 26 for Apple Intelligence):
-            # 1. MacBook (macos-26) — wait up to 10 min
-            # 2. Mac Mini (macos-test) — wait up to 5 min
+            # 1. MacBook (macos-26) — wait up to 3 min
+            # 2. Mac Mini (macos-test) — wait up to 2 min
             # 3. GH-hosted (macos-latest) — no Apple Intelligence but always available
             MACBOOK=$(check_runner "macos-26")
 
@@ -138,18 +138,18 @@ jobs:
               echo "macos_arm_runner=macos-26" >> $GITHUB_OUTPUT
               echo "✅ MacBook (macos-26) is available"
             elif [ "$MACBOOK" = "busy" ]; then
-              RESULT=$(wait_for_runner "macos-26" 600)
+              RESULT=$(wait_for_runner "macos-26" 180)
               if [ "$RESULT" = "available" ]; then
                 echo "macos_arm_runner=macos-26" >> $GITHUB_OUTPUT
                 echo "✅ MacBook (macos-26) became available"
               else
-                echo "⚠️ MacBook timed out after 10 min, trying Mac Mini..."
+                echo "⚠️ MacBook timed out after 3 min, trying Mac Mini..."
                 MACMINI=$(check_runner "macos-test")
                 if [ "$MACMINI" = "available" ]; then
                   echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
                   echo "✅ Mac Mini (macos-test) is available"
                 elif [ "$MACMINI" = "busy" ]; then
-                  RESULT2=$(wait_for_runner "macos-test" 300)
+                  RESULT2=$(wait_for_runner "macos-test" 120)
                   if [ "$RESULT2" = "available" ]; then
                     echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
                     echo "✅ Mac Mini (macos-test) became available"
@@ -169,7 +169,7 @@ jobs:
                 echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
                 echo "✅ Mac Mini (macos-test) is available"
               elif [ "$MACMINI" = "busy" ]; then
-                RESULT2=$(wait_for_runner "macos-test" 300)
+                RESULT2=$(wait_for_runner "macos-test" 120)
                 if [ "$RESULT2" = "available" ]; then
                   echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
                   echo "✅ Mac Mini (macos-test) became available"
@@ -183,14 +183,14 @@ jobs:
               fi
             fi
 
-            # Windows: try self-hosted, wait up to 5 min, fallback to GH-hosted
+            # Windows: try self-hosted, wait up to 2 min, fallback to GH-hosted
             WINRUNNER=$(check_runner "windows-desktop-test")
 
             if [ "$WINRUNNER" = "available" ]; then
               echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
               echo "✅ Windows self-hosted is available"
             elif [ "$WINRUNNER" = "busy" ]; then
-              RESULT=$(wait_for_runner "windows-desktop-test" 300)
+              RESULT=$(wait_for_runner "windows-desktop-test" 120)
               if [ "$RESULT" = "available" ]; then
                 echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
                 echo "✅ Windows self-hosted became available"
