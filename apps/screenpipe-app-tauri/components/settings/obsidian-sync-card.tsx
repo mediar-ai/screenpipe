@@ -693,6 +693,29 @@ export function ObsidianSyncCard() {
           </div>
         )}
 
+        {/* Rate limit / upgrade banner */}
+        {status.lastError && (status.lastError.includes("429") || status.lastError.includes("rate limit")) && (
+          <div className="px-4 py-2 border-t border-border bg-muted/50">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                <AlertCircle className="h-3 w-3 inline mr-1" />
+                usage limit reached · retrying automatically
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-6 gap-1"
+                onClick={async () => {
+                  const { open } = await import("@tauri-apps/plugin-shell");
+                  await open("https://screenpi.pe/login");
+                }}
+              >
+                upgrade
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Status Bar */}
         <div className="px-4 py-2 bg-muted/50 border-t border-border">
           <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
