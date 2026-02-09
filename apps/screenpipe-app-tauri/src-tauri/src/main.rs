@@ -1185,13 +1185,18 @@ async fn main() {
             MacosLauncher::LaunchAgent,
             None,
         ))
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        // single-instance plugin uses zbus::blocking on Linux which panics
+        // inside an existing tokio runtime (nested block_on), so skip it on Linux
+        ;
+        #[cfg(not(target_os = "linux"))]
+        let app = app.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Gracefully handle case where no windows exist yet (can happen during early init)
             let windows = app.webview_windows();
             if let Some(window) = windows.values().next() {
                 let _ = window.set_focus();
             }
-        }))
+        }));
+        let app = app
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build());
 
@@ -1765,6 +1770,10 @@ async fn main() {
             // The app stays in Regular mode permanently so dock+tray are always visible.
 
             // Initialize global shortcuts
+            // TODO(linux): When a shortcut is already registered (e.g. by the DE or another
+            // instance), apply_shortcuts early-returns and skips the rest. Fix this to:
+            // 1. Collect per-shortcut failures instead of aborting on the first one
+            // 2. Emit a user-visible notification listing the conflicting shortcuts
             let app_handle_clone = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = initialize_global_shortcuts(&app_handle_clone).await {

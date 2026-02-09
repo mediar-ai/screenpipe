@@ -174,19 +174,24 @@ before you begin:
    curl -fsSL https://bun.sh/install | bash
    ```
 
-3. **clone and build**:
+3. **install vulkan dependencies (optional, for AMD GPU acceleration)**:
+   ```bash
+   sudo apt-get install -y libvulkan-dev glslc
+   ```
+
+4. **clone and build**:
    ```bash
    git clone https://github.com/screenpipe/screenpipe
    cd screenpipe
    cargo build --release
    ```
 
-4. **run the application**:
+5. **run the application**:
    ```bash
    ./target/release/screenpipe
    ```
 
-5. **build the desktop app**:
+6. **build the desktop app**:
    ```bash
    sudo apt-get install -y libayatana-appindicator3-1 libayatana-appindicator3-dev librsvg2-dev libwebkit2gtk-4.1-dev
    cd apps/screenpipe-app-tauri
@@ -275,7 +280,7 @@ this section lists the labels we use to help us track and manage issues and pull
 ## building
 
 ```bash
-cargo build --release --features metal # or cuda, depending on your computer's NPU
+cargo build --release --features metal # or cuda, or vulkan, depending on your GPU
 ```
 
 ## running tests

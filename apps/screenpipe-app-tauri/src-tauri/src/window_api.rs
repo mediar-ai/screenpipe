@@ -556,6 +556,7 @@ impl ShowRewindWindow {
             #[cfg(target_os = "linux")]
             {
                 window.show().ok();
+                window.set_focus().ok();
                 let _ = app.emit("window-focused", true);
             }
         }
@@ -967,16 +968,27 @@ impl ShowRewindWindow {
                     win
                 };
 
-                // Linux uses a normal decorated window (overlay not yet implemented)
+                // Linux uses a normal decorated window (overlay not yet implemented).
+                // Start hidden — show after webview finishes loading to avoid
+                // blank/unresponsive window and premature focus-loss events.
                 #[cfg(target_os = "linux")]
                 let window = {
+                    let app_clone = app.clone();
                     let builder = self.window_builder_with_label(app, "/", main_label_for_mode("fullscreen"))
                         .title("screenpipe")
                         .inner_size(1200.0, 800.0)
                         .min_inner_size(800.0, 600.0)
                         .decorations(true)
-                        .visible(true)
-                        .focused(true);
+                        .visible(false)
+                        .focused(false)
+                        .transparent(false)
+                        .on_page_load(move |win, payload| {
+                            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                                win.show().ok();
+                                win.set_focus().ok();
+                                let _ = app_clone.emit("window-focused", true);
+                            }
+                        });
                     builder.build()?
                 };
 
@@ -1030,11 +1042,15 @@ impl ShowRewindWindow {
 
                 // Add event listener to hide window when it loses focus and handle display changes.
                 // Debounce focus-loss so three-finger workspace swipes don't hide mid-animation.
+                // On Linux the main window is a normal decorated window — don't auto-hide on focus loss,
+                // as that makes the window unclickable and breaks the standard desktop UX.
                 let app_clone = app.clone();
                 let window_clone = window.clone();
+                #[cfg(not(target_os = "linux"))]
                 let focus_cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
                 window.on_window_event(move |event| {
                     match event {
+                        #[cfg(not(target_os = "linux"))]
                         tauri::WindowEvent::Focused(is_focused) => {
                             if !is_focused {
                                 info!("Main window lost focus, scheduling hide (300ms debounce)");
@@ -1324,7 +1340,18 @@ impl ShowRewindWindow {
                 });
             }
 
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
+            {
+                // Hide instead of close/destroy so the webview survives for reopen.
+                // Destroying the window causes a white screen when re-creating
+                // a webview with the same label.
+                for label in &["main", "main-window"] {
+                    if let Some(window) = app.get_webview_window(label) {
+                        window.hide().ok();
+                    }
+                }
+            }
+            #[cfg(target_os = "windows")]
             {
                 for label in &["main", "main-window"] {
                     if let Some(window) = app.get_webview_window(label) {

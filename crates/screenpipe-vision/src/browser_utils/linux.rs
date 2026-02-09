@@ -9,7 +9,6 @@ use atspi_common::State;
 use atspi_proxies::document::DocumentProxy;
 use std::future::Future;
 use std::pin::Pin;
-use tokio::runtime::Handle;
 use tracing::{debug, error};
 use zbus::fdo::DBusProxy;
 
@@ -290,14 +289,19 @@ impl BrowserUrlDetector for LinuxUrlDetector {
         process_id: i32,
         window_title: &str,
     ) -> Result<Option<String>> {
-        // Use block_in_place to avoid blocking the runtime worker thread
-        // Then use Handle::current().block_on to run the async code
-        tokio::task::block_in_place(|| {
-            Handle::current().block_on(Self::get_active_url_from_window(
-                process_id,
-                window_title,
-                app_name,
-            ))
+        // Run on a dedicated thread so zbus/atspi can create their own tokio
+        // runtime without hitting "Cannot start a runtime from within a runtime"
+        let pid = process_id;
+        let title = window_title.to_string();
+        let name = app_name.to_string();
+        std::thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build atspi runtime")
+                .block_on(Self::get_active_url_from_window(pid, &title, &name))
         })
+        .join()
+        .map_err(|e| anyhow!("browser url detector thread panicked: {:?}", e))?
     }
 }
