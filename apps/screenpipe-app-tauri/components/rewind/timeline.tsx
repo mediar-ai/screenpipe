@@ -143,6 +143,17 @@ export default function Timeline() {
 	const isAtLiveEdge = currentIndex === 0;
 	const prevFramesLengthRef = useRef(frames.length);
 
+	// collect unique device ids across all frames (for monitor pill)
+	const allDeviceIds = useMemo(() => {
+		const ids = new Set<string>();
+		for (const frame of frames) {
+			for (const d of frame.devices) {
+				if (d.device_id) ids.add(d.device_id);
+			}
+		}
+		return [...ids];
+	}, [frames]);
+
 	// When new frames arrive and user is NOT at live edge, adjust index to stay on same frame
 	useEffect(() => {
 		if (newFramesCount > 0 && !isAtLiveEdge && frames.length > prevFramesLengthRef.current) {
@@ -1054,6 +1065,7 @@ export default function Timeline() {
 					{currentFrame ? (
 						<CurrentFrameTimeline
 							currentFrame={currentFrame}
+							allDeviceIds={allDeviceIds}
 							onNavigate={(direction) => {
 								const newIndex = direction === "next"
 									? Math.min(currentIndex + 1, frames.length - 1)
