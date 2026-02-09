@@ -81,14 +81,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RUNNER_CHECK_TOKEN }}
         run: |
+          # Check if runner is online AND not busy (available = can start immediately)
           check_runner() {
             local label="$1"
             local info
             info=$(gh api repos/${{ github.repository }}/actions/runners \
-              --jq ".runners[] | select(.labels[].name == \"$label\") | {status: .status, busy: .busy}" 2>/dev/null || echo '{"status":"offline","busy":false}')
+              --jq ".runners[] | select(.labels[].name == \"$label\") | {status: .status, busy: .busy}" 2>/dev/null || echo '{"status":"offline","busy":true}')
             local status=$(echo "$info" | jq -r '.status // "offline"')
-            if [ "$status" = "online" ]; then
-              echo "online"
+            local busy=$(echo "$info" | jq -r '.busy // true')
+            if [ "$status" = "online" ] && [ "$busy" = "false" ]; then
+              echo "available"
+            elif [ "$status" = "online" ]; then
+              echo "busy"
             else
               echo "offline"
             fi
@@ -100,30 +104,30 @@ jobs:
             echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
             echo "⚠️ Forcing GitHub-hosted runners (manual override)"
           else
-            # macOS aarch64: MacBook (macos-26) → Mac Mini (macos-test) → GH-hosted (macos-latest)
+            # macOS aarch64: prefer available self-hosted, fallback to GH-hosted if busy/offline
             MACBOOK=$(check_runner "macos-26")
             MACMINI=$(check_runner "macos-test")
 
-            if [ "$MACBOOK" = "online" ]; then
+            if [ "$MACBOOK" = "available" ]; then
               echo "macos_arm_runner=macos-26" >> $GITHUB_OUTPUT
-              echo "✅ MacBook (macos-26) is online — using as primary"
-            elif [ "$MACMINI" = "online" ]; then
+              echo "✅ MacBook (macos-26) is available"
+            elif [ "$MACMINI" = "available" ]; then
               echo "macos_arm_runner=macos-test" >> $GITHUB_OUTPUT
-              echo "⚠️ MacBook offline — falling back to Mac Mini (macos-test)"
+              echo "⚠️ MacBook busy/offline — using Mac Mini (macos-test)"
             else
               echo "macos_arm_runner=macos-latest" >> $GITHUB_OUTPUT
-              echo "ℹ️ All self-hosted macOS runners offline — using GH-hosted macos-latest"
+              echo "ℹ️ All self-hosted runners busy/offline — using GH-hosted macos-latest"
             fi
 
-            # Windows: self-hosted (windows-desktop-test) → GH-hosted (windows-2019)
+            # Windows: prefer self-hosted if available, fallback to GH-hosted
             WINRUNNER=$(check_runner "windows-desktop-test")
 
-            if [ "$WINRUNNER" = "online" ]; then
+            if [ "$WINRUNNER" = "available" ]; then
               echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
-              echo "✅ Windows self-hosted runner is online"
+              echo "✅ Windows self-hosted runner is available"
             else
               echo "windows_runner=windows-2019" >> $GITHUB_OUTPUT
-              echo "ℹ️ Windows self-hosted offline — using GH-hosted windows-2019"
+              echo "ℹ️ Windows self-hosted busy/offline — using GH-hosted windows-2019"
             fi
           fi
 
