@@ -857,7 +857,7 @@ jobs:
             Get-ChildItem -Path "target" -Recurse -Include "*.nsis*","*.exe","*.sig","*.msi" | Where-Object { $_.DirectoryName -match "bundle|release$" } | Remove-Item -Force -ErrorAction SilentlyContinue
             # Rebuild (Rust cached, just repackages) - run from project root
             Push-Location ..
-            bunx tauri build --target x86_64-pc-windows-msvc --features mkl
+            bunx tauri build --target x86_64-pc-windows-msvc --features mkl,official-build
             Pop-Location
             Write-Host "=== Beta rebuild complete ==="
             Write-Host "Beta artifacts:"
