@@ -105,7 +105,7 @@ jobs:
             local timeout="$2"
             local elapsed=0
             local interval=30
-            echo "⏳ Waiting up to ${timeout}s for $label to become available..."
+            echo "⏳ Waiting up to ${timeout}s for $label to become available..." >&2
             while [ $elapsed -lt $timeout ]; do
               local state=$(check_runner "$label")
               if [ "$state" = "available" ]; then
