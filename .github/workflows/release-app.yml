@@ -314,6 +314,23 @@ jobs:
         with:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
+      - name: Shorten target dir to avoid MAX_PATH (Windows)
+        if: matrix.os_type == 'windows'
+        shell: powershell
+        run: |
+          # vulkan-shaders-gen ExternalProject creates deeply nested paths
+          # that exceed the 260-char Windows MAX_PATH limit when built under
+          # the default checkout path. Create a junction so the target dir
+          # physically lives at C:\t (short) while all existing path refs
+          # (apps/screenpipe-app-tauri/src-tauri/target/...) still work.
+          $targetDir = "apps\screenpipe-app-tauri\src-tauri\target"
+          $shortDir = "C:\t"
+          if (Test-Path $shortDir) { Remove-Item -Recurse -Force $shortDir }
+          New-Item -ItemType Directory -Force -Path $shortDir | Out-Null
+          if (Test-Path $targetDir) { Remove-Item -Recurse -Force $targetDir }
+          cmd /c mklink /J $targetDir $shortDir
+          Write-Host "Created junction: $targetDir -> $shortDir"
+
       - name: Update version in Cargo.toml
         if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform != 'macos-latest'
         shell: pwsh

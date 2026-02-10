@@ -3,23 +3,22 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Monitor, Mic, Keyboard, Check, AlertTriangle, RefreshCw, ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { commands, type OSPermission, type OSPermissionsCheck } from "@/lib/utils/tauri";
+import { commands, type OSPermission } from "@/lib/utils/tauri";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import posthog from "posthog-js";
 
 
-interface PermissionRowFullProps {
+interface PermissionRowProps {
   icon: React.ReactNode;
   label: string;
   description: string;
   status: "granted" | "denied" | "checking";
-  onResetAndFix: () => void;
-  onOpenSettings: () => void;
-  isFixing: boolean;
+  onFix: () => void;
+  isAnyFixing: boolean;
 }
 
-function PermissionRow({ icon, label, description, status, onResetAndFix, onOpenSettings, isFixing }: PermissionRowFullProps) {
+function PermissionRow({ icon, label, description, status, onFix, isAnyFixing }: Omit<PermissionRowProps, 'onReset' | 'isFixing'>) {
   return (
     <div className="flex items-center justify-between p-4 border border-border rounded-lg bg-card">
       <div className="flex items-center space-x-3">
@@ -38,32 +37,16 @@ function PermissionRow({ icon, label, description, status, onResetAndFix, onOpen
             <span className="font-mono text-xs">ok</span>
           </div>
         ) : (
-          <>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={onResetAndFix}
-              disabled={isFixing}
-              className="font-mono text-xs"
-            >
-              {isFixing ? (
-                <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3 h-3 mr-1" />
-              )}
-              reset & fix
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onOpenSettings}
-              disabled={isFixing}
-              className="font-mono text-xs"
-            >
-              <ExternalLink className="w-3 h-3 mr-1" />
-              open settings
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onFix}
+            disabled={isAnyFixing}
+            className="font-mono text-xs"
+          >
+            <ExternalLink className="w-3 h-3 mr-1" />
+            open settings
+          </Button>
         )}
       </div>
     </div>
@@ -72,7 +55,6 @@ function PermissionRow({ icon, label, description, status, onResetAndFix, onOpen
 
 export default function PermissionRecoveryPage() {
   const [permissions, setPermissions] = useState<Record<string, string> | null>(null);
-  const [fixingPermission, setFixingPermission] = useState<string | null>(null);
 
   const { isMac: isMacOS } = usePlatform();
 
@@ -130,27 +112,6 @@ export default function PermissionRecoveryPage() {
       }, 1500);
     }
   }, [permissions]);
-
-  // Reset TCC entry and re-request permission (shows native dialog if possible)
-  const resetAndFix = async (permission: OSPermission) => {
-    posthog.capture("permission_recovery_reset_and_fix", { permission });
-    setFixingPermission(permission);
-    try {
-      const result = await commands.resetAndRequestPermission(permission);
-      if (result.status === "error") {
-        console.error("Reset and request failed:", result.error);
-        // Fallback: open settings directly
-        await commands.openPermissionSettings(permission);
-      }
-    } catch (error) {
-      console.error("Failed to reset and request permission:", error);
-      // Fallback: open settings directly
-      await commands.openPermissionSettings(permission);
-    } finally {
-      // Clear fixing state after a short delay to let the dialog appear
-      setTimeout(() => setFixingPermission(null), 2000);
-    }
-  };
 
   // Open system settings for a permission
   const openSettings = async (permission: OSPermission) => {
@@ -242,9 +203,8 @@ export default function PermissionRecoveryPage() {
                   label="screen recording"
                   description="capture what's on screen"
                   status={screenStatus}
-                  onResetAndFix={() => resetAndFix("screenRecording")}
-                  onOpenSettings={() => openSettings("screenRecording")}
-                  isFixing={fixingPermission === "screenRecording"}
+                  onFix={() => openSettings("screenRecording")}
+                  isAnyFixing={false}
                 />
 
                 <PermissionRow
@@ -252,9 +212,8 @@ export default function PermissionRecoveryPage() {
                   label="microphone"
                   description="transcribe speech"
                   status={micStatus}
-                  onResetAndFix={() => resetAndFix("microphone")}
-                  onOpenSettings={() => openSettings("microphone")}
-                  isFixing={fixingPermission === "microphone"}
+                  onFix={() => openSettings("microphone")}
+                  isAnyFixing={false}
                 />
 
                 {isMacOS && (
@@ -263,18 +222,15 @@ export default function PermissionRecoveryPage() {
                     label="accessibility"
                     description="keyboard shortcuts"
                     status={accessibilityStatus}
-                    onResetAndFix={() => resetAndFix("accessibility")}
-                    onOpenSettings={() => openSettings("accessibility")}
-                    isFixing={fixingPermission === "accessibility"}
+                    onFix={() => openSettings("accessibility")}
+                    isAnyFixing={false}
                   />
                 )}
               </div>
 
               <div className="text-center space-y-3">
                 <p className="font-mono text-xs text-muted-foreground">
-                  click &quot;reset &amp; fix&quot; to trigger the permission dialog.
-                  <br />
-                  if that doesn&apos;t work, use &quot;open settings&quot; to toggle it manually.
+                  click &quot;open settings&quot; to toggle the permission on in system settings.
                   <br />
                   this window will close automatically once permissions are fixed.
                 </p>
