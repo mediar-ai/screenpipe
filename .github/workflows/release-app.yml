@@ -460,7 +460,7 @@ jobs:
         run: |
           # Ensure brew is on PATH (self-hosted runners may not have it in default PATH)
           eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null || true)"
-          brew install ffmpeg
+          brew install ffmpeg wget
 
       - name: Install dependencies
         if: matrix.os_type == 'linux'
@@ -690,8 +690,21 @@ jobs:
         run: bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ${{ github.workspace }}/apps/screenpipe-app-tauri
 
-      - uses: actions/setup-python@v5
+      - name: Check Python availability
         if: matrix.os_type == 'windows'
+        id: check-python
+        shell: powershell
+        run: |
+          if (Get-Command python -ErrorAction SilentlyContinue) {
+            $ver = python --version 2>&1
+            Write-Host "Python already available: $ver"
+            echo "has_python=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "has_python=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - uses: actions/setup-python@v5
+        if: matrix.os_type == 'windows' && steps.check-python.outputs.has_python != 'true'
         with:
           python-version: '3.13'
 

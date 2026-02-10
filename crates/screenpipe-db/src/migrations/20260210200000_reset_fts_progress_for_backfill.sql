@@ -1,0 +1,12 @@
+-- Reset FTS index progress to trigger a full backfill.
+--
+-- The old synchronous FTS triggers silently failed under DB write contention
+-- (issue #2181), leaving gaps in the FTS index. The deferred FTS migration
+-- (20260209000001) then set high-water marks to MAX(rowid), assuming all
+-- existing data was indexed — but it wasn't.
+--
+-- Resetting to 0 causes the background FTS indexer to re-scan all rows.
+-- It uses INSERT OR IGNORE, so already-indexed rows are skipped cheaply.
+-- The indexer processes 500 rows every 30 seconds, so backfill is gradual
+-- and won't impact recording performance.
+UPDATE fts_index_progress SET last_indexed_rowid = 0;
