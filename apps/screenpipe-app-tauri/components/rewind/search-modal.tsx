@@ -256,6 +256,17 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
   const [isLoadingTranscriptions, setIsLoadingTranscriptions] = useState(false);
   const [selectedTranscriptionIndex, setSelectedTranscriptionIndex] = useState(0);
 
+  // Pagination
+  const [ocrOffset, setOcrOffset] = useState(0);
+  const [hasMoreOcr, setHasMoreOcr] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [transcriptionOffset, setTranscriptionOffset] = useState(0);
+  const [hasMoreTranscriptions, setHasMoreTranscriptions] = useState(true);
+  const [isLoadingMoreTranscriptions, setIsLoadingMoreTranscriptions] = useState(false);
+
+  const OCR_PAGE_SIZE = 24;
+  const TRANSCRIPTION_PAGE_SIZE = 30;
+
   const debouncedQuery = useDebounce(query, 200);
   const { suggestions, isLoading: suggestionsLoading } = useSuggestions(isOpen);
 
@@ -276,6 +287,10 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
       setSelectedSpeaker(null);
       setSpeakerTranscriptions([]);
       setSelectedTranscriptionIndex(0);
+      setOcrOffset(0);
+      setHasMoreOcr(true);
+      setTranscriptionOffset(0);
+      setHasMoreTranscriptions(true);
 
       // Focus after next frame. The panel is made key window on show,
       // but the global shortcut path also calls show_main_window first.
@@ -303,8 +318,11 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
       return;
     }
 
+    setOcrOffset(0);
+    setHasMoreOcr(true);
     searchKeywords(debouncedQuery, {
-      limit: 24,
+      limit: OCR_PAGE_SIZE,
+      offset: 0,
     });
   }, [debouncedQuery, searchKeywords, resetSearch]);
 
@@ -343,6 +361,8 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
   useEffect(() => {
     if (!selectedSpeaker) {
       setSpeakerTranscriptions([]);
+      setTranscriptionOffset(0);
+      setHasMoreTranscriptions(true);
       return;
     }
 
@@ -372,6 +392,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
             speaker_name: item.content?.speaker_name || selectedSpeaker.name,
             duration_secs: item.content?.duration_secs || 0,
           }));
+          if (items.length < TRANSCRIPTION_PAGE_SIZE) setHasMoreTranscriptions(false);
           setSpeakerTranscriptions(items);
         }
       } catch {
@@ -409,15 +430,91 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
     setSelectedSpeaker(null);
     setSpeakerTranscriptions([]);
     setSelectedTranscriptionIndex(0);
+    setTranscriptionOffset(0);
+    setHasMoreTranscriptions(true);
     // Re-focus the input
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
-  // Keyboard navigation
+  // Load more OCR results
+  const loadMoreOcr = useCallback(() => {
+    if (isLoadingMore || !hasMoreOcr || !debouncedQuery.trim()) return;
+    setIsLoadingMore(true);
+    const newOffset = ocrOffset + OCR_PAGE_SIZE;
+    setOcrOffset(newOffset);
+    searchKeywords(debouncedQuery, {
+      limit: OCR_PAGE_SIZE,
+      offset: newOffset,
+    }).finally(() => setIsLoadingMore(false));
+  }, [isLoadingMore, hasMoreOcr, debouncedQuery, ocrOffset, searchKeywords]);
+
+  // Track if we got fewer results than page size (= no more pages)
+  useEffect(() => {
+    if (searchResults.length > 0 && searchResults.length < (ocrOffset + OCR_PAGE_SIZE)) {
+      setHasMoreOcr(false);
+    }
+  }, [searchResults.length, ocrOffset]);
+
+  // Load more speaker transcriptions
+  const loadMoreTranscriptions = useCallback(async () => {
+    if (isLoadingMoreTranscriptions || !hasMoreTranscriptions || !selectedSpeaker) return;
+    setIsLoadingMoreTranscriptions(true);
+    const newOffset = transcriptionOffset + TRANSCRIPTION_PAGE_SIZE;
+    setTranscriptionOffset(newOffset);
+
+    try {
+      const params = new URLSearchParams({
+        content_type: "audio",
+        speaker_name: selectedSpeaker.name,
+        limit: TRANSCRIPTION_PAGE_SIZE.toString(),
+        offset: newOffset.toString(),
+      });
+      const resp = await fetch(
+        `http://localhost:3030/search?${params}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        const items = (data?.data || []).map((item: any) => ({
+          timestamp: item.content?.timestamp || "",
+          transcription: item.content?.transcription || "",
+          device_name: item.content?.device_name || "",
+          is_input: item.content?.is_input ?? true,
+          speaker_name: item.content?.speaker_name || selectedSpeaker.name,
+          duration_secs: item.content?.duration_secs || 0,
+        }));
+        if (items.length < TRANSCRIPTION_PAGE_SIZE) setHasMoreTranscriptions(false);
+        setSpeakerTranscriptions(prev => [...prev, ...items]);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingMoreTranscriptions(false);
+    }
+  }, [isLoadingMoreTranscriptions, hasMoreTranscriptions, selectedSpeaker, transcriptionOffset]);
+
+  // Infinite scroll handler
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    const target = e.currentTarget;
+    const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 200;
+
+    if (nearBottom) {
+      if (selectedSpeaker) {
+        loadMoreTranscriptions();
+      } else {
+        loadMoreOcr();
+      }
+    }
+  }, [selectedSpeaker, loadMoreOcr, loadMoreTranscriptions]);
+
+  // Keyboard navigation — skip arrow key capture when input is focused (let cursor move)
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const inputFocused = document.activeElement === inputRef.current;
+
       // Speaker drill-down mode
       if (selectedSpeaker) {
         switch (e.key) {
@@ -442,6 +539,11 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
             break;
         }
         return;
+      }
+
+      // When input is focused, let left/right arrows move the cursor
+      if (inputFocused && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        return; // Don't capture — let the input handle it
       }
 
       const cols = 4; // Grid columns
@@ -566,7 +668,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
             if (isAtTop || isAtBottom) e.preventDefault();
           }}
           onTouchMove={(e) => e.stopPropagation()}
-          onScroll={(e) => e.stopPropagation()}
+          onScroll={handleScroll}
         >
           {/* === Speaker drill-down view === */}
           {selectedSpeaker ? (
@@ -632,6 +734,17 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Load more transcriptions indicator */}
+              {speakerTranscriptions.length > 0 && (isLoadingMoreTranscriptions || hasMoreTranscriptions) && (
+                <div className="flex justify-center py-4">
+                  {isLoadingMoreTranscriptions ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">scroll for more</span>
+                  )}
                 </div>
               )}
             </div>
@@ -741,6 +854,17 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
                       );
                     })}
                   </div>
+
+                  {/* Load more indicator */}
+                  {(isLoadingMore || (hasMoreOcr && searchResults.length >= OCR_PAGE_SIZE)) && (
+                    <div className="flex justify-center py-4">
+                      {isLoadingMore ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">scroll for more</span>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 

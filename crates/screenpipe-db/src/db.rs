@@ -161,9 +161,11 @@ impl DatabaseManager {
 
         let db_manager = DatabaseManager {
             pool,
-            // Single permit = single writer. All BEGIN IMMEDIATE callers acquire
-            // this before touching the DB, so SQLite never sees concurrent writers.
-            write_semaphore: Arc::new(Semaphore::new(1)),
+            // 2 permits = at most 2 concurrent writers. SQLite WAL handles 2
+            // concurrent writers fine via busy_timeout retry. The cascade failure
+            // from issue #2181 only occurs at 3+ concurrent writers overwhelming
+            // the retry loop. This balances throughput vs safety.
+            write_semaphore: Arc::new(Semaphore::new(2)),
         };
 
         // Run migrations after establishing the connection
