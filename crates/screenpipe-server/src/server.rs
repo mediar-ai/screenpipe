@@ -1623,7 +1623,7 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
                                     transcription: audio.transcription,
                                     audio_file_path: audio.audio_file_path,
                                     duration_secs: audio.duration_secs,
-                                    start_offset: 0.0, // calculate based on audio timestamp vs frame timestamp
+                                    start_offset: audio.start_time.unwrap_or(0.0),
                                     audio_chunk_id: audio.audio_chunk_id,
                                     speaker_id: audio.speaker_id,
                                     speaker_name: audio.speaker_name,

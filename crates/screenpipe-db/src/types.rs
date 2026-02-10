@@ -241,6 +241,10 @@ pub struct AudioEntry {
     pub audio_chunk_id: i64,
     pub speaker_id: Option<i64>,
     pub speaker_name: Option<String>,
+    /// Offset in seconds from the start of the audio chunk file where this transcription begins
+    pub start_time: Option<f64>,
+    /// Offset in seconds from the start of the audio chunk file where this transcription ends
+    pub end_time: Option<f64>,
 }
 
 #[derive(OaSchema, Debug, Clone)]

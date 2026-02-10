@@ -8719,7 +8719,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "2.0.388"
+version = "2.0.390"
 dependencies = [
  "anyhow",
  "async-stream",

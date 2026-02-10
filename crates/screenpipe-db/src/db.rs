@@ -2314,6 +2314,8 @@ impl DatabaseManager {
                         audio_chunk_id: row.get("audio_chunk_id"),
                         speaker_id: row.try_get("speaker_id").ok(),
                         speaker_name: row.try_get("speaker_name").ok(),
+                        start_time: row.try_get("start_time").ok(),
+                        end_time: row.try_get("end_time").ok(),
                     });
                 }
             }
