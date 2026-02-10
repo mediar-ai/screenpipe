@@ -1935,6 +1935,7 @@ async fn reassign_speaker_handler(
     }))
 }
 
+#[oasgen]
 async fn undo_speaker_reassign_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UndoSpeakerReassignRequest>,
