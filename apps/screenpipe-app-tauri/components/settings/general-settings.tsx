@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Rocket, Moon, Sun, Monitor, FlaskConical, Shield, ExternalLink, Layers, RefreshCw, Undo2 } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Settings } from "@/lib/hooks/use-settings";
@@ -228,7 +229,10 @@ export default function GeneralSettings() {
               <div className="flex items-center space-x-2.5">
                 <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div>
-                  <h3 className="text-sm font-medium text-foreground">Timeline Mode</h3>
+                  <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                    Timeline Mode
+                    <HelpTooltip text="Controls how the timeline overlay appears. 'Native' uses a system overlay, 'Tauri' uses the app window." />
+                  </h3>
                   <p className="text-xs text-muted-foreground">Reopen timeline to apply</p>
                 </div>
               </div>
@@ -298,7 +302,10 @@ export default function GeneralSettings() {
               <div className="flex items-center space-x-2.5">
                 <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div>
-                  <h3 className="text-sm font-medium text-foreground">Show Overlay in Screen Recording</h3>
+                  <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                    Show Overlay in Screen Recording
+                    <HelpTooltip text="When enabled, the screenpipe overlay will be visible in screen recordings and screenshots made by other apps like OBS or Screen Studio." />
+                  </h3>
                   <p className="text-xs text-muted-foreground">Let OBS, Screen Studio capture the overlay</p>
                 </div>
               </div>

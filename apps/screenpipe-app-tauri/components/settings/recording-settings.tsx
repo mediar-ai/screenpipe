@@ -19,7 +19,6 @@ import {
   Check,
   ChevronsUpDown,
   Eye,
-  HelpCircle,
   Languages,
   Mic,
   Monitor,
@@ -55,12 +54,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -811,7 +805,10 @@ export function RecordingSettings() {
             <div className="flex items-center space-x-2.5">
               <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
-                <h3 className="text-sm font-medium text-foreground">Adaptive FPS</h3>
+                <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                  Adaptive FPS
+                  <HelpTooltip text="Automatically increases capture rate during mouse/keyboard activity (up to 5 FPS) and decreases during idle periods. Helps capture fast workflows without wasting resources." />
+                </h3>
                 <p className="text-xs text-muted-foreground">Boost during activity, reduce when idle</p>
               </div>
             </div>
@@ -864,7 +861,10 @@ export function RecordingSettings() {
         <CardContent className="px-3 py-2.5">
           <div className="flex items-center space-x-2.5">
             <Mic className="h-4 w-4 text-muted-foreground shrink-0" />
-            <h3 className="text-sm font-medium text-foreground">Audio chunk duration</h3>
+            <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+              Audio chunk duration
+              <HelpTooltip text="Duration of each audio recording segment. Shorter chunks lower memory spikes. Longer chunks may improve transcription quality." />
+            </h3>
           </div>
           <div className="flex items-center space-x-3 mt-2 ml-[26px]">
             <Slider id="audioChunkDuration" min={5} max={3000} step={1} value={[settings.audioChunkDuration]} onValueChange={handleAudioChunkDurationChange} className="flex-grow" />
@@ -886,7 +886,10 @@ export function RecordingSettings() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
                 <Mic className="h-4 w-4 text-muted-foreground shrink-0" />
-                <h3 className="text-sm font-medium text-foreground">Transcription engine</h3>
+                <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                  Transcription engine
+                  <HelpTooltip text="Deepgram: cloud-based, higher quality, requires API key or screenpipe cloud. Whisper: runs locally, no API key needed, may be slower." />
+                </h3>
               </div>
               <Select
                 value={settings.audioTranscriptionEngine}
@@ -1087,7 +1090,10 @@ export function RecordingSettings() {
           <CardContent className="px-3 py-2.5">
             <div className="flex items-center space-x-2.5">
               <Asterisk className="h-4 w-4 text-muted-foreground shrink-0" />
-              <h3 className="text-sm font-medium text-foreground">Voice detection sensitivity</h3>
+              <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                Voice detection sensitivity
+                <HelpTooltip text="How aggressively to filter background noise. Higher = more sensitive (captures quieter speech). Lower = only loud/clear speech." />
+              </h3>
             </div>
             <div className="flex items-center space-x-3 mt-2 ml-[26px]">
               <Slider id="vadSensitivity" min={0} max={2} step={1} value={[vadSensitivityToNumber(settings.vadSensitivity as VadSensitivity)]} onValueChange={handleVadSensitivityChange} className="flex-grow" />
@@ -1187,7 +1193,10 @@ export function RecordingSettings() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
                 <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
-                <h3 className="text-sm font-medium text-foreground">OCR engine</h3>
+                <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                  OCR engine
+                  <HelpTooltip text="Apple Native: fast, uses built-in macOS OCR. Tesseract: open-source, cross-platform. Windows Native: uses Windows OCR APIs." />
+                </h3>
               </div>
               <Select value={settings.ocrEngine} onValueChange={handleOcrModelChange}>
                 <SelectTrigger className="w-[160px] h-7 text-xs">
@@ -1210,7 +1219,10 @@ export function RecordingSettings() {
               <div className="flex items-center space-x-2.5">
                 <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div>
-                  <h3 className="text-sm font-medium text-foreground">PII removal</h3>
+                  <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                    PII removal
+                    <HelpTooltip text="Automatically redacts personally identifiable information (emails, phone numbers, etc.) from captured text before storing." />
+                  </h3>
                   <p className="text-xs text-muted-foreground">Redact emails, phones, SSNs, credit cards</p>
                 </div>
               </div>
@@ -1232,7 +1244,10 @@ export function RecordingSettings() {
                 <div className="flex items-center space-x-2.5">
                   <Key className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div>
-                    <h3 className="text-sm font-medium text-foreground">UI event capture</h3>
+                    <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                      UI event capture
+                      <HelpTooltip text="Records mouse clicks, keyboard activity, and window focus changes. Used for activity tracking and search context." />
+                    </h3>
                     <p className="text-xs text-muted-foreground">Keyboard, mouse, and clipboard events</p>
                   </div>
                 </div>
@@ -1257,7 +1272,10 @@ export function RecordingSettings() {
           <CardContent className="px-3 py-2.5">
             <div className="flex items-center space-x-2.5 mb-2">
               <AppWindowMac className="h-4 w-4 text-muted-foreground shrink-0" />
-              <h3 className="text-sm font-medium text-foreground">Ignored windows</h3>
+              <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                Ignored windows
+                <HelpTooltip text="Windows matching these patterns will not be captured. Use for privacy — e.g. add 'Password Manager' to skip sensitive apps." />
+              </h3>
             </div>
             <div className="ml-[26px]">
               <MultiSelect
@@ -1275,7 +1293,10 @@ export function RecordingSettings() {
           <CardContent className="px-3 py-2.5">
             <div className="flex items-center space-x-2.5 mb-2">
               <AppWindowMac className="h-4 w-4 text-muted-foreground shrink-0" />
-              <h3 className="text-sm font-medium text-foreground">Included windows</h3>
+              <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                Included windows
+                <HelpTooltip text="When set, ONLY windows matching these patterns will be captured. Everything else is ignored. Leave empty to capture all windows (except ignored ones)." />
+              </h3>
             </div>
             <div className="ml-[26px]">
               <MultiSelect
@@ -1293,7 +1314,10 @@ export function RecordingSettings() {
           <CardContent className="px-3 py-2.5">
             <div className="flex items-center space-x-2.5 mb-2">
               <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
-              <h3 className="text-sm font-medium text-foreground">Ignored URLs</h3>
+              <h3 className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                Ignored URLs
+                <HelpTooltip text="Browser URLs matching these patterns will not be captured. Use for privacy — e.g. add 'bank.com' to skip banking sites." />
+              </h3>
             </div>
             <div className="ml-[26px]">
               <MultiSelect
