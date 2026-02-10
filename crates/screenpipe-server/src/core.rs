@@ -12,7 +12,7 @@ use std::time::Duration;
 use tokio::runtime::Handle;
 use tracing::{debug, error, info, warn};
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::clone_on_copy)]
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
@@ -45,6 +45,7 @@ pub async fn start_continuous_recording(
                 let ignored_urls_video = ignored_urls.to_vec();
 
                 let languages = languages.clone();
+                #[allow(clippy::clone_on_copy)] // ActivityFeedOption is not Copy when adaptive-fps feature is enabled
                 let activity_feed = activity_feed.clone();
                 let video_quality = video_quality.clone();
 

@@ -85,6 +85,11 @@ impl FrameWriteTracker {
     pub fn len(&self) -> usize {
         self.writes.len()
     }
+
+    /// Check if there are no tracked frames.
+    pub fn is_empty(&self) -> bool {
+        self.writes.is_empty()
+    }
 }
 
 impl Default for FrameWriteTracker {
@@ -111,7 +116,7 @@ pub struct VideoCapture {
 }
 
 impl VideoCapture {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::clone_on_copy)]
     pub fn new(
         output_path: &str,
         fps: f64,
@@ -511,6 +516,7 @@ async fn log_ffmpeg_output(stream: impl AsyncBufReadExt + Unpin, stream_name: &s
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn save_frames_as_video(
     frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
     output_path: &str,

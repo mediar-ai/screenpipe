@@ -916,7 +916,7 @@ async fn main() -> anyhow::Result<()> {
             languages: languages_clone.clone(),
             capture_unfocused_windows: cli.capture_unfocused_windows,
             realtime_vision: cli.enable_realtime_audio_transcription,
-            activity_feed: activity_feed,
+            activity_feed,
             video_quality: cli.video_quality.clone(),
         };
         Some(Arc::new(VisionManager::new(
@@ -1415,7 +1415,7 @@ async fn main() -> anyhow::Result<()> {
 
 pub async fn handle_mcp_command(
     command: &McpCommand,
-    local_data_dir: &PathBuf,
+    local_data_dir: &std::path::Path,
 ) -> Result<(), anyhow::Error> {
     let client = Client::new();
 

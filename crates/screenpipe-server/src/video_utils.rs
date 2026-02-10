@@ -369,7 +369,7 @@ pub async fn extract_frames_from_video(
     Ok(frames)
 }
 
-async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
+async fn get_video_fps(ffmpeg_path: &std::path::Path, video_path: &str) -> Result<f64> {
     let (fps, _) = get_video_fps_and_duration(ffmpeg_path, video_path).await?;
     Ok(fps)
 }
@@ -378,7 +378,10 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
 /// Uses a global cache to avoid repeated ffprobe calls for the same video file.
 /// This is critical for timeline performance - without caching, every frame
 /// request spawns a new ffprobe process (~200-500ms overhead).
-async fn get_video_fps_and_duration(ffmpeg_path: &PathBuf, video_path: &str) -> Result<(f64, f64)> {
+async fn get_video_fps_and_duration(
+    ffmpeg_path: &std::path::Path,
+    video_path: &str,
+) -> Result<(f64, f64)> {
     // Check cache first (fast path)
     {
         let cache = VIDEO_METADATA_CACHE.read().await;
@@ -420,7 +423,7 @@ async fn get_video_fps_and_duration(ffmpeg_path: &PathBuf, video_path: &str) -> 
 
 /// Internal function that actually calls ffprobe - used by the cached wrapper.
 async fn get_video_fps_and_duration_uncached(
-    ffmpeg_path: &PathBuf,
+    ffmpeg_path: &std::path::Path,
     video_path: &str,
 ) -> Result<(f64, f64)> {
     let ffprobe_path = get_ffprobe_path(ffmpeg_path);

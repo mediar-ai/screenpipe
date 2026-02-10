@@ -16,18 +16,16 @@ impl EmbeddingModel {
         let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
 
         // default to jina-embeddings-v2-base-en if no paths provided
-        let (model_path, tokenizer_path) = if model_path.is_none() || tokenizer_path.is_none() {
-            let api = Api::new()?;
-            let repo = api.repo(Repo::new(
-                "jinaai/jina-embeddings-v2-base-en".to_string(),
-                RepoType::Model,
-            ));
-            (repo.get("model.safetensors")?, repo.get("tokenizer.json")?)
-        } else {
-            (
-                std::path::PathBuf::from(model_path.unwrap()),
-                std::path::PathBuf::from(tokenizer_path.unwrap()),
-            )
+        let (model_path, tokenizer_path) = match (model_path, tokenizer_path) {
+            (Some(m), Some(t)) => (std::path::PathBuf::from(m), std::path::PathBuf::from(t)),
+            _ => {
+                let api = Api::new()?;
+                let repo = api.repo(Repo::new(
+                    "jinaai/jina-embeddings-v2-base-en".to_string(),
+                    RepoType::Model,
+                ));
+                (repo.get("model.safetensors")?, repo.get("tokenizer.json")?)
+            }
         };
 
         let tokenizer = Tokenizer::from_file(tokenizer_path).map_err(E::msg)?;

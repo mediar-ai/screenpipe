@@ -375,11 +375,11 @@ impl Cli {
     #[cfg(feature = "ui-events")]
     pub fn to_ui_recorder_config(&self) -> crate::ui_recorder::UiRecorderConfig {
         // Use sensible defaults - the single enable_ui_events flag controls everything
-        let mut config = crate::ui_recorder::UiRecorderConfig::default();
-        config.enabled = self.enable_ui_events;
-        // Reuse ignored_windows for UI exclusion
-        config.excluded_windows = self.ignored_windows.clone();
-        config
+        crate::ui_recorder::UiRecorderConfig {
+            enabled: self.enable_ui_events,
+            excluded_windows: self.ignored_windows.clone(),
+            ..Default::default()
+        }
     }
 
     /// Create UI recorder configuration (stub when ui-events feature is disabled)

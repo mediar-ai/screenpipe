@@ -623,8 +623,9 @@ impl DatabaseManager {
     ///
     /// # Arguments
     /// * `offset_index` - The video frame index. Multiple window records from the same capture cycle
-    ///                    should share the same offset_index to correctly reference the video frame.
-    ///                    If None, auto-calculates based on DB records (legacy behavior, may cause mismatches).
+    ///   should share the same offset_index to correctly reference the video frame.
+    ///   If None, auto-calculates based on DB records (legacy behavior, may cause mismatches).
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_frame(
         &self,
         device_name: &str,

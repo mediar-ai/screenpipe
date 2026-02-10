@@ -151,6 +151,7 @@ pub type ActivityFeedOption = Option<screenpipe_accessibility::ActivityFeed>;
 #[cfg(not(feature = "adaptive-fps"))]
 pub type ActivityFeedOption = Option<()>;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
@@ -317,7 +318,7 @@ pub async fn continuous_capture(
         if current_diff > max_avg_value {
             max_average = Some(MaxAverageFrame {
                 image: image.clone(),
-                window_images: window_images,
+                window_images,
                 image_hash: 0, // Hash is now internal to FrameComparer
                 frame_number: frame_counter,
                 timestamp: Instant::now(),

@@ -1198,7 +1198,7 @@ fn run_activity_only_tap(activity_feed: ActivityFeed, stop: Arc<AtomicBool>) {
         cg::EventTapOpts::LISTEN_ONLY,
         mask,
         activity_only_callback,
-        feed_ptr as *mut ActivityFeed,
+        feed_ptr,
     );
 
     let Some(tap) = tap else {

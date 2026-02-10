@@ -43,11 +43,6 @@ impl WindowOcrCache {
         }
     }
 
-    /// Create with default settings (5 minute max age, 100 entries)
-    pub fn default() -> Self {
-        Self::new(Duration::from_secs(300), 100)
-    }
-
     /// Calculate hash for an image's raw bytes
     pub fn calculate_image_hash(image_bytes: &[u8]) -> u64 {
         let mut hasher = DefaultHasher::new();
@@ -137,6 +132,13 @@ impl WindowOcrCache {
         let now = Instant::now();
         self.cache
             .retain(|_, v| now.duration_since(v.cached_at) < self.max_age);
+    }
+}
+
+impl Default for WindowOcrCache {
+    /// Create with default settings (5 minute max age, 100 entries)
+    fn default() -> Self {
+        Self::new(Duration::from_secs(300), 100)
     }
 }
 

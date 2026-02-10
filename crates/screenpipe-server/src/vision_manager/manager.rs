@@ -133,6 +133,7 @@ impl VisionManager {
     }
 
     /// Start recording on a specific monitor
+    #[allow(clippy::clone_on_copy)] // ActivityFeedOption is not Copy when adaptive-fps feature is enabled
     pub async fn start_monitor(&self, monitor_id: u32) -> Result<()> {
         // Check if already recording
         if self.recording_tasks.contains_key(&monitor_id) {
