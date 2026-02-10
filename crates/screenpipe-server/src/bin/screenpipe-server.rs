@@ -1354,6 +1354,9 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Start background FTS indexer (replaces synchronous INSERT triggers)
+    let _fts_handle = screenpipe_db::fts_indexer::start_fts_indexer(db.clone());
+
     let server_future = server.start(cli.enable_frame_cache);
     pin_mut!(server_future);
 

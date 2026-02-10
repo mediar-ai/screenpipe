@@ -192,6 +192,8 @@ pub async fn start_ui_recording(
 
         let mut batch: Vec<InsertUiEvent> = Vec::with_capacity(batch_size);
         let mut last_flush = std::time::Instant::now();
+        let mut consecutive_failures: u32 = 0;
+        let max_batch_age = Duration::from_secs(30); // Drop events older than 30s during storms
 
         loop {
             if stop_flag_clone.load(Ordering::Relaxed) {
@@ -206,23 +208,57 @@ pub async fn start_ui_recording(
 
                     // Flush if batch is full
                     if batch.len() >= batch_size {
-                        flush_batch(&db, &mut batch).await;
+                        flush_batch(&db, &mut batch, &mut consecutive_failures).await;
                         last_flush = std::time::Instant::now();
                     }
                 }
                 None => {
                     // Timeout - check if we should flush
                     if !batch.is_empty() && last_flush.elapsed() >= batch_timeout {
-                        flush_batch(&db, &mut batch).await;
+                        // During contention storms, drop old events to prevent unbounded growth
+                        if consecutive_failures > 3 && batch.len() > batch_size * 2 {
+                            let old_len = batch.len();
+                            // Keep only the most recent batch_size events
+                            let drain_count = old_len.saturating_sub(batch_size);
+                            batch.drain(..drain_count);
+                            warn!(
+                                "UI recorder: dropped {} old events during DB contention (kept {})",
+                                drain_count, batch.len()
+                            );
+                        }
+
+                        flush_batch(&db, &mut batch, &mut consecutive_failures).await;
                         last_flush = std::time::Instant::now();
+
+                        // Exponential backoff on consecutive failures
+                        if consecutive_failures > 0 {
+                            let backoff = Duration::from_millis(
+                                (500 * (1u64 << consecutive_failures.min(5))).min(30_000)
+                            );
+                            debug!(
+                                "UI recorder: backing off {}ms after {} failures",
+                                backoff.as_millis(), consecutive_failures
+                            );
+                            tokio::time::sleep(backoff).await;
+                        }
                     }
                 }
+            }
+
+            // Safety: drop entire batch if it's too old (>30s without successful flush)
+            if !batch.is_empty() && last_flush.elapsed() > max_batch_age && consecutive_failures > 5 {
+                warn!(
+                    "UI recorder: dropping {} stale events (last flush {}s ago, {} consecutive failures)",
+                    batch.len(), last_flush.elapsed().as_secs(), consecutive_failures
+                );
+                batch.clear();
+                last_flush = std::time::Instant::now();
             }
         }
 
         // Final flush
         if !batch.is_empty() {
-            flush_batch(&db, &mut batch).await;
+            flush_batch(&db, &mut batch, &mut consecutive_failures).await;
         }
 
         handle.stop();
@@ -236,7 +272,11 @@ pub async fn start_ui_recording(
 }
 
 #[cfg(feature = "ui-events")]
-async fn flush_batch(db: &Arc<DatabaseManager>, batch: &mut Vec<InsertUiEvent>) {
+async fn flush_batch(
+    db: &Arc<DatabaseManager>,
+    batch: &mut Vec<InsertUiEvent>,
+    consecutive_failures: &mut u32,
+) {
     if batch.is_empty() {
         return;
     }
@@ -244,9 +284,16 @@ async fn flush_batch(db: &Arc<DatabaseManager>, batch: &mut Vec<InsertUiEvent>) 
     match db.insert_ui_events_batch(batch).await {
         Ok(inserted) => {
             debug!("Flushed {} UI events to database", inserted);
+            *consecutive_failures = 0;
         }
         Err(e) => {
-            error!("Failed to insert UI events batch: {}", e);
+            *consecutive_failures += 1;
+            if *consecutive_failures <= 3 {
+                error!("Failed to insert UI events batch: {}", e);
+            } else {
+                // Reduce log spam during contention storms
+                debug!("Failed to insert UI events batch (failure #{}): {}", consecutive_failures, e);
+            }
         }
     }
     batch.clear();

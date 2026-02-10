@@ -534,6 +534,9 @@ pub async fn start_embedded_server(
         });
     }
 
+    // Start background FTS indexer (replaces synchronous INSERT triggers)
+    let _fts_handle = screenpipe_db::fts_indexer::start_fts_indexer(db.clone());
+
     // Start resource monitor
     let resource_monitor = ResourceMonitor::new(config.analytics_enabled);
     resource_monitor.start_monitoring(Duration::from_secs(30), Some(Duration::from_secs(60)));
