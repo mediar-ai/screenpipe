@@ -1297,7 +1297,8 @@ export function StandaloneChat() {
 
     try {
       // Collect images (pasted image + prefill frame)
-      const piImages: Array<{ type: string; source: { type: string; mediaType: string; data: string } }> = [];
+      // Pi expects ImageContent format: { type: "image", mimeType: "...", data: "..." }
+      const piImages: Array<{ type: string; mimeType: string; data: string }> = [];
 
       if (prefillFrameId) {
         try {
@@ -1311,7 +1312,8 @@ export function StandaloneChat() {
             const mimeType = blob.type || 'image/png';
             piImages.push({
               type: "image",
-              source: { type: "base64", mediaType: mimeType, data: base64 },
+              mimeType,
+              data: base64,
             });
           }
         } catch (error) {
@@ -1333,7 +1335,8 @@ export function StandaloneChat() {
         if (match) {
           piImages.push({
             type: "image",
-            source: { type: "base64", mediaType: match[1], data: match[2] },
+            mimeType: match[1],
+            data: match[2],
           });
         }
         setPastedImage(null);

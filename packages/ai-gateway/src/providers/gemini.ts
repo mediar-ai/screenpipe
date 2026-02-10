@@ -224,7 +224,7 @@ export class GeminiProvider implements AIProvider {
 			throw new Error(`Gemini Vertex AI request failed: ${response.status} ${error}`);
 		}
 
-		let result = await response.json();
+		let result: any = await response.json();
 
 		// Check if model called web_search - if so, execute it and continue
 		const parts = result.candidates?.[0]?.content?.parts || [];
@@ -590,7 +590,7 @@ export class GeminiProvider implements AIProvider {
 			throw new Error(`Web search failed: ${response.status}`);
 		}
 
-		const result = await response.json();
+		const result: any = await response.json();
 		const parts = result.candidates?.[0]?.content?.parts || [];
 		const groundingMetadata = result.candidates?.[0]?.groundingMetadata;
 

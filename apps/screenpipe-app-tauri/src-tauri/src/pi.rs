@@ -593,20 +593,13 @@ pub async fn pi_start(
     Ok(snapshot)
 }
 
-/// Image content for Pi RPC protocol
+/// Image content for Pi RPC protocol (pi-ai ImageContent format)
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
 pub struct PiImageContent {
     #[serde(rename = "type")]
     pub content_type: String, // always "image"
-    pub source: PiImageSource,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
-pub struct PiImageSource {
-    #[serde(rename = "type")]
-    pub source_type: String, // "base64"
-    #[serde(rename = "mediaType")]
-    pub media_type: String, // e.g. "image/png"
+    #[serde(rename = "mimeType")]
+    pub mime_type: String, // e.g. "image/png", "image/jpeg"
     pub data: String, // base64-encoded image data
 }
 

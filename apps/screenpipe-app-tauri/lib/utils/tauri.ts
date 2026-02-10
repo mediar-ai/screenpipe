@@ -765,10 +765,9 @@ export type OnboardingStore = { isCompleted: boolean; completedAt: string | null
 currentStep?: string | null }
 export type PiCheckResult = { available: boolean; path: string | null }
 /**
- * Image content for Pi RPC protocol
+ * Image content for Pi RPC protocol (pi-ai ImageContent format)
  */
-export type PiImageContent = { type: string; source: PiImageSource }
-export type PiImageSource = { type: string; mediaType: string; data: string }
+export type PiImageContent = { type: string; mimeType: string; data: string }
 export type PiInfo = { running: boolean; projectDir: string | null; pid: number | null; sessionId: string | null }
 export type ReminderItem = { identifier: string; title: string; notes: string | null; completed: boolean }
 export type RemindersStatus = { available: boolean; authorized: boolean; authorizationStatus: string; schedulerRunning: boolean; reminderCount: number }

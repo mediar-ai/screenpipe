@@ -784,10 +784,11 @@ describe('Request conversion edge cases', () => {
 			};
 
 			// Verify the transformation
+			const tool: any = openaiTool;
 			const transformed = {
-				name: openaiTool.function?.name || openaiTool.name,
-				description: openaiTool.function?.description || openaiTool.description,
-				input_schema: openaiTool.function?.parameters || openaiTool.input_schema,
+				name: tool.function?.name || tool.name,
+				description: tool.function?.description || tool.description,
+				input_schema: tool.function?.parameters || tool.input_schema,
 			};
 
 			expect(transformed).toEqual(expectedAnthropic);

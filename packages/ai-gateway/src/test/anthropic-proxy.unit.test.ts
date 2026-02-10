@@ -55,7 +55,7 @@ describe('proxyToAnthropic', () => {
 		});
 
 		const response = await proxyToAnthropic(request, 'sk-ant-test-key');
-		const data = await response.json();
+		const data: any = await response.json();
 
 		// Verify it hit the Anthropic API
 		expect(capturedUrl).toBe('https://api.anthropic.com/v1/messages');
@@ -180,7 +180,7 @@ describe('proxyToAnthropic', () => {
 		const response = await proxyToAnthropic(request, 'sk-ant-test-key');
 		expect(response.status).toBe(400);
 
-		const data = await response.json();
+		const data: any = await response.json();
 		expect(data.type).toBe('error');
 		expect(data.error.type).toBe('invalid_request_error');
 	});
@@ -203,7 +203,7 @@ describe('proxyToAnthropic', () => {
 		const response = await proxyToAnthropic(request, 'sk-ant-test-key');
 		expect(response.status).toBe(500);
 
-		const data = await response.json();
+		const data: any = await response.json();
 		expect(data.type).toBe('error');
 		expect(data.error.message).toContain('Network timeout');
 	});
