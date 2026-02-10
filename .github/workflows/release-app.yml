@@ -533,6 +533,8 @@ jobs:
       - name: Set up MSVC
         if: matrix.os_type == 'windows'
         uses: ilammy/msvc-dev-cmd@v1
+        with:
+          vsversion: "2022"
 
       - name: Install 7zip
         if: matrix.os_type == 'windows'
@@ -799,6 +801,8 @@ jobs:
           CXXFLAGS: ${{ matrix.os_type == 'macos' && (matrix.target == 'aarch64-apple-darwin' && '-mmacosx-version-min=10.15 -mcpu=apple-m1 -U__ARM_FEATURE_MATMUL_INT8' || '-mmacosx-version-min=10.15') || '' }}
           CMAKE_C_FLAGS: ${{ matrix.os_type == 'macos' && '-mmacosx-version-min=10.15' || '' }}
           CMAKE_CXX_FLAGS: ${{ matrix.os_type == 'macos' && '-mmacosx-version-min=10.15' || '' }}
+          # Force correct VS generator on windows-2022 runners (cmake crate defaults to VS 2019)
+          CMAKE_GENERATOR: ${{ matrix.os_type == 'windows' && 'Visual Studio 17 2022' || '' }}
           # Optimize for build speed on Windows
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.os_type == 'windows' && 'thin' || 'false' }}
           CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.os_type == 'windows' && '2' || '3' }}
