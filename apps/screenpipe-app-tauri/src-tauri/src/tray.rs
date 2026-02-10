@@ -258,11 +258,11 @@ fn create_dynamic_menu(
     {
         let info = get_recording_info();
         for (i, device) in info.devices.iter().enumerate() {
-            let dot = if device.active { "🟢" } else { "🟡" };
+            let dot = if device.active { "●" } else { "○" };
             let icon = match device.kind {
-                DeviceKind::Monitor => "🖥",
-                DeviceKind::AudioInput => "🎤",
-                DeviceKind::AudioOutput => "🔊",
+                DeviceKind::Monitor => "▣",
+                DeviceKind::AudioInput => "♪",
+                DeviceKind::AudioOutput => "♫",
             };
             let label = format!("  {} {} {}", dot, icon, device.name);
             menu_builder = menu_builder.item(
