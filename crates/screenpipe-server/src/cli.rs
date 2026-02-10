@@ -57,7 +57,7 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliOcrEngine {
     Unstructured,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     Tesseract,
     #[cfg(target_os = "windows")]
     WindowsNative,
@@ -72,7 +72,7 @@ impl From<CliOcrEngine> for Arc<DBOcrEngine> {
             CliOcrEngine::Unstructured => Arc::new(DBOcrEngine::Unstructured),
             #[cfg(target_os = "macos")]
             CliOcrEngine::AppleNative => Arc::new(DBOcrEngine::AppleNative),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             CliOcrEngine::Tesseract => Arc::new(DBOcrEngine::Tesseract),
             #[cfg(target_os = "windows")]
             CliOcrEngine::WindowsNative => Arc::new(DBOcrEngine::WindowsNative),
@@ -85,7 +85,7 @@ impl From<CliOcrEngine> for CoreOcrEngine {
     fn from(cli_engine: CliOcrEngine) -> Self {
         match cli_engine {
             CliOcrEngine::Unstructured => CoreOcrEngine::Unstructured,
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             CliOcrEngine::Tesseract => CoreOcrEngine::Tesseract,
             #[cfg(target_os = "windows")]
             CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
@@ -221,7 +221,7 @@ pub struct Cli {
     /// AppleNative is the default local OCR engine for macOS.
     /// WindowsNative is a local OCR engine for Windows.
     /// Unstructured is a cloud OCR engine (free of charge on us for now), recommended for high quality OCR.
-    /// Tesseract is a local OCR engine (not supported on macOS)
+    /// Tesseract is a local OCR engine (supported on Linux and Windows, requires tesseract binary on PATH)
     #[cfg_attr(
         target_os = "macos",
         arg(short = 'o', long, value_enum, default_value_t = CliOcrEngine::AppleNative)

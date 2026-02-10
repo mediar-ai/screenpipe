@@ -1205,7 +1205,7 @@ export function RecordingSettings() {
                 <SelectContent>
                   {isMacOS && <SelectItem value="apple-native">Apple Native</SelectItem>}
                   {!isMacOS && platform() === "windows" && <SelectItem value="windows-native">Windows Native</SelectItem>}
-                  {!isMacOS && platform() !== "windows" && <SelectItem value="tesseract">Tesseract</SelectItem>}
+                  {!isMacOS && <SelectItem value="tesseract">Tesseract</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
