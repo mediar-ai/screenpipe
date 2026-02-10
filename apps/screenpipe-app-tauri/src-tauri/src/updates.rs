@@ -406,14 +406,26 @@ impl UpdatesManager {
             error!("Failed to update all pipes: {}", err);
         }
 
-        info!("checking for updates via Tauri updater...");
+        let current_version = self.app.package_info().version.to_string();
+        let product_name = self.app.package_info().name.clone();
+        info!(
+            "checking for updates via Tauri updater... (app={}, version={}, identifier={})",
+            product_name,
+            current_version,
+            self.app.config().identifier
+        );
         let check_result = self.app.updater()?.check().await;
         match &check_result {
             Ok(Some(ref u)) => {
                 info!("update found: v{}", u.version);
             }
             Ok(None) => {
-                info!("updater returned None — no update available (current app thinks it's up to date)");
+                info!(
+                    "updater returned None — no update available (current v{}, endpoints: {:?})",
+                    current_version,
+                    self.app.config().plugins.0.get("updater")
+                        .and_then(|u| u.get("endpoints"))
+                );
             }
             Err(ref e) => {
                 error!("updater check() error: {}", e);
@@ -682,6 +694,8 @@ impl UpdatesManager {
 
     pub async fn start_periodic_event(&self) {
         let mut interval = interval(self.interval);
+        // Skip the first tick (fires immediately) — boot check already runs separately
+        interval.tick().await;
 
         loop {
             interval.tick().await;
