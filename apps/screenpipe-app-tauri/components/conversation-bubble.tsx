@@ -32,6 +32,7 @@ export interface ConversationBubbleProps {
 	side: "left" | "right";
 	isFirstInGroup: boolean;
 	isPlaying: boolean;
+	startOffsetSecs?: number;
 	onPlay: () => void;
 	onSpeakerAssigned: (newId: number, newName: string) => void;
 }
@@ -48,6 +49,7 @@ export function ConversationBubble({
 	side,
 	isFirstInGroup,
 	isPlaying,
+	startOffsetSecs,
 	onPlay,
 	onSpeakerAssigned,
 }: ConversationBubbleProps) {
@@ -131,7 +133,7 @@ export function ConversationBubble({
 					{/* Audio player */}
 					{isPlaying && (
 						<div className="mt-2 overflow-hidden border border-border">
-							<VideoComponent filePath={audioFilePath} />
+							<VideoComponent filePath={audioFilePath} startTimeSecs={startOffsetSecs} />
 						</div>
 					)}
 				</div>
