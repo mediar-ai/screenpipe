@@ -1616,18 +1616,16 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
                         audio: device_frame
                             .audio_entries
                             .into_iter()
-                            .map(|audio| {
-                                AudioData {
-                                    device_name: audio.device_name,
-                                    is_input: audio.is_input,
-                                    transcription: audio.transcription,
-                                    audio_file_path: audio.audio_file_path,
-                                    duration_secs: audio.duration_secs,
-                                    start_offset: audio.start_time.unwrap_or(0.0),
-                                    audio_chunk_id: audio.audio_chunk_id,
-                                    speaker_id: audio.speaker_id,
-                                    speaker_name: audio.speaker_name,
-                                }
+                            .map(|audio| AudioData {
+                                device_name: audio.device_name,
+                                is_input: audio.is_input,
+                                transcription: audio.transcription,
+                                audio_file_path: audio.audio_file_path,
+                                duration_secs: audio.duration_secs,
+                                start_offset: audio.start_time.unwrap_or(0.0),
+                                audio_chunk_id: audio.audio_chunk_id,
+                                speaker_id: audio.speaker_id,
+                                speaker_name: audio.speaker_name,
                             })
                             .collect(),
                     }
