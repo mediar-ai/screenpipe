@@ -458,8 +458,11 @@ jobs:
         if: matrix.os_type == 'macos'
         shell: bash
         run: |
-          # Ensure brew is on PATH (self-hosted runners may not have it in default PATH)
+          # Ensure brew is on PATH for this step AND all subsequent steps (via GITHUB_PATH)
           eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null || true)"
+          # Persist brew bin dirs to GITHUB_PATH so bun/pre_build.js can find wget etc.
+          echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          echo "/opt/homebrew/sbin" >> $GITHUB_PATH
           brew install ffmpeg wget
 
       - name: Install dependencies
