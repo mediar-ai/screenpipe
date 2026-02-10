@@ -115,7 +115,7 @@ screenpipe
 </p>
 
 <details>
-<summary>📖 Full reference — about screenpipe</summary>
+<summary>📖 LLM reference</summary>
 
 ## About screenpipe
 
