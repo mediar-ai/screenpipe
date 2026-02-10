@@ -1320,6 +1320,13 @@ export function StandaloneChat() {
         setPrefillFrameId(null);
       }
 
+      // Clear prefill context banner (was only cleared in non-Pi path)
+      if (prefillContext) {
+        // Prepend search context to the user message so Pi sees it
+        userMessage = `[Context from search: ${prefillContext}]\n\n${userMessage}`;
+        setPrefillContext(null);
+      }
+
       if (pastedImage) {
         // pastedImage is a data URL like "data:image/png;base64,..."
         const match = pastedImage.match(/^data:(image\/[^;]+);base64,(.+)$/);
