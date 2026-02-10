@@ -44,7 +44,10 @@ mod tests {
             window_height: image.height(),
         }];
 
-        let ocr_cache = Arc::new(Mutex::new(WindowOcrCache::new(StdDuration::from_secs(60), 100)));
+        let ocr_cache = Arc::new(Mutex::new(WindowOcrCache::new(
+            StdDuration::from_secs(60),
+            100,
+        )));
         let result = process_ocr_task(
             OcrTaskData {
                 image: image_arc,
@@ -86,9 +89,9 @@ mod tests {
             ocr_engine,
             monitor,
             window_filters,
-            vec![],  // languages
+            vec![], // languages
             save_text_files_flag,
-            None,    // activity_feed
+            None, // activity_feed
         ));
 
         // Wait for a short duration to allow some captures to occur

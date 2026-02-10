@@ -6458,6 +6458,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "criterion",
+ "dirs",
  "futures",
  "image",
  "libsqlite3-sys",

@@ -451,12 +451,20 @@ pub async fn start_ffmpeg_process(
     );
 
     args.extend_from_slice(&[
-        "-vcodec", "libx265", "-tag:v", "hvc1", "-preset", preset, "-crf", crf,
+        "-vcodec",
+        "libx265",
+        "-tag:v",
+        "hvc1",
+        "-preset",
+        preset,
+        "-crf",
+        crf,
         // Disable B-frames: libx265 default B-frame buffering shifts PTS by 2 frames
         // (e.g. first frame at 4s instead of 0s at 0.5fps). This causes the frontend
         // to seek to the wrong frame. B-frames provide no benefit for screenshot
         // captures anyway since every frame is visually independent.
-        "-x265-params", "bframes=0",
+        "-x265-params",
+        "bframes=0",
     ]);
 
     // Use fragmented MP4 to allow reading frames while file is still being written
