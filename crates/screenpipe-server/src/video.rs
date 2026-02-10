@@ -452,6 +452,11 @@ pub async fn start_ffmpeg_process(
 
     args.extend_from_slice(&[
         "-vcodec", "libx265", "-tag:v", "hvc1", "-preset", preset, "-crf", crf,
+        // Disable B-frames: libx265 default B-frame buffering shifts PTS by 2 frames
+        // (e.g. first frame at 4s instead of 0s at 0.5fps). This causes the frontend
+        // to seek to the wrong frame. B-frames provide no benefit for screenshot
+        // captures anyway since every frame is visually independent.
+        "-x265-params", "bframes=0",
     ]);
 
     // Use fragmented MP4 to allow reading frames while file is still being written
@@ -459,10 +464,6 @@ pub async fn start_ffmpeg_process(
     // - Frame extraction from incomplete/in-progress recordings
     // - Streaming playback before recording finishes
     args.extend_from_slice(&["-movflags", "frag_keyframe+empty_moov+default_base_moof"]);
-
-    // Fix pts offset: ffmpeg image2pipe with -r buffers 2 frames, starting pts at 2/fps
-    // instead of 0. This causes seek mismatches in the frontend (offset N shows frame N-2).
-    args.extend_from_slice(&["-output_ts_offset", "0"]);
 
     args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
 
