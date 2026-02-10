@@ -35,6 +35,7 @@ export interface ConversationBubbleProps {
 	startOffsetSecs?: number;
 	onPlay: () => void;
 	onSpeakerAssigned: (newId: number, newName: string) => void;
+	onTimestampClick?: () => void;
 }
 
 export function ConversationBubble({
@@ -52,6 +53,7 @@ export function ConversationBubble({
 	startOffsetSecs,
 	onPlay,
 	onSpeakerAssigned,
+	onTimestampClick,
 }: ConversationBubbleProps) {
 	return (
 		<div
@@ -78,7 +80,15 @@ export function ConversationBubble({
 							audioFilePath={audioFilePath}
 							onAssigned={onSpeakerAssigned}
 						/>
-						<span className="text-[10px] text-muted-foreground">
+						<span
+							className={cn(
+								"text-[10px] text-muted-foreground",
+								onTimestampClick &&
+									"cursor-pointer hover:text-foreground hover:underline transition-colors duration-150"
+							)}
+							onClick={onTimestampClick}
+							title={onTimestampClick ? "Jump to this moment in timeline" : undefined}
+						>
 							{formatTime(timestamp)}
 						</span>
 						{/* Audio source indicator: mic = your voice, speaker = system audio */}
