@@ -580,15 +580,16 @@ impl ScreenpipeSyncProvider {
             }
 
             // Create audio chunk for synced transcription
+            // Note: audio_chunks has no device_name column — device info is on the
+            // audio_transcriptions row (the `device` column) inserted below.
             let audio_chunk_id: i64 = sqlx::query_scalar(
                 r#"
-                INSERT INTO audio_chunks (file_path, device_name, sync_id, machine_id)
-                VALUES ('cloud://' || ?, ?, ?, ?)
+                INSERT INTO audio_chunks (file_path, sync_id, machine_id)
+                VALUES ('cloud://' || ?, ?, ?)
                 RETURNING id
                 "#,
             )
             .bind(&trans.sync_id)
-            .bind(&trans.device)
             .bind(&trans.sync_id)
             .bind(&chunk.machine_id)
             .fetch_one(pool)
