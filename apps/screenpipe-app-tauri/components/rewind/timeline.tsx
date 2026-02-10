@@ -13,8 +13,7 @@ import { getStartDate } from "@/lib/actions/get-start-date";
 import { useTimelineData } from "@/lib/hooks/use-timeline-data";
 import { useCurrentFrame } from "@/lib/hooks/use-current-frame";
 import { TimelineSlider, getFrameAppName } from "@/components/rewind/timeline/timeline";
-import { useMeetings, Meeting } from "@/lib/hooks/use-meetings";
-import { MeetingBar } from "@/components/rewind/timeline/meeting-bar";
+import { useMeetings } from "@/lib/hooks/use-meetings";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { hasFramesForDate } from "@/lib/actions/has-frames-date";
 import { CurrentFrameTimeline } from "@/components/rewind/current-frame-timeline";
@@ -74,7 +73,7 @@ export default function Timeline() {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [showAudioTranscript, setShowAudioTranscript] = useState(true);
 	const [showSearchModal, setShowSearchModal] = useState(false);
-	const [activeMeeting, setActiveMeeting] = useState<Meeting | null>(null);
+
 
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	// const [searchResults, setSearchResults] = useState<number[]>([]);
@@ -143,7 +142,7 @@ export default function Timeline() {
 		});
 
 	// Meeting detection from existing frame data
-	const { meetings, getMeetingAtTime } = useMeetings(frames);
+	const { meetings } = useMeetings(frames);
 
 	// Track if user is at "live edge" (viewing newest frame, index 0)
 	const isAtLiveEdge = currentIndex === 0;
@@ -1290,13 +1289,9 @@ export default function Timeline() {
 							frames={frames}
 							currentIndex={currentIndex}
 							groupingWindowMs={30000} // 30 seconds window
-							activeMeeting={activeMeeting}
-							onClose={() => {
-								setShowAudioTranscript(false);
-								setActiveMeeting(null);
-							}}
+							meetings={meetings}
+							onClose={() => setShowAudioTranscript(false)}
 							onJumpToTime={(timestamp) => {
-								// Find the frame closest to this timestamp
 								const targetTime = timestamp.getTime();
 								let bestIdx = 0;
 								let bestDiff = Infinity;
@@ -1316,20 +1311,7 @@ export default function Timeline() {
 					</div>
 				)}
 
-				{/* Meeting Bar - thin accent lines just above the timeline slider */}
-				{meetings.length > 0 && frames.length > 0 && (
-					<div className="absolute bottom-[84px] left-0 right-0 z-[41] pointer-events-auto">
-						<MeetingBar
-							meetings={meetings}
-							frames={frames}
-							currentIndex={currentIndex}
-							onMeetingClick={(meeting) => {
-								setActiveMeeting(meeting);
-								setShowAudioTranscript(true);
-							}}
-						/>
-					</div>
-				)}
+				{/* Meeting bar removed — meeting detection handled inside transcript panel */}
 
 				{/* Bottom Timeline - Overlay that doesn't cut off image */}
 				<div className="absolute bottom-0 left-0 right-0 z-40 pointer-events-auto">

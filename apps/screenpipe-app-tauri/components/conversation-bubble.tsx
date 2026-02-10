@@ -175,19 +175,25 @@ export function ParticipantsSummary({
 	totalDuration: number;
 	timeRange: { start: Date; end: Date };
 }) {
+	// Filter: hide speakers under 5%, cap at top 5
+	const visible = participants
+		.filter((p) => Math.round((p.duration / totalDuration) * 100) >= 5)
+		.slice(0, 5);
+	const hiddenCount = participants.length - visible.length;
+
 	return (
 		<div className="px-3 py-2 border-b border-border">
-			<div className="flex items-center justify-between text-xs">
-				<div className="flex items-center gap-2 flex-wrap">
-					{participants.map((p) => {
+			<div className="flex items-center justify-between text-xs gap-2">
+				<div className="flex items-center gap-1.5 flex-wrap min-w-0">
+					{visible.map((p) => {
 						const percentage = Math.round((p.duration / totalDuration) * 100);
 						return (
 							<div
 								key={p.id}
-								className="flex items-center gap-1 px-2 py-0.5 border border-border"
+								className="flex items-center gap-1 px-1.5 py-0.5 border border-border"
 							>
-								<span className="font-medium text-foreground">
-									{p.name || `Unknown #${p.id}`}
+								<span className="font-medium text-foreground truncate max-w-[100px]">
+									{p.name || `#${p.id}`}
 								</span>
 								<span className="text-muted-foreground text-[10px]">
 									{percentage}%
@@ -195,8 +201,13 @@ export function ParticipantsSummary({
 							</div>
 						);
 					})}
+					{hiddenCount > 0 && (
+						<span className="text-[10px] text-muted-foreground">
+							+{hiddenCount} more
+						</span>
+					)}
 				</div>
-				<div className="text-muted-foreground text-[10px]">
+				<div className="text-muted-foreground text-[10px] shrink-0">
 					{formatTime(timeRange.start)} - {formatTime(timeRange.end)}
 				</div>
 			</div>

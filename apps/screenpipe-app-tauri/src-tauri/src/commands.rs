@@ -572,9 +572,11 @@ pub async fn show_shortcut_reminder(
             let _ = app_handle.run_on_main_thread(move || {
                 if let Ok(panel) = app_clone.get_webview_panel("shortcut-reminder") {
                     use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
-                    // Re-set level and behaviors on every show — order_out
-                    // may have cleared the Space association.
+                    // Re-set level, style mask, and behaviors on every show —
+                    // order_out may have cleared the Space association.
                     panel.set_level(1001);
+                    panel.set_style_mask(128); // NonActivatingPanel
+                    panel.set_hides_on_deactivate(false);
                     panel.set_collection_behaviour(
                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces |
                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle |
@@ -648,7 +650,12 @@ pub async fn show_shortcut_reminder(
 
                     // Level 1001 = above CGShieldingWindowLevel, shows over fullscreen
                     panel.set_level(1001);
-                    panel.set_style_mask(0);
+                    // NonActivatingPanel (128) so the reminder doesn't activate
+                    // the app (which would cause Space switching on fullscreen).
+                    // style_mask(0) was wrong — it cleared NonActivatingPanel.
+                    panel.set_style_mask(128);
+                    // Don't hide when app deactivates (default is YES for NSPanel)
+                    panel.set_hides_on_deactivate(false);
 
                     // Exclude from screen capture (NSWindowSharingNone = 0)
                     let _: () = unsafe { msg_send![&*panel, setSharingType: 0_u64] };

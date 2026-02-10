@@ -44,7 +44,7 @@ interface AudioTranscriptProps {
 	frames: StreamTimeSeriesResponse[];
 	currentIndex: number;
 	groupingWindowMs?: number;
-	activeMeeting?: Meeting | null;
+	meetings?: Meeting[];
 	onClose?: () => void;
 	onJumpToTime?: (timestamp: Date) => void;
 }
@@ -80,7 +80,7 @@ export function AudioTranscript({
 	frames,
 	currentIndex,
 	groupingWindowMs = 30000,
-	activeMeeting,
+	meetings = [],
 	onClose,
 	onJumpToTime,
 }: AudioTranscriptProps) {
@@ -93,13 +93,22 @@ export function AudioTranscript({
 	const MEETING_PAGE_SIZE = 50;
 	const [meetingPageSize, setMeetingPageSize] = useState(MEETING_PAGE_SIZE);
 
-	// Auto-switch to meeting tab when activeMeeting is set
+	// Auto-detect meeting at current frame position
+	const activeMeeting = useMemo(() => {
+		if (meetings.length === 0 || !frames[currentIndex]) return null;
+		const currentTime = new Date(frames[currentIndex].timestamp);
+		for (const meeting of meetings) {
+			if (currentTime >= meeting.startTime && currentTime <= meeting.endTime) {
+				return meeting;
+			}
+		}
+		return null;
+	}, [meetings, frames, currentIndex]);
+
+	// Reset pagination when meeting changes
 	const activeMeetingId = activeMeeting?.id;
 	useEffect(() => {
-		if (activeMeetingId) {
-			setTabMode("meeting");
-			setMeetingPageSize(MEETING_PAGE_SIZE); // reset pagination
-		}
+		setMeetingPageSize(MEETING_PAGE_SIZE);
 	}, [activeMeetingId]);
 
 	const [position, setPosition] = useState(() => ({
@@ -433,38 +442,25 @@ export function AudioTranscript({
 						<GripHorizontal className="w-4 h-4" />
 						<span>
 							{tabMode === "meeting" && activeMeeting
-								? `meeting — ${activeMeeting.startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–${activeMeeting.endTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+								? `meeting · ${activeMeeting.audioEntries.length} segments · ${activeMeeting.startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–${activeMeeting.endTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
 								: "audio transcripts"}
 						</span>
 					</div>
 
 					<div className="flex items-center gap-1">
-						{activeMeeting ? (
-							<>
-								{/* Tab toggle: only shown when a meeting is active */}
-								<Button
-									variant={tabMode === "nearby" ? "secondary" : "ghost"}
-									size="sm"
-									className="h-6 px-2 text-xs gap-1"
-									onClick={() => setTabMode("nearby")}
-									title="Nearby audio (30s window)"
-								>
-									nearby
-								</Button>
-								<Button
-									variant={tabMode === "meeting" ? "secondary" : "ghost"}
-									size="sm"
-									className="h-6 px-2 text-xs gap-1"
-									onClick={() => setTabMode("meeting")}
-									title="Full meeting transcript"
-								>
-									<Users className="h-3 w-3" />
-									full meeting
-								</Button>
-							</>
+						{tabMode === "meeting" ? (
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-6 px-2 text-xs"
+								onClick={() => setTabMode("nearby")}
+								title="Back to nearby view"
+							>
+								← nearby
+							</Button>
 						) : (
 							<>
-								{/* Device/thread toggle: only when no meeting active */}
+								{/* Device/thread toggle */}
 								<Button
 									variant={viewMode === "device" ? "secondary" : "ghost"}
 									size="sm"
@@ -483,6 +479,22 @@ export function AudioTranscript({
 								>
 									<MessageSquare className="h-3 w-3" />
 								</Button>
+								{/* Show "full meeting" button when a meeting is detected */}
+								{activeMeeting && (
+									<>
+										<div className="w-px h-4 bg-border mx-0.5" />
+										<Button
+											variant="ghost"
+											size="sm"
+											className="h-6 px-2 text-xs gap-1"
+											onClick={() => setTabMode("meeting")}
+											title="View full meeting transcript"
+										>
+											<Users className="h-3 w-3" />
+											full meeting
+										</Button>
+									</>
+								)}
 							</>
 						)}
 
@@ -534,7 +546,7 @@ export function AudioTranscript({
 			>
 				{tabMode === "meeting" && activeMeeting ? (
 					// Full meeting transcript view
-					<div className="p-3 pb-6 space-y-0">
+					<div className="p-3 pb-14 space-y-0">
 						{meetingConversationData.items.length === 0 ? (
 							<div className="text-center text-sm text-muted-foreground py-8">
 								No transcriptions in this meeting
@@ -621,7 +633,7 @@ export function AudioTranscript({
 					</div>
 				) : viewMode === "device" ? (
 					// Device view (original)
-					<div className="space-y-2 p-3 pb-6">
+					<div className="space-y-2 p-3 pb-14">
 						{audioGroups.map((group, groupIndex) => (
 							<Card
 								key={groupIndex}
@@ -707,7 +719,7 @@ export function AudioTranscript({
 					</div>
 				) : (
 					// Conversation thread view (nearby)
-					<div className="p-3 pb-6 space-y-0">
+					<div className="p-3 pb-14 space-y-0">
 						{conversationData.items.length === 0 ? (
 							<div className="text-center text-sm text-muted-foreground py-8">
 								No audio in this time window
