@@ -159,6 +159,13 @@ async fn get_or_create_speaker_from_embedding(
 ) -> Result<Speaker, anyhow::Error> {
     let speaker = db.get_speaker_from_embedding(embedding).await?;
     if let Some(speaker) = speaker {
+        // Improve cluster over time: update centroid and store diverse embeddings
+        if let Err(e) = db.update_speaker_centroid(speaker.id, embedding).await {
+            debug!("failed to update speaker centroid: {}", e);
+        }
+        if let Err(e) = db.add_embedding_to_speaker(speaker.id, embedding, 10).await {
+            debug!("failed to add embedding to speaker: {}", e);
+        }
         Ok(speaker)
     } else {
         let speaker = db.insert_speaker(embedding).await?;

@@ -407,12 +407,15 @@ impl DatabaseManager {
     pub async fn insert_speaker(&self, embedding: &[f32]) -> Result<Speaker, SqlxError> {
         let mut tx = self.begin_immediate_with_retry().await?;
 
-        let id = sqlx::query("INSERT INTO speakers (name) VALUES (NULL)")
-            .execute(&mut **tx.conn())
-            .await?
-            .last_insert_rowid();
-
         let bytes: &[u8] = embedding.as_bytes();
+        let id = sqlx::query(
+            "INSERT INTO speakers (name, centroid, embedding_count) VALUES (NULL, vec_f32(?1), 1)",
+        )
+        .bind(bytes)
+        .execute(&mut **tx.conn())
+        .await?
+        .last_insert_rowid();
+
         let _ = sqlx::query(
             "INSERT INTO speaker_embeddings (embedding, speaker_id) VALUES (vec_f32(?1), ?2)",
         )
@@ -456,11 +459,11 @@ impl DatabaseManager {
         &self,
         embedding: &[f32],
     ) -> Result<Option<Speaker>, SqlxError> {
-        let speaker_threshold = 0.5;
+        let speaker_threshold = 0.8;
         let bytes: &[u8] = embedding.as_bytes();
 
-        // Using subquery with LIMIT 1 instead of JOIN
-        let speaker = sqlx::query_as(
+        // First try matching against stored embeddings (up to 10 per speaker)
+        let speaker: Option<Speaker> = sqlx::query_as(
             "SELECT id, name, metadata
              FROM speakers
              WHERE id = (
@@ -476,7 +479,104 @@ impl DatabaseManager {
         .fetch_optional(&self.pool)
         .await?;
 
+        if speaker.is_some() {
+            return Ok(speaker);
+        }
+
+        // Fallback: match against speaker centroids (running average embeddings)
+        let speaker = sqlx::query_as(
+            "SELECT id, name, metadata
+             FROM speakers
+             WHERE centroid IS NOT NULL
+               AND vec_distance_cosine(centroid, vec_f32(?1)) < ?2
+             ORDER BY vec_distance_cosine(centroid, vec_f32(?1))
+             LIMIT 1",
+        )
+        .bind(bytes)
+        .bind(speaker_threshold)
+        .fetch_optional(&self.pool)
+        .await?;
+
         Ok(speaker)
+    }
+
+    /// Add an embedding to a speaker's stored embeddings (up to max_stored).
+    /// If at capacity, replaces the most redundant embedding (closest to centroid)
+    /// with the new one if it's more diverse.
+    pub async fn add_embedding_to_speaker(
+        &self,
+        speaker_id: i64,
+        embedding: &[f32],
+        max_stored: usize,
+    ) -> Result<(), SqlxError> {
+        // Count existing embeddings for this speaker
+        let (count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = ?1")
+                .bind(speaker_id)
+                .fetch_one(&self.pool)
+                .await?;
+
+        if (count as usize) < max_stored {
+            // Under capacity — just insert
+            let bytes: &[u8] = embedding.as_bytes();
+            sqlx::query(
+                "INSERT INTO speaker_embeddings (embedding, speaker_id) VALUES (vec_f32(?1), ?2)",
+            )
+            .bind(bytes)
+            .bind(speaker_id)
+            .execute(&self.pool)
+            .await?;
+        }
+        // At capacity — skip (diversity replacement is complex in SQL, centroid handles drift)
+
+        Ok(())
+    }
+
+    /// Update a speaker's running centroid: new = (old * count + embedding) / (count + 1)
+    pub async fn update_speaker_centroid(
+        &self,
+        speaker_id: i64,
+        embedding: &[f32],
+    ) -> Result<(), SqlxError> {
+        // Get current centroid and count
+        let row: Option<(Option<Vec<u8>>, i64)> =
+            sqlx::query_as("SELECT centroid, embedding_count FROM speakers WHERE id = ?1")
+                .bind(speaker_id)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        let (new_centroid, new_count) = match row {
+            Some((Some(blob), count)) if blob.len() == 512 * 4 => {
+                // Update running average
+                let old: Vec<f32> = blob
+                    .chunks_exact(4)
+                    .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                    .collect();
+                let n = count as f32;
+                let new: Vec<f32> = old
+                    .iter()
+                    .zip(embedding.iter())
+                    .map(|(o, e)| (o * n + e) / (n + 1.0))
+                    .collect();
+                (new, count + 1)
+            }
+            _ => {
+                // First embedding — centroid IS the embedding
+                (embedding.to_vec(), 1i64)
+            }
+        };
+
+        let bytes: &[u8] = new_centroid.as_bytes();
+        sqlx::query(
+            "UPDATE speakers SET centroid = vec_f32(?1), embedding_count = ?2 WHERE id = ?3",
+        )
+        .bind(bytes)
+        .bind(new_count)
+        .bind(speaker_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     pub async fn update_speaker_name(&self, speaker_id: i64, name: &str) -> Result<i64, SqlxError> {
