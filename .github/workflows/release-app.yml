@@ -441,6 +441,8 @@ jobs:
         if: matrix.os_type == 'macos'
         shell: bash
         run: |
+          # Ensure brew is on PATH (self-hosted runners may not have it in default PATH)
+          eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null || true)"
           brew install ffmpeg
 
       - name: Install dependencies
@@ -910,9 +912,10 @@ jobs:
             Write-Host "=== Rebuilding with beta config ==="
             # Swap to beta config (we're in src-tauri/)
             Copy-Item "tauri.beta.conf.json" "tauri.conf.json" -Force
-            # Clean ALL bundle artifacts so only beta artifacts exist for upload
-            Get-ChildItem -Path "target" -Recurse -Directory -Filter "bundle" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-            Get-ChildItem -Path "target" -Recurse -Include "*.nsis*","*.exe","*.sig","*.msi" | Where-Object { $_.DirectoryName -match "bundle|release$" } | Remove-Item -Force -ErrorAction SilentlyContinue
+            # Only clean NSIS bundle output (not the entire build tree)
+            # This preserves whisper-rs-sys/Vulkan shader build cache
+            $bundleNsis = "target\x86_64-pc-windows-msvc\release\bundle\nsis"
+            if (Test-Path $bundleNsis) { Remove-Item -Recurse -Force $bundleNsis }
             # Rebuild (Rust cached, just repackages) - run from project root
             Push-Location ..
             bunx tauri build --target x86_64-pc-windows-msvc --features mkl,vulkan,official-build

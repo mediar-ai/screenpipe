@@ -18,6 +18,41 @@ use tracing::{debug, error, info, warn};
 /// Signals that the background Pi install has finished (success or failure).
 static PI_INSTALL_DONE: AtomicBool = AtomicBool::new(false);
 
+/// On Windows, `.cmd` files cannot be spawned directly with `Command::new()` since
+/// Rust 1.77+ (CVE-2024-24576 fix). We must use `cmd.exe /C` to run them.
+#[cfg(windows)]
+fn build_command_for_path(path: &str) -> Command {
+    if path.ends_with(".cmd") || path.ends_with(".bat") {
+        let mut cmd = Command::new("cmd.exe");
+        cmd.args(["/C", path]);
+        cmd
+    } else {
+        Command::new(path)
+    }
+}
+
+#[cfg(not(windows))]
+fn build_command_for_path(path: &str) -> Command {
+    Command::new(path)
+}
+
+/// Async version for tokio::process::Command
+#[cfg(windows)]
+fn build_async_command_for_path(path: &str) -> tokio::process::Command {
+    if path.ends_with(".cmd") || path.ends_with(".bat") {
+        let mut cmd = tokio::process::Command::new("cmd.exe");
+        cmd.args(["/C", path]);
+        cmd
+    } else {
+        tokio::process::Command::new(path)
+    }
+}
+
+#[cfg(not(windows))]
+fn build_async_command_for_path(path: &str) -> tokio::process::Command {
+    tokio::process::Command::new(path)
+}
+
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
 const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
 
@@ -423,8 +458,8 @@ pub async fn pi_start(
 
     info!("Starting pi from {} in dir: {}", pi_path, project_dir);
 
-    // Build command
-    let mut cmd = Command::new(&pi_path);
+    // Build command — use cmd.exe /C wrapper for .cmd files on Windows (Rust 1.77+ CVE fix)
+    let mut cmd = build_command_for_path(&pi_path);
     cmd.current_dir(&project_dir)
         .args(["--mode", "rpc", "--provider", "screenpipe", "--model", "claude-haiku-4-5@20251001"])
         .stdin(Stdio::piped())
@@ -727,7 +762,8 @@ pub async fn run(
         }
     };
 
-    let mut cmd = tokio::process::Command::new(&pi_path);
+    // Use cmd.exe /C wrapper for .cmd files on Windows (Rust 1.77+ CVE fix)
+    let mut cmd = build_async_command_for_path(&pi_path);
     cmd.current_dir(working_dir);
     cmd.arg("-p").arg(prompt);
     cmd.arg("--provider").arg("screenpipe");
