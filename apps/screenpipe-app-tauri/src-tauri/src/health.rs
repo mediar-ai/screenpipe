@@ -25,15 +25,53 @@ pub enum RecordingStatus {
     Error,
 }
 
-static RECORDING_STATUS: Lazy<RwLock<RecordingStatus>> =
-    Lazy::new(|| RwLock::new(RecordingStatus::Starting));
+/// Kind of recording device
+#[derive(Clone, PartialEq, Debug)]
+pub enum DeviceKind {
+    Monitor,
+    AudioInput,
+    AudioOutput,
+}
+
+/// Per-device status info for tray display
+#[derive(Clone, PartialEq, Debug)]
+pub struct DeviceInfo {
+    pub name: String,
+    pub kind: DeviceKind,
+    pub active: bool,
+    pub last_seen_secs_ago: u64,
+}
+
+/// Full recording info including per-device status
+#[derive(Clone, PartialEq, Debug)]
+pub struct RecordingInfo {
+    pub status: RecordingStatus,
+    pub devices: Vec<DeviceInfo>,
+}
+
+static RECORDING_INFO: Lazy<RwLock<RecordingInfo>> = Lazy::new(|| {
+    RwLock::new(RecordingInfo {
+        status: RecordingStatus::Starting,
+        devices: Vec::new(),
+    })
+});
 
 pub fn get_recording_status() -> RecordingStatus {
-    *RECORDING_STATUS.read().unwrap()
+    RECORDING_INFO.read().unwrap().status
+}
+
+pub fn get_recording_info() -> RecordingInfo {
+    RECORDING_INFO.read().unwrap().clone()
 }
 
 fn set_recording_status(status: RecordingStatus) {
-    *RECORDING_STATUS.write().unwrap() = status;
+    RECORDING_INFO.write().unwrap().status = status;
+}
+
+fn set_recording_info(status: RecordingStatus, devices: Vec<DeviceInfo>) {
+    let mut info = RECORDING_INFO.write().unwrap();
+    info.status = status;
+    info.devices = devices;
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +98,9 @@ struct HealthCheckResponse {
     verbose_instructions: Option<String>,
     #[serde(default)]
     device_status_details: Option<String>,
+    /// Monitor names from the server
+    #[serde(default)]
+    monitors: Option<Vec<String>>,
 }
 
 /// Decide recording status based on health check result and time since startup.
@@ -119,6 +160,70 @@ fn is_unhealthy_icon(icon_key: &str) -> bool {
     icon_key == "unhealthy" || icon_key == "error"
 }
 
+/// Parse device info from a health check response for tray display.
+fn parse_devices_from_health(health_result: &Result<HealthCheckResponse>) -> Vec<DeviceInfo> {
+    let health = match health_result {
+        Ok(h) => h,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut devices = Vec::new();
+
+    // Parse monitors
+    if let Some(monitors) = &health.monitors {
+        for name in monitors {
+            devices.push(DeviceInfo {
+                name: name.clone(),
+                kind: DeviceKind::Monitor,
+                active: health.frame_status.as_deref() == Some("ok"),
+                last_seen_secs_ago: 0,
+            });
+        }
+    }
+
+    // Parse audio devices from device_status_details
+    // Format: "DeviceName (input): active (last activity: 2s ago), DeviceName (output): inactive (last activity: 30s ago)"
+    if let Some(details) = &health.device_status_details {
+        for part in details.split(", ") {
+            // e.g. "MacBook Pro Microphone (input): active (last activity: 2s ago)"
+            let (name_and_type, rest) = match part.split_once(": ") {
+                Some(pair) => pair,
+                None => continue,
+            };
+            let active = rest.starts_with("active");
+            let last_seen = rest
+                .split("last activity: ")
+                .nth(1)
+                .and_then(|s| s.trim_end_matches(')').trim_end_matches("s ago").parse::<u64>().ok())
+                .unwrap_or(0);
+
+            let kind = if name_and_type.contains("(input)") {
+                DeviceKind::AudioInput
+            } else if name_and_type.contains("(output)") {
+                DeviceKind::AudioOutput
+            } else {
+                // Guess from name
+                DeviceKind::AudioInput
+            };
+
+            let name = name_and_type
+                .replace("(input)", "")
+                .replace("(output)", "")
+                .trim()
+                .to_string();
+
+            devices.push(DeviceInfo {
+                name,
+                kind,
+                active,
+                last_seen_secs_ago: last_seen,
+            });
+        }
+    }
+
+    devices
+}
+
 /// Starts a background task that periodically checks the health of the sidecar
 /// and updates the tray icon accordingly.
 pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
@@ -155,7 +260,10 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
                 CONSECUTIVE_FAILURES_THRESHOLD,
                 current_status,
             );
-            set_recording_status(status);
+
+            // Parse device info from health response
+            let devices = parse_devices_from_health(&health_result);
+            set_recording_info(status, devices);
 
             let current_status = status_to_icon_key(status);
 
@@ -254,6 +362,7 @@ mod tests {
             message: None,
             verbose_instructions: None,
             device_status_details: None,
+            monitors: None,
         })
     }
 
@@ -270,6 +379,7 @@ mod tests {
             message: None,
             verbose_instructions: None,
             device_status_details: None,
+            monitors: None,
         })
     }
 

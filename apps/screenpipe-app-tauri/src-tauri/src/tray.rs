@@ -1,5 +1,5 @@
 use crate::commands::show_main_window;
-use crate::health::{get_recording_status, RecordingStatus};
+use crate::health::{get_recording_info, get_recording_status, DeviceKind, RecordingStatus};
 use crate::recording::RecordingState;
 use crate::store::{get_store, OnboardingStore};
 use crate::updates::is_source_build;
@@ -37,6 +37,8 @@ struct MenuState {
     recording_status: Option<RecordingStatus>,
     onboarding_completed: bool,
     has_permission_issue: bool,
+    /// Device names + active status for change detection
+    devices: Vec<(String, bool)>,
 }
 
 pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> Result<()> {
@@ -250,6 +252,27 @@ fn create_dynamic_menu(
             .build(app)?,
     );
 
+    // Show active devices under recording status
+    if get_recording_status() == RecordingStatus::Recording
+        || get_recording_status() == RecordingStatus::Starting
+    {
+        let info = get_recording_info();
+        for (i, device) in info.devices.iter().enumerate() {
+            let dot = if device.active { "🟢" } else { "🟡" };
+            let icon = match device.kind {
+                DeviceKind::Monitor => "🖥",
+                DeviceKind::AudioInput => "🎤",
+                DeviceKind::AudioOutput => "🔊",
+            };
+            let label = format!("  {} {} {}", dot, icon, device.name);
+            menu_builder = menu_builder.item(
+                &MenuItemBuilder::with_id(format!("device_{}", i), label)
+                    .enabled(false)
+                    .build(app)?,
+            );
+        }
+    }
+
     // Show "fix permissions" item when recording is in error state and permissions are denied
     if get_recording_status() == RecordingStatus::Error {
         let perms = crate::permissions::do_permissions_check(false);
@@ -427,11 +450,17 @@ async fn update_menu_if_needed(
         false
     };
 
+    let recording_info = get_recording_info();
     let new_state = MenuState {
         shortcuts: get_current_shortcuts(app)?,
-        recording_status: Some(get_recording_status()),
+        recording_status: Some(recording_info.status),
         onboarding_completed,
         has_permission_issue,
+        devices: recording_info
+            .devices
+            .iter()
+            .map(|d| (d.name.clone(), d.active))
+            .collect(),
     };
 
     // Compare with last state
