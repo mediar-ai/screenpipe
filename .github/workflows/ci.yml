@@ -136,8 +136,7 @@ jobs:
       - name: Run PII redaction tests
         run: cargo test -p screenpipe-server --lib pii_redaction_tests --release
 
-      - name: Run pipes_test
-        run: cargo test -p screenpipe-core --test pipes_test --release
+      # pipes_test removed — pipe manager system deleted in #2212
 
   test-macos:
     runs-on: macos-latest
