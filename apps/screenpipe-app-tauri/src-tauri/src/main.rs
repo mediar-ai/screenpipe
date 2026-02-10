@@ -460,11 +460,26 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         config.is_disabled("show_chat"),
         |app| {
             info!("show chat shortcut triggered");
-            // Toggle the chat window - close if visible, show if not
-            if let Some(window) = app.get_webview_window("chat") {
-                if window.is_visible().unwrap_or(false) {
-                    let _ = window.close();
-                    return;
+            // Toggle the chat window - hide if visible, show if not.
+            // Use order_out (not close) to preserve the pre-created panel
+            // so it can reappear on fullscreen Spaces without re-creation.
+            if let Some(_window) = app.get_webview_window("chat") {
+                #[cfg(target_os = "macos")]
+                {
+                    use tauri_nspanel::ManagerExt;
+                    if let Ok(panel) = app.get_webview_panel("chat") {
+                        if panel.is_visible() {
+                            panel.order_out(None);
+                            return;
+                        }
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    if _window.is_visible().unwrap_or(false) {
+                        let _ = _window.hide();
+                        return;
+                    }
                 }
             }
             let _ = ShowRewindWindow::Chat.show(app);

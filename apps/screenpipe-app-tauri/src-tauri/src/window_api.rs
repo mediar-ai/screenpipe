@@ -444,12 +444,6 @@ impl ShowRewindWindow {
                         }
                         panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
-                        crate::space_monitor::suppress_space_monitor(500);
-                        unsafe {
-                            use tauri_nspanel::cocoa::base::id;
-                            let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
-                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
-                        }
                         panel.make_key_window();
                         // Remove MoveToActiveSpace so panel stays pinned to this Space
                         panel.set_collection_behaviour(
@@ -526,13 +520,6 @@ impl ShowRewindWindow {
                         }
                         panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
-                        // Activate app so WKWebView receives keyboard input,
-                        // then make panel key window.
-                        crate::space_monitor::suppress_space_monitor(500);
-                        unsafe {
-                            let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
-                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
-                        }
                         panel.make_key_window();
 
                         // Remove MoveToActiveSpace now that the panel is shown.
@@ -642,18 +629,8 @@ impl ShowRewindWindow {
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                             );
-                            // order_front FIRST, then activate — same order as
-                            // show_existing_main. Activating first on a fullscreen
-                            // Space causes macOS to switch Spaces before the panel
-                            // appears; ordering front first places the panel on the
-                            // current Space, then activation happens in-place.
+                            panel.make_first_responder(Some(panel.content_view()));
                             panel.order_front_regardless();
-                            crate::space_monitor::suppress_space_monitor(500);
-                            unsafe {
-                                use tauri_nspanel::cocoa::base::id;
-                                let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
-                                let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
-                            }
                             panel.make_key_window();
                             // Remove MoveToActiveSpace now that the panel is shown.
                             // Keeps it pinned to THIS Space so it won't follow
@@ -763,7 +740,15 @@ impl ShowRewindWindow {
                                     // Same level as overlay — above fullscreen
                                     panel.set_level(1001);
                                     panel.released_when_closed(true);
-                                    // Keep decorations! Don't call set_style_mask(0)
+                                    // NonActivatingPanel so panel works on fullscreen Spaces
+                                    // without activating the app (which causes Space switching).
+                                    // Preserve existing style bits (titled, closable, resizable).
+                                    unsafe {
+                                        let current: i32 = msg_send![&*panel, styleMask];
+                                        panel.set_style_mask(current | 128);
+                                    }
+                                    // Don't hide when app deactivates
+                                    panel.set_hides_on_deactivate(false);
                                     // Enable dragging by title bar (normal window behavior)
                                     let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
                                     // NSWindowSharingNone=0 hides from screen recorders, NSWindowSharingReadOnly=1 allows capture
@@ -773,13 +758,6 @@ impl ShowRewindWindow {
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
-                                    // Activate + show on correct Space (same as overlay/chat)
-                                    crate::space_monitor::suppress_space_monitor(500);
-                                    unsafe {
-                                        use tauri_nspanel::cocoa::base::id;
-                                        let ns_app: id = msg_send![objc::class!(NSApplication), sharedApplication];
-                                        let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
-                                    }
                                     panel.order_front_regardless();
                                     panel.make_key_window();
                                     let _ = app_for_emit.emit("window-focused", true);
@@ -1031,6 +1009,9 @@ impl ShowRewindWindow {
                                 // macOS Space switching when showing/hiding over fullscreen apps.
                                 panel.set_style_mask(128);
 
+                                // Don't hide when app deactivates (we never activate the app)
+                                panel.set_hides_on_deactivate(false);
+
                                 // Disable window dragging by clicking on background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: false] };
 
@@ -1235,6 +1216,18 @@ impl ShowRewindWindow {
                             if let Ok(panel) = window_clone.to_panel() {
                                 // Same level as overlay (1001) to appear above fullscreen apps
                                 panel.set_level(1001);
+
+                                // NonActivatingPanel (128) so clicking the chat doesn't
+                                // activate the app (which would switch Spaces away from
+                                // fullscreen apps). Preserve existing style bits.
+                                // WKWebView still receives keyboard input via makeKeyWindow.
+                                unsafe {
+                                    let current: i32 = msg_send![&*panel, styleMask];
+                                    panel.set_style_mask(current | 128);
+                                }
+
+                                // Don't hide when app deactivates (we never activate the app)
+                                panel.set_hides_on_deactivate(false);
 
                                 // Enable dragging by clicking anywhere on the window background
                                 let _: () = unsafe { msg_send![&*panel, setMovableByWindowBackground: true] };
