@@ -612,6 +612,22 @@ jobs:
           }
           Write-Host "Vulkan SDK installation completed successfully"
 
+      - name: Set CMAKE compilers for Vulkan shader builds
+        if: matrix.os_type == 'windows'
+        shell: powershell
+        run: |
+          # whisper.cpp's vulkan-shaders-gen ExternalProject spawns a new CMake
+          # that doesn't inherit MSVC env from ilammy/msvc-dev-cmd.
+          # Setting CC/CXX ensures the subprocess finds cl.exe.
+          $clPath = (Get-Command cl.exe -ErrorAction SilentlyContinue).Source
+          if ($clPath) {
+            echo "CC=$clPath" >> $env:GITHUB_ENV
+            echo "CXX=$clPath" >> $env:GITHUB_ENV
+            Write-Host "Set CC/CXX to $clPath"
+          } else {
+            Write-Host "WARNING: cl.exe not found on PATH"
+          }
+
       - name: Install wget on Windows
         if: matrix.os_type == 'windows'
         shell: powershell
@@ -811,8 +827,10 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: mediar
         run: |
-          # Install sentry-cli
-          curl -sL https://sentry.io/get-cli/ | bash
+          # Install sentry-cli (skip if already installed on self-hosted runners)
+          if ! command -v sentry-cli &> /dev/null; then
+            curl -sL https://sentry.io/get-cli/ | bash
+          fi
 
           # Upload debug symbols (dSYM files) for the app
           echo "Uploading debug symbols to Sentry..."
