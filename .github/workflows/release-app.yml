@@ -616,14 +616,17 @@ jobs:
         if: matrix.os_type == 'windows'
         shell: powershell
         run: |
-          # whisper.cpp's vulkan-shaders-gen ExternalProject spawns a new CMake
-          # that doesn't inherit MSVC env from ilammy/msvc-dev-cmd.
-          # Setting CC/CXX ensures the subprocess finds cl.exe.
+          # whisper.cpp's vulkan-shaders-gen is a CMake ExternalProject that
+          # spawns a NEW cmake process. That subprocess needs to find cl.exe.
+          # ilammy/msvc-dev-cmd sets PATH for current step but ExternalProject
+          # inherits env from GITHUB_ENV. Persist the MSVC bin dir in PATH.
           $clPath = (Get-Command cl.exe -ErrorAction SilentlyContinue).Source
           if ($clPath) {
+            $clDir = Split-Path $clPath
+            echo "$clDir" >> $env:GITHUB_PATH
             echo "CC=$clPath" >> $env:GITHUB_ENV
             echo "CXX=$clPath" >> $env:GITHUB_ENV
-            Write-Host "Set CC/CXX to $clPath"
+            Write-Host "Added $clDir to GITHUB_PATH, set CC/CXX to $clPath"
           } else {
             Write-Host "WARNING: cl.exe not found on PATH"
           }
