@@ -95,6 +95,41 @@ pub fn clear_frontmost_app() {
     }
 }
 
+/// Find the WKWebView inside an NSPanel's content view and make it first responder.
+/// This is critical: `make_first_responder(content_view())` steals focus from the
+/// WKWebView, preventing it from receiving trackpad gestures (pinch-to-zoom).
+/// We need to traverse the subview hierarchy to find the actual WKWebView.
+#[cfg(target_os = "macos")]
+unsafe fn make_webview_first_responder(panel: &tauri_nspanel::raw_nspanel::RawNSPanel) {
+    use objc::{class, msg_send, sel, sel_impl};
+    use tauri_nspanel::cocoa::base::{id, nil};
+    use tauri_nspanel::cocoa::foundation::NSArray;
+
+    let content_view: id = panel.content_view();
+    let wk_class: *const objc::runtime::Class = class!(WKWebView);
+
+    // BFS through subview tree to find WKWebView
+    let mut queue: Vec<id> = vec![content_view];
+    while let Some(view) = queue.pop() {
+        let is_wk: bool = msg_send![view, isKindOfClass: wk_class];
+        if is_wk {
+            panel.make_first_responder(Some(view));
+            return;
+        }
+        let subviews: id = msg_send![view, subviews];
+        if subviews != nil {
+            let count: u64 = NSArray::count(subviews);
+            for i in 0..count {
+                let child: id = NSArray::objectAtIndex(subviews, i);
+                queue.push(child);
+            }
+        }
+    }
+
+    // Fallback: if no WKWebView found, use content_view (shouldn't happen)
+    panel.make_first_responder(Some(panel.content_view()));
+}
+
 /// Tracks which overlay mode the current Main window was created for.
 /// When the mode changes, show() hides the old panel and creates a fresh one
 /// under a different label to avoid NSPanel reconfiguration crashes.
@@ -441,8 +476,8 @@ impl ShowRewindWindow {
                         save_frontmost_app();
                         unsafe {
                             let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
+                            make_webview_first_responder(&panel);
                         }
-                        panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
                         panel.make_key_window();
                         // Remove MoveToActiveSpace so panel stays pinned to this Space
@@ -517,8 +552,8 @@ impl ShowRewindWindow {
                         // Restore alpha in case it was set to 0 by focus-loss handler
                         unsafe {
                             let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
+                            make_webview_first_responder(&panel);
                         }
-                        panel.make_first_responder(Some(panel.content_view()));
                         panel.order_front_regardless();
                         panel.make_key_window();
 
@@ -629,7 +664,7 @@ impl ShowRewindWindow {
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                 NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                             );
-                            panel.make_first_responder(Some(panel.content_view()));
+                            unsafe { make_webview_first_responder(&panel); }
                             panel.order_front_regardless();
                             panel.make_key_window();
                             // Remove MoveToActiveSpace now that the panel is shown.
