@@ -1,11 +1,13 @@
 use crate::stop_screenpipe;
 use crate::store::SettingsStore;
+use crate::tray::QUIT_REQUESTED;
 use crate::RecordingState;
 use anyhow::Error;
 use dark_light::Mode;
 use log::{error, info, warn};
 use serde_json;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuItem, MenuItemBuilder};
@@ -356,6 +358,8 @@ pub struct UpdatesManager {
     app: tauri::AppHandle,
     update_menu_item: MenuItem<Wry>,
     update_installed: Arc<Mutex<bool>>,
+    /// Prevents concurrent check_for_updates calls (boot check + periodic race)
+    is_checking: AtomicBool,
 }
 
 impl UpdatesManager {
@@ -375,6 +379,7 @@ impl UpdatesManager {
             update_menu_item: MenuItemBuilder::with_id("update_now", menu_text)
                 .enabled(is_source_build(app)) // Enable for source builds to show info dialog
                 .build(app)?,
+            is_checking: AtomicBool::new(false),
         })
     }
 
@@ -382,6 +387,17 @@ impl UpdatesManager {
         &self,
         show_dialog: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
+        // Prevent concurrent update checks (boot check + periodic/manual race)
+        if self.is_checking.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            info!("update check already in progress, skipping");
+            return Ok(false);
+        }
+        struct CheckGuard<'a>(&'a AtomicBool);
+        impl<'a> Drop for CheckGuard<'a> {
+            fn drop(&mut self) { self.0.store(false, Ordering::SeqCst); }
+        }
+        let _guard = CheckGuard(&self.is_checking);
+
         // Handle source/community builds
         if is_source_build(&self.app) {
             info!("source build detected, auto-updates not available");
@@ -559,6 +575,8 @@ impl UpdatesManager {
                 {
                     error!("Failed to stop recording before auto-update: {}", err);
                 }
+                // Signal ExitRequested handler to allow clean exit (not prevent_exit)
+                QUIT_REQUESTED.store(true, Ordering::SeqCst);
                 self.app.restart();
             }
 

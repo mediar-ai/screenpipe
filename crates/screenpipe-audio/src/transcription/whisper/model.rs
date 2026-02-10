@@ -45,6 +45,11 @@ pub fn create_whisper_context_parameters<'a>(
 ) -> Result<WhisperContextParameters<'a>> {
     let mut context_param = WhisperContextParameters::default();
 
+    // Explicitly enable GPU acceleration (Vulkan on Windows, Metal on macOS).
+    // The whisper-rs default only enables GPU when built with the `_gpu` feature,
+    // but we always want to try GPU if the runtime supports it.
+    context_param.use_gpu(true);
+
     // NOTE: keep DTW disabled to avoid whisper.cpp median_filter asserts on short inputs
     // (WHISPER_ASSERT filter_width < a->ne[2]). Token-level timestamps are optional for us
     // and DTW can be re-enabled after the upstream issue is addressed.
