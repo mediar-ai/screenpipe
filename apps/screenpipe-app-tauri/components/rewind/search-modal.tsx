@@ -1,13 +1,28 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { Search, X, Loader2, Clock, MessageSquare } from "lucide-react";
+import { Search, X, Loader2, Clock, MessageSquare, User, ArrowLeft, Mic, Volume2 } from "lucide-react";
 import { useKeywordSearchStore, SearchMatch } from "@/lib/hooks/use-keyword-search-store";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { commands } from "@/lib/utils/tauri";
 import { emit } from "@tauri-apps/api/event";
+
+interface SpeakerResult {
+  id: number;
+  name: string;
+  metadata: string;
+}
+
+interface AudioTranscription {
+  timestamp: string;
+  transcription: string;
+  device_name: string;
+  is_input: boolean;
+  speaker_name: string;
+  duration_secs: number;
+}
 
 
 interface SearchModalProps {
@@ -232,6 +247,15 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
   const inputRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
+  // Speaker search state
+  const [speakerResults, setSpeakerResults] = useState<SpeakerResult[]>([]);
+  const [isSearchingSpeakers, setIsSearchingSpeakers] = useState(false);
+  // Drill-down: selected speaker to show their transcriptions
+  const [selectedSpeaker, setSelectedSpeaker] = useState<SpeakerResult | null>(null);
+  const [speakerTranscriptions, setSpeakerTranscriptions] = useState<AudioTranscription[]>([]);
+  const [isLoadingTranscriptions, setIsLoadingTranscriptions] = useState(false);
+  const [selectedTranscriptionIndex, setSelectedTranscriptionIndex] = useState(0);
+
   const debouncedQuery = useDebounce(query, 200);
   const { suggestions, isLoading: suggestionsLoading } = useSuggestions(isOpen);
 
@@ -248,6 +272,10 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
       setSelectedIndex(0);
       setQuery("");
       resetSearch();
+      setSpeakerResults([]);
+      setSelectedSpeaker(null);
+      setSpeakerTranscriptions([]);
+      setSelectedTranscriptionIndex(0);
 
       // Focus after next frame. The panel is made key window on show,
       // but the global shortcut path also calls show_main_window first.
@@ -271,6 +299,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
   useEffect(() => {
     if (!debouncedQuery.trim()) {
       resetSearch();
+      setSpeakerResults([]);
       return;
     }
 
@@ -278,6 +307,82 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
       limit: 24,
     });
   }, [debouncedQuery, searchKeywords, resetSearch]);
+
+  // Search speakers in parallel
+  useEffect(() => {
+    if (!debouncedQuery.trim() || debouncedQuery.length < 2 || selectedSpeaker) {
+      setSpeakerResults([]);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    (async () => {
+      setIsSearchingSpeakers(true);
+      try {
+        const resp = await fetch(
+          `http://localhost:3030/speakers/search?name=${encodeURIComponent(debouncedQuery)}`,
+          { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(3000)]) }
+        );
+        if (resp.ok && !cancelled) {
+          const speakers: SpeakerResult[] = await resp.json();
+          setSpeakerResults(speakers.filter(s => s.name).slice(0, 5));
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setIsSearchingSpeakers(false);
+      }
+    })();
+
+    return () => { cancelled = true; controller.abort(); };
+  }, [debouncedQuery, selectedSpeaker]);
+
+  // Load transcriptions when a speaker is selected
+  useEffect(() => {
+    if (!selectedSpeaker) {
+      setSpeakerTranscriptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    (async () => {
+      setIsLoadingTranscriptions(true);
+      try {
+        const params = new URLSearchParams({
+          content_type: "audio",
+          speaker_name: selectedSpeaker.name,
+          limit: "30",
+          offset: "0",
+        });
+        const resp = await fetch(
+          `http://localhost:3030/search?${params}`,
+          { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]) }
+        );
+        if (resp.ok && !cancelled) {
+          const data = await resp.json();
+          const items = (data?.data || []).map((item: any) => ({
+            timestamp: item.content?.timestamp || "",
+            transcription: item.content?.transcription || "",
+            device_name: item.content?.device_name || "",
+            is_input: item.content?.is_input ?? true,
+            speaker_name: item.content?.speaker_name || selectedSpeaker.name,
+            duration_secs: item.content?.duration_secs || 0,
+          }));
+          setSpeakerTranscriptions(items);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setIsLoadingTranscriptions(false);
+      }
+    })();
+
+    return () => { cancelled = true; controller.abort(); };
+  }, [selectedSpeaker]);
 
   // Send to AI handler
   const handleSendToAI = useCallback(async () => {
@@ -299,11 +404,46 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
     await emit("chat-prefill", { context, frameId: result.frame_id });
   }, [searchResults, selectedIndex, onClose]);
 
+  // Handle going back from speaker drill-down
+  const handleBackFromSpeaker = useCallback(() => {
+    setSelectedSpeaker(null);
+    setSpeakerTranscriptions([]);
+    setSelectedTranscriptionIndex(0);
+    // Re-focus the input
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
   // Keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Speaker drill-down mode
+      if (selectedSpeaker) {
+        switch (e.key) {
+          case "Escape":
+            e.preventDefault();
+            handleBackFromSpeaker();
+            break;
+          case "ArrowDown":
+            e.preventDefault();
+            setSelectedTranscriptionIndex(i => Math.min(i + 1, speakerTranscriptions.length - 1));
+            break;
+          case "ArrowUp":
+            e.preventDefault();
+            setSelectedTranscriptionIndex(i => Math.max(i - 1, 0));
+            break;
+          case "Enter":
+            e.preventDefault();
+            if (speakerTranscriptions[selectedTranscriptionIndex]?.timestamp) {
+              onNavigateToTimestamp(speakerTranscriptions[selectedTranscriptionIndex].timestamp);
+              onClose();
+            }
+            break;
+        }
+        return;
+      }
+
       const cols = 4; // Grid columns
 
       switch (e.key) {
@@ -342,7 +482,7 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, searchResults, selectedIndex, onClose, onNavigateToTimestamp, handleSendToAI]);
+  }, [isOpen, searchResults, selectedIndex, selectedSpeaker, speakerTranscriptions, selectedTranscriptionIndex, onClose, onNavigateToTimestamp, handleSendToAI, handleBackFromSpeaker]);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -359,8 +499,8 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
 
   if (!isOpen) return null;
 
-  const hasResults = searchResults.length > 0;
-  const showEmpty = !isSearching && debouncedQuery && !hasResults;
+  const hasResults = searchResults.length > 0 || speakerResults.length > 0;
+  const showEmpty = !isSearching && !isSearchingSpeakers && debouncedQuery && !hasResults && !selectedSpeaker;
   const activeIndex = hoveredIndex ?? selectedIndex;
 
   return (
@@ -414,148 +554,254 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
           )}
         </div>
 
-        {/* Results Grid - isolate scroll to prevent timeline from scrolling */}
+        {/* Results area - isolate scroll to prevent timeline from scrolling */}
         <div
           ref={gridRef}
           className="max-h-[60vh] overflow-y-auto p-4 overscroll-contain touch-pan-y"
           onWheel={(e) => {
-            // Stop event from reaching timeline, but allow scrolling within this container
             e.stopPropagation();
-
-            // Check if we're at scroll boundaries - if so, prevent default to avoid
-            // the event from propagating and scrolling the timeline
             const target = e.currentTarget;
             const isAtTop = target.scrollTop === 0 && e.deltaY < 0;
             const isAtBottom = target.scrollTop + target.clientHeight >= target.scrollHeight && e.deltaY > 0;
-
-            if (isAtTop || isAtBottom) {
-              e.preventDefault();
-            }
+            if (isAtTop || isAtBottom) e.preventDefault();
           }}
           onTouchMove={(e) => e.stopPropagation()}
           onScroll={(e) => e.stopPropagation()}
         >
-          {/* Empty state */}
-          {showEmpty && (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              no results for &quot;{debouncedQuery}&quot;
-            </div>
-          )}
+          {/* === Speaker drill-down view === */}
+          {selectedSpeaker ? (
+            <div>
+              {/* Back button + speaker name */}
+              <button
+                onClick={handleBackFromSpeaker}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <User className="w-3.5 h-3.5" />
+                <span className="font-medium text-foreground">{selectedSpeaker.name}</span>
+              </button>
 
-          {/* Loading skeleton */}
-          {isSearching && searchResults.length === 0 && (
-            <div className="grid grid-cols-4 gap-3">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="bg-muted animate-pulse rounded overflow-hidden">
-                  <div className="aspect-video" />
-                  <div className="p-2 space-y-1">
-                    <div className="h-3 bg-muted-foreground/20 rounded w-16" />
-                    <div className="h-2 bg-muted-foreground/20 rounded w-24" />
-                  </div>
+              {isLoadingTranscriptions && (
+                <div className="space-y-3">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="bg-muted animate-pulse rounded p-3 h-16" />
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          {/* Results grid */}
-          {hasResults && (
-            <div className="grid grid-cols-4 gap-3">
-              {searchResults.map((result, index) => {
-                const isActive = index === activeIndex;
-                const isHovered = index === hoveredIndex;
+              {!isLoadingTranscriptions && speakerTranscriptions.length === 0 && (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  no transcriptions found for {selectedSpeaker.name}
+                </div>
+              )}
 
-                return (
-                  <div
-                    key={result.frame_id}
-                    data-index={index}
-                    onClick={() => handleSelectResult(result)}
-                    onMouseEnter={() => setHoveredIndex(index)}
-                    onMouseLeave={() => setHoveredIndex(null)}
-                    className={cn(
-                      "cursor-pointer rounded overflow-hidden border transition-all duration-150",
-                      isActive
-                        ? "ring-2 ring-foreground border-foreground scale-[1.02] shadow-lg z-10"
-                        : "border-border hover:border-foreground/50"
-                    )}
-                  >
-                    <FrameThumbnail
-                      frameId={result.frame_id}
-                      alt={`${result.app_name} - ${result.window_name}`}
-                    />
-                    <div className="p-2 bg-card">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-                        <Clock className="w-3 h-3" />
-                        <span className="font-mono">{formatRelativeTime(result.timestamp)}</span>
-                      </div>
-                      <p className="text-xs font-medium text-foreground truncate">
-                        {result.app_name}
-                      </p>
-                      {/* Expanded details on hover/select - hide noisy OCR, show useful metadata */}
-                      {isActive && (
-                        <div className="mt-1 pt-1 border-t border-border space-y-1">
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {result.window_name}
-                          </p>
-                          {result.url && (
-                            <p className="text-xs text-muted-foreground/70 truncate">
-                              {result.url}
-                            </p>
-                          )}
-                        </div>
+              {speakerTranscriptions.length > 0 && (
+                <div className="space-y-1">
+                  {speakerTranscriptions.map((t, index) => (
+                    <div
+                      key={`${t.timestamp}-${index}`}
+                      data-index={index}
+                      onClick={() => {
+                        if (t.timestamp) {
+                          onNavigateToTimestamp(t.timestamp);
+                          onClose();
+                        }
+                      }}
+                      className={cn(
+                        "px-3 py-2.5 rounded cursor-pointer transition-all duration-100",
+                        index === selectedTranscriptionIndex
+                          ? "bg-foreground/10 ring-1 ring-foreground/20"
+                          : "hover:bg-muted"
                       )}
+                    >
+                      <p className="text-sm text-foreground leading-relaxed line-clamp-2">
+                        {t.transcription || "(empty)"}
+                      </p>
+                      <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1 font-mono">
+                          <Clock className="w-3 h-3" />
+                          {t.timestamp ? formatRelativeTime(t.timestamp) : "unknown"}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          {t.is_input ? <Mic className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                          {t.is_input ? "mic" : "speaker"}
+                        </span>
+                        {t.duration_secs > 0 && (
+                          <span>{Math.round(t.duration_secs)}s</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Suggestions when no query */}
-          {!debouncedQuery && !isSearching && (
-            <div className="py-8 px-2">
-              {suggestions.length > 0 ? (
-                <>
-                  <p className="text-xs text-muted-foreground mb-3 text-center">
-                    from your recent activity
-                  </p>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {suggestions.map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        onClick={() => setQuery(suggestion)}
-                        className="px-3 py-1.5 text-sm border border-border rounded-md
-                          hover:bg-muted hover:border-foreground/30 transition-colors
-                          text-foreground/80 hover:text-foreground cursor-pointer"
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : suggestionsLoading ? (
-                <div className="text-center text-sm text-muted-foreground">
-                  loading suggestions...
-                </div>
-              ) : (
-                <div className="text-center text-sm text-muted-foreground">
-                  type to search your screen history
+                  ))}
                 </div>
               )}
             </div>
+          ) : (
+            <>
+              {/* Empty state */}
+              {showEmpty && (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  no results for &quot;{debouncedQuery}&quot;
+                </div>
+              )}
+
+              {/* Loading skeleton */}
+              {isSearching && searchResults.length === 0 && speakerResults.length === 0 && (
+                <div className="grid grid-cols-4 gap-3">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="bg-muted animate-pulse rounded overflow-hidden">
+                      <div className="aspect-video" />
+                      <div className="p-2 space-y-1">
+                        <div className="h-3 bg-muted-foreground/20 rounded w-16" />
+                        <div className="h-2 bg-muted-foreground/20 rounded w-24" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* People section */}
+              {speakerResults.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <User className="w-3 h-3" />
+                    people
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {speakerResults.map((speaker) => (
+                      <button
+                        key={speaker.id}
+                        onClick={() => {
+                          setSelectedSpeaker(speaker);
+                          setSelectedTranscriptionIndex(0);
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 border border-border rounded-md
+                          hover:bg-muted hover:border-foreground/30 transition-colors cursor-pointer"
+                      >
+                        <User className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-sm font-medium">{speaker.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Screen results grid */}
+              {searchResults.length > 0 && (
+                <>
+                  {speakerResults.length > 0 && (
+                    <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Search className="w-3 h-3" />
+                      screen
+                    </p>
+                  )}
+                  <div className="grid grid-cols-4 gap-3">
+                    {searchResults.map((result, index) => {
+                      const isActive = index === activeIndex;
+
+                      return (
+                        <div
+                          key={result.frame_id}
+                          data-index={index}
+                          onClick={() => handleSelectResult(result)}
+                          onMouseEnter={() => setHoveredIndex(index)}
+                          onMouseLeave={() => setHoveredIndex(null)}
+                          className={cn(
+                            "cursor-pointer rounded overflow-hidden border transition-all duration-150",
+                            isActive
+                              ? "ring-2 ring-foreground border-foreground scale-[1.02] shadow-lg z-10"
+                              : "border-border hover:border-foreground/50"
+                          )}
+                        >
+                          <FrameThumbnail
+                            frameId={result.frame_id}
+                            alt={`${result.app_name} - ${result.window_name}`}
+                          />
+                          <div className="p-2 bg-card">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                              <Clock className="w-3 h-3" />
+                              <span className="font-mono">{formatRelativeTime(result.timestamp)}</span>
+                            </div>
+                            <p className="text-xs font-medium text-foreground truncate">
+                              {result.app_name}
+                            </p>
+                            {isActive && (
+                              <div className="mt-1 pt-1 border-t border-border space-y-1">
+                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                  {result.window_name}
+                                </p>
+                                {result.url && (
+                                  <p className="text-xs text-muted-foreground/70 truncate">
+                                    {result.url}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Suggestions when no query */}
+              {!debouncedQuery && !isSearching && (
+                <div className="py-8 px-2">
+                  {suggestions.length > 0 ? (
+                    <>
+                      <p className="text-xs text-muted-foreground mb-3 text-center">
+                        from your recent activity
+                      </p>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {suggestions.map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => setQuery(suggestion)}
+                            className="px-3 py-1.5 text-sm border border-border rounded-md
+                              hover:bg-muted hover:border-foreground/30 transition-colors
+                              text-foreground/80 hover:text-foreground cursor-pointer"
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : suggestionsLoading ? (
+                    <div className="text-center text-sm text-muted-foreground">
+                      loading suggestions...
+                    </div>
+                  ) : (
+                    <div className="text-center text-sm text-muted-foreground">
+                      type to search your screen history
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
 
         {/* Footer with keyboard hints */}
         <div className="px-4 py-2 border-t border-border bg-muted/30 flex items-center justify-between text-[10px] text-muted-foreground font-mono">
           <div className="flex items-center gap-4">
-            <span>←→↑↓ navigate</span>
-            <span>⏎ go to timeline</span>
-            <span className="flex items-center gap-1">
-              <MessageSquare className="w-3 h-3" />
-              ⌘⏎ ask AI
-            </span>
+            {selectedSpeaker ? (
+              <>
+                <span>↑↓ navigate</span>
+                <span>⏎ go to timeline</span>
+                <span>esc back</span>
+              </>
+            ) : (
+              <>
+                <span>←→↑↓ navigate</span>
+                <span>⏎ go to timeline</span>
+                <span className="flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3" />
+                  ⌘⏎ ask AI
+                </span>
+              </>
+            )}
           </div>
-          <span>esc close</span>
+          <span>esc {selectedSpeaker ? "back" : "close"}</span>
         </div>
       </div>
     </div>
