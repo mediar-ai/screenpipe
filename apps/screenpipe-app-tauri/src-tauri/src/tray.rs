@@ -388,7 +388,7 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
             tauri::async_runtime::spawn(async move {
                 info!("Stopping screenpipe recording before quit...");
                 if let Some(recording_state) = app_handle_clone.try_state::<RecordingState>() {
-                    let mut handle_guard = recording_state.0.lock().await;
+                    let mut handle_guard = recording_state.handle.lock().await;
                     if let Some(handle) = handle_guard.take() {
                         handle.shutdown();
                         info!("Screenpipe recording stopped successfully");

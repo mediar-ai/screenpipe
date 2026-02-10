@@ -3,13 +3,18 @@ use crate::get_base_dir;
 use crate::permissions::do_permissions_check;
 use crate::store::SettingsStore;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 /// State holding the embedded server handle
-pub struct RecordingState(pub Arc<Mutex<Option<EmbeddedServerHandle>>>);
+pub struct RecordingState {
+    pub handle: Arc<Mutex<Option<EmbeddedServerHandle>>>,
+    /// True while a server start is in progress (prevents race between main.rs boot and frontend)
+    pub is_starting: AtomicBool,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -106,9 +111,10 @@ pub async fn stop_screenpipe(
 ) -> Result<(), String> {
     info!("Stopping screenpipe server");
 
-    let mut handle_guard = state.0.lock().await;
+    let mut handle_guard = state.handle.lock().await;
     if let Some(handle) = handle_guard.take() {
         handle.shutdown();
+        state.is_starting.store(false, Ordering::SeqCst);
         // Wait for the old server to fully release port 3030
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         info!("Screenpipe server stopped");
@@ -132,9 +138,30 @@ pub async fn spawn_screenpipe(
     let port = store.port;
     let health_url = format!("http://localhost:{}/health", port);
 
+    // Check if another start is already in progress (race between main.rs boot and frontend)
+    if state.is_starting.swap(true, Ordering::SeqCst) {
+        info!("Server start already in progress, waiting for health...");
+        // Another start is in flight — wait for health instead of starting a second server
+        for _ in 0..30 {
+            if let Ok(resp) = reqwest::Client::new()
+                .get(&health_url)
+                .timeout(std::time::Duration::from_secs(1))
+                .send()
+                .await
+            {
+                if resp.status().is_success() {
+                    info!("Server became healthy while waiting for in-flight start");
+                    return Ok(());
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        warn!("In-flight server start didn't produce healthy server after 15s, proceeding with our own start");
+    }
+
     // Check if we already own a running server
     {
-        let mut handle_guard = state.0.lock().await;
+        let mut handle_guard = state.handle.lock().await;
         if handle_guard.is_some() {
             // We have a handle — check if it's still healthy
             match reqwest::Client::new()
@@ -145,6 +172,7 @@ pub async fn spawn_screenpipe(
             {
                 Ok(resp) if resp.status().is_success() => {
                     info!("Screenpipe server already running and healthy on port {}", port);
+                    state.is_starting.store(false, Ordering::SeqCst);
                     return Ok(());
                 }
                 _ => {
@@ -219,7 +247,7 @@ pub async fn spawn_screenpipe(
 
     // Build config from store
     let config = EmbeddedServerConfig::from_store(&store, base_dir);
-    let recording_state_inner = state.0.clone();
+    let recording_state_inner = state.handle.clone();
 
     // Use a oneshot channel to report success/failure from the dedicated runtime
     let (result_tx, result_rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
@@ -276,10 +304,18 @@ pub async fn spawn_screenpipe(
     match result_rx.await {
         Ok(Ok(())) => {
             info!("Screenpipe server started successfully");
+            // is_starting stays true — it's cleared when stop_screenpipe() is called
+            // This prevents another spawn_screenpipe from racing with the running server
             Ok(())
         }
-        Ok(Err(e)) => Err(e),
-        Err(_) => Err("Server startup channel dropped unexpectedly".to_string()),
+        Ok(Err(e)) => {
+            state.is_starting.store(false, Ordering::SeqCst);
+            Err(e)
+        }
+        Err(_) => {
+            state.is_starting.store(false, Ordering::SeqCst);
+            Err("Server startup channel dropped unexpectedly".to_string())
+        }
     }
 }
 

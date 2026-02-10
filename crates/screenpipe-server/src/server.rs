@@ -1692,9 +1692,11 @@ async fn get_unnamed_speakers_handler(
     let speakers = speakers
         .into_iter()
         .map(|speaker| {
-            let mut metadata: Value = serde_json::from_str(&speaker.metadata).unwrap();
+            let mut metadata: Value = serde_json::from_str(&speaker.metadata).unwrap_or(json!({}));
             if let Some(audio_samples) = metadata.get("audio_samples").and_then(|v| v.as_array()) {
-                metadata["audio_samples"] = serde_json::to_value(audio_samples).unwrap();
+                if let Ok(samples) = serde_json::to_value(audio_samples) {
+                    metadata["audio_samples"] = samples;
+                }
             }
             Speaker {
                 metadata: metadata.to_string(),
@@ -1735,9 +1737,13 @@ async fn update_speaker_handler(
         }
     }
 
-    Ok(JsonResponse(
-        state.db.get_speaker_by_id(speaker_id).await.unwrap(),
-    ))
+    let speaker = state.db.get_speaker_by_id(speaker_id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("failed to get speaker {}: {}", speaker_id, e)})),
+        )
+    })?;
+    Ok(JsonResponse(speaker))
 }
 
 #[oasgen]
@@ -1746,9 +1752,13 @@ async fn search_speakers_handler(
     Query(request): Query<SearchSpeakersRequest>,
 ) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
     let search_prefix = request.name.unwrap_or_default();
-    Ok(JsonResponse(
-        state.db.search_speakers(&search_prefix).await.unwrap(),
-    ))
+    let speakers = state.db.search_speakers(&search_prefix).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("failed to search speakers: {}", e)})),
+        )
+    })?;
+    Ok(JsonResponse(speakers))
 }
 
 #[oasgen]
@@ -1801,7 +1811,12 @@ async fn mark_as_hallucination_handler(
         .db
         .mark_speaker_as_hallucination(speaker_id)
         .await
-        .unwrap();
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("failed to mark hallucination: {}", e)})),
+            )
+        })?;
 
     Ok(JsonResponse(json!({"success": true})))
 }

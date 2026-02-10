@@ -12,6 +12,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
@@ -1178,7 +1179,10 @@ async fn main() {
         }
     }
 
-    let recording_state = RecordingState(Arc::new(tokio::sync::Mutex::new(None)));
+    let recording_state = RecordingState {
+        handle: Arc::new(tokio::sync::Mutex::new(None)),
+        is_starting: AtomicBool::new(false),
+    };
     let pi_state = pi::PiState(Arc::new(tokio::sync::Mutex::new(None)));
     let obsidian_sync_state = obsidian_sync::ObsidianSyncState::new();
     let reminders_state = reminders::RemindersState::new();
@@ -1608,7 +1612,9 @@ async fn main() {
                 let store_clone = store.clone();
                 let base_dir_clone = base_dir.clone();
                 let recording_state = app_handle.state::<RecordingState>();
-                let recording_state_inner = recording_state.0.clone();
+                // Mark as starting BEFORE spawning thread — prevents race with frontend spawn_screenpipe
+                recording_state.is_starting.store(true, std::sync::atomic::Ordering::SeqCst);
+                let recording_state_inner = recording_state.handle.clone();
                 
                 // Spawn a dedicated thread for the server with its own runtime
                 // This prevents CPU contention between UI and recording workloads

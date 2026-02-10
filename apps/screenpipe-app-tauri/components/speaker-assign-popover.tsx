@@ -46,28 +46,36 @@ export function SpeakerAssignPopover({
 	useEffect(() => {
 		if (!searchTerm || searchTerm.length < 1) {
 			setSpeakers([]);
+			setIsSearching(false);
 			return;
 		}
 
+		const controller = new AbortController();
 		const searchSpeakers = async () => {
 			setIsSearching(true);
 			try {
 				const response = await fetch(
-					`http://localhost:3030/speakers/search?name=${encodeURIComponent(searchTerm)}`
+					`http://localhost:3030/speakers/search?name=${encodeURIComponent(searchTerm)}`,
+					{ signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]) }
 				);
 				if (response.ok) {
 					const results = await response.json();
 					setSpeakers(results);
 				}
 			} catch (error) {
-				console.error("Error searching speakers:", error);
+				if ((error as Error).name !== "AbortError") {
+					console.error("Error searching speakers:", error);
+				}
 			} finally {
 				setIsSearching(false);
 			}
 		};
 
 		const debounceTimeout = setTimeout(searchSpeakers, 300);
-		return () => clearTimeout(debounceTimeout);
+		return () => {
+			clearTimeout(debounceTimeout);
+			controller.abort();
+		};
 	}, [searchTerm]);
 
 	const handleAssign = useCallback(
