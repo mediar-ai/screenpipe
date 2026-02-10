@@ -439,34 +439,32 @@ export function AudioTranscript({
 					</div>
 
 					<div className="flex items-center gap-1">
-						{/* Tab toggle: Nearby / Full meeting */}
-						<Button
-							variant={tabMode === "nearby" ? "secondary" : "ghost"}
-							size="sm"
-							className="h-6 px-2 text-xs gap-1"
-							onClick={() => setTabMode("nearby")}
-							title="Nearby audio (30s window)"
-						>
-							<MessageSquare className="h-3 w-3" />
-							<span className="hidden sm:inline">nearby</span>
-						</Button>
-						{activeMeeting && (
-							<Button
-								variant={tabMode === "meeting" ? "secondary" : "ghost"}
-								size="sm"
-								className="h-6 px-2 text-xs gap-1"
-								onClick={() => setTabMode("meeting")}
-								title="Full meeting transcript"
-							>
-								<Users className="h-3 w-3" />
-								<span className="hidden sm:inline">full meeting</span>
-							</Button>
-						)}
-
-						{/* View mode toggle (only in nearby tab) */}
-						{tabMode === "nearby" && (
+						{activeMeeting ? (
 							<>
-								<div className="w-px h-4 bg-border mx-0.5" />
+								{/* Tab toggle: only shown when a meeting is active */}
+								<Button
+									variant={tabMode === "nearby" ? "secondary" : "ghost"}
+									size="sm"
+									className="h-6 px-2 text-xs gap-1"
+									onClick={() => setTabMode("nearby")}
+									title="Nearby audio (30s window)"
+								>
+									nearby
+								</Button>
+								<Button
+									variant={tabMode === "meeting" ? "secondary" : "ghost"}
+									size="sm"
+									className="h-6 px-2 text-xs gap-1"
+									onClick={() => setTabMode("meeting")}
+									title="Full meeting transcript"
+								>
+									<Users className="h-3 w-3" />
+									full meeting
+								</Button>
+							</>
+						) : (
+							<>
+								{/* Device/thread toggle: only when no meeting active */}
 								<Button
 									variant={viewMode === "device" ? "secondary" : "ghost"}
 									size="sm"

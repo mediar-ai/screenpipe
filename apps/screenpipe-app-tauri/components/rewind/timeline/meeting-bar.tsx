@@ -6,7 +6,6 @@ import { memo, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Meeting } from "@/lib/hooks/use-meetings";
 import { StreamTimeSeriesResponse } from "@/components/rewind/timeline";
-import { Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MeetingBarProps {
@@ -36,10 +35,9 @@ export const MeetingBar = memo(function MeetingBar({
 	onMeetingClick,
 }: MeetingBarProps) {
 	const [hoveredMeeting, setHoveredMeeting] = useState<string | null>(null);
-	const [hoverRect, setHoverRect] = useState<{
-		x: number;
-		y: number;
-	} | null>(null);
+	const [hoverRect, setHoverRect] = useState<{ x: number; y: number } | null>(
+		null
+	);
 
 	// Compute time range from frames (frames are newest-first)
 	const timeRange = useMemo(() => {
@@ -67,75 +65,51 @@ export const MeetingBar = memo(function MeetingBar({
 	if (totalMs <= 0) return null;
 
 	return (
-		<div className="relative w-full h-7 bg-card/60 backdrop-blur-sm border-t border-b border-border flex items-center px-2">
-			{/* Label */}
-			<div className="flex items-center gap-1 text-[10px] text-muted-foreground mr-2 shrink-0">
-				<Mic className="w-3 h-3" />
-			</div>
+		<div className="relative w-full h-3 flex items-end">
+			{/* Meeting blocks — thin accent lines */}
+			{meetings.map((meeting) => {
+				const leftPct =
+					((meeting.startTime.getTime() - timeRange.start.getTime()) /
+						totalMs) *
+					100;
+				const widthPct =
+					((meeting.endTime.getTime() - meeting.startTime.getTime()) /
+						totalMs) *
+					100;
 
-			{/* Meeting blocks container */}
-			<div className="relative flex-1 h-full">
-				{meetings.map((meeting) => {
-					const leftPct =
-						((meeting.startTime.getTime() - timeRange.start.getTime()) /
-							totalMs) *
-						100;
-					const widthPct =
-						((meeting.endTime.getTime() - meeting.startTime.getTime()) /
-							totalMs) *
-						100;
+				const isCurrent = meeting.id === currentMeetingId;
+				const isHovered = meeting.id === hoveredMeeting;
 
-					// Ensure minimum clickable width
-					const minWidthPx = 20;
-					const isCurrent = meeting.id === currentMeetingId;
-					const isHovered = meeting.id === hoveredMeeting;
-					const speakerCount = meeting.speakers.size;
-
-					return (
-						<div
-							key={meeting.id}
-							className={cn(
-								"absolute top-1 bottom-1 cursor-pointer transition-all duration-150",
-								"border border-border hover:border-foreground/40",
-								isCurrent
-									? "bg-foreground/20 border-foreground/50"
-									: "bg-foreground/8 hover:bg-foreground/15"
-							)}
-							style={{
-								left: `${leftPct}%`,
-								width: `max(${minWidthPx}px, ${widthPct}%)`,
-							}}
-							onClick={() => onMeetingClick(meeting)}
-							onMouseEnter={(e) => {
-								const rect = e.currentTarget.getBoundingClientRect();
-								setHoveredMeeting(meeting.id);
-								setHoverRect({
-									x: rect.left + rect.width / 2,
-									y: rect.top,
-								});
-							}}
-							onMouseLeave={() => {
-								setHoveredMeeting(null);
-								setHoverRect(null);
-							}}
-						>
-							{/* Inner content — only show if block is wide enough */}
-							{widthPct > 3 && (
-								<div className="flex items-center h-full px-1.5 gap-1 overflow-hidden">
-									<span className="text-[9px] text-foreground/70 whitespace-nowrap truncate">
-										{formatTime(meeting.startTime)}
-									</span>
-									{widthPct > 8 && (
-										<span className="text-[9px] text-muted-foreground whitespace-nowrap">
-											· {speakerCount} {speakerCount === 1 ? "speaker" : "speakers"}
-										</span>
-									)}
-								</div>
-							)}
-						</div>
-					);
-				})}
-			</div>
+				return (
+					<div
+						key={meeting.id}
+						className={cn(
+							"absolute bottom-0 h-1.5 cursor-pointer transition-all duration-150",
+							isCurrent || isHovered
+								? "bg-foreground/60 h-2.5"
+								: "bg-foreground/25 hover:bg-foreground/40 hover:h-2"
+						)}
+						style={{
+							left: `${leftPct}%`,
+							width: `max(6px, ${widthPct}%)`,
+							borderRadius: "1px 1px 0 0",
+						}}
+						onClick={() => onMeetingClick(meeting)}
+						onMouseEnter={(e) => {
+							const rect = e.currentTarget.getBoundingClientRect();
+							setHoveredMeeting(meeting.id);
+							setHoverRect({
+								x: rect.left + rect.width / 2,
+								y: rect.top,
+							});
+						}}
+						onMouseLeave={() => {
+							setHoveredMeeting(null);
+							setHoverRect(null);
+						}}
+					/>
+				);
+			})}
 
 			{/* Hover tooltip via portal */}
 			{hoveredMeeting &&

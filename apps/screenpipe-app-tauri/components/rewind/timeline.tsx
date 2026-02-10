@@ -1316,9 +1316,9 @@ export default function Timeline() {
 					</div>
 				)}
 
-				{/* Meeting Bar - between frame area and timeline slider */}
+				{/* Meeting Bar - thin accent lines just above the timeline slider */}
 				{meetings.length > 0 && frames.length > 0 && (
-					<div className="absolute bottom-[88px] left-0 right-0 z-[38] pointer-events-auto">
+					<div className="absolute bottom-[84px] left-0 right-0 z-[41] pointer-events-auto">
 						<MeetingBar
 							meetings={meetings}
 							frames={frames}
