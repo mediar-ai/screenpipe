@@ -47,10 +47,10 @@ pub async fn get_app_icon(
 
             let tiff_data: id = msg_send![icon, TIFFRepresentation];
             let image_rep: id = msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff_data];
-            let jpeg_data: id = msg_send![image_rep, representationUsingType:3 properties:nil]; // Type 3 is JPEG
+            let png_data: id = msg_send![image_rep, representationUsingType:0 properties:nil]; // Type 0 is PNG (supports transparency)
 
-            let length = NSData::length(jpeg_data);
-            let bytes = NSData::bytes(jpeg_data);
+            let length = NSData::length(png_data);
+            let bytes = NSData::bytes(png_data);
             let data = std::slice::from_raw_parts(bytes as *const u8, length as usize).to_vec();
 
             Ok(Some(AppIcon {
