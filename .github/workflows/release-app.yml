@@ -259,7 +259,7 @@ jobs:
             tauri-args: "--target x86_64-apple-darwin --features official-build"
             os_type: "macos"
           - platform: ${{ needs.check_commit.outputs.windows_runner || 'windows-2019' }}
-            args: "--target x86_64-pc-windows-msvc --features mkl"
+            args: "--target x86_64-pc-windows-msvc --features mkl,vulkan"
             pre-build-args: ""
             tauri-args: "--target x86_64-pc-windows-msvc --features official-build"
             os_type: "windows"
@@ -579,6 +579,39 @@ jobs:
           }
           Write-Host "LLVM installation completed successfully"
 
+      - name: Install Vulkan SDK
+        if: matrix.os_type == 'windows'
+        shell: powershell
+        run: |
+          $vulkanVersion = "1.3.290.0"
+          $vulkanPath = "C:\VulkanSDK\$vulkanVersion"
+          
+          # Skip if already installed (self-hosted runners)
+          if (Test-Path "$vulkanPath\Lib\vulkan-1.lib") {
+            Write-Host "Vulkan SDK already installed, skipping"
+          } else {
+            Write-Host "Installing Vulkan SDK $vulkanVersion..."
+            $installerUrl = "https://sdk.lunarg.com/sdk/download/$vulkanVersion/windows/VulkanSDK-$vulkanVersion-Installer.exe"
+            $installerPath = "$env:TEMP\VulkanSDK-Installer.exe"
+            
+            Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+            
+            # Silent install
+            Start-Process -FilePath $installerPath -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait -NoNewWindow
+            
+            Remove-Item $installerPath -Force
+          }
+          
+          # Set environment variable for this job
+          echo "VULKAN_SDK=$vulkanPath" >> $env:GITHUB_ENV
+          Write-Host "VULKAN_SDK set to $vulkanPath"
+          
+          # Verify installation
+          if (!(Test-Path "$vulkanPath\Lib\vulkan-1.lib")) {
+            throw "Vulkan SDK installation failed - vulkan-1.lib not found"
+          }
+          Write-Host "Vulkan SDK installation completed successfully"
+
       - name: Install wget on Windows
         if: matrix.os_type == 'windows'
         shell: powershell
@@ -861,7 +894,7 @@ jobs:
             Get-ChildItem -Path "target" -Recurse -Include "*.nsis*","*.exe","*.sig","*.msi" | Where-Object { $_.DirectoryName -match "bundle|release$" } | Remove-Item -Force -ErrorAction SilentlyContinue
             # Rebuild (Rust cached, just repackages) - run from project root
             Push-Location ..
-            bunx tauri build --target x86_64-pc-windows-msvc --features mkl,official-build
+            bunx tauri build --target x86_64-pc-windows-msvc --features mkl,vulkan,official-build
             Pop-Location
             Write-Host "=== Beta rebuild complete ==="
             Write-Host "Beta artifacts:"
