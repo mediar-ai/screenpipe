@@ -1,6 +1,6 @@
 # contributing to screen pipe
 
-first off, thank you for considering contributing to screen pipe! it's people like you that make screen pipe such a great tool. we're looking for developers who want to create paid pipes, with the potential to easily make $1000/m. let's [schedule a call](https://cal.com/louis030195/screenpipe) to get you onboarded.
+first off, thank you for considering contributing to screen pipe! it's people like you that make screen pipe such a great tool. we're looking for developers who want to create paid pipes, with the potential to easily make $1000/m. let's [schedule a call](https://cal.com/team/screenpipe/chat) to get you onboarded.
 
 btw, we prefer that you don't contribute if you are not using or will use the product and is just there for bounties, thank you.
 

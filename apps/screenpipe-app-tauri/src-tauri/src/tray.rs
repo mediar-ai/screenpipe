@@ -367,7 +367,7 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
             let _ = ShowRewindWindow::Settings { page: Some("feedback".to_string()) }.show(app_handle);
         }
         "book_call" => {
-            let _ = app_handle.opener().open_url("https://cal.com/louis030195/screenpipe-onboarding", None::<&str>);
+            let _ = app_handle.opener().open_url("https://cal.com/team/screenpipe/chat", None::<&str>);
         }
         "onboarding" => {
             // Reset onboarding state so it shows even if previously completed

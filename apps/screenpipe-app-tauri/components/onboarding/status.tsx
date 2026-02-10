@@ -218,7 +218,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   };
 
   const openBookingLink = () => {
-    openUrl("https://cal.com/louis030195/screenpipe-onboarding");
+    openUrl("https://cal.com/team/screenpipe/chat");
   };
 
   const ensureDefaultPreset = async () => {
