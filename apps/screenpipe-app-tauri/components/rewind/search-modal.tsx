@@ -636,7 +636,17 @@ export function SearchModal({ isOpen, onClose, onNavigateToTimestamp }: SearchMo
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              // Exit speaker drill-down when user edits search query
+              if (selectedSpeaker) {
+                setSelectedSpeaker(null);
+                setSpeakerTranscriptions([]);
+                setSelectedTranscriptionIndex(0);
+                setTranscriptionOffset(0);
+                setHasMoreTranscriptions(true);
+              }
+            }}
             placeholder="Search your memory..."
             className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground text-sm outline-none"
             autoComplete="off"
