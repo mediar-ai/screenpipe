@@ -5,7 +5,7 @@ import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { AudioData, StreamTimeSeriesResponse, TimeRange } from "@/components/rewind/timeline";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Play, Pause, Volume2, GripHorizontal, X, MessageSquare, Layers, Users } from "lucide-react";
+import { Play, Pause, Volume2, GripHorizontal, X, MessageSquare, Layers, Users, Copy, Check } from "lucide-react";
 import { VideoComponent } from "@/components/rewind/video";
 import { SpeakerAssignPopover } from "@/components/speaker-assign-popover";
 import {
@@ -120,6 +120,8 @@ export function AudioTranscript({
 	const [windowSize, setWindowSize] = useState({ width: 360, height: 500 });
 	const resizerRef = useRef<HTMLDivElement | null>(null);
 	const panelRef = useRef<HTMLDivElement | null>(null);
+
+	const [copied, setCopied] = useState(false);
 
 	// Track speaker assignments
 	const [speakerOverrides, setSpeakerOverrides] = useState<
@@ -351,6 +353,24 @@ export function AudioTranscript({
 		return { items, participants, timeRange, totalDuration };
 	}, [activeMeeting, getSpeakerInfo]);
 
+	// Copy full transcript to clipboard (nearby or meeting depending on active tab)
+	const handleCopyTranscript = useCallback(() => {
+		const data = tabMode === "meeting" ? meetingConversationData : conversationData;
+		if (!data.items.length) return;
+
+		const lines = data.items.map((item) => {
+			const { speakerName } = getSpeakerInfo(item.audio);
+			const time = item.audio.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+			const name = speakerName || (item.audio.is_input ? "me" : "speaker");
+			return `[${time}] ${name}: ${item.audio.transcription || "(no transcription)"}`;
+		});
+
+		navigator.clipboard.writeText(lines.join("\n")).then(() => {
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		});
+	}, [tabMode, meetingConversationData, conversationData, getSpeakerInfo]);
+
 	// Auto-switch to thread view if multiple speakers detected
 	const hasMultipleSpeakers = conversationData.participants.length > 1;
 
@@ -502,6 +522,15 @@ export function AudioTranscript({
 							variant="ghost"
 							size="sm"
 							className="h-6 w-6 p-0 ml-1"
+							onClick={handleCopyTranscript}
+							title="copy transcript"
+						>
+							{copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-6 w-6 p-0"
 							onClick={handleClose}
 						>
 							<X className="h-3 w-3" />
