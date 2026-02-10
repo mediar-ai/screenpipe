@@ -5,10 +5,11 @@ mod tests {
     use screenpipe_vision::capture_screenshot_by_window::{CapturedWindow, WindowFilters};
     use screenpipe_vision::core::OcrTaskData;
     use screenpipe_vision::monitor::get_default_monitor;
+    use screenpipe_vision::ocr_cache::WindowOcrCache;
     use screenpipe_vision::{process_ocr_task, OcrEngine};
     use std::sync::Arc;
-    use std::{path::PathBuf, time::Instant};
-    use tokio::sync::mpsc;
+    use std::{path::PathBuf, time::Duration as StdDuration, time::Instant};
+    use tokio::sync::{mpsc, Mutex};
 
     use screenpipe_vision::{continuous_capture, CaptureResult};
     use std::time::Duration;
@@ -43,6 +44,7 @@ mod tests {
             window_height: image.height(),
         }];
 
+        let ocr_cache = Arc::new(Mutex::new(WindowOcrCache::new(StdDuration::from_secs(60), 100)));
         let result = process_ocr_task(
             OcrTaskData {
                 image: image_arc,
@@ -54,6 +56,7 @@ mod tests {
             },
             &ocr_engine,
             vec![],
+            ocr_cache,
         )
         .await;
 
@@ -68,7 +71,7 @@ mod tests {
         let (result_tx, mut result_rx) = mpsc::channel::<CaptureResult>(10);
 
         // Create a mock monitor
-        let monitor = get_default_monitor().await.id();
+        let monitor = get_default_monitor().await.expect("no monitor found").id();
 
         // Set up test parameters
         let interval = Duration::from_millis(1000);

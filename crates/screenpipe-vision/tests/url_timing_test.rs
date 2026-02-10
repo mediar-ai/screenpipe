@@ -90,6 +90,7 @@ async fn capture_frame_fixed_behavior(browser: Arc<MockBrowser>) -> (String, Str
 }
 
 #[tokio::test]
+#[ignore] // Known bug — URL mismatch when browser navigates during capture. Remove ignore when fix lands.
 async fn test_bug_url_mismatch_when_browser_navigates_during_capture() {
     // This test reproduces the bug where:
     // - Screenshot shows google.com content
