@@ -3782,6 +3782,8 @@ mod tests {
                 audio_chunk_id: i as i64,
                 speaker_id: None,
                 speaker_name: None,
+                start_time: None,
+                end_time: None,
             })
             .collect();
 
