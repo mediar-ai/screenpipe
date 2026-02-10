@@ -105,17 +105,6 @@ screenpipe
 - works offline
 - optional encrypted device sync
 
-## use with claude code
-
-```bash
-claude mcp add screenpipe -- npx -y screenpipe-mcp
-```
-
-now ask claude:
-- "what was i working on yesterday?"
-- "find when i saw that error message"
-- "search my screen for mentions of API"
-
 ---
 
 <p align="center">
