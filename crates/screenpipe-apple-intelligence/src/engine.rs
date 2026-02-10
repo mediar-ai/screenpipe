@@ -165,7 +165,7 @@ pub fn generate_text(instructions: Option<&str>, prompt: &str) -> Result<Generat
         bail!("Foundation Models requires macOS 26+");
     }
     let prompt_c = CString::new(prompt)?;
-    let instructions_c = instructions.map(|s| CString::new(s)).transpose()?;
+    let instructions_c = instructions.map(CString::new).transpose()?;
 
     let mut out_text: *mut std::os::raw::c_char = std::ptr::null_mut();
     let mut out_error: *mut std::os::raw::c_char = std::ptr::null_mut();
@@ -222,7 +222,7 @@ pub fn generate_json(
     }
     let prompt_c = CString::new(prompt)?;
     let schema_c = CString::new(json_schema)?;
-    let instructions_c = instructions.map(|s| CString::new(s)).transpose()?;
+    let instructions_c = instructions.map(CString::new).transpose()?;
 
     let mut out_text: *mut std::os::raw::c_char = std::ptr::null_mut();
     let mut out_error: *mut std::os::raw::c_char = std::ptr::null_mut();
