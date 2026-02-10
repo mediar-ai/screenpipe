@@ -149,7 +149,7 @@ export function AppContextPopover({
 						<img
 							key={i}
 							src={`http://localhost:11435/app-icon?name=${encodeURIComponent(name)}`}
-							className="w-4 h-4 rounded flex-shrink-0"
+							className="w-5 h-5 rounded flex-shrink-0 object-contain"
 							alt={name}
 							style={i > 0 ? { marginLeft: -6 } : undefined}
 						/>

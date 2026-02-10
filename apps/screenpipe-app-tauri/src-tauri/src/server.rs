@@ -353,7 +353,7 @@ async fn get_app_icon_handler(
         match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
             Ok(Some(icon)) => {
                 let headers = [
-                    (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
+                    (CONTENT_TYPE, HeaderValue::from_static("image/png")),
                     (
                         http::header::CACHE_CONTROL,
                         HeaderValue::from_static("public, max-age=604800"),

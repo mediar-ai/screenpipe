@@ -526,8 +526,12 @@ export const TimelineSlider = ({
 								{/* Vertical stacked app icons - click for context popover */}
 								{groupWidth > 30 && (
 									<motion.div
-										className="absolute top-1 left-1/2 -translate-x-1/2 z-10 flex flex-col cursor-pointer"
-										style={{ direction: 'ltr' }}
+										className="absolute top-1 left-1/2 -translate-x-1/2 z-10 flex flex-col cursor-pointer p-1.5"
+										style={{ 
+											direction: 'ltr',
+											pointerEvents: 'auto',
+											isolation: 'isolate'
+										}}
 										whileHover="expanded"
 										initial="collapsed"
 										onClick={(e) => {
@@ -542,17 +546,26 @@ export const TimelineSlider = ({
 										{group.appNames.slice(0, 2).map((appName, idx) => (
 											<motion.div
 												key={`${appName}-${idx}`}
-												className="w-4 h-4 rounded bg-background/90 p-0.5 shadow-sm border border-background/50"
-												style={{ zIndex: 10 - idx }}
+												className="w-8 h-8 rounded flex-shrink-0 overflow-hidden flex items-center justify-center"
+												style={{ 
+													zIndex: 10 - idx,
+													position: 'relative'
+												}}
 												variants={{
-													collapsed: { marginTop: idx === 0 ? 0 : -6 },
-													expanded: { marginTop: idx === 0 ? 0 : 2 }
+													collapsed: { 
+														marginTop: idx === 0 ? 0 : -10,
+														scale: 1
+													},
+													expanded: { 
+														marginTop: idx === 0 ? 0 : 4,
+														scale: 1.1
+													}
 												}}
 												transition={{ type: "spring", stiffness: 400, damping: 25 }}
 											>
 												<img
 													src={`http://localhost:11435/app-icon?name=${encodeURIComponent(appName)}`}
-													className="w-full h-full rounded-sm"
+													className="w-full h-full rounded-sm object-contain scale-110"
 													alt={appName}
 													loading="lazy"
 													decoding="async"
