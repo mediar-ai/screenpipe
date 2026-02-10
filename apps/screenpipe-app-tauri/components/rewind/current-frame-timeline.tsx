@@ -61,8 +61,7 @@ const failedChunks = new Set<string>();
 // Cache calibrated fps per video file path so we only compute once
 const calibratedFpsCache = new Map<string, number>();
 
-// Cache PTS offset per video file (old libx265 videos start at 2/fps instead of 0)
-const ptsOffsetCache = new Map<string, number>();
+
 
 
 
@@ -261,24 +260,8 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 				throw new Error(`cannot determine fps for ${path}`);
 			}
 
-			// Seek to frame: offset_index / fps gives the ideal time assuming pts starts at 0.
-			// Old videos encoded with libx265 B-frames have pts starting at 2/fps (e.g. 4s at 0.5fps).
-			// Probe once per video by seeking to 0 and reading where the browser actually lands.
-			let ptsOffset = ptsOffsetCache.get(path) ?? 0;
-			if (!ptsOffsetCache.has(path)) {
-				try {
-					video.currentTime = 0;
-					await new Promise<void>((r) => {
-						const done = () => { video.removeEventListener("seeked", done); r(); };
-						video.addEventListener("seeked", done);
-					});
-					ptsOffset = video.currentTime; // browser snaps to first frame PTS
-					ptsOffsetCache.set(path, ptsOffset);
-				} catch {
-					ptsOffsetCache.set(path, 0);
-				}
-			}
-			let targetTime = (idx / effectiveFps) + ptsOffset;
+			// Seek to frame with bounds check
+			let targetTime = idx / effectiveFps;
 			// Clamp to video duration (safety net)
 			if (targetTime > video.duration) {
 				console.warn(`seek target ${targetTime.toFixed(1)}s > duration ${video.duration.toFixed(1)}s, clamping`);
