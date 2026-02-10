@@ -3160,6 +3160,8 @@ fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
             audio_chunk_id: a.audio_chunk_id,
             speaker_id: a.speaker_id,
             speaker_name: a.speaker_name.clone(),
+            start_time: a.start_time,
+            end_time: a.end_time,
         })
         .collect();
 
