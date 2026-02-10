@@ -77,7 +77,7 @@ mod tests {
         let interval = Duration::from_millis(1000);
         let save_text_files_flag = false;
         let ocr_engine = OcrEngine::WindowsNative;
-        let window_filters = Arc::new(WindowFilters::new(&[], &[]));
+        let window_filters = Arc::new(WindowFilters::new(&[], &[], &[]));
 
         // Spawn the continuous_capture function with corrected parameter order
         let capture_handle = tokio::spawn(continuous_capture(
@@ -85,9 +85,10 @@ mod tests {
             interval,
             ocr_engine,
             monitor,
-            window_filters, // window filters as empty vec
-            vec![],         // languages as empty vec
+            window_filters,
+            vec![],  // languages
             save_text_files_flag,
+            None,    // activity_feed
         ));
 
         // Wait for a short duration to allow some captures to occur
