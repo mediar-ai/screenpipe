@@ -7,7 +7,7 @@ const IP_DAILY_LIMIT = 200; // Max queries per IP per day (catches device ID spo
 export const TIER_CONFIG: Record<UserTier, TierLimits> = {
   anonymous: {
     dailyQueries: 25,
-    rpm: 5,
+    rpm: 10,
     allowedModels: [
       'claude-haiku-4-5',
       'gemini-3-flash',
@@ -16,7 +16,7 @@ export const TIER_CONFIG: Record<UserTier, TierLimits> = {
   },
   logged_in: {
     dailyQueries: 50,
-    rpm: 10,
+    rpm: 20,
     allowedModels: [
       'claude-haiku-4-5',
       'claude-sonnet-4-5',
@@ -28,7 +28,7 @@ export const TIER_CONFIG: Record<UserTier, TierLimits> = {
   },
   subscribed: {
     dailyQueries: 200, // hard cap to control Vertex AI costs
-    rpm: 30,
+    rpm: 60,
     allowedModels: ['*'], // all models
   },
 };

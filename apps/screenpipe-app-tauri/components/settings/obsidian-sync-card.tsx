@@ -712,7 +712,9 @@ export function ObsidianSyncCard() {
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 <AlertCircle className="h-3 w-3 inline mr-1" />
-                usage limit reached · retrying automatically
+                {isLoggedIn
+                  ? "usage limit reached · upgrade for higher limits"
+                  : "usage limit reached · sign in for 2x more"}
               </p>
               <Button
                 variant="outline"
@@ -720,10 +722,10 @@ export function ObsidianSyncCard() {
                 className="text-xs h-6 gap-1"
                 onClick={async () => {
                   const { open } = await import("@tauri-apps/plugin-shell");
-                  await open("https://screenpi.pe/login");
+                  await open(isLoggedIn ? "https://screenpi.pe/pricing" : "https://screenpi.pe/login");
                 }}
               >
-                upgrade
+                {isLoggedIn ? "upgrade" : "sign in"}
               </Button>
             </div>
           </div>

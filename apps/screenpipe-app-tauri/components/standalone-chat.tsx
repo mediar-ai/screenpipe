@@ -405,7 +405,7 @@ export function StandaloneChat() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
-  const [upgradeReason, setUpgradeReason] = useState<"daily_limit" | "model_not_allowed">("daily_limit");
+  const [upgradeReason, setUpgradeReason] = useState<"daily_limit" | "model_not_allowed" | "rate_limit">("daily_limit");
   const [upgradeResetsAt, setUpgradeResetsAt] = useState<string | undefined>();
   const [prefillContext, setPrefillContext] = useState<string | null>(null);
   const [prefillFrameId, setPrefillFrameId] = useState<number | null>(null);
@@ -1793,7 +1793,9 @@ export function StandaloneChat() {
       } else if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
         errorMessage = "Invalid API key. Please check your preset configuration.";
       } else if (errorMessage.includes("429")) {
-        errorMessage = "Rate limit exceeded. Please wait and try again.";
+        setUpgradeReason("rate_limit");
+        setShowUpgradeDialog(true);
+        errorMessage = "Rate limit exceeded. Upgrade for higher limits.";
       } else if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
         errorMessage = "Network error. Check your connection.";
       } else if (

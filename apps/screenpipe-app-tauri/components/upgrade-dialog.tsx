@@ -15,7 +15,7 @@ import { Sparkles, Zap, Clock, Star } from "lucide-react";
 interface UpgradeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  reason?: "daily_limit" | "model_not_allowed";
+  reason?: "daily_limit" | "model_not_allowed" | "rate_limit";
   resetsAt?: string;
 }
 
@@ -71,12 +71,16 @@ export function UpgradeDialog({
             <span>
               {reason === "daily_limit"
                 ? "you've used all your free queries today"
+                : reason === "rate_limit"
+                ? "too many requests"
                 : "this model requires an upgrade"}
             </span>
           </DialogTitle>
           <DialogDescription className="text-sm">
             {reason === "daily_limit"
               ? `your free queries reset ${formatResetTime()}, or upgrade for unlimited access`
+              : reason === "rate_limit"
+              ? "you're sending requests too fast — upgrade for 3x higher rate limits"
               : "upgrade for unlimited access to claude opus & more"}
           </DialogDescription>
         </DialogHeader>
@@ -116,7 +120,7 @@ export function UpgradeDialog({
             </div>
           </Button>
 
-          {!isLoggedIn && reason === "daily_limit" && (
+          {!isLoggedIn && (reason === "daily_limit" || reason === "rate_limit") && (
             <Button
               variant="outline"
               className="w-full justify-start gap-3 h-auto py-3"
@@ -139,9 +143,13 @@ export function UpgradeDialog({
           >
             <Clock className="h-5 w-5 shrink-0" />
             <div className="text-left flex-1 min-w-0">
-              <div className="font-medium">wait until {formatResetTime()}</div>
+              <div className="font-medium">
+                {reason === "rate_limit" ? "wait a minute" : `wait until ${formatResetTime()}`}
+              </div>
               <div className="text-xs text-muted-foreground">
-                your free queries will reset automatically
+                {reason === "rate_limit"
+                  ? "rate limits reset every minute"
+                  : "your free queries will reset automatically"}
               </div>
             </div>
           </Button>
