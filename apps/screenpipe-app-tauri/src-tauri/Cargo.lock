@@ -8719,7 +8719,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "2.0.380"
+version = "2.0.387"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -8911,6 +8911,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "criterion",
+ "dirs 5.0.1",
  "futures",
  "image 0.25.9",
  "libsqlite3-sys",

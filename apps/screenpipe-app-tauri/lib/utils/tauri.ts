@@ -238,8 +238,9 @@ async registerWindowShortcuts() : Promise<Result<null, string>> {
 }
 },
 /**
- * Unregister window-specific shortcuts when main window is hidden
- * This allows Escape and search shortcut to work normally in other apps
+ * Unregister window-specific shortcuts when main window is hidden.
+ * Only unregisters Escape and arrow keys. Global shortcuts (search, show, chat)
+ * are NOT touched here — they must persist across window show/hide cycles.
  */
 async unregisterWindowShortcuts() : Promise<Result<null, string>> {
     try {
