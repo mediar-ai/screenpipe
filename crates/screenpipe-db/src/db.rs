@@ -2245,13 +2245,16 @@ impl DatabaseManager {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<TimeSeriesChunk, SqlxError> {
-        // Get frames with OCR data, grouped by minute to handle multiple monitors
+        // Get frames with OCR data, grouped by minute to handle multiple monitors.
+        // OCR text is truncated to 200 chars for the timeline stream — full text
+        // is fetched on-demand via /frames/{id}/ocr when needed. This reduces
+        // data transfer from ~5MB to ~500KB for a full-day query (~2500 frames).
         let frames_query = r#"
          SELECT
             f.id,
             f.timestamp,
             f.offset_index,
-            ot.text,
+            SUBSTR(ot.text, 1, 200) as text,
             COALESCE(f.app_name, ot.app_name) as app_name,
             COALESCE(f.window_name, ot.window_name) as window_name,
             vc.device_name as screen_device,
