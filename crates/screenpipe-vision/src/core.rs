@@ -341,7 +341,6 @@ pub async fn continuous_capture(
             {
                 error!("Error processing max average frame: {}", e);
             }
-            frame_counter = 0;
             max_avg_value = 0.0;
 
             // Log frame comparison stats periodically
