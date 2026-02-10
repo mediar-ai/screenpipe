@@ -861,8 +861,15 @@ mod tests {
         // (85% similarity threshold within 45s window)
         let transcriptions: Vec<Vec<&str>> = vec![
             vec!["the quick brown fox jumps over the lazy dog"],
-            vec!["quantum computing revolutionizes cryptography today", "blockchain networks secure digital transactions worldwide"],
-            vec!["artificial intelligence transforms healthcare diagnostics rapidly", "machine learning models predict weather patterns accurately", "neural networks process natural language understanding efficiently"],
+            vec![
+                "quantum computing revolutionizes cryptography today",
+                "blockchain networks secure digital transactions worldwide",
+            ],
+            vec![
+                "artificial intelligence transforms healthcare diagnostics rapidly",
+                "machine learning models predict weather patterns accurately",
+                "neural networks process natural language understanding efficiently",
+            ],
         ];
         for n in 0..3 {
             let speaker = db.insert_speaker(&vec![n as f32; 512]).await.unwrap();
@@ -934,8 +941,15 @@ mod tests {
         // Transcription text must be very different per insert to avoid cross-device dedup
         let transcriptions_ids: Vec<Vec<&str>> = vec![
             vec!["penguins waddle across frozen antarctic landscapes gracefully"],
-            vec!["volcanic eruptions reshape island geography dramatically overnight", "tectonic plates shift beneath ocean floors continuously"],
-            vec!["photosynthesis converts sunlight into chemical energy storage", "mitochondria generate cellular power through oxidative processes", "ribosomes assemble protein chains from messenger templates"],
+            vec![
+                "volcanic eruptions reshape island geography dramatically overnight",
+                "tectonic plates shift beneath ocean floors continuously",
+            ],
+            vec![
+                "photosynthesis converts sunlight into chemical energy storage",
+                "mitochondria generate cellular power through oxidative processes",
+                "ribosomes assemble protein chains from messenger templates",
+            ],
         ];
         for n in 0..3 {
             let speaker = db.insert_speaker(&vec![n as f32; 512]).await.unwrap();

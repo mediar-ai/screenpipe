@@ -460,6 +460,10 @@ pub async fn start_ffmpeg_process(
     // - Streaming playback before recording finishes
     args.extend_from_slice(&["-movflags", "frag_keyframe+empty_moov+default_base_moof"]);
 
+    // Fix pts offset: ffmpeg image2pipe with -r buffers 2 frames, starting pts at 2/fps
+    // instead of 0. This causes seek mismatches in the frontend (offset N shows frame N-2).
+    args.extend_from_slice(&["-output_ts_offset", "0"]);
+
     args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
 
     command

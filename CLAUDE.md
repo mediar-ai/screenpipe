@@ -30,6 +30,7 @@ Use `#` for Python, `//` for Rust/TS/JS/Swift. Keep it as the first comment in t
 - `cargo test` for Rust
 - `bun test` for JS/TS
 - **Regression checklist**: `TESTING.md` — must-read before changing window management, tray/dock, monitors, audio, or Apple Intelligence. Lists every edge case that has caused regressions with commit references.
+- regularly check ci/cd which runs automated tests to verify if we broke something or not
 
 ## macOS Dev Builds
 - Dev builds are signed with a developer certificate for consistent permissions
