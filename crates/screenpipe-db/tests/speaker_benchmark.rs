@@ -1,15 +1,21 @@
-/// Speaker diarization benchmark
+/// Speaker clustering experiments
 ///
-/// Runs against the real DB at `~/.screenpipe/db.sqlite` to measure
-/// speaker clustering quality. Outputs metrics only — no PII leaves the machine.
+/// Replays all embeddings from `~/.screenpipe/db.sqlite` through different
+/// clustering strategies and scores each one. No production code is touched.
 ///
 /// Run with: cargo test -p screenpipe-db --test speaker_benchmark -- --nocapture --ignored
+///
+/// Ground truth: named speakers (Louis, Matt) + temporal consistency
+/// (same 5-min window should have few distinct IDs)
 #[cfg(test)]
 mod speaker_benchmark {
     use screenpipe_db::DatabaseManager;
     use std::collections::HashMap;
 
-    /// Cosine similarity between two f32 slices
+    // ════════════════════════════════════════════════════════════════════
+    // Shared types & math
+    // ════════════════════════════════════════════════════════════════════
+
     fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -20,28 +26,507 @@ mod speaker_benchmark {
         dot / (norm_a * norm_b)
     }
 
-    /// Cosine distance (1 - similarity), matching sqlite-vec's vec_distance_cosine
     fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
         1.0 - cosine_similarity(a, b)
     }
 
-    #[derive(Debug)]
-    struct EmbeddingRow {
-        id: i64,
-        speaker_id: i64,
+    /// Compute centroid of a set of embeddings
+    fn centroid(embeddings: &[Vec<f32>]) -> Vec<f32> {
+        let dim = embeddings[0].len();
+        let mut c = vec![0.0f32; dim];
+        for e in embeddings {
+            for (i, v) in e.iter().enumerate() {
+                c[i] += v;
+            }
+        }
+        let n = embeddings.len() as f32;
+        for v in &mut c {
+            *v /= n;
+        }
+        c
+    }
+
+    /// An embedding loaded from the real DB, ordered by insertion time
+    #[derive(Clone)]
+    struct Embedding {
+        /// original speaker_id from DB (ground truth for named speakers)
+        original_speaker_id: i64,
         embedding: Vec<f32>,
     }
 
-    #[derive(Debug)]
-    struct SpeakerInfo {
+    /// Metadata about a speaker from the real DB
+    struct SpeakerMeta {
         id: i64,
         name: Option<String>,
         transcription_count: i64,
     }
 
-    #[tokio::test]
-    #[ignore] // only runs manually — needs real DB
-    async fn benchmark_speaker_clustering() {
+    /// Result of running a clustering strategy
+    struct ClusterResult {
+        /// strategy name
+        name: String,
+        /// cluster_id → list of original_speaker_ids assigned to that cluster
+        clusters: HashMap<usize, Vec<i64>>,
+        /// total clusters created
+        num_clusters: usize,
+    }
+
+    /// Score a clustering result against ground truth
+    struct Score {
+        name: String,
+        num_clusters: usize,
+        /// how many clusters contain a named speaker's embeddings (ideally 1 per name)
+        named_speaker_fragmentation: HashMap<String, usize>,
+        /// total transcriptions captured under the dominant cluster for each named speaker
+        named_speaker_recall: HashMap<String, (i64, i64)>, // (captured, total)
+        /// average distinct cluster IDs per 5-min temporal window
+        avg_clusters_per_window: f32,
+        /// % of clusters with ≤1 member (hallucinations)
+        hallucination_rate: f32,
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Clustering strategies
+    // ════════════════════════════════════════════════════════════════════
+
+    /// Strategy A: Current system — single embedding per cluster, fixed threshold
+    fn strategy_current(embeddings: &[Embedding], threshold: f32) -> ClusterResult {
+        // Each cluster stores one embedding (the first one seen)
+        let mut clusters: Vec<(usize, Vec<f32>, Vec<i64>)> = Vec::new(); // (id, embedding, members)
+        let mut next_id = 0;
+
+        for emb in embeddings {
+            let mut assigned = None;
+            for (cid, cluster_emb, _) in &clusters {
+                if cosine_distance(&emb.embedding, cluster_emb) < threshold {
+                    assigned = Some(*cid);
+                    break;
+                }
+            }
+
+            match assigned {
+                Some(cid) => {
+                    clusters
+                        .iter_mut()
+                        .find(|(id, _, _)| *id == cid)
+                        .unwrap()
+                        .2
+                        .push(emb.original_speaker_id);
+                }
+                None => {
+                    clusters.push((
+                        next_id,
+                        emb.embedding.clone(),
+                        vec![emb.original_speaker_id],
+                    ));
+                    next_id += 1;
+                }
+            }
+        }
+
+        let result_clusters: HashMap<usize, Vec<i64>> = clusters
+            .into_iter()
+            .map(|(id, _, members)| (id, members))
+            .collect();
+        let n = result_clusters.len();
+        ClusterResult {
+            name: format!("current (threshold={:.2})", threshold),
+            clusters: result_clusters,
+            num_clusters: n,
+        }
+    }
+
+    /// Strategy B: Running centroid — update cluster centroid on every match
+    fn strategy_centroid(embeddings: &[Embedding], threshold: f32) -> ClusterResult {
+        struct Cluster {
+            id: usize,
+            centroid: Vec<f32>,
+            count: usize,
+            members: Vec<i64>,
+        }
+
+        let mut clusters: Vec<Cluster> = Vec::new();
+        let mut next_id = 0;
+
+        for emb in embeddings {
+            let mut best_cid = None;
+            let mut best_dist = threshold;
+
+            for c in &clusters {
+                let dist = cosine_distance(&emb.embedding, &c.centroid);
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_cid = Some(c.id);
+                }
+            }
+
+            match best_cid {
+                Some(cid) => {
+                    let c = clusters.iter_mut().find(|c| c.id == cid).unwrap();
+                    // Update running centroid: new_centroid = (old * count + new) / (count + 1)
+                    let n = c.count as f32;
+                    for (i, v) in emb.embedding.iter().enumerate() {
+                        c.centroid[i] = (c.centroid[i] * n + v) / (n + 1.0);
+                    }
+                    c.count += 1;
+                    c.members.push(emb.original_speaker_id);
+                }
+                None => {
+                    clusters.push(Cluster {
+                        id: next_id,
+                        centroid: emb.embedding.clone(),
+                        count: 1,
+                        members: vec![emb.original_speaker_id],
+                    });
+                    next_id += 1;
+                }
+            }
+        }
+
+        let result_clusters: HashMap<usize, Vec<i64>> =
+            clusters.into_iter().map(|c| (c.id, c.members)).collect();
+        let n = result_clusters.len();
+        ClusterResult {
+            name: format!("centroid (threshold={:.2})", threshold),
+            clusters: result_clusters,
+            num_clusters: n,
+        }
+    }
+
+    /// Strategy C: Multi-embedding — store up to N embeddings per cluster, match against best
+    fn strategy_multi_embedding(
+        embeddings: &[Embedding],
+        threshold: f32,
+        max_stored: usize,
+    ) -> ClusterResult {
+        struct Cluster {
+            id: usize,
+            stored_embeddings: Vec<Vec<f32>>,
+            members: Vec<i64>,
+        }
+
+        let mut clusters: Vec<Cluster> = Vec::new();
+        let mut next_id = 0;
+
+        for emb in embeddings {
+            let mut best_cid = None;
+            let mut best_dist = threshold;
+
+            for c in &clusters {
+                // Match against closest stored embedding
+                for stored in &c.stored_embeddings {
+                    let dist = cosine_distance(&emb.embedding, stored);
+                    if dist < best_dist {
+                        best_dist = dist;
+                        best_cid = Some(c.id);
+                    }
+                }
+            }
+
+            match best_cid {
+                Some(cid) => {
+                    let c = clusters.iter_mut().find(|c| c.id == cid).unwrap();
+                    // Store embedding if under limit, or replace if this one is closer to centroid
+                    if c.stored_embeddings.len() < max_stored {
+                        c.stored_embeddings.push(emb.embedding.clone());
+                    } else {
+                        // Replace the embedding that's most similar to another stored one (least diverse)
+                        let cent = centroid(&c.stored_embeddings);
+                        let mut most_redundant_idx = 0;
+                        let mut most_redundant_dist = f32::MAX;
+                        for (i, se) in c.stored_embeddings.iter().enumerate() {
+                            let d = cosine_distance(se, &cent);
+                            if d < most_redundant_dist {
+                                most_redundant_dist = d;
+                                most_redundant_idx = i;
+                            }
+                        }
+                        // Only replace if new embedding is more diverse
+                        let new_dist = cosine_distance(&emb.embedding, &cent);
+                        if new_dist > most_redundant_dist {
+                            c.stored_embeddings[most_redundant_idx] = emb.embedding.clone();
+                        }
+                    }
+                    c.members.push(emb.original_speaker_id);
+                }
+                None => {
+                    clusters.push(Cluster {
+                        id: next_id,
+                        stored_embeddings: vec![emb.embedding.clone()],
+                        members: vec![emb.original_speaker_id],
+                    });
+                    next_id += 1;
+                }
+            }
+        }
+
+        let result_clusters: HashMap<usize, Vec<i64>> =
+            clusters.into_iter().map(|c| (c.id, c.members)).collect();
+        let n = result_clusters.len();
+        ClusterResult {
+            name: format!("multi-emb (threshold={:.2}, max={})", threshold, max_stored),
+            clusters: result_clusters,
+            num_clusters: n,
+        }
+    }
+
+    /// Strategy D: Centroid + multi-embedding hybrid
+    /// Match against centroid, but also store N diverse embeddings for fallback matching
+    fn strategy_hybrid(
+        embeddings: &[Embedding],
+        threshold: f32,
+        max_stored: usize,
+    ) -> ClusterResult {
+        struct Cluster {
+            id: usize,
+            centroid: Vec<f32>,
+            count: usize,
+            stored_embeddings: Vec<Vec<f32>>,
+            members: Vec<i64>,
+        }
+
+        let mut clusters: Vec<Cluster> = Vec::new();
+        let mut next_id = 0;
+
+        for emb in embeddings {
+            let mut best_cid = None;
+            let mut best_dist = threshold;
+
+            for c in &clusters {
+                // Check centroid first
+                let cent_dist = cosine_distance(&emb.embedding, &c.centroid);
+                if cent_dist < best_dist {
+                    best_dist = cent_dist;
+                    best_cid = Some(c.id);
+                }
+                // Also check stored embeddings (catches cases where centroid drifted)
+                for stored in &c.stored_embeddings {
+                    let dist = cosine_distance(&emb.embedding, stored);
+                    if dist < best_dist {
+                        best_dist = dist;
+                        best_cid = Some(c.id);
+                    }
+                }
+            }
+
+            match best_cid {
+                Some(cid) => {
+                    let c = clusters.iter_mut().find(|c| c.id == cid).unwrap();
+                    // Update centroid
+                    let n = c.count as f32;
+                    for (i, v) in emb.embedding.iter().enumerate() {
+                        c.centroid[i] = (c.centroid[i] * n + v) / (n + 1.0);
+                    }
+                    c.count += 1;
+                    // Store diverse embeddings
+                    if c.stored_embeddings.len() < max_stored {
+                        c.stored_embeddings.push(emb.embedding.clone());
+                    }
+                    c.members.push(emb.original_speaker_id);
+                }
+                None => {
+                    clusters.push(Cluster {
+                        id: next_id,
+                        centroid: emb.embedding.clone(),
+                        count: 1,
+                        stored_embeddings: vec![emb.embedding.clone()],
+                        members: vec![emb.original_speaker_id],
+                    });
+                    next_id += 1;
+                }
+            }
+        }
+
+        let result_clusters: HashMap<usize, Vec<i64>> =
+            clusters.into_iter().map(|c| (c.id, c.members)).collect();
+        let n = result_clusters.len();
+        ClusterResult {
+            name: format!("hybrid (threshold={:.2}, max={})", threshold, max_stored),
+            clusters: result_clusters,
+            num_clusters: n,
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Scoring
+    // ════════════════════════════════════════════════════════════════════
+
+    fn score_result(
+        result: &ClusterResult,
+        speakers: &[SpeakerMeta],
+        _embeddings: &[Embedding],
+        temporal_windows: &[(String, Vec<i64>)], // (window_key, [original_speaker_ids])
+    ) -> Score {
+        // Build original_speaker_id → cluster_id map
+        // We process embeddings in order and assign them cluster IDs
+        // based on which cluster their original_speaker_id ended up in
+        let mut speaker_to_clusters: HashMap<i64, Vec<usize>> = HashMap::new();
+        for (cid, members) in &result.clusters {
+            for &sid in members {
+                speaker_to_clusters.entry(sid).or_default().push(*cid);
+            }
+        }
+
+        // Named speaker fragmentation: how many clusters does each named speaker span?
+        let named_speakers: Vec<&SpeakerMeta> =
+            speakers.iter().filter(|s| s.name.is_some()).collect();
+
+        let mut fragmentation: HashMap<String, usize> = HashMap::new();
+        let mut recall: HashMap<String, (i64, i64)> = HashMap::new();
+
+        for named in &named_speakers {
+            let name = named.name.as_ref().unwrap().clone();
+
+            // Find which clusters this named speaker's original ID landed in
+            let named_cluster_ids: Vec<usize> = speaker_to_clusters
+                .get(&named.id)
+                .cloned()
+                .unwrap_or_default();
+
+            // Also find other original_speaker_ids that share any cluster with this named speaker
+            let all_clusters_for_named: std::collections::HashSet<usize> =
+                named_cluster_ids.iter().cloned().collect();
+
+            // Count unique clusters that contain this named speaker's original ID
+            fragmentation.insert(name.clone(), all_clusters_for_named.len());
+
+            // Recall: for the dominant cluster, how many transcriptions were captured?
+            // Find the cluster with the most members
+            let mut best_cluster = 0usize;
+            let mut best_count = 0usize;
+            for &cid in &all_clusters_for_named {
+                let count = result.clusters.get(&cid).map(|m| m.len()).unwrap_or(0);
+                if count > best_count {
+                    best_count = count;
+                    best_cluster = cid;
+                }
+            }
+
+            // Total transcriptions for this named speaker + all speakers that ended up
+            // in the same dominant cluster
+            let empty = Vec::new();
+            let cluster_members = result.clusters.get(&best_cluster).unwrap_or(&empty);
+            let captured: i64 = cluster_members
+                .iter()
+                .filter_map(|sid| speakers.iter().find(|s| s.id == *sid))
+                .map(|s| s.transcription_count)
+                .sum();
+
+            // Total transcriptions that SHOULD be this speaker
+            // (from all speakers close to the named speaker in the original DB)
+            let total: i64 = speaker_to_clusters
+                .iter()
+                .filter(|(_, clusters)| clusters.iter().any(|c| all_clusters_for_named.contains(c)))
+                .filter_map(|(sid, _)| speakers.iter().find(|s| s.id == *sid))
+                .map(|s| s.transcription_count)
+                .sum();
+
+            recall.insert(name, (captured, total.max(captured)));
+        }
+
+        // Temporal stability: map original_speaker_ids to cluster IDs in each window
+        let mut window_cluster_counts: Vec<usize> = Vec::new();
+        for (_, window_sids) in temporal_windows {
+            let mut cluster_ids: std::collections::HashSet<usize> =
+                std::collections::HashSet::new();
+            for sid in window_sids {
+                if let Some(cids) = speaker_to_clusters.get(sid) {
+                    // Use the first (most common) cluster for this speaker
+                    if let Some(&cid) = cids.first() {
+                        cluster_ids.insert(cid);
+                    }
+                }
+            }
+            if !cluster_ids.is_empty() {
+                window_cluster_counts.push(cluster_ids.len());
+            }
+        }
+        let avg_clusters = if window_cluster_counts.is_empty() {
+            0.0
+        } else {
+            window_cluster_counts.iter().sum::<usize>() as f32 / window_cluster_counts.len() as f32
+        };
+
+        // Hallucination rate
+        let singleton_clusters = result
+            .clusters
+            .values()
+            .filter(|members| members.len() <= 1)
+            .count();
+        let hallucination_rate = singleton_clusters as f32 / result.num_clusters as f32;
+
+        Score {
+            name: result.name.clone(),
+            num_clusters: result.num_clusters,
+            named_speaker_fragmentation: fragmentation,
+            named_speaker_recall: recall,
+            avg_clusters_per_window: avg_clusters,
+            hallucination_rate,
+        }
+    }
+
+    fn print_score(score: &Score) {
+        println!("  clusters:             {}", score.num_clusters);
+        for (name, frag) in &score.named_speaker_fragmentation {
+            println!("  {} fragmentation:  {} clusters (ideal: 1)", name, frag);
+        }
+        for (name, (captured, total)) in &score.named_speaker_recall {
+            let pct = if *total > 0 {
+                *captured as f64 / *total as f64 * 100.0
+            } else {
+                0.0
+            };
+            println!(
+                "  {} recall:         {}/{} transcriptions ({:.1}%)",
+                name, captured, total, pct
+            );
+        }
+        println!(
+            "  temporal stability:   {:.1} clusters/5min (lower=better)",
+            score.avg_clusters_per_window
+        );
+        println!(
+            "  hallucination rate:   {:.1}%",
+            score.hallucination_rate * 100.0
+        );
+
+        // Composite score: lower is better
+        // Weights: fragmentation matters most, then temporal, then hallucination
+        let frag_score: f64 = score
+            .named_speaker_fragmentation
+            .values()
+            .map(|&f| (f as f64 - 1.0).max(0.0))
+            .sum::<f64>();
+        let recall_score: f64 = score
+            .named_speaker_recall
+            .values()
+            .map(|(c, t)| {
+                if *t > 0 {
+                    1.0 - (*c as f64 / *t as f64)
+                } else {
+                    0.0
+                }
+            })
+            .sum::<f64>();
+        let temporal_penalty = (score.avg_clusters_per_window - 2.0).max(0.0) as f64; // 2 is ideal-ish
+        let hallucination_penalty = score.hallucination_rate as f64;
+
+        let composite =
+            frag_score * 10.0 + recall_score * 5.0 + temporal_penalty * 3.0 + hallucination_penalty;
+        println!("  ── composite score:   {:.2} (lower = better)", composite);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Data loading (shared)
+    // ════════════════════════════════════════════════════════════════════
+
+    struct BenchmarkData {
+        embeddings: Vec<Embedding>,
+        speakers: Vec<SpeakerMeta>,
+        temporal_windows: Vec<(String, Vec<i64>)>,
+    }
+
+    async fn load_benchmark_data() -> Option<BenchmarkData> {
         let db_path = dirs::home_dir()
             .unwrap()
             .join(".screenpipe")
@@ -49,41 +534,38 @@ mod speaker_benchmark {
 
         if !db_path.exists() {
             println!("SKIP: no DB at {}", db_path.display());
-            return;
+            return None;
         }
 
         let db = DatabaseManager::new(db_path.to_str().unwrap())
             .await
             .expect("failed to open DB");
 
-        // ── 1. Load all embeddings ──────────────────────────────────────
+        // Load embeddings ordered by insertion (autoincrement id)
         let rows: Vec<(i64, i64, Vec<u8>)> =
-            sqlx::query_as("SELECT id, speaker_id, embedding FROM speaker_embeddings")
+            sqlx::query_as("SELECT id, speaker_id, embedding FROM speaker_embeddings ORDER BY id")
                 .fetch_all(&db.pool)
                 .await
                 .unwrap();
 
-        let embeddings: Vec<EmbeddingRow> = rows
+        let embeddings: Vec<Embedding> = rows
             .into_iter()
-            .filter_map(|(id, speaker_id, blob)| {
+            .filter_map(|(_, speaker_id, blob)| {
                 if blob.len() != 512 * 4 {
-                    return None; // skip malformed
+                    return None;
                 }
                 let embedding: Vec<f32> = blob
                     .chunks_exact(4)
                     .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
                     .collect();
-                Some(EmbeddingRow {
-                    id,
-                    speaker_id,
+                Some(Embedding {
+                    original_speaker_id: speaker_id,
                     embedding,
                 })
             })
             .collect();
 
-        println!("loaded {} embeddings", embeddings.len());
-
-        // ── 2. Load speaker info ────────────────────────────────────────
+        // Load speaker metadata
         let speaker_rows: Vec<(i64, Option<String>, i64)> = sqlx::query_as(
             "SELECT s.id, s.name, COUNT(at.id) as cnt
              FROM speakers s
@@ -94,289 +576,201 @@ mod speaker_benchmark {
         .await
         .unwrap();
 
-        let speakers: Vec<SpeakerInfo> = speaker_rows
+        let speakers: Vec<SpeakerMeta> = speaker_rows
             .into_iter()
-            .map(|(id, name, cnt)| SpeakerInfo {
+            .map(|(id, name, cnt)| SpeakerMeta {
                 id,
                 name: name.filter(|n| !n.is_empty()),
                 transcription_count: cnt,
             })
             .collect();
 
-        let total_speakers = speakers.len();
-        let named_speakers: Vec<&SpeakerInfo> =
-            speakers.iter().filter(|s| s.name.is_some()).collect();
-        let speakers_with_transcriptions = speakers
-            .iter()
-            .filter(|s| s.transcription_count > 0)
-            .count();
-        let hallucination_speakers = speakers
-            .iter()
-            .filter(|s| s.transcription_count <= 1 && s.name.is_none())
-            .count();
-
-        println!("\n═══ SPEAKER OVERVIEW ═══");
-        println!("total speakers:              {}", total_speakers);
-        println!("named speakers:              {}", named_speakers.len());
-        for s in &named_speakers {
-            println!(
-                "  {} (id={}, {} transcriptions)",
-                s.name.as_ref().unwrap(),
-                s.id,
-                s.transcription_count
-            );
-        }
-        println!(
-            "speakers with transcriptions:{}",
-            speakers_with_transcriptions
-        );
-        println!(
-            "hallucination speakers (≤1 transcription, unnamed): {} ({:.1}%)",
-            hallucination_speakers,
-            hallucination_speakers as f64 / total_speakers as f64 * 100.0
-        );
-
-        // ── 3. Build speaker→embeddings map ────────────────────────────
-        let mut speaker_embeddings: HashMap<i64, Vec<&[f32]>> = HashMap::new();
-        for e in &embeddings {
-            speaker_embeddings
-                .entry(e.speaker_id)
-                .or_default()
-                .push(&e.embedding);
-        }
-
-        // ── 4. Intra-speaker distance (for speakers with >1 embedding) ─
-        let mut intra_distances: Vec<f32> = Vec::new();
-        for (_sid, embs) in &speaker_embeddings {
-            if embs.len() < 2 {
-                continue;
-            }
-            for i in 0..embs.len() {
-                for j in (i + 1)..embs.len() {
-                    intra_distances.push(cosine_distance(embs[i], embs[j]));
-                }
-            }
-        }
-
-        // ── 5. Inter-speaker distance (sample to keep it fast) ─────────
-        // Only compare centroids to avoid O(n²) on 672 speakers
-        let centroids: Vec<(i64, Vec<f32>)> = speaker_embeddings
-            .iter()
-            .map(|(&sid, embs)| {
-                let dim = embs[0].len();
-                let mut centroid = vec![0.0f32; dim];
-                for e in embs {
-                    for (i, v) in e.iter().enumerate() {
-                        centroid[i] += v;
-                    }
-                }
-                let n = embs.len() as f32;
-                for v in &mut centroid {
-                    *v /= n;
-                }
-                (sid, centroid)
-            })
-            .collect();
-
-        let mut inter_distances: Vec<f32> = Vec::new();
-        // Sample: compare each centroid against up to 50 random others
-        let sample_limit = 50.min(centroids.len());
-        for i in 0..centroids.len() {
-            for j in (i + 1)..centroids.len().min(i + 1 + sample_limit) {
-                inter_distances.push(cosine_distance(&centroids[i].1, &centroids[j].1));
-            }
-        }
-
-        let avg_intra = if intra_distances.is_empty() {
-            f32::NAN
-        } else {
-            intra_distances.iter().sum::<f32>() / intra_distances.len() as f32
-        };
-        let avg_inter = if inter_distances.is_empty() {
-            f32::NAN
-        } else {
-            inter_distances.iter().sum::<f32>() / inter_distances.len() as f32
-        };
-
-        println!("\n═══ EMBEDDING DISTANCES ═══");
-        println!(
-            "avg intra-speaker distance:  {:.4} (from {} pairs across {} multi-embedding speakers)",
-            avg_intra,
-            intra_distances.len(),
-            speaker_embeddings.values().filter(|v| v.len() > 1).count()
-        );
-        println!(
-            "avg inter-speaker distance:  {:.4} (from {} centroid pairs)",
-            avg_inter,
-            inter_distances.len()
-        );
-        println!(
-            "separation gap:              {:.4} (inter - intra, higher = better)",
-            avg_inter - avg_intra
-        );
-
-        // ── 6. Named speaker analysis ──────────────────────────────────
-        // For each named speaker, find all unnamed speakers whose embeddings
-        // are closer than the current threshold (0.5 distance)
-        println!("\n═══ NAMED SPEAKER ANALYSIS ═══");
-        for named in &named_speakers {
-            if let Some(named_embs) = speaker_embeddings.get(&named.id) {
-                let named_centroid = &centroids.iter().find(|(id, _)| *id == named.id).unwrap().1;
-
-                let mut close_speakers: Vec<(i64, f32, i64)> = Vec::new(); // (id, distance, transcription_count)
-                for (sid, centroid) in &centroids {
-                    if *sid == named.id {
-                        continue;
-                    }
-                    let dist = cosine_distance(named_centroid, centroid);
-                    if dist < 0.5 {
-                        let tc = speakers
-                            .iter()
-                            .find(|s| s.id == *sid)
-                            .map(|s| s.transcription_count)
-                            .unwrap_or(0);
-                        close_speakers.push((*sid, dist, tc));
-                    }
-                }
-                close_speakers.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-                let missed_transcriptions: i64 = close_speakers.iter().map(|(_, _, tc)| tc).sum();
-
-                println!(
-                    "\n  {} (id={}, {} transcriptions, {} embeddings):",
-                    named.name.as_ref().unwrap(),
-                    named.id,
-                    named.transcription_count,
-                    named_embs.len()
-                );
-                println!(
-                    "    {} close unnamed speakers (dist < 0.5) with {} total transcriptions",
-                    close_speakers.len(),
-                    missed_transcriptions
-                );
-                for (sid, dist, tc) in close_speakers.iter().take(10) {
-                    println!(
-                        "      speaker #{}: dist={:.4}, {} transcriptions",
-                        sid, dist, tc
-                    );
-                }
-                if close_speakers.len() > 10 {
-                    println!("      ... and {} more", close_speakers.len() - 10);
-                }
-            }
-        }
-
-        // ── 7. Threshold sweep ─────────────────────────────────────────
-        println!("\n═══ THRESHOLD SWEEP ═══");
-        println!("(simulating: if we merged all speakers within distance X, how many remain?)");
-        println!("{:<12} {:>10}", "threshold", "speakers");
-        println!("{:<12} {:>10}", "---------", "--------");
-
-        for threshold_pct in (5..=95).step_by(5) {
-            let threshold = threshold_pct as f32 / 100.0;
-
-            // Simple greedy clustering: assign each embedding to first cluster within threshold
-            let mut clusters: Vec<Vec<f32>> = Vec::new(); // centroid per cluster
-
-            for (_, centroid) in &centroids {
-                let mut found = false;
-                for cluster_centroid in &clusters {
-                    if cosine_distance(centroid, cluster_centroid) < threshold {
-                        found = true;
-                        break;
-                    }
-                }
-                if !found {
-                    clusters.push(centroid.clone());
-                }
-            }
-
-            let marker = if threshold_pct == 50 {
-                " <-- current"
-            } else {
-                ""
-            };
-            println!("{:<12.2} {:>10}{}", threshold, clusters.len(), marker);
-        }
-
-        // ── 8. Temporal stability ──────────────────────────────────────
-        // Look at 5-minute windows: how many distinct speakers appear?
-        let temporal_rows: Vec<(i64,)> = sqlx::query_as(
-            "SELECT COUNT(DISTINCT speaker_id) as n
+        // Load temporal windows: 5-min buckets with speaker_ids
+        let temporal_rows: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT
+                strftime('%Y-%m-%d %H:', timestamp) || (CAST(strftime('%M', timestamp) AS INTEGER) / 5) as window_key,
+                speaker_id
              FROM audio_transcriptions
              WHERE speaker_id IS NOT NULL
-             GROUP BY strftime('%Y-%m-%d %H', timestamp),
-                      CAST(strftime('%M', timestamp) AS INTEGER) / 5",
+             ORDER BY timestamp",
         )
         .fetch_all(&db.pool)
         .await
         .unwrap();
 
-        let temporal_counts: Vec<i64> = temporal_rows.into_iter().map(|(n,)| n).collect();
-        let avg_speakers_per_window = if temporal_counts.is_empty() {
-            0.0
-        } else {
-            temporal_counts.iter().sum::<i64>() as f64 / temporal_counts.len() as f64
+        let mut temporal_windows: Vec<(String, Vec<i64>)> = Vec::new();
+        let mut current_key = String::new();
+        let mut current_sids: Vec<i64> = Vec::new();
+        for (key, sid) in temporal_rows {
+            if key != current_key {
+                if !current_sids.is_empty() {
+                    temporal_windows.push((current_key.clone(), current_sids.clone()));
+                    current_sids.clear();
+                }
+                current_key = key;
+            }
+            current_sids.push(sid);
+        }
+        if !current_sids.is_empty() {
+            temporal_windows.push((current_key, current_sids));
+        }
+
+        Some(BenchmarkData {
+            embeddings,
+            speakers,
+            temporal_windows,
+        })
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // The benchmark test
+    // ════════════════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    #[ignore]
+    async fn benchmark_speaker_clustering() {
+        let data = match load_benchmark_data().await {
+            Some(d) => d,
+            None => return,
         };
-        let max_speakers_per_window = temporal_counts.iter().max().copied().unwrap_or(0);
 
-        println!("\n═══ TEMPORAL STABILITY ═══");
-        println!("(distinct speaker IDs per 5-minute window)");
-        println!("windows analyzed:            {}", temporal_counts.len());
         println!(
-            "avg speakers per window:     {:.1}",
-            avg_speakers_per_window
+            "\nLoaded {} embeddings, {} speakers ({} named), {} temporal windows\n",
+            data.embeddings.len(),
+            data.speakers.len(),
+            data.speakers.iter().filter(|s| s.name.is_some()).count(),
+            data.temporal_windows.len()
         );
-        println!("max speakers in one window:  {}", max_speakers_per_window);
 
-        // Distribution
-        let mut dist: HashMap<i64, usize> = HashMap::new();
-        for &c in &temporal_counts {
-            *dist.entry(c).or_default() += 1;
-        }
-        let mut dist_sorted: Vec<(i64, usize)> = dist.into_iter().collect();
-        dist_sorted.sort();
-        println!("distribution:");
-        for (speakers, windows) in &dist_sorted {
-            println!("  {} speakers: {} windows", speakers, windows);
+        // ── Run all strategies ──────────────────────────────────────────
+        let mut results: Vec<(ClusterResult, Score)> = Vec::new();
+
+        // Current system baseline
+        for &t in &[0.50] {
+            let r = strategy_current(&data.embeddings, t);
+            let s = score_result(&r, &data.speakers, &data.embeddings, &data.temporal_windows);
+            results.push((r, s));
         }
 
-        // ── 9. Top speakers by transcription share ─────────────────────
-        let total_transcriptions: i64 = speakers.iter().map(|s| s.transcription_count).sum();
-        let mut sorted_speakers: Vec<&SpeakerInfo> = speakers
-            .iter()
-            .filter(|s| s.transcription_count > 0)
-            .collect();
-        sorted_speakers.sort_by(|a, b| b.transcription_count.cmp(&a.transcription_count));
+        // Strategy A: current system at different thresholds
+        for &t in &[0.55, 0.60, 0.65, 0.70, 0.75, 0.80] {
+            let r = strategy_current(&data.embeddings, t);
+            let s = score_result(&r, &data.speakers, &data.embeddings, &data.temporal_windows);
+            results.push((r, s));
+        }
 
-        println!("\n═══ TOP 20 SPEAKERS BY TRANSCRIPTION COUNT ═══");
-        println!("{:<8} {:<15} {:>8} {:>8}", "id", "name", "count", "share%");
-        for s in sorted_speakers.iter().take(20) {
+        // Strategy B: centroid averaging
+        for &t in &[0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80] {
+            let r = strategy_centroid(&data.embeddings, t);
+            let s = score_result(&r, &data.speakers, &data.embeddings, &data.temporal_windows);
+            results.push((r, s));
+        }
+
+        // Strategy C: multi-embedding
+        for &t in &[0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80] {
+            for &max in &[3, 5, 10] {
+                let r = strategy_multi_embedding(&data.embeddings, t, max);
+                let s = score_result(&r, &data.speakers, &data.embeddings, &data.temporal_windows);
+                results.push((r, s));
+            }
+        }
+
+        // Strategy D: hybrid
+        for &t in &[0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80] {
+            for &max in &[3, 5, 10] {
+                let r = strategy_hybrid(&data.embeddings, t, max);
+                let s = score_result(&r, &data.speakers, &data.embeddings, &data.temporal_windows);
+                results.push((r, s));
+            }
+        }
+
+        // ── Print results ───────────────────────────────────────────────
+        println!("═══════════════════════════════════════════════════════════════");
+        println!("                    EXPERIMENT RESULTS");
+        println!("═══════════════════════════════════════════════════════════════\n");
+
+        for (_, score) in &results {
+            println!("▸ {}", score.name);
+            print_score(score);
+            println!();
+        }
+
+        // ── Leaderboard ─────────────────────────────────────────────────
+        let mut ranked: Vec<&Score> = results.iter().map(|(_, s)| s).collect();
+        ranked.sort_by(|a, b| {
+            let score_a = composite_score(a);
+            let score_b = composite_score(b);
+            score_a.partial_cmp(&score_b).unwrap()
+        });
+
+        println!("═══════════════════════════════════════════════════════════════");
+        println!("                      LEADERBOARD");
+        println!("═══════════════════════════════════════════════════════════════");
+        println!(
+            "{:<5} {:<40} {:>8} {:>8} {:>10} {:>8}",
+            "rank", "strategy", "clusters", "temp/5m", "halluc%", "score"
+        );
+        println!("{}", "─".repeat(85));
+
+        for (i, score) in ranked.iter().enumerate().take(20) {
+            let star = if i == 0 { " ★" } else { "" };
             println!(
-                "{:<8} {:<15} {:>8} {:>7.1}%",
-                s.id,
-                s.name.as_deref().unwrap_or("(unnamed)"),
-                s.transcription_count,
-                s.transcription_count as f64 / total_transcriptions as f64 * 100.0
+                "{:<5} {:<40} {:>8} {:>8.1} {:>9.1}% {:>8.2}{}",
+                i + 1,
+                score.name,
+                score.num_clusters,
+                score.avg_clusters_per_window,
+                score.hallucination_rate * 100.0,
+                composite_score(score),
+                star,
             );
         }
 
-        println!("\n═══ SUMMARY ═══");
-        println!(
-            "fragmentation ratio:         {:.4} (named / total, 1.0 = perfect)",
-            named_speakers.len() as f64 / total_speakers as f64
-        );
-        println!(
-            "hallucination rate:          {:.1}%",
-            hallucination_speakers as f64 / total_speakers as f64 * 100.0
-        );
-        println!("avg intra-speaker distance:  {:.4}", avg_intra);
-        println!("avg inter-speaker distance:  {:.4}", avg_inter);
-        println!("separation gap:              {:.4}", avg_inter - avg_intra);
-        println!(
-            "avg speakers per 5min:       {:.1}",
-            avg_speakers_per_window
-        );
-        println!("total transcriptions:        {}", total_transcriptions);
+        println!("\n(lower score = better)");
+
+        // Print baseline vs winner comparison
+        if ranked.len() >= 2 {
+            let baseline = &results[0].1; // current system at 0.50
+            let winner = ranked[0];
+            let baseline_composite = composite_score(baseline);
+            let winner_composite = composite_score(winner);
+            let improvement = (baseline_composite - winner_composite) / baseline_composite * 100.0;
+
+            println!("\n═══ BASELINE vs WINNER ═══");
+            println!(
+                "baseline: {} (score {:.2})",
+                baseline.name, baseline_composite
+            );
+            println!("winner:   {} (score {:.2})", winner.name, winner_composite);
+            println!("improvement: {:.1}%\n", improvement);
+
+            println!("baseline detail:");
+            print_score(baseline);
+            println!("\nwinner detail:");
+            print_score(winner);
+        }
+    }
+
+    fn composite_score(score: &Score) -> f64 {
+        let frag_score: f64 = score
+            .named_speaker_fragmentation
+            .values()
+            .map(|&f| (f as f64 - 1.0).max(0.0))
+            .sum::<f64>();
+        let recall_score: f64 = score
+            .named_speaker_recall
+            .values()
+            .map(|(c, t)| {
+                if *t > 0 {
+                    1.0 - (*c as f64 / *t as f64)
+                } else {
+                    0.0
+                }
+            })
+            .sum::<f64>();
+        let temporal_penalty = (score.avg_clusters_per_window - 2.0).max(0.0) as f64;
+        let hallucination_penalty = score.hallucination_rate as f64;
+
+        frag_score * 10.0 + recall_score * 5.0 + temporal_penalty * 3.0 + hallucination_penalty
     }
 }
