@@ -259,7 +259,7 @@ jobs:
             tauri-args: "--target x86_64-apple-darwin --features official-build"
             os_type: "macos"
           - platform: ${{ needs.check_commit.outputs.windows_runner || 'windows-2019' }}
-            args: "--target x86_64-pc-windows-msvc --features mkl,vulkan"
+            args: "--target x86_64-pc-windows-msvc --features mkl"
             pre-build-args: ""
             tauri-args: "--target x86_64-pc-windows-msvc --features official-build"
             os_type: "windows"
@@ -918,7 +918,7 @@ jobs:
             if (Test-Path $bundleNsis) { Remove-Item -Recurse -Force $bundleNsis }
             # Rebuild (Rust cached, just repackages) - run from project root
             Push-Location ..
-            bunx tauri build --target x86_64-pc-windows-msvc --features mkl,vulkan,official-build
+            bunx tauri build --target x86_64-pc-windows-msvc --features mkl,official-build
             Pop-Location
             Write-Host "=== Beta rebuild complete ==="
             Write-Host "Beta artifacts:"
