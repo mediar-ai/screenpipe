@@ -226,12 +226,29 @@ fn default_propagate_similar() -> bool {
     true
 }
 
+#[derive(OaSchema, Serialize, Deserialize, Debug, Clone)]
+pub struct SpeakerOldAssignment {
+    pub transcription_id: i64,
+    pub old_speaker_id: i64,
+}
+
 #[derive(OaSchema, Serialize, Debug)]
 pub struct ReassignSpeakerResponse {
     pub new_speaker_id: i64,
     pub new_speaker_name: String,
     pub transcriptions_updated: u64,
     pub embeddings_moved: u64,
+    pub old_assignments: Vec<SpeakerOldAssignment>,
+}
+
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
+pub struct UndoSpeakerReassignRequest {
+    pub old_assignments: Vec<SpeakerOldAssignment>,
+}
+
+#[derive(OaSchema, Serialize, Debug)]
+pub struct UndoSpeakerReassignResponse {
+    pub restored: u64,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Debug)]
@@ -375,6 +392,9 @@ pub struct HealthCheckResponse {
     pub message: String,
     pub verbose_instructions: Option<String>,
     pub device_status_details: Option<String>,
+    /// Active monitor names (e.g. ["Built-in Retina Display"])
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monitors: Option<Vec<String>>,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Clone)]
@@ -954,6 +974,19 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         )
     };
 
+    // Collect monitor names for tray display
+    let monitor_names: Option<Vec<String>> = if !state.vision_disabled {
+        match list_monitors_detailed().await {
+            Ok(monitors) => {
+                let names: Vec<String> = monitors.iter().map(|m| m.name().to_string()).collect();
+                if names.is_empty() { None } else { Some(names) }
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
         status_code,
@@ -971,6 +1004,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         message,
         verbose_instructions,
         device_status_details,
+        monitors: monitor_names,
     })
 }
 
@@ -1174,6 +1208,7 @@ impl SCServer {
             .post("/speakers/merge", merge_speakers_handler)
             .get("/speakers/similar", get_similar_speakers_handler)
             .post("/speakers/reassign", reassign_speaker_handler)
+            .post("/speakers/undo-reassign", undo_speaker_reassign_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
             .post("/audio/start", start_audio)
@@ -1870,7 +1905,7 @@ async fn reassign_speaker_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ReassignSpeakerRequest>,
 ) -> Result<JsonResponse<ReassignSpeakerResponse>, (StatusCode, JsonResponse<Value>)> {
-    let (new_speaker_id, transcriptions_updated, embeddings_moved) = state
+    let (new_speaker_id, transcriptions_updated, embeddings_moved, old_assignments) = state
         .db
         .reassign_speaker(
             payload.audio_chunk_id,
@@ -1890,7 +1925,38 @@ async fn reassign_speaker_handler(
         new_speaker_name: payload.new_speaker_name,
         transcriptions_updated,
         embeddings_moved,
+        old_assignments: old_assignments
+            .into_iter()
+            .map(|(tid, sid)| SpeakerOldAssignment {
+                transcription_id: tid,
+                old_speaker_id: sid,
+            })
+            .collect(),
     }))
+}
+
+async fn undo_speaker_reassign_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<UndoSpeakerReassignRequest>,
+) -> Result<JsonResponse<UndoSpeakerReassignResponse>, (StatusCode, JsonResponse<Value>)> {
+    let tuples: Vec<(i64, i64)> = payload
+        .old_assignments
+        .iter()
+        .map(|a| (a.transcription_id, a.old_speaker_id))
+        .collect();
+
+    let restored = state
+        .db
+        .undo_speaker_reassign(&tuples)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    Ok(JsonResponse(UndoSpeakerReassignResponse { restored }))
 }
 
 // #[derive(OaSchema, Deserialize)]

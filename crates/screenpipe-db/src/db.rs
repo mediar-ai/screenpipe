@@ -17,7 +17,7 @@ use sqlx::ValueRef;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use std::collections::BTreeMap;
 
@@ -3343,23 +3343,24 @@ LIMIT ? OFFSET ?
         Ok(results)
     }
 
-    /// Reassign a speaker: move transcriptions and embeddings to a new or existing speaker
-    /// This is the main function for the correction flow
-    /// Returns (new_speaker_id, transcriptions_updated, embeddings_moved)
+    /// Reassign a speaker: move transcriptions and embeddings to a new or existing speaker.
+    /// Phase 1 (instant): reassigns just this one audio chunk.
+    /// Phase 2-3 (propagation): majority-vote — only absorbs a speaker if >50% of its
+    /// embeddings match the target. Prevents one similar embedding from stealing all
+    /// transcriptions from an unrelated speaker.
+    /// Returns (new_speaker_id, transcriptions_updated, embeddings_moved, old_assignments)
     pub async fn reassign_speaker(
         &self,
         audio_chunk_id: i64,
         new_speaker_name: &str,
         propagate_similar: bool,
-    ) -> Result<(i64, u64, u64), sqlx::Error> {
-        // Phase 1: Short IMMEDIATE write transaction – reassign the chunk and move one embedding.
-        //          Uses BEGIN IMMEDIATE to acquire write lock upfront (avoids SQLITE_BUSY_SNAPSHOT
-        //          code 517 that happens with DEFERRED transactions in WAL mode under contention).
-        //          Retries on busy errors since the recording pipeline writes constantly.
+    ) -> Result<(i64, u64, u64, Vec<(i64, i64)>), sqlx::Error> {
+        let mut old_assignments: Vec<(i64, i64)> = Vec::new();
+
+        // Phase 1: Short IMMEDIATE write transaction – reassign just this chunk.
         let (current_speaker_id, target_speaker_id, transcriptions_updated, mut embeddings_moved) = {
             let mut tx = self.begin_immediate_with_retry().await?;
 
-            // 1. Get the current speaker_id for this audio chunk
             let current_speaker_id: Option<i64> = sqlx::query_scalar(
                 "SELECT speaker_id FROM audio_transcriptions WHERE audio_chunk_id = ? LIMIT 1",
             )
@@ -3372,7 +3373,6 @@ LIMIT ? OFFSET ?
                 None => return Err(sqlx::Error::RowNotFound),
             };
 
-            // 2. Find or create the target speaker
             let target_speaker: Speaker = match sqlx::query_as::<_, Speaker>(
                 "SELECT id, name, metadata FROM speakers WHERE name = ? AND hallucination = 0",
             )
@@ -3396,7 +3396,15 @@ LIMIT ? OFFSET ?
                 }
             };
 
-            // 3. Update the transcription's speaker_id
+            // Record old assignments for undo
+            let affected_rows: Vec<(i64, i64)> = sqlx::query_as(
+                "SELECT id, speaker_id FROM audio_transcriptions WHERE audio_chunk_id = ?",
+            )
+            .bind(audio_chunk_id)
+            .fetch_all(&mut **tx.conn())
+            .await?;
+            old_assignments.extend(affected_rows);
+
             let transcriptions_updated = sqlx::query(
                 "UPDATE audio_transcriptions SET speaker_id = ? WHERE audio_chunk_id = ?",
             )
@@ -3406,7 +3414,6 @@ LIMIT ? OFFSET ?
             .await?
             .rows_affected();
 
-            // 4. Move the embedding from old speaker to new speaker
             let embedding_id: Option<i64> = sqlx::query_scalar(
                 "SELECT id FROM speaker_embeddings WHERE speaker_id = ? LIMIT 1",
             )
@@ -3433,46 +3440,70 @@ LIMIT ? OFFSET ?
             )
         };
 
-        // Phase 2: If propagate_similar, do the expensive vector similarity search
-        //          OUTSIDE any transaction so we don't hold a write lock.
+        // Phase 2: Majority-vote propagation — only absorb speakers where >50% of
+        // their embeddings are similar to target.
         if propagate_similar {
-            let threshold = 0.8; // Match the hybrid speaker clustering threshold
+            let threshold = 0.8;
+            let min_absorption_ratio = 0.5;
 
-            // Read-only: find similar embeddings from other speakers
-            let similar_rows: Vec<(i64, i64)> = sqlx::query(
+            let speaker_match_stats: Vec<(i64, i64, i64)> = sqlx::query_as(
                 r#"
-                SELECT se2.id as embedding_id, se2.speaker_id
+                SELECT
+                    se2.speaker_id,
+                    COUNT(DISTINCT CASE
+                        WHEN vec_distance_cosine(se1.embedding, se2.embedding) < ?2
+                        THEN se2.id
+                    END) as matching_count,
+                    (SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = se2.speaker_id) as total_count
                 FROM speaker_embeddings se1
                 JOIN speaker_embeddings se2 ON se1.speaker_id != se2.speaker_id
-                WHERE se1.speaker_id = ?
-                  AND vec_distance_cosine(se1.embedding, se2.embedding) < ?
-                  AND se2.speaker_id != ?
+                WHERE se1.speaker_id = ?1
+                  AND se2.speaker_id != ?1
+                GROUP BY se2.speaker_id
                 "#,
             )
             .bind(target_speaker_id)
             .bind(threshold)
-            .bind(target_speaker_id)
             .fetch_all(&self.pool)
-            .await?
-            .iter()
-            .map(|row| {
-                let emb_id: i64 = row.get("embedding_id");
-                let old_speaker_id: i64 = row.get("speaker_id");
-                (emb_id, old_speaker_id)
-            })
-            .collect();
+            .await?;
 
-            // Phase 3: Short IMMEDIATE write transaction – apply the similarity results.
-            if !similar_rows.is_empty() {
+            let speakers_to_absorb: Vec<i64> = speaker_match_stats
+                .iter()
+                .filter(|(_, matching, total)| {
+                    *total > 0 && (*matching as f64 / *total as f64) > min_absorption_ratio
+                })
+                .map(|(speaker_id, _, _)| *speaker_id)
+                .collect();
+
+            if !speakers_to_absorb.is_empty() {
+                info!(
+                    "speaker reassign: absorbing {} speakers into {} ({})",
+                    speakers_to_absorb.len(),
+                    target_speaker_id,
+                    new_speaker_name
+                );
+
                 let mut tx = self.begin_immediate_with_retry().await?;
 
-                for (emb_id, old_speaker_id) in &similar_rows {
-                    sqlx::query("UPDATE speaker_embeddings SET speaker_id = ? WHERE id = ?")
-                        .bind(target_speaker_id)
-                        .bind(emb_id)
-                        .execute(&mut **tx.conn())
-                        .await?;
-                    embeddings_moved += 1;
+                for old_speaker_id in &speakers_to_absorb {
+                    // Record old assignments for undo
+                    let affected: Vec<(i64, i64)> = sqlx::query_as(
+                        "SELECT id, speaker_id FROM audio_transcriptions WHERE speaker_id = ?",
+                    )
+                    .bind(old_speaker_id)
+                    .fetch_all(&mut **tx.conn())
+                    .await?;
+                    old_assignments.extend(affected);
+
+                    let moved = sqlx::query(
+                        "UPDATE speaker_embeddings SET speaker_id = ? WHERE speaker_id = ?",
+                    )
+                    .bind(target_speaker_id)
+                    .bind(old_speaker_id)
+                    .execute(&mut **tx.conn())
+                    .await?
+                    .rows_affected();
+                    embeddings_moved += moved;
 
                     sqlx::query(
                         "UPDATE audio_transcriptions SET speaker_id = ? WHERE speaker_id = ?",
@@ -3482,19 +3513,10 @@ LIMIT ? OFFSET ?
                     .execute(&mut **tx.conn())
                     .await?;
 
-                    let remaining: i64 = sqlx::query_scalar(
-                        "SELECT COUNT(*) FROM speaker_embeddings WHERE speaker_id = ?",
-                    )
-                    .bind(old_speaker_id)
-                    .fetch_one(&mut **tx.conn())
-                    .await?;
-
-                    if remaining == 0 {
-                        sqlx::query("DELETE FROM speakers WHERE id = ?")
-                            .bind(old_speaker_id)
-                            .execute(&mut **tx.conn())
-                            .await?;
-                    }
+                    sqlx::query("DELETE FROM speakers WHERE id = ?")
+                        .bind(old_speaker_id)
+                        .execute(&mut **tx.conn())
+                        .await?;
                 }
 
                 tx.commit().await?;
@@ -3519,7 +3541,49 @@ LIMIT ? OFFSET ?
             }
         }
 
-        Ok((target_speaker_id, transcriptions_updated, embeddings_moved))
+        Ok((target_speaker_id, transcriptions_updated, embeddings_moved, old_assignments))
+    }
+
+    /// Undo a speaker reassignment using the old_assignments from reassign_speaker
+    pub async fn undo_speaker_reassign(
+        &self,
+        old_assignments: &[(i64, i64)],
+    ) -> Result<u64, sqlx::Error> {
+        if old_assignments.is_empty() {
+            return Ok(0);
+        }
+
+        let mut tx = self.begin_immediate_with_retry().await?;
+        let mut restored = 0u64;
+
+        for (transcription_id, old_speaker_id) in old_assignments {
+            let exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM speakers WHERE id = ?)",
+            )
+            .bind(old_speaker_id)
+            .fetch_one(&mut **tx.conn())
+            .await?;
+
+            if !exists {
+                sqlx::query("INSERT INTO speakers (id, name) VALUES (?, '')")
+                    .bind(old_speaker_id)
+                    .execute(&mut **tx.conn())
+                    .await?;
+            }
+
+            let affected = sqlx::query(
+                "UPDATE audio_transcriptions SET speaker_id = ? WHERE id = ?",
+            )
+            .bind(old_speaker_id)
+            .bind(transcription_id)
+            .execute(&mut **tx.conn())
+            .await?
+            .rows_affected();
+            restored += affected;
+        }
+
+        tx.commit().await?;
+        Ok(restored)
     }
 
     // ============================================================================

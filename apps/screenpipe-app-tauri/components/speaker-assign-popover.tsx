@@ -11,6 +11,7 @@ import { SpeakerBadge } from "@/components/speaker-badge";
 import { useToast } from "@/components/ui/use-toast";
 import { Check, Ghost, Loader2, Plus, Volume2 } from "lucide-react";
 import { VideoComponent } from "@/components/rewind/video";
+import { ToastAction } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 interface Speaker {
@@ -83,14 +84,17 @@ export function SpeakerAssignPopover({
 			if (!name.trim()) return;
 
 			setIsAssigning(true);
+			const trimmedName = name.trim();
+
 			try {
+				// Phase 1: Assign just this chunk instantly (no propagation)
 				const response = await fetch("http://localhost:3030/speakers/reassign", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
 						audio_chunk_id: audioChunkId,
-						new_speaker_name: name.trim(),
-						propagate_similar: true,
+						new_speaker_name: trimmedName,
+						propagate_similar: false,
 					}),
 				});
 
@@ -99,14 +103,75 @@ export function SpeakerAssignPopover({
 				}
 
 				const result = await response.json();
-				toast({
-					title: "Speaker assigned",
-					description: `Assigned to "${name}". ${result.embeddings_moved} similar voices updated.`,
-				});
 
+				// Close popover immediately — this chunk is assigned
 				onAssigned?.(result.new_speaker_id, result.new_speaker_name);
 				setOpen(false);
 				setSearchTerm("");
+				setIsAssigning(false);
+
+				toast({
+					title: `assigned to "${trimmedName}"`,
+					description: "propagating to similar voices...",
+				});
+
+				// Phase 2: Propagate in background (non-blocking)
+				try {
+					const propagateResponse = await fetch("http://localhost:3030/speakers/reassign", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							audio_chunk_id: audioChunkId,
+							new_speaker_name: trimmedName,
+							propagate_similar: true,
+						}),
+					});
+
+					if (propagateResponse.ok) {
+						const propagateResult = await propagateResponse.json();
+						const oldAssignments: Array<{transcription_id: number, old_speaker_id: number}> = propagateResult.old_assignments || [];
+						const extraMoved = propagateResult.embeddings_moved || 0;
+
+						if (extraMoved > 0) {
+							toast({
+								title: `found ${extraMoved} similar voices`,
+								description: "click undo if incorrect",
+								action: (
+									<ToastAction
+										altText="Undo speaker assignment"
+										onClick={async () => {
+											try {
+												const undoResp = await fetch("http://localhost:3030/speakers/undo-reassign", {
+													method: "POST",
+													headers: { "Content-Type": "application/json" },
+													body: JSON.stringify({ old_assignments: oldAssignments }),
+												});
+												if (undoResp.ok) {
+													const undoResult = await undoResp.json();
+													toast({
+														title: "undone",
+														description: `restored ${undoResult.restored} transcriptions`,
+													});
+												}
+											} catch {
+												toast({ title: "undo failed", variant: "destructive" });
+											}
+										}}
+									>
+										undo
+									</ToastAction>
+								),
+							});
+						} else {
+							toast({
+								title: `assigned to "${trimmedName}"`,
+								description: "no additional similar voices found",
+							});
+						}
+					}
+				} catch (propagateError) {
+					console.error("Background propagation failed:", propagateError);
+				}
 			} catch (error) {
 				console.error("Error assigning speaker:", error);
 				toast({
@@ -114,7 +179,6 @@ export function SpeakerAssignPopover({
 					description: "Failed to assign speaker. Please try again.",
 					variant: "destructive",
 				});
-			} finally {
 				setIsAssigning(false);
 			}
 		},
