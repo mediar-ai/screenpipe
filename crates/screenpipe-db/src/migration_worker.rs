@@ -174,7 +174,7 @@ impl MigrationWorker {
         let handle = tokio::spawn(async move {
             // Start the migration process
             let result = migrate_ocr_data_to_frames(
-                &db.pool,
+                &db,
                 config,
                 is_running.clone(),
                 is_paused.clone(),
@@ -370,12 +370,13 @@ async fn update_migration_progress(
 
 /// Perform the actual migration of data from ocr_text to frames
 async fn migrate_ocr_data_to_frames(
-    pool: &SqlitePool,
+    db: &DatabaseManager,
     config: MigrationConfig,
     is_running: Arc<AtomicBool>,
     is_paused: Arc<AtomicBool>,
     status_tx: mpsc::Sender<MigrationResponse>,
 ) -> Result<(i64, u64)> {
+    let pool = &db.pool;
     let start_time = std::time::Instant::now();
 
     // Ensure migration table exists
@@ -441,7 +442,7 @@ async fn migrate_ocr_data_to_frames(
         }
 
         // Process a batch
-        match process_batch(pool, last_id, batch_size).await {
+        match process_batch(db, last_id, batch_size).await {
             Ok((batch_processed, new_last_id)) => {
                 if batch_processed == 0 {
                     // No more records to process
@@ -504,10 +505,7 @@ async fn migrate_ocr_data_to_frames(
 }
 
 /// Process a batch of records
-async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Result<(i64, i64)> {
-    // Use a temporary DatabaseManager to get ImmediateTx with auto-rollback
-    use crate::DatabaseManager;
-    let db = DatabaseManager { pool: pool.clone() };
+async fn process_batch(db: &DatabaseManager, last_id: i64, batch_size: i64) -> Result<(i64, i64)> {
     let mut tx = db.begin_immediate_with_retry().await?;
 
     // Query to get a batch of records with unique frame_ids that need migration

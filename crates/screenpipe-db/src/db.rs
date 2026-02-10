@@ -16,6 +16,7 @@ use sqlx::TypeInfo;
 use sqlx::ValueRef;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::{debug, error, warn};
 
 use std::collections::BTreeMap;
@@ -46,9 +47,13 @@ const DEDUP_SIMILARITY_THRESHOLD: f64 = 0.85;
 /// Unlike sqlx's built-in `Transaction` (which uses DEFERRED), this acquires the write
 /// lock immediately, avoiding SQLITE_BUSY_SNAPSHOT (code 517) that occurs when a
 /// deferred reader tries to upgrade to writer.
+///
+/// Holds an `OwnedSemaphorePermit` to ensure only one writer is active at a time,
+/// eliminating application-level write contention before it reaches SQLite.
 pub struct ImmediateTx {
     conn: Option<PoolConnection<Sqlite>>,
     committed: bool,
+    _write_permit: OwnedSemaphorePermit,
 }
 
 impl ImmediateTx {
@@ -80,22 +85,29 @@ impl ImmediateTx {
 impl Drop for ImmediateTx {
     fn drop(&mut self) {
         if !self.committed {
-            if let Some(mut conn) = self.conn.take() {
-                // Best-effort synchronous rollback to clean up the connection before
-                // it goes back to the pool. We can't do async in Drop, so we use
-                // futures::executor::block_on. SQLite connections are synchronous
-                // under the hood, so this completes immediately.
-                let _ = futures::executor::block_on(async {
-                    sqlx::query("ROLLBACK").execute(&mut *conn).await
-                });
-                warn!("ImmediateTx dropped without commit — rolled back");
+            if let Some(conn) = self.conn.take() {
+                // Detach from pool — the connection has an open transaction.
+                // Returning it to the pool would cause "cannot start a transaction
+                // within a transaction" errors on the next use. Detaching drops the
+                // raw connection (closes it) and lets the pool create a fresh one.
+                //
+                // Previous approach used futures::executor::block_on(ROLLBACK) which
+                // can deadlock inside a tokio async context, silently failing and
+                // returning the dirty connection to the pool.
+                let _raw = conn.detach();
+                warn!("ImmediateTx dropped without commit — connection detached (not returned to pool)");
             }
         }
+        // _write_permit is dropped here, releasing the semaphore for the next writer
     }
 }
 
 pub struct DatabaseManager {
     pub pool: SqlitePool,
+    /// Serializes all write transactions. Only one writer can hold this at a time,
+    /// eliminating `BEGIN IMMEDIATE` contention that caused 20-40s lock waits and
+    /// cascading "database is locked" / "cannot start a transaction" errors.
+    write_semaphore: Arc<Semaphore>,
 }
 
 impl DatabaseManager {
@@ -123,8 +135,12 @@ impl DatabaseManager {
             .parse::<SqliteConnectOptions>()?
             // busy_timeout is per-connection; setting it here ensures ALL pooled
             // connections wait before returning SQLITE_BUSY ("database is locked").
-            .busy_timeout(Duration::from_secs(10))
+            .busy_timeout(Duration::from_secs(30))
             .pragma("journal_mode", "WAL")
+            // NORMAL is safe with WAL mode — commits only need to wait for WAL
+            // write, not fsync to main DB. Reduces commit latency significantly.
+            // Default (FULL) fsyncs on every commit which is unnecessary in WAL.
+            .pragma("synchronous", "NORMAL")
             .pragma("cache_size", "-64000") // 64 MB page cache
             .pragma("mmap_size", "268435456") // 256 MB memory-mapped I/O
             .pragma("temp_store", "MEMORY")
@@ -135,14 +151,20 @@ impl DatabaseManager {
             .pragma("wal_autocheckpoint", "4000");
 
         let pool = SqlitePoolOptions::new()
-            // SQLite only allows a single writer; keep the pool modest to reduce write contention.
+            // Pool is primarily for read concurrency. Writes are serialized via
+            // write_semaphore so only 1 connection does writes at a time.
             .max_connections(10)
             .min_connections(3) // Minimum number of idle connections
-            .acquire_timeout(Duration::from_secs(10))
+            .acquire_timeout(Duration::from_secs(30))
             .connect_with(connect_options)
             .await?;
 
-        let db_manager = DatabaseManager { pool };
+        let db_manager = DatabaseManager {
+            pool,
+            // Single permit = single writer. All BEGIN IMMEDIATE callers acquire
+            // this before touching the DB, so SQLite never sees concurrent writers.
+            write_semaphore: Arc::new(Semaphore::new(1)),
+        };
 
         // Run migrations after establishing the connection
         Self::run_migrations(&db_manager.pool).await?;
@@ -200,15 +222,26 @@ impl DatabaseManager {
         Ok(())
     }
 
-    /// Acquire a connection with `BEGIN IMMEDIATE` and retry on SQLITE_BUSY variants.
+    /// Acquire a connection with `BEGIN IMMEDIATE`, serialized via write semaphore.
     ///
-    /// Unlike `pool.begin()` (DEFERRED), `BEGIN IMMEDIATE` acquires the write lock
-    /// upfront. This avoids SQLITE_BUSY_SNAPSHOT (code 517) that occurs in WAL mode
-    /// when a deferred reader tries to upgrade to writer after another commit.
+    /// The semaphore ensures only one writer is active at a time, eliminating
+    /// application-level contention before it reaches SQLite. This means
+    /// `BEGIN IMMEDIATE` should succeed instantly (no other writer holds the lock).
     ///
-    /// Returns an `ImmediateTx` that automatically rolls back on drop if not committed.
+    /// Returns an `ImmediateTx` that automatically detaches the connection on drop
+    /// if not committed (preventing dirty connections from poisoning the pool).
     pub async fn begin_immediate_with_retry(&self) -> Result<ImmediateTx, sqlx::Error> {
-        let max_retries = 5;
+        // Acquire the write semaphore first — this is where serialization happens.
+        // Only one task can pass this point at a time.
+        let permit = Arc::clone(&self.write_semaphore)
+            .acquire_owned()
+            .await
+            .map_err(|_| sqlx::Error::PoolClosed)?;
+
+        // With the semaphore held, BEGIN IMMEDIATE should succeed immediately
+        // since no other writer can be active. Retry only for edge cases
+        // (e.g., checkpoint in progress).
+        let max_retries = 3;
         for attempt in 1..=max_retries {
             let mut conn = self.pool.acquire().await?;
             match sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await {
@@ -216,15 +249,16 @@ impl DatabaseManager {
                     return Ok(ImmediateTx {
                         conn: Some(conn),
                         committed: false,
+                        _write_permit: permit,
                     })
                 }
                 Err(e) if attempt < max_retries && Self::is_busy_error(&e) => {
                     warn!(
-                        "BEGIN IMMEDIATE busy (attempt {}/{}), retrying...",
+                        "BEGIN IMMEDIATE busy despite semaphore (attempt {}/{}), retrying...",
                         attempt, max_retries
                     );
                     drop(conn);
-                    tokio::time::sleep(Duration::from_millis(100 * attempt as u64)).await;
+                    tokio::time::sleep(Duration::from_millis(50 * attempt as u64)).await;
                 }
                 Err(e) => return Err(e),
             }
@@ -3440,7 +3474,7 @@ LIMIT ? OFFSET ?
         // Phase 2: If propagate_similar, do the expensive vector similarity search
         //          OUTSIDE any transaction so we don't hold a write lock.
         if propagate_similar {
-            let threshold = 0.5; // Same as speaker matching threshold
+            let threshold = 0.8; // Match the hybrid speaker clustering threshold
 
             // Read-only: find similar embeddings from other speakers
             let similar_rows: Vec<(i64, i64)> = sqlx::query(
