@@ -1,0 +1,109 @@
+name: Test CLI npm (blank slate)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-macos-arm64:
+    runs-on: macos-latest  # Apple Silicon (M1)
+    steps:
+      - name: Verify blank slate
+        run: |
+          echo "--- system info ---"
+          uname -a
+          echo "--- no screenpipe installed ---"
+          which screenpipe 2>/dev/null && echo "FAIL: screenpipe already in PATH" && exit 1 || echo "OK: not installed"
+          echo "--- node/bun ---"
+          node --version || true
+          which bun || echo "no bun"
+
+      - name: Install bun
+        run: curl -fsSL https://bun.sh/install | bash
+
+      - name: Test bunx screenpipe status
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          echo "--- running: bunx screenpipe@0.3.139 status ---"
+          bunx screenpipe@0.3.139 status 2>&1 || true
+          echo "--- exit code: $? ---"
+
+      - name: Test bunx screenpipe --help
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          bunx screenpipe@0.3.139 --help 2>&1
+
+      - name: Test bunx screenpipe record (5s timeout)
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          echo "--- running: bunx screenpipe record (expect permission error on CI) ---"
+          timeout 15 bunx screenpipe@0.3.139 record 2>&1 || echo "--- exited (expected on CI due to screen recording permission) ---"
+
+  test-macos-x64:
+    runs-on: macos-13  # Intel
+    steps:
+      - name: Verify blank slate
+        run: |
+          uname -a
+          which screenpipe 2>/dev/null && exit 1 || echo "OK: not installed"
+
+      - name: Install bun
+        run: curl -fsSL https://bun.sh/install | bash
+
+      - name: Test bunx screenpipe status
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          bunx screenpipe@0.3.139 status 2>&1 || true
+
+      - name: Test bunx screenpipe --help
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          bunx screenpipe@0.3.139 --help 2>&1
+
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Verify blank slate
+        shell: pwsh
+        run: |
+          Get-ComputerInfo | Select-Object OsName, OsArchitecture
+          where.exe screenpipe 2>$null
+          if ($LASTEXITCODE -eq 0) { Write-Error "screenpipe already installed"; exit 1 }
+          Write-Output "OK: not installed"
+
+      - name: Install bun
+        shell: pwsh
+        run: irm https://bun.sh/install.ps1 | iex
+
+      - name: Test bunx screenpipe status
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:USERPROFILE\.bun\bin;$env:PATH"
+          bunx screenpipe@0.3.139 status 2>&1
+          Write-Output "exit code: $LASTEXITCODE"
+
+      - name: Test bunx screenpipe --help
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:USERPROFILE\.bun\bin;$env:PATH"
+          bunx screenpipe@0.3.139 --help 2>&1
+
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify blank slate
+        run: |
+          uname -a
+          which screenpipe 2>/dev/null && exit 1 || echo "OK: not installed"
+
+      - name: Install bun
+        run: curl -fsSL https://bun.sh/install | bash
+
+      - name: Test bunx screenpipe status
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          bunx screenpipe@0.3.139 status 2>&1 || true
+
+      - name: Test bunx screenpipe --help
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          bunx screenpipe@0.3.139 --help 2>&1
