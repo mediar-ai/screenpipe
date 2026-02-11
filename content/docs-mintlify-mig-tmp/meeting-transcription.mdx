@@ -11,23 +11,23 @@ screenpipe automatically transcribes all audio from your meetings, calls, and co
 
 ```bash
 # start with audio enabled (default)
-bunx screenpipe
+bunx screenpipe record
 
 # list available audio devices
 bunx screenpipe audio list
 
 # capture specific devices
-bunx screenpipe --audio-device "MacBook Pro Microphone" --audio-device "BlackHole 2ch"
+bunx screenpipe record --audio-device "MacBook Pro Microphone" --audio-device "BlackHole 2ch"
 ```
 
 ### choose transcription engine
 
 ```bash
 # local (default) — most private
-bunx screenpipe --audio-transcription-engine whisper-large-v3-turbo
+bunx screenpipe record --audio-transcription-engine whisper-large-v3-turbo
 
 # cloud — faster, requires API key
-bunx screenpipe --audio-transcription-engine deepgram
+bunx screenpipe record --audio-transcription-engine deepgram
 ```
 
 ## search transcriptions

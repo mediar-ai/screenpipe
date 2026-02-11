@@ -1,0 +1,78 @@
+---
+title: "Apple Intelligence — use screenpipe with Siri & Apple shortcuts"
+sidebarTitle: "apple intelligence"
+description: "Connect screenpipe to Apple Intelligence, Siri, and Apple Shortcuts for screen-aware automations on macOS."
+icon: "apple"
+---
+
+screenpipe's local API integrates with Apple Intelligence through Siri Shortcuts, giving you voice-activated access to your screen history.
+
+## how it works
+
+screenpipe runs a local API on `localhost:3030`. Apple Shortcuts can call this API to search your screen history, get recent activity, or trigger pipes — all through Siri voice commands or automations.
+
+## Siri Shortcuts integration
+
+### search your screen with Siri
+
+create a shortcut that queries screenpipe:
+
+1. open **Shortcuts** app on macOS
+2. create a new shortcut
+3. add **Get Contents of URL** action:
+   - URL: `http://localhost:3030/search?q=QUERY&limit=5&content_type=ocr`
+   - method: GET
+4. add **Get Dictionary Value** to parse the JSON response
+5. add **Show Result** or **Quick Look** to display results
+
+### example: "what was I working on?"
+
+create a shortcut named "what was I working on":
+
+1. **Get Contents of URL**: `http://localhost:3030/search?content_type=ocr&limit=10`
+2. **Get Dictionary Value**: key `data`
+3. **Repeat with Each** → extract `content.text` and `content.app_name`
+4. **Show Result**: display the text
+
+then say: *"Hey Siri, what was I working on?"*
+
+### example: get meeting transcriptions
+
+1. **Get Contents of URL**: `http://localhost:3030/search?content_type=audio&limit=20`
+2. parse and display transcriptions
+
+say: *"Hey Siri, what did we discuss in the meeting?"*
+
+## Apple Shortcuts automations
+
+combine screenpipe with Shortcuts automations:
+
+| automation | how |
+| --- | --- |
+| daily summary at 6pm | time-based trigger → query screenpipe → format summary → send notification |
+| focus mode logging | when Focus turns on → log current activity from screenpipe |
+| meeting notes on calendar end | calendar event ends → query audio transcriptions → save to Notes |
+
+## tips
+
+- screenpipe must be running for the API to respond
+- all data stays local — Shortcuts queries `localhost` only
+- combine with **Ask ChatGPT** action in Shortcuts for AI-powered summaries
+- use `start_time` and `end_time` params to scope queries to specific time ranges
+
+## vs Apple's built-in screen time
+
+| feature | screenpipe | Apple Screen Time |
+| --- | --- | --- |
+| full text search | ✅ OCR on every frame | ❌ app usage only |
+| audio transcription | ✅ local Whisper | ❌ |
+| AI integration | ✅ any LLM | limited to Apple Intelligence |
+| API access | ✅ full REST API | ❌ |
+| cross-platform | ✅ macOS, Windows, Linux | ❌ Apple only |
+| data export | ✅ SQLite, API | ❌ |
+
+## next steps
+
+- [install screenpipe](/getting-started)
+- [MCP server](/mcp-server) — connect to Claude and Cursor
+- [pipes](/pipes) — scheduled AI agents on your data

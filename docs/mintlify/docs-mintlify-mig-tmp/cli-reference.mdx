@@ -8,13 +8,21 @@ icon: "terminal"
 ## install & run
 
 ```bash
-# recommended: run via npm
-bunx screenpipe
-
-# or install globally
-npm i -g screenpipe
-screenpipe
+bunx screenpipe record
 ```
+
+<Expandable title="linux: additional dependencies">
+```bash
+# ubuntu/debian
+sudo apt install libpulse0 libasound2-dev ffmpeg
+
+# fedora
+sudo dnf install pulseaudio-libs alsa-lib ffmpeg
+
+# arch
+sudo pacman -S libpulse alsa-lib ffmpeg
+```
+</Expandable>
 
 ## recording options
 

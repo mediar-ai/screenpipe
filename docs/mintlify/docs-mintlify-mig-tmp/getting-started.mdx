@@ -13,29 +13,22 @@ the app manages recording, settings, and search — no terminal needed.
 
 ## CLI
 
-<Tabs>
-  <Tab title="npm (all platforms)">
-    ```bash
-    bunx screenpipe
-    ```
-    or with npm:
-    ```bash
-    npx screenpipe
-    ```
-  </Tab>
-  <Tab title="macOS/Linux (curl)">
-    ```bash
-    curl -fsSL get.screenpi.pe/cli | sh
-    screenpipe
-    ```
-  </Tab>
-  <Tab title="Windows (powershell)">
-    ```powershell
-    iwr get.screenpi.pe/cli.ps1 | iex
-    screenpipe.exe
-    ```
-  </Tab>
-</Tabs>
+```bash
+bunx screenpipe record
+```
+
+<Expandable title="linux: additional dependencies">
+```bash
+# ubuntu/debian
+sudo apt install libpulse0 libasound2-dev ffmpeg
+
+# fedora
+sudo dnf install pulseaudio-libs alsa-lib ffmpeg
+
+# arch
+sudo pacman -S libpulse alsa-lib ffmpeg
+```
+</Expandable>
 
 ## verify it's running
 
@@ -46,7 +39,7 @@ once screenpipe starts, it serves an API on `localhost:3030`:
 curl http://localhost:3030/health
 
 # search your screen history
-curl "http://localhost:3030/search?q=meeting&limit=5"
+curl "http://localhost:3030/search"
 ```
 
 ## connect to AI
