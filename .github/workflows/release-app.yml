@@ -826,7 +826,7 @@ jobs:
           CARGO_PROFILE_RELEASE_STRIP: none
           CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.os_type == 'windows' && 'abort' || 'unwind' }}
           CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.os_type == 'windows' && 'false' || 'true' }}
-          RUSTFLAGS: ${{ matrix.os_type == 'windows' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
+          RUSTFLAGS: ${{ matrix.os_type == 'windows' && '-C target-feature=+crt-static -C link-arg=/LTCG -C link-arg=/DELAYLOAD:vulkan-1.dll -C link-arg=delayimp.lib' || '' }}
           VCPKG_STATIC_LINKAGE: "true"
           KNF_STATIC_CRT: ${{ matrix.os_type == 'windows' && '1' || '' }}
           # Fix whisper.cpp crash on newer CPUs (Lunar Lake, etc.) that lack AVX-512
