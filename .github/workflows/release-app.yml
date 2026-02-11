@@ -857,6 +857,7 @@ jobs:
 
       - name: Upload to Cloudflare R2 (macOS)
         if: matrix.os_type == 'macos'
+        continue-on-error: true
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -1013,7 +1014,8 @@ jobs:
   # use a different network path and don't have this issue.
   cn-upload:
     needs: [check_commit, draft, publish-tauri]
-    if: needs.publish-tauri.result == 'success' && (needs.check_commit.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
+    # Run even if some platforms failed — upload whatever succeeded
+    if: always() && needs.draft.result == 'success' && (needs.check_commit.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
