@@ -871,96 +871,43 @@ jobs:
           echo "Uploading debug symbols to Sentry..."
           sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-app apps/screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/
 
-      - name: Download and Run CLI Manually (Windows)
-        if: matrix.os_type == 'windows'
+      - name: Rebuild and upload beta (Windows)
+        if: matrix.os_type == 'windows' && (needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch')
+        continue-on-error: true
         shell: powershell
         env:
           CN_API_KEY: ${{ secrets.CN_API_KEY }}
           CN_VERBOSE: "2"
           USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          MAX_RETRIES: 5
-          RETRY_DELAY: 30
-          SHOULD_RELEASE: ${{ needs.check_commit.outputs.should_release }}
-          SHOULD_BETA: ${{ needs.check_commit.outputs.should_beta }}
-          IS_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         run: |
-          # create temp directory for cli
+          # download cn cli
           $cliDir = Join-Path $Env:GITHUB_WORKSPACE "cn-cli-temp"
           New-Item -ItemType Directory -Force -Path $cliDir
-
-          # download cli
           $cliUrl = "https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/windows-binary-x86_64"
           $cliExe = Join-Path $cliDir "cn.exe"
           Write-Host "downloading crabnebula cli..."
           Invoke-WebRequest -Uri $cliUrl -UserAgent $env:USER_AGENT -OutFile $cliExe
 
-          # move to the directory we want to upload from
           cd apps/screenpipe-app-tauri/src-tauri
 
-          # upload assets with retry logic
-          $cliFullPath = Join-Path $cliDir "cn.exe"
-          Write-Host "uploading assets from $(pwd) using $cliFullPath..."
+          Write-Host "=== Rebuilding with beta config ==="
+          Copy-Item "tauri.beta.conf.json" "tauri.conf.json" -Force
+          $bundleNsis = "target\x86_64-pc-windows-msvc\release\bundle\nsis"
+          if (Test-Path $bundleNsis) { Remove-Item -Recurse -Force $bundleNsis }
+          Push-Location ..
+          # Skip vulkan for now — ExternalProject can't find cl.exe on GH runners
+          bunx tauri build --target x86_64-pc-windows-msvc --features mkl,official-build
+          Pop-Location
+          Write-Host "=== Beta rebuild complete ==="
 
-          # Upload to stable (only for release builds and workflow_dispatch)
-          if ($env:SHOULD_RELEASE -eq "true" -or $env:IS_DISPATCH -eq "true") {
-            $attempt = 1
-            $success = $false
-
-            while (-not $success -and $attempt -le $env:MAX_RETRIES) {
-              Write-Host "Stable upload attempt $attempt of $env:MAX_RETRIES"
-              try {
-                & $cliFullPath release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
-                if ($LASTEXITCODE -eq 0) {
-                  $success = $true
-                  Write-Host "Stable upload successful!"
-                } else {
-                  throw "CLI returned exit code $LASTEXITCODE"
-                }
-              } catch {
-                Write-Host "Error during attempt $attempt`: $_"
-                if ($attempt -lt $env:MAX_RETRIES) {
-                  Write-Host "Waiting $env:RETRY_DELAY seconds before retry..."
-                  Start-Sleep -Seconds $env:RETRY_DELAY
-                }
-              }
-              $attempt++
-            }
-
-            if (-not $success) {
-              Write-Host "Failed to upload stable after $env:MAX_RETRIES attempts"
-              exit 1
-            }
-          } else {
-            Write-Host "Skipping stable upload (beta-only build)"
-          }
-
-          # Rebuild with beta config and upload to beta channel
-          # Current dir: apps/screenpipe-app-tauri/src-tauri
-          if ($env:SHOULD_BETA -eq "true" -or $env:IS_DISPATCH -eq "true") {
-            Write-Host "=== Rebuilding with beta config ==="
-            # Swap to beta config (we're in src-tauri/)
-            Copy-Item "tauri.beta.conf.json" "tauri.conf.json" -Force
-            # Only clean NSIS bundle output (not the entire build tree)
-            # This preserves whisper-rs-sys/Vulkan shader build cache
-            $bundleNsis = "target\x86_64-pc-windows-msvc\release\bundle\nsis"
-            if (Test-Path $bundleNsis) { Remove-Item -Recurse -Force $bundleNsis }
-            # Rebuild (Rust cached, just repackages) - run from project root
-            Push-Location ..
-            bunx tauri build --target x86_64-pc-windows-msvc --features mkl,vulkan,official-build
-            Pop-Location
-            Write-Host "=== Beta rebuild complete ==="
-            Write-Host "Beta artifacts:"
-            Get-ChildItem -Path "target" -Recurse -Include "*.exe","*.nsis*" | Where-Object { $_.DirectoryName -match "bundle" } | ForEach-Object { Write-Host $_.FullName }
-
-            Write-Host "Uploading to beta channel..."
-            try {
-              & $cliFullPath release upload ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri -vv
-              Write-Host "Beta upload successful!"
-            } catch {
-              Write-Host "Beta upload failed (non-fatal): $_"
-            }
+          Write-Host "Uploading to beta channel..."
+          try {
+            & $cliExe release upload ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri -vv
+            Write-Host "Beta upload successful!"
+          } catch {
+            Write-Host "Beta upload failed (non-fatal): $_"
           }
 
       - name: Clean stale beta artifacts before stable upload
@@ -970,38 +917,6 @@ jobs:
           # Remove any leftover beta artifacts from previous builds (self-hosted runners persist)
           find apps/screenpipe-app-tauri/src-tauri/target -name "*beta*" -type f -delete 2>/dev/null || true
           echo "Cleaned stale beta artifacts"
-
-      - name: Upload Assets to CrabNebula Cloud (Non-Windows)
-        if: matrix.os_type != 'windows' && (needs.check_commit.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
-        env:
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-        shell: bash
-        run: |
-          # Install CN CLI
-          if ! command -v cn 2>/dev/null; then
-            curl -sL https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/osx-aarch64 -o /tmp/cn || \
-            curl -sL https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/osx-x86_64 -o /tmp/cn
-            chmod +x /tmp/cn
-            CN=/tmp/cn
-          else
-            CN=cn
-          fi
-
-          MAX_RETRIES=3
-          RETRY_DELAY=30
-          for attempt in $(seq 1 $MAX_RETRIES); do
-            echo "Upload attempt $attempt/$MAX_RETRIES..."
-            if (cd ./apps/screenpipe-app-tauri/src-tauri && $CN release upload ${{ secrets.CN_APP_SLUG }} --framework tauri); then
-              echo "Upload successful!"
-              exit 0
-            fi
-            if [ $attempt -lt $MAX_RETRIES ]; then
-              echo "Upload failed, retrying in ${RETRY_DELAY}s..."
-              sleep $RETRY_DELAY
-            fi
-          done
-          echo "Upload failed after $MAX_RETRIES attempts"
-          exit 1
 
       - name: Rebuild with beta config (Non-Windows)
         if: matrix.os_type != 'windows' && (needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch')
@@ -1046,7 +961,6 @@ jobs:
 
       - name: Upload to Cloudflare R2 (macOS)
         if: matrix.os_type == 'macos'
-        continue-on-error: true
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -1075,7 +989,6 @@ jobs:
 
       - name: Upload to Cloudflare R2 (Windows)
         if: matrix.os_type == 'windows'
-        continue-on-error: true
         shell: powershell
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -1110,11 +1023,105 @@ jobs:
 
           Write-Host "R2 upload complete for Windows"
 
+  # Upload to CrabNebula from GitHub-hosted runner.
+  # Self-hosted macOS runners fail CN uploads due to HTTP/2 + macOS native TLS
+  # causing SSL errors on large file uploads to Cloudflare. GitHub-hosted runners
+  # use a different network path and don't have this issue.
+  cn-upload:
+    needs: [check_commit, draft, publish-tauri]
+    if: needs.publish-tauri.result == 'success' && (needs.check_commit.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            bundle_subdir: dmg
+            dmg_glob: "*.dmg"
+            updater_subdir: macos
+          - target: x86_64-apple-darwin
+            bundle_subdir: dmg
+            dmg_glob: "*.dmg"
+            updater_subdir: macos
+          - target: x86_64-pc-windows-msvc
+            bundle_subdir: nsis
+            dmg_glob: "*.exe"
+            updater_subdir: nsis
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_hash || github.ref }}
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download artifacts from R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TARGET="${{ matrix.target }}"
+          R2_PREFIX="s3://screenpipe-releases/releases/${VERSION}/${TARGET}"
+
+          # Recreate the Tauri bundle directory structure that cn CLI expects
+          BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
+          mkdir -p "${BUNDLE_DIR}/${{ matrix.bundle_subdir }}"
+          mkdir -p "${BUNDLE_DIR}/${{ matrix.updater_subdir }}"
+
+          echo "Downloading ${TARGET} artifacts from R2..."
+          aws s3 sync "${R2_PREFIX}/" "/tmp/r2-artifacts/" --endpoint-url "$R2_ENDPOINT"
+
+          echo "Downloaded files:"
+          ls -la /tmp/r2-artifacts/
+
+          # Place files into the correct bundle subdirectories
+          # macOS: dmg/ has .dmg, macos/ has .app.tar.gz + .sig
+          # Windows: nsis/ has .exe + .nsis.zip + .sig
+          for f in /tmp/r2-artifacts/*; do
+            [ -f "$f" ] || continue
+            name=$(basename "$f")
+            case "$name" in
+              *.dmg)
+                cp "$f" "${BUNDLE_DIR}/${{ matrix.bundle_subdir }}/"
+                echo "  → ${{ matrix.bundle_subdir }}/$name"
+                ;;
+              *.app.tar.gz|*.app.tar.gz.sig)
+                cp "$f" "${BUNDLE_DIR}/${{ matrix.updater_subdir }}/"
+                echo "  → ${{ matrix.updater_subdir }}/$name"
+                ;;
+              *.exe|*.nsis.zip|*.nsis.zip.sig)
+                cp "$f" "${BUNDLE_DIR}/${{ matrix.bundle_subdir }}/"
+                echo "  → ${{ matrix.bundle_subdir }}/$name"
+                ;;
+              *)
+                # Catch-all: put in updater subdir
+                cp "$f" "${BUNDLE_DIR}/${{ matrix.updater_subdir }}/"
+                echo "  → ${{ matrix.updater_subdir }}/$name (catch-all)"
+                ;;
+            esac
+          done
+
+          echo "Bundle directory structure:"
+          find "${BUNDLE_DIR}" -type f
+
+      - name: Upload to CrabNebula Cloud
+        uses: crabnebula-dev/cloud-release@v0.2.6
+        with:
+          command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: ./apps/screenpipe-app-tauri/src-tauri
+
   publish-release:
-    needs: [check_commit, publish-tauri]
+    needs: [check_commit, publish-tauri, cn-upload]
     # Only auto-publish when commit message contains "release-app-publish"
     # workflow_dispatch builds only create drafts - publish manually after testing
-    if: needs.check_commit.outputs.should_publish == 'true' && (needs.publish-tauri.result == 'success' || needs.retry-win.result == 'success')
+    if: needs.check_commit.outputs.should_publish == 'true' && needs.publish-tauri.result == 'success' && needs.cn-upload.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
