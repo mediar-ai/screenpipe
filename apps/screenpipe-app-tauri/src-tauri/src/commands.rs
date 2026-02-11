@@ -1,4 +1,4 @@
-use crate::{window_api::ShowRewindWindow, store::OnboardingStore, store::SettingsStore, parse_shortcut};
+use crate::{window_api::ShowRewindWindow, store::OnboardingStore};
 use tauri::{Manager, Emitter};
 use tracing::{error, info, warn, debug};
 

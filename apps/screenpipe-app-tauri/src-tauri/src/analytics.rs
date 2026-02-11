@@ -1,6 +1,5 @@
 use log::{error, warn};
 use reqwest::Client;
-use serde_derive::Deserialize;
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;

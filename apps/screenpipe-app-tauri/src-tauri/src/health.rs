@@ -64,6 +64,7 @@ pub fn get_recording_info() -> RecordingInfo {
     RECORDING_INFO.read().unwrap().clone()
 }
 
+#[allow(dead_code)]
 fn set_recording_status(status: RecordingStatus) {
     RECORDING_INFO.write().unwrap().status = status;
 }

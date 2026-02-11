@@ -64,7 +64,7 @@ impl RemindersState {
 #[tauri::command]
 #[specta::specta]
 pub async fn reminders_status(
-    app: AppHandle,
+    _app: AppHandle,
     state: tauri::State<'_, RemindersState>,
 ) -> Result<RemindersStatus, String> {
     #[cfg(target_os = "macos")]
@@ -712,7 +712,7 @@ async fn call_ai_for_reminders(
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct ActionItemParsed {
+pub(crate) struct ActionItemParsed {
     title: String,
     notes: Option<String>,
     due: Option<String>,

@@ -20,6 +20,7 @@ static SUPPRESS_UNTIL: AtomicU64 = AtomicU64::new(0);
 /// Call before `activateIgnoringOtherApps` to prevent the space monitor
 /// from hiding the overlay during the activation-triggered Space change.
 /// Suppresses for `duration_ms` milliseconds (default 500ms is plenty).
+#[allow(dead_code)]
 pub fn suppress_space_monitor(duration_ms: u64) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
