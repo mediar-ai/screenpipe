@@ -57,7 +57,15 @@
     "global-shortcut:allow-unregister-all",
     "global-shortcut:default",
     "sentry:default",
-    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "^https?://.*" },
+        { "url": "^mailto:.*" },
+        { "url": "^tel:.*" },
+        { "url": "^x-apple-reminderkit://.*" }
+      ]
+    },
     "core:window:default",
     "core:window:allow-get-all-windows",
     "core:window:allow-close",
