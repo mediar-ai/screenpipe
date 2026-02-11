@@ -12,6 +12,7 @@ import {
   FolderOpen,
   RefreshCw,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -140,6 +141,16 @@ export function PipesSection() {
           <h3 className="text-lg font-medium">pipes</h3>
           <p className="text-sm text-muted-foreground">
             scheduled agents that run on your screen data
+            {" · "}
+            <a
+              href="https://docs.screenpi.pe/pipes"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-foreground transition-colors"
+            >
+              docs
+              <ExternalLink className="h-3 w-3" />
+            </a>
           </p>
         </div>
         <div className="flex gap-2">
@@ -189,14 +200,16 @@ export function PipesSection() {
                   </Badge>
 
                   {pipe.is_running && (
-                    <Badge className="text-xs bg-blue-500">running</Badge>
+                    <Badge variant="outline" className="text-xs">
+                      running
+                    </Badge>
                   )}
 
                   {pipe.last_success === true && (
-                    <span className="text-xs text-green-500">✓</span>
+                    <span className="text-xs text-muted-foreground">✓</span>
                   )}
                   {pipe.last_success === false && (
-                    <span className="text-xs text-red-500">✗</span>
+                    <span className="text-xs text-muted-foreground">✗</span>
                   )}
 
                   {pipe.last_run && (
@@ -279,13 +292,7 @@ export function PipesSection() {
                                 <span className="text-muted-foreground">
                                   {new Date(log.started_at).toLocaleString()}
                                 </span>
-                                <span
-                                  className={
-                                    log.success
-                                      ? "text-green-500"
-                                      : "text-red-500"
-                                  }
-                                >
+                                <span className="text-muted-foreground">
                                   {log.success ? "✓" : "✗"}
                                 </span>
                                 <span className="text-muted-foreground">
@@ -297,7 +304,7 @@ export function PipesSection() {
                                   s
                                 </span>
                                 {!log.success && log.stderr && (
-                                  <span className="text-red-400 truncate max-w-64">
+                                  <span className="text-muted-foreground truncate max-w-64">
                                     {log.stderr.split("\n")[0]}
                                   </span>
                                 )}
