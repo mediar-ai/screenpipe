@@ -1,5 +1,6 @@
-use log::{error, warn};
+use log::{error, info, warn};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -7,6 +8,25 @@ use std::time::Duration;
 use sysinfo::{System, SystemExt};
 use tokio::sync::Mutex;
 use tokio::time::interval;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Attribution {
+    pub utm_source: Option<String>,
+    pub utm_medium: Option<String>,
+    pub utm_campaign: Option<String>,
+    pub utm_content: Option<String>,
+    pub utm_term: Option<String>,
+}
+
+impl Attribution {
+    pub fn is_empty(&self) -> bool {
+        self.utm_source.is_none()
+            && self.utm_medium.is_none()
+            && self.utm_campaign.is_none()
+            && self.utm_content.is_none()
+            && self.utm_term.is_none()
+    }
+}
 
 pub struct AnalyticsManager {
     client: Client,
@@ -18,6 +38,7 @@ pub struct AnalyticsManager {
     api_host: String,
     local_api_base_url: String,
     screenpipe_dir_path: PathBuf,
+    attribution: Mutex<Option<Attribution>>,
 }
 
 impl AnalyticsManager {
@@ -40,6 +61,45 @@ impl AnalyticsManager {
             api_host: "https://eu.i.posthog.com".to_string(),
             local_api_base_url,
             screenpipe_dir_path,
+            attribution: Mutex::new(None),
+        }
+    }
+
+    /// Fetch UTM attribution from the website by IP matching.
+    /// Called once on first launch; result is cached for all subsequent events.
+    pub async fn fetch_attribution(&self) {
+        // Only fetch if we haven't already
+        if self.attribution.lock().await.is_some() {
+            return;
+        }
+
+        match self
+            .client
+            .get("https://screenpi.pe/api/attribution")
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                if let Ok(body) = resp.json::<serde_json::Value>().await {
+                    if body.get("found").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        let attr = Attribution {
+                            utm_source: body.get("utm_source").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                            utm_medium: body.get("utm_medium").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                            utm_campaign: body.get("utm_campaign").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                            utm_content: body.get("utm_content").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                            utm_term: body.get("utm_term").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        };
+                        if !attr.is_empty() {
+                            info!("attribution found: {:?}", attr);
+                            *self.attribution.lock().await = Some(attr);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("failed to fetch attribution (non-fatal): {}", e);
+            }
         }
     }
 
@@ -81,6 +141,7 @@ impl AnalyticsManager {
                     "os_name": os_name,
                     "os_version": os_version,
                 },
+                "$set_once": {},
             },
         });
 
@@ -100,6 +161,23 @@ impl AnalyticsManager {
             }
         } else {
             warn!("failed to get disk usage: {:?}", disk_usage_result);
+        }
+
+        // Inject UTM attribution as $set_once (only sets on first event per person)
+        if let Some(attr) = self.attribution.lock().await.as_ref() {
+            if let Some(payload_props) = payload["properties"].as_object_mut() {
+                if let Some(set_once) = payload_props.get_mut("$set_once").and_then(|v| v.as_object_mut()) {
+                    if let Some(s) = &attr.utm_source { set_once.insert("utm_source".into(), json!(s)); }
+                    if let Some(s) = &attr.utm_medium { set_once.insert("utm_medium".into(), json!(s)); }
+                    if let Some(s) = &attr.utm_campaign { set_once.insert("utm_campaign".into(), json!(s)); }
+                    if let Some(s) = &attr.utm_content { set_once.insert("utm_content".into(), json!(s)); }
+                    if let Some(s) = &attr.utm_term { set_once.insert("utm_term".into(), json!(s)); }
+                }
+                // Also add as event properties for easier querying
+                if let Some(s) = &attr.utm_source { payload_props.insert("utm_source".into(), json!(s)); }
+                if let Some(s) = &attr.utm_medium { payload_props.insert("utm_medium".into(), json!(s)); }
+                if let Some(s) = &attr.utm_campaign { payload_props.insert("utm_campaign".into(), json!(s)); }
+            }
         }
 
         if let Some(props) = properties {
@@ -214,10 +292,14 @@ pub fn start_analytics(
         should_enable_analytics,
     ));
 
-    // Send initial event at boot
+    // Fetch attribution then send initial event at boot
     tokio::spawn({
         let analytics_manager = analytics_manager.clone();
         async move {
+            // Try to fetch UTM attribution from website (IP-matched, 2hr window)
+            // This must happen before app_started so the first event carries attribution
+            analytics_manager.fetch_attribution().await;
+
             if let Err(e) = analytics_manager.send_event("app_started", None).await {
                 error!("Failed to send initial PostHog event: {}", e);
             }
