@@ -434,7 +434,14 @@ impl UpdatesManager {
             current_version,
             self.app.config().identifier
         );
-        let check_result = self.app.updater()?.check().await;
+        // Build updater with auth header so paid users can download from R2
+        let mut builder = self.app.updater_builder();
+        if let Ok(Some(settings)) = SettingsStore::get(&self.app) {
+            if let Some(ref token) = settings.user.token {
+                builder = builder.header("Authorization", format!("Bearer {}", token))?;
+            }
+        }
+        let check_result = builder.build()?.check().await;
         match &check_result {
             Ok(Some(ref u)) => {
                 info!("update found: v{}", u.version);
@@ -503,7 +510,7 @@ impl UpdatesManager {
                 let menu_item = self.update_menu_item.clone();
                 let mut downloaded: u64 = 0;
                 let mut last_pct: u8 = 0;
-                update.download_and_install(
+                let download_result = update.download_and_install(
                     move |chunk_len, content_len| {
                         downloaded += chunk_len as u64;
                         let pct = content_len
@@ -526,10 +533,39 @@ impl UpdatesManager {
                         );
                     },
                     || {},
-                ).await?;
-                *self.update_installed.lock().await = true;
-                self.update_menu_item.set_enabled(true)?;
-                self.update_menu_item.set_text("restart to update")?;
+                ).await;
+
+                match download_result {
+                    Ok(_) => {
+                        *self.update_installed.lock().await = true;
+                        self.update_menu_item.set_enabled(true)?;
+                        self.update_menu_item.set_text("restart to update")?;
+                    }
+                    Err(e) => {
+                        let err_str = e.to_string();
+                        if err_str.contains("401") || err_str.contains("403")
+                            || err_str.contains("Unauthorized") || err_str.contains("Forbidden") {
+                            warn!("update download requires authentication: {}", err_str);
+                            let _ = self.app.emit("update-auth-required", serde_json::json!({
+                                "version": update.version,
+                                "message": "sign in to get the latest update",
+                            }));
+                            let app_notif = self.app.clone();
+                            let version_str = update.version.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                let _ = app_notif.notification()
+                                    .builder()
+                                    .title("screenpipe update available")
+                                    .body(format!("v{} is ready — sign in to download", version_str))
+                                    .show();
+                            }).await;
+                            self.update_menu_item.set_enabled(true)?;
+                            self.update_menu_item.set_text("sign in to update")?;
+                            return Ok(false);
+                        }
+                        return Err(e.into());
+                    }
+                }
             }
 
             // Emit event to frontend for in-app banner (visible if window is open)

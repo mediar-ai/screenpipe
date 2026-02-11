@@ -24,6 +24,11 @@ interface DownloadProgress {
   percent: number;
 }
 
+interface AuthRequiredInfo {
+  version: string;
+  message: string;
+}
+
 interface UpdateBannerState {
   isVisible: boolean;
   updateInfo: UpdateInfo | null;
@@ -31,12 +36,14 @@ interface UpdateBannerState {
   isDownloading: boolean;
   downloadProgress: DownloadProgress | null;
   pendingUpdate: Update | null;
+  authRequired: AuthRequiredInfo | null;
   setIsVisible: (visible: boolean) => void;
   setUpdateInfo: (info: UpdateInfo | null) => void;
   setIsInstalling: (installing: boolean) => void;
   setIsDownloading: (downloading: boolean) => void;
   setDownloadProgress: (progress: DownloadProgress | null) => void;
   setPendingUpdate: (update: Update | null) => void;
+  setAuthRequired: (info: AuthRequiredInfo | null) => void;
 }
 
 export const useUpdateBanner = create<UpdateBannerState>((set) => ({
@@ -46,12 +53,14 @@ export const useUpdateBanner = create<UpdateBannerState>((set) => ({
   isDownloading: false,
   downloadProgress: null,
   pendingUpdate: null,
+  authRequired: null,
   setIsVisible: (visible) => set({ isVisible: visible }),
   setUpdateInfo: (info) => set({ updateInfo: info }),
   setIsInstalling: (installing) => set({ isInstalling: installing }),
   setIsDownloading: (downloading) => set({ isDownloading: downloading }),
   setDownloadProgress: (progress) => set({ downloadProgress: progress }),
   setPendingUpdate: (update) => set({ pendingUpdate: update }),
+  setAuthRequired: (info) => set({ authRequired: info }),
 }));
 
 interface UpdateBannerProps {
