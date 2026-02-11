@@ -1,31 +1,35 @@
 ---
-title: "install screenpipe - screen recording with AI search"
+title: "install screenpipe"
 sidebarTitle: "getting started"
-description: "Install screenpipe on macOS, Windows, or Linux. Start recording your screen and audio in minutes with our desktop app or CLI. Query your data with AI."
+description: "Install screenpipe on macOS, Windows, or Linux. Start recording your screen in minutes."
 icon: "rocket"
 ---
 
-### choose your installation method
+## desktop app (recommended)
 
-| method      | best for                          | pros                           | cons                                 |
-| ----------- | --------------------------------- | ------------------------------ | ------------------------------------ |
-| app         | personal users, quick setup       | easy gui, no terminal required | less customizable, automatic updates |
-| cli         | developers, automation, scripting | fast, scriptable               | requires terminal familiarity        |
+download the [desktop app](https://screenpi.pe/onboarding) and follow the installation instructions. works on macOS, Windows, and Linux.
 
-### install desktop app
+the app manages recording, settings, and search — no terminal needed.
 
-- download the [desktop app](https://screenpi.pe) and follow the installation instructions.
-
-### install cli
+## CLI
 
 <Tabs>
-  <Tab title="macos/linux">
+  <Tab title="npm (all platforms)">
+    ```bash
+    bunx screenpipe
+    ```
+    or with npm:
+    ```bash
+    npx screenpipe
+    ```
+  </Tab>
+  <Tab title="macOS/Linux (curl)">
     ```bash
     curl -fsSL get.screenpi.pe/cli | sh
     screenpipe
     ```
   </Tab>
-  <Tab title="windows">
+  <Tab title="Windows (powershell)">
     ```powershell
     iwr get.screenpi.pe/cli.ps1 | iex
     screenpipe.exe
@@ -33,107 +37,31 @@ icon: "rocket"
   </Tab>
 </Tabs>
 
-### verify installation
+## verify it's running
 
-- run `screenpipe` or `screenpipe.exe` to verify successful installation.
+once screenpipe starts, it serves an API on `localhost:3030`:
 
-### query data with javascript sdk
+```bash
+# check health
+curl http://localhost:3030/health
 
-then query the data using our javascript sdk:
-
-```typescript
-import { pipe } from "@screenpipe/js";
-
-async function queryScreenpipe() {
-  // get content from last 5 minutes
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-
-  const results = await pipe.queryScreenpipe({
-    startTime: fiveMinutesAgo,
-    limit: 10,
-    contentType: "all", // can be "ocr", "audio", or "all"
-  });
-
-  if (!results) {
-    console.log("no results found or error occurred");
-    return;
-  }
-
-  console.log(`found ${results.pagination.total} items`);
-
-  // process each result
-  for (const item of results.data) {
-    if (item.type === "OCR") {
-      console.log(`OCR: ${JSON.stringify(item.content)}`);
-    } else if (item.type === "Audio") {
-      console.log(`transcript: ${JSON.stringify(item.content)}`);
-    }
-  }
-}
-
-queryScreenpipe().catch(console.error);
+# search your screen history
+curl "http://localhost:3030/search?q=meeting&limit=5"
 ```
 
-now download the [desktop app](https://screenpi.pe) to start capturing your screen and audio!
+## connect to AI
 
-### connect to ai providers
+screenpipe works with any AI that supports MCP or HTTP APIs:
 
-screenpipe can connect to various ai providers to process your data. here's how to set up popular local ai providers:
+| integration | how |
+| --- | --- |
+| **claude desktop** | add screenpipe as MCP server ([guide](/mcp-server)) |
+| **cursor** | add screenpipe MCP to your project ([guide](/mcp-server)) |
+| **claude code** | use screenpipe MCP or curl the API ([guide](/claude-code)) |
+| **ollama** | configure in app settings, use any local model |
 
-<Tabs>
-  <Tab title="ollama">
-    1. install ollama from [ollama.ai](https://ollama.ai) and run your preferred model
+## what's next?
 
-    ```bash
-    # start ollama with your preferred model
-    ollama run phi4:14b-q4_K_M
-    ```
-
-    1. then configure screenpipe to use ollama in your settings with model phi4:14b-q4_K_M
-
-    that's it\! screenpipe will now use ollama for ai like search, rewind, and more. you can change the model in settings.
-  </Tab>
-  <Tab title="lmstudio">
-    to use lmstudio:
-
-    1. download and install [lmstudio](https://lmstudio.ai)
-    2. select your preferred model
-    3. start the local server
-
-    <Frame>
-      <img
-        src="public/lmstudio2.png"
-        alt="select model in lmstudio"
-        width={800}
-        height={450}
-        className="rounded-lg"
-      />
-    </Frame>
-
-    <Frame>
-      <img
-        src="public/lmstudio3.png"
-        alt="start server in lmstudio"
-        width={800}
-        height={450}
-        className="rounded-lg"
-      />
-    </Frame>
-
-    <Frame>
-      <img
-        src="public/lmstudio1.png"
-        alt="lmstudio setup"
-        width={800}
-        height={450}
-        className="rounded-lg"
-      />
-    </Frame>
-  </Tab>
-</Tabs>
-
-verify your ai provider by using the search or chat features in the app!
-
-### for developers
-
-if you're interested in building from source or contributing to screenpipe, please check our [contributing guide](https://github.com/screenpipe/screenpipe/blob/main/CONTRIBUTING.md).
+- [search your screen history](/search-screen-history) — find anything you've seen
+- [set up pipes](/pipes) — scheduled AI agents on your data
+- [CLI reference](/cli-reference) — all commands and options

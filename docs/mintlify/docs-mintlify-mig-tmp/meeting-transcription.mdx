@@ -1,178 +1,84 @@
 ---
-title: "automatic meeting transcription - local & private"
+title: "meeting transcription"
 sidebarTitle: "meeting transcription"
-description: "Automatically transcribe meetings with screenpipe. Local speech-to-text using Whisper, speaker identification, and AI-powered summaries. No cloud required."
+description: "Automatically transcribe meetings with screenpipe. Local speech-to-text using Whisper, speaker identification. No cloud required."
 icon: "microphone"
 ---
 
-<iframe
-  src="https://lottie.host/embed/7650e974-eaeb-4036-b2bc-5bd7a7c5356f/l76e9MBHBd.lottie"
-  width="100%"
-  height="150"
-  style={{border: "none", background: "transparent"}}
-/>
-
-screenpipe automatically transcribes all audio from your meetings, calls, and conversations. everything runs locally using Whisper for maximum privacy.
-
-## how it works
-
-1. **audio capture**: screenpipe records from your microphone and system audio
-2. **speech-to-text**: audio is transcribed using Whisper (runs locally)
-3. **speaker identification**: different speakers are automatically labeled
-4. **searchable storage**: transcripts are indexed and searchable
+screenpipe automatically transcribes all audio from your meetings, calls, and conversations. everything runs locally using Whisper.
 
 ## setup
 
-### basic setup
-
 ```bash
-# start screenpipe with audio enabled (default)
-screenpipe
-```
+# start with audio enabled (default)
+bunx screenpipe
 
-### capture both mic and system audio
-
-```bash
 # list available audio devices
-screenpipe --list-audio-devices
+bunx screenpipe audio list
 
 # capture specific devices
-screenpipe --audio-device "MacBook Pro Microphone" --audio-device "BlackHole 2ch"
+bunx screenpipe --audio-device "MacBook Pro Microphone" --audio-device "BlackHole 2ch"
 ```
 
 ### choose transcription engine
 
 ```bash
-# local (default) - most private
-screenpipe --audio-transcription-engine whisper-large-v3-turbo
+# local (default) — most private
+bunx screenpipe --audio-transcription-engine whisper-large-v3-turbo
 
-# cloud - faster, requires API key
-screenpipe --audio-transcription-engine deepgram
+# cloud — faster, requires API key
+bunx screenpipe --audio-transcription-engine deepgram
 ```
 
-## query transcriptions
+## search transcriptions
 
-```typescript
-import { pipe } from "@screenpipe/js";
+```bash
+# find discussions about a topic
+curl "http://localhost:3030/search?q=budget+review&content_type=audio&limit=10"
 
-// find discussions about a topic
-const results = await pipe.queryScreenpipe({
-  q: "budget review",
-  contentType: "audio",
-  limit: 10
-});
+# get today's meetings
+curl "http://localhost:3030/search?content_type=audio&start_time=2026-02-11T00:00:00Z"
 
-// get transcripts from today's meetings
-const today = new Date().toISOString().split('T')[0];
-const meetings = await pipe.queryScreenpipe({
-  startTime: today,
-  contentType: "audio"
-});
+# filter by speaker
+curl "http://localhost:3030/search?content_type=audio&speaker_ids=1,2"
+curl "http://localhost:3030/search?content_type=audio&speaker_name=John"
 ```
 
-## transcription quality tips
+## speaker identification
+
+screenpipe automatically identifies different speakers. manage them via API:
+
+```bash
+# get unnamed speakers for labeling
+curl "http://localhost:3030/speakers/unnamed?limit=10"
+
+# update a speaker's name
+curl -X POST http://localhost:3030/speakers/update \
+  -H "Content-Type: application/json" \
+  -d '{"id": 1, "name": "John Smith"}'
+
+# search speakers by name
+curl "http://localhost:3030/speakers/search?name=john"
+
+# merge duplicate speakers
+curl -X POST http://localhost:3030/speakers/merge \
+  -H "Content-Type: application/json" \
+  -d '{"speaker_to_keep_id": 1, "speaker_to_merge_id": 2}'
+
+# find similar speakers
+curl "http://localhost:3030/speakers/similar?speaker_id=1"
+```
+
+## tips
 
 - use a good microphone
 - reduce background noise
 - `whisper-large-v3-turbo` gives best accuracy
 - add `--language en` if you only speak English (faster)
 
-## speaker identification
-
-screenpipe automatically identifies different speakers:
-
-```typescript
-const results = await pipe.queryScreenpipe({
-  contentType: "audio"
-});
-
-for (const item of results.data) {
-  if (item.type === "Audio") {
-    console.log(`Speaker ID: ${item.content.speaker_id}`);
-    console.log(`Speaker Name: ${item.content.speaker?.name || "Unknown"}`);
-    console.log(`Text: ${item.content.transcription}`);
-  }
-}
-```
-
-### filter by speaker
-
-```typescript
-// filter by specific speaker IDs
-const results = await pipe.queryScreenpipe({
-  contentType: "audio",
-  speakerIds: [1, 2, 3]
-});
-
-// or use the REST API directly
-// GET http://localhost:3030/search?content_type=audio&speaker_ids=1,2,3
-// GET http://localhost:3030/search?content_type=audio&speaker_name=John
-```
-
-### speaker management API
-
-screenpipe provides REST endpoints to manage speakers:
-
-| endpoint | method | description |
-|----------|--------|-------------|
-| `/speakers/unnamed` | GET | get speakers without names assigned |
-| `/speakers/search?name=query` | GET | search speakers by name |
-| `/speakers/update` | POST | update speaker name or metadata |
-| `/speakers/merge` | POST | merge two speaker profiles |
-| `/speakers/reassign` | POST | reassign audio chunk to different speaker |
-| `/speakers/similar?speaker_id=1` | GET | find similar speakers |
-| `/speakers/delete` | POST | delete a speaker profile |
-| `/speakers/hallucination` | POST | mark speaker as false detection |
-
-### update speaker name
-
-```bash
-# update a speaker's name
-curl -X POST http://localhost:3030/speakers/update \
-  -H "Content-Type: application/json" \
-  -d '{"id": 1, "name": "John Smith"}'
-```
-
-### search speakers
-
-```bash
-# find speakers by name prefix
-curl "http://localhost:3030/speakers/search?name=john"
-
-# get unnamed speakers for labeling
-curl "http://localhost:3030/speakers/unnamed?limit=10&offset=0"
-```
-
-### merge duplicate speakers
-
-```bash
-# merge speaker 2 into speaker 1
-curl -X POST http://localhost:3030/speakers/merge \
-  -H "Content-Type: application/json" \
-  -d '{"speaker_to_keep_id": 1, "speaker_to_merge_id": 2}'
-```
-
-### reassign audio to different speaker
-
-```bash
-# reassign an audio chunk to a named speaker
-curl -X POST http://localhost:3030/speakers/reassign \
-  -H "Content-Type: application/json" \
-  -d '{
-    "audio_chunk_id": 123,
-    "new_speaker_name": "Jane Doe",
-    "propagate_similar": true
-  }'
-```
-
 ## privacy
 
 - all transcription runs locally on your device
 - audio files stored in `~/.screenpipe/data/`
-- no audio is sent to the cloud (unless you choose deepgram)
-- you can disable audio recording with `--disable-audio`
-
-## next steps
-
-- [install screenpipe](/getting-started)
-- [CLI audio options](/cli-reference#audio-options)
+- no audio sent to cloud unless you choose deepgram
+- disable with `--disable-audio`

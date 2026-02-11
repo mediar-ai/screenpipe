@@ -1,41 +1,25 @@
 ---
-title: "give AI memory of your screen - context for LLMs"
+title: "give AI memory of your screen"
 sidebarTitle: "ai memory"
-description: "Give your AI assistant memory of everything on your screen. Use screenpipe to provide context to ChatGPT, Claude, Ollama, and other LLMs."
+description: "Give your AI assistant memory of everything on your screen. Use screenpipe with Claude, Cursor, Ollama, and other LLMs."
 icon: "brain"
 ---
 
-screenpipe acts as a memory layer for AI, giving large language models context about what you've been doing on your computer.
+screenpipe acts as a memory layer for AI — it gives LLMs context about what you've been doing on your computer.
 
 ## why AI needs memory
 
-LLMs are powerful but stateless - they don't know what you were working on 5 minutes ago. screenpipe bridges this gap by:
+LLMs are stateless — they don't know what you were working on 5 minutes ago. screenpipe bridges this by:
 
-- capturing everything on your screen
+- capturing everything on your screen 24/7
 - extracting text via OCR
-- transcribing audio
-- making it all searchable and retrievable
+- making it searchable via REST API on `localhost:3030`
 
-## connect to AI providers
+## connect to AI
 
-### ollama (local)
+### MCP (recommended)
 
-```bash
-# start ollama
-ollama run phi4:14b-q4_K_M
-
-# configure in screenpipe settings
-# model: phi4:14b-q4_K_M
-# url: http://localhost:11434
-```
-
-### openai
-
-set your API key in screenpipe settings under AI configuration.
-
-### claude via MCP
-
-screenpipe can act as an MCP server, giving Claude direct access to your screen history:
+screenpipe has a built-in MCP server that works with Claude Desktop, Cursor, and other MCP-compatible tools:
 
 ```json
 {
@@ -50,77 +34,41 @@ screenpipe can act as an MCP server, giving Claude direct access to your screen 
 
 see [MCP server setup](/mcp-server) for details.
 
-## build AI-powered apps
+### pipes (scheduled agents)
 
-### context-aware chatbot
+[pipes](/pipes) are AI agents that run on a schedule and act on your screen data automatically — like syncing to Obsidian, tracking time in Toggl, or sending daily summaries.
 
-```typescript
-import { pipe } from "@screenpipe/js";
-import { generateText } from "ai";
+### direct API
 
-async function chatWithContext(userMessage: string) {
-  // get recent screen context
-  const context = await pipe.queryScreenpipe({
-    limit: 20,
-    contentType: "all"
-  });
+any tool that can make HTTP requests can query screenpipe:
 
-  // format context for LLM
-  const screenContext = context.data
-    .map(item => {
-      if (item.type === "OCR") {
-        return `[Screen - ${item.content.app_name}]: ${item.content.text}`;
-      } else {
-        return `[Audio]: ${item.content.transcription}`;
-      }
-    })
-    .join("\n");
+```bash
+# get recent screen activity
+curl "http://localhost:3030/search?content_type=ocr&limit=20"
 
-  // generate response with context
-  const response = await generateText({
-    model: yourModel,
-    prompt: `Based on the user's recent activity:\n${screenContext}\n\nUser question: ${userMessage}`
-  });
-
-  return response;
-}
-```
-
-### automatic note-taking
-
-```typescript
-// obsidian pipe example - syncs screen activity to notes
-import { pipe } from "@screenpipe/js";
-
-async function logToObsidian() {
-  const recentActivity = await pipe.queryScreenpipe({
-    startTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // last hour
-    contentType: "all"
-  });
-
-  // summarize with AI and write to Obsidian
-  // ... see obsidian pipe for full implementation
-}
+# search for specific content
+curl "http://localhost:3030/search?q=meeting+notes&app_name=Slack&limit=10"
 ```
 
 ## use cases
 
-| use case | how screenpipe helps |
-|----------|---------------------|
-| "what was I working on?" | search screen history by time |
+| use case | how |
+|----------|-----|
+| "what was I working on?" | search by time range |
 | "summarize today's meetings" | query audio transcriptions |
-| "find that code snippet" | search OCR text by content |
-| "what did john say about X?" | search transcriptions by keyword |
+| "find that code snippet" | search OCR text |
+| "auto-track my time" | toggl-sync pipe |
+| "sync activity to notes" | obsidian-sync pipe |
 
-## privacy-first AI
+## privacy-first
 
 - all data stays on your device
 - use local LLMs (Ollama, LMStudio) for complete privacy
+- filter what gets captured with `--ignored-windows` and `--included-windows`
 - no data sent to cloud unless you explicitly choose cloud providers
-- filter what gets captured with window inclusion/exclusion
 
 ## next steps
 
-- [install screenpipe](/getting-started)
-- [set up MCP server](/mcp-server)
-- [build a plugin](/plugins)
+- [set up MCP server](/mcp-server) — connect to Claude, Cursor
+- [set up pipes](/pipes) — scheduled AI agents
+- [CLI reference](/cli-reference) — search parameters and API endpoints

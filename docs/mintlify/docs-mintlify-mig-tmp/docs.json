@@ -35,7 +35,7 @@
           },
           {
             "group": "reference",
-            "pages": ["cli-reference", "sdk-reference"]
+            "pages": ["cli-reference"]
           },
           {
             "group": "compare",

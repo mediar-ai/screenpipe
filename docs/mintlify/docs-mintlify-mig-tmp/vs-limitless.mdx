@@ -45,19 +45,11 @@ screenpipe runs entirely on your device. no cloud account required.
 
 ### extensible
 
-build custom integrations:
+build custom integrations with the REST API or [pipes](/pipes):
 
-```typescript
-import { pipe } from "@screenpipe/js";
-
-// create your own AI workflows
-const context = await pipe.queryScreenpipe({
-  contentType: "all",
-  limit: 50
-});
-
-// process with any AI provider
-const summary = await generateSummary(context);
+```bash
+# query your screen data
+curl "http://localhost:3030/search?content_type=all&limit=50"
 ```
 
 ## for meeting transcription
@@ -66,12 +58,10 @@ screenpipe handles meetings just as well:
 
 ```bash
 # capture system audio (meeting apps) + microphone
-screenpipe \
+bunx screenpipe \
   --audio-device "MacBook Pro Microphone" \
   --audio-device "BlackHole 2ch"
 ```
-
-install the **meeting** pipe for automatic summaries and action items.
 
 ## self-hosting benefits
 
@@ -85,13 +75,7 @@ install the **meeting** pipe for automatic summaries and action items.
 ## get started
 
 ```bash
-# macos/linux
-curl -fsSL get.screenpi.pe/cli | sh
-screenpipe
-
-# windows
-iwr get.screenpi.pe/cli.ps1 | iex
-screenpipe.exe
+bunx screenpipe
 ```
 
 or [download the desktop app](https://screenpi.pe)

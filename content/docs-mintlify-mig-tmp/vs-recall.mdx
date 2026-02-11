@@ -42,16 +42,10 @@ Microsoft Recall is a Windows 11 feature that captures screenshots and makes the
 
 ### extensible
 
-build custom integrations with the pipes system:
+build custom integrations with the REST API or [pipes](/pipes):
 
-```typescript
-import { pipe } from "@screenpipe/js";
-
-// build anything on top of your screen data
-const data = await pipe.queryScreenpipe({
-  q: "meeting notes",
-  contentType: "all"
-});
+```bash
+curl "http://localhost:3030/search?q=meeting+notes&content_type=all"
 ```
 
 ## recall privacy concerns
@@ -74,7 +68,7 @@ screenpipe addresses these:
 
 ```bash
 # exclude password managers and banking apps
-screenpipe \
+bunx screenpipe \
   --ignored-windows "1Password" \
   --ignored-windows "Bitwarden" \
   --ignored-windows "Chase" \
@@ -84,11 +78,7 @@ screenpipe \
 ## get started
 
 ```bash
-# macos/linux
-curl -fsSL get.screenpi.pe/cli | sh
-
-# windows
-iwr get.screenpi.pe/cli.ps1 | iex
+bunx screenpipe
 ```
 
 or [download the desktop app](https://screenpi.pe)

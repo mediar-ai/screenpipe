@@ -1,344 +1,196 @@
 ---
-title: "screenpipe CLI reference - all commands and options"
+title: "CLI reference"
 sidebarTitle: "cli reference"
-description: "Complete CLI reference for screenpipe: screen recording options, audio settings, OCR engines, pipe management, and advanced configuration."
+description: "Complete CLI reference for screenpipe: recording, search, pipes, audio, and vision commands."
 icon: "terminal"
 ---
 
-below is the detailed cli reference for screenpipe's core functionality.
-
-### core options
-
-- **fps** (`\-f, --fps <FLOAT>`): frames per second for continuous recording
-  - default: `1.0` (non-macos), `0.5` (macos)
-  - storage impact: `1 fps ≈ 30 gb/month`, `5 fps ≈ 150 gb/month`
-- **port** (`\-p, --port <INT>`): port to run the server on
-  - default: `3030`
-- **data-dir** (`--data-dir <PATH>`): data directory
-  - default: `$HOME/.screenpipe`
-- **debug** (`--debug`): enable debug logging
-  - default: `false`
-
-### audio options
-
-- **audio-chunk-duration** (`\-d, --audio-chunk-duration <INT>`): audio chunk duration in seconds
-  - default: `30`
-- **disable-audio** (`--disable-audio`): disable audio recording
-  - default: `false`
-- **audio-device** (`\-i, --audio-device <STRING>`): audio devices to use (can specify multiple)
-- **realtime-audio-device** (`\-r, --realtime-audio-device <STRING>`): devices for realtime transcription
-- **list-audio-devices** (`--list-audio-devices`): list available audio devices
-- **audio-transcription-engine** (`\-a, --audio-transcription-engine <ENGINE>`): transcription engine
-  - options:
-    - `deepgram`: cloud-based, high quality (free tier available)
-    - `whisper-tiny`: local, lightweight, privacy-focused
-    - `whisper-large`: local, higher quality than tiny
-    - `whisper-large-v3-turbo`: local, highest quality
-  - default: `whisper-large-v3-turbo`
-- **enable-realtime-audio-transcription** (`--enable-realtime-audio-transcription`): enable realtime transcription
-  - default: `false`
-
-### vision options
-
-- **disable-vision** (`--disable-vision`): disable vision recording
-  - default: `false`
-- **list-monitors** (`--list-monitors`): list available monitors
-- **monitor-id** (`\-m, --monitor-id <INT>`): monitor ids to record (can specify multiple)
-- **ignored-windows** (`--ignored-windows <STRING>`): windows to ignore by title
-  - example: `--ignored-windows "Spotify" --ignored-windows "Chrome"`
-- **included-windows** (`--included-windows <STRING>`): windows to include by title
-  - example: `--included-windows "Code" --included-windows "Terminal"`
-- **video-chunk-duration** (`--video-chunk-duration <INT>`): video chunk duration in seconds
-  - default: `60`
-- **ocr-engine** (`\-o, --ocr-engine <ENGINE>`): ocr engine selection
-  - options:
-    - `apple-native`: default for macos
-    - `windows-native`: default for windows
-    - `tesseract`: default for linux
-    - `unstructured`: cloud-based (free tier available)
-    - `custom`: configurable via `SCREENPIPE_CUSTOM_OCR_CONFIG`
-
-#### custom ocr engine example
+## install & run
 
 ```bash
-# 1. setup python environment & ocr server
-python -m venv venv
-source venv/bin/activate
+# recommended: run via npm
+bunx screenpipe
 
-pip install fastapi uvicorn easyocr pillow numpy
-
-# create ocr server file
-cat > app.py << EOF
-from fastapi import FastAPI, HTTPException
-import base64
-import io
-from PIL import Image
-import numpy as np
-import time
-import easyocr
-
-app = FastAPI()
-reader = easyocr.Reader(['en', 'ch_sim'])
-
-@app.post("/ocr")
-async def read_ocr(payload: dict):
-    image_b64 = payload.get("image")
-    if not image_b64:
-        raise HTTPException(status_code=400, detail="no image data provided")
-    try:
-        start = time.time()
-        image_data = base64.b64decode(image_b64)
-        image = Image.open(io.BytesIO(image_data))
-        image_np = np.array(image)
-        result = reader.readtext(image_np)
-        text = "\n".join([item[1] for item in result])
-        confidence = sum([item[2] for item in result]) / len(result) if result else 0.0
-        print(f"ocr took {time.time() - start:.2f} seconds")
-        return {
-            "text": text,
-            "structured_data": {},
-            "confidence": confidence
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ocr error: {str(e)}")
-EOF
-
-# start the ocr server
-uvicorn app:app --host 0.0.0.0 --port 8000
-
-# 2. configure screenpipe
-export SCREENPIPE_CUSTOM_OCR_CONFIG='{
-  "api_url": "http://localhost:8000/ocr",
-  "api_key": "",
-  "timeout_ms": 5000
-}'
-
-# 3. run screenpipe with custom ocr
-screenpipe add \
-  path/to/videos \
-  --ocr-engine custom \
-  --data-dir /tmp/sp
-
-# 4. cleanup
-# stop server with ctrl+c
-deactivate
-rm -rf venv app.py
+# or install globally
+npm i -g screenpipe
+screenpipe
 ```
 
-### language & privacy
+## recording options
 
-- **language** (`\-l, --language <LANG>`): languages to support (can specify multiple)
-- **use-pii-removal** (`--use-pii-removal`): enable pii removal from ocr text
-  - default: `false`
+### core
 
-### voice activity detection
+| flag | description | default |
+| --- | --- | --- |
+| `-f, --fps <FLOAT>` | frames per second for recording | `1.0` (macOS: `0.5`) |
+| `-p, --port <INT>` | API server port | `3030` |
+| `--data-dir <PATH>` | data directory | `~/.screenpipe` |
+| `--debug` | enable debug logging | `false` |
 
-- **vad-engine** (`--vad-engine <ENGINE>`): voice activity detection engine
-  - options: `silero`, `webrtc`
-  - default: `silero`
-- **vad-sensitivity** (`--vad-sensitivity <LEVEL>`): vad sensitivity level
-  - options: `low`, `medium`, `high`
-  - default: `high`
+### audio
 
-### experimental features
+| flag | description | default |
+| --- | --- | --- |
+| `-d, --audio-chunk-duration <INT>` | chunk duration (seconds) | `30` |
+| `--disable-audio` | disable audio recording | `false` |
+| `-i, --audio-device <STRING>` | audio device (repeatable) | — |
+| `-a, --audio-transcription-engine <ENGINE>` | STT engine | `whisper-large-v3-turbo` |
+| `--vad-engine <ENGINE>` | voice activity detection (`silero`/`webrtc`) | `silero` |
+| `--vad-sensitivity <LEVEL>` | VAD sensitivity (`low`/`medium`/`high`) | `high` |
 
-- **enable-llm** (`--enable-llm`): enable local llm api
-  - default: `false`
-- **enable-ui-monitoring** (`--enable-ui-monitoring`): enable ui monitoring (macos only)
-  - default: `false`
-- **enable-frame-cache** (`--enable-frame-cache`): enable experimental video frame cache
-  - default: `false`
-- **capture-unfocused-windows** (`--capture-unfocused-windows`): capture unfocused windows
-  - default: `false`
-- **enable-realtime-audio-transcription** (`--enable-realtime-audio-transcription`): enable realtime transcription
-  - default: `false`
-  - requires: at least one `--realtime-audio-device`
-  - note: experimental feature, may impact system performance
+transcription engines: `deepgram`, `whisper-tiny`, `whisper-large`, `whisper-large-v3-turbo`
 
-### subcommands
+### vision
 
-#### pipe management
+| flag | description | default |
+| --- | --- | --- |
+| `--disable-vision` | disable screen recording | `false` |
+| `-m, --monitor-id <INT>` | monitor to record (repeatable) | all |
+| `-o, --ocr-engine <ENGINE>` | OCR engine | platform native |
+| `--ignored-windows <STRING>` | ignore windows by title (repeatable) | — |
+| `--included-windows <STRING>` | only capture these windows (repeatable) | — |
+| `--video-chunk-duration <INT>` | video chunk duration (seconds) | `60` |
+
+OCR engines: `apple-native`, `windows-native`, `tesseract`, `unstructured`, `custom`
+
+### privacy
+
+| flag | description | default |
+| --- | --- | --- |
+| `-l, --language <LANG>` | languages to support (repeatable) | — |
+| `--use-pii-removal` | redact PII from OCR text | `false` |
+
+### experimental
+
+| flag | description | default |
+| --- | --- | --- |
+| `--enable-ui-monitoring` | capture UI events via accessibility (macOS) | `false` |
+| `--enable-frame-cache` | video frame cache | `false` |
+| `--capture-unfocused-windows` | capture unfocused windows | `false` |
+
+## subcommands
+
+### pipe management
+
+pipes are scheduled AI agents that run on your screen data. see [pipes docs](/pipes) for details.
 
 ```bash
 # list all pipes
-screenpipe pipe list [--output <FORMAT>] [--port <PORT>]
+bunx screenpipe pipe list
 
-# install a new pipe
-screenpipe pipe install <URL> [--output <FORMAT>] [--port <PORT>]
+# install a pipe
+bunx screenpipe pipe install /path/to/pipe
+bunx screenpipe pipe install https://example.com/pipe.md
 
-# get pipe info
-screenpipe pipe info <ID> [--output <FORMAT>] [--port <PORT>]
+# enable/disable
+bunx screenpipe pipe enable my-pipe
+bunx screenpipe pipe disable my-pipe
 
-# enable/disable pipe
-screenpipe pipe enable <ID> [--port <PORT>]
-screenpipe pipe disable <ID> [--port <PORT>]
+# run once manually
+bunx screenpipe pipe run my-pipe
 
-# delete pipe
-screenpipe pipe delete <ID> [-y] [--port <PORT>]
+# view logs
+bunx screenpipe pipe logs my-pipe
+bunx screenpipe pipe logs my-pipe -f  # follow
 
-# purge all pipes
-screenpipe pipe purge [-y] [--port <PORT>]
+# delete
+bunx screenpipe pipe delete my-pipe
 ```
 
-#### add external data to screenpipe (ocr only)
+### add external data
 
-allows you to add external screen recordings to screenpipe, for example it could be your iphone screen recordings, your physical journal photos, etc.
-
-companies use this to index their product's screen recordings, for example.
+add screen recordings from external sources (iPhone recordings, journal photos, etc.):
 
 ```bash
-# add video files
-screenpipe add <PATH> [--data-dir <DIR>] [--output <FORMAT>] [--pattern <REGEX>] [--ocr-engine <ENGINE>] [--metadata-override <PATH>]
+bunx screenpipe add /path/to/videos --ocr-engine apple-native
 ```
 
-by default, screenpipe extracts metadata (fps, duration, creation time) directly from video files. however, you can override these with a metadata file:
-
-#### metadata override example
+optional: override metadata with a JSON file:
 
 ```bash
-# 1. setup test videos
-mkdir -p $HOME/Downloads/tmpvideos
-
-# copy 3 videos with random names
-find $HOME/.screenpipe/data -type f -name "*monitor*.mp4" | head -n 3 | while read -r file; do
-    case $RANDOM in
-        [0-9][0-9][0-9][0-9])
-            cp "$file" "$HOME/Downloads/tmpvideos/video1.mp4"
-            ;;
-        [0-9][0-9][0-9][0-9][0-9])
-            cp "$file" "$HOME/Downloads/tmpvideos/video2.mp4"
-            ;;
-        *)
-            cp "$file" "$HOME/Downloads/tmpvideos/video3.mp4"
-            ;;
-    esac
-done
-
-# 2. create metadata override file
-cat > metadata.json << EOF
-{
-  "overrides": [
-    {
-      "file_path": "$HOME/Downloads/tmpvideos/video1.mp4",
-      "metadata": {
-        "creation_time": "2024-03-20T10:00:00Z",
-        "fps": 30.0,
-        "duration": 300.0,
-        "device_name": "macbook pro"
-      }
-    },
-    {
-      "file_path": "$HOME/Downloads/tmpvideos/video2.mp4",
-      "metadata": {
-        "creation_time": "2024-03-21T15:30:00Z",
-        "fps": 24.0,
-        "duration": 400.0,
-        "device_name": "external monitor"
-      }
-    },
-    {
-      "file_path": "$HOME/Downloads/tmpvideos/video3.mp4",
-      "metadata": {
-        "creation_time": "2024-03-22T09:15:00Z",
-        "fps": 60.0,
-        "duration": 200.0,
-        "device_name": "ipad screen"
-      }
-    }
-  ]
-}
-EOF
-
-# 3. run screenpipe with metadata override
-screenpipe add \
-  $HOME/Downloads/tmpvideos \
-  --metadata-override metadata.json \
-  --data-dir /tmp/sp
-
-# 4. cleanup
-rm -rf $HOME/Downloads/tmpvideos
-rm metadata.json
+bunx screenpipe add /path/to/videos --metadata-override metadata.json
 ```
 
-note: if you don't provide a metadata override file, screenpipe will automatically extract metadata from the video files. use overrides when you need to specify custom metadata or when the automatic extraction fails.
-
-#### database
+### status
 
 ```bash
-# run migrations
-screenpipe migrate
+bunx screenpipe status
+bunx screenpipe status --json
 ```
 
-### shell completions
-
-the `screenpipe` cli supports generating shell completions for popular shells. follow the steps below to enable autocompletion for your shell:
-
-#### bash
-
-1. add the following to your `.bashrc` profile:
+### audio devices
 
 ```bash
+bunx screenpipe audio list
+bunx screenpipe audio start <device-id>
+bunx screenpipe audio stop <device-id>
+```
+
+### vision devices
+
+```bash
+bunx screenpipe vision list
+```
+
+### database
+
+```bash
+bunx screenpipe migrate
+```
+
+## API endpoints
+
+screenpipe serves a REST API on `localhost:3030`:
+
+| method | endpoint | description |
+| --- | --- | --- |
+| GET | `/search` | search screen & audio content |
+| GET | `/health` | server health check |
+| GET | `/audio/list` | list audio devices |
+| GET | `/vision/list` | list monitors |
+| GET | `/frames/{id}` | get frame data |
+| GET | `/frames/{id}/ocr` | get frame OCR text |
+| POST | `/tags/{type}/{id}` | add tags |
+| DELETE | `/tags/{type}/{id}` | remove tags |
+| POST | `/raw_sql` | execute raw SQL |
+| POST | `/add` | add content to database |
+| GET | `/semantic-search` | semantic search |
+| GET | `/search/keyword` | keyword search |
+
+### search example
+
+```bash
+curl "http://localhost:3030/search?q=meeting&limit=10&content_type=ocr"
+```
+
+### search parameters
+
+| param | type | description |
+| --- | --- | --- |
+| `q` | string | search query |
+| `limit` | int | max results |
+| `offset` | int | pagination offset |
+| `content_type` | string | `ocr`, `audio`, `ui`, `all` |
+| `start_time` | ISO 8601 | filter start |
+| `end_time` | ISO 8601 | filter end |
+| `app_name` | string | filter by app |
+| `window_name` | string | filter by window title |
+| `browser_url` | string | filter by browser URL |
+| `min_length` | int | minimum text length |
+| `max_length` | int | maximum text length |
+
+## shell completions
+
+```bash
+# bash
 eval "$(screenpipe completions bash)"
-```
-2. reload your profile:
 
-```bash
-source ~/.bashrc
-```
-
-#### zsh
-
-1. add the following to your `.zshrc` profile:
-
-```bash
+# zsh
 eval "$(screenpipe completions zsh)"
-```
-2. reload your profile:
 
-```bash
-source ~/.zshrc
-```
-
-#### fish
-
-1. create `\~/.config/fish/conf.d/screenpipe.fish` and add this line to it:
-
-```fish
+# fish
 screenpipe completions fish | source
-```
 
-#### powershell
-
-1. add the following to the end of your profile file:
-
-```powershell
+# powershell
 screenpipe completions powershell | Out-String | Invoke-Expression
 ```
-
-- for macos/linux, the profile is located at `\~/.config/powershell/Microsoft.PowerShell_profile.ps1`
-- for windows location is either:
-  - `%userprofile%\\Documents\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1` powershell 5
-  - `%userprofile%\\Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1` powershell 6+
-- to create the profile file you can run this in powershell:
-
-```powershell
-if (-not (Test-Path $profile)) { New-Item $profile -Force }
-```
-- to edit your profile run this in powershell:
-
-```powershell
-Invoke-Item $profile
-```
-
-1. reload your profile:
-
-```powershell
-. $PROFILE
-```
-
-### llm links
-
-paste these links into your cursor chat for context:
-
-- https://github.com/screenpipe/screenpipe/blob/main/crates/screenpipe-server/src/bin/screenpipe-server.rs
-- https://github.com/screenpipe/screenpipe/blob/main/crates/screenpipe-server/src/cli.rs

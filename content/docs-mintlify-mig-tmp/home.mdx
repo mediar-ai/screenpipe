@@ -1,37 +1,43 @@
 ---
-title: "screenpipe - open source AI screen recorder with OCR & search"
+title: "screenpipe — your screen's memory layer"
 sidebarTitle: "home"
-description: "screenpipe is an open source screen recorder that captures your screen 24/7, extracts text with OCR, transcribes audio, and lets you search everything with AI. Local-first, privacy-focused alternative to Rewind."
+description: "screenpipe captures your screen 24/7, extracts text with OCR, and lets you search everything with AI. local-first, open source."
 icon: "house"
 ---
 
-<iframe
-  src="https://lottie.host/embed/374da79b-a70e-4023-8a23-3dda0e17bb65/KpiWyXpo35.lottie"
-  width="100%"
-  height="200"
-  style={{border: "none", background: "transparent"}}
-/>
+screenpipe records your screen continuously and makes everything searchable. it runs locally, stores data on your machine, and provides APIs for AI integration.
 
-screenpipe empowers developers to build context-aware ai tools by:
-- capturing screen & audio 24/7
-- processing everything locally for privacy
-- providing clean apis for ai integration
-- supporting all major platforms
+## what it does
 
-built in rust for reliability.
+- **captures screen 24/7** — OCR extracts text from every frame
+- **local storage** — sqlite database + media files on your machine
+- **search API** — find anything you've seen via `localhost:3030/search`
+- **pipes** — scheduled AI agents that act on your screen data ([learn more](/pipes))
+- **MCP server** — connect to Claude, Cursor, and other AI assistants ([learn more](/mcp-server))
 
-## key features
+## quick start
 
-- **24/7 media capture**: captures screen and audio data continuously, storing it locally.
-- **personalized ai**: enables ai models to be powered by your captured data.
-- **open source & secure**: your data stays private, 100% local, with complete control over storage and processing.
-- **cross-platform**: works on windows, macos, and linux.
-- **multi-device support**: supports multiple monitors & audio devices for comprehensive data capture.
+```bash
+# install and run
+bunx screenpipe
 
-## target audience
-
-screenpipe is suitable for developers and anyone interested in automating data capture and creating desktop context-aware ai agents.
+# or download the desktop app
+# https://screenpi.pe/onboarding
+```
 
 ## what's next?
 
-- [getting started](/getting-started)
+<CardGroup cols={2}>
+  <Card title="getting started" icon="rocket" href="/getting-started">
+    install screenpipe on macOS, Windows, or Linux
+  </Card>
+  <Card title="search screen history" icon="magnifying-glass" href="/search-screen-history">
+    find anything you've seen on your screen
+  </Card>
+  <Card title="pipes" icon="wand-magic-sparkles" href="/pipes">
+    scheduled AI agents on your screen data
+  </Card>
+  <Card title="MCP server" icon="server" href="/mcp-server">
+    connect screenpipe to AI assistants
+  </Card>
+</CardGroup>
