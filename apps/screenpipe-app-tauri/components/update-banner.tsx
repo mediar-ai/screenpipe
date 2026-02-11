@@ -69,7 +69,7 @@ interface UpdateBannerProps {
 }
 
 export function UpdateBanner({ className, compact = false }: UpdateBannerProps) {
-  const { isVisible, updateInfo, isInstalling, isDownloading, downloadProgress, setIsVisible, setIsInstalling, pendingUpdate } = useUpdateBanner();
+  const { isVisible, updateInfo, isInstalling, isDownloading, downloadProgress, setIsVisible, setIsInstalling, pendingUpdate, authRequired, setAuthRequired } = useUpdateBanner();
   const { toast } = useToast();
 
   const handleUpdate = async () => {
@@ -99,7 +99,6 @@ export function UpdateBanner({ className, compact = false }: UpdateBannerProps) 
           const cpuArch = arch();
           update = await check({ endpoints: [
             `https://screenpi.pe/api/app-update/stable/windows-${cpuArch}/{{current_version}}`,
-            `https://cdn.crabnebula.app/update/mediar/screenpipe/windows-${cpuArch}/{{current_version}}`,
           ] } as any);
         }
 
@@ -139,6 +138,57 @@ export function UpdateBanner({ className, compact = false }: UpdateBannerProps) 
       });
     }
   };
+
+  // Show auth-required state — user needs to sign in to download updates
+  if (authRequired) {
+    if (compact) {
+      return (
+        <div className={cn("flex items-center gap-2 text-xs text-muted-foreground", className)}>
+          <Sparkles className="h-3 w-3 text-primary" />
+          <span>v{authRequired.version} available</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 px-2 text-xs"
+            onClick={() => window.location.href = "/settings"}
+          >
+            sign in to update
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <div className={cn(
+        "flex items-center justify-between gap-3 px-3 py-2 bg-muted/50 border-b text-sm",
+        className
+      )}>
+        <div className="flex items-center gap-2 flex-1">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span>
+            screenpipe <span className="font-medium">v{authRequired.version}</span> is available — sign in to download
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            className="h-7 px-3 text-xs"
+            onClick={() => window.location.href = "/settings"}
+          >
+            sign in
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => setAuthRequired(null)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Show downloading state even before updateInfo is set
   if (isDownloading && !updateInfo) {
@@ -250,13 +300,14 @@ export function UpdateBanner({ className, compact = false }: UpdateBannerProps) 
 
 // Hook to listen for update events from Rust
 export function useUpdateListener() {
-  const { setIsVisible, setUpdateInfo, setIsDownloading, setDownloadProgress } = useUpdateBanner();
+  const { setIsVisible, setUpdateInfo, setIsDownloading, setDownloadProgress, setAuthRequired } = useUpdateBanner();
 
   useEffect(() => {
     let unlistenAvailable: (() => void) | undefined;
     let unlistenClick: (() => void) | undefined;
     let unlistenDownloading: (() => void) | undefined;
     let unlistenProgress: (() => void) | undefined;
+    let unlistenAuth: (() => void) | undefined;
 
     const setupListeners = async () => {
       // Listen for download starting (shows banner immediately)
@@ -283,6 +334,13 @@ export function useUpdateListener() {
       unlistenClick = await listen("update-now-clicked", () => {
         setIsVisible(true);
       });
+
+      // Listen for auth-required (user needs to sign in to download update)
+      unlistenAuth = await listen<AuthRequiredInfo>("update-auth-required", (event) => {
+        setAuthRequired(event.payload);
+        setIsDownloading(false);
+        setDownloadProgress(null);
+      });
     };
 
     setupListeners();
@@ -292,6 +350,7 @@ export function useUpdateListener() {
       unlistenClick?.();
       unlistenDownloading?.();
       unlistenProgress?.();
+      unlistenAuth?.();
     };
-  }, [setIsVisible, setUpdateInfo, setIsDownloading, setDownloadProgress]);
+  }, [setIsVisible, setUpdateInfo, setIsDownloading, setDownloadProgress, setAuthRequired]);
 }

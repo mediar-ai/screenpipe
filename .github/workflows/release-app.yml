@@ -206,20 +206,8 @@ jobs:
             sed -i 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' apps/screenpipe-app-tauri/src-tauri/Cargo.toml
           fi
 
-      - name: create draft release
-        if: needs.check_commit.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch'
-        uses: crabnebula-dev/cloud-release@v0.2.6
-        with:
-          command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
-          api-key: ${{ secrets.CN_API_KEY }}
-
-      - name: create beta draft release
-        if: needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch'
-        uses: crabnebula-dev/cloud-release@v0.2.6
-        continue-on-error: true
-        with:
-          command: release draft ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri
-          api-key: ${{ secrets.CN_API_KEY }}
+      - name: draft placeholder
+        run: echo "R2-based releases — no CN draft needed"
 
   publish-tauri:
     needs: [check_commit, draft]
@@ -923,20 +911,12 @@ jobs:
         continue-on-error: true
         shell: powershell
         env:
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-          CN_VERBOSE: "2"
-          USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
         run: |
-          # download cn cli
-          $cliDir = Join-Path $Env:GITHUB_WORKSPACE "cn-cli-temp"
-          New-Item -ItemType Directory -Force -Path $cliDir
-          $cliUrl = "https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/windows-binary-x86_64"
-          $cliExe = Join-Path $cliDir "cn.exe"
-          Write-Host "downloading crabnebula cli..."
-          Invoke-WebRequest -Uri $cliUrl -UserAgent $env:USER_AGENT -OutFile $cliExe
-
           cd apps/screenpipe-app-tauri/src-tauri
 
           Write-Host "=== Rebuilding with beta config ==="
@@ -949,13 +929,30 @@ jobs:
           Pop-Location
           Write-Host "=== Beta rebuild complete ==="
 
-          Write-Host "Uploading to beta channel..."
-          try {
-            & $cliExe release upload ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri -vv
-            Write-Host "Beta upload successful!"
-          } catch {
-            Write-Host "Beta upload failed (non-fatal): $_"
+          # Upload beta to R2
+          if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing AWS CLI..."
+            Invoke-WebRequest -Uri "https://awscli.amazonaws.com/AWSCLIV2.msi" -OutFile "$env:TEMP\awscli.msi"
+            Start-Process msiexec.exe -Wait -ArgumentList "/i $env:TEMP\awscli.msi /quiet"
+            $env:PATH += ";C:\Program Files\Amazon\AWSCLIV2"
           }
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          $r2Endpoint = "https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          $r2Prefix = "s3://screenpipe-releases/beta/releases/$version/x86_64-pc-windows-msvc"
+
+          Write-Host "Uploading beta Windows bundles for v$version to R2..."
+
+          Get-ChildItem "target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
+            aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
+            Write-Host "  ✅ $($_.Name)"
+          }
+
+          Get-ChildItem "target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip","target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sig" -ErrorAction SilentlyContinue | ForEach-Object {
+            aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
+            Write-Host "  ✅ $($_.Name)"
+          }
+
+          Write-Host "R2 beta upload complete for Windows"
 
       - name: Clean stale beta artifacts before stable upload
         if: matrix.os_type != 'windows'
@@ -995,176 +992,37 @@ jobs:
           echo "Beta artifacts:"
           find src-tauri/target -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.exe" 2>/dev/null
 
-      - name: Upload Assets to CrabNebula Beta (Non-Windows)
-        if: matrix.os_type != 'windows' && (needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch')
-        uses: crabnebula-dev/cloud-release@v0.2.6
+      - name: Upload beta to R2 (macOS)
+        if: matrix.os_type == 'macos' && (needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch')
         continue-on-error: true
-        env:
-          CN_VERBOSE: "2"
-        with:
-          command: release upload ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri -vv
-          api-key: ${{ secrets.CN_API_KEY }}
-          path: ./apps/screenpipe-app-tauri/src-tauri
-
-  # Upload to CrabNebula from GitHub-hosted runner.
-  # Self-hosted macOS runners fail CN uploads due to HTTP/2 + macOS native TLS
-  # causing SSL errors on large file uploads to Cloudflare. GitHub-hosted runners
-  # use a different network path and don't have this issue.
-  cn-upload:
-    needs: [check_commit, draft, publish-tauri]
-    # Run even if some platforms failed — upload whatever succeeded
-    if: always() && needs.draft.result == 'success' && (needs.check_commit.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            bundle_subdir: dmg
-            dmg_glob: "*.dmg"
-            updater_subdir: macos
-          - target: x86_64-apple-darwin
-            bundle_subdir: dmg
-            dmg_glob: "*.dmg"
-            updater_subdir: macos
-          - target: x86_64-pc-windows-msvc
-            bundle_subdir: nsis
-            dmg_glob: "*.exe"
-            updater_subdir: nsis
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.commit_hash || github.ref }}
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Download artifacts from R2
+        shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           TARGET="${{ matrix.target }}"
-          R2_PREFIX="s3://screenpipe-releases/releases/${VERSION}/${TARGET}"
-
-          # Recreate the Tauri bundle directory structure that cn CLI expects
           BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
-          mkdir -p "${BUNDLE_DIR}/${{ matrix.bundle_subdir }}"
-          mkdir -p "${BUNDLE_DIR}/${{ matrix.updater_subdir }}"
+          R2_PREFIX="s3://screenpipe-releases/beta/releases/${VERSION}/${TARGET}"
 
-          echo "Downloading ${TARGET} artifacts from R2..."
-          aws s3 sync "${R2_PREFIX}/" "/tmp/r2-artifacts/" --endpoint-url "$R2_ENDPOINT" --exclude "*beta*"
+          echo "uploading beta ${TARGET} bundles for v${VERSION} to R2..."
 
-          echo "Downloaded files:"
-          ls -la /tmp/r2-artifacts/
-
-          # Place files into the correct bundle subdirectories
-          # macOS: dmg/ has .dmg, macos/ has .app.tar.gz + .sig
-          # Windows: nsis/ has .exe + .nsis.zip + .sig
-          for f in /tmp/r2-artifacts/*; do
-            [ -f "$f" ] || continue
-            name=$(basename "$f")
-            # Skip any beta artifacts that slipped through
-            case "$name" in *beta*) echo "  ⏭ skipping beta: $name"; continue ;; esac
-            case "$name" in
-              *.dmg)
-                cp "$f" "${BUNDLE_DIR}/${{ matrix.bundle_subdir }}/"
-                echo "  → ${{ matrix.bundle_subdir }}/$name"
-                ;;
-              *.app.tar.gz|*.app.tar.gz.sig)
-                cp "$f" "${BUNDLE_DIR}/${{ matrix.updater_subdir }}/"
-                echo "  → ${{ matrix.updater_subdir }}/$name"
-                ;;
-              *.exe|*.exe.sig|*.nsis.zip|*.nsis.zip.sig)
-                cp "$f" "${BUNDLE_DIR}/${{ matrix.bundle_subdir }}/"
-                echo "  → ${{ matrix.bundle_subdir }}/$name"
-                ;;
-              *)
-                # Catch-all: put in updater subdir
-                cp "$f" "${BUNDLE_DIR}/${{ matrix.updater_subdir }}/"
-                echo "  → ${{ matrix.updater_subdir }}/$name (catch-all)"
-                ;;
-            esac
+          for f in ${BUNDLE_DIR}/dmg/*.dmg; do
+            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename $f)" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename $f)"
           done
 
-          echo "Bundle directory structure:"
-          find "${BUNDLE_DIR}" -type f
+          for f in ${BUNDLE_DIR}/macos/*.tar.gz ${BUNDLE_DIR}/macos/*.sig; do
+            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename $f)" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename $f)"
+          done
 
-      - name: Install CN CLI
-        run: |
-          curl -sL https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/linux-x86_64 -o cn
-          chmod +x cn
-          sudo mv cn /usr/local/bin/cn
-          cn --version
+          echo "R2 beta upload complete for ${TARGET}"
 
-      - name: Upload to CrabNebula Cloud
-        env:
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-        shell: bash
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/bundle"
-          SLUG="${{ secrets.CN_APP_SLUG }}"
-
-          echo "Uploading to CN release ${VERSION}..."
-
-          # First try framework auto-detect
-          cd apps/screenpipe-app-tauri/src-tauri
-          cn release upload "${SLUG}" --framework tauri || true
-          cd -
-
-          # Then explicitly upload updater artifacts that framework mode might miss
-          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ] || [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
-            PLATFORM="${{ matrix.target == 'aarch64-apple-darwin' && 'darwin-aarch64' || 'darwin-x86_64' }}"
-            PUBLIC="${{ matrix.target == 'aarch64-apple-darwin' && 'dmg-aarch64' || 'dmg-x86_64' }}"
-
-            # Upload updater bundle (.app.tar.gz + .sig)
-            for f in "${BUNDLE_DIR}/macos/"*.app.tar.gz; do
-              [ -f "$f" ] || continue
-              sig="${f}.sig"
-              [ -f "$sig" ] || continue
-              echo "Uploading updater: $(basename "$f") (platform: ${PLATFORM})"
-              cn release upload "${SLUG}" "${VERSION}" --file "$f" --signature "$sig" --update-platform "${PLATFORM}" || echo "  ⚠ updater upload failed (may already exist)"
-            done
-
-            # Upload DMG as public download
-            for f in "${BUNDLE_DIR}/dmg/"*.dmg; do
-              [ -f "$f" ] || continue
-              echo "Uploading public: $(basename "$f")"
-              cn release upload "${SLUG}" "${VERSION}" --file "$f" --public-platform "${PUBLIC}" || echo "  ⚠ dmg upload failed (may already exist)"
-            done
-
-          elif [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
-            # Upload NSIS updater bundle (.nsis.zip + .sig)
-            for f in "${BUNDLE_DIR}/nsis/"*.nsis.zip; do
-              [ -f "$f" ] || continue
-              sig="${f}.sig"
-              [ -f "$sig" ] || continue
-              echo "Uploading updater: $(basename "$f")"
-              cn release upload "${SLUG}" "${VERSION}" --file "$f" --signature "$sig" --update-platform "windows-x86_64" || echo "  ⚠ nsis updater upload failed (may already exist)"
-            done
-
-            # Upload EXE as public download
-            for f in "${BUNDLE_DIR}/nsis/"*.exe; do
-              [ -f "$f" ] || continue
-              echo "Uploading public: $(basename "$f")"
-              cn release upload "${SLUG}" "${VERSION}" --file "$f" --public-platform "nsis-x86_64" || echo "  ⚠ exe upload failed (may already exist)"
-            done
-          fi
-
-          echo "CN upload complete"
-
+  # Write R2 latest.json manifests and optionally publish
   publish-release:
-    needs: [check_commit, publish-tauri, cn-upload]
-    # Only auto-publish when commit message contains "release-app-publish"
-    # workflow_dispatch builds only create drafts - publish manually after testing
-    if: needs.check_commit.outputs.should_publish == 'true' && needs.publish-tauri.result == 'success' && needs.cn-upload.result == 'success'
+    needs: [check_commit, publish-tauri]
+    if: needs.check_commit.outputs.should_publish == 'true' && needs.publish-tauri.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1177,20 +1035,70 @@ jobs:
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Publish Release on CrabNebula Cloud
-        uses: crabnebula-dev/cloud-release@v0.2.6
-        with:
-          command: release publish ${{ secrets.CN_APP_SLUG }} ${{ env.VERSION }}
-          api-key: ${{ secrets.CN_API_KEY }}
+      - name: Write R2 latest.json (stable)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          VERSION="${{ env.VERSION }}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          BASE="https://screenpi.pe/api/app-update/download/stable"
 
-      - name: Also publish Beta release
-        uses: crabnebula-dev/cloud-release@v0.2.6
-        continue-on-error: true
-        with:
-          command: release publish ${{ secrets.CN_APP_SLUG_BETA }} ${{ env.VERSION }}
-          api-key: ${{ secrets.CN_API_KEY }}
+          mkdir -p /tmp/sigs
+          for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc; do
+            mkdir -p /tmp/sigs/${target}
+            aws s3 cp "s3://screenpipe-releases/releases/${VERSION}/${target}/" /tmp/sigs/${target}/ \
+              --recursive --exclude "*" --include "*.sig" --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true
+          done
 
-      - name: Write R2 latest.json manifest
+          # Build Tauri-format latest.json with signature contents
+          python3 << 'PYEOF'
+          import json, os, glob
+
+          version = os.environ["VERSION"]
+          pub_date = os.environ.get("PUB_DATE", "")
+          base = os.environ["BASE"]
+
+          # Map R2 target dirs to Tauri platform keys
+          target_map = {
+              "aarch64-apple-darwin": "darwin-aarch64",
+              "x86_64-apple-darwin": "darwin-x86_64",
+              "x86_64-pc-windows-msvc": "windows-x86_64",
+          }
+
+          platforms = {}
+          for target, platform_key in target_map.items():
+              sig_dir = f"/tmp/sigs/{target}"
+              sig_files = glob.glob(f"{sig_dir}/*.sig")
+              if not sig_files:
+                  continue
+              sig_file = sig_files[0]
+              with open(sig_file, "r") as f:
+                  signature = f.read().strip()
+              # Artifact name = sig filename minus .sig
+              artifact = os.path.basename(sig_file).replace(".sig", "")
+              platforms[platform_key] = {
+                  "url": f"{base}/{version}/{target}/{artifact}",
+                  "signature": signature,
+              }
+
+          data = {
+              "version": version,
+              "pub_date": pub_date,
+              "platforms": platforms,
+          }
+          with open("/tmp/latest.json", "w") as f:
+              json.dump(data, f, indent=2)
+          print(json.dumps(data, indent=2))
+          PYEOF
+
+          aws s3 cp /tmp/latest.json "s3://screenpipe-releases/latest.json" \
+            --endpoint-url "$R2_ENDPOINT" --content-type "application/json"
+          echo "✅ stable latest.json for v${VERSION}"
+
+      - name: Write R2 latest.json (beta)
         continue-on-error: true
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -1200,29 +1108,56 @@ jobs:
         run: |
           VERSION="${{ env.VERSION }}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          BASE="https://screenpi.pe/api/app-update/download/beta"
 
-          # List what was actually uploaded for each platform
-          PLATFORMS=""
+          mkdir -p /tmp/beta-sigs
           for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc; do
-            FILES=$(aws s3 ls "s3://screenpipe-releases/releases/${VERSION}/${target}/" --endpoint-url "$R2_ENDPOINT" 2>/dev/null | awk '{print $4}' | tr '\n' ',' | sed 's/,$//')
-            if [ -n "$FILES" ]; then
-              PLATFORMS="${PLATFORMS}\"${target}\": { \"files\": [$(echo $FILES | sed 's/\([^,]*\)/"\1"/g')] },"
-            fi
+            mkdir -p /tmp/beta-sigs/${target}
+            aws s3 cp "s3://screenpipe-releases/beta/releases/${VERSION}/${target}/" /tmp/beta-sigs/${target}/ \
+              --recursive --exclude "*" --include "*.sig" --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true
           done
-          PLATFORMS=$(echo "$PLATFORMS" | sed 's/,$//')
 
-          cat > /tmp/latest.json << MANIFEST
-          {
-            "version": "${VERSION}",
-            "pub_date": "${PUB_DATE}",
-            "platforms": { ${PLATFORMS} }
+          python3 << 'PYEOF'
+          import json, os, glob
+
+          version = os.environ["VERSION"]
+          pub_date = os.environ.get("PUB_DATE", "")
+          base = os.environ["BASE"]
+
+          target_map = {
+              "aarch64-apple-darwin": "darwin-aarch64",
+              "x86_64-apple-darwin": "darwin-x86_64",
+              "x86_64-pc-windows-msvc": "windows-x86_64",
           }
-          MANIFEST
 
-          # Pretty-print and upload
-          python3 -m json.tool /tmp/latest.json > /tmp/latest-pretty.json 2>/dev/null && mv /tmp/latest-pretty.json /tmp/latest.json
-          aws s3 cp /tmp/latest.json "s3://screenpipe-releases/latest.json" --endpoint-url "$R2_ENDPOINT" --content-type "application/json"
-          echo "✅ R2 latest.json updated for v${VERSION}"
+          platforms = {}
+          for target, platform_key in target_map.items():
+              sig_dir = f"/tmp/beta-sigs/{target}"
+              sig_files = glob.glob(f"{sig_dir}/*.sig")
+              if not sig_files:
+                  continue
+              sig_file = sig_files[0]
+              with open(sig_file, "r") as f:
+                  signature = f.read().strip()
+              artifact = os.path.basename(sig_file).replace(".sig", "")
+              platforms[platform_key] = {
+                  "url": f"{base}/{version}/{target}/{artifact}",
+                  "signature": signature,
+              }
+
+          data = {
+              "version": version,
+              "pub_date": pub_date,
+              "platforms": platforms,
+          }
+          with open("/tmp/beta-latest.json", "w") as f:
+              json.dump(data, f, indent=2)
+          print(json.dumps(data, indent=2))
+          PYEOF
+
+          aws s3 cp /tmp/beta-latest.json "s3://screenpipe-releases/beta/latest.json" \
+            --endpoint-url "$R2_ENDPOINT" --content-type "application/json"
+          echo "✅ beta latest.json for v${VERSION}"
 
       - name: Create testing notification
         if: needs.check_commit.outputs.should_test == 'true'
@@ -1230,7 +1165,6 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Create release discussion issue
             const message = `
             ## 🧪 testing needed for v${{ env.VERSION }}
             
@@ -1242,7 +1176,6 @@ jobs:
             each tester who provides quality feedback will receive a $20 bounty through algora.
             `;
             
-            // Create a new issue for testing discussion
             const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
