@@ -396,6 +396,8 @@ pub struct HealthCheckResponse {
     pub message: String,
     pub verbose_instructions: Option<String>,
     pub device_status_details: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub monitors: Option<Vec<String>>,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Clone)]
@@ -975,6 +977,23 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         )
     };
 
+    // Get active monitors
+    let monitors = if !state.vision_disabled {
+        let monitor_list = list_monitors().await;
+        if monitor_list.is_empty() {
+            None
+        } else {
+            Some(
+                monitor_list
+                    .iter()
+                    .map(|m| format!("Display {} ({}x{})", m.id(), m.width(), m.height()))
+                    .collect(),
+            )
+        }
+    } else {
+        None
+    };
+
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
         status_code,
@@ -992,6 +1011,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         message,
         verbose_instructions,
         device_status_details,
+        monitors,
     })
 }
 
