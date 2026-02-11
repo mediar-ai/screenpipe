@@ -1059,7 +1059,7 @@ jobs:
           mkdir -p "${BUNDLE_DIR}/${{ matrix.updater_subdir }}"
 
           echo "Downloading ${TARGET} artifacts from R2..."
-          aws s3 sync "${R2_PREFIX}/" "/tmp/r2-artifacts/" --endpoint-url "$R2_ENDPOINT"
+          aws s3 sync "${R2_PREFIX}/" "/tmp/r2-artifacts/" --endpoint-url "$R2_ENDPOINT" --exclude "*beta*"
 
           echo "Downloaded files:"
           ls -la /tmp/r2-artifacts/
@@ -1070,6 +1070,8 @@ jobs:
           for f in /tmp/r2-artifacts/*; do
             [ -f "$f" ] || continue
             name=$(basename "$f")
+            # Skip any beta artifacts that slipped through
+            case "$name" in *beta*) echo "  ⏭ skipping beta: $name"; continue ;; esac
             case "$name" in
               *.dmg)
                 cp "$f" "${BUNDLE_DIR}/${{ matrix.bundle_subdir }}/"
@@ -1094,12 +1096,69 @@ jobs:
           echo "Bundle directory structure:"
           find "${BUNDLE_DIR}" -type f
 
+      - name: Install CN CLI
+        run: |
+          curl -sL https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/linux-x86_64 -o cn
+          chmod +x cn
+          sudo mv cn /usr/local/bin/cn
+          cn --version
+
       - name: Upload to CrabNebula Cloud
-        uses: crabnebula-dev/cloud-release@v0.2.6
-        with:
-          command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
-          api-key: ${{ secrets.CN_API_KEY }}
-          path: ./apps/screenpipe-app-tauri/src-tauri
+        env:
+          CN_API_KEY: ${{ secrets.CN_API_KEY }}
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/bundle"
+          SLUG="${{ secrets.CN_APP_SLUG }}"
+
+          echo "Uploading to CN release ${VERSION}..."
+
+          # First try framework auto-detect
+          cd apps/screenpipe-app-tauri/src-tauri
+          cn release upload "${SLUG}" --framework tauri || true
+          cd -
+
+          # Then explicitly upload updater artifacts that framework mode might miss
+          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ] || [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+            PLATFORM="${{ matrix.target == 'aarch64-apple-darwin' && 'darwin-aarch64' || 'darwin-x86_64' }}"
+            PUBLIC="${{ matrix.target == 'aarch64-apple-darwin' && 'dmg-aarch64' || 'dmg-x86_64' }}"
+
+            # Upload updater bundle (.app.tar.gz + .sig)
+            for f in "${BUNDLE_DIR}/macos/"*.app.tar.gz; do
+              [ -f "$f" ] || continue
+              sig="${f}.sig"
+              [ -f "$sig" ] || continue
+              echo "Uploading updater: $(basename "$f") (platform: ${PLATFORM})"
+              cn release upload "${SLUG}" "${VERSION}" --file "$f" --signature "$sig" --update-platform "${PLATFORM}" || echo "  ⚠ updater upload failed (may already exist)"
+            done
+
+            # Upload DMG as public download
+            for f in "${BUNDLE_DIR}/dmg/"*.dmg; do
+              [ -f "$f" ] || continue
+              echo "Uploading public: $(basename "$f")"
+              cn release upload "${SLUG}" "${VERSION}" --file "$f" --public-platform "${PUBLIC}" || echo "  ⚠ dmg upload failed (may already exist)"
+            done
+
+          elif [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
+            # Upload NSIS updater bundle (.nsis.zip + .sig)
+            for f in "${BUNDLE_DIR}/nsis/"*.nsis.zip; do
+              [ -f "$f" ] || continue
+              sig="${f}.sig"
+              [ -f "$sig" ] || continue
+              echo "Uploading updater: $(basename "$f")"
+              cn release upload "${SLUG}" "${VERSION}" --file "$f" --signature "$sig" --update-platform "windows-x86_64" || echo "  ⚠ nsis updater upload failed (may already exist)"
+            done
+
+            # Upload EXE as public download
+            for f in "${BUNDLE_DIR}/nsis/"*.exe; do
+              [ -f "$f" ] || continue
+              echo "Uploading public: $(basename "$f")"
+              cn release upload "${SLUG}" "${VERSION}" --file "$f" --public-platform "nsis-x86_64" || echo "  ⚠ exe upload failed (may already exist)"
+            done
+          fi
+
+          echo "CN upload complete"
 
   publish-release:
     needs: [check_commit, publish-tauri, cn-upload]
