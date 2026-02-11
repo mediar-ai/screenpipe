@@ -6,7 +6,7 @@ import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { isAfter, subDays, format } from "date-fns";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { ZoomIn, ZoomOut, Mic } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import posthog from "posthog-js";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,8 @@ interface AppGroup {
 	color: string;
 	colors: string[]; // Colors for all apps
 	iconSrc?: string;
+	/** If set, this group starts a new day — render a day boundary divider before it */
+	dayBoundaryDate?: string;
 }
 
 // App category definitions for semantic grayscale coloring
@@ -234,40 +236,51 @@ export const TimelineSlider = ({
 		let currentApp = "";
 		let currentGroup: StreamTimeSeriesResponse[] = [];
 		let currentGroupAllApps = new Set<string>();
+		let currentDayKey = "";
+
+		const flushGroup = () => {
+			if (currentGroup.length > 0) {
+				const allApps = [...currentGroupAllApps];
+				groups.push({
+					appName: currentApp,
+					appNames: allApps,
+					frames: currentGroup,
+					color: stringToColor(currentApp),
+					colors: allApps.map(app => stringToColor(app)),
+				});
+			}
+		};
 
 		visibleFrames.forEach((frame) => {
 			const appName = getFrameAppName(frame);
 			const allAppsInFrame = getFrameAppNames(frame);
+			const frameDate = new Date(frame.timestamp);
+			const dayKey = frameDate.toDateString();
 
-			if (appName !== currentApp) {
-				if (currentGroup.length > 0) {
-					const allApps = [...currentGroupAllApps];
-					groups.push({
-						appName: currentApp,
-						appNames: allApps,
-						frames: currentGroup,
-						color: stringToColor(currentApp),
-						colors: allApps.map(app => stringToColor(app)),
-					});
-				}
+			// Break group at day boundary OR app change
+			if ((currentDayKey && dayKey !== currentDayKey) || appName !== currentApp) {
+				flushGroup();
 				currentApp = appName;
 				currentGroup = [frame];
 				currentGroupAllApps = new Set(allAppsInFrame);
+				currentDayKey = dayKey;
 			} else {
 				currentGroup.push(frame);
 				allAppsInFrame.forEach(app => currentGroupAllApps.add(app));
+				if (!currentDayKey) currentDayKey = dayKey;
 			}
 		});
 
-		if (currentGroup.length > 0) {
-			const allApps = [...currentGroupAllApps];
-			groups.push({
-				appName: currentApp,
-				appNames: allApps,
-				frames: currentGroup,
-				color: stringToColor(currentApp),
-				colors: allApps.map(app => stringToColor(app)),
-			});
+		flushGroup();
+
+		// Mark day boundaries: when a group's first frame is on a different day
+		// than the previous group's first frame, tag it with a date label
+		for (let i = 1; i < groups.length; i++) {
+			const prevDate = new Date(groups[i - 1].frames[0]?.timestamp);
+			const currDate = new Date(groups[i].frames[0]?.timestamp);
+			if (prevDate.toDateString() !== currDate.toDateString()) {
+				groups[i].dayBoundaryDate = format(currDate, 'EEE, MMM d');
+			}
 		}
 
 		return groups;
@@ -518,8 +531,30 @@ export const TimelineSlider = ({
 						const showFullLabel = groupWidth > 100;
 
 						return (
+							<React.Fragment key={`${group.appName}-${groupIndex}`}>
+								{/* Day boundary divider — gap + line + date pill */}
+								{group.dayBoundaryDate && (
+									<div
+										className="flex-shrink-0 flex items-end h-full relative"
+										style={{ width: '16px' }}
+									>
+										{/* Vertical accent line */}
+										<div
+											className="absolute left-1/2 -translate-x-1/2 w-px bg-primary/60"
+											style={{ top: '10%', bottom: '0' }}
+										/>
+										{/* Date pill below the line */}
+										<div
+											className="absolute top-full mt-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap z-10"
+											style={{ direction: 'ltr' }}
+										>
+											<span className="text-[9px] font-medium text-primary bg-primary/15 border border-primary/25 rounded-full px-2 py-0.5">
+												{group.dayBoundaryDate}
+											</span>
+										</div>
+									</div>
+								)}
 							<div
-								key={`${group.appName}-${groupIndex}`}
 								className="flex flex-nowrap items-end h-full group/appgroup relative"
 								dir="rtl"
 								style={{
@@ -703,6 +738,7 @@ export const TimelineSlider = ({
 									);
 								})}
 							</div>
+							</React.Fragment>
 						);
 					})}
 					<div ref={observerTargetRef} className="h-full w-1" />
