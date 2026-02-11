@@ -61,3 +61,4 @@ __pycache__/
 
 screenpipe-app-tauri/src-tauri/.next/
 .vercel
+.wrangler/
