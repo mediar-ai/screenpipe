@@ -995,7 +995,7 @@ jobs:
           RETRY_DELAY=30
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "Upload attempt $attempt/$MAX_RETRIES..."
-            if $CN release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv --path ./apps/screenpipe-app-tauri/src-tauri; then
+            if (cd ./apps/screenpipe-app-tauri/src-tauri && $CN release upload ${{ secrets.CN_APP_SLUG }} --framework tauri); then
               echo "Upload successful!"
               exit 0
             fi
