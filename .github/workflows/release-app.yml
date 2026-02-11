@@ -959,14 +959,14 @@ jobs:
 
           echo "uploading ${TARGET} bundles for v${VERSION} to R2..."
 
-          # Upload DMG
-          for f in ${BUNDLE_DIR}/dmg/*.dmg; do
-            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename $f)" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename $f)"
+          # Upload DMG (quote paths — filenames may contain spaces like "screenpipe beta_2.0.422_x64.dmg")
+          find "${BUNDLE_DIR}/dmg" -name "*.dmg" -type f | while IFS= read -r f; do
+            aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename "$f")"
           done
 
           # Upload updater artifacts (.tar.gz + .sig)
-          for f in ${BUNDLE_DIR}/macos/*.tar.gz ${BUNDLE_DIR}/macos/*.sig; do
-            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename $f)" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename $f)"
+          find "${BUNDLE_DIR}/macos" \( -name "*.tar.gz" -o -name "*.sig" \) -type f | while IFS= read -r f; do
+            aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename "$f")"
           done
 
           echo "R2 upload complete for ${TARGET}"
