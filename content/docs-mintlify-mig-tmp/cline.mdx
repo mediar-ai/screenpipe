@@ -1,0 +1,69 @@
+---
+title: "cline - VS Code agent with screen memory"
+sidebarTitle: "cline"
+description: "Connect screenpipe to Cline to give this autonomous VS Code agent access to your screen history and context."
+icon: "code"
+---
+
+[Cline](https://github.com/cline/cline) is an autonomous AI coding agent for VS Code with 30k+ GitHub stars. it supports MCP servers, so you can connect screenpipe to give Cline context about what you've been working on across all your apps.
+
+## setup
+
+1. open VS Code with Cline installed
+2. open Cline settings (gear icon in Cline panel)
+3. go to **MCP Servers**
+4. add screenpipe:
+
+```json
+{
+  "mcpServers": {
+    "screenpipe": {
+      "command": "npx",
+      "args": ["-y", "screenpipe-mcp"]
+    }
+  }
+}
+```
+
+5. click the refresh icon to reload MCP servers
+
+## usage
+
+once configured, Cline can search your screen history while coding:
+
+```
+> I was reading documentation about async/await patterns earlier,
+> find it and help me apply those patterns here
+
+> what error messages have I seen in my terminal today?
+
+> find the API response format I was looking at in the browser
+```
+
+## plan mode with context
+
+Cline's "Plan" mode works great with screenpipe:
+
+1. switch to Plan mode
+2. ask Cline to find relevant context from your screen history
+3. let it create a plan based on what you've been working on
+4. switch to Act mode to execute
+
+```
+> [Plan mode] I was researching authentication patterns earlier,
+> find what I was looking at and plan how to implement it here
+```
+
+## available tools
+
+screenpipe provides:
+
+- **search-content** - search screen OCR, audio transcriptions
+- **search-ui-events** - search accessibility data: keyboard input, mouse clicks, app switches, clipboard (macOS)
+- **get-ui-event-stats** - get aggregated app usage statistics
+
+## requirements
+
+- screenpipe running on localhost:3030
+- VS Code with Cline extension
+- Node.js >= 18.0.0

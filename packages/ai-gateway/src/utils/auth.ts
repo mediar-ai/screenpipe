@@ -78,6 +78,19 @@ export async function validateAuth(request: Request, env: Env): Promise<AuthResu
     };
   }
 
+  // UUID user without subscription = logged_in tier
+  // (they provided a valid Supabase user ID, just not subscribed)
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (UUID_REGEX.test(token)) {
+    console.log('UUID token detected without subscription, granting logged_in tier');
+    return {
+      isValid: true,
+      tier: 'logged_in',
+      deviceId,
+      userId: userId || token,
+    };
+  }
+
   // Clerk user ID without subscription = logged_in tier
   // (won't pass JWT verification below, so catch it here)
   const CLERK_ID_PATTERN = /^user_[a-zA-Z0-9]+$/;

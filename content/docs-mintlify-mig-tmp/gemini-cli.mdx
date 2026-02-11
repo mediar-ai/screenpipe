@@ -1,0 +1,79 @@
+---
+title: "gemini CLI - google's AI with screen context"
+sidebarTitle: "gemini cli"
+description: "Use screenpipe with Gemini CLI to give Google's AI access to your screen history and audio transcriptions."
+icon: "wand-magic-sparkles"
+---
+
+[Gemini CLI](https://github.com/google/gemini-cli) is Google's terminal-based AI coding assistant. it supports MCP servers, so you can connect screenpipe to give Gemini context about what you've been working on.
+
+## setup
+
+Gemini CLI uses MCP for external tools. add screenpipe to your config:
+
+```bash
+# add screenpipe MCP server
+gemini config mcp add screenpipe "npx -y screenpipe-mcp"
+```
+
+or edit your config file directly:
+
+```json
+{
+  "mcpServers": {
+    "screenpipe": {
+      "command": "npx",
+      "args": ["-y", "screenpipe-mcp"]
+    }
+  }
+}
+```
+
+restart Gemini CLI after configuration.
+
+## usage
+
+once configured, Gemini can search your screen history:
+
+```bash
+gemini
+
+> what was I working on this morning?
+
+> find the error message I saw in my terminal earlier
+
+> summarize the documentation I was reading about kubernetes
+```
+
+## available tools
+
+screenpipe provides these MCP tools to Gemini:
+
+- **search-content** - search screen OCR, audio transcriptions
+- **search-ui-events** - search accessibility data: keyboard input, mouse clicks, app switches, clipboard (macOS)
+- **get-ui-event-stats** - get aggregated UI event statistics by app
+- **export-video** - create video exports from screen recordings
+
+## example workflows
+
+**context-aware coding:**
+```
+> I was looking at a react component earlier that handled
+> form validation, find it and help me implement something similar
+```
+
+**debug from memory:**
+```
+> there was an error in my build output, find it and help me fix it
+```
+
+**recall documentation:**
+```
+> what did that API documentation say about rate limits?
+```
+
+## requirements
+
+- screenpipe running on localhost:3030
+- Gemini CLI installed
+- Node.js >= 18.0.0

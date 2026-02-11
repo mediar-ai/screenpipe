@@ -1,0 +1,114 @@
+---
+title: "screenpipe vs Limitless - self-hosted alternative"
+sidebarTitle: "vs limitless"
+description: "Compare screenpipe to Limitless.ai. screenpipe is the self-hosted, open source alternative with complete data ownership and privacy."
+icon: "scale-balanced"
+---
+
+Limitless.ai offers an AI-powered pendant and app for recording meetings and conversations. screenpipe provides similar AI memory capabilities but entirely self-hosted and open source.
+
+## comparison
+
+| feature | screenpipe | limitless |
+|---------|-----------|-----------|
+| **hardware** | uses your existing devices | requires pendant |
+| **open source** | yes (MIT) | no |
+| **data location** | 100% local | cloud-based |
+| **platforms** | macOS, Windows, Linux | iOS, web |
+| **screen capture** | yes | no |
+| **audio capture** | yes | yes |
+| **self-hosted** | yes | no |
+
+## why choose screenpipe?
+
+### no hardware purchase
+
+use your existing computer, microphone, and webcam. no additional hardware required.
+
+### screen + audio
+
+limitless only captures audio. screenpipe captures:
+- screen content with OCR
+- audio transcription
+- UI elements (experimental)
+
+### complete privacy
+
+- all data stays on your device
+- use local AI models (Ollama)
+- no cloud dependency
+- audit the source code yourself
+
+### no cloud dependency
+
+screenpipe runs entirely on your device. no cloud account required.
+
+### extensible
+
+build custom integrations:
+
+```typescript
+import { pipe } from "@screenpipe/js";
+
+// create your own AI workflows
+const context = await pipe.queryScreenpipe({
+  contentType: "all",
+  limit: 50
+});
+
+// process with any AI provider
+const summary = await generateSummary(context);
+```
+
+## for meeting transcription
+
+screenpipe handles meetings just as well:
+
+```bash
+# capture system audio (meeting apps) + microphone
+screenpipe \
+  --audio-device "MacBook Pro Microphone" \
+  --audio-device "BlackHole 2ch"
+```
+
+install the **meeting** pipe for automatic summaries and action items.
+
+## self-hosting benefits
+
+| limitless cloud | screenpipe local |
+|----------------|------------------|
+| data on their servers | data on your device |
+| internet required | works offline |
+| cloud dependency | works offline |
+| vendor lock-in | export anytime |
+
+## get started
+
+```bash
+# macos/linux
+curl -fsSL get.screenpi.pe/cli | sh
+screenpipe
+
+# windows
+iwr get.screenpi.pe/cli.ps1 | iex
+screenpipe.exe
+```
+
+or [download the desktop app](https://screenpi.pe)
+
+---
+
+## more comparisons
+
+looking for detailed feature comparisons? check out our main comparison pages:
+
+- [screenpipe vs Limitless (full comparison)](https://screenpi.pe/compare/limitless) - in-depth analysis with feature tables
+- [screenpipe vs Microsoft Recall](https://screenpi.pe/compare/microsoft-recall) - privacy-focused alternative
+- [screenpipe vs Rewind](https://screenpi.pe/compare/limitless) - open source alternative
+- [all comparisons](https://screenpi.pe/compare) - see how screenpipe stacks up
+
+## resources
+
+- [AI meeting notes guide](https://screenpi.pe/resources/use-cases/ai-meeting-notes) - automatic transcription setup
+- [local AI assistant setup](https://screenpi.pe/resources/use-cases/local-ai-assistant) - run AI 100% locally
+- [screenpipe blog](https://screenpi.pe/blog) - latest updates and tutorials
