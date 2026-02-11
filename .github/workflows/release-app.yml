@@ -977,13 +977,35 @@ jobs:
 
       - name: Upload Assets to CrabNebula Cloud (Non-Windows)
         if: matrix.os_type != 'windows' && (needs.check_commit.outputs.should_release == 'true' || github.event_name == 'workflow_dispatch')
-        uses: crabnebula-dev/cloud-release@v0.2.6
         env:
-          CN_VERBOSE: "2"
-        with:
-          command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
-          api-key: ${{ secrets.CN_API_KEY }}
-          path: ./apps/screenpipe-app-tauri/src-tauri
+          CN_API_KEY: ${{ secrets.CN_API_KEY }}
+        shell: bash
+        run: |
+          # Install CN CLI
+          if ! command -v cn 2>/dev/null; then
+            curl -sL https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/osx-aarch64 -o /tmp/cn || \
+            curl -sL https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/osx-x86_64 -o /tmp/cn
+            chmod +x /tmp/cn
+            CN=/tmp/cn
+          else
+            CN=cn
+          fi
+
+          MAX_RETRIES=3
+          RETRY_DELAY=30
+          for attempt in $(seq 1 $MAX_RETRIES); do
+            echo "Upload attempt $attempt/$MAX_RETRIES..."
+            if $CN release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv --path ./apps/screenpipe-app-tauri/src-tauri; then
+              echo "Upload successful!"
+              exit 0
+            fi
+            if [ $attempt -lt $MAX_RETRIES ]; then
+              echo "Upload failed, retrying in ${RETRY_DELAY}s..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          echo "Upload failed after $MAX_RETRIES attempts"
+          exit 1
 
       - name: Rebuild with beta config (Non-Windows)
         if: matrix.os_type != 'windows' && (needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch')
