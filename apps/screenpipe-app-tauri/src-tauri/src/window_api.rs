@@ -797,6 +797,7 @@ impl ShowRewindWindow {
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace |
                                         NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
                                     );
+                                    unsafe { make_webview_first_responder(&panel); }
                                     panel.order_front_regardless();
                                     panel.make_key_window();
                                     let _ = app_for_emit.emit("window-focused", true);
@@ -859,6 +860,7 @@ impl ShowRewindWindow {
                                         if let Ok(panel) = app_clone.get_webview_panel("main-window") {
                                             unsafe {
                                                 let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
+                                                make_webview_first_responder(&panel);
                                             }
                                         }
                                     }
@@ -1160,6 +1162,7 @@ impl ShowRewindWindow {
                                     if let Ok(panel) = app_clone.get_webview_panel(&lbl) {
                                         unsafe {
                                             let _: () = msg_send![&*panel, setAlphaValue: 1.0f64];
+                                            make_webview_first_responder(&panel);
                                         }
                                     }
                                 }
