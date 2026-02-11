@@ -183,25 +183,9 @@ jobs:
               fi
             fi
 
-            # Windows: try self-hosted, wait up to 2 min, fallback to GH-hosted
-            WINRUNNER=$(check_runner "windows-desktop-test")
-
-            if [ "$WINRUNNER" = "available" ]; then
-              echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
-              echo "✅ Windows self-hosted is available"
-            elif [ "$WINRUNNER" = "busy" ]; then
-              RESULT=$(wait_for_runner "windows-desktop-test" 120)
-              if [ "$RESULT" = "available" ]; then
-                echo "windows_runner=windows-desktop-test" >> $GITHUB_OUTPUT
-                echo "✅ Windows self-hosted became available"
-              else
-                echo "windows_runner=windows-2022" >> $GITHUB_OUTPUT
-                echo "ℹ️ Windows self-hosted timed out — using GH-hosted"
-              fi
-            else
-              echo "windows_runner=windows-2022" >> $GITHUB_OUTPUT
-              echo "ℹ️ Windows self-hosted offline — using GH-hosted"
-            fi
+            # Always use GH-hosted Windows — self-hosted is unreliable for builds
+            echo "windows_runner=windows-2022" >> $GITHUB_OUTPUT
+            echo "ℹ️ Using GH-hosted Windows runner (windows-2022)"
           fi
 
   draft:
