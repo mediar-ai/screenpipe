@@ -560,6 +560,7 @@ export function ObsidianSyncCard() {
   };
 
   const isLoggedIn = Boolean(appSettings?.user?.token);
+  const isSubscribed = Boolean(appSettings?.user?.cloud_subscribed);
 
   return (
     <Card className="border-border bg-card overflow-hidden">
@@ -712,21 +713,25 @@ export function ObsidianSyncCard() {
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 <AlertCircle className="h-3 w-3 inline mr-1" />
-                {isLoggedIn
-                  ? "usage limit reached · upgrade for higher limits"
-                  : "usage limit reached · sign in for 2x more"}
+                {isSubscribed
+                  ? "usage limit reached · retrying shortly"
+                  : isLoggedIn
+                    ? "usage limit reached · upgrade for higher limits"
+                    : "usage limit reached · sign in for 2x more"}
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs h-6 gap-1"
-                onClick={async () => {
-                  const { open } = await import("@tauri-apps/plugin-shell");
-                  await open(isLoggedIn ? "https://screenpi.pe/pricing" : "https://screenpi.pe/login");
-                }}
-              >
-                {isLoggedIn ? "upgrade" : "sign in"}
-              </Button>
+              {!isSubscribed && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-6 gap-1"
+                  onClick={async () => {
+                    const { open } = await import("@tauri-apps/plugin-shell");
+                    await open(isLoggedIn ? "https://screenpi.pe/pricing" : "https://screenpi.pe/login");
+                  }}
+                >
+                  {isLoggedIn ? "upgrade" : "sign in"}
+                </Button>
+              )}
             </div>
           </div>
         )}
