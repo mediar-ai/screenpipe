@@ -205,15 +205,9 @@ export function PipesSection() {
                     </Badge>
                   )}
 
-                  {pipe.last_success === true && (
-                    <span className="text-xs text-muted-foreground">✓</span>
-                  )}
-                  {pipe.last_success === false && (
-                    <span className="text-xs text-muted-foreground">✗</span>
-                  )}
-
                   {pipe.last_run && (
                     <span className="text-xs text-muted-foreground">
+                      {pipe.last_success === true ? "✓" : "✗"}{" "}
                       {new Date(pipe.last_run).toLocaleTimeString()}
                     </span>
                   )}
@@ -275,10 +269,10 @@ export function PipesSection() {
                     {/* Logs */}
                     <div>
                       <Label className="text-xs">recent runs</Label>
-                      <div className="mt-1 space-y-1 max-h-40 overflow-y-auto">
+                      <div className="mt-1 space-y-2 max-h-64 overflow-y-auto">
                         {logs.length === 0 ? (
                           <p className="text-xs text-muted-foreground">
-                            no runs yet
+                            no runs yet — click ▶ to run manually
                           </p>
                         ) : (
                           logs
@@ -287,26 +281,33 @@ export function PipesSection() {
                             .map((log, i) => (
                               <div
                                 key={i}
-                                className="flex items-center gap-2 text-xs font-mono"
+                                className="border rounded p-2 space-y-1"
                               >
-                                <span className="text-muted-foreground">
-                                  {new Date(log.started_at).toLocaleString()}
-                                </span>
-                                <span className="text-muted-foreground">
-                                  {log.success ? "✓" : "✗"}
-                                </span>
-                                <span className="text-muted-foreground">
-                                  {Math.round(
-                                    (new Date(log.finished_at).getTime() -
-                                      new Date(log.started_at).getTime()) /
-                                      1000
-                                  )}
-                                  s
-                                </span>
-                                {!log.success && log.stderr && (
-                                  <span className="text-muted-foreground truncate max-w-64">
-                                    {log.stderr.split("\n")[0]}
+                                <div className="flex items-center gap-2 text-xs font-mono">
+                                  <span className="text-muted-foreground">
+                                    {new Date(log.started_at).toLocaleString()}
                                   </span>
+                                  <span>
+                                    {log.success ? "✓" : "✗"}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {Math.round(
+                                      (new Date(log.finished_at).getTime() -
+                                        new Date(log.started_at).getTime()) /
+                                        1000
+                                    )}
+                                    s
+                                  </span>
+                                </div>
+                                {log.success && log.stdout && (
+                                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-20 overflow-y-auto">
+                                    {log.stdout.slice(0, 500)}
+                                  </pre>
+                                )}
+                                {!log.success && log.stderr && (
+                                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-20 overflow-y-auto">
+                                    {log.stderr.slice(0, 500)}
+                                  </pre>
                                 )}
                               </div>
                             ))
