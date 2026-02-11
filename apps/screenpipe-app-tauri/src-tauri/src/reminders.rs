@@ -102,7 +102,7 @@ pub async fn reminders_status(
 
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (app, state);
+        let _ = (_app, state);
         Ok(RemindersStatus {
             available: false,
             authorized: false,
