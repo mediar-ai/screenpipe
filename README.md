@@ -81,17 +81,45 @@ screenpipe turns your computer into a personal AI that knows everything you've d
 
 ### cli (free, open source)
 
+```bash
+bunx screenpipe@latest record
+```
+
+or with npm:
+```bash
+npx screenpipe@latest record
+```
+
+<details>
+<summary>alternative: shell installer</summary>
+
 mac / linux:
 ```bash
 curl -fsSL get.screenpi.pe/cli | sh
-screenpipe
+screenpipe record
 ```
 
 windows:
 ```bash
 iwr get.screenpi.pe/cli.ps1 | iex
-screenpipe
+screenpipe record
 ```
+</details>
+
+<details>
+<summary>linux: additional dependencies</summary>
+
+```bash
+# ubuntu/debian
+sudo apt install libpulse0 libasound2-dev ffmpeg
+
+# fedora
+sudo dnf install pulseaudio-libs alsa-lib ffmpeg
+
+# arch
+sudo pacman -S libpulse alsa-lib ffmpeg
+```
+</details>
 
 ### desktop app
 
