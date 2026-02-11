@@ -17,8 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { open } from "@tauri-apps/plugin-shell";
 import { homeDir, join } from "@tauri-apps/api/path";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
 interface PipeConfig {
   name: string;
@@ -113,7 +113,7 @@ export function PipesSection() {
   const openPipesFolder = async () => {
     const home = await homeDir();
     const path = await join(home, ".screenpipe", "pipes");
-    open(path);
+    revealItemInDir(path);
   };
 
   const toggleExpand = (name: string) => {

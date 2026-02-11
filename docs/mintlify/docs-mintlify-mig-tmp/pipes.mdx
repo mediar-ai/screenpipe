@@ -1,0 +1,228 @@
+---
+title: "pipes"
+description: "scheduled AI agents that run on your screen data"
+---
+
+## what are pipes?
+
+pipes are automated workflows that run on your screenpipe data at regular intervals. each pipe is a markdown file with a prompt and a schedule. under the hood, screenpipe runs a coding agent (like [pi](https://github.com/mariozechner/pi-coding-agent)) that can query your screen data, call APIs, write files, and take actions.
+
+**a pipe is just one file: `pipe.md`**
+
+```
+~/.screenpipe/pipes/
+├── daily-journal/
+│   └── pipe.md
+├── toggl-sync/
+│   ├── pipe.md
+│   └── .env          # secrets (api keys)
+└── obsidian-sync/
+    └── pipe.md
+```
+
+## creating a pipe
+
+create a folder in `~/.screenpipe/pipes/` with a `pipe.md` file:
+
+```bash
+mkdir -p ~/.screenpipe/pipes/my-pipe
+cat > ~/.screenpipe/pipes/my-pipe/pipe.md << 'EOF'
+---
+name: my-pipe
+schedule: every 30m
+lookback: 30m
+enabled: true
+---
+
+Summarize my screen activity for the last 30 minutes.
+Query screenpipe at http://localhost:3030/search.
+Write the summary to ./output/{{date}}.md
+EOF
+```
+
+## pipe.md format
+
+every pipe.md starts with YAML frontmatter between `---` markers, followed by the prompt:
+
+```markdown
+---
+name: my-pipe
+schedule: every 2h
+lookback: 2h
+enabled: true
+agent: pi
+model: claude-haiku-4-5@20251001
+---
+
+Your prompt goes here. This is what the AI agent will execute.
+You can reference screenpipe's API, write files, call external APIs, etc.
+```
+
+### frontmatter fields
+
+| field | required | default | description |
+|-------|----------|---------|-------------|
+| `name` | no | folder name | pipe identifier |
+| `schedule` | yes | `manual` | `every 1m`, `every 30m`, `every 2h`, `daily`, `manual` |
+| `lookback` | no | matches schedule | how far back to query screen data: `30m`, `2h`, `8h` |
+| `enabled` | no | `true` | whether the scheduler runs this pipe |
+| `agent` | no | `pi` | which coding agent CLI to use |
+| `model` | no | `claude-haiku-4-5@20251001` | which LLM the agent uses |
+
+### template variables
+
+these get replaced in the prompt body before execution:
+
+| variable | example value |
+|----------|---------------|
+| `{{start_time}}` | `2026-02-11T20:00:00Z` |
+| `{{end_time}}` | `2026-02-11T20:30:00Z` |
+| `{{date}}` | `2026-02-11` |
+| `{{timezone}}` | `PST` |
+| `{{timezone_offset}}` | `-08:00` |
+
+## cli commands
+
+```bash
+# list all pipes
+screenpipe pipe list
+
+# install a pipe from file, folder, or URL
+screenpipe pipe install ./my-pipe.md
+screenpipe pipe install https://raw.githubusercontent.com/user/repo/main/pipe.md
+
+# enable/disable
+screenpipe pipe enable my-pipe
+screenpipe pipe disable my-pipe
+
+# run once manually
+screenpipe pipe run my-pipe
+
+# view run history
+screenpipe pipe logs my-pipe
+
+# delete
+screenpipe pipe delete my-pipe
+```
+
+## http api
+
+when screenpipe is running, pipes are also manageable via the local API:
+
+```bash
+# list all pipes
+curl http://localhost:3030/pipes
+
+# run a pipe
+curl -X POST http://localhost:3030/pipes/my-pipe/run
+
+# enable/disable
+curl -X POST http://localhost:3030/pipes/my-pipe/enable \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+
+# view logs
+curl http://localhost:3030/pipes/my-pipe/logs
+
+# install from URL
+curl -X POST http://localhost:3030/pipes/install \
+  -H "Content-Type: application/json" \
+  -d '{"source": "https://example.com/pipe.md"}'
+```
+
+## app ui
+
+go to **settings → pipes** to see all installed pipes, toggle them on/off, run them manually, and view logs.
+
+## examples
+
+### time tracking (toggl)
+
+```markdown
+---
+name: toggl-sync
+schedule: every 1m
+lookback: 2m
+enabled: true
+---
+
+You automatically update my Toggl time tracking based on screen activity.
+
+1. Query screenpipe: curl "http://localhost:3030/search?content_type=ocr&limit=20&start_time={{start_time}}&end_time={{end_time}}"
+2. Read API key: source .env
+3. Check current Toggl timer
+4. If activity changed, stop old timer and start new one
+5. If activity matches, do nothing
+
+Activity rules:
+- VSCode/Cursor/Terminal → "coding"
+- Chrome with GitHub → "code review"
+- Slack/Discord → "communication"
+- Zoom/Meet → "meeting"
+```
+
+### daily journal (obsidian)
+
+```markdown
+---
+name: daily-journal
+schedule: every 2h
+lookback: 2h
+enabled: true
+---
+
+Summarize my screen activity into a daily journal entry.
+Query screenpipe at http://localhost:3030/search.
+Write to ~/obsidian-vault/screenpipe/{{date}}.md
+Use [[wiki-links]] for people and projects.
+Include timeline deep links: [time](screenpipe://timeline?timestamp=ISO8601)
+```
+
+### standup report
+
+```markdown
+---
+name: standup
+schedule: daily
+lookback: 8h
+enabled: true
+---
+
+Generate a standup report from yesterday's screen activity.
+Format: what I did, what I'm doing, blockers.
+Write to ./output/{{date}}.md
+```
+
+## secrets
+
+store API keys in `.env` files inside the pipe folder:
+
+```bash
+echo "TOGGL_API_KEY=your_key_here" > ~/.screenpipe/pipes/toggl-sync/.env
+```
+
+the pipe prompt can reference them: `source .env && curl -u $TOGGL_API_KEY:api_token ...`
+
+**never put secrets in pipe.md** — the prompt may be visible in logs.
+
+## architecture
+
+```
+pipe.md (prompt + config)
+  → pipe manager (parses frontmatter, schedules runs)
+    → agent executor (pi, claude-code, etc.)
+      → agent queries screenpipe API + executes actions
+        → output saved to pipe folder
+```
+
+- **agent ≠ model**: the agent is the CLI tool (pi, claude-code). the model is the LLM (haiku, opus, llama).
+- **one pipe runs at a time** (global semaphore prevents overlap)
+- **lookback capped at 8h** to prevent context overflow
+- **logs saved** to `~/.screenpipe/pipes/{name}/logs/` as JSON
+
+## built-in pipes
+
+screenpipe ships with two template pipes (disabled by default):
+
+- **obsidian-sync** — sync screen activity to obsidian vault
+- **reminders** — scan activity for todos and create apple reminders

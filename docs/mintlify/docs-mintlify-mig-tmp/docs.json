@@ -27,7 +27,7 @@
           },
           {
             "group": "guides",
-            "pages": ["mcp-server", "mcp-apps", "cloud-sync"]
+            "pages": ["pipes", "mcp-server", "mcp-apps", "cloud-sync"]
           },
           {
             "group": "integrations",

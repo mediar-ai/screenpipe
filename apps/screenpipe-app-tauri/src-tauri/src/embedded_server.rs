@@ -578,6 +578,40 @@ pub async fn start_embedded_server(
         config.video_quality.clone(),
     );
 
+    // Initialize pipe manager
+    let pipes_dir = config.data_dir.join("pipes");
+    std::fs::create_dir_all(&pipes_dir).ok();
+
+    let user_token = config.user_id.clone();
+    let pi_executor = std::sync::Arc::new(
+        screenpipe_core::agents::pi::PiExecutor::new(user_token),
+    );
+    let mut agent_executors: std::collections::HashMap<
+        String,
+        std::sync::Arc<dyn screenpipe_core::agents::AgentExecutor>,
+    > = std::collections::HashMap::new();
+    agent_executors.insert("pi".to_string(), pi_executor.clone());
+
+    let mut pipe_manager =
+        screenpipe_core::pipes::PipeManager::new(pipes_dir, agent_executors);
+    pipe_manager.install_builtin_pipes().ok();
+    if let Err(e) = pipe_manager.load_pipes().await {
+        tracing::warn!("failed to load pipes: {}", e);
+    }
+    if let Err(e) = pipe_manager.start_scheduler().await {
+        tracing::warn!("failed to start pipe scheduler: {}", e);
+    }
+    let shared_pipe_manager = std::sync::Arc::new(tokio::sync::Mutex::new(pipe_manager));
+    let server = server.with_pipe_manager(shared_pipe_manager);
+
+    // Install pi agent in background
+    tokio::spawn(async move {
+        use screenpipe_core::agents::AgentExecutor;
+        if let Err(e) = pi_executor.ensure_installed().await {
+            tracing::warn!("pi agent install failed: {}", e);
+        }
+    });
+
     // Bind the HTTP listener BEFORE returning success.
     // This ensures port conflicts (AddrInUse) are caught and propagated
     // instead of silently failing in a background task.
