@@ -33,6 +33,7 @@ export function DeeplinkHandler() {
         if (apiKey) {
           try {
             await loadUser(apiKey);
+            await openSettingsWindow("account");
             toast({
               title: "logged in!",
               description: "you have been logged in",
