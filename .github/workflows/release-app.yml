@@ -855,6 +855,70 @@ jobs:
           echo "Uploading debug symbols to Sentry..."
           sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-app apps/screenpipe-app-tauri/src-tauri/target/${{ matrix.target }}/release/
 
+      - name: Upload to Cloudflare R2 (macOS)
+        if: matrix.os_type == 'macos'
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          TARGET="${{ matrix.target }}"
+          BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
+          R2_PREFIX="s3://screenpipe-releases/releases/${VERSION}/${TARGET}"
+
+          echo "uploading ${TARGET} bundles for v${VERSION} to R2..."
+
+          # Upload DMG (quote paths — filenames may contain spaces)
+          find "${BUNDLE_DIR}/dmg" -name "*.dmg" -type f | while IFS= read -r f; do
+            aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename "$f")"
+          done
+
+          # Upload updater artifacts (.tar.gz + .sig)
+          find "${BUNDLE_DIR}/macos" \( -name "*.tar.gz" -o -name "*.sig" \) -type f | while IFS= read -r f; do
+            aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename "$f")"
+          done
+
+          echo "R2 upload complete for ${TARGET}"
+
+      - name: Upload to Cloudflare R2 (Windows)
+        if: matrix.os_type == 'windows'
+        shell: powershell
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          # Install AWS CLI if not present
+          if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing AWS CLI..."
+            Invoke-WebRequest -Uri "https://awscli.amazonaws.com/AWSCLIV2.msi" -OutFile "$env:TEMP\awscli.msi"
+            Start-Process msiexec.exe -Wait -ArgumentList "/i $env:TEMP\awscli.msi /quiet"
+            $env:PATH += ";C:\Program Files\Amazon\AWSCLIV2"
+          }
+          $version = (Select-String -Path apps/screenpipe-app-tauri/src-tauri/Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          $bundleDir = "apps/screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $r2Endpoint = "https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          $r2Prefix = "s3://screenpipe-releases/releases/$version/x86_64-pc-windows-msvc"
+
+          Write-Host "uploading Windows bundles for v$version to R2..."
+
+          # Upload NSIS installer (.exe)
+          Get-ChildItem "$bundleDir/nsis/*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
+            aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
+            Write-Host "  ✅ $($_.Name)"
+          }
+
+          # Upload updater artifacts (.nsis.zip + .sig)
+          Get-ChildItem "$bundleDir/nsis/*.nsis.zip","$bundleDir/nsis/*.sig" -ErrorAction SilentlyContinue | ForEach-Object {
+            aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
+            Write-Host "  ✅ $($_.Name)"
+          }
+
+          Write-Host "R2 upload complete for Windows"
+
       - name: Rebuild and upload beta (Windows)
         if: matrix.os_type == 'windows' && (needs.check_commit.outputs.should_beta == 'true' || github.event_name == 'workflow_dispatch')
         continue-on-error: true
@@ -942,70 +1006,6 @@ jobs:
           command: release upload ${{ secrets.CN_APP_SLUG_BETA }} --framework tauri -vv
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./apps/screenpipe-app-tauri/src-tauri
-
-      - name: Upload to Cloudflare R2 (macOS)
-        if: matrix.os_type == 'macos'
-        shell: bash
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-        run: |
-          VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          TARGET="${{ matrix.target }}"
-          BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
-          R2_PREFIX="s3://screenpipe-releases/releases/${VERSION}/${TARGET}"
-
-          echo "uploading ${TARGET} bundles for v${VERSION} to R2..."
-
-          # Upload DMG (quote paths — filenames may contain spaces like "screenpipe beta_2.0.422_x64.dmg")
-          find "${BUNDLE_DIR}/dmg" -name "*.dmg" -type f | while IFS= read -r f; do
-            aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename "$f")"
-          done
-
-          # Upload updater artifacts (.tar.gz + .sig)
-          find "${BUNDLE_DIR}/macos" \( -name "*.tar.gz" -o -name "*.sig" \) -type f | while IFS= read -r f; do
-            aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename "$f")"
-          done
-
-          echo "R2 upload complete for ${TARGET}"
-
-      - name: Upload to Cloudflare R2 (Windows)
-        if: matrix.os_type == 'windows'
-        shell: powershell
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-        run: |
-          # Install AWS CLI if not present
-          if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
-            Write-Host "Installing AWS CLI..."
-            Invoke-WebRequest -Uri "https://awscli.amazonaws.com/AWSCLIV2.msi" -OutFile "$env:TEMP\awscli.msi"
-            Start-Process msiexec.exe -Wait -ArgumentList "/i $env:TEMP\awscli.msi /quiet"
-            $env:PATH += ";C:\Program Files\Amazon\AWSCLIV2"
-          }
-          $version = (Select-String -Path apps/screenpipe-app-tauri/src-tauri/Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
-          $bundleDir = "apps/screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
-          $r2Endpoint = "https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com"
-          $r2Prefix = "s3://screenpipe-releases/releases/$version/x86_64-pc-windows-msvc"
-
-          Write-Host "uploading Windows bundles for v$version to R2..."
-
-          # Upload NSIS installer (.exe)
-          Get-ChildItem "$bundleDir/nsis/*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
-            aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
-            Write-Host "  ✅ $($_.Name)"
-          }
-
-          # Upload updater artifacts (.nsis.zip + .sig)
-          Get-ChildItem "$bundleDir/nsis/*.nsis.zip","$bundleDir/nsis/*.sig" -ErrorAction SilentlyContinue | ForEach-Object {
-            aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
-            Write-Host "  ✅ $($_.Name)"
-          }
-
-          Write-Host "R2 upload complete for Windows"
 
   # Upload to CrabNebula from GitHub-hosted runner.
   # Self-hosted macOS runners fail CN uploads due to HTTP/2 + macOS native TLS
