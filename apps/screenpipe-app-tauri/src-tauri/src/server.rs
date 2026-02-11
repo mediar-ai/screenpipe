@@ -1,3 +1,4 @@
+use crate::commands::show_main_window;
 use crate::window_api::{close_window, show_specific_window};
 use crate::{get_base_dir, get_store, register_shortcut};
 use axum::body::Bytes;
@@ -105,6 +106,39 @@ struct ShortcutRegistrationPayload {
     body: Option<serde_json::Value>,
 }
 
+#[derive(Deserialize, Debug)]
+struct FocusPayload {
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    deep_link_url: Option<String>,
+}
+
+async fn handle_focus(
+    State(state): State<ServerState>,
+    Json(payload): Json<FocusPayload>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!(
+        "Received focus request from second instance: args={:?}, deep_link={:?}",
+        payload.args, payload.deep_link_url
+    );
+
+    show_main_window(&state.app_handle, false);
+
+    if let Some(url) = payload.deep_link_url {
+        let _ = state.app_handle.emit("deep-link-received", url);
+    }
+
+    if !payload.args.is_empty() {
+        let _ = state.app_handle.emit("second-instance-args", payload.args);
+    }
+
+    Ok(Json(ApiResponse {
+        success: true,
+        message: "Window focused successfully".to_string(),
+    }))
+}
+
 async fn settings_stream(
     State(state): State<ServerState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
@@ -179,6 +213,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/sidecar/stop", axum::routing::post(stop_recording))
         .route("/window", axum::routing::post(show_specific_window))
         .route("/window/close", axum::routing::post(close_window))
+        .route("/focus", axum::routing::post(handle_focus))
         .route(
             "/shortcuts/register",
             axum::routing::post(register_http_shortcut),

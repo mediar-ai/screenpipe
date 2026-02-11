@@ -932,6 +932,33 @@ async fn is_server_running(app: AppHandle) -> Result<bool, String> {
 async fn main() {
     let _ = fix_path_env::fix();
 
+    // Single-instance check: if sidecar server is already listening, hand off and exit.
+    // This covers Linux (where tauri-plugin-single-instance is disabled due to
+    // zbus/tokio conflict) and acts as a fallback on macOS/Windows.
+    {
+        let args: Vec<String> = std::env::args().collect();
+        let deep_link_url = args
+            .iter()
+            .find(|a| a.starts_with("screenpipe://"))
+            .cloned();
+
+        if let Ok(resp) = reqwest::Client::new()
+            .post("http://127.0.0.1:11435/focus")
+            .timeout(std::time::Duration::from_secs(2))
+            .json(&serde_json::json!({
+                "args": args,
+                "deep_link_url": deep_link_url,
+            }))
+            .send()
+            .await
+        {
+            if resp.status().is_success() {
+                eprintln!("screenpipe: another instance is already running — focused existing window, exiting.");
+                std::process::exit(0);
+            }
+        }
+    }
+
     // Check if telemetry is disabled via store setting (analyticsEnabled)
     // Use ~/.screenpipe to match CLI default data directory
     let telemetry_disabled = dirs::home_dir()
@@ -1218,11 +1245,18 @@ async fn main() {
         // inside an existing tokio runtime (nested block_on), so skip it on Linux
         ;
         #[cfg(not(target_os = "linux"))]
-        let app = app.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Gracefully handle case where no windows exist yet (can happen during early init)
-            let windows = app.webview_windows();
-            if let Some(window) = windows.values().next() {
-                let _ = window.set_focus();
+        let app = app.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // Focus the existing window
+            show_main_window(app, false);
+
+            // Forward deep-link URL from args
+            if let Some(url) = args.iter().find(|a| a.starts_with("screenpipe://")) {
+                let _ = app.emit("deep-link-received", url.clone());
+            }
+
+            // Forward CLI args
+            if !args.is_empty() {
+                let _ = app.emit("second-instance-args", args.clone());
             }
         }));
         let app = app
