@@ -87,7 +87,7 @@ export function SpeakerAssignPopover({
 			const trimmedName = name.trim();
 
 			try {
-				// Phase 1: Assign just this chunk instantly (no propagation)
+				// Phase 1: Assign just this chunk (instant, no propagation)
 				const response = await fetch("http://localhost:3030/speakers/reassign", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -104,7 +104,7 @@ export function SpeakerAssignPopover({
 
 				const result = await response.json();
 
-				// Close popover immediately — this chunk is assigned
+				// Close popover immediately — assignment is done
 				onAssigned?.(result.new_speaker_id, result.new_speaker_name);
 				setOpen(false);
 				setSearchTerm("");
@@ -171,6 +171,7 @@ export function SpeakerAssignPopover({
 					}
 				} catch (propagateError) {
 					console.error("Background propagation failed:", propagateError);
+					// Non-fatal — the initial assignment succeeded
 				}
 			} catch (error) {
 				console.error("Error assigning speaker:", error);

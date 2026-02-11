@@ -177,9 +177,52 @@ impl DatabaseManager {
     async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         let mut migrator = sqlx::migrate!("./src/migrations");
         migrator.set_ignore_missing(true);
-        migrator.run(pool).await.map_err(|e| e.into())
+        match migrator.run(pool).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let err_str = e.to_string();
+                // Handle checksum mismatch from modified migrations.
+                // This can happen when a migration file was changed after being applied
+                // (e.g., the fps migration was modified between v0.3.130 and v0.3.131).
+                // Fix: update the stored checksum to match the current file, then retry.
+                if err_str.contains("was previously applied but has been modified") {
+                    tracing::warn!(
+                        "Migration checksum mismatch detected: {}. Updating checksums and retrying...",
+                        err_str
+                    );
+                    Self::fix_migration_checksums(pool, &migrator).await?;
+                    // Retry after fixing checksums
+                    migrator.run(pool).await.map_err(|e| e.into())
+                } else {
+                    Err(e.into())
+                }
+            }
+        }
     }
 
+    /// Fix checksum mismatches by updating stored checksums to match current migration files.
+    /// This is needed when a migration file was modified after being applied to the DB
+    /// (which happened with the fps migration between v0.3.130 and v0.3.131).
+    async fn fix_migration_checksums(
+        pool: &SqlitePool,
+        migrator: &sqlx::migrate::Migrator,
+    ) -> Result<(), sqlx::Error> {
+        for migration in migrator.iter() {
+            if migration.migration_type.is_down_migration() {
+                continue;
+            }
+            // Update the checksum for any previously-applied migration to match the current file
+            let version = migration.version;
+            let checksum_bytes: &[u8] = &migration.checksum;
+            sqlx::query("UPDATE _sqlx_migrations SET checksum = ? WHERE version = ?")
+                .bind(checksum_bytes)
+                .bind(version)
+                .execute(pool)
+                .await?;
+        }
+        tracing::info!("Migration checksums updated successfully");
+        Ok(())
+    }
 
     /// Acquire a connection with `BEGIN IMMEDIATE`, serialized via write semaphore.
     ///
@@ -3345,22 +3388,25 @@ LIMIT ? OFFSET ?
 
     /// Reassign a speaker: move transcriptions and embeddings to a new or existing speaker.
     /// Phase 1 (instant): reassigns just this one audio chunk.
-    /// Phase 2-3 (propagation): majority-vote — only absorbs a speaker if >50% of its
-    /// embeddings match the target. Prevents one similar embedding from stealing all
-    /// transcriptions from an unrelated speaker.
+    /// Phase 2-3 (propagation): finds similar speakers using majority-vote — only absorbs
+    /// a speaker if >50% of its embeddings match the target. This prevents one similar
+    /// embedding from stealing all transcriptions from an unrelated speaker.
     /// Returns (new_speaker_id, transcriptions_updated, embeddings_moved, old_assignments)
+    /// old_assignments can be used to undo the operation.
     pub async fn reassign_speaker(
         &self,
         audio_chunk_id: i64,
         new_speaker_name: &str,
         propagate_similar: bool,
     ) -> Result<(i64, u64, u64, Vec<(i64, i64)>), sqlx::Error> {
+        // old_assignments: Vec<(audio_transcription_id, old_speaker_id)> for undo
         let mut old_assignments: Vec<(i64, i64)> = Vec::new();
 
         // Phase 1: Short IMMEDIATE write transaction – reassign just this chunk.
         let (current_speaker_id, target_speaker_id, transcriptions_updated, mut embeddings_moved) = {
             let mut tx = self.begin_immediate_with_retry().await?;
 
+            // 1. Get the current speaker_id for this audio chunk
             let current_speaker_id: Option<i64> = sqlx::query_scalar(
                 "SELECT speaker_id FROM audio_transcriptions WHERE audio_chunk_id = ? LIMIT 1",
             )
@@ -3373,6 +3419,7 @@ LIMIT ? OFFSET ?
                 None => return Err(sqlx::Error::RowNotFound),
             };
 
+            // 2. Find or create the target speaker
             let target_speaker: Speaker = match sqlx::query_as::<_, Speaker>(
                 "SELECT id, name, metadata FROM speakers WHERE name = ? AND hallucination = 0",
             )
@@ -3405,6 +3452,7 @@ LIMIT ? OFFSET ?
             .await?;
             old_assignments.extend(affected_rows);
 
+            // 3. Update the transcription's speaker_id
             let transcriptions_updated = sqlx::query(
                 "UPDATE audio_transcriptions SET speaker_id = ? WHERE audio_chunk_id = ?",
             )
@@ -3414,6 +3462,7 @@ LIMIT ? OFFSET ?
             .await?
             .rows_affected();
 
+            // 4. Move one embedding from old speaker to new speaker
             let embedding_id: Option<i64> = sqlx::query_scalar(
                 "SELECT id FROM speaker_embeddings WHERE speaker_id = ? LIMIT 1",
             )
@@ -3441,11 +3490,13 @@ LIMIT ? OFFSET ?
         };
 
         // Phase 2: Majority-vote propagation — only absorb speakers where >50% of
-        // their embeddings are similar to target.
+        //          their embeddings are similar to target. This prevents one similar
+        //          embedding from stealing all transcriptions from an unrelated speaker.
         if propagate_similar {
             let threshold = 0.8;
-            let min_absorption_ratio = 0.5;
+            let min_absorption_ratio = 0.5; // >50% of embeddings must match
 
+            // Read-only: for each other speaker, count matching vs total embeddings
             let speaker_match_stats: Vec<(i64, i64, i64)> = sqlx::query_as(
                 r#"
                 SELECT
@@ -3467,6 +3518,7 @@ LIMIT ? OFFSET ?
             .fetch_all(&self.pool)
             .await?;
 
+            // Filter to speakers where majority of embeddings match
             let speakers_to_absorb: Vec<i64> = speaker_match_stats
                 .iter()
                 .filter(|(_, matching, total)| {
@@ -3483,10 +3535,11 @@ LIMIT ? OFFSET ?
                     new_speaker_name
                 );
 
+                // Phase 3: Absorb qualifying speakers in a write transaction
                 let mut tx = self.begin_immediate_with_retry().await?;
 
                 for old_speaker_id in &speakers_to_absorb {
-                    // Record old assignments for undo
+                    // Record old assignments for undo before moving
                     let affected: Vec<(i64, i64)> = sqlx::query_as(
                         "SELECT id, speaker_id FROM audio_transcriptions WHERE speaker_id = ?",
                     )
@@ -3495,6 +3548,7 @@ LIMIT ? OFFSET ?
                     .await?;
                     old_assignments.extend(affected);
 
+                    // Move ALL embeddings from this speaker to target
                     let moved = sqlx::query(
                         "UPDATE speaker_embeddings SET speaker_id = ? WHERE speaker_id = ?",
                     )
@@ -3505,6 +3559,7 @@ LIMIT ? OFFSET ?
                     .rows_affected();
                     embeddings_moved += moved;
 
+                    // Move ALL transcriptions from this speaker to target
                     sqlx::query(
                         "UPDATE audio_transcriptions SET speaker_id = ? WHERE speaker_id = ?",
                     )
@@ -3513,6 +3568,7 @@ LIMIT ? OFFSET ?
                     .execute(&mut **tx.conn())
                     .await?;
 
+                    // Delete the now-empty speaker
                     sqlx::query("DELETE FROM speakers WHERE id = ?")
                         .bind(old_speaker_id)
                         .execute(&mut **tx.conn())
@@ -3557,6 +3613,7 @@ LIMIT ? OFFSET ?
         let mut restored = 0u64;
 
         for (transcription_id, old_speaker_id) in old_assignments {
+            // Ensure the old speaker exists (recreate if deleted during merge)
             let exists: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM speakers WHERE id = ?)",
             )

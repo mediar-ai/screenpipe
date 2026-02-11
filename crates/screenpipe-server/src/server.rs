@@ -238,11 +238,13 @@ pub struct ReassignSpeakerResponse {
     pub new_speaker_name: String,
     pub transcriptions_updated: u64,
     pub embeddings_moved: u64,
+    /// Old assignments for undo
     pub old_assignments: Vec<SpeakerOldAssignment>,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct UndoSpeakerReassignRequest {
+    /// Old assignments from the reassign response
     pub old_assignments: Vec<SpeakerOldAssignment>,
 }
 
@@ -392,9 +394,6 @@ pub struct HealthCheckResponse {
     pub message: String,
     pub verbose_instructions: Option<String>,
     pub device_status_details: Option<String>,
-    /// Active monitor names (e.g. ["Built-in Retina Display"])
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub monitors: Option<Vec<String>>,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Clone)]
@@ -974,19 +973,6 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         )
     };
 
-    // Collect monitor names for tray display
-    let monitor_names: Option<Vec<String>> = if !state.vision_disabled {
-        match list_monitors_detailed().await {
-            Ok(monitors) => {
-                let names: Vec<String> = monitors.iter().map(|m| m.name().to_string()).collect();
-                if names.is_empty() { None } else { Some(names) }
-            }
-            Err(_) => None,
-        }
-    } else {
-        None
-    };
-
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
         status_code,
@@ -1004,7 +990,6 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         message,
         verbose_instructions,
         device_status_details,
-        monitors: monitor_names,
     })
 }
 
@@ -1935,7 +1920,6 @@ async fn reassign_speaker_handler(
     }))
 }
 
-#[oasgen]
 async fn undo_speaker_reassign_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UndoSpeakerReassignRequest>,
