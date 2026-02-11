@@ -133,6 +133,55 @@ jobs:
           curl -sL https://sentry.io/get-cli/ | bash
           sentry-cli debug-files upload --org $SENTRY_ORG --project screenpipe-cli target/${{ matrix.target }}/release/
 
+      - name: Codesign binary
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          # Import certificate into a temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Sign the binary with hardened runtime
+          codesign --force --options runtime \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            --timestamp \
+            target/${{ matrix.target }}/release/screenpipe
+
+          # Verify signature
+          codesign --verify --verbose target/${{ matrix.target }}/release/screenpipe
+          echo "codesign: verified"
+
+      - name: Notarize binary
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # notarytool requires zip/dmg/pkg
+          ditto -c -k --keepParent \
+            target/${{ matrix.target }}/release/screenpipe \
+            $RUNNER_TEMP/screenpipe-notarize.zip
+
+          xcrun notarytool submit $RUNNER_TEMP/screenpipe-notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait --timeout 10m
+
+          echo "notarization: complete"
+
       - name: Set version
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
@@ -395,6 +444,94 @@ jobs:
         with:
           name: screenpipe-linux-${{ matrix.target }}
           path: screenpipe-*.tar.gz
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    needs: [build-macos, build-windows, build-linux]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Set version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          fi
+          if [[ -z "$VERSION" ]]; then
+            VERSION="0.0.0"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare platform packages
+        run: |
+          # macOS ARM64
+          mkdir -p packages/cli/screenpipe-darwin-arm64/bin
+          tar -xzf artifacts/screenpipe-macos-aarch64-apple-darwin/screenpipe-*.tar.gz -C /tmp/darwin-arm64 || true
+          cp /tmp/darwin-arm64/bin/screenpipe packages/cli/screenpipe-darwin-arm64/bin/ 2>/dev/null || \
+            (cd artifacts/screenpipe-macos-aarch64-apple-darwin && tar -xzf screenpipe-*.tar.gz && cp bin/screenpipe ../../packages/cli/screenpipe-darwin-arm64/bin/)
+          chmod +x packages/cli/screenpipe-darwin-arm64/bin/screenpipe
+
+          # macOS x64
+          mkdir -p packages/cli/screenpipe-darwin-x64/bin
+          cd artifacts/screenpipe-macos-x86_64-apple-darwin && tar -xzf screenpipe-*.tar.gz && cp bin/screenpipe ../../packages/cli/screenpipe-darwin-x64/bin/ && cd ../..
+          chmod +x packages/cli/screenpipe-darwin-x64/bin/screenpipe
+
+          # Linux x64
+          mkdir -p packages/cli/screenpipe-linux-x64/bin
+          cd artifacts/screenpipe-linux-x86_64-unknown-linux-gnu && tar -xzf screenpipe-*.tar.gz && cp bin/screenpipe ../../packages/cli/screenpipe-linux-x64/bin/ && cd ../..
+          chmod +x packages/cli/screenpipe-linux-x64/bin/screenpipe
+
+          # Windows x64
+          mkdir -p packages/cli/screenpipe-win32-x64/bin
+          cd artifacts/screenpipe-windows && unzip -o screenpipe-*.zip -d extracted && cp extracted/bin/screenpipe.exe ../../packages/cli/screenpipe-win32-x64/bin/ && cp extracted/bin/onnxruntime.dll ../../packages/cli/screenpipe-win32-x64/bin/ 2>/dev/null || true && cd ../..
+
+      - name: Update package versions
+        run: |
+          for pkg in screenpipe screenpipe-darwin-arm64 screenpipe-darwin-x64 screenpipe-linux-x64 screenpipe-win32-x64; do
+            cd packages/cli/$pkg
+            npm version ${{ env.VERSION }} --no-git-tag-version --allow-same-version 2>/dev/null || true
+            cd ../../..
+          done
+          # Update optionalDependencies versions in main package
+          cd packages/cli/screenpipe
+          node -e "
+            const pkg = require('./package.json');
+            for (const dep of Object.keys(pkg.optionalDependencies || {})) {
+              pkg.optionalDependencies[dep] = '${{ env.VERSION }}';
+            }
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          cd ../../..
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg in screenpipe-darwin-arm64 screenpipe-darwin-x64 screenpipe-linux-x64 screenpipe-win32-x64; do
+            cd packages/cli/$pkg
+            npm publish --access public 2>/dev/null || echo "skipping $pkg (may already exist)"
+            cd ../../..
+          done
+
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd packages/cli/screenpipe
+          npm publish --access public 2>/dev/null || echo "skipping main package (may already exist)"
 
   release:
     runs-on: ubuntu-latest

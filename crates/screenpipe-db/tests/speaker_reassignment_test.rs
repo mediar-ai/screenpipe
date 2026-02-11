@@ -176,7 +176,7 @@ mod speaker_reassignment_tests {
             create_audio_with_speaker(&db, speaker_id, "Hello, this is Louis speaking").await;
 
         // Reassign to new name
-        let (new_speaker_id, transcriptions_updated, embeddings_moved) = db
+        let (new_speaker_id, transcriptions_updated, embeddings_moved, _affected_pairs) = db
             .reassign_speaker(audio_chunk_id, "Louis", false)
             .await
             .unwrap();
@@ -206,7 +206,7 @@ mod speaker_reassignment_tests {
             create_audio_with_speaker(&db, unknown_id, "This is also Alice speaking").await;
 
         // Reassign unknown to "Alice"
-        let (new_speaker_id, transcriptions_updated, embeddings_moved) = db
+        let (new_speaker_id, transcriptions_updated, embeddings_moved, _affected_pairs) = db
             .reassign_speaker(audio_chunk_id, "Alice", false)
             .await
             .unwrap();
@@ -239,7 +239,7 @@ mod speaker_reassignment_tests {
             create_audio_with_speaker(&db, speaker2_id, "Second transcription").await;
 
         // Reassign first speaker to "Bob" with propagation
-        let (new_speaker_id, transcriptions_updated, embeddings_moved) = db
+        let (new_speaker_id, transcriptions_updated, embeddings_moved, _affected_pairs) = db
             .reassign_speaker(audio_chunk_id1, "Bob", true)
             .await
             .unwrap();
@@ -277,13 +277,13 @@ mod speaker_reassignment_tests {
         let audio_chunk_id = create_audio_with_speaker(&db, speaker_id, "Test audio").await;
 
         // First reassignment
-        let (first_id, _, _) = db
+        let (first_id, _, _, _) = db
             .reassign_speaker(audio_chunk_id, "Charlie", false)
             .await
             .unwrap();
 
         // Second reassignment to same name should return same speaker
-        let (second_id, _, _) = db
+        let (second_id, _, _, _) = db
             .reassign_speaker(audio_chunk_id, "Charlie", false)
             .await
             .unwrap();
@@ -324,7 +324,7 @@ mod speaker_reassignment_tests {
         .await;
 
         // Correct the misidentification by naming it "Bob"
-        let (bob_id, transcriptions_updated, _embeddings_moved) = db
+        let (bob_id, transcriptions_updated, _embeddings_moved, _affected_pairs) = db
             .reassign_speaker(audio_chunk_id, "Bob", false)
             .await
             .unwrap();

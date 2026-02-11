@@ -1,0 +1,23 @@
+{
+  "name": "screenpipe",
+  "version": "0.1.0",
+  "description": "screenpipe CLI — AI that knows everything you've seen, said, or heard",
+  "bin": {
+    "screenpipe": "bin/screenpipe.js"
+  },
+  "scripts": {
+    "postinstall": "sh scripts/postinstall.sh || true"
+  },
+  "optionalDependencies": {
+    "@screenpipe/cli-darwin-arm64": "0.1.0",
+    "@screenpipe/cli-darwin-x64": "0.1.0",
+    "@screenpipe/cli-linux-x64": "0.1.0",
+    "@screenpipe/cli-win32-x64": "0.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/screenpipe/screenpipe"
+  },
+  "license": "MIT",
+  "keywords": ["screenpipe", "screen-recording", "ai", "memory", "cli"]
+}

@@ -16,16 +16,16 @@ use screenpipe_core::find_ffmpeg_path;
 use screenpipe_core::sync::{
     BlobType, SyncClientConfig, SyncEvent, SyncManager, SyncService, SyncServiceConfig,
 };
-use screenpipe_db::{
-    create_migration_worker, DatabaseManager, MigrationCommand, MigrationConfig, MigrationStatus,
-};
+use screenpipe_db::DatabaseManager;
 use screenpipe_server::{
     analytics,
     cli::{
         get_or_create_machine_id, AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine,
-        Command, McpCommand, MigrationSubCommand, OutputFormat, SyncCommand, VisionCommand,
+        Command, McpCommand, OutputFormat, RecordArgs, SyncCommand, VisionCommand,
     },
-    handle_index_command, start_continuous_recording, start_sleep_monitor, start_ui_recording,
+    cli_pipe::handle_pipe_command,
+    cli_status::handle_status_command,
+    start_continuous_recording, start_sleep_monitor, start_ui_recording,
     sync_provider::ScreenpipeSyncProvider,
     vision_manager::{
         start_monitor_watcher, stop_monitor_watcher, VisionManager, VisionManagerConfig,
@@ -243,7 +243,7 @@ async fn main() -> anyhow::Result<()> {
     set_fd_limit();
 
     debug!("starting screenpipe server");
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
 
     // Initialize Sentry only if telemetry is enabled
     let _sentry_guard = if !cli.disable_telemetry {
@@ -376,27 +376,27 @@ async fn main() -> anyhow::Result<()> {
     let local_data_dir_clone = local_data_dir.clone();
 
     // Only set up logging if we're not running a command with JSON output
-    let should_log = match &cli.command {
-        Some(Command::Add {
-            output: OutputFormat::Text,
-            ..
-        }) => true,
-        Some(Command::Migrate {
-            output: OutputFormat::Text,
-            ..
-        }) => true,
-        _ => true,
-    };
-
     // Store the guard in a variable that lives for the entire main function
-    let _log_guard = if should_log {
-        Some(setup_logging(&local_data_dir, &cli)?)
-    } else {
-        None
-    };
+    let _log_guard = Some(setup_logging(&local_data_dir, &cli)?);
 
+    // Handle subcommands that return early
     if let Some(ref command) = cli.command {
         match command {
+            Command::Record(_) => {
+                // Fall through to recording logic below
+            }
+            Command::Status {
+                json,
+                data_dir,
+                port,
+            } => {
+                handle_status_command(*json, data_dir, *port).await?;
+                return Ok(());
+            }
+            Command::Pipe { subcommand } => {
+                handle_pipe_command(subcommand).await?;
+                return Ok(());
+            }
             Command::Audio { subcommand } => match subcommand {
                 AudioCommand::List { output } => {
                     let default_input = default_input_device().unwrap();
@@ -456,246 +456,6 @@ async fn main() -> anyhow::Result<()> {
                     return Ok(());
                 }
             },
-            Command::Completions { shell } => {
-                cli.handle_completions(*shell)?;
-                return Ok(());
-            }
-            Command::Migrate {
-                migration_name,
-                data_dir,
-                subcommand,
-                output,
-                batch_size,
-                batch_delay_ms,
-                continue_on_error,
-            } => {
-                // Initialize the database
-                let local_data_dir = get_base_dir(data_dir)?;
-                let db = Arc::new(
-                    DatabaseManager::new(&format!(
-                        "{}/db.sqlite",
-                        local_data_dir.to_string_lossy()
-                    ))
-                    .await
-                    .map_err(|e| {
-                        error!("failed to initialize database: {:?}", e);
-                        e
-                    })?,
-                );
-
-                // Create a migration worker config
-                let config = MigrationConfig::new(*batch_size, *batch_delay_ms, *continue_on_error);
-
-                // Start the migration worker
-                let (cmd_tx, mut status_rx, worker_handle) =
-                    create_migration_worker(db, Some(config));
-
-                // Process the specified subcommand or default to status
-                let cmd = match subcommand {
-                    Some(MigrationSubCommand::Start) => MigrationCommand::Start,
-                    Some(MigrationSubCommand::Pause) => MigrationCommand::Pause,
-                    Some(MigrationSubCommand::Stop) => MigrationCommand::Stop,
-                    Some(MigrationSubCommand::Status) | None => MigrationCommand::Status,
-                };
-
-                // Send the command to the worker
-                if let Err(e) = cmd_tx.send(cmd.clone()).await {
-                    error!("failed to send command to migration worker: {}", e);
-                    return Err(anyhow::anyhow!(
-                        "Failed to send command to migration worker"
-                    ));
-                }
-
-                // If the command is start, we need to track the progress
-                if matches!(cmd, MigrationCommand::Start) {
-                    // Send the start command and wait for the worker to acknowledge
-                    if let Some(response) = status_rx.recv().await {
-                        match output {
-                            OutputFormat::Json => {
-                                println!("{}", serde_json::to_string_pretty(&response.status)?);
-                            }
-                            OutputFormat::Text => {
-                                info!("Started migration: {}", migration_name);
-                                match response.status {
-                                    MigrationStatus::Running {
-                                        total_records,
-                                        processed_records,
-                                    } => {
-                                        info!(
-                                            "Processing records: {}/{} ({:.2}%)",
-                                            processed_records,
-                                            total_records,
-                                            if total_records > 0 {
-                                                (processed_records as f64 / total_records as f64)
-                                                    * 100.0
-                                            } else {
-                                                0.0
-                                            }
-                                        );
-                                    }
-                                    _ => {
-                                        info!("Migration status: {:?}", response.status);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Keep checking status periodically until migration completes, fails, or is stopped
-                    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-                    loop {
-                        interval.tick().await;
-
-                        // Send status command
-                        if let Err(e) = cmd_tx.send(MigrationCommand::Status).await {
-                            error!("failed to send status command: {}", e);
-                            break;
-                        }
-
-                        // Wait for response
-                        if let Some(response) = status_rx.recv().await {
-                            match output {
-                                OutputFormat::Json => {
-                                    println!("{}", serde_json::to_string_pretty(&response.status)?);
-                                }
-                                OutputFormat::Text => match &response.status {
-                                    MigrationStatus::Running {
-                                        total_records,
-                                        processed_records,
-                                    } => {
-                                        info!(
-                                            "Processing records: {}/{} ({:.2}%)",
-                                            processed_records,
-                                            total_records,
-                                            if *total_records > 0 {
-                                                (*processed_records as f64 / *total_records as f64)
-                                                    * 100.0
-                                            } else {
-                                                0.0
-                                            }
-                                        );
-                                    }
-                                    MigrationStatus::Completed {
-                                        total_records,
-                                        duration_secs,
-                                    } => {
-                                        info!(
-                                            "Migration completed: {} records processed in {} seconds",
-                                            total_records, duration_secs
-                                        );
-                                        break;
-                                    }
-                                    MigrationStatus::Paused {
-                                        total_records,
-                                        processed_records,
-                                    } => {
-                                        info!(
-                                            "Migration paused: {}/{} ({:.2}%)",
-                                            processed_records,
-                                            total_records,
-                                            if *total_records > 0 {
-                                                (*processed_records as f64 / *total_records as f64)
-                                                    * 100.0
-                                            } else {
-                                                0.0
-                                            }
-                                        );
-                                    }
-                                    MigrationStatus::Failed {
-                                        total_records,
-                                        processed_records,
-                                        error,
-                                    } => {
-                                        error!(
-                                            "Migration failed: {}/{} records processed. Error: {}",
-                                            processed_records, total_records, error
-                                        );
-                                        break;
-                                    }
-                                    _ => {
-                                        info!("Migration status: {:?}", response.status);
-                                    }
-                                },
-                            }
-                        } else {
-                            break;
-                        }
-                    }
-                } else {
-                    // For non-start commands, just get the status once
-                    if let Some(response) = status_rx.recv().await {
-                        match output {
-                            OutputFormat::Json => {
-                                println!("{}", serde_json::to_string_pretty(&response.status)?);
-                            }
-                            OutputFormat::Text => {
-                                info!("Migration status: {:?}", response.status);
-                            }
-                        }
-                    }
-                }
-
-                // If we explicitly stopped, wait for the worker to finish
-                if matches!(cmd, MigrationCommand::Stop) {
-                    if let Err(e) = worker_handle.await {
-                        error!("error waiting for worker to finish: {}", e);
-                    }
-                }
-
-                return Ok(());
-            }
-            Command::Add {
-                path,
-                output,
-                data_dir,
-                pattern,
-                ocr_engine,
-                metadata_override,
-                copy_videos,
-                debug,
-                use_embedding,
-            } => {
-                let local_data_dir = get_base_dir(data_dir)?;
-
-                // Update logging filter if debug is enabled
-                if *debug {
-                    tracing::subscriber::set_global_default(
-                        tracing_subscriber::registry()
-                            .with(
-                                EnvFilter::from_default_env()
-                                    .add_directive("screenpipe=debug".parse().unwrap()),
-                            )
-                            .with(fmt::layer().with_writer(std::io::stdout)),
-                    )
-                    .ok();
-                    debug!("debug logging enabled");
-                }
-
-                let db = Arc::new(
-                    DatabaseManager::new(&format!(
-                        "{}/db.sqlite",
-                        local_data_dir.to_string_lossy()
-                    ))
-                    .await
-                    .map_err(|e| {
-                        error!("failed to initialize database: {:?}", e);
-                        e
-                    })?,
-                );
-                handle_index_command(
-                    local_data_dir,
-                    path.to_string(),
-                    pattern.clone(),
-                    db,
-                    output.clone(),
-                    ocr_engine.clone(),
-                    metadata_override.clone(),
-                    *copy_videos,
-                    *use_embedding,
-                )
-                .await?;
-                return Ok(());
-            }
             Command::Mcp { subcommand } => {
                 handle_mcp_command(subcommand, &local_data_dir_clone).await?;
                 return Ok(());
@@ -706,6 +466,68 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
+
+    // If we get here, we're either `screenpipe` (no command) or `screenpipe record`
+    // For bare `screenpipe`, show deprecation hint
+    if cli.command.is_none() {
+        eprintln!(
+            "{}",
+            "hint: use 'screenpipe record' explicitly. bare 'screenpipe' will be removed in a future version."
+                .bright_yellow()
+        );
+    }
+
+    // Build RecordArgs from either the Record subcommand or legacy top-level flags.
+    // Then override cli fields so all downstream code (which uses cli.*) gets the right values.
+    let record_args = match &cli.command {
+        Some(Command::Record(args)) => args.clone(),
+        _ => RecordArgs::from_cli(&cli),
+    };
+
+    // Sync cli fields from record_args (needed when `screenpipe record --fps 2` is used,
+    // because clap puts those flags on RecordArgs, not on Cli's top-level fields)
+    cli.fps = record_args.fps;
+    cli.adaptive_fps = record_args.adaptive_fps;
+    cli.audio_chunk_duration = record_args.audio_chunk_duration;
+    cli.port = record_args.port;
+    cli.disable_audio = record_args.disable_audio;
+    cli.audio_device = record_args.audio_device.clone();
+    cli.use_system_default_audio = record_args.use_system_default_audio;
+    cli.realtime_audio_device = record_args.realtime_audio_device.clone();
+    cli.data_dir = record_args.data_dir.clone();
+    cli.debug = record_args.debug;
+    cli.audio_transcription_engine = record_args.audio_transcription_engine.clone();
+    cli.enable_realtime_audio_transcription = record_args.enable_realtime_audio_transcription;
+    cli.enable_realtime_vision = record_args.enable_realtime_vision;
+    cli.ocr_engine = record_args.ocr_engine.clone();
+    cli.monitor_id = record_args.monitor_id.clone();
+    cli.use_all_monitors = record_args.use_all_monitors;
+    cli.language = record_args.language.clone();
+    cli.use_pii_removal = record_args.use_pii_removal;
+    cli.disable_vision = record_args.disable_vision;
+    cli.vad_engine = record_args.vad_engine.clone();
+    cli.ignored_windows = record_args.ignored_windows.clone();
+    cli.included_windows = record_args.included_windows.clone();
+    cli.ignored_urls = record_args.ignored_urls.clone();
+    cli.video_chunk_duration = record_args.video_chunk_duration;
+    cli.deepgram_api_key = record_args.deepgram_api_key.clone();
+    cli.auto_destruct_pid = record_args.auto_destruct_pid;
+    cli.vad_sensitivity = record_args.vad_sensitivity.clone();
+    cli.disable_telemetry = record_args.disable_telemetry;
+    cli.enable_llm = record_args.enable_llm;
+    cli.enable_frame_cache = record_args.enable_frame_cache;
+    cli.capture_unfocused_windows = record_args.capture_unfocused_windows;
+    cli.video_quality = record_args.video_quality.clone();
+    cli.enable_ui_events = record_args.enable_ui_events;
+    cli.enable_sync = record_args.enable_sync;
+    cli.sync_token = record_args.sync_token.clone();
+    cli.sync_password = record_args.sync_password.clone();
+    cli.sync_interval_secs = record_args.sync_interval_secs;
+    cli.sync_machine_id = record_args.sync_machine_id.clone();
+
+    // Recompute data dir in case record_args overrode it
+    let local_data_dir = get_base_dir(&cli.data_dir)?;
+    let local_data_dir_clone = local_data_dir.clone();
 
     // Replace the current conditional check with:
     let ffmpeg_path = find_ffmpeg_path();

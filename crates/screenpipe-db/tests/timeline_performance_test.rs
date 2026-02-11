@@ -79,7 +79,7 @@ mod timeline_performance_tests {
     async fn insert_audio_transcriptions(
         db: &DatabaseManager,
         count: usize,
-        start_time: chrono::DateTime<Utc>,
+        _start_time: chrono::DateTime<Utc>,
     ) {
         for i in 0..count {
             let audio_chunk_id = db
