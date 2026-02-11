@@ -906,14 +906,12 @@ jobs:
 
           Write-Host "uploading Windows bundles for v$version to R2..."
 
-          # Upload NSIS installer (.exe)
-          Get-ChildItem "$bundleDir/nsis/*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
-            aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
-            Write-Host "  ✅ $($_.Name)"
+          # Upload ALL bundle artifacts (.exe, .nsis.zip, .sig files)
+          Write-Host "Files in nsis bundle dir:"
+          Get-ChildItem "$bundleDir/nsis" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "  found: $($_.Name) ($($_.Length) bytes)"
           }
-
-          # Upload updater artifacts (.nsis.zip + .sig)
-          Get-ChildItem "$bundleDir/nsis/*.nsis.zip","$bundleDir/nsis/*.sig" -ErrorAction SilentlyContinue | ForEach-Object {
+          Get-ChildItem "$bundleDir/nsis" -ErrorAction SilentlyContinue | ForEach-Object {
             aws s3 cp $_.FullName "$r2Prefix/$($_.Name)" --endpoint-url $r2Endpoint
             Write-Host "  ✅ $($_.Name)"
           }
@@ -1081,7 +1079,7 @@ jobs:
                 cp "$f" "${BUNDLE_DIR}/${{ matrix.updater_subdir }}/"
                 echo "  → ${{ matrix.updater_subdir }}/$name"
                 ;;
-              *.exe|*.nsis.zip|*.nsis.zip.sig)
+              *.exe|*.exe.sig|*.nsis.zip|*.nsis.zip.sig)
                 cp "$f" "${BUNDLE_DIR}/${{ matrix.bundle_subdir }}/"
                 echo "  → ${{ matrix.bundle_subdir }}/$name"
                 ;;
