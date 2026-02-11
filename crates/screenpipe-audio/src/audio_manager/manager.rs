@@ -320,10 +320,12 @@ impl AudioManager {
         let context_param = create_whisper_context_parameters(audio_transcription_engine.clone())?;
 
         let quantized_path = self.stt_model_path.clone();
+        info!("loading whisper model with GPU acceleration...");
         let whisper_context = Arc::new(
             WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_param)
                 .expect("failed to load model"),
         );
+        info!("whisper model loaded successfully");
 
         Ok(tokio::spawn(async move {
             while let Ok(audio) = whisper_receiver.recv() {
