@@ -115,6 +115,16 @@ export async function trackUsage(
         ).bind(today, tier, userId || null, deviceId).run();
         dailyCount = 1;
       } else {
+        // Check limit BEFORE incrementing — don't inflate counter on rejected requests
+        if (existing.daily_count >= limits.dailyQueries) {
+          return {
+            used: existing.daily_count,
+            limit: limits.dailyQueries,
+            remaining: 0,
+            allowed: false,
+            resetsAt: getNextResetTime(),
+          };
+        }
         // Increment count
         dailyCount = existing.daily_count + 1;
         await env.DB.prepare(
