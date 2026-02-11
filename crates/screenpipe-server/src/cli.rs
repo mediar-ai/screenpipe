@@ -630,6 +630,11 @@ pub enum PipeCommand {
         #[arg(long, default_value_t = false)]
         json: bool,
     },
+    /// Install a pipe from a local path or URL
+    Install {
+        /// Source: local file/dir path or URL
+        source: String,
+    },
     /// Enable a pipe
     Enable {
         /// Pipe name

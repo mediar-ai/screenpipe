@@ -10,6 +10,7 @@ pub mod chunking;
 pub mod cli;
 pub mod cli_pipe;
 pub mod cli_status;
+pub mod pipes_api;
 pub mod cloud_search;
 pub mod core;
 pub mod filtering;

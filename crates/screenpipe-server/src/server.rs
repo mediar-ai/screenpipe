@@ -127,6 +127,8 @@ pub struct AppState {
     pub video_quality: String,
     /// API request counter for usage analytics
     pub api_request_count: Arc<AtomicUsize>,
+    /// Pipe manager for scheduled agent execution
+    pub pipe_manager: Option<crate::pipes_api::SharedPipeManager>,
 }
 
 // Update the SearchQuery struct
@@ -1022,6 +1024,7 @@ pub struct SCServer {
     use_pii_removal: bool,
     sync_handle: Option<Arc<SyncServiceHandle>>,
     video_quality: String,
+    pipe_manager: Option<crate::pipes_api::SharedPipeManager>,
 }
 
 impl SCServer {
@@ -1046,7 +1049,14 @@ impl SCServer {
             use_pii_removal,
             sync_handle: None,
             video_quality,
+            pipe_manager: None,
         }
+    }
+
+    /// Set the pipe manager
+    pub fn with_pipe_manager(mut self, pm: crate::pipes_api::SharedPipeManager) -> Self {
+        self.pipe_manager = Some(pm);
+        self
     }
 
     /// Set the sync service handle
@@ -1163,6 +1173,7 @@ impl SCServer {
             sync_state: sync_api::new_sync_state(),
             video_quality: self.video_quality.clone(),
             api_request_count: api_request_count.clone(),
+            pipe_manager: self.pipe_manager.clone(),
         });
 
         let cors = CorsLayer::new()
@@ -1233,6 +1244,23 @@ impl SCServer {
                 "/ai/chat/completions",
                 axum::routing::post(crate::apple_intelligence_api::chat_completions),
             );
+
+        // Pipe API routes (if pipe manager is available)
+        let router = if let Some(ref pm) = self.pipe_manager {
+            let pipe_routes = Router::new()
+                .route("/", axum::routing::get(crate::pipes_api::list_pipes))
+                .route("/install", axum::routing::post(crate::pipes_api::install_pipe))
+                .route("/{id}", axum::routing::get(crate::pipes_api::get_pipe))
+                .route("/{id}", axum::routing::delete(crate::pipes_api::delete_pipe))
+                .route("/{id}/enable", axum::routing::post(crate::pipes_api::enable_pipe))
+                .route("/{id}/run", axum::routing::post(crate::pipes_api::run_pipe_now))
+                .route("/{id}/logs", axum::routing::get(crate::pipes_api::get_pipe_logs))
+                .route("/{id}/config", axum::routing::post(crate::pipes_api::update_pipe_config))
+                .with_state(pm.clone());
+            router.nest("/pipes", pipe_routes)
+        } else {
+            router
+        };
 
         // NOTE: websockets and sse is not supported by openapi so we move it down here
         router

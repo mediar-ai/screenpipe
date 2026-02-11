@@ -12,6 +12,7 @@ use screenpipe_audio::{
         default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     },
 };
+use screenpipe_core::agents::AgentExecutor;
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_core::sync::{
     BlobType, SyncClientConfig, SyncEvent, SyncManager, SyncService, SyncServiceConfig,
@@ -879,6 +880,40 @@ async fn main() -> anyhow::Result<()> {
     } else {
         server
     };
+
+    // Initialize pipe manager
+    let pipes_dir = local_data_dir.join("pipes");
+    std::fs::create_dir_all(&pipes_dir).ok();
+
+    let user_token = std::env::var("SCREENPIPE_API_KEY").ok();
+    let pi_executor = std::sync::Arc::new(
+        screenpipe_core::agents::pi::PiExecutor::new(user_token),
+    );
+
+    let mut agent_executors: std::collections::HashMap<
+        String,
+        std::sync::Arc<dyn screenpipe_core::agents::AgentExecutor>,
+    > = std::collections::HashMap::new();
+    agent_executors.insert("pi".to_string(), pi_executor.clone());
+
+    let mut pipe_manager =
+        screenpipe_core::pipes::PipeManager::new(pipes_dir, agent_executors);
+    pipe_manager.install_builtin_pipes().ok();
+    if let Err(e) = pipe_manager.load_pipes().await {
+        tracing::warn!("failed to load pipes: {}", e);
+    }
+    if let Err(e) = pipe_manager.start_scheduler().await {
+        tracing::warn!("failed to start pipe scheduler: {}", e);
+    }
+    let shared_pipe_manager = std::sync::Arc::new(tokio::sync::Mutex::new(pipe_manager));
+    let server = server.with_pipe_manager(shared_pipe_manager.clone());
+
+    // Install pi agent in background
+    tokio::spawn(async move {
+        if let Err(e) = pi_executor.ensure_installed().await {
+            tracing::warn!("pi agent install failed: {}", e);
+        }
+    });
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());

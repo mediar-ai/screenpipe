@@ -13,6 +13,7 @@ import {
   Plug,
   MessageSquare,
   Cloud,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccountSection } from "@/components/settings/account-section";
@@ -23,6 +24,7 @@ import GeneralSettings from "@/components/settings/general-settings";
 import { DiskUsageSection } from "@/components/settings/disk-usage-section";
 import { ConnectionsSection } from "@/components/settings/connections-section";
 import { FeedbackSection } from "@/components/settings/feedback-section";
+import { PipesSection } from "@/components/settings/pipes-section";
 import { SyncSettings } from "@/components/settings/sync-settings";
 import { useRouter } from "next/navigation";
 import { useQueryState } from "nuqs";
@@ -37,6 +39,7 @@ type SettingsSection =
   | "disk-usage"
   | "connections"
   | "cloud-sync"
+  | "pipes"
   | "feedback";
 
 function SettingsPageContent() {
@@ -44,7 +47,7 @@ function SettingsPageContent() {
   const [activeSection, setActiveSection] = useQueryState("section", {
     defaultValue: "general" as SettingsSection,
     parse: (value) => {
-      if (["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections", "cloud-sync", "feedback"].includes(value)) {
+      if (["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections", "cloud-sync", "pipes", "feedback"].includes(value)) {
         return value as SettingsSection;
       }
       return "general" as SettingsSection;
@@ -72,6 +75,8 @@ function SettingsPageContent() {
         return <DiskUsageSection />;
       case "connections":
         return <ConnectionsSection />;
+      case "pipes":
+        return <PipesSection />;
       case "cloud-sync":
         return showCloudSync ? <SyncSettings /> : <GeneralSettings />;
       case "feedback":
@@ -122,6 +127,12 @@ function SettingsPageContent() {
       icon: <Plug className="h-4 w-4" />,
       description: "Connect to AI assistants like Claude",
     },
+    {
+      id: "pipes",
+      label: "Pipes",
+      icon: <Workflow className="h-4 w-4" />,
+      description: "Scheduled agents on your screen data",
+    },
     ...(showCloudSync
       ? [
           {
@@ -145,7 +156,7 @@ function SettingsPageContent() {
     const unlisten = listen<{ url: string }>("navigate", (event) => {
       const url = new URL(event.payload.url, window.location.origin);
       const section = url.searchParams.get("section");
-      if (section && ["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections", "feedback"].includes(section)) {
+      if (section && ["general", "ai", "shortcuts", "recording", "account", "disk-usage", "connections", "pipes", "feedback"].includes(section)) {
         setActiveSection(section as SettingsSection);
       }
     });

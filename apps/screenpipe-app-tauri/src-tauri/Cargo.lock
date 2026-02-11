@@ -8719,7 +8719,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "2.0.421"
+version = "2.0.424"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -8875,6 +8875,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "chacha20poly1305",
+ "chrono",
  "clap",
  "core-foundation 0.10.1",
  "core-graphics 0.24.0",
@@ -8894,6 +8895,7 @@ dependencies = [
  "reqwest 0.12.12",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha2",
  "thiserror 1.0.69",
  "tokenizers",
