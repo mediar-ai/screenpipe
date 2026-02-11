@@ -46,10 +46,6 @@
             "pages": ["faq", "contributing"]
           }
         ]
-      },
-      {
-        "tab": "api reference",
-        "openapi": "openapi.yaml"
       }
     ]
   },
