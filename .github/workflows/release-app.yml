@@ -624,9 +624,9 @@ jobs:
             Remove-Item $installerPath -Force
           }
           
-          # Set environment variable for this job
-          echo "VULKAN_SDK=$vulkanPath" >> $env:GITHUB_ENV
-          Write-Host "VULKAN_SDK set to $vulkanPath"
+          # Don't set VULKAN_SDK globally — whisper.cpp auto-detects it and enables Vulkan
+          # which breaks the ExternalProject build. Beta rebuild sets it locally.
+          Write-Host "Vulkan SDK installed at $vulkanPath (not setting VULKAN_SDK globally)"
           
           # Verify installation
           if (!(Test-Path "$vulkanPath\Lib\vulkan-1.lib")) {
@@ -784,10 +784,6 @@ jobs:
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
         env:
-          # Disable Vulkan for stable build — ExternalProject can't find cl.exe on GH runners
-          # Vulkan will be re-enabled once Ninja-based build is tested
-          VULKAN_SDK: ""
-          GGML_VULKAN: "OFF"
           # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
