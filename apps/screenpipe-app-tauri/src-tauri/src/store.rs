@@ -497,7 +497,13 @@ impl Default for SettingsStore {
             show_screenpipe_shortcut: "Alt+S".to_string(),
             #[cfg(not(target_os = "windows"))]
             show_screenpipe_shortcut: "Super+Ctrl+S".to_string(),
+            #[cfg(target_os = "windows")]
+            start_recording_shortcut: "Alt+Shift+U".to_string(),
+            #[cfg(not(target_os = "windows"))]
             start_recording_shortcut: "Super+Ctrl+U".to_string(),
+            #[cfg(target_os = "windows")]
+            stop_recording_shortcut: "Alt+Shift+X".to_string(),
+            #[cfg(not(target_os = "windows"))]
             stop_recording_shortcut: "Super+Ctrl+X".to_string(),
             start_audio_shortcut: "".to_string(),
             stop_audio_shortcut: "".to_string(),

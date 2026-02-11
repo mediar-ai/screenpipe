@@ -58,8 +58,29 @@ pub struct EmbeddedServerConfig {
 
 impl EmbeddedServerConfig {
     pub fn from_store(store: &SettingsStore, data_dir: PathBuf) -> Self {
-        info!("Building EmbeddedServerConfig from store: enable_ui_events={}, disable_audio={}, disable_vision={}", 
+        info!("Building EmbeddedServerConfig from store: enable_ui_events={}, disable_audio={}, disable_vision={}",
               store.enable_ui_events, store.disable_audio, store.disable_vision);
+
+        // Fallback: if engine requires cloud auth but user is not logged in, use local whisper
+        let audio_transcription_engine = {
+            let engine = store.audio_transcription_engine.clone();
+            let has_user_id = store.user.id.as_ref().map_or(false, |id| !id.is_empty());
+            let has_deepgram_key = !store.deepgram_api_key.is_empty()
+                && store.deepgram_api_key != "default";
+
+            match engine.as_str() {
+                "screenpipe-cloud" if !has_user_id => {
+                    warn!("screenpipe-cloud selected but user not logged in, falling back to whisper-large-v3-turbo");
+                    "whisper-large-v3-turbo".to_string()
+                }
+                "deepgram" if !has_deepgram_key => {
+                    warn!("deepgram selected but no API key configured, falling back to whisper-large-v3-turbo");
+                    "whisper-large-v3-turbo".to_string()
+                }
+                _ => engine,
+            }
+        };
+
         Self {
             port: store.port,
             data_dir,
@@ -70,7 +91,7 @@ impl EmbeddedServerConfig {
             disable_vision: store.disable_vision,
             use_pii_removal: store.use_pii_removal,
             ocr_engine: store.ocr_engine.clone(),
-            audio_transcription_engine: store.audio_transcription_engine.clone(),
+            audio_transcription_engine,
             monitor_ids: store.monitor_ids.clone(),
             audio_devices: store.audio_devices.clone(),
             ignored_windows: store.ignored_windows.clone(),

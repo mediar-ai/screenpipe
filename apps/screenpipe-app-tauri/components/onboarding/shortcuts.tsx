@@ -45,14 +45,14 @@ export default function OnboardingShortcuts({
     {
       id: "startRecordingShortcut",
       title: "Start Recording",
-      defaultShortcut: "Super+Alt+U",
+      defaultShortcut: isWindows ? "Alt+Shift+U" : "Super+Ctrl+U",
       description: "Begin screen recording",
       value: settings.startRecordingShortcut,
     },
     {
       id: "stopRecordingShortcut",
       title: "Stop Recording",
-      defaultShortcut: "Super+Alt+X",
+      defaultShortcut: isWindows ? "Alt+Shift+X" : "Super+Ctrl+X",
       description: "End screen recording",
       value: settings.stopRecordingShortcut,
     },
