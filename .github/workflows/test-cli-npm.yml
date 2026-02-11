@@ -66,8 +66,8 @@ jobs:
         shell: pwsh
         run: |
           Get-ComputerInfo | Select-Object OsName, OsArchitecture
-          where.exe screenpipe 2>$null
-          if ($LASTEXITCODE -eq 0) { Write-Error "screenpipe already installed"; exit 1 }
+          $found = (Get-Command screenpipe -ErrorAction SilentlyContinue)
+          if ($found) { Write-Error "screenpipe already installed"; exit 1 }
           Write-Output "OK: not installed"
 
       - name: Install bun
@@ -94,6 +94,11 @@ jobs:
         run: |
           uname -a
           which screenpipe 2>/dev/null && exit 1 || echo "OK: not installed"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y libpulse0 libasound2-dev ffmpeg
 
       - name: Install bun
         run: curl -fsSL https://bun.sh/install | bash
