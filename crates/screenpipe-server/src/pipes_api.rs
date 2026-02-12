@@ -43,19 +43,14 @@ pub struct ConfigUpdateRequest {
 // ---------------------------------------------------------------------------
 
 /// GET /pipes — list all pipes with status.
-pub async fn list_pipes(
-    State(pm): State<SharedPipeManager>,
-) -> Json<Value> {
+pub async fn list_pipes(State(pm): State<SharedPipeManager>) -> Json<Value> {
     let mgr = pm.lock().await;
     let pipes = mgr.list_pipes().await;
     Json(json!({ "data": pipes }))
 }
 
 /// GET /pipes/:id — single pipe detail.
-pub async fn get_pipe(
-    State(pm): State<SharedPipeManager>,
-    Path(id): Path<String>,
-) -> Json<Value> {
+pub async fn get_pipe(State(pm): State<SharedPipeManager>, Path(id): Path<String>) -> Json<Value> {
     let mgr = pm.lock().await;
     match mgr.get_pipe(&id).await {
         Some(pipe) => Json(json!({ "data": pipe })),

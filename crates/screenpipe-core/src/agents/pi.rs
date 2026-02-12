@@ -104,16 +104,16 @@ impl PiExecutor {
             ]
         });
 
-        if let Some(providers) = models_config.get_mut("providers").and_then(|p| p.as_object_mut()) {
+        if let Some(providers) = models_config
+            .get_mut("providers")
+            .and_then(|p| p.as_object_mut())
+        {
             providers.insert("screenpipe".to_string(), screenpipe_provider);
         } else {
             models_config = json!({"providers": {"screenpipe": screenpipe_provider}});
         }
 
-        std::fs::write(
-            &models_path,
-            serde_json::to_string_pretty(&models_config)?,
-        )?;
+        std::fs::write(&models_path, serde_json::to_string_pretty(&models_config)?)?;
 
         // -- auth.json: merge screenpipe token, preserve other providers --
         if let Some(token) = user_token {
@@ -143,8 +143,6 @@ impl PiExecutor {
         debug!("pi config merged at {:?}", models_path);
         Ok(())
     }
-
-
 }
 
 #[async_trait::async_trait]
@@ -169,11 +167,12 @@ impl AgentExecutor for PiExecutor {
         // Users who want their own provider must set it explicitly in pipe.md.
         // This ensures screenpipe cloud is the default even if the user has
         // a different defaultProvider in ~/.pi/agent/settings.json for interactive use.
-        let resolved_provider = provider
-            .unwrap_or("screenpipe")
-            .to_string();
+        let resolved_provider = provider.unwrap_or("screenpipe").to_string();
 
-        info!("pipe using provider: {}, model: {}", resolved_provider, model);
+        info!(
+            "pipe using provider: {}, model: {}",
+            resolved_provider, model
+        );
 
         let mut cmd = build_async_command(&pi_path);
         cmd.current_dir(working_dir);

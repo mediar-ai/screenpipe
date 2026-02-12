@@ -32,9 +32,7 @@ pub async fn handle_pipe_command(command: &PipeCommand) -> anyhow::Result<()> {
                 println!("{}", serde_json::to_string_pretty(&pipes)?);
             } else if pipes.is_empty() {
                 println!("no pipes installed");
-                println!(
-                    "\nhint: create one at ~/.screenpipe/pipes/my-pipe/pipe.md"
-                );
+                println!("\nhint: create one at ~/.screenpipe/pipes/my-pipe/pipe.md");
             } else {
                 println!(
                     "{:<20} {:<10} {:<12} {:<20}",
@@ -60,12 +58,10 @@ pub async fn handle_pipe_command(command: &PipeCommand) -> anyhow::Result<()> {
                 }
             }
         }
-        PipeCommand::Install { source } => {
-            match manager.install_pipe(source).await {
-                Ok(name) => println!("installed pipe: {}", name),
-                Err(e) => eprintln!("error: {}", e),
-            }
-        }
+        PipeCommand::Install { source } => match manager.install_pipe(source).await {
+            Ok(name) => println!("installed pipe: {}", name),
+            Err(e) => eprintln!("error: {}", e),
+        },
         PipeCommand::Enable { name } => {
             manager.enable_pipe(name, true).await?;
             println!("enabled pipe: {}", name);
@@ -79,7 +75,10 @@ pub async fn handle_pipe_command(command: &PipeCommand) -> anyhow::Result<()> {
             match manager.run_pipe(name).await {
                 Ok(log) => {
                     if log.success {
-                        println!("✓ completed in {}s", (log.finished_at - log.started_at).num_seconds());
+                        println!(
+                            "✓ completed in {}s",
+                            (log.finished_at - log.started_at).num_seconds()
+                        );
                         if !log.stdout.is_empty() {
                             println!("\n{}", log.stdout);
                         }

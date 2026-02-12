@@ -27,22 +27,20 @@ pub async fn handle_status_command(
                     .map(|row| row.get::<i64, _>("cnt"))
                     .unwrap_or(0);
 
-                let audio: i64 =
-                    sqlx::query("SELECT COUNT(*) as cnt FROM audio_transcriptions")
-                        .fetch_one(&db.pool)
-                        .await
-                        .map(|row| row.get::<i64, _>("cnt"))
-                        .unwrap_or(0);
+                let audio: i64 = sqlx::query("SELECT COUNT(*) as cnt FROM audio_transcriptions")
+                    .fetch_one(&db.pool)
+                    .await
+                    .map(|row| row.get::<i64, _>("cnt"))
+                    .unwrap_or(0);
 
-                let last: String = sqlx::query(
-                    "SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1",
-                )
-                .fetch_optional(&db.pool)
-                .await
-                .ok()
-                .flatten()
-                .map(|row| row.get::<String, _>("timestamp"))
-                .unwrap_or_else(|| "never".to_string());
+                let last: String =
+                    sqlx::query("SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1")
+                        .fetch_optional(&db.pool)
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|row| row.get::<String, _>("timestamp"))
+                        .unwrap_or_else(|| "never".to_string());
 
                 (frames, audio, last)
             }

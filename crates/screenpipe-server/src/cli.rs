@@ -166,7 +166,6 @@ pub struct Cli {
     // Legacy top-level flags (for backward compat with bare `screenpipe`)
     // These are duplicated on RecordArgs. When command is None, these are used.
     // =========================================================================
-
     /// FPS for continuous recording
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
     #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))]

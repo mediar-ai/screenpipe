@@ -1269,13 +1269,31 @@ impl SCServer {
         let router = if let Some(ref pm) = self.pipe_manager {
             let pipe_routes = Router::new()
                 .route("/", axum::routing::get(crate::pipes_api::list_pipes))
-                .route("/install", axum::routing::post(crate::pipes_api::install_pipe))
+                .route(
+                    "/install",
+                    axum::routing::post(crate::pipes_api::install_pipe),
+                )
                 .route("/{id}", axum::routing::get(crate::pipes_api::get_pipe))
-                .route("/{id}", axum::routing::delete(crate::pipes_api::delete_pipe))
-                .route("/{id}/enable", axum::routing::post(crate::pipes_api::enable_pipe))
-                .route("/{id}/run", axum::routing::post(crate::pipes_api::run_pipe_now))
-                .route("/{id}/logs", axum::routing::get(crate::pipes_api::get_pipe_logs))
-                .route("/{id}/config", axum::routing::post(crate::pipes_api::update_pipe_config))
+                .route(
+                    "/{id}",
+                    axum::routing::delete(crate::pipes_api::delete_pipe),
+                )
+                .route(
+                    "/{id}/enable",
+                    axum::routing::post(crate::pipes_api::enable_pipe),
+                )
+                .route(
+                    "/{id}/run",
+                    axum::routing::post(crate::pipes_api::run_pipe_now),
+                )
+                .route(
+                    "/{id}/logs",
+                    axum::routing::get(crate::pipes_api::get_pipe_logs),
+                )
+                .route(
+                    "/{id}/config",
+                    axum::routing::post(crate::pipes_api::update_pipe_config),
+                )
                 .with_state(pm.clone());
             router.nest("/pipes", pipe_routes)
         } else {
@@ -1820,12 +1838,16 @@ async fn search_speakers_handler(
     Query(request): Query<SearchSpeakersRequest>,
 ) -> Result<JsonResponse<Vec<Speaker>>, (StatusCode, JsonResponse<Value>)> {
     let search_prefix = request.name.unwrap_or_default();
-    let speakers = state.db.search_speakers(&search_prefix).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": format!("failed to search speakers: {}", e)})),
-        )
-    })?;
+    let speakers = state
+        .db
+        .search_speakers(&search_prefix)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("failed to search speakers: {}", e)})),
+            )
+        })?;
     Ok(JsonResponse(speakers))
 }
 
@@ -1979,16 +2001,12 @@ async fn undo_speaker_reassign_handler(
         .map(|a| (a.transcription_id, a.old_speaker_id))
         .collect();
 
-    let restored = state
-        .db
-        .undo_speaker_reassign(&tuples)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": e.to_string()})),
-            )
-        })?;
+    let restored = state.db.undo_speaker_reassign(&tuples).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": e.to_string()})),
+        )
+    })?;
 
     Ok(JsonResponse(UndoSpeakerReassignResponse { restored }))
 }

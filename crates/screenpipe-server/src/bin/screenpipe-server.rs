@@ -886,9 +886,7 @@ async fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(&pipes_dir).ok();
 
     let user_token = std::env::var("SCREENPIPE_API_KEY").ok();
-    let pi_executor = std::sync::Arc::new(
-        screenpipe_core::agents::pi::PiExecutor::new(user_token),
-    );
+    let pi_executor = std::sync::Arc::new(screenpipe_core::agents::pi::PiExecutor::new(user_token));
 
     let mut agent_executors: std::collections::HashMap<
         String,
@@ -896,8 +894,7 @@ async fn main() -> anyhow::Result<()> {
     > = std::collections::HashMap::new();
     agent_executors.insert("pi".to_string(), pi_executor.clone());
 
-    let mut pipe_manager =
-        screenpipe_core::pipes::PipeManager::new(pipes_dir, agent_executors);
+    let mut pipe_manager = screenpipe_core::pipes::PipeManager::new(pipes_dir, agent_executors);
     pipe_manager.install_builtin_pipes().ok();
     if let Err(e) = pipe_manager.load_pipes().await {
         tracing::warn!("failed to load pipes: {}", e);

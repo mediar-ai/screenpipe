@@ -345,12 +345,13 @@ impl SyncClient {
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_default();
+            let body = response.text().await.unwrap_or_default();
             // Truncate body to avoid flooding logs with large XML error responses
-            let body_preview = if body.len() > 500 { &body[..500] } else { &body };
+            let body_preview = if body.len() > 500 {
+                &body[..500]
+            } else {
+                &body
+            };
             return Err(SyncError::Server(format!(
                 "S3 download failed with status: {} body: {}",
                 status, body_preview

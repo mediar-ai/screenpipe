@@ -20,8 +20,11 @@ const FTS_INDEX_INTERVAL: Duration = Duration::from_secs(30);
 ///
 /// Returns a JoinHandle that can be used to await/abort the indexer.
 pub fn start_fts_indexer(db: Arc<DatabaseManager>) -> tokio::task::JoinHandle<()> {
-    info!("Starting background FTS indexer (interval: {}s, batch: {})",
-        FTS_INDEX_INTERVAL.as_secs(), FTS_BATCH_SIZE);
+    info!(
+        "Starting background FTS indexer (interval: {}s, batch: {})",
+        FTS_INDEX_INTERVAL.as_secs(),
+        FTS_BATCH_SIZE
+    );
 
     tokio::spawn(async move {
         // Small initial delay to let the app start up
@@ -55,10 +58,12 @@ async fn index_all_tables(db: &DatabaseManager) -> i64 {
         0
     });
 
-    total += index_audio_transcriptions_fts(db).await.unwrap_or_else(|e| {
-        warn!("FTS indexer: audio_transcriptions error: {}", e);
-        0
-    });
+    total += index_audio_transcriptions_fts(db)
+        .await
+        .unwrap_or_else(|e| {
+            warn!("FTS indexer: audio_transcriptions error: {}", e);
+            0
+        });
 
     total += index_ui_events_fts(db).await.unwrap_or_else(|e| {
         warn!("FTS indexer: ui_events error: {}", e);
@@ -71,7 +76,7 @@ async fn index_all_tables(db: &DatabaseManager) -> i64 {
 /// Get the last indexed rowid for a table.
 async fn get_last_indexed(db: &DatabaseManager, table_name: &str) -> Result<i64, sqlx::Error> {
     let result: Option<i64> = sqlx::query_scalar(
-        "SELECT last_indexed_rowid FROM fts_index_progress WHERE table_name = ?1"
+        "SELECT last_indexed_rowid FROM fts_index_progress WHERE table_name = ?1",
     )
     .bind(table_name)
     .fetch_optional(&db.pool)
@@ -88,7 +93,7 @@ async fn update_last_indexed(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT OR REPLACE INTO fts_index_progress (table_name, last_indexed_rowid, updated_at) \
-         VALUES (?1, ?2, CURRENT_TIMESTAMP)"
+         VALUES (?1, ?2, CURRENT_TIMESTAMP)",
     )
     .bind(table_name)
     .bind(last_rowid)
@@ -102,7 +107,7 @@ async fn index_frames_fts(db: &DatabaseManager) -> Result<i64, sqlx::Error> {
     let last = get_last_indexed(db, "frames").await?;
 
     let rows = sqlx::query_as::<_, (i64, i64)>(
-        "SELECT rowid, id FROM frames WHERE rowid > ?1 ORDER BY rowid LIMIT ?2"
+        "SELECT rowid, id FROM frames WHERE rowid > ?1 ORDER BY rowid LIMIT ?2",
     )
     .bind(last)
     .bind(FTS_BATCH_SIZE)
@@ -144,7 +149,7 @@ async fn index_ocr_text_fts(db: &DatabaseManager) -> Result<i64, sqlx::Error> {
     let rows = sqlx::query_as::<_, (i64,)>(
         "SELECT rowid FROM ocr_text WHERE rowid > ?1 \
          AND text IS NOT NULL AND text != '' AND frame_id IS NOT NULL \
-         ORDER BY rowid LIMIT ?2"
+         ORDER BY rowid LIMIT ?2",
     )
     .bind(last)
     .bind(FTS_BATCH_SIZE)
@@ -164,7 +169,7 @@ async fn index_ocr_text_fts(db: &DatabaseManager) -> Result<i64, sqlx::Error> {
         sqlx::query(
             "INSERT OR IGNORE INTO ocr_text_fts(frame_id, text, app_name, window_name) \
              SELECT frame_id, text, COALESCE(app_name, ''), COALESCE(window_name, '') \
-             FROM ocr_text WHERE rowid = ?1"
+             FROM ocr_text WHERE rowid = ?1",
         )
         .bind(rowid)
         .execute(&mut **tx.conn())
@@ -185,7 +190,7 @@ async fn index_audio_transcriptions_fts(db: &DatabaseManager) -> Result<i64, sql
         "SELECT rowid FROM audio_transcriptions WHERE rowid > ?1 \
          AND transcription IS NOT NULL AND transcription != '' \
          AND audio_chunk_id IS NOT NULL \
-         ORDER BY rowid LIMIT ?2"
+         ORDER BY rowid LIMIT ?2",
     )
     .bind(last)
     .bind(FTS_BATCH_SIZE)
@@ -223,7 +228,7 @@ async fn index_ui_events_fts(db: &DatabaseManager) -> Result<i64, sqlx::Error> {
     let last = get_last_indexed(db, "ui_events").await?;
 
     let rows = sqlx::query_as::<_, (i64,)>(
-        "SELECT rowid FROM ui_events WHERE rowid > ?1 ORDER BY rowid LIMIT ?2"
+        "SELECT rowid FROM ui_events WHERE rowid > ?1 ORDER BY rowid LIMIT ?2",
     )
     .bind(last)
     .bind(FTS_BATCH_SIZE)

@@ -3597,7 +3597,12 @@ LIMIT ? OFFSET ?
             }
         }
 
-        Ok((target_speaker_id, transcriptions_updated, embeddings_moved, old_assignments))
+        Ok((
+            target_speaker_id,
+            transcriptions_updated,
+            embeddings_moved,
+            old_assignments,
+        ))
     }
 
     /// Undo a speaker reassignment using the old_assignments from reassign_speaker
@@ -3614,12 +3619,11 @@ LIMIT ? OFFSET ?
 
         for (transcription_id, old_speaker_id) in old_assignments {
             // Ensure the old speaker exists (recreate if deleted during merge)
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM speakers WHERE id = ?)",
-            )
-            .bind(old_speaker_id)
-            .fetch_one(&mut **tx.conn())
-            .await?;
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM speakers WHERE id = ?)")
+                    .bind(old_speaker_id)
+                    .fetch_one(&mut **tx.conn())
+                    .await?;
 
             if !exists {
                 sqlx::query("INSERT INTO speakers (id, name) VALUES (?, '')")
@@ -3628,14 +3632,13 @@ LIMIT ? OFFSET ?
                     .await?;
             }
 
-            let affected = sqlx::query(
-                "UPDATE audio_transcriptions SET speaker_id = ? WHERE id = ?",
-            )
-            .bind(old_speaker_id)
-            .bind(transcription_id)
-            .execute(&mut **tx.conn())
-            .await?
-            .rows_affected();
+            let affected =
+                sqlx::query("UPDATE audio_transcriptions SET speaker_id = ? WHERE id = ?")
+                    .bind(old_speaker_id)
+                    .bind(transcription_id)
+                    .execute(&mut **tx.conn())
+                    .await?
+                    .rows_affected();
             restored += affected;
         }
 

@@ -223,7 +223,8 @@ pub async fn start_ui_recording(
                             batch.drain(..drain_count);
                             warn!(
                                 "UI recorder: dropped {} old events during DB contention (kept {})",
-                                drain_count, batch.len()
+                                drain_count,
+                                batch.len()
                             );
                         }
 
@@ -233,11 +234,12 @@ pub async fn start_ui_recording(
                         // Exponential backoff on consecutive failures
                         if consecutive_failures > 0 {
                             let backoff = Duration::from_millis(
-                                (500 * (1u64 << consecutive_failures.min(5))).min(30_000)
+                                (500 * (1u64 << consecutive_failures.min(5))).min(30_000),
                             );
                             debug!(
                                 "UI recorder: backing off {}ms after {} failures",
-                                backoff.as_millis(), consecutive_failures
+                                backoff.as_millis(),
+                                consecutive_failures
                             );
                             tokio::time::sleep(backoff).await;
                         }
@@ -246,7 +248,8 @@ pub async fn start_ui_recording(
             }
 
             // Safety: drop entire batch if it's too old (>30s without successful flush)
-            if !batch.is_empty() && last_flush.elapsed() > max_batch_age && consecutive_failures > 5 {
+            if !batch.is_empty() && last_flush.elapsed() > max_batch_age && consecutive_failures > 5
+            {
                 warn!(
                     "UI recorder: dropping {} stale events (last flush {}s ago, {} consecutive failures)",
                     batch.len(), last_flush.elapsed().as_secs(), consecutive_failures
@@ -292,7 +295,10 @@ async fn flush_batch(
                 error!("Failed to insert UI events batch: {}", e);
             } else {
                 // Reduce log spam during contention storms
-                debug!("Failed to insert UI events batch (failure #{}): {}", consecutive_failures, e);
+                debug!(
+                    "Failed to insert UI events batch (failure #{}): {}",
+                    consecutive_failures, e
+                );
             }
         }
     }

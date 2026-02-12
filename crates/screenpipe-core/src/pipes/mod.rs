@@ -51,10 +51,18 @@ pub struct PipeConfig {
     pub config: HashMap<String, serde_json::Value>,
 }
 
-fn default_schedule() -> String { "manual".into() }
-fn default_true() -> bool { true }
-fn default_agent() -> String { "pi".into() }
-fn default_model() -> String { "claude-haiku-4-5@20251001".into() }
+fn default_schedule() -> String {
+    "manual".into()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_agent() -> String {
+    "pi".into()
+}
+fn default_model() -> String {
+    "claude-haiku-4-5@20251001".into()
+}
 
 /// Result of a single pipe run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,10 +111,7 @@ pub struct PipeManager {
 }
 
 impl PipeManager {
-    pub fn new(
-        pipes_dir: PathBuf,
-        executors: HashMap<String, Arc<dyn AgentExecutor>>,
-    ) -> Self {
+    pub fn new(pipes_dir: PathBuf, executors: HashMap<String, Arc<dyn AgentExecutor>>) -> Self {
         Self {
             pipes_dir,
             executors,
@@ -178,9 +183,7 @@ impl PipeManager {
             .map(|(name, (config, body))| {
                 let pipe_logs = logs.get(name);
                 let last_log = pipe_logs.and_then(|l| l.back());
-                let last_error = last_log
-                    .filter(|l| !l.success)
-                    .map(|l| l.stderr.clone());
+                let last_error = last_log.filter(|l| !l.success).map(|l| l.stderr.clone());
                 PipeStatus {
                     config: config.clone(),
                     last_run: last_log.map(|l| l.finished_at),
@@ -202,9 +205,7 @@ impl PipeManager {
         pipes.get(name).map(|(config, body)| {
             let pipe_logs = logs.get(name);
             let last_log = pipe_logs.and_then(|l| l.back());
-            let last_error = last_log
-                .filter(|l| !l.success)
-                .map(|l| l.stderr.clone());
+            let last_error = last_log.filter(|l| !l.success).map(|l| l.stderr.clone());
             PipeStatus {
                 config: config.clone(),
                 last_run: last_log.map(|l| l.finished_at),
@@ -267,7 +268,14 @@ impl PipeManager {
         // Acquire semaphore (one pipe at a time)
         let _permit = self.semaphore.acquire().await?;
 
-        let result = executor.run(&prompt, &config.model, &pipe_dir, config.provider.as_deref()).await;
+        let result = executor
+            .run(
+                &prompt,
+                &config.model,
+                &pipe_dir,
+                config.provider.as_deref(),
+            )
+            .await;
 
         // Remove from running
         {
@@ -323,7 +331,11 @@ impl PipeManager {
             entry.0.enabled = enabled;
         }
 
-        info!("pipe '{}' {}", name, if enabled { "enabled" } else { "disabled" });
+        info!(
+            "pipe '{}' {}",
+            name,
+            if enabled { "enabled" } else { "disabled" }
+        );
         Ok(())
     }
 
@@ -343,13 +355,39 @@ impl PipeManager {
 
         for (k, v) in &updates {
             match k.as_str() {
-                "schedule" => if let Some(s) = v.as_str() { config.schedule = s.to_string(); },
-                "lookback" => if let Some(s) = v.as_str() { config.lookback = s.to_string(); },
-                "enabled" => if let Some(b) = v.as_bool() { config.enabled = b; },
-                "agent" => if let Some(s) = v.as_str() { config.agent = s.to_string(); },
-                "model" => if let Some(s) = v.as_str() { config.model = s.to_string(); },
-                "provider" => if let Some(s) = v.as_str() { config.provider = Some(s.to_string()); },
-                _ => { config.config.insert(k.clone(), v.clone()); },
+                "schedule" => {
+                    if let Some(s) = v.as_str() {
+                        config.schedule = s.to_string();
+                    }
+                }
+                "lookback" => {
+                    if let Some(s) = v.as_str() {
+                        config.lookback = s.to_string();
+                    }
+                }
+                "enabled" => {
+                    if let Some(b) = v.as_bool() {
+                        config.enabled = b;
+                    }
+                }
+                "agent" => {
+                    if let Some(s) = v.as_str() {
+                        config.agent = s.to_string();
+                    }
+                }
+                "model" => {
+                    if let Some(s) = v.as_str() {
+                        config.model = s.to_string();
+                    }
+                }
+                "provider" => {
+                    if let Some(s) = v.as_str() {
+                        config.provider = Some(s.to_string());
+                    }
+                }
+                _ => {
+                    config.config.insert(k.clone(), v.clone());
+                }
             }
         }
 
@@ -371,11 +409,7 @@ impl PipeManager {
 
         if source_path.exists() {
             // Local file or directory
-            if source_path.is_file()
-                && source_path
-                    .extension()
-                    .map_or(false, |e| e == "md")
-            {
+            if source_path.is_file() && source_path.extension().map_or(false, |e| e == "md") {
                 // Single .md file — derive name from filename
                 let name = source_path
                     .file_stem()
@@ -451,7 +485,11 @@ impl PipeManager {
         {
             let mut running = self.running.lock().await;
             if let Some(handle) = running.remove(name) {
-                if let Some(executor) = self.pipes.lock().await.get(name)
+                if let Some(executor) = self
+                    .pipes
+                    .lock()
+                    .await
+                    .get(name)
                     .and_then(|(c, _)| self.executors.get(&c.agent))
                 {
                     let _ = executor.kill(&handle);
@@ -553,7 +591,10 @@ impl PipeManager {
                     };
 
                     if !executor.is_available() {
-                        debug!("pipe '{}': agent '{}' not available yet", name, config.agent);
+                        debug!(
+                            "pipe '{}': agent '{}' not available yet",
+                            name, config.agent
+                        );
                         continue;
                     }
 
@@ -579,7 +620,9 @@ impl PipeManager {
                     tokio::spawn(async move {
                         let _permit = sem.acquire().await;
                         let started_at = Utc::now();
-                        let result = executor.run(&prompt, &model, &pipe_dir, provider.as_deref()).await;
+                        let result = executor
+                            .run(&prompt, &model, &pipe_dir, provider.as_deref())
+                            .await;
                         let finished_at = Utc::now();
 
                         // Remove from running
@@ -620,10 +663,8 @@ impl PipeManager {
                         // Write log to disk
                         let log_dir = pipes_dir_for_log.join(&pipe_name).join("logs");
                         let _ = std::fs::create_dir_all(&log_dir);
-                        let log_file = log_dir.join(format!(
-                            "{}.json",
-                            log.started_at.format("%Y%m%d_%H%M%S")
-                        ));
+                        let log_file = log_dir
+                            .join(format!("{}.json", log.started_at.format("%Y%m%d_%H%M%S")));
                         let _ = std::fs::write(
                             &log_file,
                             serde_json::to_string_pretty(&log).unwrap_or_default(),
@@ -661,13 +702,17 @@ impl PipeManager {
 
     /// Copy built-in pipe templates into pipes_dir if they don't exist.
     pub fn install_builtin_pipes(&self) -> Result<()> {
-        let mut builtins = vec![
-            ("obsidian-sync", include_str!("../../assets/pipes/obsidian-sync/pipe.md")),
-        ];
+        let mut builtins = vec![(
+            "obsidian-sync",
+            include_str!("../../assets/pipes/obsidian-sync/pipe.md"),
+        )];
 
         // reminders pipe uses Apple Reminders via osascript — macOS only
         #[cfg(target_os = "macos")]
-        builtins.push(("reminders", include_str!("../../assets/pipes/reminders/pipe.md")));
+        builtins.push((
+            "reminders",
+            include_str!("../../assets/pipes/reminders/pipe.md"),
+        ));
 
         for (name, content) in builtins {
             let dir = self.pipes_dir.join(name);
@@ -698,10 +743,7 @@ impl PipeManager {
     fn write_log_to_disk(&self, name: &str, log: &PipeRunLog) -> Result<()> {
         let log_dir = self.pipes_dir.join(name).join("logs");
         std::fs::create_dir_all(&log_dir)?;
-        let log_file = log_dir.join(format!(
-            "{}.json",
-            log.started_at.format("%Y%m%d_%H%M%S")
-        ));
+        let log_file = log_dir.join(format!("{}.json", log.started_at.format("%Y%m%d_%H%M%S")));
         std::fs::write(&log_file, serde_json::to_string_pretty(log)?)?;
         Ok(())
     }
@@ -754,13 +796,15 @@ fn render_prompt(config: &PipeConfig, body: &str) -> String {
     } else {
         &config.lookback
     };
-    let lookback_duration = parse_duration_str(lookback).unwrap_or(std::time::Duration::from_secs(3600));
+    let lookback_duration =
+        parse_duration_str(lookback).unwrap_or(std::time::Duration::from_secs(3600));
     // Cap at 8h to prevent context overflow
     let lookback_duration = lookback_duration.min(std::time::Duration::from_secs(8 * 3600));
-    let start_time = (now - chrono::Duration::from_std(lookback_duration).unwrap_or(chrono::Duration::hours(1)))
-        .to_utc()
-        .format("%Y-%m-%dT%H:%M:%SZ")
-        .to_string();
+    let start_time = (now
+        - chrono::Duration::from_std(lookback_duration).unwrap_or(chrono::Duration::hours(1)))
+    .to_utc()
+    .format("%Y-%m-%dT%H:%M:%SZ")
+    .to_string();
     let end_time = now.to_utc().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
     let header = format!(
@@ -807,17 +851,31 @@ fn parse_duration_str(s: &str) -> Option<std::time::Duration> {
     let s = s.strip_prefix("every").unwrap_or(&s).trim();
 
     // Try "Xh", "Xm", "Xs"
-    if let Some(num) = s.strip_suffix('h').or(s.strip_suffix("hr")).or(s.strip_suffix("hours")).or(s.strip_suffix("hour")) {
+    if let Some(num) = s
+        .strip_suffix('h')
+        .or(s.strip_suffix("hr"))
+        .or(s.strip_suffix("hours"))
+        .or(s.strip_suffix("hour"))
+    {
         if let Ok(n) = num.trim().parse::<u64>() {
             return Some(std::time::Duration::from_secs(n * 3600));
         }
     }
-    if let Some(num) = s.strip_suffix('m').or(s.strip_suffix("min")).or(s.strip_suffix("mins")).or(s.strip_suffix("minutes")) {
+    if let Some(num) = s
+        .strip_suffix('m')
+        .or(s.strip_suffix("min"))
+        .or(s.strip_suffix("mins"))
+        .or(s.strip_suffix("minutes"))
+    {
         if let Ok(n) = num.trim().parse::<u64>() {
             return Some(std::time::Duration::from_secs(n * 60));
         }
     }
-    if let Some(num) = s.strip_suffix('s').or(s.strip_suffix("sec")).or(s.strip_suffix("seconds")) {
+    if let Some(num) = s
+        .strip_suffix('s')
+        .or(s.strip_suffix("sec"))
+        .or(s.strip_suffix("seconds"))
+    {
         if let Ok(n) = num.trim().parse::<u64>() {
             return Some(std::time::Duration::from_secs(n));
         }
