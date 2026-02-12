@@ -72,9 +72,9 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          VERSION="${{ env.VERSION }}"
-          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          BASE="https://screenpi.pe/api/app-update/download/stable"
+          export VERSION="${{ env.VERSION }}"
+          export PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          export BASE="https://screenpi.pe/api/app-update/download/stable"
 
           mkdir -p /tmp/sigs
           for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc; do
@@ -135,9 +135,9 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          VERSION="${{ env.VERSION }}"
-          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          BASE="https://screenpi.pe/api/app-update/download/beta"
+          export VERSION="${{ env.VERSION }}"
+          export PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          export BASE="https://screenpi.pe/api/app-update/download/beta"
 
           mkdir -p /tmp/beta-sigs
           for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc; do
