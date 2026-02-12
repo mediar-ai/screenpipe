@@ -158,6 +158,61 @@ const TOOL_ICONS: Record<string, string> = {
   ls: "📁",
 };
 
+// Grid dissolve loading indicator — 5x4 grid of cells that randomly toggle
+// black/white like pixels being scanned. Geometric, screen-capture themed.
+function GridDissolveLoader({ label = "analyzing..." }: { label?: string }) {
+  const ROWS = 4;
+  const COLS = 5;
+  const TOTAL = ROWS * COLS;
+  const [cells, setCells] = useState<boolean[]>(() =>
+    Array.from({ length: TOTAL }, () => Math.random() > 0.5)
+  );
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setTick((t) => t + 1);
+      setCells((prev) => {
+        const next = [...prev];
+        const count = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < count; i++) {
+          const idx = Math.floor(Math.random() * TOTAL);
+          next[idx] = !next[idx];
+        }
+        return next;
+      });
+    }, 120);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        className="grid shrink-0"
+        style={{
+          gridTemplateColumns: `repeat(${COLS}, 8px)`,
+          gridTemplateRows: `repeat(${ROWS}, 8px)`,
+          gap: "2px",
+        }}
+      >
+        {cells.map((on, i) => (
+          <div
+            key={i}
+            style={{
+              width: 8,
+              height: 8,
+              border: "1px solid var(--border)",
+              backgroundColor: on ? "var(--foreground)" : "transparent",
+              transition: "background-color 120ms ease-in-out",
+            }}
+          />
+        ))}
+      </div>
+      <span className="text-xs font-mono text-muted-foreground tracking-wide">{label}</span>
+    </div>
+  );
+}
+
 function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
   const icon = TOOL_ICONS[toolCall.toolName] || "🔧";
@@ -1179,9 +1234,15 @@ export function StandaloneChat() {
               if (existing && existing.content !== "Processing..." && !content) {
                 return prev;
               }
-              content = content || "Done";
               const contentBlocks = [...piContentBlocksRef.current];
-              if (!piStreamingTextRef.current && content !== "Done" && contentBlocks.length === 0) {
+              // If no text content but we have tool calls, don't show "Done" — the tool blocks speak for themselves
+              const hasToolBlocks = contentBlocks.some((b) => b.type === "tool");
+              if (!content && hasToolBlocks) {
+                content = ""; // empty — tool blocks will render
+              } else if (!content) {
+                content = "no response from model — try a different prompt or model";
+              }
+              if (!piStreamingTextRef.current && content && contentBlocks.length === 0) {
                 contentBlocks.push({ type: "text", text: content });
               }
               return prev.map((m) => m.id === msgId ? { ...m, content, contentBlocks } : m);
@@ -1753,7 +1814,16 @@ export function StandaloneChat() {
           </div>
         )}
         <AnimatePresence mode="popLayout">
-          {messages.map((message) => (
+          {messages
+            .filter((m) => {
+              if (m.role !== "assistant") return true;
+              // hide placeholder "Processing..." messages (the grid dissolve loader handles this state)
+              if (m.content === "Processing..." && !m.contentBlocks?.length) return false;
+              // hide empty messages with no content blocks
+              if (!m.content && !m.contentBlocks?.length) return false;
+              return true;
+            })
+            .map((message) => (
             <motion.div
               key={message.id}
               initial={{ opacity: 0, y: 10 }}
@@ -1830,10 +1900,9 @@ export function StandaloneChat() {
           <motion.div
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-3 px-4 py-3 bg-muted/30 rounded-xl border border-border/50 w-fit"
+            className="px-4 py-3 border border-border/50 w-fit"
           >
-            <PipeAIIcon size={18} thinking={true} className="text-foreground/70" />
-            <span className="text-sm text-muted-foreground font-medium">Processing...</span>
+            <GridDissolveLoader label="analyzing..." />
           </motion.div>
         )}
         <div ref={messagesEndRef} />

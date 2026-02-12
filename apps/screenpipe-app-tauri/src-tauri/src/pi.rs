@@ -568,8 +568,25 @@ pub async fn pi_start_inner(
     // Build command — use cmd.exe /C wrapper for .cmd files on Windows (Rust 1.77+ CVE fix)
     let mut cmd = build_command_for_path(&pi_path);
     cmd.current_dir(&project_dir)
-        .args(["--mode", "rpc", "--provider", &pi_provider, "--model", &pi_model])
-        .stdin(Stdio::piped())
+        .args(["--mode", "rpc", "--provider", &pi_provider, "--model", &pi_model]);
+
+    // For local/small models, inject minimal screenpipe API context directly into the system prompt
+    // so they don't need to discover and read the skill file (which they often skip)
+    let is_local_model = matches!(pi_provider.as_str(), "ollama" | "custom");
+    if is_local_model {
+        let api_hint = concat!(
+            "You are a screen activity assistant. The user has screenpipe running locally.\n",
+            "Search their data with: curl \"http://localhost:3030/search?q=QUERY&content_type=all&limit=10&start_time=ISO8601\"\n",
+            "Parameters: q (keywords), content_type (all|ocr|audio), limit (1-20), start_time (ISO 8601, REQUIRED), end_time, app_name, window_name\n",
+            "ALWAYS include start_time. Use date -u for UTC. Example:\n",
+            "curl \"http://localhost:3030/search?content_type=all&limit=5&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)\"\n",
+            "For Linux use: date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ\n",
+            "Response is JSON with data[] array containing type (OCR/Audio/UI) and content with text/transcription, timestamp, app_name."
+        );
+        cmd.args(["--append-system-prompt", api_hint]);
+    }
+
+    cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
