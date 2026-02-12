@@ -819,9 +819,20 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          # --no-verify-ssl works around self-hosted runner's broken OpenSSL
-          export AWS_CA_BUNDLE=""
-          SSL_FLAG="--no-verify-ssl"
+          # Upload helper with retry (R2 intermittently drops TLS on multipart uploads)
+          upload_with_retry() {
+            local src="$1" dst="$2"
+            for attempt in 1 2 3; do
+              if aws s3 cp "$src" "$dst" --endpoint-url "$R2_ENDPOINT" 2>&1; then
+                echo "  ✅ $(basename "$src")"
+                return 0
+              fi
+              echo "  ⚠️ attempt $attempt failed for $(basename "$src"), retrying..."
+              sleep 5
+            done
+            echo "  ❌ failed to upload $(basename "$src") after 3 attempts"
+            return 1
+          }
 
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           TARGET="${{ matrix.target }}"
@@ -833,12 +844,12 @@ jobs:
 
           # Upload DMG
           for f in "${BUNDLE_DIR}"/dmg/*.dmg; do
-            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" $SSL_FLAG && echo "  ✅ $(basename "$f")"
+            [ -f "$f" ] && upload_with_retry "$f" "${R2_PREFIX}/$(basename "$f")"
           done
 
           # Upload updater artifacts (.tar.gz + .sig)
           for f in "${BUNDLE_DIR}"/macos/*.tar.gz "${BUNDLE_DIR}"/macos/*.sig; do
-            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" $SSL_FLAG && echo "  ✅ $(basename "$f")"
+            [ -f "$f" ] && upload_with_retry "$f" "${R2_PREFIX}/$(basename "$f")"
           done
 
           echo "R2 upload complete for ${TARGET}"
@@ -974,7 +985,19 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          SSL_FLAG="--no-verify-ssl"
+          upload_with_retry() {
+            local src="$1" dst="$2"
+            for attempt in 1 2 3; do
+              if aws s3 cp "$src" "$dst" --endpoint-url "$R2_ENDPOINT" 2>&1; then
+                echo "  ✅ $(basename "$src")"
+                return 0
+              fi
+              echo "  ⚠️ attempt $attempt failed for $(basename "$src"), retrying..."
+              sleep 5
+            done
+            echo "  ❌ failed to upload $(basename "$src") after 3 attempts"
+            return 1
+          }
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           TARGET="${{ matrix.target }}"
           BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
@@ -983,11 +1006,11 @@ jobs:
           echo "uploading beta ${TARGET} bundles for v${VERSION} to R2..."
 
           for f in "${BUNDLE_DIR}"/dmg/*.dmg; do
-            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" $SSL_FLAG && echo "  ✅ $(basename "$f")"
+            [ -f "$f" ] && upload_with_retry "$f" "${R2_PREFIX}/$(basename "$f")"
           done
 
           for f in "${BUNDLE_DIR}"/macos/*.tar.gz "${BUNDLE_DIR}"/macos/*.sig; do
-            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" $SSL_FLAG && echo "  ✅ $(basename "$f")"
+            [ -f "$f" ] && upload_with_retry "$f" "${R2_PREFIX}/$(basename "$f")"
           done
 
           echo "R2 beta upload complete for ${TARGET}"
