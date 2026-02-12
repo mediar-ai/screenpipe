@@ -366,23 +366,22 @@ export const TextOverlay = memo(function TextOverlay({
 		const w = Math.abs(endX - startX);
 		const h = Math.abs(endY - startY);
 
-		// Ignore tiny selections
 		if (w < 15 || h < 8) return;
 
+		// Keep the selection rectangle visible during OCR
+		setDragStart({ x, y: startY < endY ? startY : endY });
+		setDragEnd({ x: x + w, y: (startY < endY ? startY : endY) + h });
 		setOcrLoading(true);
 		setOcrResult(null);
 
 		try {
-			const img = new Image();
-			img.crossOrigin = "anonymous";
-			await new Promise<void>((resolve, reject) => {
-				img.onload = () => resolve();
-				img.onerror = reject;
-				img.src = imageSrc;
-			});
+			// Fetch image as blob to avoid canvas tainted origin issues
+			const response = await fetch(imageSrc);
+			const blob = await response.blob();
+			const bitmap = await createImageBitmap(blob);
 
-			const scaleX = img.naturalWidth / displayedWidth;
-			const scaleY = img.naturalHeight / displayedHeight;
+			const scaleX = bitmap.width / displayedWidth;
+			const scaleY = bitmap.height / displayedHeight;
 
 			const canvas = document.createElement("canvas");
 			const cropX = Math.round(x * scaleX);
@@ -393,10 +392,12 @@ export const TextOverlay = memo(function TextOverlay({
 			canvas.height = cropH;
 
 			const ctx = canvas.getContext("2d");
-			if (!ctx) return;
+			if (!ctx) throw new Error("no canvas context");
 
-			ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+			ctx.drawImage(bitmap, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+			bitmap.close();
 
+			// Get base64 PNG
 			const dataUrl = canvas.toDataURL("image/png");
 			const base64 = dataUrl.split(",")[1];
 
@@ -405,17 +406,29 @@ export const TextOverlay = memo(function TextOverlay({
 			});
 
 			if (text.trim()) {
-				navigator.clipboard.writeText(text.trim()).catch(() => {});
+				await navigator.clipboard.writeText(text.trim());
 				setOcrResult(text.trim());
-				setTimeout(() => setOcrResult(null), 3000);
+				setTimeout(() => {
+					setOcrResult(null);
+					setDragStart(null);
+					setDragEnd(null);
+				}, 2500);
 			} else {
 				setOcrResult("(no text found)");
-				setTimeout(() => setOcrResult(null), 2000);
+				setTimeout(() => {
+					setOcrResult(null);
+					setDragStart(null);
+					setDragEnd(null);
+				}, 2000);
 			}
 		} catch (err) {
 			console.error("drag ocr failed:", err);
-			setOcrResult("ocr failed");
-			setTimeout(() => setOcrResult(null), 2000);
+			setOcrResult(`failed: ${err}`);
+			setTimeout(() => {
+				setOcrResult(null);
+				setDragStart(null);
+				setDragEnd(null);
+			}, 3000);
 		} finally {
 			setOcrLoading(false);
 		}
@@ -471,8 +484,12 @@ export const TextOverlay = memo(function TextOverlay({
 		if (!dragStart) return;
 
 		if (isDragging && dragEnd && imageSrc) {
-			// It was a drag — run OCR on the selection
-			performDragOcr(dragStart.x, dragStart.y, dragEnd.x, dragEnd.y);
+			// It was a drag — keep rectangle visible, run OCR
+			const sx = dragStart.x, sy = dragStart.y;
+			const ex = dragEnd.x, ey = dragEnd.y;
+			setIsDragging(false);
+			// dragStart/dragEnd are kept so rectangle stays visible during OCR
+			performDragOcr(sx, sy, ex, ey);
 		} else {
 			// It was a click — find the text block under cursor and copy it
 			const rect = containerRef.current?.getBoundingClientRect();
@@ -488,11 +505,10 @@ export const TextOverlay = memo(function TextOverlay({
 					flashCopied(block.index);
 				}
 			}
+			setIsDragging(false);
+			setDragStart(null);
+			setDragEnd(null);
 		}
-
-		setIsDragging(false);
-		setDragStart(null);
-		setDragEnd(null);
 	}, [isDragging, dragStart, dragEnd, imageSrc, performDragOcr, textBlocks, flashCopied]);
 
 	// Compute drag rectangle
@@ -654,21 +670,33 @@ export const TextOverlay = memo(function TextOverlay({
 			{/* Drag selection rectangle */}
 			{dragRect && dragRect.width > 5 && dragRect.height > 5 && (
 				<div
-					className="absolute pointer-events-none"
+					className={cn(
+						"absolute pointer-events-none",
+						ocrLoading && "animate-pulse"
+					)}
 					style={{
 						left: dragRect.left,
 						top: dragRect.top,
 						width: dragRect.width,
 						height: dragRect.height,
-						border: "2px dashed rgba(255, 255, 255, 0.7)",
-						backgroundColor: "rgba(255, 255, 255, 0.08)",
+						border: ocrLoading
+							? "2px solid rgba(255, 255, 255, 0.8)"
+							: ocrResult
+								? "2px solid rgba(255, 255, 255, 0.6)"
+								: "2px dashed rgba(255, 255, 255, 0.7)",
+						backgroundColor: ocrLoading
+							? "rgba(255, 255, 255, 0.06)"
+							: ocrResult
+								? "rgba(255, 255, 255, 0.04)"
+								: "rgba(255, 255, 255, 0.08)",
 						borderRadius: "4px",
 						zIndex: 25,
+						transition: "border-color 0.2s, background-color 0.2s",
 					}}
 				/>
 			)}
-			{/* "Copied" / OCR result floating toast */}
-			{(copiedIndex !== null || ocrLoading || ocrResult) && (
+			{/* Click-to-copy toast */}
+			{copiedIndex !== null && !ocrLoading && !ocrResult && (
 				<div
 					className="absolute pointer-events-none flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium shadow-lg"
 					style={{
@@ -679,6 +707,26 @@ export const TextOverlay = memo(function TextOverlay({
 						backgroundColor: "rgba(0, 0, 0, 0.85)",
 						color: "rgba(255, 255, 255, 0.9)",
 						border: "1px solid rgba(255, 255, 255, 0.15)",
+					}}
+				>
+					<Check className="w-3.5 h-3.5" />
+					copied
+				</div>
+			)}
+			{/* Drag OCR toast — positioned near the selection */}
+			{(ocrLoading || ocrResult) && dragRect && (
+				<div
+					className="absolute pointer-events-none flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium shadow-lg"
+					style={{
+						top: Math.min(dragRect.top + dragRect.height + 8, displayedHeight - 32),
+						left: Math.max(8, Math.min(
+							dragRect.left + dragRect.width / 2 - 60,
+							displayedWidth - 140
+						)),
+						zIndex: 30,
+						backgroundColor: "rgba(0, 0, 0, 0.9)",
+						color: "rgba(255, 255, 255, 0.95)",
+						border: "1px solid rgba(255, 255, 255, 0.2)",
 						maxWidth: "80%",
 						overflow: "hidden",
 						textOverflow: "ellipsis",
@@ -690,17 +738,14 @@ export const TextOverlay = memo(function TextOverlay({
 							<Loader2 className="w-3.5 h-3.5 animate-spin" />
 							extracting text...
 						</>
-					) : ocrResult ? (
+					) : ocrResult?.startsWith("failed:") || ocrResult === "(no text found)" ? (
 						<>
-							<Check className="w-3.5 h-3.5" />
-							{ocrResult === "(no text found)" || ocrResult === "ocr failed"
-								? ocrResult
-								: "copied"}
+							{ocrResult}
 						</>
 					) : (
 						<>
 							<Check className="w-3.5 h-3.5" />
-							copied
+							copied to clipboard
 						</>
 					)}
 				</div>
