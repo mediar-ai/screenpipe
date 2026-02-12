@@ -10,7 +10,6 @@ use anyhow::Error;
 use dark_light::Mode;
 use log::{error, info, warn};
 use serde_json;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,326 +25,66 @@ use tokio::sync::Mutex;
 use tokio::time::interval;
 
 // ---------------------------------------------------------------------------
-// Rollback: backup current app bundle before updates, restore on demand
+// Rollback: download a specific older version from R2 via the website API
 // ---------------------------------------------------------------------------
 
-/// Directory where we keep the previous version's app bundle
-fn rollback_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".screenpipe").join("rollback"))
-}
+/// Install a specific version from R2 via the Tauri updater.
+/// The website's /rollback endpoint returns a manifest with a fake high version
+/// so the updater accepts it as an "update".
+pub async fn install_specific_version(app: &tauri::AppHandle, version: &str) -> Result<(), String> {
+    let target_arch = get_target_arch();
+    let rollback_url = format!(
+        "https://screenpi.pe/api/app-update/rollback/{}/{}",
+        target_arch, version
+    );
 
-/// Read the version string stored alongside the rollback backup
-pub fn rollback_version() -> Option<String> {
-    let dir = rollback_dir()?;
-    let version_file = dir.join("version.txt");
-    std::fs::read_to_string(version_file).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-}
+    info!("rollback: installing v{} from {}", version, rollback_url);
 
-/// Public wrapper for the Tauri command (frontend JS-driven updates)
-pub fn backup_current_app_cmd() {
-    backup_current_app();
-}
+    // Build updater pointed at our rollback endpoint
+    let mut builder = app.updater_builder()
+        .endpoints(vec![rollback_url.parse().map_err(|e| format!("invalid url: {}", e))?])
+        .map_err(|e| format!("failed to build updater: {}", e))?;
 
-/// Back up the currently-running app bundle so we can rollback later.
-/// Called right before `download_and_install`.
-fn backup_current_app() {
-    let current_version = env!("CARGO_PKG_VERSION");
-
-    #[cfg(target_os = "macos")]
-    {
-        // Resolve /Applications/screenpipe.app from the running binary
-        // Binary is at <app>/Contents/MacOS/screenpipe
-        let exe = match std::env::current_exe() {
-            Ok(p) => p,
-            Err(e) => { warn!("rollback: cannot resolve exe path: {}", e); return; }
-        };
-        // Walk up: MacOS -> Contents -> screenpipe.app
-        let app_bundle = match exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
-            Some(p) => p.to_path_buf(),
-            None => { warn!("rollback: cannot derive .app bundle from exe"); return; }
-        };
-        if !app_bundle.exists() {
-            warn!("rollback: app bundle not found at {:?}", app_bundle);
-            return;
-        }
-        let dir = match rollback_dir() {
-            Some(d) => d,
-            None => return,
-        };
-        let dest = dir.join("screenpipe.app");
-        // Atomic-ish: copy to tmp dir first, then rename
-        let tmp_dest = dir.join("screenpipe.app.tmp");
-        // Clean up any leftovers
-        let _ = std::fs::remove_dir_all(&tmp_dest);
-        let _ = std::fs::remove_dir_all(&dest);
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            warn!("rollback: cannot create rollback dir: {}", e);
-            return;
-        }
-        info!("rollback: backing up {:?} -> {:?}", app_bundle, tmp_dest);
-        match copy_dir_recursive(&app_bundle, &tmp_dest) {
-            Ok(_) => {
-                if let Err(e) = std::fs::rename(&tmp_dest, &dest) {
-                    warn!("rollback: rename failed: {}", e);
-                    let _ = std::fs::remove_dir_all(&tmp_dest);
-                    return;
-                }
-                if let Err(e) = std::fs::write(dir.join("version.txt"), current_version) {
-                    warn!("rollback: failed to write version.txt: {}", e);
-                }
-                info!("rollback: backed up v{} successfully", current_version);
-            }
-            Err(e) => {
-                warn!("rollback: copy failed: {}", e);
-                let _ = std::fs::remove_dir_all(&tmp_dest);
-            }
+    // Add auth header so R2 download works for paid users
+    if let Ok(Some(settings)) = SettingsStore::get(app) {
+        if let Some(ref token) = settings.user.token {
+            builder = builder.header("Authorization", format!("Bearer {}", token))
+                .map_err(|e| format!("failed to set auth header: {}", e))?;
         }
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        // On Windows the Tauri updater replaces the exe in-place via NSIS/WiX.
-        // We back up the entire install directory.
-        let exe = match std::env::current_exe() {
-            Ok(p) => p,
-            Err(e) => { warn!("rollback: cannot resolve exe path: {}", e); return; }
-        };
-        let install_dir = match exe.parent() {
-            Some(p) => p.to_path_buf(),
-            None => return,
-        };
-        let dir = match rollback_dir() {
-            Some(d) => d,
-            None => return,
-        };
-        let dest = dir.join("app");
-        let tmp_dest = dir.join("app.tmp");
-        let _ = std::fs::remove_dir_all(&tmp_dest);
-        let _ = std::fs::remove_dir_all(&dest);
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            warn!("rollback: cannot create rollback dir: {}", e);
-            return;
-        }
-        info!("rollback: backing up {:?} -> {:?}", install_dir, tmp_dest);
-        match copy_dir_recursive(&install_dir, &tmp_dest) {
-            Ok(_) => {
-                if let Err(e) = std::fs::rename(&tmp_dest, &dest) {
-                    warn!("rollback: rename failed: {}", e);
-                    let _ = std::fs::remove_dir_all(&tmp_dest);
-                    return;
-                }
-                if let Err(e) = std::fs::write(dir.join("version.txt"), current_version) {
-                    warn!("rollback: failed to write version.txt: {}", e);
-                }
-                info!("rollback: backed up v{} successfully", current_version);
-            }
-            Err(e) => {
-                warn!("rollback: copy failed: {}", e);
-                let _ = std::fs::remove_dir_all(&tmp_dest);
-            }
-        }
-    }
+    let update = builder.build()
+        .map_err(|e| format!("failed to build updater: {}", e))?
+        .check().await
+        .map_err(|e| format!("failed to check rollback endpoint: {}", e))?
+        .ok_or_else(|| "rollback endpoint returned no update (version may not exist)".to_string())?;
 
-    #[cfg(target_os = "linux")]
-    {
-        // AppImage: back up the AppImage file itself
-        if let Ok(appimage) = std::env::var("APPIMAGE") {
-            let src = PathBuf::from(&appimage);
-            if src.exists() {
-                let dir = match rollback_dir() {
-                    Some(d) => d,
-                    None => return,
-                };
-                if let Err(e) = std::fs::create_dir_all(&dir) {
-                    warn!("rollback: cannot create rollback dir: {}", e);
-                    return;
-                }
-                let dest = dir.join(src.file_name().unwrap_or_default());
-                info!("rollback: backing up {:?} -> {:?}", src, dest);
-                if let Err(e) = std::fs::copy(&src, &dest) {
-                    warn!("rollback: copy failed: {}", e);
-                    return;
-                }
-                if let Err(e) = std::fs::write(dir.join("version.txt"), current_version) {
-                    warn!("rollback: failed to write version.txt: {}", e);
-                }
-                info!("rollback: backed up v{} successfully", current_version);
-            }
-        }
-    }
-}
+    info!("rollback: downloading v{}", version);
 
-/// Recursively copy a directory
-fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        let dest_path = dst.join(entry.file_name());
-        if ty.is_dir() {
-            copy_dir_recursive(&entry.path(), &dest_path)?;
-        } else if ty.is_symlink() {
-            let target = std::fs::read_link(entry.path())?;
-            #[cfg(unix)]
-            std::os::unix::fs::symlink(&target, &dest_path)?;
-            #[cfg(windows)]
-            {
-                if target.is_dir() {
-                    std::os::windows::fs::symlink_dir(&target, &dest_path)?;
-                } else {
-                    std::os::windows::fs::symlink_file(&target, &dest_path)?;
-                }
-            }
-        } else {
-            std::fs::copy(entry.path(), &dest_path)?;
-        }
-    }
+    update.download_and_install(|_, _| {}, || {}).await
+        .map_err(|e| format!("failed to download/install v{}: {}", version, e))?;
+
+    info!("rollback: v{} installed, restart required", version);
     Ok(())
 }
 
-/// Perform rollback: restore the backed-up app bundle and relaunch.
-/// Returns an error string if something goes wrong.
-pub fn perform_rollback() -> Result<(), String> {
-    let dir = rollback_dir().ok_or("cannot determine rollback directory")?;
-    let version = rollback_version().ok_or("no previous version available")?;
-
-    #[cfg(target_os = "macos")]
-    {
-        let backup = dir.join("screenpipe.app");
-        if !backup.exists() {
-            return Err("rollback backup not found".into());
-        }
-        // Resolve current .app location
-        let exe = std::env::current_exe().map_err(|e| format!("cannot resolve exe: {}", e))?;
-        let current_app = exe.parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-            .ok_or("cannot derive .app from exe")?
-            .to_path_buf();
-
-        info!("rollback: restoring v{} from {:?} -> {:?}", version, backup, current_app);
-
-        // We can't replace ourselves while running. Spawn a helper script that:
-        // 1. Waits for us to quit
-        // 2. Replaces the .app bundle
-        // 3. Relaunches
-        let script = format!(
-            r#"#!/bin/bash
-sleep 2
-rm -rf "{current_app}"
-cp -R "{backup}" "{current_app}"
-open "{current_app}"
-rm -f /tmp/screenpipe-rollback.sh
-"#,
-            current_app = current_app.display(),
-            backup = backup.display(),
-        );
-        let script_path = "/tmp/screenpipe-rollback.sh";
-        std::fs::write(script_path, &script).map_err(|e| format!("failed to write rollback script: {}", e))?;
-        std::fs::set_permissions(script_path, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-            .map_err(|e| format!("failed to chmod rollback script: {}", e))?;
-
-        // Launch the script detached
-        std::process::Command::new("/bin/bash")
-            .arg(script_path)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .map_err(|e| format!("failed to spawn rollback script: {}", e))?;
-
-        info!("rollback: script spawned, app will quit now");
-        Ok(())
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let backup = dir.join("app");
-        if !backup.exists() {
-            return Err("rollback backup not found".into());
-        }
-        let exe = std::env::current_exe().map_err(|e| format!("cannot resolve exe: {}", e))?;
-        let install_dir = exe.parent().ok_or("cannot derive install dir")?.to_path_buf();
-        let exe_name = exe.file_name().ok_or("cannot get exe name")?.to_string_lossy().to_string();
-
-        info!("rollback: restoring v{} from {:?} -> {:?}", version, backup, install_dir);
-
-        // PowerShell script to replace files after process exits
-        let script = format!(
-            r#"Start-Sleep -Seconds 2
-Remove-Item -Recurse -Force "{install_dir}\*"
-Copy-Item -Recurse -Force "{backup}\*" "{install_dir}\"
-Start-Process "{install_dir}\{exe_name}"
-"#,
-            install_dir = install_dir.display(),
-            backup = backup.display(),
-            exe_name = exe_name,
-        );
-        let script_path = std::env::temp_dir().join("screenpipe-rollback.ps1");
-        std::fs::write(&script_path, &script).map_err(|e| format!("failed to write rollback script: {}", e))?;
-
-        let mut rollback_cmd = std::process::Command::new("powershell");
-        rollback_cmd
-            .args(["-ExecutionPolicy", "Bypass", "-File"])
-            .arg(&script_path)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            rollback_cmd.creation_flags(CREATE_NO_WINDOW);
-        }
-        rollback_cmd.spawn()
-            .map_err(|e| format!("failed to spawn rollback script: {}", e))?;
-
-        info!("rollback: script spawned, app will quit now");
-        Ok(())
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        // Find the backed-up AppImage
-        let entries = std::fs::read_dir(&dir).map_err(|e| format!("cannot read rollback dir: {}", e))?;
-        let appimage_backup = entries
-            .filter_map(|e| e.ok())
-            .find(|e| e.path().extension().map_or(false, |ext| ext == "AppImage"))
-            .map(|e| e.path())
-            .ok_or("no AppImage backup found")?;
-
-        let current_appimage = std::env::var("APPIMAGE").map_err(|_| "not running as AppImage")?;
-
-        info!("rollback: restoring v{} from {:?} -> {:?}", version, appimage_backup, current_appimage);
-
-        let script = format!(
-            r#"#!/bin/bash
-sleep 2
-cp -f "{backup}" "{current}"
-chmod +x "{current}"
-"{current}" &
-rm -f /tmp/screenpipe-rollback.sh
-"#,
-            backup = appimage_backup.display(),
-            current = current_appimage,
-        );
-        let script_path = "/tmp/screenpipe-rollback.sh";
-        std::fs::write(script_path, &script).map_err(|e| format!("failed to write rollback script: {}", e))?;
-        #[cfg(unix)]
-        std::fs::set_permissions(script_path, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-            .map_err(|e| format!("failed to chmod rollback script: {}", e))?;
-
-        std::process::Command::new("/bin/bash")
-            .arg(script_path)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .map_err(|e| format!("failed to spawn rollback script: {}", e))?;
-
-        info!("rollback: script spawned, app will quit now");
-        Ok(())
-    }
+/// Get Tauri target-arch string for the current platform
+fn get_target_arch() -> &'static str {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    { "darwin-aarch64" }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    { "darwin-x86_64" }
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    { "windows-x86_64" }
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    { "linux-x86_64" }
+    #[cfg(not(any(
+        all(target_os = "macos", target_arch = "aarch64"),
+        all(target_os = "macos", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "x86_64"),
+    )))]
+    { "unknown" }
 }
 
 /// Check if this is a source/community build (not an official release)
@@ -502,8 +241,6 @@ impl UpdatesManager {
                         error!("Failed to stop recording before update: {}", err);
                     }
                 }
-                // Back up current app bundle before replacing it
-                backup_current_app();
                 let app_handle = self.app.clone();
                 let update_version = update.version.clone();
                 let menu_item = self.update_menu_item.clone();
@@ -660,8 +397,6 @@ impl UpdatesManager {
                             error!("Failed to stop recording: {}", err);
                         }
 
-                        // Back up current app before replacing it
-                        backup_current_app();
                         let menu_item_win = self.update_menu_item.clone();
                         let mut dl: u64 = 0;
                         let mut lp: u8 = 0;
@@ -782,20 +517,13 @@ pub fn start_update_check(
 ) -> Result<Arc<UpdatesManager>, Box<dyn std::error::Error>> {
     let updates_manager = Arc::new(UpdatesManager::new(app, interval_minutes)?);
 
-    // Back up current app on launch ONLY if no backup exists yet.
-    // The pre-update backup (before download_and_install) is the real rollback target.
-    // Previously this ran unconditionally, overwriting the previous version backup
-    // with the current version — making rollback useless.
-    if !is_source_build(app) && !cfg!(debug_assertions) {
-        std::thread::spawn(|| {
-            if rollback_version().is_none() {
-                info!("rollback: no backup exists, backing up current version");
-                backup_current_app();
-            } else {
-                info!("rollback: backup already exists (v{}), skipping launch backup",
-                    rollback_version().unwrap_or_default());
-            }
-        });
+    // Clean up old rollback directory if it exists (legacy, no longer needed)
+    if let Some(home) = dirs::home_dir() {
+        let rollback_dir = home.join(".screenpipe").join("rollback");
+        if rollback_dir.exists() {
+            let _ = std::fs::remove_dir_all(&rollback_dir);
+            info!("rollback: cleaned up legacy rollback directory");
+        }
     }
 
     // Check for updates at boot

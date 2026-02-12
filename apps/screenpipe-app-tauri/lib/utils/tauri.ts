@@ -251,27 +251,16 @@ async unregisterWindowShortcuts() : Promise<Result<null, string>> {
 }
 },
 /**
- * Get the version of the backed-up app (if any), so the UI can show a rollback button
+ * Install a specific older version from R2. Downloads and installs via Tauri updater,
+ * then restarts the app.
  */
-async getRollbackVersion() : Promise<string | null> {
-    return await TAURI_INVOKE("get_rollback_version");
-},
-/**
- * Roll back to the previous version. Spawns a helper script, then the app must quit.
- */
-async rollbackToPreviousVersion() : Promise<Result<null, string>> {
+async rollbackToVersion(version: string) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("rollback_to_previous_version") };
+    return { status: "ok", data: await TAURI_INVOKE("rollback_to_version", { version }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
-},
-/**
- * Back up the current app bundle (called from frontend before JS-driven updates)
- */
-async backupCurrentApp() : Promise<void> {
-    await TAURI_INVOKE("backup_current_app");
 },
 async setTrayUnhealthIcon() : Promise<void> {
     await TAURI_INVOKE("set_tray_unhealth_icon");
@@ -406,7 +395,7 @@ async piInfo() : Promise<Result<PiInfo, string>> {
 }
 },
 /**
- * Start the Pi sidecar in RPC mode
+ * Start the Pi sidecar in RPC mode (Tauri command wrapper)
  */
 async piStart(projectDir: string, userToken: string | null, providerConfig: PiProviderConfig | null) : Promise<Result<PiInfo, string>> {
     try {

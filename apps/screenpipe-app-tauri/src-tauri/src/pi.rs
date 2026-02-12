@@ -57,6 +57,7 @@ const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
 const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
 
 /// State for managing the Pi sidecar process
+#[derive(Clone)]
 pub struct PiState(pub Arc<Mutex<Option<PiManager>>>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -476,12 +477,23 @@ pub async fn pi_stop(state: State<'_, PiState>) -> Result<PiInfo, String> {
     }
 }
 
-/// Start the Pi sidecar in RPC mode
+/// Start the Pi sidecar in RPC mode (Tauri command wrapper)
 #[tauri::command]
 #[specta::specta]
 pub async fn pi_start(
     app: AppHandle,
     state: State<'_, PiState>,
+    project_dir: String,
+    user_token: Option<String>,
+    provider_config: Option<PiProviderConfig>,
+) -> Result<PiInfo, String> {
+    pi_start_inner(app, &state, project_dir, user_token, provider_config).await
+}
+
+/// Core Pi start logic — callable from both Tauri commands and Rust boot code.
+pub async fn pi_start_inner(
+    app: AppHandle,
+    state: &PiState,
     project_dir: String,
     user_token: Option<String>,
     provider_config: Option<PiProviderConfig>,

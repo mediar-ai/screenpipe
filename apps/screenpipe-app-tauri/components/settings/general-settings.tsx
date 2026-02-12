@@ -21,12 +21,12 @@ export default function GeneralSettings() {
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
-  const [rollbackVersion, setRollbackVersion] = useState<string | null>(null);
+  const [availableVersions, setAvailableVersions] = useState<string[]>([]);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
 
   useEffect(() => {
     getVersion().then(setCurrentVersion).catch(() => {});
-    invoke<string | null>("get_rollback_version").then(setRollbackVersion).catch(() => {});
   }, []);
 
   const handleSettingsChange = (newSettings: Partial<Settings>) => {
@@ -56,16 +56,40 @@ export default function GeneralSettings() {
     },
   ];
 
-  const handleRollback = async () => {
-    if (!rollbackVersion || isRollingBack) return;
+  const fetchVersions = async () => {
+    if (availableVersions.length > 0) {
+      setShowVersions(!showVersions);
+      return;
+    }
+    try {
+      // Detect target arch
+      const { arch, type: osType } = await import("@tauri-apps/plugin-os").then(m => ({ arch: m.arch(), type: m.type() }));
+      let targetArch = "darwin-aarch64";
+      if (osType === "macos") targetArch = arch === "x86_64" ? "darwin-x86_64" : "darwin-aarch64";
+      else if (osType === "windows") targetArch = "windows-x86_64";
+
+      const resp = await fetch(`https://screenpi.pe/api/app-update/versions/${targetArch}`);
+      if (!resp.ok) throw new Error("failed to fetch versions");
+      const data = await resp.json();
+      // Filter out current version
+      const versions = (data.versions || []).filter((v: string) => v !== currentVersion);
+      setAvailableVersions(versions);
+      setShowVersions(true);
+    } catch (e: any) {
+      toast({ title: "failed to load versions", description: e?.toString(), variant: "destructive" });
+    }
+  };
+
+  const handleRollback = async (version: string) => {
+    if (isRollingBack) return;
     setIsRollingBack(true);
     try {
       toast({
-        title: "rolling back...",
-        description: `restoring v${rollbackVersion}. the app will restart.`,
-        duration: 5000,
+        title: "downloading...",
+        description: `installing v${version}. this is at your own risk — db migrations are not reversed.`,
+        duration: 10000,
       });
-      await invoke("rollback_to_previous_version");
+      await invoke("rollback_to_version", { version });
     } catch (e: any) {
       setIsRollingBack(false);
       toast({
@@ -156,24 +180,41 @@ export default function GeneralSettings() {
                     Version{currentVersion ? ` ${currentVersion}` : ""}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {rollbackVersion && rollbackVersion !== currentVersion
-                      ? `previous: v${rollbackVersion}`
-                      : "no previous version saved yet"}
+                    install a previous version (at your own risk)
                   </p>
                 </div>
               </div>
-              {rollbackVersion && rollbackVersion !== currentVersion && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRollback}
-                  disabled={isRollingBack}
-                  className="ml-4 h-7 text-xs"
-                >
-                  {isRollingBack ? "rolling back..." : `rollback to v${rollbackVersion}`}
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchVersions}
+                disabled={isRollingBack}
+                className="ml-4 h-7 text-xs"
+              >
+                {isRollingBack ? "installing..." : showVersions ? "hide" : "show versions"}
+              </Button>
             </div>
+            {showVersions && availableVersions.length > 0 && (
+              <div className="mt-3 space-y-1 border-t pt-2">
+                <p className="text-[10px] text-muted-foreground mb-2">
+                  ⚠️ database migrations are not reversed. use at your own risk.
+                </p>
+                {availableVersions.map((v) => (
+                  <div key={v} className="flex items-center justify-between py-0.5">
+                    <span className="text-xs text-muted-foreground">v{v}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRollback(v)}
+                      disabled={isRollingBack}
+                      className="h-6 text-[11px] px-2"
+                    >
+                      install
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

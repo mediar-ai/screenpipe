@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { commands } from "@/lib/utils/tauri";
 import type { TextPosition } from "@/lib/hooks/use-frame-ocr-data";
-import { Copy, Check } from "lucide-react";
+import { Check } from "lucide-react";
 
 /**
  * Check if a string looks like a URL.
@@ -199,8 +199,7 @@ export const TextOverlay = memo(function TextOverlay({
 }: TextOverlayProps) {
 	const [hoveredLinkIndex, setHoveredLinkIndex] = useState<number | null>(null);
 	const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null);
-	const [copiedIndex, setCopiedIndex] = useState<number | null>(null); // -1 = "copy all"
-	const [showCopyAll, setShowCopyAll] = useState(false);
+	const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
 	// Compute pixel-positioned blocks for the text layer
 	const textBlocks = useMemo(() => {
@@ -338,26 +337,21 @@ export const TextOverlay = memo(function TextOverlay({
 		[]
 	);
 
-	const copyText = useCallback((text: string, feedbackIndex: number) => {
-		navigator.clipboard.writeText(text).catch(() => {});
-		setCopiedIndex(feedbackIndex);
+	const flashCopied = useCallback((index: number) => {
+		setCopiedIndex(index);
 		setTimeout(() => setCopiedIndex(null), 1200);
 	}, []);
 
-	const handleCopyAll = useCallback(() => {
-		// Sort blocks in reading order (top to bottom, left to right)
-		const sorted = [...textPositions]
-			.filter(p => p.confidence >= minConfidence && p.text.trim().length > 0)
-			.sort((a, b) => {
-				const dy = a.bounds.top - b.bounds.top;
-				if (Math.abs(dy) < Math.min(a.bounds.height, b.bounds.height) * 0.5) {
-					return a.bounds.left - b.bounds.left;
-				}
-				return dy;
-			});
-		const text = sorted.map(p => p.text).join("\n");
-		copyText(text, -1);
-	}, [textPositions, minConfidence, copyText]);
+	const handleBlockClick = useCallback((blockIndex: number, e: React.MouseEvent) => {
+		e.stopPropagation();
+		const block = textBlocks.find(b => b.index === blockIndex);
+		if (block) {
+			navigator.clipboard.writeText(block.text).catch(() => {});
+			flashCopied(blockIndex);
+		}
+	}, [textBlocks, flashCopied]);
+
+
 
 	const hasContent =
 		(clickableUrls && urlLinks.length > 0) ||
@@ -376,8 +370,7 @@ export const TextOverlay = memo(function TextOverlay({
 				height: displayedHeight,
 				pointerEvents: "none",
 			}}
-			onMouseEnter={() => setShowCopyAll(true)}
-			onMouseLeave={() => { setShowCopyAll(false); setHoveredBlockIndex(null); }}
+			onMouseLeave={() => { setHoveredBlockIndex(null); }}
 		>
 			{/* Search term highlights */}
 			{highlights.map((hl) => (
@@ -412,17 +405,12 @@ export const TextOverlay = memo(function TextOverlay({
 							cursor: "pointer",
 							pointerEvents: "auto",
 							backgroundColor: isCopied
-								? "rgba(74, 222, 128, 0.25)"
+								? "rgba(255, 255, 255, 0.25)"
 								: isHovered
-									? "rgba(59, 130, 246, 0.18)"
+									? "rgba(255, 255, 255, 0.10)"
 									: "transparent",
-							border: isCopied
-								? "1px solid rgba(74, 222, 128, 0.6)"
-								: isHovered
-									? "1px solid rgba(59, 130, 246, 0.4)"
-									: "1px solid transparent",
 							borderRadius: "2px",
-							transition: "background-color 0.1s, border-color 0.1s",
+							transition: "background-color 0.15s",
 							...(debug
 								? {
 										backgroundColor: "rgba(0, 255, 0, 0.1)",
@@ -432,11 +420,7 @@ export const TextOverlay = memo(function TextOverlay({
 						}}
 						onMouseEnter={() => setHoveredBlockIndex(block.index)}
 						onMouseLeave={() => setHoveredBlockIndex(null)}
-						onClick={(e) => {
-							e.stopPropagation();
-							copyText(block.text, block.index);
-						}}
-						title={block.text}
+						onClick={(e) => handleBlockClick(block.index, e)}
 					/>
 				);
 			})}
@@ -503,42 +487,23 @@ export const TextOverlay = memo(function TextOverlay({
 					</a>
 				);
 			})}
-			{/* "Copy all text" button — top-right corner, shown on hover */}
-			{selectable && textBlocks.length > 0 && (showCopyAll || copiedIndex === -1) && (
-				<button
-					className="absolute flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium shadow-lg transition-all"
+			{/* "Copied" floating toast */}
+			{copiedIndex !== null && (
+				<div
+					className="absolute pointer-events-none flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium shadow-lg"
 					style={{
 						top: 8,
-						right: 8,
-						zIndex: 20,
-						pointerEvents: "auto",
-						backgroundColor: copiedIndex === -1
-							? "rgba(74, 222, 128, 0.9)"
-							: "rgba(0, 0, 0, 0.75)",
-						color: copiedIndex === -1
-							? "rgba(0, 0, 0, 0.9)"
-							: "rgba(255, 255, 255, 0.9)",
+						left: "50%",
+						transform: "translateX(-50%)",
+						zIndex: 30,
+						backgroundColor: "rgba(0, 0, 0, 0.85)",
+						color: "rgba(255, 255, 255, 0.9)",
 						border: "1px solid rgba(255, 255, 255, 0.15)",
-						backdropFilter: "blur(8px)",
 					}}
-					onClick={(e) => {
-						e.stopPropagation();
-						handleCopyAll();
-					}}
-					title="Copy all text from this screenshot"
 				>
-					{copiedIndex === -1 ? (
-						<>
-							<Check className="w-3.5 h-3.5" />
-							copied!
-						</>
-					) : (
-						<>
-							<Copy className="w-3.5 h-3.5" />
-							copy all text
-						</>
-					)}
-				</button>
+					<Check className="w-3.5 h-3.5" />
+					copied
+				</div>
 			)}
 		</div>
 	);

@@ -59,7 +59,7 @@ describe("TextOverlay", () => {
 		expect(container.firstChild).toBeNull();
 	});
 
-	it("should render selectable text spans when selectable", () => {
+	it("should render clickable text blocks when selectable", () => {
 		const positions = [
 			createTextPosition("Hello world", 0.1, 0.05, 0.2, 0.02),
 		];
@@ -74,8 +74,9 @@ describe("TextOverlay", () => {
 			/>
 		);
 		expect(container.firstChild).not.toBeNull();
-		// The text should be present in the DOM (invisible but selectable)
-		expect(container.textContent).toContain("Hello world");
+		// Should have clickable block divs (one per text position)
+		const blocks = container.querySelectorAll('[style*="pointer"]');
+		expect(blocks.length).toBeGreaterThan(0);
 	});
 
 	it("should render a whole-block URL as clickable link", () => {

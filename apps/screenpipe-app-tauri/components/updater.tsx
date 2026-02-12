@@ -104,13 +104,7 @@ Release notes: ${update.body}
     });
 
     try {
-      // Back up current app bundle before replacing it (for rollback)
-      try {
-        await invoke("backup_current_app");
-      } catch (_) {
-        // Non-fatal — proceed with update even if backup fails
-        console.warn("rollback backup failed, continuing with update");
-      }
+
       await update.downloadAndInstall((event: any) => {
         if (event?.event === "progress") {
           const pct = event.data?.contentLength

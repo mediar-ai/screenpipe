@@ -103,12 +103,7 @@ export function UpdateBanner({ className, compact = false }: UpdateBannerProps) 
         }
 
         if (update?.available) {
-          // Backup before installing
-          try {
-            await invoke("backup_current_app");
-          } catch (e) {
-            console.warn("rollback backup failed, continuing with update:", e);
-          }
+
 
           await update.downloadAndInstall();
 

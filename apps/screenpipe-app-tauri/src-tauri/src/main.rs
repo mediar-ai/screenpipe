@@ -1109,9 +1109,7 @@ async fn main() {
                 commands::register_window_shortcuts,
                 commands::unregister_window_shortcuts,
                 // Rollback commands
-                commands::get_rollback_version,
-                commands::rollback_to_previous_version,
-                commands::backup_current_app,
+                commands::rollback_to_version,
                 // Commands from tray.rs
                 set_tray_unhealth_icon,
                 set_tray_health_icon,
@@ -1581,6 +1579,16 @@ async fn main() {
                         .or_else(|| store_for_pi.ai_presets.first());
 
                     if let Some(preset) = default_preset {
+                        // Normalize model name: old "pi" presets used hyphens (e.g. claude-haiku-4-5-20251001)
+                        // but screenpipe cloud expects @ separator (claude-haiku-4-5@20251001)
+                        let model = if matches!(preset.provider, crate::store::AIProviderType::Pi | crate::store::AIProviderType::ScreenpipeCloud) {
+                            // Fix known model name patterns: last hyphen before date → @
+                            preset.model.replace("4-5-2025", "4-5@2025")
+                                .replace("4-6-2025", "4-6@2025")
+                        } else {
+                            preset.model.clone()
+                        };
+
                         let provider_config = pi::PiProviderConfig {
                             provider: match preset.provider {
                                 crate::store::AIProviderType::OpenAI => "openai".to_string(),
@@ -1590,7 +1598,7 @@ async fn main() {
                                 crate::store::AIProviderType::Pi => "screenpipe-cloud".to_string(),
                             },
                             url: preset.url.clone(),
-                            model: preset.model.clone(),
+                            model,
                             api_key: preset.api_key.clone(),
                         };
 
@@ -1601,16 +1609,31 @@ async fn main() {
                         let user_token = store_for_pi.user.token.clone();
 
                         if let Some(pi_state) = app_handle_pi_boot.try_state::<pi::PiState>() {
-                            info!("Auto-starting Pi agent with provider: {}, model: {}", provider_config.provider, provider_config.model);
-                            match pi::pi_start(
-                                app_handle_pi_boot.clone(),
-                                pi_state,
-                                project_dir,
-                                user_token,
-                                Some(provider_config),
-                            ).await {
-                                Ok(info) => info!("Pi auto-started successfully: {:?}", info),
-                                Err(e) => warn!("Pi auto-start failed (non-fatal): {}", e),
+                            let pi_state_clone = pi_state.inner().clone();
+                            // Retry up to 3 times (Pi might still be installing)
+                            for attempt in 1..=3u32 {
+                                info!("Auto-starting Pi agent (attempt {}/3) with provider: {}, model: {}", attempt, provider_config.provider, provider_config.model);
+
+                                let result = pi::pi_start_inner(
+                                    app_handle_pi_boot.clone(),
+                                    &pi_state_clone,
+                                    project_dir.clone(),
+                                    user_token.clone(),
+                                    Some(provider_config.clone()),
+                                ).await;
+
+                                match result {
+                                    Ok(info) => {
+                                        info!("Pi auto-started successfully: {:?}", info);
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        warn!("Pi auto-start attempt {} failed: {}", attempt, e);
+                                        if attempt < 3 {
+                                            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

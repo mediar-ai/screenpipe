@@ -793,28 +793,16 @@ pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), S
 
 
 
-/// Get the version of the backed-up app (if any), so the UI can show a rollback button
+/// Install a specific older version from R2. Downloads and installs via Tauri updater,
+/// then restarts the app.
 #[tauri::command]
 #[specta::specta]
-pub fn get_rollback_version() -> Option<String> {
-    crate::updates::rollback_version()
-}
-
-/// Back up the current app bundle (called from frontend before JS-driven updates)
-#[tauri::command]
-#[specta::specta]
-pub fn backup_current_app() {
-    crate::updates::backup_current_app_cmd();
-}
-
-/// Roll back to the previous version. Spawns a helper script, then the app must quit.
-#[tauri::command]
-#[specta::specta]
-pub async fn rollback_to_previous_version(
+pub async fn rollback_to_version(
     app_handle: tauri::AppHandle,
+    version: String,
 ) -> Result<(), String> {
     use crate::RecordingState;
-    info!("rollback_to_previous_version: starting rollback");
+    info!("rollback_to_version: installing v{}", version);
 
     // Stop recording first
     if let Err(e) = crate::stop_screenpipe(
@@ -822,15 +810,12 @@ pub async fn rollback_to_previous_version(
         app_handle.clone(),
     ).await {
         error!("rollback: failed to stop recording: {}", e);
-        // Continue anyway — the rollback script will kill us
     }
 
-    // Perform the rollback (spawns helper script)
-    crate::updates::perform_rollback()?;
+    // Download and install the target version
+    crate::updates::install_specific_version(&app_handle, &version).await?;
 
-    // Quit the app so the helper script can replace the bundle
-    info!("rollback: quitting app for replacement");
-    app_handle.exit(0);
-    Ok(())
+    info!("rollback: v{} installed, restarting", version);
+    app_handle.restart();
 }
 

@@ -658,7 +658,21 @@ impl ShowRewindWindow {
                     use tauri_nspanel::cocoa::base::{id as cocoa_id, nil as cocoa_nil};
                     if let Ok(ns_win) = window.ns_window() {
                         unsafe {
+                            // Activate the app so it comes to the foreground
+                            let ns_app: cocoa_id = msg_send![objc::class!(NSApplication), sharedApplication];
+                            let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+
+                            // Move the window to the active space (current workspace)
+                            // NSWindowCollectionBehaviorMoveToActiveSpace = 1 << 1 = 2
+                            let behavior: u64 = msg_send![ns_win as cocoa_id, collectionBehavior];
+                            let move_to_active: u64 = 1 << 1;
+                            let _: () = msg_send![ns_win as cocoa_id, setCollectionBehavior: behavior | move_to_active];
+
+                            // Bring window to front and make it key
                             let _: () = msg_send![ns_win as cocoa_id, makeKeyAndOrderFront: cocoa_nil];
+
+                            // Remove MoveToActiveSpace so the window stays pinned to this space
+                            let _: () = msg_send![ns_win as cocoa_id, setCollectionBehavior: behavior];
                         }
                     }
                 }
