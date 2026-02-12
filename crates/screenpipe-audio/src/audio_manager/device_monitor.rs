@@ -2,14 +2,34 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::{
-    core::device::{default_input_device, default_output_device, parse_audio_device, DeviceType},
+    core::{
+        device::{default_input_device, default_output_device, parse_audio_device, DeviceType},
+        get_device_capture_time,
+    },
     device::device_manager::DeviceManager,
 };
 
 use super::{AudioManager, AudioManagerStatus};
+
+/// If an input device (microphone) hasn't produced audio data for this many
+/// seconds, force-restart its stream. Input devices should always produce
+/// data (even silence frames), so a gap indicates a stale/dead stream.
+const INPUT_STALE_THRESHOLD_SECS: u64 = 60;
+
+/// Output devices (display/system audio via ScreenCaptureKit) may legitimately
+/// be silent when nothing is playing. Use a longer threshold.
+const OUTPUT_STALE_THRESHOLD_SECS: u64 = 120;
+
+/// Safety-net: force-restart all audio streams every N hours to work around
+/// macOS CoreAudio / ScreenCaptureKit sessions that silently degrade over
+/// long-running periods (e.g., across sleep/wake cycles).
+/// Set to 4 hours — short enough to catch degradation before users notice,
+/// long enough to avoid unnecessary churn.
+#[cfg(target_os = "macos")]
+const FORCE_RESTART_INTERVAL_SECS: u64 = 4 * 60 * 60;
 
 lazy_static::lazy_static! {
   pub static ref DEVICE_MONITOR: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
@@ -68,10 +88,120 @@ pub async fn start_device_monitor(
         let _ = default_tracker.check_input_changed();
         let _ = default_tracker.check_output_changed().await;
 
+        #[cfg(target_os = "macos")]
+        let mut last_force_restart = std::time::Instant::now();
+
+        // macOS sleep/wake detection via time-gap heuristic
+        #[cfg(target_os = "macos")]
+        let wake_flag = {
+            let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let _handle = crate::core::macos_sleep::spawn_sleep_wake_listener(flag.clone());
+            // Keep _handle alive by leaking it (monitor runs for app lifetime)
+            std::mem::forget(_handle);
+            flag
+        };
+
         loop {
             if audio_manager.status().await == AudioManagerStatus::Running {
                 let currently_available_devices = device_manager.devices().await;
                 let enabled_devices = audio_manager.enabled_devices().await;
+
+                // --- macOS periodic forced restart safety net ---
+                #[cfg(target_os = "macos")]
+                {
+                    if last_force_restart.elapsed().as_secs() >= FORCE_RESTART_INTERVAL_SECS {
+                        info!(
+                            "periodic audio restart (every {}h) to prevent macOS stream degradation",
+                            FORCE_RESTART_INTERVAL_SECS / 3600
+                        );
+                        // Restart all active recording devices
+                        for device_name in enabled_devices.iter() {
+                            if let Ok(device) = parse_audio_device(device_name) {
+                                let _ = audio_manager.stop_device(device_name).await;
+                                match audio_manager.start_device(&device).await {
+                                    Ok(()) => info!("periodic restart succeeded for {}", device_name),
+                                    Err(e) => {
+                                        error!("periodic restart failed for {}: {}", device_name, e);
+                                        disconnected_devices.insert(device_name.clone());
+                                    }
+                                }
+                            }
+                        }
+                        last_force_restart = std::time::Instant::now();
+                        // Skip the rest of this iteration to let streams settle
+                        sleep(Duration::from_secs(2)).await;
+                        continue;
+                    }
+                }
+
+                // --- macOS sleep/wake detection: restart all streams after wake ---
+                #[cfg(target_os = "macos")]
+                {
+                    if wake_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                        info!("macOS wake detected, restarting all audio streams");
+                        // Give macOS audio subsystem a moment to re-initialize
+                        sleep(Duration::from_secs(3)).await;
+                        for device_name in enabled_devices.iter() {
+                            if let Ok(device) = parse_audio_device(device_name) {
+                                let _ = audio_manager.stop_device(device_name).await;
+                                match audio_manager.start_device(&device).await {
+                                    Ok(()) => info!("post-wake restart succeeded for {}", device_name),
+                                    Err(e) => {
+                                        warn!("post-wake restart failed for {}: {}, will retry", device_name, e);
+                                        disconnected_devices.insert(device_name.clone());
+                                    }
+                                }
+                            }
+                        }
+                        #[cfg(target_os = "macos")]
+                        {
+                            last_force_restart = std::time::Instant::now();
+                        }
+                        sleep(Duration::from_secs(2)).await;
+                        continue;
+                    }
+                }
+
+                // --- Health check: detect streams alive but not producing data ---
+                {
+                    let now_secs = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+
+                    for device_name in enabled_devices.iter() {
+                        // Skip devices already known to be disconnected
+                        if disconnected_devices.contains(device_name) {
+                            continue;
+                        }
+
+                        let device = match parse_audio_device(device_name) {
+                            Ok(d) => d,
+                            Err(_) => continue,
+                        };
+
+                        // Only check devices that have an active recording handle
+                        if !device_manager.is_running(&device) {
+                            continue;
+                        }
+
+                        let last_capture = get_device_capture_time(device_name);
+                        let stale_threshold = match device.device_type {
+                            DeviceType::Input => INPUT_STALE_THRESHOLD_SECS,
+                            DeviceType::Output => OUTPUT_STALE_THRESHOLD_SECS,
+                        };
+
+                        let elapsed = now_secs.saturating_sub(last_capture);
+                        if elapsed > stale_threshold {
+                            warn!(
+                                "device {} has not produced audio for {}s (threshold: {}s), force-restarting",
+                                device_name, elapsed, stale_threshold
+                            );
+                            let _ = audio_manager.cleanup_stale_device(device_name).await;
+                            disconnected_devices.insert(device_name.clone());
+                        }
+                    }
+                }
 
                 // Handle "Follow System Default" mode
                 if audio_manager.use_system_default_audio().await {
