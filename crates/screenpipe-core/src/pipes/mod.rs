@@ -76,6 +76,8 @@ pub struct PipeStatus {
     pub is_running: bool,
     /// Raw prompt body (below front-matter).
     pub prompt_body: String,
+    /// Last error message (stderr from most recent failed run).
+    pub last_error: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -176,12 +178,16 @@ impl PipeManager {
             .map(|(name, (config, body))| {
                 let pipe_logs = logs.get(name);
                 let last_log = pipe_logs.and_then(|l| l.back());
+                let last_error = last_log
+                    .filter(|l| !l.success)
+                    .map(|l| l.stderr.clone());
                 PipeStatus {
                     config: config.clone(),
                     last_run: last_log.map(|l| l.finished_at),
                     last_success: last_log.map(|l| l.success),
                     is_running: running.contains_key(name),
                     prompt_body: body.clone(),
+                    last_error,
                 }
             })
             .collect()
@@ -196,12 +202,16 @@ impl PipeManager {
         pipes.get(name).map(|(config, body)| {
             let pipe_logs = logs.get(name);
             let last_log = pipe_logs.and_then(|l| l.back());
+            let last_error = last_log
+                .filter(|l| !l.success)
+                .map(|l| l.stderr.clone());
             PipeStatus {
                 config: config.clone(),
                 last_run: last_log.map(|l| l.finished_at),
                 last_success: last_log.map(|l| l.success),
                 is_running: running.contains_key(name),
                 prompt_body: body.clone(),
+                last_error,
             }
         })
     }

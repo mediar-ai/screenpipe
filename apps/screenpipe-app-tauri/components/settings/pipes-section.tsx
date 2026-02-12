@@ -20,6 +20,39 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { homeDir, join } from "@tauri-apps/api/path";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openUrl } from "@tauri-apps/plugin-opener";
+
+function parsePipeError(stderr: string): {
+  type: "daily_limit" | "rate_limit" | "unknown";
+  message: string;
+  used?: number;
+  limit?: number;
+  resets_at?: string;
+} {
+  // stderr format: '429 "{...json...}"\n'
+  const jsonMatch = stderr.match(/\d{3}\s+"(.+)"/s);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (parsed.error === "daily_limit_exceeded") {
+        return {
+          type: "daily_limit",
+          message: `daily limit reached (${parsed.used_today}/${parsed.limit_today})`,
+          used: parsed.used_today,
+          limit: parsed.limit_today,
+          resets_at: parsed.resets_at,
+        };
+      }
+      if (parsed.error === "rate limit exceeded") {
+        return {
+          type: "rate_limit",
+          message: `rate limited — retrying automatically`,
+        };
+      }
+    } catch {}
+  }
+  return { type: "unknown", message: stderr.slice(0, 150) };
+}
 
 interface PipeConfig {
   name: string;
@@ -38,6 +71,7 @@ interface PipeStatus {
   last_success: boolean | null;
   is_running: boolean;
   prompt_body: string;
+  last_error: string | null;
 }
 
 interface PipeRunLog {
@@ -235,6 +269,41 @@ export function PipesSection() {
                     }
                   />
                 </div>
+
+                {/* Error banner */}
+                {pipe.last_success === false && pipe.last_error && (() => {
+                  const error = parsePipeError(pipe.last_error);
+                  if (error.type === "daily_limit") {
+                    return (
+                      <div className="mt-2 flex items-center gap-2 text-xs">
+                        <span className="text-orange-500">
+                          {error.message}
+                          {error.resets_at && (
+                            <> · resets {new Date(error.resets_at).toLocaleTimeString()}</>
+                          )}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[11px] px-2"
+                          onClick={() => openUrl("https://screenpi.pe/onboarding?tab=pricing")}
+                        >
+                          get more queries →
+                        </Button>
+                      </div>
+                    );
+                  }
+                  if (error.type === "rate_limit") {
+                    return (
+                      <p className="mt-2 text-xs text-yellow-500">{error.message}</p>
+                    );
+                  }
+                  return (
+                    <p className="mt-2 text-xs text-red-500 truncate max-w-full">
+                      {error.message}
+                    </p>
+                  );
+                })()}
 
                 {/* Expanded detail */}
                 {expanded === pipe.config.name && (
