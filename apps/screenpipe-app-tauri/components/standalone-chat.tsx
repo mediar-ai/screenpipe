@@ -21,6 +21,7 @@ import { AIPresetsSelector } from "@/components/rewind/ai-presets-selector";
 import { AIPreset } from "@/lib/utils/tauri";
 import remarkGfm from "remark-gfm";
 // OpenAI SDK no longer used directly — all providers route through Pi agent
+import posthog from "posthog-js";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -1254,6 +1255,7 @@ export function StandaloneChat() {
               if (match) setUpgradeResetsAt(match[1]);
             } catch {}
             setUpgradeReason("daily_limit");
+            posthog.capture("wall_hit", { reason: "daily_limit", source: "chat" });
 
             if (piMessageIdRef.current) {
               const msgId = piMessageIdRef.current;
@@ -2289,6 +2291,7 @@ export function StandaloneChat() {
         onOpenChange={setShowUpgradeDialog}
         reason={upgradeReason}
         resetsAt={upgradeResetsAt}
+        source="chat"
       />
     </div>
   );

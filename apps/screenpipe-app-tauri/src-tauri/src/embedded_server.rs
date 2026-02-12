@@ -13,6 +13,7 @@ use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
 use screenpipe_server::{
+    analytics,
     ResourceMonitor, SCServer, start_continuous_recording, start_sleep_monitor,
     start_ui_recording, UiRecorderConfig,
     vision_manager::{VisionManager, VisionManagerConfig, start_monitor_watcher, stop_monitor_watcher},
@@ -594,6 +595,13 @@ pub async fn start_embedded_server(
 
     let mut pipe_manager =
         screenpipe_core::pipes::PipeManager::new(pipes_dir, agent_executors);
+    pipe_manager.set_on_run_complete(std::sync::Arc::new(|pipe_name, success, duration_secs| {
+        analytics::capture_event_nonblocking("pipe_scheduled_run", serde_json::json!({
+            "pipe": pipe_name,
+            "success": success,
+            "duration_secs": duration_secs,
+        }));
+    }));
     pipe_manager.install_builtin_pipes().ok();
     if let Err(e) = pipe_manager.load_pipes().await {
         tracing::warn!("failed to load pipes: {}", e);

@@ -1273,25 +1273,25 @@ impl SCServer {
                     "/install",
                     axum::routing::post(crate::pipes_api::install_pipe),
                 )
-                .route("/{id}", axum::routing::get(crate::pipes_api::get_pipe))
+                .route("/:id", axum::routing::get(crate::pipes_api::get_pipe))
                 .route(
-                    "/{id}",
+                    "/:id",
                     axum::routing::delete(crate::pipes_api::delete_pipe),
                 )
                 .route(
-                    "/{id}/enable",
+                    "/:id/enable",
                     axum::routing::post(crate::pipes_api::enable_pipe),
                 )
                 .route(
-                    "/{id}/run",
+                    "/:id/run",
                     axum::routing::post(crate::pipes_api::run_pipe_now),
                 )
                 .route(
-                    "/{id}/logs",
+                    "/:id/logs",
                     axum::routing::get(crate::pipes_api::get_pipe_logs),
                 )
                 .route(
-                    "/{id}/config",
+                    "/:id/config",
                     axum::routing::post(crate::pipes_api::update_pipe_config),
                 )
                 .with_state(pm.clone());

@@ -28,19 +28,28 @@ the agent can query your screen data, write files, call external APIs, send noti
 the file starts with YAML frontmatter, then the prompt body:
 
 ---
-name: my-pipe
 schedule: every 30m
-lookback: 30m
 enabled: true
 ---
 
 Your prompt instructions here...
 
+## context header
+
+before execution, screenpipe prepends a context header to the prompt with:
+- time range (start/end timestamps based on the schedule interval)
+- current date
+- user's timezone
+- screenpipe API base URL
+- output directory
+
+the AI agent uses this context to query the right time range. no template variables needed in the prompt.
+
 ## screenpipe search API
 
 the agent queries screen data via the local REST API:
 
-curl "http://localhost:3030/search?limit=20&content_type=all&start_time={{start_time}}&end_time={{end_time}}"
+curl "http://localhost:3030/search?limit=20&content_type=all&start_time=<ISO8601>&end_time=<ISO8601>"
 
 ### query parameters
 - q: text search query (optional)
@@ -73,17 +82,8 @@ each result contains:
 - device_type: "input" (microphone) or "output" (system audio)
 
 ### UI events (accessibility data, macOS only)
-query via: curl "http://localhost:3030/ui-events?app_name=Slack&limit=50&start_time={{start_time}}&end_time={{end_time}}"
+query via: curl "http://localhost:3030/ui-events?app_name=Slack&limit=50&start_time=<ISO8601>&end_time=<ISO8601>"
 event types: text (keyboard input), click, app_switch, window_focus, clipboard, scroll
-
-## template variables
-
-these are replaced in the prompt before execution:
-- {{start_time}}: ISO 8601 start (based on lookback)
-- {{end_time}}: ISO 8601 end (current time)
-- {{date}}: current date (YYYY-MM-DD)
-- {{timezone}}: timezone abbreviation (e.g. PST)
-- {{timezone_offset}}: UTC offset (e.g. -08:00)
 
 ## secrets
 
@@ -129,15 +129,13 @@ create a folder in `~/.screenpipe/pipes/` with a `pipe.md` file:
 mkdir -p ~/.screenpipe/pipes/my-pipe
 cat > ~/.screenpipe/pipes/my-pipe/pipe.md << 'EOF'
 ---
-name: my-pipe
 schedule: every 30m
-lookback: 30m
 enabled: true
 ---
 
 Summarize my screen activity for the last 30 minutes.
-Query screenpipe at http://localhost:3030/search.
-Write the summary to ./output/{{date}}.md
+Query screenpipe at http://localhost:3030/search using the time range from the context header.
+Write the summary to ./output/<date>.md
 EOF
 
 # install and enable
@@ -154,12 +152,8 @@ every pipe.md starts with YAML frontmatter between `---` markers, followed by th
 
 ```markdown
 ---
-name: my-pipe
 schedule: every 2h
-lookback: 2h
 enabled: true
-agent: pi
-model: claude-haiku-4-5@20251001
 ---
 
 Your prompt goes here. This is what the AI agent will execute.
@@ -170,25 +164,34 @@ You can reference screenpipe's API, write files, call external APIs, etc.
 
 | field | required | default | description |
 |-------|----------|---------|-------------|
-| `name` | no | folder name | pipe identifier |
-| `schedule` | yes | `manual` | `every 1m`, `every 30m`, `every 2h`, `daily`, `manual` |
-| `lookback` | no | matches schedule | how far back to query screen data: `30m`, `2h`, `8h` |
+| `schedule` | yes | `manual` | `every 30m`, `every 2h`, `daily`, cron (`0 */2 * * *`), or `manual` |
 | `enabled` | no | `true` | whether the scheduler runs this pipe |
-| `agent` | no | `pi` | which coding agent CLI to use |
 | `model` | no | `claude-haiku-4-5@20251001` | which LLM the agent uses |
 | `provider` | no | `screenpipe` | LLM provider: `screenpipe` (cloud), `anthropic`, `openai`, `google`, etc. |
+| `preset` | no | — | AI preset id from app settings (overrides model/provider) |
 
-### template variables
+### context header
 
-these get replaced in the prompt body before execution:
+before execution, screenpipe prepends a context header to the prompt:
 
-| variable | example value |
-|----------|---------------|
-| `{{start_time}}` | `2026-02-11T20:00:00Z` |
-| `{{end_time}}` | `2026-02-11T20:30:00Z` |
-| `{{date}}` | `2026-02-11` |
-| `{{timezone}}` | `PST` |
-| `{{timezone_offset}}` | `-08:00` |
+```
+Time range: 2026-02-12T13:00:00Z to 2026-02-12T14:00:00Z
+Date: 2026-02-12
+Timezone: PST (UTC-08:00)
+Output directory: ./output/
+Screenpipe API: http://localhost:3030
+```
+
+the AI agent uses these values to query the right time range and format output correctly. no template variables needed — just write plain instructions.
+
+### schedule formats
+
+| format | example | description |
+|--------|---------|-------------|
+| interval | `every 30m`, `every 2h` | runs at fixed intervals |
+| daily | `daily` | runs once per day |
+| cron | `0 */2 * * *` | standard 5-field cron expression |
+| manual | `manual` | only runs when triggered manually |
 
 ## cli commands
 
@@ -231,6 +234,11 @@ curl -X POST http://localhost:3030/pipes/my-pipe/enable \
   -H "Content-Type: application/json" \
   -d '{"enabled": true}'
 
+# update pipe content
+curl -X POST http://localhost:3030/pipes/my-pipe/config \
+  -H "Content-Type: application/json" \
+  -d '{"raw_content": "---\nschedule: every 1h\nenabled: true\n---\n\nYour prompt here..."}'
+
 # view logs
 curl http://localhost:3030/pipes/my-pipe/logs
 
@@ -242,7 +250,7 @@ curl -X POST http://localhost:3030/pipes/install \
 
 ## app ui
 
-go to **settings → pipes** to see all installed pipes, toggle them on/off, run them manually, and view logs.
+go to **settings → pipes** to see all installed pipes, toggle them on/off, run them manually, edit the pipe.md directly, select an AI preset, and view logs.
 
 ## examples
 
@@ -250,19 +258,16 @@ go to **settings → pipes** to see all installed pipes, toggle them on/off, run
 
 ```markdown
 ---
-name: toggl-sync
 schedule: every 1m
-lookback: 2m
 enabled: true
 ---
 
-You automatically update my Toggl time tracking based on screen activity.
+Automatically update my Toggl time tracking based on screen activity.
 
-1. Query screenpipe: curl "http://localhost:3030/search?content_type=ocr&limit=20&start_time={{start_time}}&end_time={{end_time}}"
+1. Query screenpipe search API for the time range in the context header
 2. Read API key: source .env
 3. Check current Toggl timer
 4. If activity changed, stop old timer and start new one
-5. If activity matches, do nothing
 
 Activity rules:
 - VSCode/Cursor/Terminal → "coding"
@@ -275,33 +280,35 @@ Activity rules:
 
 ```markdown
 ---
-name: daily-journal
 schedule: every 2h
-lookback: 2h
 enabled: true
 ---
 
 Summarize my screen activity into a daily journal entry.
-Query screenpipe at http://localhost:3030/search.
-Write to ~/obsidian-vault/screenpipe/{{date}}.md
+Query screenpipe search API for the time range in the context header.
+Write to ~/obsidian-vault/screenpipe/<date>.md
 Use [[wiki-links]] for people and projects.
-Include timeline deep links: [time](screenpipe://timeline?timestamp=ISO8601)
+Include timeline deep links: [time](screenpipe://timeline?timestamp=<ISO8601>)
 ```
 
 ### standup report
 
 ```markdown
 ---
-name: standup
 schedule: daily
-lookback: 8h
 enabled: true
 ---
 
 Generate a standup report from yesterday's screen activity.
 Format: what I did, what I'm doing, blockers.
-Write to ./output/{{date}}.md
+Write to ./output/<date>.md
 ```
+
+## AI presets
+
+in the screenpipe app, go to **settings → AI settings** to configure presets (model + provider combinations). in **settings → pipes**, you can assign a preset to each pipe — this overrides the model/provider in the frontmatter.
+
+for CLI users, screenpipe auto-creates a default preset using screenpipe cloud.
 
 ## AI providers
 
@@ -338,14 +345,13 @@ add `provider` to your pipe.md frontmatter:
 
 ```yaml
 ---
-name: my-pipe
 schedule: every 30m
 provider: anthropic
 model: claude-haiku-4-5@20251001
 ---
 ```
 
-**provider resolution:** if `provider` is set in pipe.md → use it. otherwise → screenpipe cloud.
+**provider resolution:** preset (if set) → frontmatter provider/model → screenpipe cloud.
 
 ## secrets
 
@@ -371,12 +377,13 @@ pipe.md (prompt + config)
 
 - **agent ≠ model**: the agent is the CLI tool (pi, claude-code). the model is the LLM (haiku, opus, llama).
 - **one pipe runs at a time** (global semaphore prevents overlap)
-- **lookback capped at 8h** to prevent context overflow
+- **lookback = schedule interval** (capped at 8h to prevent context overflow)
 - **logs saved** to `~/.screenpipe/pipes/{name}/logs/` as JSON
 
 ## built-in pipes
 
-screenpipe ships with two template pipes (disabled by default):
+screenpipe ships with three template pipes (disabled by default):
 
-- **obsidian-sync** — sync screen activity to obsidian vault
-- **reminders** — scan activity for todos and create apple reminders
+- **obsidian-sync** — sync screen activity to obsidian vault as daily logs
+- **reminders** — scan activity for todos and create apple reminders (macOS)
+- **idea-tracker** — surface startup ideas from your browsing + market trends

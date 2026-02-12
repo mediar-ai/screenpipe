@@ -426,6 +426,7 @@ export function AccountSection() {
         open={showUpgrade}
         onOpenChange={setShowUpgrade}
         reason="daily_limit"
+        source="account"
       />
     </div>
   );
