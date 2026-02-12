@@ -117,7 +117,7 @@ function useSuggestions(isOpen: boolean) {
       try {
         const now = new Date();
         const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const endTime = new Date(now.getTime() - 60000); // 1 min ago
+        const endTime = now; // include most recent captures
 
         const params = new URLSearchParams({
           content_type: "ocr",
