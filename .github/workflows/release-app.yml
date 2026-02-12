@@ -812,7 +812,6 @@ jobs:
 
       - name: Upload to Cloudflare R2 (macOS)
         if: matrix.os_type == 'macos'
-        continue-on-error: true
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -820,12 +819,22 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
+          # Ensure aws CLI v2 is in PATH (self-hosted runners install to /usr/local/bin)
+          export PATH="/usr/local/bin:$PATH"
+          if ! command -v aws &>/dev/null; then
+            echo "Installing AWS CLI v2..."
+            curl -s "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "/tmp/AWSCLIV2.pkg"
+            sudo installer -pkg /tmp/AWSCLIV2.pkg -target /
+            export PATH="/usr/local/bin:$PATH"
+          fi
+
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           TARGET="${{ matrix.target }}"
           BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
           R2_PREFIX="s3://screenpipe-releases/releases/${VERSION}/${TARGET}"
 
           echo "uploading ${TARGET} bundles for v${VERSION} to R2..."
+          echo "aws cli: $(aws --version)"
 
           # Upload DMG (quote paths — filenames may contain spaces)
           find "${BUNDLE_DIR}/dmg" -name "*.dmg" -type f | while IFS= read -r f; do
@@ -970,6 +979,7 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
+          export PATH="/usr/local/bin:$PATH"
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           TARGET="${{ matrix.target }}"
           BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
