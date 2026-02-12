@@ -924,7 +924,8 @@ jobs:
           $bundleNsis = "target\x86_64-pc-windows-msvc\release\bundle\nsis"
           if (Test-Path $bundleNsis) { Remove-Item -Recurse -Force $bundleNsis }
           Push-Location ..
-          # Skip vulkan for now — ExternalProject can't find cl.exe on GH runners
+          # Skip frontend rebuild (already built for stable) and vulkan
+          $env:TAURI_CLI_CONFIG = '{"build":{"beforeBuildCommand":""}}'
           bunx tauri build --target x86_64-pc-windows-msvc --features mkl,official-build
           Pop-Location
           Write-Host "=== Beta rebuild complete ==="
@@ -979,16 +980,16 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: "10.15"
         run: |
           echo "=== Rebuilding with beta config ==="
-          # Swap to beta config (Rust is already compiled, this just repackages)
+          # Swap to beta config
           cp apps/screenpipe-app-tauri/src-tauri/tauri.beta.conf.json apps/screenpipe-app-tauri/src-tauri/tauri.conf.json
-          # Clean ALL bundle artifacts so only beta artifacts exist for upload
+          # Only remove bundle outputs (NOT cargo cache). Use parens to group -o conditions properly.
           find apps/screenpipe-app-tauri/src-tauri/target -type d -name "bundle" -exec rm -rf {} + 2>/dev/null || true
-          # Also remove any .dmg, .app.tar.gz, .sig files from previous build
-          find apps/screenpipe-app-tauri/src-tauri/target -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.sig" -o -name "*.nsis*" | xargs rm -f 2>/dev/null || true
+          find apps/screenpipe-app-tauri/src-tauri/target \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.sig" -o -name "*.nsis*" \) -type f -delete 2>/dev/null || true
+          # Skip frontend rebuild — already built for stable, beta uses same frontend
+          # Override beforeBuildCommand to no-op so tauri doesn't re-run bun run build
           cd apps/screenpipe-app-tauri
-          bunx tauri build ${{ steps.tauri-args.outputs.args || matrix.tauri-args }}
+          TAURI_CLI_CONFIG='{"build":{"beforeBuildCommand":""}}' bunx tauri build ${{ steps.tauri-args.outputs.args || matrix.tauri-args }}
           echo "=== Beta rebuild complete ==="
-          # Verify only beta artifacts exist
           echo "Beta artifacts:"
           find src-tauri/target -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.exe" 2>/dev/null
 

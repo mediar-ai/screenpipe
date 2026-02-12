@@ -251,28 +251,6 @@ async unregisterWindowShortcuts() : Promise<Result<null, string>> {
 }
 },
 /**
- * Suspend arrow shortcuts (called from JS when search/chat modal opens)
- */
-async suspendArrowShortcuts() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("suspend_arrow_shortcuts") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Resume arrow shortcuts (called from JS when search/chat modal closes)
- */
-async resumeArrowShortcuts() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("resume_arrow_shortcuts") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
  * Get the version of the backed-up app (if any), so the UI can show a rollback button
  */
 async getRollbackVersion() : Promise<string | null> {

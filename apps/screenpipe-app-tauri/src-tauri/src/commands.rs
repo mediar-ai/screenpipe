@@ -756,11 +756,7 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
     // Having it in both places caused it to be unregistered globally when the window
     // closed, breaking Ctrl+Cmd+K entirely until app restart.
 
-    // Register arrow key shortcuts for timeline navigation
-    // Plain arrows = frame step, Alt+arrows = app-boundary jump
-    register_arrow_shortcuts(app_handle.clone())?;
-
-    info!("Window-specific shortcuts registered (Escape, arrows)");
+    info!("Window-specific shortcuts registered (Escape)");
     Ok(())
 }
 
@@ -783,87 +779,11 @@ pub fn unregister_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), S
     // hides. Previously unregistering it here killed the global registration,
     // causing Ctrl+Cmd+K to stop working entirely after pressing Escape.
 
-    // Unregister arrow key shortcuts (these are window-only, safe to remove)
-    unregister_arrow_shortcuts(&app_handle)?;
-
     info!("Window-specific shortcuts unregistered");
     Ok(())
 }
 
-/// Register arrow key shortcuts for timeline frame navigation
-/// Plain arrows = frame step, Alt+arrows = app-boundary jump
-fn register_arrow_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
-    use tauri::Emitter;
 
-    let gs = app_handle.global_shortcut();
-
-    // ArrowLeft = prev frame
-    let left = Shortcut::new(None, Code::ArrowLeft);
-    let app = app_handle.clone();
-    if let Err(e) = gs.on_shortcut(left, move |_app, _, event| {
-        if matches!(event.state, ShortcutState::Pressed) {
-            let _ = app.emit("timeline-navigate", "prev-frame");
-        }
-    }) {
-        if !e.to_string().contains("already registered") {
-            error!("Failed to register ArrowLeft shortcut: {}", e);
-        }
-    }
-
-    // ArrowRight = next frame
-    let right = Shortcut::new(None, Code::ArrowRight);
-    let app = app_handle.clone();
-    if let Err(e) = gs.on_shortcut(right, move |_app, _, event| {
-        if matches!(event.state, ShortcutState::Pressed) {
-            let _ = app.emit("timeline-navigate", "next-frame");
-        }
-    }) {
-        if !e.to_string().contains("already registered") {
-            error!("Failed to register ArrowRight shortcut: {}", e);
-        }
-    }
-
-    // Alt+ArrowLeft = prev app boundary
-    let alt_left = Shortcut::new(Some(Modifiers::ALT), Code::ArrowLeft);
-    let app = app_handle.clone();
-    if let Err(e) = gs.on_shortcut(alt_left, move |_app, _, event| {
-        if matches!(event.state, ShortcutState::Pressed) {
-            let _ = app.emit("timeline-navigate", "prev-app");
-        }
-    }) {
-        if !e.to_string().contains("already registered") {
-            error!("Failed to register Alt+ArrowLeft shortcut: {}", e);
-        }
-    }
-
-    // Alt+ArrowRight = next app boundary
-    let alt_right = Shortcut::new(Some(Modifiers::ALT), Code::ArrowRight);
-    let app = app_handle.clone();
-    if let Err(e) = gs.on_shortcut(alt_right, move |_app, _, event| {
-        if matches!(event.state, ShortcutState::Pressed) {
-            let _ = app.emit("timeline-navigate", "next-app");
-        }
-    }) {
-        if !e.to_string().contains("already registered") {
-            error!("Failed to register Alt+ArrowRight shortcut: {}", e);
-        }
-    }
-
-    Ok(())
-}
-
-/// Unregister arrow key shortcuts
-fn unregister_arrow_shortcuts(app_handle: &tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
-
-    let gs = app_handle.global_shortcut();
-    let _ = gs.unregister(Shortcut::new(None, Code::ArrowLeft));
-    let _ = gs.unregister(Shortcut::new(None, Code::ArrowRight));
-    let _ = gs.unregister(Shortcut::new(Some(Modifiers::ALT), Code::ArrowLeft));
-    let _ = gs.unregister(Shortcut::new(Some(Modifiers::ALT), Code::ArrowRight));
-    Ok(())
-}
 
 /// Get the version of the backed-up app (if any), so the UI can show a rollback button
 #[tauri::command]
@@ -906,16 +826,3 @@ pub async fn rollback_to_previous_version(
     Ok(())
 }
 
-/// Suspend arrow shortcuts (called from JS when search/chat modal opens)
-#[tauri::command]
-#[specta::specta]
-pub fn suspend_arrow_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {
-    unregister_arrow_shortcuts(&app_handle)
-}
-
-/// Resume arrow shortcuts (called from JS when search/chat modal closes)
-#[tauri::command]
-#[specta::specta]
-pub fn resume_arrow_shortcuts(app_handle: tauri::AppHandle) -> Result<(), String> {
-    register_arrow_shortcuts(app_handle)
-}

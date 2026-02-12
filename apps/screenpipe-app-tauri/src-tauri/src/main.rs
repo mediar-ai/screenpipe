@@ -1107,8 +1107,6 @@ async fn main() {
                 // Window-specific shortcut commands (dynamic registration)
                 commands::register_window_shortcuts,
                 commands::unregister_window_shortcuts,
-                commands::suspend_arrow_shortcuts,
-                commands::resume_arrow_shortcuts,
                 // Rollback commands
                 commands::get_rollback_version,
                 commands::rollback_to_previous_version,
@@ -1281,8 +1279,6 @@ async fn main() {
             // Window-specific shortcut commands (dynamic registration)
             commands::register_window_shortcuts,
             commands::unregister_window_shortcuts,
-            commands::suspend_arrow_shortcuts,
-            commands::resume_arrow_shortcuts,
             // Overlay commands (Windows)
             commands::enable_overlay_click_through,
             commands::disable_overlay_click_through,
