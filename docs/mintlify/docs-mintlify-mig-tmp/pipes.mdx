@@ -106,7 +106,7 @@ replace `[DESCRIBE WHAT YOU WANT]` with your use case — e.g. "tracks my time i
 
 ## what are pipes?
 
-pipes are automated workflows that run on your screenpipe data at regular intervals. each pipe is a markdown file with a prompt and a schedule. under the hood, screenpipe runs a coding agent (like [pi](https://github.com/mariozechner/pi-coding-agent)) that can query your screen data, call APIs, write files, and take actions.
+pipes are automated workflows that run on your screenpipe data at regular intervals. each pipe is a markdown file with a prompt and a schedule. under the hood, screenpipe runs a coding agent (like [pi](https://github.com/badlogic/pi-mono)) that can query your screen data, call APIs, write files, and take actions.
 
 **a pipe is just one file: `pipe.md`**
 
@@ -307,7 +307,7 @@ Write to ./output/{{date}}.md
 
 by default, pipes use **screenpipe cloud** — no setup needed if you have a screenpipe account.
 
-to use your own AI subscription (Claude Pro, ChatGPT Plus, Gemini, or API keys), pipes reuse [pi's native auth system](https://github.com/mariozechner/pi-coding-agent):
+to use your own AI subscription (Claude Pro, ChatGPT Plus, Gemini, or API keys), pipes reuse [pi's native auth system](https://github.com/badlogic/pi-mono):
 
 ### option 1: subscription (free with existing plan)
 
