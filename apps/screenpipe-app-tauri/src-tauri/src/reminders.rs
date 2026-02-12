@@ -219,15 +219,15 @@ pub async fn reminders_create(
 /// Optional custom_prompt appended to the AI instructions.
 #[tauri::command]
 #[specta::specta]
-pub async fn reminders_scan(custom_prompt: Option<String>) -> Result<ScanResult, String> {
+pub async fn reminders_scan(custom_prompt: Option<String>, audio_only: Option<bool>) -> Result<ScanResult, String> {
     #[cfg(target_os = "macos")]
     {
-        do_scan(custom_prompt.as_deref()).await
+        do_scan(custom_prompt.as_deref(), audio_only.unwrap_or(true)).await
     }
 
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = custom_prompt;
+        let _ = (custom_prompt, audio_only);
         Err("only available on macOS".into())
     }
 }
@@ -248,8 +248,31 @@ pub async fn reminders_set_custom_prompt(app: AppHandle, prompt: String) -> Resu
     let mut settings = RemindersSettingsStore::get(&app)?.unwrap_or(RemindersSettingsStore {
         enabled: false,
         custom_prompt: String::new(),
+        audio_only: true,
     });
     settings.custom_prompt = prompt;
+    settings.save(&app)
+}
+
+/// Get the audio_only setting.
+#[tauri::command]
+#[specta::specta]
+pub async fn reminders_get_audio_only(app: AppHandle) -> Result<bool, String> {
+    Ok(RemindersSettingsStore::get(&app)?
+        .map(|s| s.audio_only)
+        .unwrap_or(true))
+}
+
+/// Set the audio_only setting.
+#[tauri::command]
+#[specta::specta]
+pub async fn reminders_set_audio_only(app: AppHandle, audio_only: bool) -> Result<(), String> {
+    let mut settings = RemindersSettingsStore::get(&app)?.unwrap_or(RemindersSettingsStore {
+        enabled: false,
+        custom_prompt: String::new(),
+        audio_only: true,
+    });
+    settings.audio_only = audio_only;
     settings.save(&app)
 }
 
@@ -268,6 +291,7 @@ pub async fn reminders_start_scheduler(
     let mut settings = RemindersSettingsStore::get(&app)?.unwrap_or(RemindersSettingsStore {
         enabled: false,
         custom_prompt: String::new(),
+        audio_only: true,
     });
     settings.enabled = true;
     settings.save(&app)?;
@@ -277,6 +301,7 @@ pub async fn reminders_start_scheduler(
     } else {
         Some(settings.custom_prompt.clone())
     };
+    let audio_only = settings.audio_only;
 
     let handle_arc = state.scheduler_handle.clone();
 
@@ -290,7 +315,7 @@ pub async fn reminders_start_scheduler(
         loop {
             info!("reminders scheduler: running scan");
             #[cfg(target_os = "macos")]
-            match do_scan(custom_prompt.as_deref()).await {
+            match do_scan(custom_prompt.as_deref(), audio_only).await {
                 Ok(result) => {
                     if result.reminders_created > 0 {
                         info!(
@@ -357,6 +382,7 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &RemindersState) {
             } else {
                 Some(settings.custom_prompt.clone())
             };
+            let audio_only = settings.audio_only;
 
             let handle_arc = state.scheduler_handle.clone();
             let handle = tokio::spawn(async move {
@@ -367,7 +393,7 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &RemindersState) {
                 loop {
                     info!("reminders scheduler: running scan");
                     #[cfg(target_os = "macos")]
-                    match do_scan(custom_prompt.as_deref()).await {
+                    match do_scan(custom_prompt.as_deref(), audio_only).await {
                         Ok(result) => {
                             if result.reminders_created > 0 {
                                 info!(
@@ -400,7 +426,7 @@ pub async fn auto_start_scheduler(app: AppHandle, state: &RemindersState) {
 // ─── Scan implementation ────────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
-async fn do_scan(custom_prompt: Option<&str>) -> Result<ScanResult, String> {
+async fn do_scan(custom_prompt: Option<&str>, audio_only: bool) -> Result<ScanResult, String> {
     use screenpipe_integrations::reminders::ScreenpipeReminders;
 
     // 1. Check authorization
@@ -426,7 +452,7 @@ async fn do_scan(custom_prompt: Option<&str>) -> Result<ScanResult, String> {
     }
 
     // 3. Fetch recent data from screenpipe API
-    let context = fetch_recent_context().await?;
+    let context = fetch_recent_context(audio_only).await?;
     if context.is_empty() {
         return Ok(ScanResult {
             reminders_created: 0,
@@ -530,16 +556,17 @@ async fn check_ai_available() -> bool {
 }
 
 /// Fetch the last 30 minutes of screen + audio from the screenpipe API.
+/// When `audio_only` is true, skip screen/OCR data entirely.
 #[cfg(target_os = "macos")]
-async fn fetch_recent_context() -> Result<String, String> {
+async fn fetch_recent_context(audio_only: bool) -> Result<String, String> {
     let client = reqwest::Client::new();
     let now = chrono::Utc::now();
     let thirty_min_ago = now - chrono::Duration::minutes(30);
 
     let mut parts = Vec::new();
 
-    // Screen data (OCR)
-    if let Ok(resp) = client
+    // Screen data (OCR) — skip when audio_only
+    if !audio_only { if let Ok(resp) = client
         .get(format!("{}/search", API))
         .query(&[
             ("content_type", "ocr"),
@@ -577,7 +604,7 @@ async fn fetch_recent_context() -> Result<String, String> {
                 }
             }
         }
-    }
+    } }
 
     // Audio data
     if let Ok(resp) = client

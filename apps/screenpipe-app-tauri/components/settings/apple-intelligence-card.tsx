@@ -39,6 +39,7 @@ export function AppleIntelligenceCard() {
   const [reminderCount, setReminderCount] = useState(0);
   const [customPrompt, setCustomPrompt] = useState("");
   const [promptDirty, setPromptDirty] = useState(false);
+  const [audioOnly, setAudioOnly] = useState(true);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -118,6 +119,9 @@ export function AppleIntelligenceCard() {
         invoke<string>("reminders_get_custom_prompt")
           .then((p) => setCustomPrompt(p))
           .catch(() => {});
+        invoke<boolean>("reminders_get_audio_only")
+          .then((v) => setAudioOnly(v))
+          .catch(() => {});
       }
     } catch {}
   }, []);
@@ -139,6 +143,12 @@ export function AppleIntelligenceCard() {
       );
       setPromptDirty(false);
     }, 1000);
+  };
+
+  const toggleAudioOnly = async (val: boolean) => {
+    setAudioOnly(val);
+    await invoke("reminders_set_audio_only", { audioOnly: val }).catch(() => {});
+    posthog.capture("reminders_audio_only_toggled", { audio_only: val });
   };
 
   // Authorize reminders
@@ -194,6 +204,7 @@ export function AppleIntelligenceCard() {
         error: string | null;
       }>("reminders_scan", {
         customPrompt: customPrompt || null,
+        audioOnly,
       });
 
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -352,6 +363,16 @@ export function AppleIntelligenceCard() {
                     {remindersEnabled
                       ? "Auto-scanning every 30 min"
                       : "Auto-scan disabled"}
+                  </Label>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={audioOnly}
+                    onCheckedChange={toggleAudioOnly}
+                  />
+                  <Label className="text-xs text-muted-foreground">
+                    audio only (skip screen data)
                   </Label>
                 </div>
 

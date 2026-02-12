@@ -1155,6 +1155,8 @@ async fn main() {
                 reminders::reminders_stop_scheduler,
                 reminders::reminders_get_custom_prompt,
                 reminders::reminders_set_custom_prompt,
+                reminders::reminders_get_audio_only,
+                reminders::reminders_set_audio_only,
             ])
             .typ::<SettingsStore>()
             .typ::<OnboardingStore>()
@@ -1328,7 +1330,9 @@ async fn main() {
             reminders::reminders_start_scheduler,
             reminders::reminders_stop_scheduler,
             reminders::reminders_get_custom_prompt,
-            reminders::reminders_set_custom_prompt
+            reminders::reminders_set_custom_prompt,
+            reminders::reminders_get_audio_only,
+            reminders::reminders_set_audio_only
         ])
         .setup(move |app| {
             //deep link register_all

@@ -665,7 +665,12 @@ pub struct RemindersSettingsStore {
     pub enabled: bool,
     #[serde(default)]
     pub custom_prompt: String,
+    /// When true, only audio/transcript data is used (no screen OCR).
+    #[serde(default = "reminders_audio_only_default")]
+    pub audio_only: bool,
 }
+
+fn reminders_audio_only_default() -> bool { true }
 
 // ─── Cloud Sync Settings ─────────────────────────────────────────────────────
 
