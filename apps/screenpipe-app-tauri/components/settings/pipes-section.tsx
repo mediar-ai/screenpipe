@@ -232,6 +232,32 @@ export function PipesSection() {
         </Card>
       ) : (
         <div className="space-y-2">
+          {/* Global daily limit banner — shown once at top */}
+          {(() => {
+            const limitError = pipes
+              .filter((p) => p.last_success === false && p.last_error)
+              .map((p) => parsePipeError(p.last_error!))
+              .find((e) => e.type === "daily_limit");
+            if (!limitError) return null;
+            return (
+              <div className="flex items-center gap-2 text-xs px-4 py-2 border rounded-md">
+                <span className="text-muted-foreground">
+                  {limitError.message}
+                  {limitError.resets_at && (
+                    <> · resets {new Date(limitError.resets_at).toLocaleTimeString()}</>
+                  )}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[11px] px-2"
+                  onClick={() => openUrl("https://screenpi.pe/onboarding?tab=pricing")}
+                >
+                  get more queries →
+                </Button>
+              </div>
+            );
+          })()}
           {pipes.map((pipe) => (
             <Card key={pipe.config.name}>
               <CardContent className="p-4">
@@ -289,29 +315,10 @@ export function PipesSection() {
                   />
                 </div>
 
-                {/* Error banner */}
+                {/* Per-pipe error (skip daily_limit — shown globally above) */}
                 {pipe.last_success === false && pipe.last_error && (() => {
                   const error = parsePipeError(pipe.last_error);
-                  if (error.type === "daily_limit") {
-                    return (
-                      <div className="mt-2 flex items-center gap-2 text-xs">
-                        <span className="text-muted-foreground">
-                          {error.message}
-                          {error.resets_at && (
-                            <> · resets {new Date(error.resets_at).toLocaleTimeString()}</>
-                          )}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 text-[11px] px-2"
-                          onClick={() => openUrl("https://screenpi.pe/onboarding?tab=pricing")}
-                        >
-                          get more queries →
-                        </Button>
-                      </div>
-                    );
-                  }
+                  if (error.type === "daily_limit") return null;
                   if (error.type === "rate_limit") {
                     return (
                       <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
