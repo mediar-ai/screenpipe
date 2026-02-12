@@ -3,7 +3,6 @@ import { Env, RequestBody, AuthResult } from './types';
 import { handleOptions, createSuccessResponse, createErrorResponse, addCorsHeaders } from './utils/cors';
 import { validateAuth } from './utils/auth';
 import { RateLimiter, checkRateLimit } from './utils/rate-limiter';
-import { setupAnalytics } from './services/analytics';
 import { trackUsage, getUsageStatus, isModelAllowed, TIER_CONFIG } from './services/usage-tracker';
 import { handleChatCompletions } from './handlers/chat';
 import { handleModelListing } from './handlers/models';
@@ -24,8 +23,6 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 	if (path === '/test') {
 		return new Response('ai proxy is working!', { status: 200 });
 	}
-
-	const langfuse = setupAnalytics(env);
 
 	try {
 		if (request.method === 'OPTIONS') {
@@ -89,7 +86,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 				})));
 			}
 
-			return await handleChatCompletions(body, env, langfuse);
+			return await handleChatCompletions(body, env);
 		}
 
 		// Web search endpoint - uses Gemini's Google Search grounding
@@ -124,15 +121,15 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 		}
 
 		if (path === '/v1/voice/query' && request.method === 'POST') {
-			return await handleVoiceQuery(request, env, langfuse);
+			return await handleVoiceQuery(request, env);
 		}
 
 		if (path === '/v1/text-to-speech' && request.method === 'POST') {
-			return await handleTextToSpeech(request, env, langfuse);
+			return await handleTextToSpeech(request, env);
 		}
 
 		if (path === '/v1/voice/chat' && request.method === 'POST') {
-			return await handleVoiceChat(request, env, langfuse);
+			return await handleVoiceChat(request, env);
 		}
 
 		// //TODO:
@@ -231,7 +228,6 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 		captureException(error);
 		return createErrorResponse(500, error?.message || 'an error occurred');
 	} finally {
-		await langfuse.shutdownAsync();
 	}
 }
 

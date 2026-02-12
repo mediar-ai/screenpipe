@@ -130,8 +130,6 @@ export interface GeminiResponse {
 
 export interface Env {
 	OPENAI_API_KEY: string;
-	LANGFUSE_PUBLIC_KEY: string;
-	LANGFUSE_SECRET_KEY: string;
 	ANTHROPIC_API_KEY: string;
 	DEEPGRAM_API_KEY: string;
 	RATE_LIMITER: DurableObjectNamespace;
