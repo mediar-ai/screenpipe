@@ -20,7 +20,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { homeDir, join } from "@tauri-apps/api/path";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { openUrl } from "@tauri-apps/plugin-opener";
 

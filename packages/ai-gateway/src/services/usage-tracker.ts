@@ -1,11 +1,55 @@
 import { Env, UserTier, TierLimits, UsageResult, UsageStatus } from '../types';
 
+const CLERK_ID_REGEX = /^user_[a-zA-Z0-9]+$/;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Cache UUID → clerk_id mappings (lives for worker lifetime)
+const clerkIdCache = new Map<string, string>();
+
+/**
+ * Resolve a userId to a clerk_id. user_credits table uses clerk_id as user_id.
+ * If already a clerk_id, returns as-is. If UUID, looks up in users table.
+ */
+async function resolveClerkId(env: Env, userId: string): Promise<string | null> {
+  if (!userId) return null;
+  if (CLERK_ID_REGEX.test(userId)) return userId;
+
+  // Check cache
+  const cached = clerkIdCache.get(userId);
+  if (cached) return cached;
+
+  if (UUID_REGEX.test(userId)) {
+    try {
+      const response = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/users?select=clerk_id&id=eq.${userId}&limit=1`,
+        {
+          headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+          },
+        }
+      );
+      if (!response.ok) return null;
+      const rows = await response.json() as Array<{ clerk_id: string | null }>;
+      if (rows.length > 0 && rows[0].clerk_id) {
+        clerkIdCache.set(userId, rows[0].clerk_id);
+        return rows[0].clerk_id;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Try to deduct 1 credit from user's balance via Supabase RPC.
  * Returns remaining balance or -1 if insufficient/error.
  */
 async function tryDeductCredit(env: Env, userId: string, reason: string): Promise<{ success: boolean; remaining: number }> {
-  if (!userId) return { success: false, remaining: 0 };
+  const clerkId = await resolveClerkId(env, userId);
+  if (!clerkId) return { success: false, remaining: 0 };
 
   try {
     const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/deduct_credits`, {
@@ -16,7 +60,7 @@ async function tryDeductCredit(env: Env, userId: string, reason: string): Promis
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        p_user_id: userId,
+        p_user_id: clerkId,
         p_amount: 1,
         p_type: reason,
         p_description: `${reason} via ai gateway`,
@@ -44,11 +88,12 @@ async function tryDeductCredit(env: Env, userId: string, reason: string): Promis
  * Get user's current credit balance without deducting.
  */
 async function getCreditBalance(env: Env, userId: string): Promise<number> {
-  if (!userId) return 0;
+  const clerkId = await resolveClerkId(env, userId);
+  if (!clerkId) return 0;
 
   try {
     const response = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+      `${env.SUPABASE_URL}/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(clerkId)}&limit=1`,
       {
         headers: {
           apikey: env.SUPABASE_ANON_KEY,
