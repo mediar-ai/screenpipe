@@ -161,50 +161,14 @@ const TOOL_ICONS: Record<string, string> = {
 // Grid dissolve loading indicator — 5x4 grid of cells that randomly toggle
 // black/white like pixels being scanned. Geometric, screen-capture themed.
 function GridDissolveLoader({ label = "analyzing..." }: { label?: string }) {
-  const ROWS = 4;
-  const COLS = 5;
-  const TOTAL = ROWS * COLS;
-  const [cells, setCells] = useState<boolean[]>(() =>
-    Array.from({ length: TOTAL }, () => Math.random() > 0.5)
-  );
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setTick((t) => t + 1);
-      setCells((prev) => {
-        const next = [...prev];
-        const count = 3 + Math.floor(Math.random() * 3);
-        for (let i = 0; i < count; i++) {
-          const idx = Math.floor(Math.random() * TOTAL);
-          next[idx] = !next[idx];
-        }
-        return next;
-      });
-    }, 120);
-    return () => window.clearInterval(id);
-  }, []);
-
   return (
     <div className="flex items-center gap-3">
-      <div
-        className="grid shrink-0"
-        style={{
-          gridTemplateColumns: `repeat(${COLS}, 8px)`,
-          gridTemplateRows: `repeat(${ROWS}, 8px)`,
-          gap: "2px",
-        }}
-      >
-        {cells.map((on, i) => (
-          <div
+      <div className="flex items-center gap-1">
+        {[0, 1, 2].map((i) => (
+          <span
             key={i}
-            style={{
-              width: 8,
-              height: 8,
-              border: "1px solid var(--border)",
-              backgroundColor: on ? "var(--foreground)" : "transparent",
-              transition: "background-color 120ms ease-in-out",
-            }}
+            className="block h-1.5 w-1.5 rounded-full bg-current opacity-40 animate-pulse"
+            style={{ animationDelay: `${i * 200}ms`, animationDuration: "1s" }}
           />
         ))}
       </div>
@@ -492,12 +456,23 @@ export function StandaloneChat() {
     const conversation: ChatConversation = {
       id: convId,
       title,
-      messages: msgs.slice(-100).map(m => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp,
-      })),
+      messages: msgs.slice(-100).map(m => {
+        // For tool-only responses, content may be empty but contentBlocks has the data.
+        // Generate a text fallback so the message isn't lost when reloaded.
+        let content = m.content;
+        if (!content && m.contentBlocks?.length) {
+          content = m.contentBlocks
+            .filter((b: any) => b.type === "text")
+            .map((b: any) => b.text)
+            .join("\n") || "(tool result)";
+        }
+        return {
+          id: m.id,
+          role: m.role,
+          content,
+          timestamp: m.timestamp,
+        };
+      }),
       createdAt: existingIndex >= 0 ? history.conversations[existingIndex].createdAt : Date.now(),
       updatedAt: Date.now(),
     };
@@ -525,6 +500,15 @@ export function StandaloneChat() {
       setConversationId(convId);
     }
   };
+
+  // Auto-save conversation when a response completes (isLoading transitions from true to false)
+  const prevIsLoadingRef = useRef(false);
+  useEffect(() => {
+    if (prevIsLoadingRef.current && !isLoading && messages.length > 0) {
+      saveConversation(messages);
+    }
+    prevIsLoadingRef.current = isLoading;
+  }, [isLoading, messages]);
 
   // Delete a conversation
   const deleteConversation = async (convId: string) => {
@@ -1896,15 +1880,19 @@ export function StandaloneChat() {
             </motion.div>
           ))}
         </AnimatePresence>
-        {isLoading && !messages.find(m => m.content.includes("Searching")) && (
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="px-4 py-3 border border-border/50 w-fit"
-          >
-            <GridDissolveLoader label="analyzing..." />
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {isLoading && messages.some(m => m.role === "assistant" && m.content === "Processing..." && !m.contentBlocks?.length) && (
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.15 }}
+              className="px-4 py-3 border border-border/50 w-fit"
+            >
+              <GridDissolveLoader label="analyzing..." />
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
       </div> {/* End of main content area with history sidebar */}

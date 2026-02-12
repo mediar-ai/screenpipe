@@ -131,6 +131,86 @@ async fn settings_stream(
     )
 }
 
+async fn kill_process_on_port(port: u16) {
+    let my_pid = std::process::id().to_string();
+
+    #[cfg(unix)]
+    {
+        match tokio::process::Command::new("lsof")
+            .args(["-ti", &format!(":{}", port)])
+            .output()
+            .await
+        {
+            Ok(output) if output.status.success() => {
+                let pids = String::from_utf8_lossy(&output.stdout);
+                let pids: Vec<&str> = pids
+                    .trim()
+                    .split('\n')
+                    .filter(|s| !s.is_empty() && *s != my_pid)
+                    .collect();
+                if pids.is_empty() {
+                    return;
+                }
+                tracing::warn!(
+                    "found {} orphaned process(es) on port {}: {:?}, killing (our pid: {})",
+                    pids.len(), port, pids, my_pid
+                );
+                for pid in &pids {
+                    let _ = tokio::process::Command::new("kill")
+                        .args(["-9", pid])
+                        .output()
+                        .await;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+            _ => {}
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let my_pid_num: u32 = std::process::id();
+        let mut netstat_cmd = tokio::process::Command::new("cmd");
+        netstat_cmd.args(["/C", &format!("netstat -ano | findstr :{}", port)]);
+        {
+            #[allow(unused_imports)]
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            netstat_cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        if let Ok(output) = netstat_cmd.output().await {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                let mut pids = std::collections::HashSet::new();
+                for line in text.lines() {
+                    if let Some(pid_str) = line.split_whitespace().last() {
+                        if let Ok(pid) = pid_str.parse::<u32>() {
+                            if pid != 0 && pid != my_pid_num {
+                                pids.insert(pid);
+                            }
+                        }
+                    }
+                }
+                for pid in &pids {
+                    tracing::warn!("killing orphaned process {} on port {}", pid, port);
+                    let mut kill_cmd = tokio::process::Command::new("cmd");
+                    kill_cmd.args(["/C", &format!("taskkill /F /PID {}", pid)]);
+                    {
+                        #[allow(unused_imports)]
+                        use std::os::windows::process::CommandExt;
+                        const CREATE_NO_WINDOW: u32 = 0x08000000;
+                        kill_cmd.creation_flags(CREATE_NO_WINDOW);
+                    }
+                    let _ = kill_cmd.output().await;
+                }
+                if !pids.is_empty() {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            }
+        }
+    }
+}
+
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
     let settings_tx_clone = settings_tx.clone();
@@ -197,6 +277,9 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
+
+    // Kill any orphaned process occupying this port from a previous instance
+    kill_process_on_port(port).await;
 
     // Retry binding with backoff — avoids panic when a previous instance hasn't
     // released the port yet (e.g. fast restart, TIME_WAIT on Linux).
