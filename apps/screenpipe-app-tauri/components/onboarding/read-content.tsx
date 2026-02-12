@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { open } from "@tauri-apps/plugin-shell";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import posthog from "posthog-js";
 
@@ -82,9 +83,15 @@ export default function ReadContent({ handleNextSlide }: ReadContentProps) {
   // listen for deep link return
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen("deep-link-received", (event) => {
+    listen("deep-link-received", async (event) => {
       const url = String(event.payload);
       if (url.includes("onboarding-read-complete")) {
+        // restore window before advancing
+        try {
+          const win = getCurrentWindow();
+          await win.unminimize();
+          await win.setFocus();
+        } catch { /* non-critical */ }
         handleContinue();
       }
     }).then((fn) => {
@@ -98,6 +105,12 @@ export default function ReadContent({ handleNextSlide }: ReadContentProps) {
   const handleOpenBrowser = useCallback(async () => {
     try {
       await open(WELCOME_URL);
+      // minimize onboarding window so browser comes to front
+      try {
+        await getCurrentWindow().minimize();
+      } catch {
+        // non-critical
+      }
       setOpened(true);
       posthog.capture("onboarding_read_opened_browser");
     } catch (e) {
