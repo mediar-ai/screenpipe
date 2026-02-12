@@ -8,16 +8,16 @@ import { validateSubscription } from './subscription';
  * @param token JWT token to verify
  * @returns Promise resolving to boolean indicating if token is valid
  */
-export async function verifyClerkToken(env: Env, token: string): Promise<boolean> {
+export async function verifyClerkToken(env: Env, token: string): Promise<{ valid: boolean; userId?: string }> {
   console.log('verifying clerk token', token);
   try {
     const payload = await verifyToken(token, {
       secretKey: env.CLERK_SECRET_KEY,
     });
-    return payload.sub !== null;
+    return { valid: payload.sub !== null, userId: payload.sub ?? undefined };
   } catch (error) {
     console.error('clerk verification failed:', error);
-    return false;
+    return { valid: false };
   }
 }
 
@@ -104,13 +104,13 @@ export async function validateAuth(request: Request, env: Env): Promise<AuthResu
   }
 
   // Check if it's a valid Clerk token (logged in but no subscription)
-  const isClerkValid = await verifyClerkToken(env, token);
-  if (isClerkValid) {
+  const clerkResult = await verifyClerkToken(env, token);
+  if (clerkResult.valid) {
     return {
       isValid: true,
       tier: 'logged_in',
       deviceId,
-      userId: token, // Use token as identifier
+      userId: clerkResult.userId || token, // Use clerk user_id (user_xxx) for credit lookups
     };
   }
 
@@ -224,6 +224,7 @@ async function validateSubscriptionWithId(env: Env, token: string): Promise<{ is
  */
 interface ScreenpipeUserData {
   id?: string;
+  clerk_id?: string;
   email?: string;
   cloud_subscribed?: boolean;
 }
@@ -248,7 +249,7 @@ async function validateScreenpipeToken(token: string): Promise<{ isValid: boolea
       console.log('Valid screenpipe user token, user:', userData?.email);
       return {
         isValid: true,
-        userId: userData?.id || userData?.email,
+        userId: userData?.clerk_id || userData?.id || userData?.email,
         hasSubscription: userData?.cloud_subscribed === true,
       };
     } else {
