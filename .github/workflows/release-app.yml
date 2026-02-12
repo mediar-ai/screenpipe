@@ -819,14 +819,8 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          # Ensure aws CLI v2 is in PATH (self-hosted runners install to /usr/local/bin)
-          export PATH="/usr/local/bin:$PATH"
-          if ! command -v aws &>/dev/null; then
-            echo "Installing AWS CLI v2..."
-            curl -s "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "/tmp/AWSCLIV2.pkg"
-            sudo installer -pkg /tmp/AWSCLIV2.pkg -target /
-            export PATH="/usr/local/bin:$PATH"
-          fi
+          # Use aws CLI with --no-verify-ssl to work around self-hosted runner SSL issues
+          aws() { command aws --no-verify-ssl "$@" 2>&1 | grep -v InsecureRequestWarning || true; }
 
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           TARGET="${{ matrix.target }}"
@@ -979,7 +973,7 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          export PATH="/usr/local/bin:$PATH"
+          aws() { command aws --no-verify-ssl "$@" 2>&1 | grep -v InsecureRequestWarning || true; }
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           TARGET="${{ matrix.target }}"
           BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
