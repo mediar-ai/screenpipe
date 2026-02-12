@@ -552,13 +552,16 @@ impl UpdatesManager {
                             }));
                             let app_notif = self.app.clone();
                             let version_str = update.version.clone();
-                            let _ = tokio::task::spawn_blocking(move || {
+                            // std::thread::spawn (not spawn_blocking) to escape tokio runtime context entirely.
+                            // notify_rust on Linux internally calls block_on for D-Bus, which panics
+                            // if any tokio runtime exists on the current thread — even blocking threads.
+                            let _ = std::thread::spawn(move || {
                                 let _ = app_notif.notification()
                                     .builder()
                                     .title("screenpipe update available")
                                     .body(format!("v{} is ready — sign in to download", version_str))
                                     .show();
-                            }).await;
+                            });
                             self.update_menu_item.set_enabled(true)?;
                             self.update_menu_item.set_text("sign in to update")?;
                             return Ok(false);
@@ -584,11 +587,12 @@ impl UpdatesManager {
                 .map(|s| s.auto_update)
                 .unwrap_or(true);
 
-            // Use spawn_blocking to avoid "Cannot start a runtime from within a runtime"
-            // panic on Linux where notify_rust internally calls block_on for D-Bus.
+            // std::thread::spawn (not spawn_blocking) to escape tokio runtime context entirely.
+            // notify_rust on Linux internally calls block_on for D-Bus, which panics
+            // if any tokio runtime exists on the current thread — even blocking threads.
             let app_notif = self.app.clone();
             let version_str = update.version.clone();
-            let _ = tokio::task::spawn_blocking(move || {
+            std::thread::spawn(move || {
                 if auto_update {
                     if let Err(e) = app_notif.notification()
                         .builder()
@@ -608,7 +612,7 @@ impl UpdatesManager {
                         error!("failed to send update notification: {}", e);
                     }
                 }
-            }).await;
+            });
 
             // Auto-update: if enabled and update is downloaded, restart automatically
             // This ensures users get updates even if tray icon is hidden (e.g., behind notch)
