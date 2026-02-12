@@ -278,10 +278,7 @@ model: claude-haiku-4-5@20251001
 ---
 ```
 
-**provider resolution order:**
-1. `provider` field in pipe.md frontmatter
-2. your `defaultProvider` in `~/.pi/agent/settings.json`
-3. screenpipe cloud (default)
+**provider resolution:** if `provider` is set in pipe.md → use it. otherwise → screenpipe cloud.
 
 ## secrets
 

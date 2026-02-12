@@ -144,16 +144,7 @@ impl PiExecutor {
         Ok(())
     }
 
-    /// Read the user's default provider from `~/.pi/agent/settings.json`.
-    fn read_user_default_provider() -> Option<String> {
-        let config_dir = get_pi_config_dir().ok()?;
-        let settings_path = config_dir.join("settings.json");
-        let content = std::fs::read_to_string(&settings_path).ok()?;
-        let settings: serde_json::Value = serde_json::from_str(&content).ok()?;
-        settings.get("defaultProvider")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-    }
+
 }
 
 #[async_trait::async_trait]
@@ -173,13 +164,14 @@ impl AgentExecutor for PiExecutor {
             .ok_or_else(|| anyhow!("pi not found. install with: bun add -g {}", PI_PACKAGE))?;
 
         // Provider resolution:
-        // 1. Explicit provider from pipe frontmatter
-        // 2. User's defaultProvider from ~/.pi/agent/settings.json
-        // 3. Fall back to screenpipe cloud
+        // 1. Explicit provider from pipe frontmatter → use it
+        // 2. No provider specified → screenpipe cloud (default)
+        // Users who want their own provider must set it explicitly in pipe.md.
+        // This ensures screenpipe cloud is the default even if the user has
+        // a different defaultProvider in ~/.pi/agent/settings.json for interactive use.
         let resolved_provider = provider
-            .map(|s| s.to_string())
-            .or_else(|| Self::read_user_default_provider())
-            .unwrap_or_else(|| "screenpipe".to_string());
+            .unwrap_or("screenpipe")
+            .to_string();
 
         info!("pipe using provider: {}, model: {}", resolved_provider, model);
 
