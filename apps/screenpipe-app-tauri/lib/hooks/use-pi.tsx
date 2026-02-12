@@ -53,7 +53,7 @@ export function usePi(): UsePiResult {
     setError(null);
     setLogs([]);
     try {
-      const result = await commands.piStart(projectDir, userToken ?? null);
+      const result = await commands.piStart(projectDir, userToken ?? null, null);
       if (result.status === "ok") {
         setInfo(result.data);
         return result.data;

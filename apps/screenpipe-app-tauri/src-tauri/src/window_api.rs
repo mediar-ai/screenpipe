@@ -645,12 +645,28 @@ impl ShowRewindWindow {
             }
 
             // Settings window: navigate to the requested section if specified
+            // and ensure it comes to front (macOS set_focus alone is unreliable from tray context)
             if id.label() == RewindWindowId::Settings.label() {
                 if let ShowRewindWindow::Settings { page: Some(ref section) } = self {
                     let _ = window.emit("navigate", serde_json::json!({ "url": format!("/settings?section={}", section) }));
                 }
                 window.show().ok();
-                window.set_focus().ok();
+
+                #[cfg(target_os = "macos")]
+                {
+                    use objc::{msg_send, sel, sel_impl};
+                    use tauri_nspanel::cocoa::base::{id as cocoa_id, nil as cocoa_nil};
+                    if let Ok(ns_win) = window.ns_window() {
+                        unsafe {
+                            let _: () = msg_send![ns_win as cocoa_id, makeKeyAndOrderFront: cocoa_nil];
+                        }
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    window.set_focus().ok();
+                }
+
                 return Ok(window);
             }
 

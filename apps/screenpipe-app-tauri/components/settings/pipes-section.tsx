@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { homeDir, join } from "@tauri-apps/api/path";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { UpgradeDialog } from "@/components/upgrade-dialog";
 
 function parsePipeError(stderr: string): {
   type: "daily_limit" | "rate_limit" | "unknown";
@@ -48,6 +49,12 @@ function parsePipeError(stderr: string): {
         return {
           type: "rate_limit",
           message: `rate limited — retrying automatically`,
+        };
+      }
+      if (parsed.error === "credits_exhausted") {
+        return {
+          type: "daily_limit",
+          message: parsed.message || "free credits exhausted",
         };
       }
     } catch {}
@@ -90,6 +97,7 @@ export function PipesSection() {
   const [logs, setLogs] = useState<PipeRunLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningPipe, setRunningPipe] = useState<string | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const { settings } = useSettings();
 
   const fetchPipes = useCallback(async () => {
@@ -201,7 +209,7 @@ export function PipesSection() {
                   variant="outline"
                   size="sm"
                   className="text-xs h-7"
-                  onClick={() => openUrl("https://screenpi.pe/onboarding")}
+                  onClick={() => setShowUpgrade(true)}
                 >
                   buy more
                 </Button>
@@ -440,6 +448,12 @@ export function PipesSection() {
           ))}
         </div>
       )}
+
+      <UpgradeDialog
+        open={showUpgrade}
+        onOpenChange={setShowUpgrade}
+        reason="daily_limit"
+      />
     </div>
   );
 }

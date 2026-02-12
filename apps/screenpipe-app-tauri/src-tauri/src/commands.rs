@@ -42,8 +42,8 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle) {
 pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
    info!("show_main_window called, attempting to show Main window");
 
-   // Close Settings window if open (transparent overlay would show it through)
-   let _ = ShowRewindWindow::Settings { page: None }.close(app_handle);
+   // Don't close Settings — it's a separate window the user explicitly opened.
+   // It will sit behind the overlay which is fine; the user can switch back to it.
 
    match ShowRewindWindow::Main.show(app_handle) {
        Ok(window) => {

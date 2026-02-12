@@ -116,14 +116,14 @@ function useSuggestions(isOpen: boolean) {
     (async () => {
       try {
         const now = new Date();
-        const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
-        const endTime = new Date(now.getTime() - 10 * 60000);
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const endTime = new Date(now.getTime() - 60000); // 1 min ago
 
         const params = new URLSearchParams({
           content_type: "ocr",
-          limit: "50",
+          limit: "100",
           offset: "0",
-          start_time: sixHoursAgo.toISOString(),
+          start_time: oneDayAgo.toISOString(),
           end_time: endTime.toISOString(),
         });
 
@@ -133,14 +133,22 @@ function useSuggestions(isOpen: boolean) {
         const data = await resp.json();
         const items = data?.data || [];
 
-        // collect app names to exclude them from suggestions
-        const appNames = new Set<string>();
+        // collect app names (used as fallback suggestions)
+        const appNameCounts = new Map<string, { count: number; original: string }>();
         const allWords = new Map<string, { count: number; original: string }>();
 
         for (const item of items) {
           const content = item?.content || {};
-          const appName = (content.app_name || "").toLowerCase();
-          if (appName) appNames.add(appName);
+          const appName = (content.app_name || "").trim();
+          if (appName) {
+            const lower = appName.toLowerCase();
+            const existing = appNameCounts.get(lower);
+            if (existing) {
+              existing.count++;
+            } else {
+              appNameCounts.set(lower, { count: 1, original: appName });
+            }
+          }
 
           const text = content.text || "";
           const extracted = extractInterestingWords(text);
@@ -148,7 +156,6 @@ function useSuggestions(isOpen: boolean) {
             const existing = allWords.get(lower);
             if (existing) {
               existing.count += info.count;
-              // keep the capitalized form
               if (info.original[0] === info.original[0].toUpperCase()) {
                 existing.original = info.original;
               }
@@ -160,12 +167,13 @@ function useSuggestions(isOpen: boolean) {
 
         if (cancelled) return;
 
-        // filter: exclude app names, must appear 2+ times, not too frequent (UI chrome)
-        const maxCount = items.length * 0.6; // if it appears in >60% of frames it's UI chrome
+        const appNameSet = new Set(appNameCounts.keys());
+
+        // filter keywords: exclude app names, not too frequent (UI chrome)
+        const maxCount = Math.max(items.length * 0.6, 5);
         const candidates = [...allWords.entries()]
-          .filter(([lower]) => !appNames.has(lower))
-          .filter(([, info]) => info.count >= 2 && info.count < maxCount)
-          // prefer proper nouns (capitalized original)
+          .filter(([lower]) => !appNameSet.has(lower))
+          .filter(([, info]) => info.count >= 1 && info.count < maxCount)
           .sort((a, b) => {
             const aProper = a[1].original[0] === a[1].original[0].toUpperCase() ? 1 : 0;
             const bProper = b[1].original[0] === b[1].original[0].toUpperCase() ? 1 : 0;
@@ -176,7 +184,16 @@ function useSuggestions(isOpen: boolean) {
         // take top 20 then randomly pick 8 for variety
         const topPool = candidates.slice(0, 20);
         const shuffled = topPool.sort(() => Math.random() - 0.5);
-        const picked = shuffled.slice(0, 8).map(([, info]) => info.original);
+        let picked = shuffled.slice(0, 8).map(([, info]) => info.original);
+
+        // fallback: if we got fewer than 4 keyword suggestions, fill with app names
+        if (picked.length < 4 && appNameCounts.size > 0) {
+          const topApps = [...appNameCounts.entries()]
+            .sort((a, b) => b[1].count - a[1].count)
+            .slice(0, 8 - picked.length)
+            .map(([, info]) => info.original);
+          picked = [...picked, ...topApps];
+        }
 
         if (!cancelled) {
           setSuggestions(picked);

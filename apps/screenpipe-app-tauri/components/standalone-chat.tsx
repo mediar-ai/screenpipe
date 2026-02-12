@@ -20,8 +20,7 @@ import { MermaidDiagram } from "@/components/rewind/mermaid-diagram";
 import { AIPresetsSelector } from "@/components/rewind/ai-presets-selector";
 import { AIPreset } from "@/lib/utils/tauri";
 import remarkGfm from "remark-gfm";
-import OpenAI from "openai";
-import { ChatCompletionTool } from "openai/resources/chat/completions";
+// OpenAI SDK no longer used directly — all providers route through Pi agent
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -64,36 +63,7 @@ const STATIC_MENTION_SUGGESTIONS: MentionSuggestion[] = [
   { tag: "@input", description: "UI events (clicks, keys)", category: "content" },
 ];
 
-const TOOLS: ChatCompletionTool[] = [
-  {
-    type: "function",
-    function: {
-      name: "search_content",
-      description: `Search screenpipe's recorded content: screen text (OCR), audio transcriptions, and UI elements.
-
-**MANDATORY**: start_time is REQUIRED for every search. Database has 600k+ entries - searches without time bounds WILL timeout.
-
-RULES:
-- ALWAYS include start_time (required) - default to 1-2 hours ago
-- Use app_name filter whenever user mentions an app
-- Keep limit=5-10, never higher initially
-- If query times out, retry with shorter time range (30 mins)`,
-      parameters: {
-        type: "object",
-        properties: {
-          q: { type: "string", description: "Search keywords. Be specific. Optional but recommended." },
-          content_type: { type: "string", enum: ["all", "ocr", "audio", "vision", "input"], description: "Filter by type. 'input' for UI events (clicks, keystrokes)." },
-          limit: { type: "integer", description: "Max results (1-20). Default: 10" },
-          start_time: { type: "string", description: "ISO 8601 UTC start time. REQUIRED." },
-          end_time: { type: "string", description: "ISO 8601 UTC end time." },
-          app_name: { type: "string", description: "Filter by app name." },
-          window_name: { type: "string", description: "Filter by window title." },
-          speaker_name: { type: "string", description: "Filter audio by speaker name." },
-        },
-      },
-    },
-  },
-];
+// TOOLS definition removed — search is now handled by Pi's screenpipe-search skill
 
 // Helper to get timezone offset string (e.g., "+1" or "-5")
 function getTimezoneOffsetString(): string {
@@ -532,7 +502,7 @@ export function StandaloneChat() {
   // Load a specific conversation
   const loadConversation = async (conv: ChatConversation) => {
     // Abort any ongoing Pi processing before switching
-    if (isPi && (isLoading || isStreaming)) {
+    if (isLoading || isStreaming) {
       try {
         await commands.piAbort();
       } catch (e) {
@@ -577,7 +547,7 @@ export function StandaloneChat() {
   // Start a new conversation
   const startNewConversation = async () => {
     // Abort any ongoing Pi processing and start a fresh session
-    if (isPi && piInfo?.running) {
+    if (piInfo?.running) {
       try {
         if (isLoading || isStreaming) {
           await commands.piAbort();
@@ -932,10 +902,11 @@ export function StandaloneChat() {
   }, [settings.aiPresets]);
 
   const hasPresets = settings.aiPresets && settings.aiPresets.length > 0;
-  const isPi = activePreset?.provider === "pi";
-  const hasValidModel = isPi || (activePreset?.model && activePreset.model.trim() !== "");
-  const needsLogin = isPi && !settings.user?.token;
-  const piReady = isPi ? piInfo?.running : true;
+  // All providers now route through Pi — isPi is always true when we have a preset
+  const isPi = true;
+  const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
+  const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
+  const piReady = piInfo?.running ?? false;
   const canChat = hasPresets && hasValidModel && !needsLogin && piReady;
 
   const getDisabledReason = (): string | null => {
@@ -943,8 +914,8 @@ export function StandaloneChat() {
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset`;
     if (needsLogin) return "Login required";
-    if (isPi && piStarting) return "Starting Pi agent...";
-    if (isPi && !piReady) return "Connecting to Pi agent...";
+    if (piStarting) return "Starting Pi agent...";
+    if (!piReady) return "Connecting to Pi agent...";
     return null;
   };
   const disabledReason = getDisabledReason();
@@ -969,17 +940,29 @@ export function StandaloneChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Auto-set Pi project dir
+  // Auto-set Pi project dir (all providers route through Pi now)
   useEffect(() => {
-    if (isPi && !piProjectDir) {
+    if (!piProjectDir) {
       const home = process.env.HOME || process.env.USERPROFILE || "/tmp";
       setPiProjectDir(`${home}/.screenpipe/pi-chat`);
     }
-  }, [isPi, piProjectDir]);
+  }, [piProjectDir]);
 
-  // Start Pi when needed (Pi is installed at app startup by Rust background thread)
+  // Build Pi provider config from active preset
+  const buildProviderConfig = useCallback(() => {
+    if (!activePreset) return null;
+    return {
+      provider: activePreset.provider,
+      url: activePreset.url || "",
+      model: activePreset.model || "",
+      apiKey: ("apiKey" in activePreset ? (activePreset.apiKey as string) : null) || null,
+    };
+  }, [activePreset?.provider, activePreset?.url, activePreset?.model, activePreset?.apiKey]);
+
+  // Start Pi when needed — all providers route through Pi now
+  // Pi is installed at app startup by Rust background thread
   useEffect(() => {
-    const shouldStart = isPi && !needsLogin && piProjectDir && !piStarting && !piInfo?.running;
+    const shouldStart = !needsLogin && piProjectDir && !piStarting && !piInfo?.running && activePreset;
 
     if (!shouldStart) return;
     if (piStartInFlightRef.current) return;
@@ -992,15 +975,13 @@ export function StandaloneChat() {
       piStartInFlightRef.current = true;
       piStoppedIntentionallyRef.current = false;
       setPiStarting(true);
-      console.log("[Pi] Starting with dir:", piProjectDir, "attempt:", piRestartCountRef.current + 1);
+      const providerConfig = buildProviderConfig();
+      console.log("[Pi] Starting with dir:", piProjectDir, "provider:", providerConfig?.provider, "model:", providerConfig?.model, "attempt:", piRestartCountRef.current + 1);
       try {
-        const result = await commands.piStart(piProjectDir, settings.user?.token ?? null);
+        const result = await commands.piStart(piProjectDir, settings.user?.token ?? null, providerConfig);
         console.log("[Pi] Start result:", result);
         if (result.status === "ok") {
           setPiInfo(result.data);
-          // Don't reset restart counter here — only reset after Pi has been running
-          // stably for a while (see pi_event listener). This prevents infinite loops
-          // when Pi spawns successfully but crashes immediately.
         } else {
           piRestartCountRef.current += 1;
           console.error("[Pi] Start failed:", result.error);
@@ -1017,12 +998,10 @@ export function StandaloneChat() {
       }
     };
     startPi();
-  }, [isPi, needsLogin, piProjectDir, piStarting, piInfo?.running, settings.user?.token]);
+  }, [needsLogin, piProjectDir, piStarting, piInfo?.running, settings.user?.token, activePreset?.provider, activePreset?.model]);
 
-  // Listen for Pi events
+  // Listen for Pi events (all providers route through Pi)
   useEffect(() => {
-    if (!isPi) return;
-
     let unlistenEvent: UnlistenFn | null = null;
     let unlistenTerminated: UnlistenFn | null = null;
     let mounted = true;
@@ -1253,7 +1232,7 @@ export function StandaloneChat() {
       unlistenEvent?.();
       unlistenTerminated?.();
     };
-  }, [isPi]);
+  }, []);
 
   // Send message using Pi agent
   async function sendPiMessage(userMessage: string) {
@@ -1464,376 +1443,11 @@ export function StandaloneChat() {
     }
   }
 
-  function getOpenAIClient(): OpenAI | null {
-    if (!activePreset) return null;
-
-    const apiKey = "apiKey" in activePreset
-      ? (activePreset.apiKey as string) || ""
-      : "";
-
-    return new OpenAI({
-      apiKey,
-      baseURL: activePreset.url,
-      dangerouslyAllowBrowser: true,
-    });
-  }
-
   async function sendMessage(userMessage: string) {
     if (!canChat || !activePreset) return;
 
-    // Use Pi agent if selected
-    if (isPi) {
-      return sendPiMessage(userMessage);
-    }
-
-    const openai = getOpenAIClient();
-    if (!openai) return;
-
-    const mentions = parseMentions(userMessage, { appTagMap });
-    const displayMessage = userMessage;
-    const processedMessage = mentions.cleanedInput || userMessage;
-
-    const newUserMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: displayMessage,
-      timestamp: Date.now(),
-    };
-
-    const assistantMessageId = (Date.now() + 1).toString();
-    setMessages((prev) => [...prev, newUserMessage]);
-    setInput("");
-    setIsLoading(true);
-    setIsStreaming(true);
-
-    abortControllerRef.current = new AbortController();
-
-    try {
-      let systemPrompt = buildSystemPrompt();
-
-      const mentionContext: string[] = [];
-
-      if (mentions.timeRanges.length > 0) {
-        const timeContext = mentions.timeRanges.map(t =>
-          `- ${t.label}: from ${t.start.toISOString()} to ${t.end.toISOString()}`
-        ).join("\n");
-        mentionContext.push(`TIME FILTER:\n${timeContext}`);
-      }
-
-      if (mentions.contentType) {
-        mentionContext.push(`CONTENT TYPE FILTER: ${mentions.contentType}`);
-      }
-
-      if (mentions.appName) {
-        mentionContext.push(`APP FILTER: ${mentions.appName}`);
-      }
-
-      if (mentions.speakerName) {
-        mentionContext.push(`SPEAKER FILTER: ${mentions.speakerName}`);
-      }
-
-      // Add prefill context from search modal
-      if (prefillContext) {
-        mentionContext.push(`CONTEXT FROM SEARCH:\n${prefillContext}`);
-        // Clear prefill after using it
-        setPrefillContext(null);
-      }
-
-      if (mentionContext.length > 0) {
-        systemPrompt += `\n\nUser specified filters via @mentions:\n${mentionContext.join("\n\n")}`;
-      }
-
-      // Fetch frame image if prefillFrameId is set
-      let frameImageBase64: string | null = null;
-      if (prefillFrameId) {
-        try {
-          const response = await fetch(`http://localhost:3030/frames/${prefillFrameId}`);
-          if (response.ok) {
-            const blob = await response.blob();
-            const arrayBuffer = await blob.arrayBuffer();
-            const base64 = btoa(
-              new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-            );
-            const mimeType = blob.type || 'image/png';
-            frameImageBase64 = `data:${mimeType};base64,${base64}`;
-          }
-        } catch (error) {
-          console.error("Failed to fetch frame image:", error);
-        }
-        // Clear after using
-        setPrefillFrameId(null);
-      }
-
-      // Also include pasted image if present
-      let pastedImageBase64: string | null = null;
-      if (pastedImage) {
-        pastedImageBase64 = pastedImage;
-        // Clear after using
-        setPastedImage(null);
-      }
-
-      const MAX_HISTORY = 10;
-      const recentMessages = messages.slice(-MAX_HISTORY);
-
-      // Build user message - multimodal if we have image(s)
-      let userMessageContent: OpenAI.Chat.ChatCompletionUserMessageParam["content"];
-      const hasAnyImage = frameImageBase64 || pastedImageBase64;
-
-      if (hasAnyImage) {
-        const contentParts: OpenAI.Chat.ChatCompletionContentPart[] = [
-          { type: "text" as const, text: processedMessage },
-        ];
-
-        if (frameImageBase64) {
-          contentParts.push({
-            type: "image_url" as const,
-            image_url: { url: frameImageBase64, detail: "auto" as const }
-          });
-        }
-
-        if (pastedImageBase64) {
-          contentParts.push({
-            type: "image_url" as const,
-            image_url: { url: pastedImageBase64, detail: "auto" as const }
-          });
-        }
-
-        userMessageContent = contentParts;
-      } else {
-        userMessageContent = processedMessage;
-      }
-
-      const conversationMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        { role: "system", content: systemPrompt },
-        ...recentMessages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
-        { role: "user", content: userMessageContent },
-      ];
-
-      // Debug: log if image is being sent
-      if (hasAnyImage) {
-        console.log("[Chat] Sending multimodal message with image(s):", {
-          hasFrameImage: !!frameImageBase64,
-          hasPastedImage: !!pastedImageBase64,
-          contentParts: Array.isArray(userMessageContent) ? userMessageContent.length : 1,
-          model: activePreset?.model,
-          provider: activePreset?.provider,
-        });
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantMessageId, role: "assistant", content: "", timestamp: Date.now() },
-      ]);
-
-      let accumulatedText = "";
-      let toolCalls: any[] = [];
-
-      const stream = await openai.chat.completions.create(
-        {
-          model: activePreset.model || "gpt-4",
-          messages: conversationMessages,
-          tools: TOOLS,
-          stream: true,
-        },
-        { signal: abortControllerRef.current.signal }
-      );
-
-      try {
-        for await (const chunk of stream) {
-          const delta = chunk.choices[0]?.delta;
-
-          if (delta?.content) {
-            accumulatedText += delta.content;
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMessageId
-                  ? { ...m, content: accumulatedText }
-                  : m
-              )
-            );
-          }
-
-          if (delta?.tool_calls) {
-            for (const toolCall of delta.tool_calls) {
-              const index = toolCall.index;
-              if (!toolCalls[index]) {
-                toolCalls[index] = {
-                  id: toolCall.id || "",
-                  function: { name: "", arguments: "" },
-                };
-              }
-              if (toolCall.id) toolCalls[index].id = toolCall.id;
-              if (toolCall.function?.name) toolCalls[index].function.name = toolCall.function.name;
-              if (toolCall.function?.arguments) toolCalls[index].function.arguments += toolCall.function.arguments;
-            }
-          }
-        }
-      } catch (e: any) {
-        if (e?.name === "AbortError") return;
-        throw e;
-      }
-
-      if (toolCalls.length > 0) {
-        const searchArgs = toolCalls[0]?.function?.arguments;
-        let searchInfo = "Searching...";
-        try {
-          const args = JSON.parse(searchArgs || "{}");
-          const parts = [];
-          if (args.app_name) parts.push(args.app_name);
-          if (args.start_time) parts.push(`from ${args.start_time}`);
-          if (args.q) parts.push(`"${args.q}"`);
-          if (parts.length > 0) searchInfo = `Searching ${parts.join(", ")}...`;
-        } catch {}
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMessageId
-              ? { ...m, content: accumulatedText + `\n\n*${searchInfo}*` }
-              : m
-          )
-        );
-
-        const toolResults: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-
-        toolResults.push({
-          role: "assistant",
-          content: accumulatedText || null,
-          tool_calls: toolCalls.map((tc) => ({
-            id: tc.id,
-            type: "function" as const,
-            function: {
-              name: tc.function.name,
-              arguments: tc.function.arguments,
-            },
-          })),
-        });
-
-        for (const toolCall of toolCalls) {
-          if (toolCall.function.name === "search_content") {
-            try {
-              const args = JSON.parse(toolCall.function.arguments || "{}");
-              const result = await executeSearchTool(args);
-              toolResults.push({
-                role: "tool",
-                tool_call_id: toolCall.id,
-                content: result,
-              });
-            } catch (e) {
-              toolResults.push({
-                role: "tool",
-                tool_call_id: toolCall.id,
-                content: `Error parsing tool arguments: ${e}`,
-              });
-            }
-          }
-        }
-
-        accumulatedText = "";
-        const continueStream = await openai.chat.completions.create(
-          {
-            model: activePreset.model || "gpt-4",
-            messages: [...conversationMessages, ...toolResults],
-            stream: true,
-          },
-          { signal: abortControllerRef.current?.signal }
-        );
-
-        try {
-          for await (const chunk of continueStream) {
-            const content = chunk.choices[0]?.delta?.content;
-            if (content) {
-              accumulatedText += content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMessageId
-                    ? { ...m, content: accumulatedText }
-                    : m
-                )
-              );
-            }
-          }
-        } catch (e: any) {
-          if (e?.name === "AbortError") return;
-          throw e;
-        }
-      }
-
-      if (!accumulatedText && toolCalls.length === 0) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMessageId
-              ? { ...m, content: "I couldn't generate a response." }
-              : m
-          )
-        );
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-      console.error("Chat error:", error);
-
-      let errorMessage = error instanceof Error ? error.message : "Something went wrong";
-
-      if (errorMessage.includes("daily_limit_exceeded")) {
-        try {
-          const match = errorMessage.match(/"resets_at":\s*"([^"]+)"/);
-          if (match) setUpgradeResetsAt(match[1]);
-        } catch {}
-        setUpgradeReason("daily_limit");
-        setShowUpgradeDialog(true);
-        errorMessage = "You've used all your free queries for today.";
-      } else if (errorMessage.includes("model_not_allowed")) {
-        setUpgradeReason("model_not_allowed");
-        setShowUpgradeDialog(true);
-        errorMessage = "This model requires an upgrade.";
-      } else if (errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
-        errorMessage = "Invalid API key. Please check your preset configuration.";
-      } else if (errorMessage.includes("429")) {
-        setUpgradeReason("rate_limit");
-        setShowUpgradeDialog(true);
-        errorMessage = "Rate limit exceeded. Upgrade for higher limits.";
-      } else if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
-        errorMessage = "Network error. Check your connection.";
-      } else if (
-        errorMessage.includes("context") ||
-        errorMessage.includes("token") ||
-        errorMessage.includes("too large")
-      ) {
-        errorMessage = "Response too large. Try a more specific search.";
-        setMessages([]);
-      }
-
-      setMessages((prev) => {
-        const filtered = prev.filter((m) => m.id !== assistantMessageId || m.content);
-        return [
-          ...filtered,
-          {
-            id: Date.now().toString(),
-            role: "assistant",
-            content: `Error: ${errorMessage}`,
-            timestamp: Date.now(),
-          },
-        ];
-      });
-    } finally {
-      setIsLoading(false);
-      setIsStreaming(false);
-      abortControllerRef.current = null;
-
-      // Save conversation after state updates
-      setTimeout(() => {
-        setMessages((currentMsgs) => {
-          if (currentMsgs.length > 0) {
-            saveConversation(currentMsgs);
-          }
-          return currentMsgs;
-        });
-      }, 100);
-    }
+    // All providers route through Pi agent
+    return sendPiMessage(userMessage);
   }
 
   const copyFullChatAsMarkdown = async () => {
@@ -1856,16 +1470,14 @@ export function StandaloneChat() {
   };
 
   const handleStop = async () => {
-    if (isPi) {
-      try {
-        await commands.piAbort();
-      } catch (e) {
-        console.warn("[Pi] Failed to abort:", e);
-      }
-      piStreamingTextRef.current = "";
-      piMessageIdRef.current = null;
-      piContentBlocksRef.current = [];
+    try {
+      await commands.piAbort();
+    } catch (e) {
+      console.warn("[Pi] Failed to abort:", e);
     }
+    piStreamingTextRef.current = "";
+    piMessageIdRef.current = null;
+    piContentBlocksRef.current = [];
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -2066,11 +1678,11 @@ export function StandaloneChat() {
               "relative p-6 rounded-2xl border",
               needsLogin
                 ? "bg-muted/50 border-border/50"
-                : (isPi && (piStarting || !piReady))
+                : (piStarting || !piReady)
                   ? "bg-muted/50 border-border/50"
                   : "bg-destructive/5 border-destructive/20"
             )}>
-              {needsLogin || (isPi && (piStarting || !piReady)) ? (
+              {needsLogin || (piStarting || !piReady) ? (
                 <PipeAIIconLarge size={48} thinking={piStarting || !piReady} className="text-muted-foreground" />
               ) : (
                 <Settings className="h-12 w-12 text-destructive/70" />
@@ -2078,7 +1690,7 @@ export function StandaloneChat() {
             </div>
             <div className="text-center space-y-2">
               <h3 className="font-semibold tracking-tight">
-                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : needsLogin ? "Login Required" : (isPi && (piStarting || !piReady)) ? "Setting up Pi..." : "Setup Required"}
+                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : needsLogin ? "Login Required" : (piStarting || !piReady) ? "Setting up Pi..." : "Setup Required"}
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
                 {disabledReason}

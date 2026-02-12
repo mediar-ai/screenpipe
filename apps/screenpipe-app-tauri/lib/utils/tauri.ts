@@ -408,9 +408,9 @@ async piInfo() : Promise<Result<PiInfo, string>> {
 /**
  * Start the Pi sidecar in RPC mode
  */
-async piStart(projectDir: string, userToken: string | null) : Promise<Result<PiInfo, string>> {
+async piStart(projectDir: string, userToken: string | null, providerConfig: PiProviderConfig | null) : Promise<Result<PiInfo, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("pi_start", { projectDir, userToken }) };
+    return { status: "ok", data: await TAURI_INVOKE("pi_start", { projectDir, userToken, providerConfig }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -769,6 +769,26 @@ export type PiCheckResult = { available: boolean; path: string | null }
  */
 export type PiImageContent = { type: string; mimeType: string; data: string }
 export type PiInfo = { running: boolean; projectDir: string | null; pid: number | null; sessionId: string | null }
+/**
+ * Configuration for which AI provider Pi should use
+ */
+export type PiProviderConfig = { 
+/**
+ * Provider type: "openai", "native-ollama", "custom", "screenpipe-cloud"
+ */
+provider: string; 
+/**
+ * Base URL for the provider API
+ */
+url: string; 
+/**
+ * Model ID to use
+ */
+model: string; 
+/**
+ * Optional API key for the provider
+ */
+apiKey: string | null }
 export type ReminderItem = { identifier: string; title: string; notes: string | null; completed: boolean }
 export type RemindersStatus = { available: boolean; authorized: boolean; authorizationStatus: string; schedulerRunning: boolean; reminderCount: number }
 export type ScanResult = { remindersCreated: bigint; items: ReminderItem[]; contextChars: bigint; error: string | null }

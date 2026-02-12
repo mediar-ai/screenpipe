@@ -308,13 +308,28 @@ fn ensure_web_search_extension(project_dir: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Merge screenpipe provider into pi's existing config (preserves other providers/auth).
-fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
+/// Configuration for which AI provider Pi should use
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PiProviderConfig {
+    /// Provider type: "openai", "native-ollama", "custom", "screenpipe-cloud"
+    pub provider: String,
+    /// Base URL for the provider API
+    pub url: String,
+    /// Model ID to use
+    pub model: String,
+    /// Optional API key for the provider
+    pub api_key: Option<String>,
+}
+
+/// Merge providers into pi's existing config (preserves other providers/auth).
+/// Now supports any OpenAI-compatible provider (OpenAI, Ollama, custom, screenpipe-cloud).
+fn ensure_pi_config(user_token: Option<&str>, provider_config: Option<&PiProviderConfig>) -> Result<(), String> {
     let config_dir = get_pi_config_dir()?;
     std::fs::create_dir_all(&config_dir)
         .map_err(|e| format!("Failed to create pi config dir: {}", e))?;
 
-    // -- models.json: merge screenpipe into existing providers --
+    // -- models.json: merge providers into existing config --
     let models_path = config_dir.join("models.json");
     let mut models_config: serde_json::Value = if models_path.exists() {
         let content = std::fs::read_to_string(&models_path).unwrap_or_default();
@@ -323,6 +338,7 @@ fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
         json!({"providers": {}})
     };
 
+    // Always add screenpipe cloud provider
     let screenpipe_provider = json!({
         "baseUrl": SCREENPIPE_API_URL,
         "api": "openai-completions",
@@ -356,6 +372,53 @@ fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
         models_config = json!({"providers": {"screenpipe": screenpipe_provider}});
     }
 
+    // Add the user's selected provider (if not screenpipe-cloud)
+    if let Some(config) = provider_config {
+        let provider_name = match config.provider.as_str() {
+            "openai" => "openai-byok",
+            "native-ollama" => "ollama",
+            "custom" => "custom",
+            _ => "", // screenpipe-cloud already added above
+        };
+
+        if !provider_name.is_empty() {
+            let base_url = if config.provider == "native-ollama" && config.url.is_empty() {
+                "http://localhost:11434/v1".to_string()
+            } else {
+                config.url.clone()
+            };
+
+            // Pi resolves apiKey values as env var names, so reference the env var
+            // we'll set when spawning the process
+            let api_key = match config.provider.as_str() {
+                "native-ollama" => "ollama".to_string(), // Ollama ignores API key but Pi requires one
+                "openai" => "OPENAI_API_KEY".to_string(), // Pi will read from env
+                "custom" => "CUSTOM_API_KEY".to_string(), // Pi will read from env
+                _ => "".to_string(),
+            };
+
+            let user_provider = json!({
+                "baseUrl": base_url,
+                "api": "openai-completions",
+                "apiKey": api_key,
+                "models": [
+                    {
+                        "id": config.model,
+                        "name": config.model,
+                        "input": ["text"],
+                        "contextWindow": 128000,
+                        "maxTokens": 16384,
+                        "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
+                    }
+                ]
+            });
+
+            if let Some(providers) = models_config.get_mut("providers").and_then(|p| p.as_object_mut()) {
+                providers.insert(provider_name.to_string(), user_provider);
+            }
+        }
+    }
+
     let models_str = serde_json::to_string_pretty(&models_config)
         .map_err(|e| format!("Failed to serialize models config: {}", e))?;
     std::fs::write(&models_path, models_str)
@@ -381,7 +444,7 @@ fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
             .map_err(|e| format!("Failed to write pi auth: {}", e))?;
     }
 
-    info!("Pi config merged (screenpipe provider added) at {:?}", models_path);
+    info!("Pi config merged at {:?}", models_path);
     Ok(())
 }
 
@@ -421,6 +484,7 @@ pub async fn pi_start(
     state: State<'_, PiState>,
     project_dir: String,
     user_token: Option<String>,
+    provider_config: Option<PiProviderConfig>,
 ) -> Result<PiInfo, String> {
     let project_dir = project_dir.trim().to_string();
     if project_dir.is_empty() {
@@ -437,8 +501,22 @@ pub async fn pi_start(
     // Ensure web-search extension exists in project
     ensure_web_search_extension(&project_dir)?;
 
-    // Ensure Pi is configured
-    ensure_pi_config(user_token.as_deref())?;
+    // Ensure Pi is configured with the user's provider
+    ensure_pi_config(user_token.as_deref(), provider_config.as_ref())?;
+
+    // Determine which Pi provider and model to use
+    let (pi_provider, pi_model) = match &provider_config {
+        Some(config) => {
+            let provider_name = match config.provider.as_str() {
+                "openai" => "openai-byok",
+                "native-ollama" => "ollama",
+                "custom" => "custom",
+                "screenpipe-cloud" | "pi" | _ => "screenpipe",
+            };
+            (provider_name.to_string(), config.model.clone())
+        }
+        None => ("screenpipe".to_string(), "claude-haiku-4-5@20251001".to_string()),
+    };
 
     let mut manager_guard = state.0.lock().await;
 
@@ -473,12 +551,12 @@ pub async fn pi_start(
         }
     };
 
-    info!("Starting pi from {} in dir: {}", pi_path, project_dir);
+    info!("Starting pi from {} in dir: {} with provider: {} model: {}", pi_path, project_dir, pi_provider, pi_model);
 
     // Build command — use cmd.exe /C wrapper for .cmd files on Windows (Rust 1.77+ CVE fix)
     let mut cmd = build_command_for_path(&pi_path);
     cmd.current_dir(&project_dir)
-        .args(["--mode", "rpc", "--provider", "screenpipe", "--model", "claude-haiku-4-5@20251001"])
+        .args(["--mode", "rpc", "--provider", &pi_provider, "--model", &pi_model])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -493,6 +571,20 @@ pub async fn pi_start(
 
     if let Some(ref token) = user_token {
         cmd.env("SCREENPIPE_API_KEY", token);
+    }
+
+    // Pass the user's API key as env var for non-screenpipe providers
+    if let Some(ref config) = provider_config {
+        if let Some(ref api_key) = config.api_key {
+            if !api_key.is_empty() {
+                // Pi resolves apiKey from env vars, so set it
+                match config.provider.as_str() {
+                    "openai" => { cmd.env("OPENAI_API_KEY", api_key); }
+                    "custom" => { cmd.env("CUSTOM_API_KEY", api_key); }
+                    _ => {}
+                }
+            }
+        }
     }
 
     // Spawn process
@@ -753,7 +845,7 @@ pub async fn run(
     working_dir: &str,
     pid_tx: Option<tokio::sync::oneshot::Sender<u32>>,
 ) -> Result<String, String> {
-    ensure_pi_config(user_token)?;
+    ensure_pi_config(user_token, None)?;
 
     let pi_path = match find_pi_executable() {
         Some(p) => p,
