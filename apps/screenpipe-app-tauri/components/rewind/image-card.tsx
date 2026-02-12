@@ -412,6 +412,7 @@ export const MainImage = () => {
 								displayedHeight={renderedImageDimensions.height}
 								clickableUrls={true}
 								highlightTerms={highlightTerms}
+								imageSrc={src}
 							/>
 						</div>
 					)}

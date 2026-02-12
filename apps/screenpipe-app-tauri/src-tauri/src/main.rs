@@ -1331,7 +1331,9 @@ async fn main() {
             reminders::reminders_get_custom_prompt,
             reminders::reminders_set_custom_prompt,
             reminders::reminders_get_audio_only,
-            reminders::reminders_set_audio_only
+            reminders::reminders_set_audio_only,
+            // OCR commands
+            commands::perform_ocr_on_image
         ])
         .setup(move |app| {
             //deep link register_all

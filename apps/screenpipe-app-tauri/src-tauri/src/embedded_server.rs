@@ -144,7 +144,7 @@ impl EmbeddedServerHandle {
 }
 
 /// Parse language string to Language enum
-fn parse_language(s: &str) -> Option<Language> {
+pub fn parse_language(s: &str) -> Option<Language> {
     match s.to_lowercase().as_str() {
         "english" | "en" => Some(Language::English),
         "chinese" | "zh" => Some(Language::Chinese),
