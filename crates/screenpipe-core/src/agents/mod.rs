@@ -37,11 +37,14 @@ pub struct ExecutionHandle {
 #[async_trait::async_trait]
 pub trait AgentExecutor: Send + Sync {
     /// Execute `prompt` using `model` with the given `working_dir` as cwd.
+    /// `provider` overrides the default provider (e.g. `"anthropic"`, `"openai"`).
+    /// If `None`, uses screenpipe cloud as default.
     async fn run(
         &self,
         prompt: &str,
         model: &str,
         working_dir: &Path,
+        provider: Option<&str>,
     ) -> Result<AgentOutput>;
 
     /// Kill a running agent process.

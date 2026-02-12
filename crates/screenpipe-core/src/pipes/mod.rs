@@ -42,6 +42,10 @@ pub struct PipeConfig {
     /// LLM model passed to the agent.  Default: `"claude-haiku-4-5@20251001"`.
     #[serde(default = "default_model")]
     pub model: String,
+    /// LLM provider override.  Default: none (uses screenpipe cloud).
+    /// Set to `"anthropic"`, `"openai"`, `"google"`, etc. to use pi's native auth.
+    #[serde(default)]
+    pub provider: Option<String>,
     /// Arbitrary extra fields from front-matter.
     #[serde(default, flatten)]
     pub config: HashMap<String, serde_json::Value>,
@@ -253,7 +257,7 @@ impl PipeManager {
         // Acquire semaphore (one pipe at a time)
         let _permit = self.semaphore.acquire().await?;
 
-        let result = executor.run(&prompt, &config.model, &pipe_dir).await;
+        let result = executor.run(&prompt, &config.model, &pipe_dir, config.provider.as_deref()).await;
 
         // Remove from running
         {
@@ -334,6 +338,7 @@ impl PipeManager {
                 "enabled" => if let Some(b) = v.as_bool() { config.enabled = b; },
                 "agent" => if let Some(s) = v.as_str() { config.agent = s.to_string(); },
                 "model" => if let Some(s) = v.as_str() { config.model = s.to_string(); },
+                "provider" => if let Some(s) = v.as_str() { config.provider = Some(s.to_string()); },
                 _ => { config.config.insert(k.clone(), v.clone()); },
             }
         }
@@ -554,6 +559,7 @@ impl PipeManager {
                     let prompt = render_prompt(config, body);
                     let pipe_dir = pipes_dir.join(name);
                     let model = config.model.clone();
+                    let provider = config.provider.clone();
                     let pipe_name = name.clone();
                     let logs_ref = logs.clone();
                     let running_ref = running.clone();
@@ -563,7 +569,7 @@ impl PipeManager {
                     tokio::spawn(async move {
                         let _permit = sem.acquire().await;
                         let started_at = Utc::now();
-                        let result = executor.run(&prompt, &model, &pipe_dir).await;
+                        let result = executor.run(&prompt, &model, &pipe_dir, provider.as_deref()).await;
                         let finished_at = Utc::now();
 
                         // Remove from running

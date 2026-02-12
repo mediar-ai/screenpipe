@@ -59,56 +59,100 @@ impl PiExecutor {
         Ok(())
     }
 
-    /// Write pi config files (models.json + auth.json) to `~/.pi/agent/`.
-    pub fn write_pi_config(user_token: Option<&str>, api_url: &str) -> Result<()> {
+    /// Merge screenpipe provider into pi's existing config files.
+    ///
+    /// Unlike the old `write_pi_config`, this preserves any existing providers
+    /// and auth credentials the user set up via `pi /login` or by editing
+    /// `~/.pi/agent/auth.json` directly.
+    pub fn ensure_pi_config(user_token: Option<&str>, api_url: &str) -> Result<()> {
         let config_dir = get_pi_config_dir()?;
         std::fs::create_dir_all(&config_dir)?;
 
+        // -- models.json: merge screenpipe provider into existing providers --
         let models_path = config_dir.join("models.json");
-        let models_config = json!({
-            "providers": {
-                "screenpipe": {
-                    "baseUrl": api_url,
-                    "api": "openai-completions",
-                    "apiKey": "SCREENPIPE_API_KEY",
-                    "authHeader": true,
-                    "models": [
-                        {
-                            "id": "claude-opus-4-5@20251101",
-                            "name": "Claude Opus 4.5",
-                            "reasoning": true,
-                            "input": ["text", "image"],
-                            "cost": {"input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75},
-                            "contextWindow": 200000,
-                            "maxTokens": 32000
-                        },
-                        {
-                            "id": "claude-haiku-4-5@20251001",
-                            "name": "Claude Haiku 4.5",
-                            "reasoning": true,
-                            "input": ["text", "image"],
-                            "cost": {"input": 0.8, "output": 4, "cacheRead": 0.08, "cacheWrite": 1},
-                            "contextWindow": 200000,
-                            "maxTokens": 64000
-                        }
-                    ]
+        let mut models_config: serde_json::Value = if models_path.exists() {
+            let content = std::fs::read_to_string(&models_path).unwrap_or_default();
+            serde_json::from_str(&content).unwrap_or_else(|_| json!({"providers": {}}))
+        } else {
+            json!({"providers": {}})
+        };
+
+        let screenpipe_provider = json!({
+            "baseUrl": api_url,
+            "api": "openai-completions",
+            "apiKey": "SCREENPIPE_API_KEY",
+            "authHeader": true,
+            "models": [
+                {
+                    "id": "claude-opus-4-5@20251101",
+                    "name": "Claude Opus 4.5",
+                    "reasoning": true,
+                    "input": ["text", "image"],
+                    "cost": {"input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75},
+                    "contextWindow": 200000,
+                    "maxTokens": 32000
+                },
+                {
+                    "id": "claude-haiku-4-5@20251001",
+                    "name": "Claude Haiku 4.5",
+                    "reasoning": true,
+                    "input": ["text", "image"],
+                    "cost": {"input": 0.8, "output": 4, "cacheRead": 0.08, "cacheWrite": 1},
+                    "contextWindow": 200000,
+                    "maxTokens": 64000
                 }
-            }
+            ]
         });
+
+        if let Some(providers) = models_config.get_mut("providers").and_then(|p| p.as_object_mut()) {
+            providers.insert("screenpipe".to_string(), screenpipe_provider);
+        } else {
+            models_config = json!({"providers": {"screenpipe": screenpipe_provider}});
+        }
 
         std::fs::write(
             &models_path,
             serde_json::to_string_pretty(&models_config)?,
         )?;
 
+        // -- auth.json: merge screenpipe token, preserve other providers --
         if let Some(token) = user_token {
             let auth_path = config_dir.join("auth.json");
-            let auth = json!({ "screenpipe": token });
+            let mut auth: serde_json::Value = if auth_path.exists() {
+                let content = std::fs::read_to_string(&auth_path).unwrap_or_default();
+                serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
+            } else {
+                json!({})
+            };
+
+            if let Some(obj) = auth.as_object_mut() {
+                obj.insert("screenpipe".to_string(), json!(token));
+            }
+
             std::fs::write(&auth_path, serde_json::to_string_pretty(&auth)?)?;
+
+            // Set restrictive permissions (user read/write only)
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let perms = std::fs::Permissions::from_mode(0o600);
+                let _ = std::fs::set_permissions(&auth_path, perms);
+            }
         }
 
-        info!("pi configured at {:?}", models_path);
+        debug!("pi config merged at {:?}", models_path);
         Ok(())
+    }
+
+    /// Read the user's default provider from `~/.pi/agent/settings.json`.
+    fn read_user_default_provider() -> Option<String> {
+        let config_dir = get_pi_config_dir().ok()?;
+        let settings_path = config_dir.join("settings.json");
+        let content = std::fs::read_to_string(&settings_path).ok()?;
+        let settings: serde_json::Value = serde_json::from_str(&content).ok()?;
+        settings.get("defaultProvider")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
     }
 }
 
@@ -119,18 +163,30 @@ impl AgentExecutor for PiExecutor {
         prompt: &str,
         model: &str,
         working_dir: &Path,
+        provider: Option<&str>,
     ) -> Result<AgentOutput> {
-        Self::write_pi_config(self.user_token.as_deref(), &self.api_url)?;
+        Self::ensure_pi_config(self.user_token.as_deref(), &self.api_url)?;
         Self::ensure_screenpipe_skill(working_dir)?;
         Self::ensure_web_search_extension(working_dir)?;
 
         let pi_path = find_pi_executable()
             .ok_or_else(|| anyhow!("pi not found. install with: bun add -g {}", PI_PACKAGE))?;
 
+        // Provider resolution:
+        // 1. Explicit provider from pipe frontmatter
+        // 2. User's defaultProvider from ~/.pi/agent/settings.json
+        // 3. Fall back to screenpipe cloud
+        let resolved_provider = provider
+            .map(|s| s.to_string())
+            .or_else(|| Self::read_user_default_provider())
+            .unwrap_or_else(|| "screenpipe".to_string());
+
+        info!("pipe using provider: {}, model: {}", resolved_provider, model);
+
         let mut cmd = build_async_command(&pi_path);
         cmd.current_dir(working_dir);
         cmd.arg("-p").arg(prompt);
-        cmd.arg("--provider").arg("screenpipe");
+        cmd.arg("--provider").arg(&resolved_provider);
         cmd.arg("--model").arg(model);
 
         if let Some(ref token) = self.user_token {

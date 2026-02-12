@@ -308,63 +308,80 @@ fn ensure_web_search_extension(project_dir: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Ensure Pi is configured to use screenpipe as the AI provider
+/// Merge screenpipe provider into pi's existing config (preserves other providers/auth).
 fn ensure_pi_config(user_token: Option<&str>) -> Result<(), String> {
     let config_dir = get_pi_config_dir()?;
     std::fs::create_dir_all(&config_dir)
         .map_err(|e| format!("Failed to create pi config dir: {}", e))?;
 
-    // Write models.json with screenpipe provider
+    // -- models.json: merge screenpipe into existing providers --
     let models_path = config_dir.join("models.json");
-    let models_config = json!({
-        "providers": {
-            "screenpipe": {
-                "baseUrl": SCREENPIPE_API_URL,
-                "api": "openai-completions",
-                "apiKey": "SCREENPIPE_API_KEY",
-                "authHeader": true,
-                "models": [
-                    {
-                        "id": "claude-opus-4-5@20251101",
-                        "name": "Claude Opus 4.5",
-                        "reasoning": true,
-                        "input": ["text", "image"],
-                        "cost": {"input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75},
-                        "contextWindow": 200000,
-                        "maxTokens": 32000
-                    },
-                    {
-                        "id": "claude-haiku-4-5@20251001",
-                        "name": "Claude Haiku 4.5",
-                        "reasoning": true,
-                        "input": ["text", "image"],
-                        "cost": {"input": 0.8, "output": 4, "cacheRead": 0.08, "cacheWrite": 1},
-                        "contextWindow": 200000,
-                        "maxTokens": 64000
-                    }
-                ]
+    let mut models_config: serde_json::Value = if models_path.exists() {
+        let content = std::fs::read_to_string(&models_path).unwrap_or_default();
+        serde_json::from_str(&content).unwrap_or_else(|_| json!({"providers": {}}))
+    } else {
+        json!({"providers": {}})
+    };
+
+    let screenpipe_provider = json!({
+        "baseUrl": SCREENPIPE_API_URL,
+        "api": "openai-completions",
+        "apiKey": "SCREENPIPE_API_KEY",
+        "authHeader": true,
+        "models": [
+            {
+                "id": "claude-opus-4-5@20251101",
+                "name": "Claude Opus 4.5",
+                "reasoning": true,
+                "input": ["text", "image"],
+                "cost": {"input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75},
+                "contextWindow": 200000,
+                "maxTokens": 32000
+            },
+            {
+                "id": "claude-haiku-4-5@20251001",
+                "name": "Claude Haiku 4.5",
+                "reasoning": true,
+                "input": ["text", "image"],
+                "cost": {"input": 0.8, "output": 4, "cacheRead": 0.08, "cacheWrite": 1},
+                "contextWindow": 200000,
+                "maxTokens": 64000
             }
-        }
+        ]
     });
+
+    if let Some(providers) = models_config.get_mut("providers").and_then(|p| p.as_object_mut()) {
+        providers.insert("screenpipe".to_string(), screenpipe_provider);
+    } else {
+        models_config = json!({"providers": {"screenpipe": screenpipe_provider}});
+    }
 
     let models_str = serde_json::to_string_pretty(&models_config)
         .map_err(|e| format!("Failed to serialize models config: {}", e))?;
     std::fs::write(&models_path, models_str)
         .map_err(|e| format!("Failed to write pi models config: {}", e))?;
 
-    // Write auth.json if we have a token
+    // -- auth.json: merge screenpipe token, preserve other providers --
     if let Some(token) = user_token {
         let auth_path = config_dir.join("auth.json");
-        let auth = json!({
-            "screenpipe": token
-        });
+        let mut auth: serde_json::Value = if auth_path.exists() {
+            let content = std::fs::read_to_string(&auth_path).unwrap_or_default();
+            serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
+        } else {
+            json!({})
+        };
+
+        if let Some(obj) = auth.as_object_mut() {
+            obj.insert("screenpipe".to_string(), json!(token));
+        }
+
         let auth_str = serde_json::to_string_pretty(&auth)
             .map_err(|e| format!("Failed to serialize auth: {}", e))?;
         std::fs::write(&auth_path, auth_str)
             .map_err(|e| format!("Failed to write pi auth: {}", e))?;
     }
 
-    info!("Pi configured to use screenpipe at {:?}", models_path);
+    info!("Pi config merged (screenpipe provider added) at {:?}", models_path);
     Ok(())
 }
 

@@ -28,6 +28,7 @@ interface PipeConfig {
   enabled: boolean;
   agent: string;
   model: string;
+  provider?: string;
   config: Record<string, unknown>;
 }
 
@@ -238,7 +239,7 @@ export function PipesSection() {
                 {/* Expanded detail */}
                 {expanded === pipe.config.name && (
                   <div className="mt-4 space-y-4 border-t pt-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
                         <Label className="text-xs">agent</Label>
                         <Input
@@ -255,7 +256,19 @@ export function PipesSection() {
                           className="h-8 text-xs"
                         />
                       </div>
+                      <div>
+                        <Label className="text-xs">provider</Label>
+                        <Input
+                          value={pipe.config.provider || "screenpipe cloud"}
+                          disabled
+                          className="h-8 text-xs"
+                        />
+                      </div>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      add <code>provider: anthropic</code> to pipe.md frontmatter to use your own key.{" "}
+                      run <code>pi /login</code> in terminal to authenticate.
+                    </p>
 
                     <div>
                       <Label className="text-xs">prompt</Label>

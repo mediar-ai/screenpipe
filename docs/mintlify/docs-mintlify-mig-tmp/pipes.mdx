@@ -110,6 +110,7 @@ You can reference screenpipe's API, write files, call external APIs, etc.
 | `enabled` | no | `true` | whether the scheduler runs this pipe |
 | `agent` | no | `pi` | which coding agent CLI to use |
 | `model` | no | `claude-haiku-4-5@20251001` | which LLM the agent uses |
+| `provider` | no | `screenpipe` | LLM provider: `screenpipe` (cloud), `anthropic`, `openai`, `google`, etc. |
 
 ### template variables
 
@@ -234,6 +235,53 @@ Generate a standup report from yesterday's screen activity.
 Format: what I did, what I'm doing, blockers.
 Write to ./output/{{date}}.md
 ```
+
+## AI providers
+
+by default, pipes use **screenpipe cloud** — no setup needed if you have a screenpipe account.
+
+to use your own AI subscription (Claude Pro, ChatGPT Plus, Gemini, or API keys), pipes reuse [pi's native auth system](https://github.com/mariozechner/pi-coding-agent):
+
+### option 1: subscription (free with existing plan)
+
+```bash
+# run pi interactively and use /login
+pi
+# then type: /login
+# select Claude Pro, ChatGPT Plus, GitHub Copilot, or Google Gemini
+```
+
+### option 2: API key
+
+add to `~/.pi/agent/auth.json`:
+
+```json
+{
+  "anthropic": { "type": "api_key", "key": "sk-ant-..." },
+  "openai": { "type": "api_key", "key": "sk-..." },
+  "google": { "type": "api_key", "key": "..." }
+}
+```
+
+or set environment variables: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`.
+
+### using in a pipe
+
+add `provider` to your pipe.md frontmatter:
+
+```yaml
+---
+name: my-pipe
+schedule: every 30m
+provider: anthropic
+model: claude-haiku-4-5@20251001
+---
+```
+
+**provider resolution order:**
+1. `provider` field in pipe.md frontmatter
+2. your `defaultProvider` in `~/.pi/agent/settings.json`
+3. screenpipe cloud (default)
 
 ## secrets
 
