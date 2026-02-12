@@ -8,7 +8,9 @@
                 "installerHooks": "windows/hooks.nsh"
             }
         },
-        "externalBin": [],
+        "externalBin": [
+            "bun"
+        ],
         "targets": [
             "nsis"
         ],

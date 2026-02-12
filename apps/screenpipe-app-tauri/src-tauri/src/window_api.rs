@@ -644,6 +644,16 @@ impl ShowRewindWindow {
                 return Ok(window);
             }
 
+            // Settings window: navigate to the requested section if specified
+            if id.label() == RewindWindowId::Settings.label() {
+                if let ShowRewindWindow::Settings { page: Some(ref section) } = self {
+                    let _ = window.emit("navigate", serde_json::json!({ "url": format!("/settings?section={}", section) }));
+                }
+                window.show().ok();
+                window.set_focus().ok();
+                return Ok(window);
+            }
+
             // Chat window needs panel behavior on macOS to show above fullscreen
             if id.label() == RewindWindowId::Chat.label() {
                 #[cfg(target_os = "macos")]

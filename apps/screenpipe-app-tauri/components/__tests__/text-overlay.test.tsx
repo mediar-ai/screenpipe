@@ -41,7 +41,7 @@ describe("TextOverlay", () => {
 		expect(container.firstChild).toBeNull();
 	});
 
-	it("should render nothing when no URLs in text positions", () => {
+	it("should render nothing when no URLs and selection disabled", () => {
 		const positions = [
 			createTextPosition("Hello", 0.1, 0.05, 0.08, 0.02),
 			createTextPosition("World", 0.2, 0.05, 0.1, 0.02),
@@ -53,9 +53,29 @@ describe("TextOverlay", () => {
 				originalHeight={1080}
 				displayedWidth={960}
 				displayedHeight={540}
+				selectable={false}
 			/>
 		);
 		expect(container.firstChild).toBeNull();
+	});
+
+	it("should render selectable text spans when selectable", () => {
+		const positions = [
+			createTextPosition("Hello world", 0.1, 0.05, 0.2, 0.02),
+		];
+		const { container } = render(
+			<TextOverlay
+				textPositions={positions}
+				originalWidth={1920}
+				originalHeight={1080}
+				displayedWidth={960}
+				displayedHeight={540}
+				selectable={true}
+			/>
+		);
+		expect(container.firstChild).not.toBeNull();
+		// The text should be present in the DOM (invisible but selectable)
+		expect(container.textContent).toContain("Hello world");
 	});
 
 	it("should render a whole-block URL as clickable link", () => {

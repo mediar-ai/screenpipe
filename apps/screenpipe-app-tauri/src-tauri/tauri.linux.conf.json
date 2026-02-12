@@ -1,6 +1,8 @@
 {
     "bundle": {
-        "externalBin": [],
+        "externalBin": [
+            "bun"
+        ],
         "linux": {
             "deb": {
                 "depends": [
