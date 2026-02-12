@@ -22,40 +22,38 @@ export function DeeplinkHandler() {
   const setPendingNavigation = useTimelineStore((s) => s.setPendingNavigation);
 
   useEffect(() => {
-    const setupDeepLink = async () => {
-      const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
-        console.log("received deep link urls:", urls);
-        for (const url of urls) {
-          const parsedUrl = new URL(url);
+    // Shared deep-link URL processor used by both the native plugin callback
+    // and the custom Tauri event from single-instance handoff.
+    const processDeepLinkUrl = async (url: string) => {
+      const parsedUrl = new URL(url);
 
-          // Handle API key auth
-          if (url.includes("api_key=")) {
-            const apiKey = parsedUrl.searchParams.get("api_key");
-            if (apiKey) {
-             try {
-              await loadUser(apiKey);
-              toast({
-                title: "logged in!",
-                description: "you have been logged in",
-              });
-
-             } catch (error) {
-              console.error("failed to load user:", error);
-              toast({
-                title: "failed to load user",
-                description: "failed to load user",
-              });
-             }
-            }
+      // Handle API key auth
+      if (url.includes("api_key=")) {
+        const apiKey = parsedUrl.searchParams.get("api_key");
+        if (apiKey) {
+          try {
+            await loadUser(apiKey);
+            toast({
+              title: "logged in!",
+              description: "you have been logged in",
+            });
+          } catch (error) {
+            console.error("failed to load user:", error);
+            toast({
+              title: "failed to load user",
+              description: "failed to load user",
+            });
           }
+        }
+      }
 
-          if (url.includes("settings")) {
-            await openSettingsWindow();
-          }
+      if (url.includes("settings")) {
+        await openSettingsWindow();
+      }
 
-          if (url.includes("changelog")) {
-            setShowChangelogDialog(true);
-          }
+      if (url.includes("changelog")) {
+        setShowChangelogDialog(true);
+      }
 
           if (url.includes("onboarding")) {
             try {
@@ -69,61 +67,68 @@ export function DeeplinkHandler() {
             }
           }
 
-          if (url.includes("status")) {
-            openStatusDialog();
-          }
+      if (url.includes("status")) {
+        openStatusDialog();
+      }
 
-          // Handle timeline deep links:
-          //   screenpipe://timeline?timestamp=ISO8601
-          //   screenpipe://timeline?start_time=ISO8601&end_time=ISO8601
-          if (parsedUrl.pathname === "timeline" || parsedUrl.host === "timeline") {
-            const timestamp =
-              parsedUrl.searchParams.get("timestamp") ||
-              parsedUrl.searchParams.get("start_time");
-            if (timestamp) {
-              try {
-                const date = new Date(timestamp);
-                if (!isNaN(date.getTime())) {
-                  // Write to store (persists across mounts) AND emit event (instant if timeline is mounted)
-                  setPendingNavigation({ timestamp });
-                  await commands.showWindow("Main");
-                  await emit("navigate-to-timestamp", timestamp);
-                  toast({
-                    title: "navigating to timestamp",
-                    description: `jumping to ${date.toLocaleString()}`,
-                  });
-                } else {
-                  throw new Error("Invalid date");
-                }
-              } catch (error) {
-                console.error("Failed to parse timeline timestamp:", error);
-                toast({
-                  title: "invalid timestamp",
-                  description: "could not parse the timeline link",
-                  variant: "destructive",
-                });
-              }
+      // Handle timeline deep links:
+      //   screenpipe://timeline?timestamp=ISO8601
+      //   screenpipe://timeline?start_time=ISO8601&end_time=ISO8601
+      if (parsedUrl.pathname === "timeline" || parsedUrl.host === "timeline") {
+        const timestamp =
+          parsedUrl.searchParams.get("timestamp") ||
+          parsedUrl.searchParams.get("start_time");
+        if (timestamp) {
+          try {
+            const date = new Date(timestamp);
+            if (!isNaN(date.getTime())) {
+              // Write to store (persists across mounts) AND emit event (instant if timeline is mounted)
+              setPendingNavigation({ timestamp });
+              await commands.showWindow("Main");
+              await emit("navigate-to-timestamp", timestamp);
+              toast({
+                title: "navigating to timestamp",
+                description: `jumping to ${date.toLocaleString()}`,
+              });
+            } else {
+              throw new Error("Invalid date");
             }
+          } catch (error) {
+            console.error("Failed to parse timeline timestamp:", error);
+            toast({
+              title: "invalid timestamp",
+              description: "could not parse the timeline link",
+              variant: "destructive",
+            });
           }
+        }
+      }
 
-          // Handle frame deep links: screenpipe://frame/12345
-          if (parsedUrl.pathname?.startsWith("/frame/") || parsedUrl.host === "frame") {
-            const frameId = url.split("frame/")[1]?.replace(/^\//, "");
-            if (frameId) {
-              try {
-                // Store frame navigation — timeline will resolve frame → timestamp
-                setPendingNavigation({ timestamp: "", frameId });
-                await commands.showWindow("Main");
-                await emit("navigate-to-frame", frameId);
-                toast({
-                  title: "navigating to frame",
-                  description: `jumping to frame ${frameId}`,
-                });
-              } catch (error) {
-                console.error("Failed to navigate to frame:", error);
-              }
-            }
+      // Handle frame deep links: screenpipe://frame/12345
+      if (parsedUrl.pathname?.startsWith("/frame/") || parsedUrl.host === "frame") {
+        const frameId = url.split("frame/")[1]?.replace(/^\//, "");
+        if (frameId) {
+          try {
+            // Store frame navigation — timeline will resolve frame → timestamp
+            setPendingNavigation({ timestamp: "", frameId });
+            await commands.showWindow("Main");
+            await emit("navigate-to-frame", frameId);
+            toast({
+              title: "navigating to frame",
+              description: `jumping to frame ${frameId}`,
+            });
+          } catch (error) {
+            console.error("Failed to navigate to frame:", error);
           }
+        }
+      }
+    };
+
+    const setupDeepLink = async () => {
+      const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
+        console.log("received deep link urls:", urls);
+        for (const url of urls) {
+          await processDeepLinkUrl(url);
         }
       });
       return unsubscribeDeepLink;
@@ -136,6 +141,13 @@ export function DeeplinkHandler() {
     });
 
     const unlisten = Promise.all([
+      // Listen for deep-link URLs forwarded from single-instance handoff
+      // (emitted by the /focus endpoint or the single-instance plugin callback)
+      listen<string>("deep-link-received", async (event) => {
+        console.log("received deep-link-received event:", event.payload);
+        await processDeepLinkUrl(event.payload);
+      }),
+
       listen("shortcut-start-recording", async () => {
         await commands.spawnScreenpipe(null);
 
@@ -168,7 +180,7 @@ export function DeeplinkHandler() {
         unsubscribes.forEach((unsubscribe) => unsubscribe());
       });
     };
-  }, [toast, setShowChangelogDialog, openStatusDialog, loadUser, reloadStore]);
+  }, [toast, setShowChangelogDialog, openStatusDialog, loadUser, reloadStore, setPendingNavigation]);
 
   return null; // This component doesn't render anything
 } 
