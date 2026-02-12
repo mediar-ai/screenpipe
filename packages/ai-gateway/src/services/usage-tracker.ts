@@ -1,5 +1,70 @@
 import { Env, UserTier, TierLimits, UsageResult, UsageStatus } from '../types';
 
+/**
+ * Try to deduct 1 credit from user's balance via Supabase RPC.
+ * Returns remaining balance or -1 if insufficient/error.
+ */
+async function tryDeductCredit(env: Env, userId: string, reason: string): Promise<{ success: boolean; remaining: number }> {
+  if (!userId) return { success: false, remaining: 0 };
+
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/deduct_credits`, {
+      method: 'POST',
+      headers: {
+        apikey: env.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_user_id: userId,
+        p_amount: 1,
+        p_type: reason,
+        p_description: `${reason} via ai gateway`,
+        p_reference_id: `gw-${Date.now()}`,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('deduct_credits error:', await response.text());
+      return { success: false, remaining: 0 };
+    }
+
+    const result = await response.json() as Array<{ success: boolean; new_balance: number; error_message: string | null }>;
+    if (Array.isArray(result) && result.length > 0 && result[0].success) {
+      return { success: true, remaining: result[0].new_balance };
+    }
+    return { success: false, remaining: 0 };
+  } catch (error) {
+    console.error('credit deduction failed:', error);
+    return { success: false, remaining: 0 };
+  }
+}
+
+/**
+ * Get user's current credit balance without deducting.
+ */
+async function getCreditBalance(env: Env, userId: string): Promise<number> {
+  if (!userId) return 0;
+
+  try {
+    const response = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+      {
+        headers: {
+          apikey: env.SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+        },
+      }
+    );
+
+    if (!response.ok) return 0;
+    const rows = await response.json() as Array<{ balance: number }>;
+    return rows.length > 0 ? rows[0].balance : 0;
+  } catch {
+    return 0;
+  }
+}
+
 // IP-based abuse prevention limits (on top of device limits)
 const IP_DAILY_LIMIT = 200; // Max queries per IP per day (catches device ID spoofing)
 
@@ -117,12 +182,31 @@ export async function trackUsage(
       } else {
         // Check limit BEFORE incrementing — don't inflate counter on rejected requests
         if (existing.daily_count >= limits.dailyQueries) {
+          // Daily free quota exhausted — try credit fallback
+          if (userId) {
+            const credit = await tryDeductCredit(env, userId, 'ai_query');
+            if (credit.success) {
+              console.log(`credit deducted for ${userId}, remaining: ${credit.remaining}`);
+              return {
+                used: existing.daily_count,
+                limit: limits.dailyQueries,
+                remaining: 0,
+                allowed: true,
+                resetsAt: getNextResetTime(),
+                paidVia: 'credits',
+                creditsRemaining: credit.remaining,
+              };
+            }
+          }
+          // No credits available — check balance for error response
+          const balance = userId ? await getCreditBalance(env, userId) : 0;
           return {
             used: existing.daily_count,
             limit: limits.dailyQueries,
             remaining: 0,
             allowed: false,
             resetsAt: getNextResetTime(),
+            creditsRemaining: balance,
           };
         }
         // Increment count

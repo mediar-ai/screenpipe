@@ -174,6 +174,10 @@ export interface UsageResult {
 	remaining: number;
 	allowed: boolean;
 	resetsAt: string;
+	/** Set when request was allowed by deducting a credit */
+	paidVia?: 'free' | 'credits';
+	/** Current credit balance (included in both success and failure) */
+	creditsRemaining?: number;
 }
 
 // Usage status response
