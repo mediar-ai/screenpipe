@@ -102,7 +102,9 @@ jobs:
               sig_files = glob.glob(f"{sig_dir}/*.sig")
               if not sig_files:
                   continue
-              sig_file = sig_files[0]
+              # Prefer non-beta sig files
+              stable_sigs = [f for f in sig_files if "beta" not in os.path.basename(f)]
+              sig_file = stable_sigs[0] if stable_sigs else sig_files[0]
               with open(sig_file, "r") as f:
                   signature = f.read().strip()
               artifact = os.path.basename(sig_file).replace(".sig", "")
@@ -163,7 +165,9 @@ jobs:
               sig_files = glob.glob(f"{sig_dir}/*.sig")
               if not sig_files:
                   continue
-              sig_file = sig_files[0]
+              # For beta, prefer beta sig files
+              beta_sigs = [f for f in sig_files if "beta" in os.path.basename(f)]
+              sig_file = beta_sigs[0] if beta_sigs else sig_files[0]
               with open(sig_file, "r") as f:
                   signature = f.read().strip()
               artifact = os.path.basename(sig_file).replace(".sig", "")
