@@ -176,9 +176,14 @@ export default function ShortcutGate() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3, duration: 0.5 }}
       >
-        <p className="font-mono text-sm text-muted-foreground">
-          press to see your timeline
-        </p>
+        <div className="text-center space-y-1">
+          <p className="font-mono text-sm text-muted-foreground">
+            press to see your timeline
+          </p>
+          <p className="font-mono text-xs text-muted-foreground/60">
+            then try searching &quot;quantum entanglement&quot;
+          </p>
+        </div>
 
         <div className="flex items-center gap-3">
           {keys.map((key, i) => (

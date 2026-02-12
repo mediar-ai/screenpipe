@@ -3,15 +3,17 @@
 import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import OnboardingSetup from "@/components/onboarding/status";
+import ReadContent from "@/components/onboarding/read-content";
 import ShortcutGate from "@/components/onboarding/shortcut-gate";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import posthog from "posthog-js";
 import { commands } from "@/lib/utils/tauri";
 
-type SlideKey = "setup" | "shortcut";
+type SlideKey = "setup" | "read" | "shortcut";
 
 const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = {
   setup: { width: 500, height: 560 },
+  read: { width: 500, height: 520 },
   shortcut: { width: 520, height: 480 },
 };
 
@@ -43,6 +45,7 @@ export default function OnboardingPage() {
         // Map any old step names to new ones
         const stepMap: Record<string, SlideKey> = {
           setup: "setup",
+          read: "read",
           shortcut: "shortcut",
           // backwards compat with old onboarding
           welcome: "setup",
@@ -86,20 +89,23 @@ export default function OnboardingPage() {
     setIsTransitioning(true);
 
     posthog.capture(`onboarding_${currentSlide}_completed`);
+    const stepOrder: SlideKey[] = ["setup", "read", "shortcut"];
+    const currentIdx = stepOrder.indexOf(currentSlide);
     posthog.capture("onboarding_step_reached", {
       step_name: `${currentSlide}_completed`,
-      step_index: currentSlide === "setup" ? 4 : 5,
+      step_index: currentIdx + 1,
     });
 
+    const nextSlide = stepOrder[currentIdx + 1] || "shortcut";
     try {
-      await commands.setOnboardingStep("shortcut");
+      await commands.setOnboardingStep(nextSlide);
     } catch {
       // non-critical
     }
 
     setIsVisible(false);
     setTimeout(() => {
-      setCurrentSlide("shortcut");
+      setCurrentSlide(nextSlide);
       setIsVisible(true);
       setIsTransitioning(false);
     }, 300);
@@ -130,6 +136,9 @@ export default function OnboardingPage() {
               className=""
               handleNextSlide={handleNextSlide}
             />
+          )}
+          {currentSlide === "read" && (
+            <ReadContent handleNextSlide={handleNextSlide} />
           )}
           {currentSlide === "shortcut" && <ShortcutGate />}
         </div>
