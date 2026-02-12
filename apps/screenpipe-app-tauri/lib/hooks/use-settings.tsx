@@ -205,7 +205,8 @@ let DEFAULT_SETTINGS: Settings = {
 				bio: null,
 				website: null,
 				contact: null,
-				cloud_subscribed: null
+				cloud_subscribed: null,
+				credits_balance: null
 			},
 			showScreenpipeShortcut: "Control+Super+S",
 			startRecordingShortcut: "Super+Alt+U",

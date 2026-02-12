@@ -20,6 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { homeDir, join } from "@tauri-apps/api/path";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 function parsePipeError(stderr: string): {
@@ -89,6 +91,7 @@ export function PipesSection() {
   const [logs, setLogs] = useState<PipeRunLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningPipe, setRunningPipe] = useState<string | null>(null);
+  const { settings } = useSettings();
 
   const fetchPipes = useCallback(async () => {
     try {
@@ -188,7 +191,24 @@ export function PipesSection() {
             </a>
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {settings.user?.credits_balance != null && (
+            <div className="flex items-center gap-1.5 mr-2">
+              <Badge variant="outline" className="text-xs font-mono">
+                {settings.user.credits_balance} credits
+              </Badge>
+              {settings.user.credits_balance <= 10 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => openUrl("https://screenpi.pe/onboarding")}
+                >
+                  buy more
+                </Button>
+              )}
+            </div>
+          )}
           <Button variant="outline" size="sm" onClick={fetchPipes}>
             <RefreshCw className="h-4 w-4" />
           </Button>

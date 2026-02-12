@@ -73,20 +73,43 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 			const ipAddress = request.headers.get('cf-connecting-ip') || undefined;
 			const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId, ipAddress);
 			if (!usage.allowed) {
+				const creditsExhausted = (usage.creditsRemaining ?? 0) <= 0;
 				return addCorsHeaders(createErrorResponse(429, JSON.stringify({
-					error: 'daily_limit_exceeded',
-					message: `You've used all ${usage.limit} free AI queries for today. Resets at ${usage.resetsAt}`,
+					error: creditsExhausted ? 'credits_exhausted' : 'daily_limit_exceeded',
+					message: creditsExhausted
+						? `You've used all free queries and have no credits remaining. Buy more at screenpi.pe`
+						: `You've used all ${usage.limit} free AI queries for today. Resets at ${usage.resetsAt}`,
 					used_today: usage.used,
 					limit_today: usage.limit,
 					resets_at: usage.resetsAt,
 					tier: authResult.tier,
-					upgrade_options: authResult.tier === 'anonymous'
-						? { login: { benefit: '+25 daily queries, more models' }, subscribe: { benefit: 'Unlimited queries, all models' } }
-						: { subscribe: { benefit: 'Unlimited queries, all models' } },
+					credits_remaining: usage.creditsRemaining ?? 0,
+					upgrade_options: {
+						...(authResult.tier === 'anonymous'
+							? { login: { benefit: '+25 daily queries, more models' } }
+							: {}),
+						buy_credits: {
+							url: 'https://screenpi.pe/onboarding',
+							benefit: 'Credits extend your daily limit — use anytime',
+						},
+						subscribe: {
+							url: 'https://screenpi.pe/onboarding',
+							benefit: '200 queries/day + 500 credits/mo + encrypted sync',
+							price: '$29/mo',
+						},
+					},
 				})));
 			}
 
-			return await handleChatCompletions(body, env);
+			// Add credit info header if paid via credits
+			const response = await handleChatCompletions(body, env);
+			if (usage.paidVia === 'credits' && usage.creditsRemaining !== undefined) {
+				const newResponse = new Response(response.body, response);
+				newResponse.headers.set('X-Credits-Remaining', String(usage.creditsRemaining));
+				newResponse.headers.set('X-Paid-Via', 'credits');
+				return newResponse;
+			}
+			return response;
 		}
 
 		// Web search endpoint - uses Gemini's Google Search grounding
@@ -96,12 +119,13 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 			const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId, ipAddress);
 			if (!usage.allowed) {
 				return addCorsHeaders(createErrorResponse(429, JSON.stringify({
-					error: 'daily_limit_exceeded',
+					error: (usage.creditsRemaining ?? 0) <= 0 ? 'credits_exhausted' : 'daily_limit_exceeded',
 					message: `You've used all ${usage.limit} free queries for today. Resets at ${usage.resetsAt}`,
 					used_today: usage.used,
 					limit_today: usage.limit,
 					resets_at: usage.resetsAt,
 					tier: authResult.tier,
+					credits_remaining: usage.creditsRemaining ?? 0,
 				})));
 			}
 			return await handleWebSearch(request, env);
@@ -173,12 +197,13 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 			const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId, ipAddress);
 			if (!usage.allowed) {
 				return addCorsHeaders(createErrorResponse(429, JSON.stringify({
-					error: 'daily_limit_exceeded',
+					error: (usage.creditsRemaining ?? 0) <= 0 ? 'credits_exhausted' : 'daily_limit_exceeded',
 					message: `You've used all ${usage.limit} AI queries for today. Resets at ${usage.resetsAt}`,
 					used_today: usage.used,
 					limit_today: usage.limit,
 					resets_at: usage.resetsAt,
 					tier: authResult.tier,
+					credits_remaining: usage.creditsRemaining ?? 0,
 				})));
 			}
 
@@ -204,12 +229,13 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 			const usage = await trackUsage(env, authResult.deviceId, authResult.tier, authResult.userId, ipAddress);
 			if (!usage.allowed) {
 				return addCorsHeaders(createErrorResponse(429, JSON.stringify({
-					error: 'daily_limit_exceeded',
+					error: (usage.creditsRemaining ?? 0) <= 0 ? 'credits_exhausted' : 'daily_limit_exceeded',
 					message: `You've used all ${usage.limit} AI queries for today. Resets at ${usage.resetsAt}`,
 					used_today: usage.used,
 					limit_today: usage.limit,
 					resets_at: usage.resetsAt,
 					tier: authResult.tier,
+					credits_remaining: usage.creditsRemaining ?? 0,
 				})));
 			}
 

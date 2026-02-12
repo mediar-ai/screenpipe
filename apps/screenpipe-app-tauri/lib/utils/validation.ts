@@ -31,6 +31,7 @@ export const userSchema = z.object({
   website: z.string().url("Invalid website URL").nullable(),
   contact: z.string().nullable(),
   cloud_subscribed: z.boolean().nullable(),
+  credits_balance: z.number().nullable(),
 });
 
 export const aiProviderTypeSchema = z.enum(["openai", "native-ollama", "custom", "pi"]);

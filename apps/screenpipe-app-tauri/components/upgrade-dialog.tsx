@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { Sparkles, Zap, Clock, Star } from "lucide-react";
+import { Sparkles, Zap, Clock, Star, Coins } from "lucide-react";
 
 interface UpgradeDialogProps {
   open: boolean;
@@ -27,6 +27,7 @@ export function UpgradeDialog({
 }: UpgradeDialogProps) {
   const { settings } = useSettings();
   const isLoggedIn = !!settings.user?.token;
+  const creditsBalance = settings.user?.credits_balance ?? 0;
 
   const handleSubscribe = async (isAnnual: boolean) => {
     const baseUrl = isAnnual
@@ -113,9 +114,34 @@ export function UpgradeDialog({
           >
             <Zap className="h-5 w-5 shrink-0" />
             <div className="text-left flex-1 min-w-0">
-              <div className="font-medium">$99/mo</div>
+              <div className="font-medium">$29/mo — screenpipe pro</div>
               <div className="text-xs text-muted-foreground">
-                unlimited queries, all models, cloud sync, priority support
+                200 queries/day + 500 credits/mo + encrypted sync + all models
+              </div>
+            </div>
+          </Button>
+
+          {/* Buy Credits */}
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 h-auto py-3"
+            onClick={async () => {
+              await openUrl("https://screenpi.pe/onboarding");
+              onOpenChange(false);
+            }}
+          >
+            <Coins className="h-5 w-5 shrink-0" />
+            <div className="text-left flex-1 min-w-0">
+              <div className="font-medium">
+                buy credits
+                {creditsBalance > 0 && (
+                  <span className="text-xs font-normal text-muted-foreground ml-2">
+                    ({creditsBalance} remaining)
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                credits extend your daily limit — use anytime after free quota
               </div>
             </div>
           </Button>

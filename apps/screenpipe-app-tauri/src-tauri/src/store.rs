@@ -313,6 +313,7 @@ pub struct User {
     pub website: Option<String>,
     pub contact: Option<String>,
     pub cloud_subscribed: Option<bool>,
+    pub credits_balance: Option<i32>,
 }
 
 impl Default for User {
@@ -333,6 +334,7 @@ impl Default for User {
             website: None,
             contact: None,
             cloud_subscribed: None,
+            credits_balance: None,
         }
     }
 }
@@ -492,6 +494,7 @@ impl Default for SettingsStore {
                 website: None,
                 contact: None,
                 cloud_subscribed: None,
+                credits_balance: None,
             },
             #[cfg(target_os = "windows")]
             show_screenpipe_shortcut: "Alt+S".to_string(),
