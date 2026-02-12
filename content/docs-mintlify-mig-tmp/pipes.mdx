@@ -4,6 +4,47 @@ description: "scheduled AI agents that run on your screen data"
 icon: "wand-magic-sparkles"
 ---
 
+## quick start — paste this into claude code
+
+copy this prompt into [claude code](https://docs.anthropic.com/en/docs/claude-code), [cursor](https://cursor.com), or any AI coding assistant:
+
+<CodeGroup>
+```text create a pipe
+create a screenpipe pipe that [DESCRIBE WHAT YOU WANT].
+
+a screenpipe pipe is a single markdown file at ~/.screenpipe/pipes/{name}/pipe.md
+
+the file must start with YAML frontmatter:
+---
+name: my-pipe
+schedule: every 30m
+lookback: 30m
+enabled: true
+---
+
+then the prompt body tells the AI agent what to do each run.
+the agent can query screen data via: curl "http://localhost:3030/search?limit=20&start_time={{start_time}}&end_time={{end_time}}"
+it can also write files, call external APIs, etc.
+
+available template variables: {{start_time}}, {{end_time}}, {{date}}, {{timezone}}, {{timezone_offset}}
+
+store secrets in .env file next to pipe.md (never in the prompt itself).
+
+after creating the file, install it:
+curl -X POST http://localhost:3030/pipes/install -H "Content-Type: application/json" -d '{"source": "~/.screenpipe/pipes/my-pipe"}'
+
+then enable it:
+curl -X POST http://localhost:3030/pipes/my-pipe/enable -H "Content-Type: application/json" -d '{"enabled": true}'
+
+or test it once:
+curl -X POST http://localhost:3030/pipes/my-pipe/run
+```
+</CodeGroup>
+
+replace `[DESCRIBE WHAT YOU WANT]` with your use case — e.g. "tracks my time in toggl based on what apps I'm using", "writes daily summaries to obsidian", "sends me a slack message if I've been on twitter for more than 30 minutes".
+
+---
+
 ## what are pipes?
 
 pipes are automated workflows that run on your screenpipe data at regular intervals. each pipe is a markdown file with a prompt and a schedule. under the hood, screenpipe runs a coding agent (like [pi](https://github.com/mariozechner/pi-coding-agent)) that can query your screen data, call APIs, write files, and take actions.
