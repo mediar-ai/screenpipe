@@ -60,6 +60,10 @@ export function DeeplinkHandler() {
           if (url.includes("onboarding")) {
             try {
               await commands.showWindow("Onboarding");
+              // Forward specific deep link events so onboarding components can react
+              if (url.includes("onboarding-read-complete")) {
+                await emit("deep-link-received", url);
+              }
             } catch (error) {
               console.error("Failed to show onboarding window:", error);
             }
