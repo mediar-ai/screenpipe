@@ -276,7 +276,7 @@ export function PipesSection() {
                   if (error.type === "daily_limit") {
                     return (
                       <div className="mt-2 flex items-center gap-2 text-xs">
-                        <span className="text-orange-500">
+                        <span className="text-muted-foreground">
                           {error.message}
                           {error.resets_at && (
                             <> · resets {new Date(error.resets_at).toLocaleTimeString()}</>
@@ -295,11 +295,11 @@ export function PipesSection() {
                   }
                   if (error.type === "rate_limit") {
                     return (
-                      <p className="mt-2 text-xs text-yellow-500">{error.message}</p>
+                      <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
                     );
                   }
                   return (
-                    <p className="mt-2 text-xs text-red-500 truncate max-w-full">
+                    <p className="mt-2 text-xs text-muted-foreground truncate max-w-full">
                       {error.message}
                     </p>
                   );

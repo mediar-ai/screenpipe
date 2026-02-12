@@ -113,7 +113,7 @@ export function UpgradeDialog({
           >
             <Zap className="h-5 w-5 shrink-0" />
             <div className="text-left flex-1 min-w-0">
-              <div className="font-medium">$29/mo</div>
+              <div className="font-medium">$99/mo</div>
               <div className="text-xs text-muted-foreground">
                 unlimited queries, all models, cloud sync, priority support
               </div>
