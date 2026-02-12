@@ -12,11 +12,11 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Sparkles, Zap, Clock, Star, Coins, Loader2 } from "lucide-react";
 
-const CREDIT_PACKS = [
+const CREDIT_PACKS: Array<{ id: string; credits: number; price: string; label: string; popular?: boolean }> = [
   { id: "100", credits: 100, price: "$10", label: "100 credits" },
   { id: "500", credits: 500, price: "$40", label: "500 credits", popular: true },
   { id: "1000", credits: 1000, price: "$70", label: "1000 credits" },
-] as const;
+];
 
 interface UpgradeDialogProps {
   open: boolean;
