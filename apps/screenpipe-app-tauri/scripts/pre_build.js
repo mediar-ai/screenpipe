@@ -358,7 +358,7 @@ if (process.env.GITHUB_ENV) {
 
 
 // Near the end of the script, call these functions
-// Bun binary bundling removed — pipe manager system removed
+await copyBunBinary();
 
 // --dev or --build
 const action = process.argv?.[2]
