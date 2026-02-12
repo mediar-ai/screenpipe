@@ -195,14 +195,14 @@ export function AccountSection() {
       </div>
 
       {/* Credits card — show for any logged-in user */}
-      {settings.user?.token && creditsBalance != null && (
+      {settings.user?.token && (
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Coins className="h-5 w-5" />
               <div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold font-mono">{creditsBalance}</span>
+                  <span className="text-2xl font-bold font-mono">{creditsBalance ?? 0}</span>
                   <span className="text-sm text-muted-foreground">credits</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">

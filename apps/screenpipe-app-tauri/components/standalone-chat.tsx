@@ -161,14 +161,46 @@ const TOOL_ICONS: Record<string, string> = {
 // Grid dissolve loading indicator — 5x4 grid of cells that randomly toggle
 // black/white like pixels being scanned. Geometric, screen-capture themed.
 function GridDissolveLoader({ label = "analyzing..." }: { label?: string }) {
+  const ROWS = 4;
+  const COLS = 5;
+  const TOTAL = ROWS * COLS;
+  const [cells, setCells] = useState<boolean[]>(() =>
+    Array.from({ length: TOTAL }, () => Math.random() > 0.5)
+  );
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setCells((prev) => {
+        const next = [...prev];
+        const count = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < count; i++) {
+          const idx = Math.floor(Math.random() * TOTAL);
+          next[idx] = !next[idx];
+        }
+        return next;
+      });
+    }, 120);
+    return () => window.clearInterval(id);
+  }, []);
+
   return (
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1">
-        {[0, 1, 2].map((i) => (
-          <span
+      <div
+        className="grid shrink-0"
+        style={{
+          gridTemplateColumns: `repeat(${COLS}, 8px)`,
+          gridTemplateRows: `repeat(${ROWS}, 8px)`,
+          gap: "2px",
+        }}
+      >
+        {cells.map((on, i) => (
+          <div
             key={i}
-            className="block h-1.5 w-1.5 rounded-full bg-current opacity-40 animate-pulse"
-            style={{ animationDelay: `${i * 200}ms`, animationDuration: "1s" }}
+            className={cn(
+              "border transition-colors duration-[120ms]",
+              on ? "bg-foreground border-foreground" : "bg-transparent border-border"
+            )}
+            style={{ width: 8, height: 8 }}
           />
         ))}
       </div>

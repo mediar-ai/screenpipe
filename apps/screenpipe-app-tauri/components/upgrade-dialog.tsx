@@ -87,10 +87,10 @@ export function UpgradeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[360px] p-4 gap-3 max-h-[calc(100vh-2rem)] overflow-y-auto">
-        <DialogHeader className="space-y-1">
-          <DialogTitle className="flex items-center gap-1.5 text-sm">
-            <Sparkles className="h-3.5 w-3.5 shrink-0" />
+      <DialogContent className="max-w-[420px] p-6 gap-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
+        <DialogHeader className="space-y-1.5">
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <Sparkles className="h-4 w-4 shrink-0" />
             <span>
               {reason === "daily_limit"
                 ? "you've used all your free queries today"
@@ -108,11 +108,11 @@ export function UpgradeDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-1.5">
+        <div className="space-y-2.5">
           {!showPacks ? (
             <>
               <Button
-                className="w-full justify-start gap-2 h-auto py-2.5 text-xs"
+                className="w-full justify-start gap-2.5 h-auto py-3 text-xs"
                 onClick={() => {
                   if (!isLoggedIn) {
                     handleLogin();
@@ -121,7 +121,7 @@ export function UpgradeDialog({
                   setShowPacks(true);
                 }}
               >
-                <Coins className="h-3.5 w-3.5 shrink-0" />
+                <Coins className="h-4 w-4 shrink-0" />
                 <div className="text-left flex-1 min-w-0">
                   <div className="font-medium">
                     buy credits
@@ -131,7 +131,7 @@ export function UpgradeDialog({
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] opacity-80">
+                  <div className="text-[11px] opacity-80 mt-0.5">
                     from $10 — use anytime after free daily quota
                   </div>
                 </div>
@@ -139,13 +139,13 @@ export function UpgradeDialog({
 
               <Button
                 variant="outline"
-                className="w-full justify-start gap-2 h-auto py-2 text-xs"
+                className="w-full justify-start gap-2.5 h-auto py-2.5 text-xs"
                 onClick={() => handleSubscribe(false)}
               >
-                <Zap className="h-3.5 w-3.5 shrink-0" />
+                <Zap className="h-4 w-4 shrink-0" />
                 <div className="text-left flex-1 min-w-0">
                   <div className="font-medium">screenpipe pro — $29/mo</div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
                     200 queries/day + 500 credits/mo + all models
                   </div>
                 </div>
@@ -153,18 +153,18 @@ export function UpgradeDialog({
 
               <Button
                 variant="outline"
-                className="w-full justify-start gap-2 h-auto py-2 text-xs"
+                className="w-full justify-start gap-2.5 h-auto py-2.5 text-xs"
                 onClick={() => handleSubscribe(true)}
               >
-                <Star className="h-3.5 w-3.5 shrink-0" />
+                <Star className="h-4 w-4 shrink-0" />
                 <div className="text-left flex-1 min-w-0">
                   <div className="font-medium flex items-center gap-1.5">
                     $228/year
-                    <Badge variant="secondary" className="text-[9px] px-1 py-0">
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                       save 34%
                     </Badge>
                   </div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
                     everything in pro, billed annually
                   </div>
                 </div>
@@ -173,13 +173,13 @@ export function UpgradeDialog({
               {!isLoggedIn && (
                 <Button
                   variant="outline"
-                  className="w-full justify-start gap-2 h-auto py-2 text-xs"
+                  className="w-full justify-start gap-2.5 h-auto py-2.5 text-xs"
                   onClick={handleLogin}
                 >
-                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <Sparkles className="h-4 w-4 shrink-0" />
                   <div className="text-left flex-1 min-w-0">
                     <div className="font-medium">sign in for more</div>
-                    <div className="text-[10px] text-muted-foreground">
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
                       get 50 queries/day + access to sonnet
                     </div>
                   </div>
@@ -188,13 +188,13 @@ export function UpgradeDialog({
 
               <Button
                 variant="ghost"
-                className="w-full justify-start gap-2 h-auto py-2 text-xs"
+                className="w-full justify-start gap-2.5 h-auto py-2.5 text-xs"
                 onClick={() => onOpenChange(false)}
               >
-                <Clock className="h-3.5 w-3.5 shrink-0" />
+                <Clock className="h-4 w-4 shrink-0" />
                 <div className="text-left flex-1 min-w-0">
                   <div className="font-medium">wait until tomorrow</div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
                     free queries reset at midnight UTC
                   </div>
                 </div>
@@ -209,19 +209,19 @@ export function UpgradeDialog({
                 <Button
                   key={pack.id}
                   variant={pack.popular ? "default" : "outline"}
-                  className="w-full justify-between h-auto py-2 text-xs"
+                  className="w-full justify-between h-auto py-2.5 text-xs"
                   disabled={buyingPack !== null}
                   onClick={() => handleBuyCredits(pack.id)}
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     {buyingPack === pack.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Coins className="h-3.5 w-3.5" />
+                      <Coins className="h-4 w-4" />
                     )}
                     <span>{pack.label}</span>
                     {pack.popular && (
-                      <Badge variant="secondary" className="text-[9px] px-1 py-0">
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                         popular
                       </Badge>
                     )}
