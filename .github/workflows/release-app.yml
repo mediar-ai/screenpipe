@@ -819,8 +819,9 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          # Use aws CLI with --no-verify-ssl to work around self-hosted runner SSL issues
-          aws() { command aws --no-verify-ssl "$@" 2>&1 | grep -v InsecureRequestWarning || true; }
+          # --no-verify-ssl works around self-hosted runner's broken OpenSSL
+          export AWS_CA_BUNDLE=""
+          SSL_FLAG="--no-verify-ssl"
 
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           TARGET="${{ matrix.target }}"
@@ -830,14 +831,14 @@ jobs:
           echo "uploading ${TARGET} bundles for v${VERSION} to R2..."
           echo "aws cli: $(aws --version)"
 
-          # Upload DMG (quote paths — filenames may contain spaces)
-          find "${BUNDLE_DIR}/dmg" -name "*.dmg" -type f | while IFS= read -r f; do
-            aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename "$f")"
+          # Upload DMG
+          for f in "${BUNDLE_DIR}"/dmg/*.dmg; do
+            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" $SSL_FLAG && echo "  ✅ $(basename "$f")"
           done
 
           # Upload updater artifacts (.tar.gz + .sig)
-          find "${BUNDLE_DIR}/macos" \( -name "*.tar.gz" -o -name "*.sig" \) -type f | while IFS= read -r f; do
-            aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename "$f")"
+          for f in "${BUNDLE_DIR}"/macos/*.tar.gz "${BUNDLE_DIR}"/macos/*.sig; do
+            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" $SSL_FLAG && echo "  ✅ $(basename "$f")"
           done
 
           echo "R2 upload complete for ${TARGET}"
@@ -973,7 +974,7 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          aws() { command aws --no-verify-ssl "$@" 2>&1 | grep -v InsecureRequestWarning || true; }
+          SSL_FLAG="--no-verify-ssl"
           VERSION=$(grep '^version = ' apps/screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
           TARGET="${{ matrix.target }}"
           BUNDLE_DIR="apps/screenpipe-app-tauri/src-tauri/target/${TARGET}/release/bundle"
@@ -981,12 +982,12 @@ jobs:
 
           echo "uploading beta ${TARGET} bundles for v${VERSION} to R2..."
 
-          for f in ${BUNDLE_DIR}/dmg/*.dmg; do
-            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename $f)" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename $f)"
+          for f in "${BUNDLE_DIR}"/dmg/*.dmg; do
+            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" $SSL_FLAG && echo "  ✅ $(basename "$f")"
           done
 
-          for f in ${BUNDLE_DIR}/macos/*.tar.gz ${BUNDLE_DIR}/macos/*.sig; do
-            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename $f)" --endpoint-url "$R2_ENDPOINT" && echo "  ✅ $(basename $f)"
+          for f in "${BUNDLE_DIR}"/macos/*.tar.gz "${BUNDLE_DIR}"/macos/*.sig; do
+            [ -f "$f" ] && aws s3 cp "$f" "${R2_PREFIX}/$(basename "$f")" --endpoint-url "$R2_ENDPOINT" $SSL_FLAG && echo "  ✅ $(basename "$f")"
           done
 
           echo "R2 beta upload complete for ${TARGET}"
