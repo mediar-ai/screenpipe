@@ -353,8 +353,14 @@ impl PipeManager {
         let content = std::fs::read_to_string(&pipe_md)?;
         let (mut config, body) = parse_frontmatter(&content)?;
 
+        let mut new_body = body.clone();
         for (k, v) in &updates {
             match k.as_str() {
+                "prompt_body" => {
+                    if let Some(s) = v.as_str() {
+                        new_body = s.to_string();
+                    }
+                }
                 "schedule" => {
                     if let Some(s) = v.as_str() {
                         config.schedule = s.to_string();
@@ -391,13 +397,14 @@ impl PipeManager {
             }
         }
 
-        let new_content = serialize_pipe(&config, &body)?;
+        let new_content = serialize_pipe(&config, &new_body)?;
         std::fs::write(&pipe_md, new_content)?;
 
         // Update in-memory
         let mut pipes = self.pipes.lock().await;
         if let Some(entry) = pipes.get_mut(name) {
             entry.0 = config;
+            entry.1 = new_body;
         }
 
         Ok(())

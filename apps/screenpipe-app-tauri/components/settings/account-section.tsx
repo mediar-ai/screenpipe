@@ -194,34 +194,6 @@ export function AccountSection() {
         </div>
       </div>
 
-      {/* Credits card — show for any logged-in user */}
-      {settings.user?.token && (
-        <Card className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Coins className="h-5 w-5" />
-              <div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold font-mono">{creditsBalance ?? 0}</span>
-                  <span className="text-sm text-muted-foreground">credits</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  each credit = 1 AI query after your free daily limit
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowUpgrade(true)}
-            >
-              <Coins className="w-3.5 h-3.5 mr-1.5" />
-              buy credits
-            </Button>
-          </div>
-        </Card>
-      )}
-
       {/* Subscribed view */}
       {settings.user?.cloud_subscribed ? (
         <Card className="p-5">
@@ -253,8 +225,24 @@ export function AccountSection() {
               <span>✓</span> cloud transcription — higher quality
             </div>
             <div className="flex items-center gap-2">
+              <span>✓</span> 500 credits/mo for pipes & AI
+            </div>
+            <div className="flex items-center gap-2">
               <span>✓</span> priority support
             </div>
+          </div>
+          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border/50">
+            <Coins className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-mono font-medium">{creditsBalance ?? 0}</span>
+            <span className="text-sm text-muted-foreground">credits remaining</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs ml-auto"
+              onClick={() => setShowUpgrade(true)}
+            >
+              buy more
+            </Button>
           </div>
         </Card>
       ) : !settings.user?.token ? (
@@ -314,6 +302,10 @@ export function AccountSection() {
                 <div className="flex items-center gap-2 text-foreground">
                   <Zap className="h-3.5 w-3.5 shrink-0" />
                   cloud transcription — higher quality, saves 2-3GB RAM
+                </div>
+                <div className="flex items-center gap-2 text-foreground">
+                  <Coins className="h-3.5 w-3.5 shrink-0" />
+                  500 credits/mo for pipes & AI
                 </div>
                 <div className="flex items-center gap-2 text-foreground">
                   <Sparkles className="h-3.5 w-3.5 shrink-0" />
@@ -378,6 +370,10 @@ export function AccountSection() {
                   cloud transcription — higher quality, saves 2-3GB RAM
                 </div>
                 <div className="flex items-center gap-2 text-foreground">
+                  <Coins className="h-3.5 w-3.5 shrink-0" />
+                  500 credits/mo for pipes & AI
+                </div>
+                <div className="flex items-center gap-2 text-foreground">
                   <Sparkles className="h-3.5 w-3.5 shrink-0" />
                   priority support
                 </div>
@@ -391,6 +387,20 @@ export function AccountSection() {
                 upgrade to pro
                 <ExternalLinkIcon className="w-4 h-4 ml-2" />
               </Button>
+
+              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border/50">
+                <Coins className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-mono font-medium">{creditsBalance ?? 0}</span>
+                <span className="text-sm text-muted-foreground">credits remaining</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs ml-auto"
+                  onClick={() => setShowUpgrade(true)}
+                >
+                  buy more
+                </Button>
+              </div>
             </Card>
           </div>
 

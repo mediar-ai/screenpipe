@@ -10,7 +10,6 @@ config:
   vault_path: ""
   notes_path: screenpipe/logs
   sync_hours: 8
-  custom_prompt: ""
 ---
 
 You are syncing screenpipe activity data to an Obsidian vault.

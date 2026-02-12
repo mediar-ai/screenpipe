@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Loader2,
   ExternalLink,
+  Check,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -98,6 +99,9 @@ export function PipesSection() {
   const [loading, setLoading] = useState(true);
   const [runningPipe, setRunningPipe] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [configDrafts, setConfigDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [promptDrafts, setPromptDrafts] = useState<Record<string, string>>({});
+  const [savingConfig, setSavingConfig] = useState<string | null>(null);
   const { settings } = useSettings();
 
   const fetchPipes = useCallback(async () => {
@@ -168,6 +172,67 @@ export function PipesSection() {
     } else {
       setExpanded(name);
       fetchLogs(name);
+    }
+  };
+
+  const getConfigDraft = (pipeName: string, key: string, original: unknown): string => {
+    return configDrafts[pipeName]?.[key] ?? String(original ?? "");
+  };
+
+  const setConfigDraft = (pipeName: string, key: string, value: string) => {
+    setConfigDrafts((prev) => ({
+      ...prev,
+      [pipeName]: { ...prev[pipeName], [key]: value },
+    }));
+  };
+
+  const hasConfigChanges = (pipe: PipeStatus): boolean => {
+    const drafts = configDrafts[pipe.config.name];
+    const hasFieldChanges = drafts && Object.entries(drafts).some(
+      ([k, v]) => v !== String(pipe.config.config[k] ?? "")
+    );
+    const promptDraft = promptDrafts[pipe.config.name];
+    const hasPromptChange = promptDraft !== undefined && promptDraft !== pipe.prompt_body;
+    return hasFieldChanges || hasPromptChange;
+  };
+
+  const saveConfig = async (pipeName: string, config: Record<string, unknown>, promptBody: string) => {
+    setSavingConfig(pipeName);
+    try {
+      const payload: Record<string, unknown> = {};
+      // config field changes
+      const drafts = configDrafts[pipeName];
+      if (drafts) {
+        for (const [k, v] of Object.entries(drafts)) {
+          const original = config[k];
+          const strOriginal = String(original ?? "");
+          if (v === strOriginal) continue;
+          if (typeof original === "number") {
+            const n = Number(v);
+            payload[k] = !isNaN(n) ? n : v;
+          } else if (typeof original === "boolean") {
+            payload[k] = v === "true";
+          } else {
+            payload[k] = v;
+          }
+        }
+      }
+      // prompt body change
+      const promptDraft = promptDrafts[pipeName];
+      if (promptDraft !== undefined && promptDraft !== promptBody) {
+        payload["prompt_body"] = promptDraft;
+      }
+      if (Object.keys(payload).length === 0) return;
+      await fetch(`http://localhost:3030/pipes/${pipeName}/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setConfigDrafts((prev) => { const next = { ...prev }; delete next[pipeName]; return next; });
+      setPromptDrafts((prev) => { const next = { ...prev }; delete next[pipeName]; return next; });
+      fetchPipes();
+    } finally {
+      setSavingConfig(null);
     }
   };
 
@@ -373,14 +438,52 @@ export function PipesSection() {
                       run <code>pi /login</code> in terminal to authenticate.
                     </p>
 
+                    {/* Editable config fields */}
+                    {Object.keys(pipe.config.config).length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-xs">config</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(pipe.config.config).map(([key, value]) => (
+                            <div key={key}>
+                              <Label className="text-[11px] text-muted-foreground">
+                                {key.replace(/_/g, " ")}
+                              </Label>
+                              <Input
+                                value={getConfigDraft(pipe.config.name, key, value)}
+                                onChange={(e) => setConfigDraft(pipe.config.name, key, e.target.value)}
+                                placeholder={String(value ?? "")}
+                                className="h-8 text-xs font-mono"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <Label className="text-xs">prompt</Label>
                       <Textarea
-                        value={pipe.prompt_body}
-                        readOnly
+                        value={promptDrafts[pipe.config.name] ?? pipe.prompt_body}
+                        onChange={(e) => setPromptDrafts((prev) => ({ ...prev, [pipe.config.name]: e.target.value }))}
                         className="text-xs font-mono h-32"
                       />
                     </div>
+
+                    {hasConfigChanges(pipe) && (
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={savingConfig === pipe.config.name}
+                        onClick={() => saveConfig(pipe.config.name, pipe.config.config, pipe.prompt_body)}
+                      >
+                        {savingConfig === pipe.config.name ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        ) : (
+                          <Check className="h-3 w-3 mr-1" />
+                        )}
+                        save
+                      </Button>
+                    )}
 
                     {/* Logs */}
                     <div>
