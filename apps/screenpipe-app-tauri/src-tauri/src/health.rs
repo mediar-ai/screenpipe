@@ -300,9 +300,9 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
 
                     match tauri::image::Image::from_path(&icon_path) {
                         Ok(image) => {
-                            let _ = main_tray
-                                .set_icon(Some(image))
-                                .and_then(|_| main_tray.set_icon_as_template(true));
+                            if let Err(e) = crate::safe_icon::safe_set_icon_as_template(&main_tray, image) {
+                                error!("failed to set tray icon: {}", e);
+                            }
                         }
                         Err(e) => {
                             error!("failed to load tray icon from {:?}: {}", icon_path, e);

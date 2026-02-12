@@ -940,13 +940,7 @@ export function StandaloneChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Auto-set Pi project dir (all providers route through Pi now)
-  useEffect(() => {
-    if (!piProjectDir) {
-      const home = process.env.HOME || process.env.USERPROFILE || "/tmp";
-      setPiProjectDir(`${home}/.screenpipe/pi-chat`);
-    }
-  }, [piProjectDir]);
+  // Pi project dir is managed Rust-side at boot
 
   // Build Pi provider config from active preset
   const buildProviderConfig = useCallback(() => {
@@ -959,46 +953,67 @@ export function StandaloneChat() {
     };
   }, [activePreset?.provider, activePreset?.url, activePreset?.model, activePreset?.apiKey]);
 
-  // Start Pi when needed — all providers route through Pi now
-  // Pi is installed at app startup by Rust background thread
+  // Check Pi status on mount — Pi is auto-started at app boot by Rust
   useEffect(() => {
-    const shouldStart = !needsLogin && piProjectDir && !piStarting && !piInfo?.running && activePreset;
+    const checkPi = async () => {
+      try {
+        const result = await commands.piInfo();
+        if (result.status === "ok") {
+          setPiInfo(result.data);
+        }
+      } catch (e) {
+        console.warn("[Pi] Failed to check status:", e);
+      }
+    };
+    checkPi();
+    // Poll until Pi is running
+    const interval = setInterval(async () => {
+      const result = await commands.piInfo();
+      if (result.status === "ok") {
+        setPiInfo(result.data);
+        if (result.data.running) clearInterval(interval);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
-    if (!shouldStart) return;
+  // Track previous preset to detect changes
+  const prevPresetRef = useRef<{ provider?: string; model?: string }>({});
+
+  // Restart Pi when user switches preset (different provider/model)
+  useEffect(() => {
+    if (!activePreset) return;
+    const prev = prevPresetRef.current;
+    const changed = prev.provider && (prev.provider !== activePreset.provider || prev.model !== activePreset.model);
+    prevPresetRef.current = { provider: activePreset.provider, model: activePreset.model };
+
+    if (!changed) return;
     if (piStartInFlightRef.current) return;
-    if (piRestartCountRef.current >= 3) {
-      console.warn("[Pi] Too many restart attempts, giving up");
-      return;
-    }
 
-    const startPi = async () => {
+    const restartPi = async () => {
       piStartInFlightRef.current = true;
-      piStoppedIntentionallyRef.current = false;
       setPiStarting(true);
       const providerConfig = buildProviderConfig();
-      console.log("[Pi] Starting with dir:", piProjectDir, "provider:", providerConfig?.provider, "model:", providerConfig?.model, "attempt:", piRestartCountRef.current + 1);
+      const home = process.env.HOME || process.env.USERPROFILE || "/tmp";
+      const dir = `${home}/.screenpipe/pi-chat`;
+      console.log("[Pi] Restarting with new preset:", providerConfig?.provider, providerConfig?.model);
       try {
-        const result = await commands.piStart(piProjectDir, settings.user?.token ?? null, providerConfig);
-        console.log("[Pi] Start result:", result);
+        const result = await commands.piStart(dir, settings.user?.token ?? null, providerConfig);
         if (result.status === "ok") {
           setPiInfo(result.data);
         } else {
-          piRestartCountRef.current += 1;
-          console.error("[Pi] Start failed:", result.error);
-          if (piRestartCountRef.current >= 3) {
-            toast({ title: "Failed to start Pi", description: result.error, variant: "destructive" });
-          }
+          console.error("[Pi] Restart failed:", result.error);
+          toast({ title: "Failed to restart Pi", description: result.error, variant: "destructive" });
         }
       } catch (e) {
-        piRestartCountRef.current += 1;
-        console.error("[Pi] Start exception:", e);
+        console.error("[Pi] Restart exception:", e);
       } finally {
         piStartInFlightRef.current = false;
         setPiStarting(false);
       }
     };
-    startPi();
-  }, [needsLogin, piProjectDir, piStarting, piInfo?.running, settings.user?.token, activePreset?.provider, activePreset?.model]);
+    restartPi();
+  }, [activePreset?.provider, activePreset?.model, settings.user?.token]);
 
   // Listen for Pi events (all providers route through Pi)
   useEffect(() => {

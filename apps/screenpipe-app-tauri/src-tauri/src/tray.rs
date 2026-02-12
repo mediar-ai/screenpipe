@@ -135,8 +135,12 @@ pub fn recreate_tray(app: &AppHandle) {
             .icon_as_template(true)
             .show_menu_on_left_click(true);
 
-        if let Some(icon) = icon {
-            builder = builder.icon(icon);
+        if let Some(ref icon) = icon {
+            if icon.width() > 0 && icon.height() > 0 {
+                builder = builder.icon(icon.clone());
+            } else {
+                error!("tray icon has zero dimensions ({}x{}), skipping", icon.width(), icon.height());
+            }
         } else {
             error!("failed to load tray icon for recreation");
         }

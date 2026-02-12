@@ -20,7 +20,11 @@ pub fn write_browser_log(level: String, message: String) {
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle) {
     if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
         match tauri::image::Image::from_path("icons/screenpipe-logo-tray-failed.png") {
-            Ok(icon) => { let _ = main_tray.set_icon(Some(icon)); }
+            Ok(icon) => {
+                if let Err(e) = crate::safe_icon::safe_set_icon(&main_tray, icon) {
+                    error!("failed to set tray unhealthy icon: {}", e);
+                }
+            }
             Err(e) => { error!("failed to load tray unhealthy icon: {}", e); }
         }
     }
@@ -31,7 +35,11 @@ pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle) {
 pub fn set_tray_health_icon(app_handle: tauri::AppHandle) {
     if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
         match tauri::image::Image::from_path("icons/screenpipe-logo-tray-black.png") {
-            Ok(icon) => { let _ = main_tray.set_icon(Some(icon)); }
+            Ok(icon) => {
+                if let Err(e) = crate::safe_icon::safe_set_icon(&main_tray, icon) {
+                    error!("failed to set tray healthy icon: {}", e);
+                }
+            }
             Err(e) => { error!("failed to load tray healthy icon: {}", e); }
         }
     }

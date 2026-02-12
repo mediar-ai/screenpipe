@@ -195,7 +195,7 @@ Extensible plugin architecture for building custom automations. Popular plugins 
 - **Meeting assistant**: Automatic meeting notes with action items
 - **Daily journal**: AI-generated daily summaries of your activity
 
-Developers can build and publish plugins using TypeScript/JavaScript.
+Developers can build and publish plugins using TypeScript/JavaScript. Pipes require [bun](https://bun.sh) — bundled automatically in the desktop app, install separately for CLI usage (`curl -fsSL https://bun.sh/install | bash`).
 
 ### MCP server (Model Context Protocol)
 screenpipe runs as an MCP server, allowing AI assistants to query your screen history:

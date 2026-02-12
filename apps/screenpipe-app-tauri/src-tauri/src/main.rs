@@ -90,6 +90,7 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 use sentry;
 mod health;
+mod safe_icon;
 use base64::Engine;
 use health::start_health_check;
 use window_api::RewindWindowId;
@@ -1560,6 +1561,56 @@ async fn main() {
                             }
                             Err(e) => {
                                 warn!("Failed to pre-create chat panel: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Auto-start Pi agent in background with default preset config
+            // All AI providers now route through Pi (OpenAI, Ollama, custom, screenpipe-cloud)
+            if onboarding_store.is_completed && !store.ai_presets.is_empty() {
+                let app_handle_pi_boot = app.handle().clone();
+                let store_for_pi = store.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Wait for Pi to be installed and app to settle
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+                    let default_preset = store_for_pi.ai_presets.iter()
+                        .find(|p| p.default_preset)
+                        .or_else(|| store_for_pi.ai_presets.first());
+
+                    if let Some(preset) = default_preset {
+                        let provider_config = pi::PiProviderConfig {
+                            provider: match preset.provider {
+                                crate::store::AIProviderType::OpenAI => "openai".to_string(),
+                                crate::store::AIProviderType::NativeOllama => "native-ollama".to_string(),
+                                crate::store::AIProviderType::Custom => "custom".to_string(),
+                                crate::store::AIProviderType::ScreenpipeCloud => "screenpipe-cloud".to_string(),
+                                crate::store::AIProviderType::Pi => "screenpipe-cloud".to_string(),
+                            },
+                            url: preset.url.clone(),
+                            model: preset.model.clone(),
+                            api_key: preset.api_key.clone(),
+                        };
+
+                        let project_dir = dirs::home_dir()
+                            .map(|h| h.join(".screenpipe").join("pi-chat").to_string_lossy().to_string())
+                            .unwrap_or_else(|| "/tmp/screenpipe-pi-chat".to_string());
+
+                        let user_token = store_for_pi.user.token.clone();
+
+                        if let Some(pi_state) = app_handle_pi_boot.try_state::<pi::PiState>() {
+                            info!("Auto-starting Pi agent with provider: {}, model: {}", provider_config.provider, provider_config.model);
+                            match pi::pi_start(
+                                app_handle_pi_boot.clone(),
+                                pi_state,
+                                project_dir,
+                                user_token,
+                                Some(provider_config),
+                            ).await {
+                                Ok(info) => info!("Pi auto-started successfully: {:?}", info),
+                                Err(e) => warn!("Pi auto-start failed (non-fatal): {}", e),
                             }
                         }
                     }

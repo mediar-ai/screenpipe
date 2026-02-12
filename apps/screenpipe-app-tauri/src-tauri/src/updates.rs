@@ -487,8 +487,7 @@ impl UpdatesManager {
                     .resolve(icon_path, tauri::path::BaseDirectory::Resource)?;
     
                 if let Ok(image) = tauri::image::Image::from_path(path) {
-                    tray.set_icon(Some(image))?;
-                    tray.set_icon_as_template(true)?;
+                    crate::safe_icon::safe_set_icon_as_template(&tray, image)?;
                 }
             }
 
