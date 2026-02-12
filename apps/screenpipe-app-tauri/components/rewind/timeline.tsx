@@ -188,6 +188,15 @@ export default function Timeline() {
 				debounceTimer = setTimeout(() => {
 					debounceTimer = null;
 					console.log("Window focused, refreshing timeline...");
+
+					// Reset position to latest (index 0 = newest frame)
+					// Window is hidden/shown not destroyed, so old position persists
+					setCurrentIndex(0);
+					setCurrentFrame(frames.length > 0 ? frames[0] : null);
+					isNavigatingRef.current = false;
+					pendingNavigationRef.current = null;
+					setSeekingTimestamp(null);
+
 					onWindowFocus();
 				}, 500);
 			}
@@ -197,7 +206,7 @@ export default function Timeline() {
 			if (debounceTimer) clearTimeout(debounceTimer);
 			unlisten.then((fn) => fn());
 		};
-	}, [onWindowFocus]);
+	}, [onWindowFocus, frames, setCurrentFrame]);
 
 	// Hide timeline when mouse moves to a different screen
 	useEffect(() => {
@@ -705,25 +714,31 @@ export default function Timeline() {
 		}
 
 		let currentDateEffect = new Date(currentDate);
+		const isToday = isSameDay(currentDateEffect, new Date());
 		const checkIfThereAreFrames = async () => {
-			const checkFramesForDate = await hasFramesForDate(currentDateEffect);
-			console.log("checkFramesForDate", currentDateEffect, checkFramesForDate);
-			// Only auto-navigate to previous day if NOT during intentional navigation
-			// (e.g., user clicking day arrows). During navigation, handleDateChange
-			// already handles finding dates with frames.
-			if (!checkFramesForDate && !isNavigatingRef.current) {
-				// Prevent infinite loop: stop walking back after MAX_DATE_RETRIES days
-				if (dateRetryCountRef.current >= MAX_DATE_RETRIES) {
-					console.warn("no frames found after checking", MAX_DATE_RETRIES, "days back, stopping");
-					dateRetryCountRef.current = 0;
-					return;
+			// For today, always fetch — live polling will push new frames.
+			// The 5-minute buffer in hasFramesForDate can falsely return false
+			// when the user just started recording or recently opened the app.
+			if (!isToday) {
+				const checkFramesForDate = await hasFramesForDate(currentDateEffect);
+				console.log("checkFramesForDate", currentDateEffect, checkFramesForDate);
+				// Only auto-navigate to previous day if NOT during intentional navigation
+				// (e.g., user clicking day arrows). During navigation, handleDateChange
+				// already handles finding dates with frames.
+				if (!checkFramesForDate && !isNavigatingRef.current) {
+					// Prevent infinite loop: stop walking back after MAX_DATE_RETRIES days
+					if (dateRetryCountRef.current >= MAX_DATE_RETRIES) {
+						console.warn("no frames found after checking", MAX_DATE_RETRIES, "days back, stopping");
+						dateRetryCountRef.current = 0;
+						return;
+					}
+					dateRetryCountRef.current += 1;
+					setCurrentDate(subDays(currentDateEffect, 1));
+					return; // Don't fetch frames for a date we're leaving
 				}
-				dateRetryCountRef.current += 1;
-				setCurrentDate(subDays(currentDateEffect, 1));
-				return; // Don't fetch frames for a date we're leaving
 			}
 
-			// Found frames — reset retry counter
+			// Found frames (or today) — reset retry counter
 			dateRetryCountRef.current = 0;
 
 			const startTime = new Date(currentDateEffect);

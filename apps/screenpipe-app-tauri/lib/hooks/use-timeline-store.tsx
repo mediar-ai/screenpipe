@@ -590,23 +590,39 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 	},
 
 	onWindowFocus: () => {
-		const { currentDate, websocket, fetchTimeRange, connectWebSocket } = get();
+		const { websocket, fetchTimeRange, connectWebSocket } = get();
 
-		// Clear current date from sentRequests to allow re-fetch
-		const dateKey = `${currentDate.getDate()}-${currentDate.getMonth()}-${currentDate.getFullYear()}`;
+		// Always reset to today when the window is focused.
+		// The window is hidden/shown (not destroyed), so stale dates persist.
+		const today = new Date();
+
+		// Clear sentRequests for today so we re-fetch fresh data
+		const todayKey = `${today.getDate()}-${today.getMonth()}-${today.getFullYear()}`;
+		
+		// Also clear the old date's sentRequests in case it was different
+		const { currentDate: oldDate } = get();
+		const oldDateKey = `${oldDate.getDate()}-${oldDate.getMonth()}-${oldDate.getFullYear()}`;
+
 		set((state) => {
 			const newSentRequests = new Set(state.sentRequests);
-			newSentRequests.delete(dateKey);
-			return { sentRequests: newSentRequests };
+			newSentRequests.delete(todayKey);
+			newSentRequests.delete(oldDateKey);
+			return {
+				sentRequests: newSentRequests,
+				currentDate: today,
+				// Signal that position should reset to latest (index 0)
+				// by clearing pendingNavigation and setting a flag
+				pendingNavigation: null,
+			};
 		});
 
-		console.log("Window focused, cleared sentRequests for:", dateKey);
+		console.log("Window focused, cleared sentRequests for:", todayKey);
 
-		// If WebSocket is open, fetch fresh data
+		// If WebSocket is open, fetch today's data
 		if (websocket && websocket.readyState === WebSocket.OPEN) {
-			const startTime = new Date(currentDate);
+			const startTime = new Date(today);
 			startTime.setHours(0, 0, 0, 0);
-			const endTime = new Date(currentDate);
+			const endTime = new Date(today);
 			endTime.setHours(23, 59, 59, 999);
 			fetchTimeRange(startTime, endTime);
 		} else {

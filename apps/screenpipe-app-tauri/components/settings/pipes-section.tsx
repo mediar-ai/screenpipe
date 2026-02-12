@@ -259,7 +259,7 @@ export function PipesSection() {
                   variant="outline"
                   size="sm"
                   className="h-6 text-[11px] px-2"
-                  onClick={() => openUrl("https://screenpi.pe/onboarding?tab=pricing")}
+                  onClick={() => setShowUpgrade(true)}
                 >
                   get more queries →
                 </Button>

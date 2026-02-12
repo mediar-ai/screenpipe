@@ -8,18 +8,22 @@ import {
   Sparkles,
   Zap,
   Shield,
+  Coins,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Card } from "../ui/card";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { PricingToggle } from "./pricing-toggle";
+import { UpgradeDialog } from "@/components/upgrade-dialog";
 import posthog from "posthog-js";
 
 
 export function AccountSection() {
   const { settings, updateSettings, loadUser } = useSettings();
   const [isAnnual, setIsAnnual] = useState(true);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const creditsBalance = settings.user?.credits_balance;
 
   useEffect(() => {
     if (!settings.user?.email) {
@@ -189,6 +193,34 @@ export function AccountSection() {
           )}
         </div>
       </div>
+
+      {/* Credits card — show for any logged-in user */}
+      {settings.user?.token && creditsBalance != null && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Coins className="h-5 w-5" />
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold font-mono">{creditsBalance}</span>
+                  <span className="text-sm text-muted-foreground">credits</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  each credit = 1 AI query after your free daily limit
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowUpgrade(true)}
+            >
+              <Coins className="w-3.5 h-3.5 mr-1.5" />
+              buy credits
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Subscribed view */}
       {settings.user?.cloud_subscribed ? (
@@ -379,6 +411,12 @@ export function AccountSection() {
           `}</style>
         </>
       )}
+
+      <UpgradeDialog
+        open={showUpgrade}
+        onOpenChange={setShowUpgrade}
+        reason="daily_limit"
+      />
     </div>
   );
 }
