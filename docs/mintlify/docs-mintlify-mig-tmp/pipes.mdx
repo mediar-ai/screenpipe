@@ -12,9 +12,21 @@ copy this prompt into [claude code](https://docs.anthropic.com/en/docs/claude-co
 ```text create a pipe
 create a screenpipe pipe that [DESCRIBE WHAT YOU WANT].
 
-a screenpipe pipe is a single markdown file at ~/.screenpipe/pipes/{name}/pipe.md
+## what is screenpipe?
 
-the file must start with YAML frontmatter:
+screenpipe is a desktop app that continuously records your screen (OCR) and audio (transcription).
+it runs a local API at http://localhost:3030 that lets you query everything you've seen, said, or heard.
+
+## what is a pipe?
+
+a pipe is a scheduled AI agent defined as a single markdown file: ~/.screenpipe/pipes/{name}/pipe.md
+every N minutes, screenpipe runs a coding agent (like pi or claude-code) with the pipe's prompt.
+the agent can query your screen data, write files, call external APIs, send notifications, etc.
+
+## pipe.md format
+
+the file starts with YAML frontmatter, then the prompt body:
+
 ---
 name: my-pipe
 schedule: every 30m
@@ -22,22 +34,69 @@ lookback: 30m
 enabled: true
 ---
 
-then the prompt body tells the AI agent what to do each run.
-the agent can query screen data via: curl "http://localhost:3030/search?limit=20&start_time={{start_time}}&end_time={{end_time}}"
-it can also write files, call external APIs, etc.
+Your prompt instructions here...
 
-available template variables: {{start_time}}, {{end_time}}, {{date}}, {{timezone}}, {{timezone_offset}}
+## screenpipe search API
 
-store secrets in .env file next to pipe.md (never in the prompt itself).
+the agent queries screen data via the local REST API:
 
-after creating the file, install it:
-curl -X POST http://localhost:3030/pipes/install -H "Content-Type: application/json" -d '{"source": "~/.screenpipe/pipes/my-pipe"}'
+curl "http://localhost:3030/search?limit=20&content_type=all&start_time={{start_time}}&end_time={{end_time}}"
 
-then enable it:
-curl -X POST http://localhost:3030/pipes/my-pipe/enable -H "Content-Type: application/json" -d '{"enabled": true}'
+### query parameters
+- q: text search query (optional)
+- content_type: "ocr" | "audio" | "ui" | "all" | "ocr+audio" | "ocr+ui" | "audio+ui"
+- limit: max results (default 20)
+- offset: pagination offset
+- start_time / end_time: ISO 8601 timestamps
+- app_name: filter by app (e.g. "chrome", "cursor")
+- window_name: filter by window title
+- browser_url: filter by URL (e.g. "github.com")
+- min_length / max_length: filter by text length
+- speaker_ids: filter audio by speaker IDs
 
-or test it once:
-curl -X POST http://localhost:3030/pipes/my-pipe/run
+### OCR results (what was on screen)
+each result contains:
+- text: the OCR'd text visible on screen
+- app_name: which app was active (e.g. "Arc", "Cursor", "Slack")
+- window_name: the window title
+- browser_url: the URL if it was a browser
+- timestamp: when it was captured
+- file_path: path to the video frame
+- focused: whether the window was focused
+
+### audio results (what was said/heard)
+each result contains:
+- transcription: the spoken text
+- speaker_id: numeric speaker identifier
+- timestamp: when it was captured
+- device_name: which audio device (mic or system audio)
+- device_type: "input" (microphone) or "output" (system audio)
+
+### UI events (accessibility data, macOS only)
+query via: curl "http://localhost:3030/ui-events?app_name=Slack&limit=50&start_time={{start_time}}&end_time={{end_time}}"
+event types: text (keyboard input), click, app_switch, window_focus, clipboard, scroll
+
+## template variables
+
+these are replaced in the prompt before execution:
+- {{start_time}}: ISO 8601 start (based on lookback)
+- {{end_time}}: ISO 8601 end (current time)
+- {{date}}: current date (YYYY-MM-DD)
+- {{timezone}}: timezone abbreviation (e.g. PST)
+- {{timezone_offset}}: UTC offset (e.g. -08:00)
+
+## secrets
+
+store API keys in a .env file next to pipe.md (never in the prompt itself):
+echo "API_KEY=your_key" > ~/.screenpipe/pipes/my-pipe/.env
+reference in prompt: source .env && curl -H "Authorization: Bearer $API_KEY" ...
+
+## after creating the file
+
+install: bunx screenpipe pipe install ~/.screenpipe/pipes/my-pipe
+enable:  bunx screenpipe pipe enable my-pipe
+test:    bunx screenpipe pipe run my-pipe
+logs:    bunx screenpipe pipe logs my-pipe
 ```
 </CodeGroup>
 
@@ -80,6 +139,13 @@ Summarize my screen activity for the last 30 minutes.
 Query screenpipe at http://localhost:3030/search.
 Write the summary to ./output/{{date}}.md
 EOF
+
+# install and enable
+bunx screenpipe pipe install ~/.screenpipe/pipes/my-pipe
+bunx screenpipe pipe enable my-pipe
+
+# test it
+bunx screenpipe pipe run my-pipe
 ```
 
 ## pipe.md format
@@ -128,24 +194,25 @@ these get replaced in the prompt body before execution:
 
 ```bash
 # list all pipes
-screenpipe pipe list
+bunx screenpipe pipe list
 
 # install a pipe from file, folder, or URL
-screenpipe pipe install ./my-pipe.md
-screenpipe pipe install https://raw.githubusercontent.com/user/repo/main/pipe.md
+bunx screenpipe pipe install ./my-pipe.md
+bunx screenpipe pipe install https://raw.githubusercontent.com/user/repo/main/pipe.md
 
 # enable/disable
-screenpipe pipe enable my-pipe
-screenpipe pipe disable my-pipe
+bunx screenpipe pipe enable my-pipe
+bunx screenpipe pipe disable my-pipe
 
 # run once manually
-screenpipe pipe run my-pipe
+bunx screenpipe pipe run my-pipe
 
 # view run history
-screenpipe pipe logs my-pipe
+bunx screenpipe pipe logs my-pipe
+bunx screenpipe pipe logs my-pipe -f  # follow
 
 # delete
-screenpipe pipe delete my-pipe
+bunx screenpipe pipe delete my-pipe
 ```
 
 ## http api
