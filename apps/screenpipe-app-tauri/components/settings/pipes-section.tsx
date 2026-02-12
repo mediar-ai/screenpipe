@@ -29,11 +29,12 @@ function parsePipeError(stderr: string): {
   limit?: number;
   resets_at?: string;
 } {
-  // stderr format: '429 "{...json...}"\n'
+  // stderr format: '429 "{\"error\":...}"\n' — inner quotes are backslash-escaped
   const jsonMatch = stderr.match(/\d{3}\s+"(.+)"/s);
   if (jsonMatch) {
     try {
-      const parsed = JSON.parse(jsonMatch[1]);
+      const raw = jsonMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      const parsed = JSON.parse(raw);
       if (parsed.error === "daily_limit_exceeded") {
         return {
           type: "daily_limit",
