@@ -651,10 +651,13 @@ impl PipeManager {
 
     /// Copy built-in pipe templates into pipes_dir if they don't exist.
     pub fn install_builtin_pipes(&self) -> Result<()> {
-        let builtins = vec![
+        let mut builtins = vec![
             ("obsidian-sync", include_str!("../../assets/pipes/obsidian-sync/pipe.md")),
-            ("reminders", include_str!("../../assets/pipes/reminders/pipe.md")),
         ];
+
+        // reminders pipe uses Apple Reminders via osascript — macOS only
+        #[cfg(target_os = "macos")]
+        builtins.push(("reminders", include_str!("../../assets/pipes/reminders/pipe.md")));
 
         for (name, content) in builtins {
             let dir = self.pipes_dir.join(name);
