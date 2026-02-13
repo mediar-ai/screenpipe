@@ -251,6 +251,29 @@ async unregisterWindowShortcuts() : Promise<Result<null, string>> {
 }
 },
 /**
+ * Copy a frame image to the system clipboard (native API, works in Tauri webview).
+ * Fetches the frame from the local server and uses arboard for clipboard access.
+ */
+async copyFrameToClipboard(frameId: bigint) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("copy_frame_to_clipboard", { frameId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Copy a frame deeplink (screenpipe://frame/N) to clipboard. Native API only.
+ */
+async copyDeeplinkToClipboard(frameId: bigint) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("copy_deeplink_to_clipboard", { frameId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Install a specific older version from R2. Downloads and installs via Tauri updater,
  * then restarts the app.
  */

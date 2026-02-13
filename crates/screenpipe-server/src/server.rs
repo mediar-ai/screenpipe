@@ -23,7 +23,7 @@ use crate::{
             add_tags, add_to_database, execute_raw_sql, merge_frames_handler, remove_tags,
             validate_media_handler,
         },
-        frames::{get_frame_data, get_frame_ocr_data, get_next_valid_frame},
+        frames::{get_frame_data, get_frame_metadata, get_frame_ocr_data, get_next_valid_frame},
         health::{
             api_list_monitors, api_vision_status, audio_metrics_handler, health_check,
             vision_metrics_handler,
@@ -366,6 +366,7 @@ impl SCServer {
             .delete("/tags/:content_type/:id", remove_tags)
             .get("/frames/:frame_id", get_frame_data)
             .get("/frames/:frame_id/ocr", get_frame_ocr_data)
+            .get("/frames/:frame_id/metadata", get_frame_metadata)
             .get("/frames/next-valid", get_next_valid_frame)
             .get("/health", health_check)
             .post("/raw_sql", execute_raw_sql)

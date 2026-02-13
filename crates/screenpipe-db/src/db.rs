@@ -1647,6 +1647,20 @@ impl DatabaseManager {
         .await
     }
 
+    /// Get timestamp for a frame. Used for deep link navigation (screenpipe://frame/123).
+    pub async fn get_frame_timestamp(
+        &self,
+        frame_id: i64,
+    ) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
+        Ok(sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
+            "SELECT timestamp FROM frames WHERE id = ?1",
+        )
+        .bind(frame_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten())
+    }
+
     /// Get frames after a given frame_id for validation checking
     /// Returns frame_id, file_path, offset_index, and timestamp
     /// Direction: true = forward (newer frames), false = backward (older frames)
