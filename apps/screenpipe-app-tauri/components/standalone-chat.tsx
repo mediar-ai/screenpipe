@@ -1019,7 +1019,7 @@ export function StandaloneChat() {
   // All providers now route through Pi — isPi is always true when we have a preset
   const isPi = true;
   const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
-  const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
+  const needsLogin = (activePreset?.provider === "screenpipe-cloud" || activePreset?.provider === "pi") && !settings.user?.token;
   const piReady = piInfo?.running ?? false;
   const canChat = hasPresets && hasValidModel && !needsLogin && piReady;
 
@@ -1933,36 +1933,29 @@ export function StandaloneChat() {
         >
         {messages.length === 0 && disabledReason && (
           <div className="relative flex flex-col items-center justify-center py-12 space-y-4">
-            <div className={cn(
-              "relative p-6 rounded-2xl border",
-              needsLogin
-                ? "bg-muted/50 border-border/50"
-                : (piStarting || !piReady)
-                  ? "bg-muted/50 border-border/50"
-                  : "bg-destructive/5 border-destructive/20"
-            )}>
+            <div className="relative p-6 rounded-2xl border bg-muted/50 border-border/50">
               {needsLogin || (piStarting || !piReady) ? (
                 <PipeAIIconLarge size={48} thinking={piStarting || !piReady} className="text-muted-foreground" />
               ) : (
-                <Settings className="h-12 w-12 text-destructive/70" />
+                <Settings className="h-12 w-12 text-muted-foreground" />
               )}
             </div>
             <div className="text-center space-y-2">
               <h3 className="font-semibold tracking-tight">
-                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : needsLogin ? "Login Required" : (piStarting || !piReady) ? "Setting up Pi..." : "Setup Required"}
+                {!hasPresets ? "No AI Presets" : !hasValidModel ? "No Model Selected" : needsLogin ? "Login to continue" : (piStarting || !piReady) ? "Setting up Pi..." : "Setup Required"}
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
-                {disabledReason}
+                {needsLogin ? "Sign in to use the AI assistant" : disabledReason}
               </p>
             </div>
             {needsLogin && (
               <Button
                 variant="default"
+                size="lg"
                 onClick={() => openUrl("https://screenpi.pe/login")}
-                className="gap-2 font-medium bg-foreground text-background hover:bg-background hover:text-foreground transition-colors duration-150"
+                className="gap-2 font-medium bg-foreground text-background hover:bg-foreground/90 transition-colors duration-150 px-8"
               >
-                <ExternalLink className="h-4 w-4" />
-                Login
+                Sign in
               </Button>
             )}
             {!hasPresets && (
@@ -2265,7 +2258,7 @@ export function StandaloneChat() {
                 disabled={isLoading || !canChat}
                 className={cn(
                   "flex-1 bg-background/50 border-border/50 focus:border-foreground/30 focus:ring-foreground/10 transition-colors",
-                  disabledReason && "border-destructive/50",
+                  disabledReason && "border-muted-foreground/30",
                   pastedImage && "pr-14" // Make room for image preview
                 )}
               />
@@ -2348,7 +2341,7 @@ export function StandaloneChat() {
               className={cn(
                 "shrink-0 transition-all duration-200",
                 isStreaming
-                  ? "bg-destructive hover:bg-destructive/90"
+                  ? "bg-foreground text-background hover:bg-foreground/80"
                   : "bg-foreground text-background hover:bg-background hover:text-foreground"
               )}
             >

@@ -5,13 +5,15 @@ import { useToast } from "@/components/ui/use-toast";
 import OnboardingSetup from "@/components/onboarding/status";
 import ReadContent from "@/components/onboarding/read-content";
 import ShortcutGate from "@/components/onboarding/shortcut-gate";
+import OnboardingLogin from "@/components/onboarding/login-gate";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import posthog from "posthog-js";
 import { commands } from "@/lib/utils/tauri";
 
-type SlideKey = "setup" | "read" | "shortcut";
+type SlideKey = "login" | "setup" | "read" | "shortcut";
 
 const SLIDE_WINDOW_SIZES: Record<SlideKey, { width: number; height: number }> = {
+  login: { width: 500, height: 480 },
   setup: { width: 500, height: 560 },
   read: { width: 500, height: 520 },
   shortcut: { width: 520, height: 480 },
@@ -28,7 +30,7 @@ const setWindowSizeForSlide = async (slide: SlideKey) => {
 
 export default function OnboardingPage() {
   const { toast } = useToast();
-  const [currentSlide, setCurrentSlide] = useState<SlideKey>("setup");
+  const [currentSlide, setCurrentSlide] = useState<SlideKey>("login");
   const [isVisible, setIsVisible] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const { onboardingData, isLoading } = useOnboarding();
@@ -44,13 +46,13 @@ export default function OnboardingPage() {
         const step = onboardingData.currentStep as string;
         // Map any old step names to new ones
         const stepMap: Record<string, SlideKey> = {
+          login: "login",
           setup: "setup",
           read: "read",
           shortcut: "shortcut",
           // backwards compat with old onboarding
-          welcome: "setup",
-          login: "setup",
-          intro: "setup",
+          welcome: "login",
+          intro: "login",
           usecases: "setup",
           status: "setup",
         };
@@ -89,7 +91,7 @@ export default function OnboardingPage() {
     setIsTransitioning(true);
 
     posthog.capture(`onboarding_${currentSlide}_completed`);
-    const stepOrder: SlideKey[] = ["setup", "read", "shortcut"];
+    const stepOrder: SlideKey[] = ["login", "setup", "read", "shortcut"];
     const currentIdx = stepOrder.indexOf(currentSlide);
     posthog.capture("onboarding_step_reached", {
       step_name: `${currentSlide}_completed`,
@@ -131,6 +133,9 @@ export default function OnboardingPage() {
             isVisible ? "opacity-100" : "opacity-0"
           }`}
         >
+          {currentSlide === "login" && (
+            <OnboardingLogin handleNextSlide={handleNextSlide} />
+          )}
           {currentSlide === "setup" && (
             <OnboardingSetup
               className=""
