@@ -91,8 +91,6 @@ libpulse-simple-binding = { version = "2.28", optional = true }
 ort = { version = "=2.0.0-rc.6", features = [
   "download-binaries",
   "copy-dylibs",
-  "directml",
-  "cuda",
 ] }
 esaxx-rs = "0.1.10"
 samplerate = { version = "0.2.4" }
