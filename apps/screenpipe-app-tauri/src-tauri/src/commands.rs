@@ -875,3 +875,42 @@ pub async fn perform_ocr_on_image(
     Ok(text)
 }
 
+/// Copy a frame image to the system clipboard (native API, works in Tauri webview).
+/// Fetches the frame from the local server and uses arboard for clipboard access.
+#[tauri::command]
+#[specta::specta]
+pub async fn copy_frame_to_clipboard(frame_id: i64) -> Result<(), String> {
+    let url = format!("http://127.0.0.1:3030/frames/{}", frame_id);
+    let bytes = reqwest::get(&url)
+        .await
+        .map_err(|e| format!("failed to fetch frame: {}", e))?
+        .bytes()
+        .await
+        .map_err(|e| format!("failed to read frame: {}", e))?;
+
+    let img = image::load_from_memory(&bytes).map_err(|e| format!("failed to decode image: {}", e))?;
+    let rgba = img.to_rgba8();
+
+    let mut clipboard = arboard::Clipboard::new().map_err(|e| format!("clipboard error: {}", e))?;
+    clipboard
+        .set_image(arboard::ImageData {
+            width: rgba.width() as usize,
+            height: rgba.height() as usize,
+            bytes: std::borrow::Cow::from(rgba.into_raw()),
+        })
+        .map_err(|e| format!("failed to set clipboard: {}", e))?;
+
+    Ok(())
+}
+
+/// Copy a frame deeplink (screenpipe://frame/N) to clipboard. Native API only.
+#[tauri::command]
+#[specta::specta]
+pub async fn copy_deeplink_to_clipboard(frame_id: i64) -> Result<(), String> {
+    let link = format!("screenpipe://frame/{}", frame_id);
+    let mut clipboard = arboard::Clipboard::new().map_err(|e| format!("clipboard error: {}", e))?;
+    clipboard
+        .set_text(link)
+        .map_err(|e| format!("failed to set clipboard: {}", e))?;
+    Ok(())
+}

@@ -106,9 +106,19 @@ export function DeeplinkHandler() {
             }
           }
 
-          // Handle frame deep links: screenpipe://frame/12345
-          if (parsedUrl.pathname?.startsWith("/frame/") || parsedUrl.host === "frame") {
-            const frameId = url.split("frame/")[1]?.replace(/^\//, "");
+          // Handle frame deep links: screenpipe://frame/12345 or screenpipe://frames/12345
+          if (
+            parsedUrl.pathname?.startsWith("/frame/") ||
+            parsedUrl.pathname?.startsWith("/frames/") ||
+            parsedUrl.host === "frame" ||
+            parsedUrl.host === "frames"
+          ) {
+            // Extract frame ID: screenpipe://frame/23 → "23", screenpipe://frame/23?foo=1 → "23"
+            const pathAfterFrame =
+              parsedUrl.host === "frame" || parsedUrl.host === "frames"
+                ? parsedUrl.pathname?.replace(/^\//, "")
+                : parsedUrl.pathname?.replace(/^\/frames?\/?/, "");
+            const frameId = pathAfterFrame?.split("/")[0]?.split("?")[0]?.trim();
             if (frameId) {
               try {
                 // Store frame navigation — timeline will resolve frame → timestamp
@@ -168,7 +178,7 @@ export function DeeplinkHandler() {
         unsubscribes.forEach((unsubscribe) => unsubscribe());
       });
     };
-  }, [toast, setShowChangelogDialog, openStatusDialog, loadUser, reloadStore]);
+  }, [toast, setShowChangelogDialog, openStatusDialog, loadUser, reloadStore, setPendingNavigation]);
 
   return null; // This component doesn't render anything
 } 

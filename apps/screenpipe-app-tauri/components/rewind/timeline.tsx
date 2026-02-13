@@ -7,6 +7,7 @@ import { Loader2, RotateCcw, AlertCircle, X, Sparkles } from "lucide-react";
 import { SearchModal } from "@/components/rewind/search-modal";
 import { commands } from "@/lib/utils/tauri";
 import { listen, emit } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { AudioTranscript } from "@/components/rewind/timeline/audio-transcript";
 import { TimelineProvider, useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
@@ -20,8 +21,10 @@ import { useMeetings } from "@/lib/hooks/use-meetings";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { hasFramesForDate } from "@/lib/actions/has-frames-date";
 import { CurrentFrameTimeline } from "@/components/rewind/current-frame-timeline";
+import { usePlatform } from "@/lib/hooks/use-platform";
 
 import posthog from "posthog-js";
+import { toast } from "@/components/ui/use-toast";
 import { DailySummaryCard } from "@/components/rewind/daily-summary";
 
 export interface StreamTimeSeriesResponse {
@@ -73,6 +76,7 @@ const easeOutCubic = (x: number): number => {
 
 
 export default function Timeline() {
+	const { isMac } = usePlatform();
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [showAudioTranscript, setShowAudioTranscript] = useState(true);
 	const [showSearchModal, setShowSearchModal] = useState(false);
@@ -293,52 +297,80 @@ export default function Timeline() {
 
 	// Listen for navigate-to-frame events (deep link: screenpipe://frame/12345)
 	useEffect(() => {
+		const fetchFrameMetadata = async (id: string, retries = 3): Promise<{ timestamp?: string } | null> => {
+			for (let i = 0; i < retries; i++) {
+				try {
+					const resp = await fetch(`http://localhost:3030/frames/${id}/metadata`);
+					if (resp.ok) {
+						const data = await resp.json();
+						return data;
+					}
+					if (resp.status === 404) return null;
+				} catch {
+					// Server may not be ready yet (cold start from deep link)
+				}
+				if (i < retries - 1) await new Promise((r) => setTimeout(r, 800));
+			}
+			return null;
+		};
+
 		const unlisten = listen<string>("navigate-to-frame", async (event) => {
-			const frameId = event.payload;
-			console.log("Navigating to frame:", frameId);
+			const raw = String(event.payload).trim();
+			console.log("Navigating to frame:", raw);
+			if (!raw) return;
+
+			// Validate frame ID: must be a positive integer
+			const parsed = parseInt(raw, 10);
+			if (Number.isNaN(parsed) || parsed < 1) {
+				setPendingNavigation(null);
+				toast({
+					title: "invalid frame ID",
+					description: `"${raw}" is not a valid frame ID. expected a positive integer.`,
+					variant: "destructive",
+				});
+				return;
+			}
+			const frameId = String(parsed);
+
 			try {
-				const resp = await fetch(`http://localhost:3030/frames/${frameId}/ocr`);
-				if (resp.ok) {
-					const data = await resp.json();
-					if (data.timestamp) {
-						setPendingNavigation(null);
-						await navigateToTimestamp(data.timestamp);
-						return;
-					}
+				const data = await fetchFrameMetadata(frameId);
+				if (data?.timestamp) {
+					setPendingNavigation(null);
+					await navigateToTimestamp(data.timestamp);
+					toast({ title: "jumped to frame", description: `opened frame ${frameId}` });
+					return;
 				}
-				// Fallback: try to get frame metadata
-				const metaResp = await fetch(`http://localhost:3030/frames/${frameId}`);
-				if (metaResp.ok) {
-					// Frame endpoint returns image, but we got a 200 — frame exists
-					// Use search to find timestamp by frame_id
-					const searchResp = await fetch(`http://localhost:3030/search?frame_id=${frameId}&limit=1`);
-					if (searchResp.ok) {
-						const searchData = await searchResp.json();
-						if (searchData.data?.[0]?.content?.timestamp) {
-							setPendingNavigation(null);
-							await navigateToTimestamp(searchData.data[0].content.timestamp);
-							return;
-						}
-					}
-				}
-				console.warn("Could not resolve frame", frameId, "to timestamp");
+				setPendingNavigation(null);
+				toast({
+					title: "frame not found",
+					description: `could not navigate to frame ${frameId} — it may not exist or server is not ready`,
+					variant: "destructive",
+				});
 			} catch (error) {
 				console.error("Failed to navigate to frame:", error);
+				setPendingNavigation(null);
+				toast({
+					title: "navigation failed",
+					description: error instanceof Error ? error.message : "could not resolve frame to timestamp",
+					variant: "destructive",
+				});
 			}
 		});
 
 		return () => {
 			unlisten.then((fn) => fn());
 		};
-	}, [navigateToTimestamp, setPendingNavigation]);
+	}, [navigateToTimestamp, setPendingNavigation, toast]);
 
 	// Consume pending navigation from zustand store on mount (survives page navigation)
+	// e.g. app opened from cold start via screenpipe://frame/23 — Timeline mounts late
 	useEffect(() => {
 		if (!pendingNavigation) return;
 
 		const consume = async () => {
 			if (pendingNavigation.frameId) {
-				// Frame navigation — emit event so the listener above resolves it
+				// Frame navigation — emit so listener fetches metadata and navigates
+				// Longer delay for frame: API + websocket may still be initializing
 				await emit("navigate-to-frame", pendingNavigation.frameId);
 			} else if (pendingNavigation.timestamp) {
 				setPendingNavigation(null);
@@ -346,8 +378,8 @@ export default function Timeline() {
 			}
 		};
 
-		// Small delay to ensure frames are loading
-		const timer = setTimeout(consume, 500);
+		const delay = pendingNavigation.frameId ? 1500 : 500;
+		const timer = setTimeout(consume, delay);
 		return () => clearTimeout(timer);
 	}, [pendingNavigation, navigateToTimestamp, setPendingNavigation]);
 
@@ -609,6 +641,48 @@ export default function Timeline() {
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [showSearchModal]);
+
+	// Cmd+Shift+C / Ctrl+Shift+C — copy current frame image
+	useEffect(() => {
+		const handleCopyFrame = (e: KeyboardEvent) => {
+			if (showSearchModal) return;
+
+			const target = e.target as HTMLElement;
+			if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable) {
+				return;
+			}
+
+			const isCopyFrame = isMac
+				? e.metaKey && e.shiftKey && e.key.toLowerCase() === "c"
+				: e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "c";
+			if (!isCopyFrame) return;
+
+			const frameId = currentFrame?.devices?.[0]?.frame_id;
+			if (!frameId) return;
+
+			e.preventDefault();
+			invoke("copy_frame_to_clipboard", {
+				frameId: parseInt(String(frameId), 10),
+			})
+				.then(() =>
+					toast({
+						title: "copied image",
+						description: "frame copied to clipboard",
+					}),
+				)
+				.catch((err) => {
+					console.warn("Copy frame failed:", err);
+					toast({
+						title: "copy failed",
+						description: err instanceof Error ? err.message : "could not copy",
+						variant: "destructive",
+					});
+				});
+		};
+
+		window.addEventListener("keydown", handleCopyFrame);
+		return () => window.removeEventListener("keydown", handleCopyFrame);
+	}, [currentFrame, isMac, showSearchModal]);
 
 	// Handle Escape: close search modal if open, otherwise close the window
 	useEffect(() => {

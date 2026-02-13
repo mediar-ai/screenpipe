@@ -346,6 +346,44 @@ pub async fn get_next_valid_frame(
     ))
 }
 
+/// Response type for frame metadata (used by deep link navigation)
+#[derive(OaSchema, Serialize)]
+pub struct FrameMetadataResponse {
+    pub frame_id: i64,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Get frame metadata (timestamp) for deep link navigation. screenpipe://frame/123 → resolve to timestamp.
+#[oasgen]
+pub async fn get_frame_metadata(
+    State(state): State<Arc<AppState>>,
+    Path(frame_id): Path<i64>,
+) -> Result<JsonResponse<FrameMetadataResponse>, (StatusCode, JsonResponse<Value>)> {
+    match state.db.get_frame_timestamp(frame_id).await {
+        Ok(Some(timestamp)) => Ok(JsonResponse(FrameMetadataResponse {
+            frame_id,
+            timestamp,
+        })),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({
+                "error": "Frame not found",
+                "frame_id": frame_id
+            })),
+        )),
+        Err(e) => {
+            error!("Failed to get frame metadata for {}: {}", frame_id, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Database error: {}", e),
+                    "frame_id": frame_id
+                })),
+            ))
+        }
+    }
+}
+
 /// Response type for frame OCR data endpoint
 #[derive(OaSchema, Serialize)]
 pub struct FrameOcrResponse {
