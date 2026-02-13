@@ -291,7 +291,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({ handleNextSlide }) =>
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.5 }}
         >
-          24/7 memory for your desktop
+          ai finally knows what you're doing
         </motion.p>
 
         {isLoggedIn ? (
@@ -344,7 +344,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({ handleNextSlide }) =>
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 1.0 }}
             >
-              free access to claude haiku ai assistant
+              free access to claude haiku &amp; cloud transcription
             </motion.p>
           </>
         )}
