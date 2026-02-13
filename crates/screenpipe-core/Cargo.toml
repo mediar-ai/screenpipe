@@ -76,6 +76,9 @@ cloud-sync = [
     "dep:hex",
 ]
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 # accessibility-sys = "0.1.3"
 accessibility-sys = { git = "https://github.com/eiz/accessibility.git", branch = "master" }

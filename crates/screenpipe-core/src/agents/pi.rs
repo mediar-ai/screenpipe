@@ -11,7 +11,7 @@ use super::{AgentExecutor, AgentOutput, ExecutionHandle};
 use anyhow::{anyhow, Result};
 use serde_json::json;
 use std::path::{Path, PathBuf};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 const PI_PACKAGE: &str = "@mariozechner/pi-coding-agent";
 const SCREENPIPE_API_URL: &str = "https://api.screenpi.pe/v1";
@@ -153,6 +153,7 @@ impl AgentExecutor for PiExecutor {
         model: &str,
         working_dir: &Path,
         provider: Option<&str>,
+        pid_tx: Option<tokio::sync::oneshot::Sender<u32>>,
     ) -> Result<AgentOutput> {
         Self::ensure_pi_config(self.user_token.as_deref(), &self.api_url)?;
         Self::ensure_screenpipe_skill(working_dir)?;
@@ -164,9 +165,6 @@ impl AgentExecutor for PiExecutor {
         // Provider resolution:
         // 1. Explicit provider from pipe frontmatter → use it
         // 2. No provider specified → screenpipe cloud (default)
-        // Users who want their own provider must set it explicitly in pipe.md.
-        // This ensures screenpipe cloud is the default even if the user has
-        // a different defaultProvider in ~/.pi/agent/settings.json for interactive use.
         let resolved_provider = provider.unwrap_or("screenpipe").to_string();
 
         info!(
@@ -187,6 +185,16 @@ impl AgentExecutor for PiExecutor {
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
+        // Use process groups on Unix so we can kill the entire tree
+        #[cfg(unix)]
+        unsafe {
+            cmd.pre_exec(|| {
+                // Create a new process group (setsid)
+                libc::setsid();
+                Ok(())
+            });
+        }
+
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -196,6 +204,13 @@ impl AgentExecutor for PiExecutor {
 
         let child = cmd.spawn()?;
         let pid = child.id();
+
+        // Report PID immediately so the caller can track/kill the process
+        if let Some(tx) = pid_tx {
+            if let Some(p) = pid {
+                let _ = tx.send(p);
+            }
+        }
 
         let output = child.wait_with_output().await?;
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -210,7 +225,7 @@ impl AgentExecutor for PiExecutor {
     }
 
     fn kill(&self, handle: &ExecutionHandle) -> Result<()> {
-        kill_process(handle.pid)
+        kill_process_group(handle.pid)
     }
 
     fn is_available(&self) -> bool {
@@ -384,19 +399,34 @@ fn build_async_command(path: &str) -> tokio::process::Command {
     }
 }
 
-fn kill_process(pid: u32) -> Result<()> {
+/// Kill a process group (SIGTERM → 5s → SIGKILL).
+/// On Unix, kills the entire process group so child processes are also terminated.
+pub fn kill_process_group(pid: u32) -> Result<()> {
     #[cfg(unix)]
     {
-        let _ = std::process::Command::new("kill")
-            .args(["-TERM", &pid.to_string()])
-            .output();
+        let pgid = pid as i32;
+        // Send SIGTERM to the process group
+        unsafe {
+            libc::kill(-pgid, libc::SIGTERM);
+        }
+        // Spawn a background task to escalate to SIGKILL after 5s
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            unsafe {
+                // Check if process still exists before sending SIGKILL
+                if libc::kill(-pgid, 0) == 0 {
+                    warn!("process group {} did not exit after SIGTERM, sending SIGKILL", pgid);
+                    libc::kill(-pgid, libc::SIGKILL);
+                }
+            }
+        });
     }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         let _ = std::process::Command::new("taskkill")
-            .args(["/F", "/PID", &pid.to_string()])
+            .args(["/F", "/T", "/PID", &pid.to_string()])
             .creation_flags(CREATE_NO_WINDOW)
             .output();
     }

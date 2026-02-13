@@ -475,6 +475,14 @@ impl SCServer {
                     "/:id/config",
                     axum::routing::post(crate::pipes_api::update_pipe_config),
                 )
+                .route(
+                    "/:id/stop",
+                    axum::routing::post(crate::pipes_api::stop_pipe),
+                )
+                .route(
+                    "/:id/executions",
+                    axum::routing::get(crate::pipes_api::get_pipe_executions),
+                )
                 .with_state(pm.clone());
             router.nest("/pipes", pipe_routes)
         } else {

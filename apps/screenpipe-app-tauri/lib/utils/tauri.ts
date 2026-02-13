@@ -139,6 +139,19 @@ async showWindow(window: ShowRewindWindow) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Re-assert the WKWebView as first responder for the current key panel.
+ * Called from JS on pointer enter / window focus to ensure trackpad pinch
+ * gestures (magnifyWithEvent:) reach the WKWebView for zoom handling.
+ */
+async ensureWebviewFocus() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("ensure_webview_focus") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async closeWindow(window: ShowRewindWindow) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("close_window", { window }) };

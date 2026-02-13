@@ -622,8 +622,15 @@ pub async fn start_embedded_server(
     > = std::collections::HashMap::new();
     agent_executors.insert("pi".to_string(), pi_executor.clone());
 
+    // Create pipe store backed by the main SQLite DB
+    let pipe_store: Option<std::sync::Arc<dyn screenpipe_core::pipes::PipeStore>> = Some(
+        std::sync::Arc::new(screenpipe_server::pipe_store::SqlitePipeStore::new(
+            db.pool.clone(),
+        )),
+    );
+
     let mut pipe_manager =
-        screenpipe_core::pipes::PipeManager::new(pipes_dir, agent_executors);
+        screenpipe_core::pipes::PipeManager::new(pipes_dir, agent_executors, pipe_store, config.port);
     pipe_manager.set_on_run_complete(std::sync::Arc::new(|pipe_name, success, duration_secs| {
         analytics::capture_event_nonblocking("pipe_scheduled_run", serde_json::json!({
             "pipe": pipe_name,
@@ -635,6 +642,7 @@ pub async fn start_embedded_server(
     if let Err(e) = pipe_manager.load_pipes().await {
         tracing::warn!("failed to load pipes: {}", e);
     }
+    pipe_manager.startup_recovery().await;
     if let Err(e) = pipe_manager.start_scheduler().await {
         tracing::warn!("failed to start pipe scheduler: {}", e);
     }

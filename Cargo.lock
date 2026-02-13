@@ -6401,6 +6401,7 @@ dependencies = [
  "hf-hub",
  "hmac",
  "lazy_static",
+ "libc",
  "log",
  "objc",
  "objc-foundation",

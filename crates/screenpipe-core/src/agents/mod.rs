@@ -39,12 +39,15 @@ pub trait AgentExecutor: Send + Sync {
     /// Execute `prompt` using `model` with the given `working_dir` as cwd.
     /// `provider` overrides the default provider (e.g. `"anthropic"`, `"openai"`).
     /// If `None`, uses screenpipe cloud as default.
+    /// `pid_tx` receives the OS PID immediately after the subprocess spawns,
+    /// enabling the caller to track/kill the process before `run()` returns.
     async fn run(
         &self,
         prompt: &str,
         model: &str,
         working_dir: &Path,
         provider: Option<&str>,
+        pid_tx: Option<tokio::sync::oneshot::Sender<u32>>,
     ) -> Result<AgentOutput>;
 
     /// Kill a running agent process.

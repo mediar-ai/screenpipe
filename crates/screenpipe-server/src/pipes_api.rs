@@ -6,7 +6,7 @@
 //!
 //! All routes expect [`AppState`] to contain a `pipe_manager` field.
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use screenpipe_core::pipes::PipeManager;
@@ -37,6 +37,11 @@ pub struct InstallRequest {
 pub struct ConfigUpdateRequest {
     #[serde(flatten)]
     pub config: HashMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+pub struct ExecutionsQuery {
+    pub limit: Option<i32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +89,19 @@ pub async fn run_pipe_now(
     }
 }
 
-/// GET /pipes/:id/logs — recent run logs.
+/// POST /pipes/:id/stop — stop a running pipe.
+pub async fn stop_pipe(
+    State(pm): State<SharedPipeManager>,
+    Path(id): Path<String>,
+) -> Json<Value> {
+    let mgr = pm.lock().await;
+    match mgr.stop_pipe(&id).await {
+        Ok(()) => Json(json!({ "success": true })),
+        Err(e) => Json(json!({ "error": e.to_string() })),
+    }
+}
+
+/// GET /pipes/:id/logs — recent run logs (in-memory).
 pub async fn get_pipe_logs(
     State(pm): State<SharedPipeManager>,
     Path(id): Path<String>,
@@ -92,6 +109,20 @@ pub async fn get_pipe_logs(
     let mgr = pm.lock().await;
     let logs = mgr.get_logs(&id).await;
     Json(json!({ "data": logs }))
+}
+
+/// GET /pipes/:id/executions — execution history from DB.
+pub async fn get_pipe_executions(
+    State(pm): State<SharedPipeManager>,
+    Path(id): Path<String>,
+    Query(query): Query<ExecutionsQuery>,
+) -> Json<Value> {
+    let mgr = pm.lock().await;
+    let limit = query.limit.unwrap_or(20).min(100);
+    match mgr.get_executions(&id, limit).await {
+        Ok(executions) => Json(json!({ "data": executions })),
+        Err(e) => Json(json!({ "error": e.to_string() })),
+    }
 }
 
 /// POST /pipes/:id/config — update pipe config fields.

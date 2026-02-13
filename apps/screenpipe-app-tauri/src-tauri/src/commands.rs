@@ -355,6 +355,30 @@ pub async fn show_window(
     Ok(())
 }
 
+/// Re-assert the WKWebView as first responder for the current key panel.
+/// Called from JS on pointer enter / window focus to ensure trackpad pinch
+/// gestures (magnifyWithEvent:) reach the WKWebView for zoom handling.
+#[tauri::command]
+#[specta::specta]
+pub async fn ensure_webview_focus(app_handle: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::window_api::run_on_main_thread_safe;
+        use tauri_nspanel::ManagerExt;
+
+        let app = app_handle.clone();
+        run_on_main_thread_safe(&app_handle, move || {
+            for label in &["main", "main-window"] {
+                if let Ok(panel) = app.get_webview_panel(label) {
+                    unsafe { crate::window_api::make_webview_first_responder(&panel); }
+                    return;
+                }
+            }
+        });
+    }
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn close_window(

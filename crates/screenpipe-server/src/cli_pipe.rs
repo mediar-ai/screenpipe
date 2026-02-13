@@ -22,7 +22,7 @@ pub async fn handle_pipe_command(command: &PipeCommand) -> anyhow::Result<()> {
     let mut executors: HashMap<String, Arc<dyn AgentExecutor>> = HashMap::new();
     executors.insert("pi".to_string(), pi);
 
-    let manager = PipeManager::new(pipes_dir, executors);
+    let manager = PipeManager::new(pipes_dir, executors, None, 3030);
     manager.load_pipes().await?;
 
     match command {

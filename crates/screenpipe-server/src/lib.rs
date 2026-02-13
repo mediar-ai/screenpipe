@@ -11,6 +11,7 @@ pub mod cli_pipe;
 pub mod cli_status;
 pub mod cloud_search;
 pub mod core;
+pub mod pipe_store;
 pub mod pipes_api;
 pub mod routes;
 
