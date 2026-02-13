@@ -9,73 +9,200 @@ icon: "sitemap"
 
 screenpipe is a Rust application that continuously captures your screen and audio, processes them locally, and stores everything in a SQLite database. it serves a REST API on `localhost:3030` for querying your data.
 
+```mermaid
+graph LR
+    subgraph capture["capture"]
+        S[screen]
+        A[audio]
+        U[UI events]
+    end
+
+    subgraph process["processing"]
+        OCR[OCR]
+        STT[speech-to-text]
+        SID[speaker ID]
+    end
+
+    subgraph store["storage"]
+        DB[(SQLite)]
+        FS[media files]
+    end
+
+    subgraph serve["API · localhost:3030"]
+        REST[REST API]
+        MCP[MCP server]
+        WS[WebSocket]
+    end
+
+    S --> OCR
+    A --> STT
+    A --> SID
+    U --> DB
+
+    OCR --> DB
+    STT --> DB
+    S --> FS
+    A --> FS
+
+    DB --> REST
+    DB --> MCP
+    FS --> WS
+
+    REST --> P[pipes / AI agents]
+    MCP --> AI[Claude · Cursor · etc.]
 ```
-┌─────────────┐     ┌──────────────┐     ┌──────────┐     ┌───────────┐
-│   capture    │ ──▸ │  processing  │ ──▸ │  storage │ ──▸ │    API    │
-│ screen/audio │     │  OCR / STT   │     │  SQLite  │     │ :3030     │
-└─────────────┘     └──────────────┘     └──────────┘     └───────────┘
-                                                                │
-                                                          ┌─────┴─────┐
-                                                          │   pipes   │
-                                                          │ AI agents │
-                                                          └───────────┘
+
+## data flow
+
+```mermaid
+sequenceDiagram
+    participant Screen
+    participant Audio
+    participant OCR/STT
+    participant SQLite
+    participant API
+    participant AI
+
+    loop every frame (1 FPS)
+        Screen->>OCR/STT: frame
+        OCR/STT->>SQLite: extracted text + metadata
+        Screen->>SQLite: MP4 recording
+    end
+
+    loop every 30s chunk
+        Audio->>OCR/STT: audio chunk
+        OCR/STT->>SQLite: transcription + speaker
+        Audio->>SQLite: audio file
+    end
+
+    AI->>API: search query
+    API->>SQLite: SQL lookup
+    SQLite-->>API: results
+    API-->>AI: JSON response
+```
+
+## crates
+
+screenpipe is a Rust workspace with specialized crates:
+
+```mermaid
+graph TD
+    APP[screenpipe-app-tauri<br/><i>desktop app</i>]
+    SERVER[screenpipe-server<br/><i>REST API · routes</i>]
+    DB[screenpipe-db<br/><i>SQLite · types</i>]
+    VISION[screenpipe-vision<br/><i>screen capture · OCR</i>]
+    AUDIO[screenpipe-audio<br/><i>audio capture · STT</i>]
+    CORE[screenpipe-core<br/><i>pipes · config</i>]
+    EVENTS[screenpipe-events<br/><i>event system</i>]
+    A11Y[screenpipe-accessibility<br/><i>UI events · macOS</i>]
+    AI[screenpipe-apple-intelligence<br/><i>Foundation Models</i>]
+    INT[screenpipe-integrations<br/><i>MCP · reminders</i>]
+
+    APP --> SERVER
+    APP --> AI
+    SERVER --> DB
+    SERVER --> VISION
+    SERVER --> AUDIO
+    SERVER --> CORE
+    SERVER --> EVENTS
+    AUDIO --> DB
+    VISION --> DB
+    CORE --> DB
+    A11Y --> DB
+    INT --> SERVER
 ```
 
 ## layers
 
 ### 1. capture
 
-- **screen**: captures frames at configurable FPS (default 1.0, macOS 0.5)
-- **audio**: captures from multiple input/output devices in configurable chunks (default 30s)
-- **UI events**: keyboard, mouse, app switches, clipboard via accessibility APIs (macOS)
+| what | how | crate |
+|------|-----|-------|
+| **screen** | per-monitor frame capture at configurable FPS (default 1.0, macOS 0.5) | `screenpipe-vision` |
+| **audio** | multiple input/output devices in configurable chunks (default 30s) | `screenpipe-audio` |
+| **UI events** | keyboard, mouse, app switches, clipboard via accessibility APIs | `screenpipe-accessibility` |
 
 ### 2. processing
 
-- **OCR**: extracts text from frames — engines: `apple-native`, `windows-native`, `tesseract`, `unstructured`, `custom`
-- **STT**: speech-to-text — engines: `whisper-large-v3-turbo`, `whisper-tiny`, `deepgram`
-- **speaker ID**: identifies and labels different speakers
-- **PII removal**: optional redaction of sensitive text
+| engine | type | platform |
+|--------|------|----------|
+| Apple Vision | OCR | macOS |
+| Windows native | OCR | Windows |
+| Tesseract | OCR | cross-platform fallback |
+| Whisper | speech-to-text | local, all platforms |
+| Deepgram | speech-to-text | cloud API |
+
+additional processing: speaker identification, PII redaction, frame deduplication (skips identical frames).
 
 ### 3. storage
 
-- **SQLite database** at `~/.screenpipe/db.sqlite` — metadata, OCR text, transcriptions, tags
-- **media files** at `~/.screenpipe/data/` — MP4 screen recordings, audio chunks
-- all data stays local on your machine
+all data stays local on your machine:
+
+- **SQLite** at `~/.screenpipe/db.sqlite` — metadata, OCR text, transcriptions, speakers, tags
+- **media** at `~/.screenpipe/data/` — MP4 screen recordings, audio chunks
 
 ### 4. API
 
 REST API on `localhost:3030`:
 
-- `/search` — filtered content retrieval
-- `/frames/{id}` — access captured frames
-- `/health` — system status
-- `/raw_sql` — direct database queries
-- see [CLI reference](/cli-reference) for full endpoint list
+| endpoint | description |
+|----------|-------------|
+| `/search` | filtered content retrieval (OCR, audio, UI events) |
+| `/search/keyword` | keyword search with text positions |
+| `/frames/{id}` | access captured frames |
+| `/health` | system status and metrics |
+| `/raw_sql` | direct database queries |
+| `/ai/chat/completions` | Apple Intelligence (macOS 26+) |
+
+see [CLI reference](/cli-reference) for the full endpoint list.
 
 ### 5. pipes
 
-[pipes](/pipes) are scheduled AI agents (`.md` files) that run on your screen data. an AI agent (like [pi](https://github.com/badlogic/pi-mono)) reads the prompt, queries the screenpipe API, and takes action.
+[pipes](/pipes) are AI agents (`.md` prompt files) that run on your screen data. they're executed by an AI agent that reads the prompt, queries the screenpipe API, and takes action.
 
-pipes run in `~/.screenpipe/pipes/{name}/` and are scheduled via cron-like intervals.
+pipes live in `~/.screenpipe/pipes/{name}/` and run on cron-like schedules.
 
-## data flow
+### 6. desktop app
 
-1. **capture** → screen frames + audio chunks recorded to disk
-2. **process** → OCR extracts text from frames, STT transcribes audio
-3. **store** → processed data indexed in SQLite, media files on disk
-4. **query** → apps/pipes search via REST API on localhost:3030
-5. **act** → pipes use AI to analyze data and take actions (write notes, track time, send reminders)
+the desktop app is built with **Tauri** (Rust backend) + **Next.js** (React frontend):
+
+```mermaid
+graph LR
+    subgraph tauri["Tauri shell"]
+        RS[Rust backend<br/>commands · permissions · tray]
+        WV[WebView]
+    end
+
+    subgraph frontend["Next.js frontend"]
+        PAGES[pages<br/>chat · timeline · settings]
+        STORE[Zustand stores]
+        UI[shadcn/ui components]
+    end
+
+    subgraph backend["screenpipe-server"]
+        API[REST API :3030]
+    end
+
+    RS --> WV
+    WV --> PAGES
+    PAGES --> STORE
+    STORE --> UI
+    PAGES --> API
+```
 
 ## database schema
 
 key tables:
 
-- `frames` — captured screen frame metadata
-- `ocr_results` — text extracted from frames
-- `audio_chunks` — audio recording metadata
-- `transcriptions` — text from audio
-- `speakers` — identified speakers
-- `tags` — user-applied tags on content
+| table | stores |
+|-------|--------|
+| `frames` | captured screen frame metadata |
+| `ocr_results` | text extracted from frames |
+| `audio_chunks` | audio recording metadata |
+| `transcriptions` | text from audio |
+| `speakers` | identified speakers |
+| `ui_events` | keyboard, mouse, clipboard events |
+| `tags` | user-applied tags on content |
 
 inspect directly:
 
@@ -85,15 +212,22 @@ sqlite3 ~/.screenpipe/db.sqlite .schema
 
 ## resource usage
 
-runs 24/7 on a MacBook Pro M3 (32GB) or a $400 Windows laptop:
+runs 24/7 on a MacBook Pro M3 (32 GB) or a $400 Windows laptop:
 
-- ~600 MB RAM
-- ~10% CPU
-- ~30 GB/month storage at 1 FPS
+| metric | typical value |
+|--------|---------------|
+| RAM | ~600 MB |
+| CPU | ~10% |
+| storage | ~30 GB/month at 1 FPS |
 
 ## source code
 
-- [server.rs](https://github.com/screenpipe/screenpipe/blob/main/crates/screenpipe-server/src/server.rs) — API server
-- [core.rs](https://github.com/screenpipe/screenpipe/blob/main/crates/screenpipe-server/src/core.rs) — recording orchestration
-- [vision core.rs](https://github.com/screenpipe/screenpipe/blob/main/crates/screenpipe-vision/src/core.rs) — screen capture
-- [pipes/mod.rs](https://github.com/screenpipe/screenpipe/blob/main/crates/screenpipe-core/src/pipes/mod.rs) — pipe manager
+| component | path |
+|-----------|------|
+| API server | [screenpipe-server/src/](https://github.com/screenpipe/screenpipe/tree/main/crates/screenpipe-server/src) |
+| screen capture | [screenpipe-vision/src/core.rs](https://github.com/screenpipe/screenpipe/blob/main/crates/screenpipe-vision/src/core.rs) |
+| audio capture | [screenpipe-audio/src/](https://github.com/screenpipe/screenpipe/tree/main/crates/screenpipe-audio/src) |
+| database | [screenpipe-db/src/db.rs](https://github.com/screenpipe/screenpipe/blob/main/crates/screenpipe-db/src/db.rs) |
+| pipes | [screenpipe-core/src/pipes/](https://github.com/screenpipe/screenpipe/tree/main/crates/screenpipe-core/src/pipes) |
+| MCP server | [screenpipe-mcp/src/index.ts](https://github.com/screenpipe/screenpipe/blob/main/crates/screenpipe-integrations/screenpipe-mcp/src/index.ts) |
+| desktop app | [screenpipe-app-tauri/](https://github.com/screenpipe/screenpipe/tree/main/apps/screenpipe-app-tauri) |
