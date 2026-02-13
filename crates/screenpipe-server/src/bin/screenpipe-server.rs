@@ -698,6 +698,9 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Create shared pipeline metrics (used by recording + health endpoint + PostHog)
+    let vision_metrics = Arc::new(screenpipe_vision::PipelineMetrics::new());
+
     // Create VisionManager for dynamic monitor detection if enabled
     let vision_manager: Option<Arc<VisionManager>> = if cli.use_all_monitors && !cli.disable_vision
     {
@@ -741,6 +744,7 @@ async fn main() -> anyhow::Result<()> {
             realtime_vision: cli.enable_realtime_audio_transcription,
             activity_feed,
             video_quality: cli.video_quality.clone(),
+            vision_metrics: vision_metrics.clone(),
         };
         Some(Arc::new(VisionManager::new(
             config,
@@ -806,6 +810,8 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(not(feature = "adaptive-fps"))]
         let activity_feed_legacy: screenpipe_vision::ActivityFeedOption = None;
 
+        let vision_metrics_for_recording = vision_metrics.clone();
+
         // Use traditional start_continuous_recording
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -829,6 +835,7 @@ async fn main() -> anyhow::Result<()> {
                     cli.enable_realtime_audio_transcription,
                     activity_feed_legacy,
                     cli.video_quality.clone(),
+                    vision_metrics_for_recording.clone(),
                 );
 
                 let result = tokio::select! {
@@ -863,7 +870,7 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "llm")]
     debug!("LLM initialized");
 
-    let server = SCServer::new(
+    let mut server = SCServer::new(
         db_server,
         SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), cli.port),
         local_data_dir_clone_2,
@@ -873,6 +880,7 @@ async fn main() -> anyhow::Result<()> {
         cli.use_pii_removal,
         video_quality_for_server,
     );
+    server.vision_metrics = vision_metrics;
 
     // Attach sync handle if sync is enabled
     let server = if let Some(ref handle) = sync_service_handle {

@@ -17,12 +17,17 @@ pub mod frame_comparison;
 pub mod microsoft;
 pub mod monitor;
 pub use monitor::MonitorListError;
+pub mod metrics;
 pub mod ocr_cache;
 pub mod tesseract;
 pub mod utils;
 #[cfg(target_os = "macos")]
 pub use apple::perform_ocr_apple;
-pub use core::{continuous_capture, process_ocr_task, CaptureResult, RealtimeVisionEvent};
+pub use core::{
+    continuous_capture, process_ocr_task, CaptureResult, OcrTaskResult, RawCaptureResult,
+    RealtimeVisionEvent,
+};
+pub use metrics::{MetricsSnapshot, PipelineMetrics};
 // pub use types::CaptureResult;
 pub use utils::OcrEngine;
 pub mod capture_screenshot_by_window;

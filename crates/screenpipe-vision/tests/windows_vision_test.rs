@@ -3,7 +3,7 @@
 mod tests {
     use chrono::Utc;
     use screenpipe_vision::capture_screenshot_by_window::{CapturedWindow, WindowFilters};
-    use screenpipe_vision::core::OcrTaskData;
+    use screenpipe_vision::core::RawCaptureResult;
     use screenpipe_vision::monitor::get_default_monitor;
     use screenpipe_vision::ocr_cache::WindowOcrCache;
     use screenpipe_vision::{process_ocr_task, OcrEngine};
@@ -11,7 +11,7 @@ mod tests {
     use std::{path::PathBuf, time::Duration as StdDuration, time::Instant};
     use tokio::sync::{mpsc, Mutex};
 
-    use screenpipe_vision::{continuous_capture, CaptureResult};
+    use screenpipe_vision::{continuous_capture, PipelineMetrics, RawCaptureResult};
     use std::time::Duration;
     use tokio::time::timeout;
 
@@ -25,10 +25,8 @@ mod tests {
         println!("Path to testing_OCR.png: {:?}", path);
         let image = image::open(&path).expect("Failed to open image");
 
-        let image_arc = image.clone();
         let frame_number = 1;
         let timestamp = Instant::now();
-        let (tx, _rx) = mpsc::channel(1);
         let ocr_engine = OcrEngine::WindowsNative;
 
         let window_images = vec![CapturedWindow {
@@ -44,21 +42,22 @@ mod tests {
             window_height: image.height(),
         }];
 
+        let raw = RawCaptureResult {
+            image: image.clone(),
+            window_images,
+            frame_number,
+            timestamp,
+            captured_at: Utc::now(),
+        };
+
         let ocr_cache = Arc::new(Mutex::new(WindowOcrCache::new(
             StdDuration::from_secs(60),
             100,
         )));
         let result = process_ocr_task(
-            OcrTaskData {
-                image: image_arc,
-                window_images,
-                frame_number,
-                timestamp,
-                captured_at: Utc::now(),
-                result_tx: tx,
-            },
+            &raw,
             &ocr_engine,
-            vec![],
+            &[],
             ocr_cache,
         )
         .await;
@@ -71,7 +70,7 @@ mod tests {
     #[ignore] // TODO require UI
     async fn test_continuous_capture() {
         // Create channels for communication
-        let (result_tx, mut result_rx) = mpsc::channel::<CaptureResult>(10);
+        let (result_tx, mut result_rx) = mpsc::channel::<RawCaptureResult>(10);
 
         // Create a mock monitor
         let monitor = get_default_monitor().await.expect("no monitor found").id();
@@ -79,19 +78,18 @@ mod tests {
         // Set up test parameters
         let interval = Duration::from_millis(1000);
         let save_text_files_flag = false;
-        let ocr_engine = OcrEngine::WindowsNative;
         let window_filters = Arc::new(WindowFilters::new(&[], &[], &[]));
 
         // Spawn the continuous_capture function with corrected parameter order
+        let metrics = Arc::new(PipelineMetrics::new());
         let capture_handle = tokio::spawn(continuous_capture(
             result_tx,
             interval,
-            ocr_engine,
             monitor,
             window_filters,
-            vec![], // languages
             save_text_files_flag,
             None, // activity_feed
+            metrics,
         ));
 
         // Wait for a short duration to allow some captures to occur

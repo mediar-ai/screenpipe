@@ -5,7 +5,7 @@ use dashmap::DashMap;
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
 use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
-use screenpipe_vision::OcrEngine;
+use screenpipe_vision::{OcrEngine, PipelineMetrics};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
@@ -31,6 +31,7 @@ pub struct VisionManagerConfig {
     pub realtime_vision: bool,
     pub activity_feed: screenpipe_vision::ActivityFeedOption,
     pub video_quality: String,
+    pub vision_metrics: Arc<PipelineMetrics>,
 }
 
 /// Status of the VisionManager
@@ -168,6 +169,7 @@ impl VisionManager {
         let realtime_vision = self.config.realtime_vision;
         let activity_feed = self.config.activity_feed.clone();
         let video_quality = self.config.video_quality.clone();
+        let vision_metrics = self.config.vision_metrics.clone();
 
         // Spawn the recording task using the existing record_video function
         let handle = self.vision_handle.spawn(async move {
@@ -189,6 +191,7 @@ impl VisionManager {
                     realtime_vision,
                     activity_feed.clone(),
                     video_quality.clone(),
+                    vision_metrics.clone(),
                 )
                 .await
                 {

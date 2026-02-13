@@ -1,7 +1,6 @@
 use crate::capture_screenshot_by_window::{
     capture_all_visible_windows, CapturedWindow, WindowFilters,
 };
-use crate::core::MaxAverageFrame;
 use crate::custom_ocr::CustomOcrConfig;
 use crate::monitor::SafeMonitor;
 use image::DynamicImage;
@@ -152,36 +151,3 @@ pub async fn capture_screenshot(
     Ok((image, window_images, image_hash, capture_duration))
 }
 
-/// Compare current image with previous image using both histogram and SSIM.
-///
-/// **DEPRECATED**: Use `frame_comparison::FrameComparer` instead, which includes
-/// optimizations like hash-based early exit and downscaled comparison.
-///
-/// This function is kept for backwards compatibility but is no longer used
-/// in the main capture loop.
-#[deprecated(
-    since = "0.4.0",
-    note = "Use frame_comparison::FrameComparer for optimized comparison"
-)]
-pub async fn compare_with_previous_image(
-    previous_image: Option<&DynamicImage>,
-    current_image: &DynamicImage,
-    max_average: &mut Option<MaxAverageFrame>,
-    frame_number: u64,
-    max_avg_value: &mut f64,
-) -> anyhow::Result<f64> {
-    let mut current_average = 0.0;
-    if let Some(prev_image) = previous_image {
-        let histogram_diff = compare_images_histogram(prev_image, current_image)?;
-        let ssim_diff = 1.0 - compare_images_ssim(prev_image, current_image);
-        current_average = (histogram_diff + ssim_diff) / 2.0;
-        let max_avg_frame_number = max_average.as_ref().map_or(0, |frame| frame.frame_number);
-        debug!(
-            "Frame {}: Histogram diff: {:.3}, SSIM diff: {:.3}, Current Average: {:.3}, Max_avr: {:.3} Fr: {}",
-            frame_number, histogram_diff, ssim_diff, current_average, *max_avg_value, max_avg_frame_number
-        );
-    } else {
-        debug!("No previous image to compare for frame {}", frame_number);
-    }
-    Ok(current_average)
-}

@@ -6,7 +6,7 @@ use screenpipe_core::Language;
 use screenpipe_db::{DatabaseManager, FrameWindowData, Speaker};
 use screenpipe_events::{poll_meetings_events, send_event};
 use screenpipe_vision::core::WindowOcr;
-use screenpipe_vision::OcrEngine;
+use screenpipe_vision::{OcrEngine, PipelineMetrics};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
@@ -31,6 +31,7 @@ pub async fn start_continuous_recording(
     realtime_vision: bool,
     activity_feed: screenpipe_vision::ActivityFeedOption,
     video_quality: String,
+    vision_metrics: Arc<PipelineMetrics>,
 ) -> Result<()> {
     debug!("Starting video recording for monitors {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -48,6 +49,7 @@ pub async fn start_continuous_recording(
                 #[allow(clippy::clone_on_copy)] // ActivityFeedOption is not Copy when adaptive-fps feature is enabled
                 let activity_feed = activity_feed.clone();
                 let video_quality = video_quality.clone();
+                let vision_metrics = vision_metrics.clone();
 
                 debug!("Starting video recording for monitor {}", monitor_id);
                 vision_handle.spawn(async move {
@@ -70,6 +72,7 @@ pub async fn start_continuous_recording(
                             realtime_vision,
                             activity_feed.clone(),
                             video_quality.clone(),
+                            vision_metrics.clone(),
                         )
                         .await
                         {
@@ -137,6 +140,7 @@ pub async fn record_video(
     realtime_vision: bool,
     activity_feed: screenpipe_vision::ActivityFeedOption,
     video_quality: String,
+    vision_metrics: Arc<PipelineMetrics>,
 ) -> Result<()> {
     debug!("record_video: Starting for monitor {}", monitor_id);
     let device_name = Arc::new(format!("monitor_{}", monitor_id));
@@ -192,6 +196,7 @@ pub async fn record_video(
         capture_unfocused_windows,
         activity_feed,
         video_quality,
+        vision_metrics,
     );
 
     info!(
@@ -258,30 +263,22 @@ pub async fn record_video(
                 time_since_last_frame.as_millis()
             );
 
-            // Check if this frame was actually written to video
-            // If not, skip DB insertion to prevent offset mismatch
+            // Wait for the video encoder to write this frame (up to 5s).
+            // OCR often finishes before video encoding; Notify wakes us immediately
+            // once the frame is recorded instead of blindly sleeping.
             let frame_write_info = video_capture
                 .frame_write_tracker
-                .get_offset(frame.frame_number);
+                .wait_for_offset(frame.frame_number, Duration::from_secs(5))
+                .await;
             let video_frame_offset = match frame_write_info {
                 Some(info) => info.offset as i64,
                 None => {
-                    // Frame wasn't written to video (likely dropped from video queue)
-                    // Wait a bit and retry - the video encoder might not have processed it yet
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                    match video_capture
-                        .frame_write_tracker
-                        .get_offset(frame.frame_number)
-                    {
-                        Some(info) => info.offset as i64,
-                        None => {
-                            debug!(
-                                "Skipping frame {} - not found in video write tracker (was dropped)",
-                                frame.frame_number
-                            );
-                            continue;
-                        }
-                    }
+                    video_capture.metrics.record_drop();
+                    debug!(
+                        "Skipping frame {} - not written to video within 5s timeout",
+                        frame.frame_number
+                    );
+                    continue;
                 }
             };
 
@@ -326,6 +323,7 @@ pub async fn record_video(
             {
                 Ok(results) => {
                     let batch_duration = batch_start.elapsed();
+                    video_capture.metrics.record_db_write(batch_duration);
                     if batch_duration.as_millis() > 200 {
                         warn!(
                             "Slow DB batch insert: {}ms for {} windows",

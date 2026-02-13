@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Monitor, Mic, Keyboard, Check, AlertTriangle, RefreshCw, ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { commands, type OSPermission } from "@/lib/utils/tauri";
@@ -70,25 +70,32 @@ export default function PermissionRecoveryPage() {
     }
   }, []);
 
-  // Initial check and polling
+  // Initial check and polling — stop once restart is triggered
   useEffect(() => {
     checkPermissions();
 
-    // Poll every 500ms while window is open
-    const interval = setInterval(checkPermissions, 500);
+    const interval = setInterval(() => {
+      if (restartTriggeredRef.current) return;
+      checkPermissions();
+    }, 500);
     return () => clearInterval(interval);
   }, [checkPermissions]);
+
+  // Guard: only restart once when permissions are fixed
+  const restartTriggeredRef = useRef(false);
 
   // Track when permission is fixed
   useEffect(() => {
     if (!permissions) return;
+    if (restartTriggeredRef.current) return;
 
     const screenOk = permissions.screenRecording === "granted" || permissions.screenRecording === "notNeeded";
     const micOk = permissions.microphone === "granted" || permissions.microphone === "notNeeded";
-    const accessibilityOk = permissions.accessibility === "granted" || permissions.accessibility === "notNeeded";
 
     // Close window and restart screenpipe if all critical permissions are granted
     if (screenOk && micOk) {
+      restartTriggeredRef.current = true;
+
       // Wait a moment to show success state, then restart screenpipe
       setTimeout(async () => {
         try {

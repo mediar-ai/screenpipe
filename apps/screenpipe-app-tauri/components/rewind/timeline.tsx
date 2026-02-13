@@ -919,6 +919,41 @@ export default function Timeline() {
 		}
 	};
 
+	// Fast navigation to a date we already know has frames (e.g. from search results).
+	// Skips the hasFramesForDate() HTTP round-trip and adjacent-date probing.
+	const navigateDirectToDate = (targetDate: Date) => {
+		isNavigatingRef.current = true;
+
+		console.log("[navigateDirectToDate] called with:", targetDate.toISOString());
+
+		dateChangesRef.current += 1;
+		posthog.capture("timeline_date_changed", {
+			from_date: currentDate.toISOString(),
+			to_date: targetDate.toISOString(),
+		});
+
+		clearFramesForNavigation();
+		clearSentRequestForDate(targetDate);
+
+		pendingNavigationRef.current = targetDate;
+		setSeekingTimestamp(targetDate.toISOString());
+
+		setCurrentFrame(null);
+		setCurrentIndex(0);
+		setCurrentDate(targetDate);
+
+		console.log("[navigateDirectToDate] Navigation initiated, waiting for frames...");
+
+		setTimeout(() => {
+			if (pendingNavigationRef.current && isSameDay(pendingNavigationRef.current, targetDate)) {
+				console.warn("[navigateDirectToDate] Timeout: frames didn't arrive, clearing navigation state");
+				pendingNavigationRef.current = null;
+				setSeekingTimestamp(null);
+				isNavigatingRef.current = false;
+			}
+		}, 15000);
+	};
+
 	const handleDateChange = async (newDate: Date) => {
 		// Set navigation flag to prevent frame-date sync from fighting
 		isNavigatingRef.current = true;
@@ -1097,7 +1132,7 @@ export default function Timeline() {
 				}}
 			>
 				{/* Main Image - Full Screen - Should fill entire viewport */}
-				<div className="absolute inset-0 z-10">
+				<div className="absolute inset-0 z-10 bg-black">
 					{currentFrame ? (
 						<CurrentFrameTimeline
 							currentFrame={currentFrame}
@@ -1416,9 +1451,9 @@ export default function Timeline() {
 						setSeekingTimestamp(timestamp);
 
 						if (!isSameDay(targetDate, currentDate)) {
-							// Different day: store pending navigation, frames effect will handle jump after load
-							pendingNavigationRef.current = targetDate;
-							handleDateChange(targetDate);
+							// Different day: use direct navigation (skip hasFramesForDate —
+							// search results prove this date has data)
+							navigateDirectToDate(targetDate);
 						} else {
 							// Same day: jump directly, no pending navigation needed
 							pendingNavigationRef.current = null;

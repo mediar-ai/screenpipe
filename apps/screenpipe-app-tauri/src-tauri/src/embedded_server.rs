@@ -352,6 +352,9 @@ pub async fn start_embedded_server(
     // Create a runtime handle for vision tasks
     let vision_handle = tokio::runtime::Handle::current();
 
+    // Create shared pipeline metrics (used by recording + health endpoint + PostHog)
+    let vision_metrics = Arc::new(screenpipe_vision::PipelineMetrics::new());
+
     // Start vision recording
     if !config.disable_vision {
         let db_clone = db.clone();
@@ -424,6 +427,7 @@ pub async fn start_embedded_server(
                 realtime_vision: false,
                 activity_feed,
                 video_quality,
+                vision_metrics: vision_metrics.clone(),
             };
 
             let vision_manager = Arc::new(VisionManager::new(
@@ -487,6 +491,7 @@ pub async fn start_embedded_server(
             let output_path = Arc::new(output_path);
             let shutdown_rx = shutdown_tx_clone.subscribe();
             let video_quality = config.video_quality.clone();
+            let recording_metrics = vision_metrics.clone();
 
             tokio::spawn(async move {
                 let mut shutdown_rx = shutdown_rx;
@@ -510,6 +515,7 @@ pub async fn start_embedded_server(
                         false,
                         None,
                         video_quality.clone(),
+                        recording_metrics.clone(),
                     );
 
                     tokio::select! {
@@ -584,7 +590,7 @@ pub async fn start_embedded_server(
     start_sleep_monitor();
 
     // Create and start HTTP server
-    let server = SCServer::new(
+    let mut server = SCServer::new(
         db.clone(),
         SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.port),
         local_data_dir,
@@ -594,6 +600,7 @@ pub async fn start_embedded_server(
         config.use_pii_removal,
         config.video_quality.clone(),
     );
+    server.vision_metrics = vision_metrics;
 
     // Initialize pipe manager
     let pipes_dir = config.data_dir.join("pipes");

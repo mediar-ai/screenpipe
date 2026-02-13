@@ -129,6 +129,8 @@ pub struct AppState {
     pub api_request_count: Arc<AtomicUsize>,
     /// Pipe manager for scheduled agent execution
     pub pipe_manager: Option<crate::pipes_api::SharedPipeManager>,
+    /// Vision pipeline metrics (shared across all monitors)
+    pub vision_metrics: Arc<screenpipe_vision::PipelineMetrics>,
 }
 
 // Update the SearchQuery struct
@@ -398,6 +400,25 @@ pub struct HealthCheckResponse {
     pub device_status_details: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub monitors: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pipeline: Option<PipelineHealthInfo>,
+}
+
+#[derive(Serialize, OaSchema, Deserialize)]
+pub struct PipelineHealthInfo {
+    pub uptime_secs: f64,
+    pub frames_captured: u64,
+    pub frames_db_written: u64,
+    pub frames_dropped: u64,
+    pub frame_drop_rate: f64,
+    pub capture_fps_actual: f64,
+    pub avg_ocr_latency_ms: f64,
+    pub avg_db_latency_ms: f64,
+    pub ocr_queue_depth: u64,
+    pub video_queue_depth: u64,
+    pub time_to_first_frame_ms: Option<f64>,
+    pub pipeline_stall_count: u64,
+    pub ocr_cache_hit_rate: f64,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Clone)]
@@ -994,6 +1015,33 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         None
     };
 
+    // Build pipeline metrics snapshot
+    let pipeline = if !state.vision_disabled {
+        let snap = state.vision_metrics.snapshot();
+        let total_ocr_ops = snap.ocr_cache_hits + snap.ocr_cache_misses;
+        Some(PipelineHealthInfo {
+            uptime_secs: snap.uptime_secs,
+            frames_captured: snap.frames_captured,
+            frames_db_written: snap.frames_db_written,
+            frames_dropped: snap.frames_dropped,
+            frame_drop_rate: snap.frame_drop_rate,
+            capture_fps_actual: snap.capture_fps_actual,
+            avg_ocr_latency_ms: snap.avg_ocr_latency_ms,
+            avg_db_latency_ms: snap.avg_db_latency_ms,
+            ocr_queue_depth: snap.ocr_queue_depth,
+            video_queue_depth: snap.video_queue_depth,
+            time_to_first_frame_ms: snap.time_to_first_frame_ms,
+            pipeline_stall_count: snap.pipeline_stall_count,
+            ocr_cache_hit_rate: if total_ocr_ops > 0 {
+                snap.ocr_cache_hits as f64 / total_ocr_ops as f64
+            } else {
+                0.0
+            },
+        })
+    } else {
+        None
+    };
+
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
         status_code,
@@ -1012,7 +1060,16 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         verbose_instructions,
         device_status_details,
         monitors,
+        pipeline,
     })
+}
+
+/// Returns raw vision pipeline metrics snapshot.
+/// Use this for monitoring dashboards and local dev benchmarking.
+async fn vision_metrics_handler(
+    State(state): State<Arc<AppState>>,
+) -> JsonResponse<screenpipe_vision::MetricsSnapshot> {
+    JsonResponse(state.vision_metrics.snapshot())
 }
 
 fn get_verbose_instructions(unhealthy_systems: &[&str]) -> String {
@@ -1045,6 +1102,7 @@ pub struct SCServer {
     sync_handle: Option<Arc<SyncServiceHandle>>,
     video_quality: String,
     pipe_manager: Option<crate::pipes_api::SharedPipeManager>,
+    pub vision_metrics: Arc<screenpipe_vision::PipelineMetrics>,
 }
 
 impl SCServer {
@@ -1070,6 +1128,7 @@ impl SCServer {
             sync_handle: None,
             video_quality,
             pipe_manager: None,
+            vision_metrics: Arc::new(screenpipe_vision::PipelineMetrics::new()),
         }
     }
 
@@ -1148,6 +1207,41 @@ impl SCServer {
             }
         });
 
+        // Spawn periodic vision pipeline metrics reporter (every 60 seconds)
+        let metrics_for_posthog = self.vision_metrics.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                let snap = metrics_for_posthog.snapshot();
+                // Only report if the pipeline has captured any frames
+                if snap.frames_captured > 0 {
+                    analytics::capture_event_nonblocking(
+                        "vision_pipeline_health",
+                        serde_json::json!({
+                            "uptime_secs": snap.uptime_secs,
+                            "frames_captured": snap.frames_captured,
+                            "frames_skipped": snap.frames_skipped,
+                            "ocr_completed": snap.ocr_completed,
+                            "ocr_cache_hits": snap.ocr_cache_hits,
+                            "ocr_cache_misses": snap.ocr_cache_misses,
+                            "avg_ocr_latency_ms": snap.avg_ocr_latency_ms,
+                            "frames_video_written": snap.frames_video_written,
+                            "frames_db_written": snap.frames_db_written,
+                            "frames_dropped": snap.frames_dropped,
+                            "avg_db_latency_ms": snap.avg_db_latency_ms,
+                            "frame_drop_rate": snap.frame_drop_rate,
+                            "capture_fps_actual": snap.capture_fps_actual,
+                            "time_to_first_frame_ms": snap.time_to_first_frame_ms,
+                            "ocr_queue_depth": snap.ocr_queue_depth,
+                            "video_queue_depth": snap.video_queue_depth,
+                            "pipeline_stall_count": snap.pipeline_stall_count,
+                        }),
+                    );
+                }
+            }
+        });
+
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
             audio_manager: self.audio_manager.clone(),
@@ -1194,6 +1288,7 @@ impl SCServer {
             video_quality: self.video_quality.clone(),
             api_request_count: api_request_count.clone(),
             pipe_manager: self.pipe_manager.clone(),
+            vision_metrics: self.vision_metrics.clone(),
         });
 
         let cors = CorsLayer::new()
@@ -1254,7 +1349,9 @@ impl SCServer {
                 axum::routing::post(sync_api::sync_download),
             )
             // Vision status endpoint (not in OpenAPI spec to avoid oasgen registration issues)
-            .route("/vision/status", get(api_vision_status));
+            .route("/vision/status", get(api_vision_status))
+            // Vision pipeline metrics (not in OpenAPI spec)
+            .route("/vision/metrics", get(vision_metrics_handler));
 
         // Apple Intelligence — generic OpenAI-compatible endpoint (macOS only)
         #[cfg(feature = "apple-intelligence")]

@@ -13,8 +13,8 @@ interface Props {
 // ─── constants ───────────────────────────────────────────
 const GLITCH_CHARS =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}|/=+~";
-const TEXT_L1 = "plugging into";
-const TEXT_L2 = "superintelligence";
+const TEXT_L1 = "upgrading your";
+const TEXT_L2 = "memory";
 const MEMORY_FRAGMENTS = [
   "13:42:07", "chrome", "screenshot", "meeting", "2026-02-02",
   "email_draft", "slack", "terminal", "vscode", "figma",
@@ -50,6 +50,8 @@ interface TextGlyph {
   current: string;
   decodeFrame: number;   // frame at which it decodes
   decoded: boolean;
+  sourceChars: string[]; // chars from memory fragments to cycle through
+  sourceIdx: number;     // current position in sourceChars
 }
 interface Fragment {
   x: number; y: number;
@@ -150,13 +152,43 @@ function initState(w: number, h: number): State {
   }
 
   // ── text glyphs ──
+  // Build a cycle sequence from memory fragments for each character.
+  // Prefer fragments starting with the same letter, then fill from others.
+  const buildSourceChars = (ch: string): string[] => {
+    const upper = ch.toUpperCase();
+    const chars: string[] = [];
+    // chars from fragments that start with the same letter
+    for (const frag of MEMORY_FRAGMENTS) {
+      if (frag[0].toUpperCase() === upper) {
+        for (const c of frag.toUpperCase()) {
+          if (c !== "_" && !chars.includes(c)) chars.push(c);
+        }
+      }
+    }
+    // pad from other fragments so the cycle is 10+ chars long
+    while (chars.length < 12) {
+      const frag = pick(MEMORY_FRAGMENTS);
+      const c = frag[Math.floor(rng() * frag.length)].toUpperCase();
+      if (c !== "_" && !chars.includes(c)) chars.push(c);
+      if (chars.length < 12 && GLITCH_CHARS.length > 0) {
+        chars.push(randChar());
+      }
+    }
+    return chars;
+  };
+
   const makeGlyphs = (text: string, baseFrame: number): TextGlyph[] =>
-    text.split("").map((ch, i) => ({
-      target: ch,
-      current: ch === " " ? " " : randChar(),
-      decodeFrame: baseFrame + i * 4 + Math.floor(rng() * 8),
-      decoded: ch === " ",
-    }));
+    text.split("").map((ch, i) => {
+      const src = ch === " " ? [] : buildSourceChars(ch);
+      return {
+        target: ch,
+        current: ch === " " ? " " : src[0] || randChar(),
+        decodeFrame: baseFrame + i * 4 + Math.floor(rng() * 8),
+        decoded: ch === " ",
+        sourceChars: src,
+        sourceIdx: 0,
+      };
+    });
   const line1 = makeGlyphs(TEXT_L1, 30);   // starts decoding ~0.5s in
   const line2 = makeGlyphs(TEXT_L2, 60);   // starts ~1s in
 
@@ -429,7 +461,7 @@ export function ParticleStream({
         ctx.fillRect(0, 0, width, height);
       }
 
-      // Draw line 1: "plugging into"
+      // Draw line 1: "upgrading your"
       const charW1 = 8.2;
       const totalW1 = s.line1.length * charW1;
       const startX1 = cx - totalW1 / 2;
@@ -452,7 +484,7 @@ export function ParticleStream({
         ctx.shadowBlur = 0;
       }
 
-      // Draw line 2: "superintelligence"
+      // Draw line 2: "memory"
       const charW2 = 10.5;
       const totalW2 = s.line2.length * charW2;
       const startX2 = cx - totalW2 / 2;
@@ -525,8 +557,11 @@ function updateTextGlyphs(glyphs: TextGlyph[], frame: number): boolean {
   for (const gl of glyphs) {
     if (gl.target === " ") continue;
     if (!gl.decoded) {
-      // Cycle through random chars
-      if (frame % 3 === 0) gl.current = randChar();
+      // Cycle through memory-sourced chars instead of random noise
+      if (frame % 3 === 0 && gl.sourceChars.length > 0) {
+        gl.sourceIdx = (gl.sourceIdx + 1) % gl.sourceChars.length;
+        gl.current = gl.sourceChars[gl.sourceIdx];
+      }
       // Decode when frame reaches threshold
       if (frame >= gl.decodeFrame) {
         gl.decoded = true;
@@ -536,9 +571,9 @@ function updateTextGlyphs(glyphs: TextGlyph[], frame: number): boolean {
         allDone = false;
       }
     } else {
-      // Occasional re-glitch on decoded chars (very rare)
-      if (rng() < 0.002) {
-        gl.current = randChar();
+      // Occasional re-glitch shows a memory fragment char briefly
+      if (rng() < 0.002 && gl.sourceChars.length > 0) {
+        gl.current = pick(gl.sourceChars);
         setTimeout(() => { gl.current = gl.target; }, 80);
       }
     }

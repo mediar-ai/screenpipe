@@ -55,8 +55,23 @@ export const SkeletonLoader: FC = () => {
 // Debounce delay for frame loading (ms)
 const FRAME_LOAD_DEBOUNCE_MS = 80;
 
-// Track which chunks have failed so we don't retry them
-const failedChunks = new Set<string>();
+// Track which chunks have failed with TTL — entries expire so finished chunks can be retried
+const FAILED_CHUNK_TTL_MS = 30_000;
+const failedChunks = new Map<string, number>();
+
+function isChunkFailed(path: string): boolean {
+	const t = failedChunks.get(path);
+	if (t === undefined) return false;
+	if (Date.now() - t > FAILED_CHUNK_TTL_MS) {
+		failedChunks.delete(path);
+		return false;
+	}
+	return true;
+}
+
+function markChunkFailed(path: string): void {
+	failedChunks.set(path, Date.now());
+}
 
 // Cache calibrated fps per video file path so we only compute once
 const calibratedFpsCache = new Map<string, number>();
@@ -91,6 +106,8 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	// Whether to use <video> seeking or fall back to <img> via ffmpeg
 	// Try video mode first on all platforms; onError fallback handles unsupported codecs
 	const [useVideoMode, setUseVideoMode] = useState(true);
+	// Successfully preloaded fallback image URL — only updated on load success
+	const [displayedFallbackUrl, setDisplayedFallbackUrl] = useState<string | null>(null);
 	// Debounced frame — only updates after scroll settles
 	const [debouncedFrame, setDebouncedFrame] = useState<{
 		filePath: string;
@@ -109,6 +126,10 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 	const loadedChunkRef = useRef<string | null>(null);
 	// Generation counter to discard stale events
 	const seekGenRef = useRef(0);
+	// Canvas for snapshotting last good frame (back buffer for crossfades)
+	const canvasRef = useRef<HTMLCanvasElement>(null);
+	// Controls crossfade: false during chunk transitions, true when frame is ready
+	const [frameReady, setFrameReady] = useState(true);
 
 	const device = currentFrame?.devices?.[0];
 	const frameId = device?.frame_id;
@@ -204,13 +225,34 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		return derived;
 	}, []);
 
+	// Snapshot the current visible frame onto the canvas back buffer.
+	// Called after every successful seek and before chunk transitions.
+	const snapshotToCanvas = useCallback((source?: CanvasImageSource, w?: number, h?: number) => {
+		const canvas = canvasRef.current;
+		if (!canvas) return;
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return;
+		if (source && w && h) {
+			canvas.width = w;
+			canvas.height = h;
+			ctx.drawImage(source, 0, 0, w, h);
+			return;
+		}
+		const video = videoRef.current;
+		if (video && video.videoWidth > 0 && video.readyState >= 2) {
+			canvas.width = video.videoWidth;
+			canvas.height = video.videoHeight;
+			ctx.drawImage(video, 0, 0);
+		}
+	}, []);
+
 	// Main video seeking effect
 	useEffect(() => {
 		if (!debouncedFrame || !useVideoMode) return;
 		const { filePath: path, offsetIndex: idx, fps: serverFps, frameId: fid } = debouncedFrame;
 
 		// If this chunk previously failed, go straight to fallback
-		if (failedChunks.has(path)) {
+		if (isChunkFailed(path)) {
 			setUseVideoMode(false);
 			return;
 		}
@@ -224,9 +266,13 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 
 			// Load new chunk if needed
 			if (loadedChunkRef.current !== path) {
+				// Snapshot current frame before switching (canvas holds it during transition)
+				snapshotToCanvas();
+				setFrameReady(false);
+
 				const url = await getVideoUrl(path);
 				if (!url || gen !== seekGenRef.current) return;
-				
+
 				loadedChunkRef.current = path;
 				video.src = url;
 				video.load();
@@ -281,7 +327,9 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 
 			if (gen !== seekGenRef.current) return;
 
-			// Frame is ready
+			// Frame is ready — snapshot to canvas and crossfade in
+			snapshotToCanvas();
+			setFrameReady(true);
 			setIsLoading(false);
 			setHasError(false);
 			setNaturalDimensions({
@@ -311,11 +359,12 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		doSeek().catch((err) => {
 			if (gen !== seekGenRef.current) return;
 			console.warn("Video seek failed, falling back to ffmpeg:", err);
-			failedChunks.add(path);
+			setFrameReady(false);
+			markChunkFailed(path);
 			loadedChunkRef.current = null;
 			setUseVideoMode(false);
 		});
-	}, [debouncedFrame, useVideoMode, getVideoUrl, resolveEffectiveFps]);
+	}, [debouncedFrame, useVideoMode, getVideoUrl, resolveEffectiveFps, snapshotToCanvas]);
 
 	// Fallback: ffmpeg <img> mode (same as old behavior)
 	const fallbackImageUrl = useMemo(() => {
@@ -323,25 +372,41 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		return `http://localhost:3030/frames/${debouncedFrame.frameId}`;
 	}, [useVideoMode, debouncedFrame]);
 
-	// Handle fallback image load
-	const imgRef = useRef<HTMLImageElement>(null);
+	// Preload fallback image — only swap displayed URL when the new image loads successfully
 	useEffect(() => {
 		if (!fallbackImageUrl) return;
 		frameLoadStartTimeRef.current = performance.now();
-		const controller = new AbortController();
-
-		fetch(fallbackImageUrl, { signal: controller.signal })
-			.then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
-			.catch(err => {
-				if (err.name !== "AbortError") {
-					setHasError(true);
-					setIsLoading(false);
-					onFrameLoadError?.();
-				}
-			});
-
-		return () => controller.abort();
-	}, [fallbackImageUrl]);
+		const img = new Image();
+		img.onload = () => {
+			snapshotToCanvas(img, img.naturalWidth, img.naturalHeight);
+			setFrameReady(true);
+			setDisplayedFallbackUrl(fallbackImageUrl);
+			setIsLoading(false);
+			setHasError(false);
+			setNaturalDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+			if (frameLoadStartTimeRef.current !== null) {
+				const loadTime = performance.now() - frameLoadStartTimeRef.current;
+				posthog.capture("timeline_frame_load_time", {
+					duration_ms: Math.round(loadTime),
+					frame_id: debouncedFrame?.frameId,
+					success: true,
+					mode: "ffmpeg_fallback",
+					frames_skipped: framesSkippedRef.current,
+				});
+				frameLoadStartTimeRef.current = null;
+				framesSkippedRef.current = 0;
+			}
+		};
+		img.onerror = () => {
+			// Preload failed — keep showing previous image
+			setIsLoading(false);
+		};
+		img.src = fallbackImageUrl;
+		return () => {
+			img.onload = null;
+			img.onerror = null;
+		};
+	}, [fallbackImageUrl, snapshotToCanvas]);
 
 	// OCR data
 	const { textPositions, isLoading: ocrLoading } = useFrameOcrData(
@@ -408,13 +473,12 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 		return () => observer.disconnect();
 	}, [naturalDimensions]);
 
-	// Auto-skip on error
+	// Re-enable video mode when navigating to a non-failed chunk
 	useEffect(() => {
-		if (hasError && !isLoading && onFrameUnavailable) {
-			const timer = setTimeout(() => onFrameUnavailable(), 50);
-			return () => clearTimeout(timer);
+		if (debouncedFrame?.filePath && !isChunkFailed(debouncedFrame.filePath)) {
+			setUseVideoMode(true);
 		}
-	}, [hasError, isLoading, onFrameUnavailable]);
+	}, [debouncedFrame?.filePath]);
 
 	if (!frameId) {
 		return (
@@ -456,69 +520,47 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 
 	return (
 		<div ref={containerRef} className="absolute inset-0 w-full h-full">
-			{isLoading && <SkeletonLoader />}
+			{/* Canvas snapshot — back buffer holding last good frame for crossfades */}
+			<div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 0 }}>
+				<canvas ref={canvasRef} className="max-w-full max-h-full" />
+			</div>
 
-			{/* Video mode: <video> element with seeking */}
-			{useVideoMode && (
-				<video
-					ref={videoRef}
-					muted
-					playsInline
-					preload="auto"
-					className="absolute inset-0 w-full h-full object-contain bg-black"
-					style={{
-						zIndex: 1,
-						opacity: isLoading ? 0 : 1,
-						transition: "opacity 0.1s ease-in-out",
-					}}
-					onError={() => {
-						const err = videoRef.current?.error;
-						console.warn("Video error:", err?.code, err?.message);
-						if (debouncedFrame?.filePath) {
-							failedChunks.add(debouncedFrame.filePath);
-						}
-						loadedChunkRef.current = null;
-						setUseVideoMode(false);
-					}}
-				/>
-			)}
+			{/* Video element — crossfades in over canvas when frame is ready */}
+			<video
+				ref={videoRef}
+				muted
+				playsInline
+				preload="auto"
+				className="absolute inset-0 w-full h-full object-contain"
+				style={{
+					zIndex: 1,
+					opacity: frameReady ? 1 : 0,
+					transition: "opacity 150ms ease-out",
+				}}
+				onError={() => {
+					const err = videoRef.current?.error;
+					console.warn("Video error:", err?.code, err?.message);
+					setFrameReady(false);
+					if (debouncedFrame?.filePath) {
+						markChunkFailed(debouncedFrame.filePath);
+					}
+					loadedChunkRef.current = null;
+					setUseVideoMode(false);
+				}}
+			/>
 
-			{/* Fallback mode: <img> via ffmpeg extraction */}
-			{!useVideoMode && fallbackImageUrl && (
+			{/* Fallback mode: preloaded <img> layered on top of frozen video frame */}
+			{displayedFallbackUrl && !useVideoMode && (
 				<img
-					ref={imgRef}
-					src={fallbackImageUrl}
-					className="absolute inset-0 w-full h-full object-contain bg-black"
+					src={displayedFallbackUrl}
+					className="absolute inset-0 w-full h-full object-contain"
 					style={{
-						zIndex: 1,
-						display: hasError ? "none" : "block",
-						opacity: isLoading ? 0 : 1,
-						transition: "opacity 0.15s ease-in-out",
+						zIndex: 2,
+						opacity: frameReady ? 1 : 0,
+						transition: "opacity 150ms ease-out",
 					}}
 					alt="Current frame"
 					draggable={false}
-					onLoad={(e) => {
-						const img = e.target as HTMLImageElement;
-						setIsLoading(false);
-						setHasError(false);
-						setNaturalDimensions({ width: img.naturalWidth, height: img.naturalHeight });
-						if (frameLoadStartTimeRef.current !== null) {
-							const loadTime = performance.now() - frameLoadStartTimeRef.current;
-							posthog.capture("timeline_frame_load_time", {
-								duration_ms: Math.round(loadTime),
-								frame_id: debouncedFrame?.frameId,
-								success: true,
-								mode: "ffmpeg_fallback",
-								frames_skipped: framesSkippedRef.current,
-							});
-							frameLoadStartTimeRef.current = null;
-							framesSkippedRef.current = 0;
-						}
-					}}
-					onError={() => {
-						setIsLoading(false);
-						setHasError(true);
-					}}
 				/>
 			)}
 
@@ -531,7 +573,7 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 
 			{/* OCR text overlay */}
 			{!isLoading && !hasError && !ocrLoading && naturalDimensions && renderedImageInfo && textPositions.length > 0 && (
-				<div className="absolute overflow-hidden" style={{ zIndex: 2, top: 0, left: 0, right: 0, bottom: 0 }}>
+				<div className="absolute overflow-hidden" style={{ zIndex: 3, top: 0, left: 0, right: 0, bottom: 0 }}>
 					<div style={{
 						position: "absolute",
 						left: renderedImageInfo.offsetX,
@@ -551,9 +593,6 @@ export const CurrentFrameTimeline: FC<CurrentFrameTimelineProps> = ({
 				</div>
 			)}
 
-			{hasError && !isLoading && (
-				<div className="absolute inset-0 z-10"><SkeletonLoader /></div>
-			)}
 		</div>
 	);
 };

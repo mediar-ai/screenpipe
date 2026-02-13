@@ -73,15 +73,10 @@ pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
            // already "focused" or never lost focus) wouldn't trigger a re-fetch.
            let _ = app_handle.emit("window-focused", true);
 
-           // Register window-specific shortcuts (Escape, Ctrl+Cmd+K) on a separate task
-           // IMPORTANT: This MUST be spawned async to avoid deadlock when called from
-           // within a global shortcut callback (the callback holds the shortcut manager lock)
-           let app_clone = app_handle.clone();
-           std::thread::spawn(move || {
-               // Small delay to ensure we're outside the shortcut callback context
-               std::thread::sleep(std::time::Duration::from_millis(10));
-               let _ = register_window_shortcuts(app_clone);
-           });
+           // NOTE: Window shortcuts (Escape) are registered by the focus-gain
+           // handler in window_api.rs. Do NOT also register them here — doing
+           // so races with the focus handler and causes duplicate
+           // RegisterEventHotKey calls that fail on macOS.
        }
        Err(e) => {
            error!("ShowRewindWindow::Main.show failed: {}", e);
@@ -92,15 +87,9 @@ pub fn show_main_window(app_handle: &tauri::AppHandle, _overlay: bool) {
 #[tauri::command]
 #[specta::specta]
 pub fn hide_main_window(app_handle: &tauri::AppHandle) {
-    // Unregister window-specific shortcuts (Escape, Ctrl+Cmd+K) on a separate task
-    // IMPORTANT: This MUST be spawned async to avoid deadlock when called from
-    // within a global shortcut callback (e.g., Escape key handler)
-    let app_clone = app_handle.clone();
-    std::thread::spawn(move || {
-        // Small delay to ensure we're outside the shortcut callback context
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        let _ = unregister_window_shortcuts(app_clone);
-    });
+    // NOTE: Window shortcuts (Escape) are unregistered by the focus-loss
+    // handler in window_api.rs. Do NOT also unregister them here — doing
+    // so races with the focus handler and causes duplicate unregister calls.
 
     if let Err(e) = ShowRewindWindow::Main.close(app_handle) {
         error!("failed to close main window: {}", e);
@@ -757,8 +746,11 @@ pub fn register_window_shortcuts(app_handle: tauri::AppHandle) -> Result<(), Str
             }
         }
     }) {
-        // Ignore "already registered" errors - shortcut may already be active
-        if !e.to_string().contains("already registered") {
+        // Ignore "already registered" / duplicate registration errors.
+        // macOS Carbon API returns "RegisterEventHotKey failed" (not "already
+        // registered") when the hotkey is already active, so check both.
+        let msg = e.to_string();
+        if !msg.contains("already registered") && !msg.contains("RegisterEventHotKey failed") {
             error!("Failed to register Escape shortcut: {}", e);
         }
     }
