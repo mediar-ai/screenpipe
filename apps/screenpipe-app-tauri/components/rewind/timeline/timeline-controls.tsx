@@ -23,7 +23,7 @@ import {
 
 // Helper to format shortcut string for display
 function formatShortcutForDisplay(shortcut: string, isMac: boolean): string {
-	if (!shortcut) return isMac ? "⌃⌘K" : "Ctrl+Alt+K";
+	if (!shortcut) return isMac ? "⌘⌃K" : "Alt+K";
 
 	const parts = shortcut.split("+");
 	const formatted = parts.map((part) => {

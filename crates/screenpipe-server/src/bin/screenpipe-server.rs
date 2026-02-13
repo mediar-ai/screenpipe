@@ -889,6 +889,7 @@ async fn main() -> anyhow::Result<()> {
         video_quality_for_server,
     );
     server.vision_metrics = vision_metrics;
+    server.audio_metrics = audio_manager.metrics.clone();
 
     // Attach sync handle if sync is enabled
     let server = if let Some(ref handle) = sync_service_handle {

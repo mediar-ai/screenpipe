@@ -193,16 +193,19 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 					end.getMonth() === now.getMonth() &&
 					end.getFullYear() === now.getFullYear()
 				) {
-					const fiveMinutesAgo = new Date(now.getTime() - 10 * 60000);
-					params.append("end_time", fiveMinutesAgo.toISOString());
+					// Exclude last 1 minute to allow FTS indexer to catch up (runs every 30s).
+					// Previously 10 minutes which made all recent data unsearchable for new users.
+					const oneMinuteAgo = new Date(now.getTime() - 60_000);
+					params.append("end_time", oneMinuteAgo.toISOString());
 				} else {
 					params.append("end_time", end.toISOString());
 				}
 			} else {
 				const now = new Date();
-				const fiveMinutesAgo = new Date(now.getTime() - 10 * 60000);
-				fiveMinutesAgo.setSeconds(0, 0);
-				params.append("end_time", fiveMinutesAgo.toISOString());
+				// Exclude last 1 minute to allow FTS indexer to catch up (runs every 30s).
+				const oneMinuteAgo = new Date(now.getTime() - 60_000);
+				oneMinuteAgo.setSeconds(0, 0);
+				params.append("end_time", oneMinuteAgo.toISOString());
 			}
 
 			if (options.order) {

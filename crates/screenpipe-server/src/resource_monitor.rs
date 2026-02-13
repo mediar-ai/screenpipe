@@ -84,9 +84,6 @@ impl ResourceMonitor {
         // Create System only when needed
         let sys = System::new();
 
-        // Get audio dedup stats (reset counters after reading)
-        let audio_stats = screenpipe_audio::transcription::get_dedup_stats(true);
-
         // Avoid unnecessary cloning by using references
         let payload = json!({
             "api_key": "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce",
@@ -104,13 +101,6 @@ impl ResourceMonitor {
                 "kernel_version": sys.kernel_version().unwrap_or_default(),
                 "cpu_count": sys.cpus().len(),
                 "release": env!("CARGO_PKG_VERSION"),
-                // Audio transcription dedup metrics
-                "audio_transcripts_total": audio_stats.total,
-                "audio_transcripts_inserted": audio_stats.inserted,
-                "audio_duplicates_blocked": audio_stats.duplicate_blocked,
-                "audio_overlaps_trimmed": audio_stats.overlap_trimmed,
-                "audio_duplicate_rate": audio_stats.duplicate_rate(),
-                "audio_avg_word_count": audio_stats.avg_word_count(),
             }
         });
 

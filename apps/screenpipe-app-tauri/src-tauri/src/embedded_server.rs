@@ -606,6 +606,7 @@ pub async fn start_embedded_server(
         config.video_quality.clone(),
     );
     server.vision_metrics = vision_metrics;
+    server.audio_metrics = audio_manager.metrics.clone();
 
     // Initialize pipe manager
     let pipes_dir = config.data_dir.join("pipes");

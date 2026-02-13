@@ -117,7 +117,11 @@ function useSuggestions(isOpen: boolean) {
       try {
         const now = new Date();
         const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const endTime = now; // include most recent captures
+        // Match the keyword search exclusion window (1 minute) so suggestions
+        // only contain words from data that's already FTS-indexed. Previously
+        // used `now` which meant suggestions showed words the keyword search
+        // couldn't find yet (FTS indexer runs every 30s).
+        const endTime = new Date(now.getTime() - 60_000);
 
         const params = new URLSearchParams({
           content_type: "ocr",

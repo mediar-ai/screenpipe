@@ -67,6 +67,7 @@ pub async fn record_and_transcribe(
     duration: Duration,
     whisper_sender: Arc<crossbeam::channel::Sender<AudioInput>>,
     is_running: Arc<AtomicBool>,
+    metrics: Arc<crate::metrics::AudioPipelineMetrics>,
 ) -> Result<()> {
     while is_running.load(Ordering::Relaxed) {
         match run_record_and_transcribe::run_record_and_transcribe(
@@ -74,6 +75,7 @@ pub async fn record_and_transcribe(
             duration,
             whisper_sender.clone(),
             is_running.clone(),
+            metrics.clone(),
         )
         .await
         {

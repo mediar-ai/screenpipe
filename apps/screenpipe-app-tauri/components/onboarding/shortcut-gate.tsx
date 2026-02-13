@@ -181,7 +181,7 @@ export default function ShortcutGate() {
             press to see your timeline
           </p>
           <p className="font-mono text-xs text-muted-foreground/60">
-            then press {isMac ? "⌃⌘K" : "Ctrl+Alt+K"} and search &quot;entanglement&quot;
+            then press {isMac ? "⌘⌃K" : "Alt+K"} and search &quot;entanglement&quot;
           </p>
         </div>
 

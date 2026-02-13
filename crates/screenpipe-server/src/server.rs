@@ -131,6 +131,8 @@ pub struct AppState {
     pub pipe_manager: Option<crate::pipes_api::SharedPipeManager>,
     /// Vision pipeline metrics (shared across all monitors)
     pub vision_metrics: Arc<screenpipe_vision::PipelineMetrics>,
+    /// Audio pipeline metrics (shared across all devices)
+    pub audio_metrics: Arc<screenpipe_audio::metrics::AudioPipelineMetrics>,
 }
 
 // Update the SearchQuery struct
@@ -402,6 +404,8 @@ pub struct HealthCheckResponse {
     pub monitors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pipeline: Option<PipelineHealthInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_pipeline: Option<AudioPipelineHealthInfo>,
 }
 
 #[derive(Serialize, OaSchema, Deserialize)]
@@ -419,6 +423,24 @@ pub struct PipelineHealthInfo {
     pub time_to_first_frame_ms: Option<f64>,
     pub pipeline_stall_count: u64,
     pub ocr_cache_hit_rate: f64,
+}
+
+#[derive(Serialize, OaSchema, Deserialize)]
+pub struct AudioPipelineHealthInfo {
+    pub uptime_secs: f64,
+    pub chunks_sent: u64,
+    pub chunks_channel_full: u64,
+    pub stream_timeouts: u64,
+    pub vad_passed: u64,
+    pub vad_rejected: u64,
+    pub vad_passthrough_rate: f64,
+    pub avg_speech_ratio: f64,
+    pub transcriptions_completed: u64,
+    pub transcriptions_empty: u64,
+    pub transcription_errors: u64,
+    pub db_inserted: u64,
+    pub total_words: u64,
+    pub words_per_minute: f64,
 }
 
 #[derive(OaSchema, Serialize, Deserialize, Clone)]
@@ -1061,6 +1083,27 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         device_status_details,
         monitors,
         pipeline,
+        audio_pipeline: if !state.audio_disabled {
+            let snap = state.audio_metrics.snapshot();
+            Some(AudioPipelineHealthInfo {
+                uptime_secs: snap.uptime_secs,
+                chunks_sent: snap.chunks_sent,
+                chunks_channel_full: snap.chunks_channel_full,
+                stream_timeouts: snap.stream_timeouts,
+                vad_passed: snap.vad_passed,
+                vad_rejected: snap.vad_rejected,
+                vad_passthrough_rate: snap.vad_passthrough_rate,
+                avg_speech_ratio: snap.avg_speech_ratio,
+                transcriptions_completed: snap.transcriptions_completed,
+                transcriptions_empty: snap.transcriptions_empty,
+                transcription_errors: snap.transcription_errors,
+                db_inserted: snap.db_inserted,
+                total_words: snap.total_words,
+                words_per_minute: snap.words_per_minute,
+            })
+        } else {
+            None
+        },
     })
 }
 
@@ -1070,6 +1113,14 @@ async fn vision_metrics_handler(
     State(state): State<Arc<AppState>>,
 ) -> JsonResponse<screenpipe_vision::MetricsSnapshot> {
     JsonResponse(state.vision_metrics.snapshot())
+}
+
+/// Returns raw audio pipeline metrics snapshot.
+/// Use this for monitoring dashboards and local dev benchmarking.
+async fn audio_metrics_handler(
+    State(state): State<Arc<AppState>>,
+) -> JsonResponse<screenpipe_audio::metrics::AudioMetricsSnapshot> {
+    JsonResponse(state.audio_metrics.snapshot())
 }
 
 fn get_verbose_instructions(unhealthy_systems: &[&str]) -> String {
@@ -1103,6 +1154,7 @@ pub struct SCServer {
     video_quality: String,
     pipe_manager: Option<crate::pipes_api::SharedPipeManager>,
     pub vision_metrics: Arc<screenpipe_vision::PipelineMetrics>,
+    pub audio_metrics: Arc<screenpipe_audio::metrics::AudioPipelineMetrics>,
 }
 
 impl SCServer {
@@ -1117,6 +1169,7 @@ impl SCServer {
         use_pii_removal: bool,
         video_quality: String,
     ) -> Self {
+        let audio_metrics = audio_manager.metrics.clone();
         SCServer {
             db,
             addr,
@@ -1129,6 +1182,7 @@ impl SCServer {
             video_quality,
             pipe_manager: None,
             vision_metrics: Arc::new(screenpipe_vision::PipelineMetrics::new()),
+            audio_metrics,
         }
     }
 
@@ -1242,6 +1296,40 @@ impl SCServer {
             }
         });
 
+        // Spawn periodic audio pipeline metrics reporter (every 60 seconds)
+        let audio_metrics_for_posthog = self.audio_metrics.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                let snap = audio_metrics_for_posthog.snapshot();
+                // Only report if the pipeline has processed any chunks
+                if snap.chunks_sent > 0 || snap.vad_rejected > 0 {
+                    analytics::capture_event_nonblocking(
+                        "audio_pipeline_health",
+                        serde_json::json!({
+                            "uptime_secs": snap.uptime_secs,
+                            "chunks_sent": snap.chunks_sent,
+                            "chunks_channel_full": snap.chunks_channel_full,
+                            "stream_timeouts": snap.stream_timeouts,
+                            "vad_passed": snap.vad_passed,
+                            "vad_rejected": snap.vad_rejected,
+                            "avg_speech_ratio": snap.avg_speech_ratio,
+                            "vad_passthrough_rate": snap.vad_passthrough_rate,
+                            "transcriptions_completed": snap.transcriptions_completed,
+                            "transcriptions_empty": snap.transcriptions_empty,
+                            "transcription_errors": snap.transcription_errors,
+                            "db_inserted": snap.db_inserted,
+                            "db_duplicates_blocked": snap.db_duplicates_blocked,
+                            "db_overlaps_trimmed": snap.db_overlaps_trimmed,
+                            "total_words": snap.total_words,
+                            "words_per_minute": snap.words_per_minute,
+                        }),
+                    );
+                }
+            }
+        });
+
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
             audio_manager: self.audio_manager.clone(),
@@ -1289,6 +1377,7 @@ impl SCServer {
             api_request_count: api_request_count.clone(),
             pipe_manager: self.pipe_manager.clone(),
             vision_metrics: self.vision_metrics.clone(),
+            audio_metrics: self.audio_metrics.clone(),
         });
 
         let cors = CorsLayer::new()
@@ -1351,7 +1440,8 @@ impl SCServer {
             // Vision status endpoint (not in OpenAPI spec to avoid oasgen registration issues)
             .route("/vision/status", get(api_vision_status))
             // Vision pipeline metrics (not in OpenAPI spec)
-            .route("/vision/metrics", get(vision_metrics_handler));
+            .route("/vision/metrics", get(vision_metrics_handler))
+            .route("/audio/metrics", get(audio_metrics_handler));
 
         // Apple Intelligence — generic OpenAI-compatible endpoint (macOS only)
         #[cfg(feature = "apple-intelligence")]
