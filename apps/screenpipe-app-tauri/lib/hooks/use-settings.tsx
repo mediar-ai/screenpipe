@@ -338,8 +338,8 @@ function createSettingsStore() {
 			needsUpdate = true;
 		}
 
-		// Migration: Default Pro subscribers to cloud transcription
-		if (settings.user?.cloud_subscribed) {
+		// Migration: Default Pro subscribers to cloud transcription (one-time only)
+		if (settings.user?.cloud_subscribed && !(settings as any)._proCloudMigrationDone) {
 			// Switch audio transcription to cloud if still on local default
 			if (
 				settings.audioTranscriptionEngine === "whisper-large-v3-turbo" ||
@@ -348,6 +348,8 @@ function createSettingsStore() {
 				settings.audioTranscriptionEngine = "screenpipe-cloud";
 				needsUpdate = true;
 			}
+			(settings as any)._proCloudMigrationDone = true;
+			needsUpdate = true;
 		}
 
 		// Save migrations if needed
@@ -473,16 +475,23 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 		}
 	}, [settings.analyticsId, settings.user?.id]);
 
-	// When user becomes a Pro subscriber, default to cloud transcription
+	// When user becomes a Pro subscriber, default to cloud transcription (one-time)
 	useEffect(() => {
 		if (!settings.user?.cloud_subscribed || !isSettingsLoaded) return;
+		if ((settings as any)._proCloudMigrationDone) return;
 
 		// Switch audio transcription to cloud if still on local default
 		if (
 			settings.audioTranscriptionEngine === "whisper-large-v3-turbo" ||
 			settings.audioTranscriptionEngine === "whisper-large-v3-turbo-quantized"
 		) {
-			settingsStore.set({ audioTranscriptionEngine: "screenpipe-cloud" });
+			settingsStore.set({
+				audioTranscriptionEngine: "screenpipe-cloud",
+				_proCloudMigrationDone: true,
+			} as any);
+		} else {
+			// Mark as done even if we didn't change anything
+			settingsStore.set({ _proCloudMigrationDone: true } as any);
 		}
 	}, [settings.user?.cloud_subscribed, isSettingsLoaded]);
 
