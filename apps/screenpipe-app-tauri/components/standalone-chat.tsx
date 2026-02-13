@@ -28,7 +28,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { commands } from "@/lib/utils/tauri";
-import { homeDir } from "@tauri-apps/api/path";
+import { homeDir, join } from "@tauri-apps/api/path";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
 import {
@@ -1109,13 +1109,13 @@ export function StandaloneChat() {
       piStartInFlightRef.current = true;
       setPiStarting(true);
       const providerConfig = buildProviderConfig();
-      let home: string;
+      let dir: string;
       try {
-        home = await homeDir();
+        const home = await homeDir();
+        dir = await join(home, ".screenpipe", "pi-chat");
       } catch {
-        home = "/tmp";
+        dir = "/tmp/.screenpipe/pi-chat";
       }
-      const dir = `${home}.screenpipe/pi-chat`;
       console.log("[Pi] Restarting with new preset:", providerConfig?.provider, providerConfig?.model);
       try {
         const result = await commands.piStart(dir, settings.user?.token ?? null, providerConfig);
